@@ -1,0 +1,57 @@
+version: 2.1
+jobs:
+  build:
+    working_directory: /usr/src/Slicer-LiverAnalysis
+    docker:
+      - image: aliveresearch/slicer-build
+    steps:
+      - checkout
+      # Rely on the Slicer version in the Docker image
+      #- run:
+      #    name: Update 3D Slicer
+      #    command: |
+      #      cd /usr/src/Slicer
+      #      git checkout .
+      #      git pull
+            
+      # Rebuilding Slicer may take a long time
+      # For now, just use the build files already present in the Docker image
+      #- run:
+      #    name: Build 3D Slicer
+      #    environment:
+      #      BUILD_TOOL_FLAGS: "-j3"
+      #    command: |
+      #      ../Slicer-build/BuildSlicer.sh
+      
+      # Not needed, as this is done by the checkout step
+      #- run:
+      #    name: Update LiverAnalysis extension
+      #    command: |
+      #      git clone https://github.com/ALive-research/Slicer-LiverAnalysis.git
+      #      cd /usr/src/Slicer-LiverAnalysis
+      #      git checkout .
+      #      git pull
+      
+      - run:
+          name: Configure LiverAnalysis extension
+          command: |
+            mkdir /usr/src/Slicer-LiverAnalysis-Build
+            cd /usr/src/Slicer-LiverAnalysis-Build
+            cmake -DCMAKE_BUILD_TYPE:STRING=Release -DSlicer_DIR:PATH=/usr/src/Slicer-build/Slicer-build ../Slicer-LiverAnalysis
+            
+      - run:
+          name: Build LiverAnalysis extension
+          environment:
+            BUILD_TOOL_FLAGS: "-j1"
+          command: |
+            cd /usr/src/Slicer-LiverAnalysis-Build
+            make
+            
+            
+      # Most Slicer tests don't run without X
+      # Either create a Docker image with X support, or only create tests that don't need X
+      #- run:
+      #    name: Run LiverAnalysis plugin tests
+      #    command: |
+      #      cd /usr/src/Slicer-LiverAnalysis-Build
+      #      ctest
