@@ -49,8 +49,11 @@
 // Markups Logic includes
 #include <vtkSlicerMarkupsLogic.h>
 
-// Markups VTK widgets includes
+// Markups VTKWidgets includes
 #include <vtkSlicerLineWidget.h>
+
+// Liver Markups VTKWidgets includes
+#include <vtkSlicerSlicingContourWidget.h>
 
 //-----------------------------------------------------------------------------
 /// \ingroup Slicer_QtModules_ExtensionTemplate
@@ -143,7 +146,7 @@ void qSlicerLiverMarkupsModule::setup()
 
  // Register markups
  markupsLogic->SetMarkup(vtkMRMLLiverMarkupsSlicingContourNode::New(),
-                         vtkSlicerLineWidget::New());
+                         vtkSlicerSlicingContourWidget::New());
 }
 
 //-----------------------------------------------------------------------------

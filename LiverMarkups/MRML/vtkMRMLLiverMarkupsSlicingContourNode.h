@@ -35,11 +35,17 @@ public:
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLLiverMarkupsSlicingContourNode);
 
+  vtkPolyData* GetTargetOrgan() const {return this->TargetOrgan;}
+  void SetTargetOrgan(vtkPolyData* targetOrgan) {this->TargetOrgan = targetOrgan;}
+
 protected:
   vtkMRMLLiverMarkupsSlicingContourNode();
   ~vtkMRMLLiverMarkupsSlicingContourNode() override;
   vtkMRMLLiverMarkupsSlicingContourNode(const vtkMRMLLiverMarkupsSlicingContourNode&);
   void operator=(const vtkMRMLLiverMarkupsSlicingContourNode&);
+
+private:
+  vtkPolyData *TargetOrgan = nullptr;
 };
 
 #endif //__vtkmrmllivermarkupsslicingcontournode_h_

@@ -35,64 +35,60 @@
   Oslo University Hospital) and was supported by The Research Council of Norway
   through the ALive project (grant nr. 311393).
 
-  ==============================================================================*/
+==============================================================================*/
+#ifndef __vtkslicerslicingcontourwidgetrepresentation3d_h_
+#define __vtkslicerslicingcontourwidgetrepresentation3d_h_
 
-#include "vtkSlicerSlicingContourWidget.h"
-
-// Liver Markups VTKWidgets include
-#include "vtkSlicerSlicingContourRepresentation3D.h"
-
-// VTK includes
-#include <vtkObjectFactory.h>
+#include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
 
 // Markups VTKWidgets includes
-#include <vtkSlicerLineRepresentation2D.h>
+#include "vtkSlicerLineRepresentation3D.h"
+
+// VTK includes
+#include <vtkWeakPointer.h>
 
 //------------------------------------------------------------------------------
-vtkStandardNewMacro(vtkSlicerSlicingContourWidget);
+class vtkCutter;
+class vtkPlane;
 
 //------------------------------------------------------------------------------
-vtkSlicerSlicingContourWidget::vtkSlicerSlicingContourWidget()
+class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerSlicingContourRepresentation3D
+: public vtkSlicerLineRepresentation3D
 {
+public:
+  static vtkSlicerSlicingContourRepresentation3D* New();
+  vtkTypeMacro(vtkSlicerSlicingContourRepresentation3D, vtkSlicerLineRepresentation3D);
+  void PrintSelf(ostream& os, vtkIndent indent);
 
-}
+  void UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void* callData=nullptr);
 
-//------------------------------------------------------------------------------
-vtkSlicerSlicingContourWidget::~vtkSlicerSlicingContourWidget() = default;
+  void GetActors(vtkPropCollection*) override;
+  void ReleaseGraphicsResources(vtkWindow*) override;
+  int RenderOverlay(vtkViewport* viewport) override;
+  int RenderOpaqueGeometry(vtkViewport* viewport) override;
+  int RenderTranslucentPolygonalGeometry(vtkViewport* viewport) override;
+  vtkTypeBool HasTranslucentPolygonalGeometry() override;
 
-//------------------------------------------------------------------------------
-void vtkSlicerSlicingContourWidget::CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode,
-                                                                vtkMRMLAbstractViewNode* viewNode,
-                                                                vtkRenderer* renderer)
-{
-  vtkSmartPointer<vtkSlicerMarkupsWidgetRepresentation> rep = nullptr;
-  if (vtkMRMLSliceNode::SafeDownCast(viewNode))
-    {
-    rep = vtkSmartPointer<vtkSlicerLineRepresentation2D>::New();
-    }
-  else
-    {
-    rep = vtkSmartPointer<vtkSlicerSlicingContourRepresentation3D>::New();
-    }
-  this->SetRenderer(renderer);
-  this->SetRepresentation(rep);
-  rep->SetViewNode(viewNode);
-  rep->SetMarkupsDisplayNode(markupsDisplayNode);
-  rep->UpdateFromMRML(nullptr, 0); // full update
-}
+protected:
+  vtkSlicerSlicingContourRepresentation3D();
+  ~vtkSlicerSlicingContourRepresentation3D() override;
 
-//------------------------------------------------------------------------------
-vtkSlicerMarkupsWidget* vtkSlicerSlicingContourWidget::CreateInstance() const
-{
-  vtkObject* ret = vtkObjectFactory::CreateInstance("vtkSlcierSlicingContourWidget");
-  if(ret)
-    {
-    return static_cast<vtkSlicerSlicingContourWidget*>(ret);
-    }
+  vtkSmartPointer<vtkCutter> Cutter;
+  vtkSmartPointer<vtkPolyDataMapper> ContourMapper;
+  vtkSmartPointer<vtkActor> ContourActor;
+  vtkSmartPointer<vtkPolyData> MiddlePoint;
+  vtkSmartPointer<vtkPolyDataMapper> MiddlePointMapper;
+  vtkSmartPointer<vtkActor> MiddlePointActor;
+  vtkWeakPointer<vtkPolyData> TargetOrgan;
+  vtkSmartPointer<vtkSphereSource> MiddlePointSource;
+  vtkSmartPointer<vtkPlane> SlicingPlane;
 
-  vtkSlicerSlicingContourWidget* result = new vtkSlicerSlicingContourWidget;
-#ifdef VTK_HAS_INITIALIZE_OBJECT_BASE
-  result->InitializeObjectBase();
-#endif
-  return result;
-}
+  void BuildMiddlePoint();
+  void BuildSlicingPlane();
+
+private:
+  vtkSlicerSlicingContourRepresentation3D(const vtkSlicerSlicingContourRepresentation3D&) = delete;
+  void operator=(const vtkSlicerSlicingContourRepresentation3D&) = delete;
+};
+
+#endif // __vtkslicerslicingcontourwidgetrepresentation3d_h_
