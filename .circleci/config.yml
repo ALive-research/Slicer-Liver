@@ -3,7 +3,7 @@ jobs:
   build:
     working_directory: /usr/src/Slicer-LiverAnalysis
     docker:
-      - image: aliveresearch/slicer-build
+      - image: olevs/slicer-build-ubuntu2004
     steps:
       - checkout
       # Rely on the Slicer version in the Docker image
@@ -47,11 +47,13 @@ jobs:
             cd /usr/src/Slicer-LiverAnalysis-Build
             make
             
-            
-      # Most Slicer tests don't run without X
-      # Either create a Docker image with X support, or only create tests that don't need X
-      #- run:
-      #    name: Run LiverAnalysis plugin tests
-      #    command: |
-      #      cd /usr/src/Slicer-LiverAnalysis-Build
-      #      ctest
+
+      - run:
+          name: Run X virtual framebuffer
+          command: Xvfb :99 -screen 0 640x480x8 -nolisten tcp
+          background: true
+      - run:
+          name: Run LiverAnalysis plugin tests
+          command: |
+            cd /usr/src/Slicer-LiverAnalysis-Build
+            ctest
