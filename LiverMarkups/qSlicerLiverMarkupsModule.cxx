@@ -89,6 +89,11 @@ qSlicerLiverMarkupsModule::~qSlicerLiverMarkupsModule()
 {
 }
 
+bool qSlicerLiverMarkupsModule::isHidden() const
+{
+    return true;
+}
+
 //-----------------------------------------------------------------------------
 QString qSlicerLiverMarkupsModule::helpText() const
 {
