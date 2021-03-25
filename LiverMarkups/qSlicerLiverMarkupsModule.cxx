@@ -55,6 +55,9 @@
 // Liver Markups VTKWidgets includes
 #include <vtkSlicerSlicingContourWidget.h>
 
+#include <qSlicerModuleManager.h>
+#include <qSlicerCoreApplication.h>
+
 //-----------------------------------------------------------------------------
 /// \ingroup Slicer_QtModules_ExtensionTemplate
 class qSlicerLiverMarkupsModulePrivate
@@ -84,11 +87,6 @@ qSlicerLiverMarkupsModule::qSlicerLiverMarkupsModule(QObject* _parent)
 //-----------------------------------------------------------------------------
 qSlicerLiverMarkupsModule::~qSlicerLiverMarkupsModule()
 {
-}
-
-bool qSlicerLiverMarkupsModule::isHidden() const
-{
-    return true;
 }
 
 //-----------------------------------------------------------------------------
@@ -150,16 +148,28 @@ void qSlicerLiverMarkupsModule::setup()
    }
 
  // Register markups
- markupsLogic->SetMarkup(vtkMRMLLiverMarkupsSlicingContourNode::New(),
-                         vtkSlicerSlicingContourWidget::New());
+ markupsLogic->RegisterMarkupsNode(vtkMRMLLiverMarkupsSlicingContourNode::New(),
+                                   vtkSlicerSlicingContourWidget::New());
+
+ qSlicerModuleManager* moduleManager = qSlicerCoreApplication::application()->moduleManager();
+ if (!moduleManager)
+   {
+   return;
+   }
+
+ qSlicerAbstractCoreModule* markupsModule = moduleManager->module("Markups");
+ if(!markupsModule)
+   {
+   qCritical() << Q_FUNC_INFO << ": Could not get the Markups module.";
+   return;
+   }
 }
 
 //-----------------------------------------------------------------------------
 qSlicerAbstractModuleRepresentation* qSlicerLiverMarkupsModule
 ::createWidgetRepresentation()
 {
-  // return new qSlicerLiverMarkupsModuleWidget;
-  return nullptr;
+    return nullptr;
 }
 
 //-----------------------------------------------------------------------------

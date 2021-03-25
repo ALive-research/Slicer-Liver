@@ -14,12 +14,12 @@ public:
   vtkTypeMacro(vtkMRMLLiverMarkupsSlicingContourNode, vtkMRMLMarkupsLineNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  const char* GetIcon() override {return "";}
-  const char* GetPlacementIcon() override {return "";}
-
   //--------------------------------------------------------------------------------
   // MRMLNode methods
   //--------------------------------------------------------------------------------
+  const char* GetIcon() override {return ":/Icons/MarkupsGeneric.png";}
+  const char* GetAddIcon() override {return ":/Icons/MarkupsGenericMouseModePlace.png";}
+  const char* GetPlaceAddIcon() override {return ":/Icons/MarkupsGenericMouseModePlaceAdd.png";}
 
   vtkMRMLNode* CreateNodeInstance() override;
   /// Get node XML tag name (like Volume, Model)
@@ -27,10 +27,10 @@ public:
   const char* GetNodeTagName() override {return "MarkupsSlicingContour";}
 
   /// Get markup name
-  const char* GetMarkupName() override {return "SlicingContour";}
+  const char* GetMarkupType() override {return "SlicingContour";}
 
   /// Get markup short name
-  const char* GetMarkupShortName() override {return "SC";}
+  const char* GetDefaultNodeNamePrefix() override {return "SC";}
 
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLLiverMarkupsSlicingContourNode);

@@ -43,7 +43,6 @@ public:
 
   qSlicerGetTitleMacro(QTMODULE_TITLE);
 
-  virtual bool isHidden()const;
   virtual QString helpText()const;
   virtual QString acknowledgementText()const;
   virtual QStringList contributors()const;

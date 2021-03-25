@@ -120,8 +120,8 @@ void vtkSlicerLiverMarkupsLogic::ObserveMRMLScene()
     auto slicingContourNode = vtkSmartPointer<vtkMRMLLiverMarkupsSlicingContourNode>::New();
 
     selectionNode->AddNewPlaceNodeClassNameToList(slicingContourNode->GetClassName(),
-                                                  slicingContourNode->GetPlacementIcon(),
-                                                  slicingContourNode->GetMarkupName());
+                                                  slicingContourNode->GetAddIcon(),
+                                                  slicingContourNode->GetMarkupType());
 
     // trigger an update on the mouse mode toolbar
     this->GetMRMLScene()->EndState(vtkMRMLScene::BatchProcessState);
