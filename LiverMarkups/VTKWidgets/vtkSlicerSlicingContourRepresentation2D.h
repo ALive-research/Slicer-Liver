@@ -50,7 +50,7 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerSlicingContourRe
 public:
   static vtkSlicerSlicingContourRepresentation2D* New();
   vtkTypeMacro(vtkSlicerSlicingContourRepresentation2D, vtkSlicerLineRepresentation2D);
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) override;
 
 protected:
   vtkSlicerSlicingContourRepresentation2D();

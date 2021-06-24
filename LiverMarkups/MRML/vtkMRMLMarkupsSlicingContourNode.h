@@ -37,44 +37,64 @@
 
 ==============================================================================*/
 
-#ifndef __vtkslicerslicingcontourwidgetrepresentation3d_h_
-#define __vtkslicerslicingcontourwidgetrepresentation3d_h_
+#ifndef __vtkmrmlmarkupsslicingcontournode_h_
+#define __vtkmrmlmarkupsslicingcontournode_h_
 
-#include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
-
-// Markups VTKWidgets includes
-#include "vtkSlicerLineRepresentation3D.h"
-#include "vtkSlicerShaderHelper.h"
+#include "vtkSlicerMarkupsModuleMRMLExport.h"
 
 // MRML includes
+#include <vtkMRMLMarkupsLineNode.h>
 #include <vtkMRMLModelNode.h>
 
-// VTK includes
+//VTK includes
 #include <vtkWeakPointer.h>
 
-
-//------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerSlicingContourRepresentation3D
-: public vtkSlicerLineRepresentation3D
+//-----------------------------------------------------------------------------
+class VTK_SLICER_MARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsSlicingContourNode
+: public vtkMRMLMarkupsLineNode
 {
 public:
-  static vtkSlicerSlicingContourRepresentation3D* New();
-  vtkTypeMacro(vtkSlicerSlicingContourRepresentation3D, vtkSlicerLineRepresentation3D);
+  static vtkMRMLMarkupsSlicingContourNode* New();
+  vtkTypeMacro(vtkMRMLMarkupsSlicingContourNode, vtkMRMLMarkupsLineNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  void UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void* callData=nullptr) override;
+  //--------------------------------------------------------------------------------
+  // MRMLNode methods
+  //--------------------------------------------------------------------------------
+  const char* GetIcon() override {return ":/Icons/MarkupsGeneric.png";}
+  const char* GetAddIcon() override {return ":/Icons/MarkupsGenericMouseModePlace.png";}
+  const char* GetPlaceAddIcon() override {return ":/Icons/MarkupsGenericMouseModePlaceAdd.png";}
+
+  vtkMRMLNode* CreateNodeInstance() override;
+
+  /// Get node XML tag name (like Volume, Model)
+  ///
+  const char* GetNodeTagName() override {return "MarkupsSlicingContour";}
+
+  /// Get markup name
+  const char* GetMarkupType() override {return "SlicingContour";}
+
+  /// Get markup short name
+  const char* GetDefaultNodeNamePrefix() override {return "SC";}
+
+  /// \sa vtkMRMLNode::CopyContent
+  vtkMRMLCopyContentDefaultMacro(vtkMRMLMarkupsSlicingContourNode);
+
+  vtkMRMLModelNode* GetTarget() const {return this->Target;}
+  void SetTarget(vtkMRMLModelNode* target) {this->Target = target; this->Modified();}
 
 protected:
-  vtkSlicerSlicingContourRepresentation3D();
-  ~vtkSlicerSlicingContourRepresentation3D() override;
+  vtkMRMLMarkupsSlicingContourNode();
+  ~vtkMRMLMarkupsSlicingContourNode() override = default;
 
 private:
-  vtkWeakPointer<vtkMRMLModelNode> Target;
-  vtkNew<vtkSlicerShaderHelper> ShaderHelper;
+ vtkWeakPointer<vtkMRMLModelNode> Target;
 
 private:
-  vtkSlicerSlicingContourRepresentation3D(const vtkSlicerSlicingContourRepresentation3D&) = delete;
-  void operator=(const vtkSlicerSlicingContourRepresentation3D&) = delete;
+ vtkMRMLMarkupsSlicingContourNode(const vtkMRMLMarkupsSlicingContourNode&);
+ void operator=(const vtkMRMLMarkupsSlicingContourNode&);
+
+
 };
 
-#endif // __vtkslicerslicingcontourwidgetrepresentation3d_h_
+#endif //__vtkmrmlmarkupsslicingcontournode_h_

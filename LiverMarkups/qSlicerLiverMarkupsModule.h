@@ -1,17 +1,39 @@
 /*==============================================================================
 
-  Program: 3D Slicer
+ Distributed under the OSI-approved BSD 3-Clause License.
 
-  Portions (c) Copyright Brigham and Women's Hospital (BWH) All Rights Reserved.
+  Copyright (c) Oslo University Hospital. All rights reserved.
 
-  See COPYRIGHT.txt
-  or http://www.slicer.org/copyright/copyright.txt for details.
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions
+  are met:
 
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
+  * Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+
+  * Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+
+  * Neither the name of Kitware, Inc. nor the names of Contributors
+    may be used to endorse or promote products derived from this
+    software without specific prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+  HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+  This file was originally developed by Rafael Palomar (The Intervention Centre,
+  Oslo University Hospital) and was supported by The Research Council of Norway
+  through the ALive project (grant nr. 311393).
 
 ==============================================================================*/
 
@@ -26,7 +48,6 @@
 class qSlicerLiverMarkupsModulePrivate;
 class vtkMRMLScene;
 
-/// \ingroup Slicer_QtModules_ExtensionTemplate
 class Q_SLICER_QTMODULES_LIVERMARKUPS_EXPORT
 qSlicerLiverMarkupsModule
   : public qSlicerLoadableModule
@@ -39,34 +60,34 @@ public:
 
   typedef qSlicerLoadableModule Superclass;
   explicit qSlicerLiverMarkupsModule(QObject *parent=0);
-  virtual ~qSlicerLiverMarkupsModule();
+   ~qSlicerLiverMarkupsModule();
 
   qSlicerGetTitleMacro(QTMODULE_TITLE);
 
-  virtual bool isHidden()const;
-  virtual QString helpText()const;
-  virtual QString acknowledgementText()const;
-  virtual QStringList contributors()const;
+   bool isHidden() const override;
+   QString helpText() const override;
+   QString acknowledgementText() const override;
+   QStringList contributors() const override;
 
-  virtual QIcon icon()const;
+   QIcon icon() const override;
 
-  virtual QStringList categories()const;
-  virtual QStringList dependencies() const;
-  virtual QStringList associatedNodeTypes() const;
+   QStringList categories() const override;
+   QStringList dependencies()  const override;
+   QStringList associatedNodeTypes()  const override;
 
   // Sets the MRML Scene
-  virtual void setMRMLScene(vtkMRMLScene* scene);
+   void setMRMLScene(vtkMRMLScene* scene) override;
 
 protected:
 
   /// Initialize the module. Register the volumes reader/writer
-  virtual void setup();
+   void setup() override;
 
   /// Create and return the widget representation associated to this module
-  virtual qSlicerAbstractModuleRepresentation * createWidgetRepresentation();
+   qSlicerAbstractModuleRepresentation * createWidgetRepresentation() override;
 
   /// Create and return the logic associated to this module
-  virtual vtkMRMLAbstractLogic* createLogic();
+   vtkMRMLAbstractLogic* createLogic() override;
 
 protected:
   QScopedPointer<qSlicerLiverMarkupsModulePrivate> d_ptr;

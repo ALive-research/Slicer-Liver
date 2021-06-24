@@ -36,34 +36,27 @@
   through the ALive project (grant nr. 311393).
 
 ==============================================================================*/
-#ifndef __vtkslicerslicingcontourwidget_h_
-#define __vtkslicerslicingcontourwidget_h_
 
-#include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
+#include "vtkMRMLMarkupsSlicingContourNode.h"
 
-#include <vtkSlicerMarkupsWidget.h>
+// MRML includes
+#include <vtkMRMLScene.h>
 
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerSlicingContourWidget
-: public vtkSlicerMarkupsWidget
+// VTK includes
+#include <vtkNew.h>
+#include <vtkObjectFactory.h>
+
+//--------------------------------------------------------------------------------
+vtkMRMLNodeNewMacro(vtkMRMLMarkupsSlicingContourNode);
+
+//--------------------------------------------------------------------------------
+vtkMRMLMarkupsSlicingContourNode::vtkMRMLMarkupsSlicingContourNode()
+  :Superclass(), Target(nullptr)
 {
-public:
-  static vtkSlicerSlicingContourWidget *New();
-  vtkTypeMacro(vtkSlicerSlicingContourWidget, vtkSlicerMarkupsWidget);
+}
 
-  void CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode,
-                                  vtkMRMLAbstractViewNode* viewNode,
-                                  vtkRenderer* renderer) override;
-
-  /// Create instance of the markups widget
-  vtkSlicerMarkupsWidget* CreateInstance() const override;
-
-protected:
-  vtkSlicerSlicingContourWidget();
-  ~vtkSlicerSlicingContourWidget();
-
-private:
-  vtkSlicerSlicingContourWidget(const vtkSlicerSlicingContourWidget&) = delete;
-  void operator=(const vtkSlicerSlicingContourWidget) = delete;
-};
-
-#endif // __vtkslicerslicingcontourwidget_h_
+//----------------------------------------------------------------------------
+void vtkMRMLMarkupsSlicingContourNode::PrintSelf(ostream& os, vtkIndent indent)
+{
+  Superclass::PrintSelf(os,indent);
+}

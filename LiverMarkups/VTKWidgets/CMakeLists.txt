@@ -18,6 +18,8 @@ set(${KIT}_SRCS
   vtkSlicerSlicingContourRepresentation3D.cxx
   vtkSlicerSlicingContourRepresentation2D.h
   vtkSlicerSlicingContourRepresentation2D.cxx
+  vtkSlicerShaderHelper.h
+  vtkSlicerShaderHelper.cxx
   )
 
 set(${KIT}_TARGET_LIBRARIES

@@ -1,3 +1,42 @@
+# ==============================================================================
+#
+#  Distributed under the OSI-approved BSD 3-Clause License.
+#
+#   Copyright (c) Oslo University Hospital. All rights reserved.
+#
+#   Redistribution and use in source and binary forms, with or without
+#   modification, are permitted provided that the following conditions
+#   are met:
+#
+#   * Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+#
+#   * Redistributions in binary form must reproduce the above copyright
+#     notice, this list of conditions and the following disclaimer in the
+#     documentation and/or other materials provided with the distribution.
+#
+#   * Neither the name of Oslo University Hospital nor the names
+#     of Contributors may be used to endorse or promote products derived
+#     from this software without specific prior written permission.
+#
+#   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+#   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+#   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+#   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+#   HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+#   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+#   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+#   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+#   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+#   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+#   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+#   This file was originally developed by Rafael Palomar (The Intervention Centre,
+#   Oslo University Hospital) and was supported by The Research Council of Norway
+#   through the ALive project (grant nr. 311393).
+#
+# ==============================================================================
+
 import os
 import unittest
 import logging
@@ -17,19 +56,18 @@ class Liver(ScriptedLoadableModule):
 
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
-    self.parent.title = "Liver"  # TODO: make this more human readable by adding spaces
-    self.parent.categories = ["Examples"]  # TODO: set categories (folders where the module shows up in the module selector)
-    self.parent.dependencies = []  # TODO: add here list of module names that this module requires
-    self.parent.contributors = ["John Doe (AnyWare Corp.)"]  # TODO: replace with "Firstname Lastname (Organization)"
-    # TODO: update with short description of the module and a link to online module documentation
+    self.parent.title = "Liver"
+    self.parent.categories = [""]
+    self.parent.dependencies = []
+    self.parent.contributors = ["Rafael Palomar (Oslo University Hospital / NTNU)"]
+
     self.parent.helpText = """
-This is an example of scripted loadable module bundled in an extension.
-See more information in <a href="https://github.com/organization/projectname#Liver">module documentation</a>.
-"""
-    # TODO: replace with organization, grant and thanks
-    self.parent.acknowledgementText = """
-This file was originally developed by Jean-Christophe Fillion-Robin, Kitware Inc., Andras Lasso, PerkLab,
-and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR013218-12S1.
+    This module offers tools for making liver resection plans in 3D liver models.
+""
+    This file was originally developed by Rafael Palomar, Oslo University
+    Hospital/NTNU, Ole Vegard Solberg, SINTEF and Geir Arne Tangen, SINTEF. This
+    work was funded by The Research Council of Norway through the project ALive
+    (grant nr. 311393).
 """
 
     # Additional initialization step after application startup is complete
@@ -43,46 +81,20 @@ def registerSampleData():
   """
   Add data sets to Sample Data module.
   """
-  # It is always recommended to provide sample data for users to make it easy to try the module,
-  # but if no sample data is available then this method (and associated startupCompeted signal connection) can be removed.
+  import SampleData
+  iconsPath = os.path.join(os.path.dirname(__file__), 'Resources/Icons')
 
-  # import SampleData
-  # iconsPath = os.path.join(os.path.dirname(__file__), 'Resources/Icons')
-
-  # # To ensure that the source code repository remains small (can be downloaded and installed quickly)
-  # # it is recommended to store data sets that are larger than a few MB in a Github release.
-
-  # # Liver1
-  # SampleData.SampleDataLogic.registerCustomSampleDataSource(
-  #   # Category and sample name displayed in Sample Data module
-  #   category='Liver',
-  #   sampleName='Liver1',
-  #   # Thumbnail should have size of approximately 260x280 pixels and stored in Resources/Icons folder.
-  #   # It can be created by Screen Capture module, "Capture all views" option enabled, "Number of images" set to "Single".
-  #   thumbnailFileName=os.path.join(iconsPath, 'Liver1.png'),
-  #   # Download URL and target file name
-  #   uris="https://github.com/Slicer/SlicerTestingData/releases/download/SHA256/998cb522173839c78657f4bc0ea907cea09fd04e44601f17c82ea27927937b95",
-  #   fileNames='Liver1.nrrd',
-  #   # Checksum to ensure file integrity. Can be computed by this command:
-  #   #  import hashlib; print(hashlib.sha256(open(filename, "rb").read()).hexdigest())
-  #   checksums = 'SHA256:998cb522173839c78657f4bc0ea907cea09fd04e44601f17c82ea27927937b95',
-  #   # This node name will be used when the data set is loaded
-  #   nodeNames='Liver1'
-  # )
-
-  # # Liver2
-  # SampleData.SampleDataLogic.registerCustomSampleDataSource(
-  #   # Category and sample name displayed in Sample Data module
-  #   category='Liver',
-  #   sampleName='Liver2',
-  #   thumbnailFileName=os.path.join(iconsPath, 'Liver2.png'),
-  #   # Download URL and target file name
-  #   uris="https://github.com/Slicer/SlicerTestingData/releases/download/SHA256/1a64f3f422eb3d1c9b093d1a18da354b13bcf307907c66317e2463ee530b7a97",
-  #   fileNames='Liver2.nrrd',
-  #   checksums = 'SHA256:1a64f3f422eb3d1c9b093d1a18da354b13bcf307907c66317e2463ee530b7a97',
-  #   # This node name will be used when the data set is loaded
-  #   nodeNames='Liver2'
-  # )
+  # Liver Parenchyma 3D Model dataset
+  SampleData.SampleDataLogic.registerCustomSampleDataSource(
+    category='Liver',
+    sampleName='LiverParenchymaModel01',
+    thumbnailFileName=os.path.join(iconsPath, 'LiverParenchyma01.png'),
+    uris="https://github.com/ALive-Research/ALiveResearchTestingData/releases/download/SHA256/f385d2b93d87a871b7f16e31cb7db6a83cf4d95b13882c2d995af174bfc320c6",
+    fileNames='LiverParenchymaModel.vtk',
+    checksums = 'SHA256:f385d2b93d87a871b7f16e31cb7db6a83cf4d95b13882c2d995af174bfc320c6',
+    nodeNames='LiverParenchyma',
+    loadFileType='ModelFile'
+  )
   pass
 
 #
@@ -90,9 +102,6 @@ def registerSampleData():
 #
 
 class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
-  """Uses ScriptedLoadableModuleWidget base class, available at:
-  https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
-  """
 
   def __init__(self, parent=None):
     """
@@ -132,7 +141,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
     # This connection listens for new node added.
-    self.addObserver(slicer.mrmlScene, slicer.mrmlScene.NodeAddedEvent, self.onSceneNodeAdded)
+    #self.addObserver(slicer.mrmlScene, slicer.mrmlScene.NodeAddedEvent, self.onSceneNodeAdded)
 
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
     # (in the selected parameter node).
@@ -142,8 +151,10 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.initializeParameterNode()
 
     # Enable the use of FXAA (antialiasing)
-    renderer = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers().GetFirstRenderer()
-    renderer.UseFXAAOn()
+    if not slicer.app.commandOptions().noMainWindow:
+      renderer = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers().GetFirstRenderer()
+      renderer.UseFXAAOn()
+
 
   def cleanup(self):
     """
@@ -179,16 +190,6 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
     if self.parent.isEntered:
       self.initializeParameterNode()
-
-  def onSceneNodeAdded(self, caller, event):
-    """
-    Called after a node gets added to the MRML scene
-    """
-    markupsLineNodes = slicer.util.getNodesByClass("vtkMRMLMarkupsLineNode")
-    if len(markupsLineNodes) > 0:
-      self.logic.setMarkupsLineNode(markupsLineNodes[-1])
-
-  #TODO: create onSceneNodeRemoved to remove observers of the node in case it is the node removed
 
   def initializeParameterNode(self):
     """
@@ -294,137 +295,12 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     """
     pass
 
-  def setMarkupsLineNode(self, markupsLineNode):
-    """
-    Sets the internal markups line node
-    """
-    self._markupsLineNode = markupsLineNode
-    self._markupsLineNode.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onLineNodeModified)
-
-  @vtk.calldata_type(vtk.VTK_OBJECT)
-  def onLineNodeModified(self, caller, event):
-    """
-    Acts on line modified
-    """
-
-    if self._markupsLineDisplayNode is None:
-      self._markupsLineDisplayNode = self._markupsLineNode.GetDisplayNode()
-      self._markupsLineDisplayNode.SetSnapMode(slicer.vtkMRMLMarkupsDisplayNode.SnapModeUnconstrained)
-
-    if self._actor is not None:
-
-      # Compute the normal of the plane
-      linePoints = vtk.vtkPoints()
-      self._markupsLineNode.GetControlPointPositionsWorld(linePoints)
-      if linePoints.GetNumberOfPoints() == 0:
-        return
-
-      mapper = self._actor.GetMapper()
-      VBOs = mapper.GetVBOs()
-      vVBO = VBOs.GetVBO("vertexMC")
-      scale = np.asarray(vVBO.GetScale())
-
-      p0 = np.asarray(linePoints.GetPoint(0),dtype=float)
-      p1 = np.asarray(linePoints.GetPoint(1),dtype=float)
-      pm = (p0 + p1) / 2.0 * scale
-      pm = np.append(pm, 1.0)
-      normal = (p0 - p1) / np.linalg.norm(p0 - p1)
-      normal = np.append(normal, 1.0)
-
-      renderer = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers().GetFirstRenderer()
-      camera = renderer.GetActiveCamera()
-
-      # Get the modelview matrix
-      modelView = camera.GetModelViewTransformMatrix()
-
-      # Compute a normals matrix
-      anorm = vtk.vtkMatrix4x4()
-      for i in range(3):
-        for j in range(3):
-          anorm.SetElement(i,j,modelView.GetElement(i,j))
-
-      fragmentUniforms = self._actor.GetShaderProperty().GetFragmentCustomUniforms()
-      fragmentUniforms.SetUniform4f("planePositionMC", pm)
-      fragmentUniforms.SetUniform4f("planeNormalMC", normal)
-
 
   def parameterNodeChanged(self,parameterNode):
     """
     Called when the parameter node has changed
     """
-
-    # If the node has changed
-    modelNode = parameterNode.GetNodeReference("LiverModel")
-    if self._currentSelectedModelNode is not modelNode:
-
-      lm = slicer.app.layoutManager()
-
-      for v in range(lm.threeDViewCount):
-        td = lm.threeDWidget(v)
-        ms = vtk.vtkCollection()
-        td.getDisplayableManagers(ms)
-
-        for i in range(ms.GetNumberOfItems()):
-
-          m = ms.GetItemAsObject(i)
-          if m.GetClassName() == "vtkMRMLModelDisplayableManager":
-
-            self._actor = m.GetActorByID(modelNode.GetDisplayNode().GetID())
-
-            shaderProperty  = self._actor.GetShaderProperty()
-
-            shaderProperty.AddVertexShaderReplacement(
-              "//VTK::PositionVC::Dec",
-              True,
-              "//VTK::PositionVC::Dec\n"
-              "out vec4 vertexMCVSOutput;\n",
-              False
-            )
-
-            shaderProperty.AddVertexShaderReplacement(
-              "//VTK::PositionVC::Impl",
-              True,
-              "//VTK::PositionVC::Impl\n"
-              "vertexMCVSOutput = vertexMC;\n",
-              False
-            )
-
-            shaderProperty.AddFragmentShaderReplacement(
-              "//VTK::PositionVC::Dec",
-              True,
-              "//VTK::PositionVC::Dec\n"
-              "in vec4 vertexMCVSOutput;\n"
-              "vec4 fragPositionMC = vertexMCVSOutput;\n",
-              False
-            )
-
-            shaderProperty.AddFragmentShaderReplacement(
-              "//VTK::Color::Impl",
-              True,
-              "//VTK::Color::Impl\n"
-              "  vec3 color1 = vec3(0.0, 1.0 ,0.0);\n"
-              "  vec3 color2 = vec3(0.0, 0.0 ,1.0);\n"
-              "  vec3 w = -(planePositionMC.xyz*fragPositionMC.w - fragPositionMC.xyz);\n"
-              "  float dist = (planeNormalMC.x * w.x + planeNormalMC.y * w.y + planeNormalMC.z * w.z) / sqrt( pow(planeNormalMC.x,2) + pow(planeNormalMC.y,2)+ pow(planeNormalMC.z,2));\n"
-              "  if(abs(dist) < 0.05){\n"
-              "     ambientColor = ambientIntensity * color1;\n"
-              "     diffuseColor = diffuseIntensity * color1;\n"
-              "  }\n"
-              "  else{\n"
-              "     ambientColor = ambientIntensity * color2;\n"
-              "     diffuseColor = diffuseIntensity * color2;\n"
-              "  }\n" ,
-              False
-            )
-
-            fragmentUniforms = self._actor.GetShaderProperty().GetFragmentCustomUniforms()
-            fragmentUniforms.SetUniform4f("planePositionMC", [0.0,0,0,0.0])
-            fragmentUniforms.SetUniform4f("planeNormalMC", ([1,0,0,1]/np.linalg.norm([1.0, 0.0, 0.0])).tolist())
-
-    else:
-
-      print("Same model")
-
+    pass
 
 
 
@@ -451,36 +327,25 @@ class LiverTest(ScriptedLoadableModuleTest):
     self.test_Liver1()
 
   def test_Liver1(self):
-    # """ Ideally you should have several levels of tests.  At the lowest level
-    # tests should exercise the functionality of the logic with different inputs
-    # (both valid and invalid).  At higher levels your tests should emulate the
-    # way the user would interact with your code and confirm that it still works
-    # the way you intended.
-    # One of the most important features of the tests is that it should alert other
-    # developers when their changes will have an impact on the behavior of your
-    # module.  For example, if a developer removes a feature that you depend on,
-    # your test should break so they know that the feature is needed.
-    # """
 
-    # self.delayDisplay("Starting the test")
+    self.delayDisplay("Starting the test")
 
     # # Get/create input data
 
-    # import SampleData
-    # registerSampleData()
-    # inputVolume = SampleData.downloadSample('Liver1')
-    # self.delayDisplay('Loaded test data set')
+    import SampleData
+    registerSampleData()
+    inputModelNode = SampleData.downloadSample('LiverParenchymaModel01')
+    self.delayDisplay('Loaded test data set')
 
-    # inputScalarRange = inputVolume.GetImageData().GetScalarRange()
-    # self.assertEqual(inputScalarRange[0], 0)
-    # self.assertEqual(inputScalarRange[1], 695)
+    slicingContourMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsSlicingContourNode")
+    slicingContourMarkupNode.AddControlPoint(vtk.vtkVector3d(205, 11, 153))
+    slicingContourMarkupNode.AddControlPoint(vtk.vtkVector3d(-92, 11, 94))
+    slicingContourMarkupNode.SetTarget(inputModelNode)
 
-    # outputVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode")
-    # threshold = 100
 
-    # # Test the module logic
+    # Test the module logic
 
-    # logic = LiverLogic()
+    #logic = LiverLogic()
 
     # # Test algorithm with non-inverted threshold
     # logic.process(inputVolume, outputVolume, threshold, True)
@@ -494,6 +359,6 @@ class LiverTest(ScriptedLoadableModuleTest):
     # self.assertEqual(outputScalarRange[0], inputScalarRange[0])
     # self.assertEqual(outputScalarRange[1], inputScalarRange[1])
 
-    # self.delayDisplay('Test passed')
+    self.delayDisplay('Test passed')
 
     pass

@@ -39,7 +39,7 @@
 #include "vtkSlicerLiverMarkupsLogic.h"
 
 // Liver Markups MRML includes
-#include "vtkMRMLLiverMarkupsSlicingContourNode.h"
+#include "vtkMRMLMarkupsSlicingContourNode.h"
 
 // MRML includes
 #include <vtkMRMLScene.h>
@@ -82,7 +82,7 @@ void vtkSlicerLiverMarkupsLogic::RegisterNodes()
   vtkMRMLScene *scene = this->GetMRMLScene();
 
   // Nodes
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLLiverMarkupsSlicingContourNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsSlicingContourNode>::New());
 }
 
 //---------------------------------------------------------------------------
@@ -117,7 +117,7 @@ void vtkSlicerLiverMarkupsLogic::ObserveMRMLScene()
     // bar is triggered when leave it
     this->GetMRMLScene()->StartState(vtkMRMLScene::BatchProcessState);
 
-    auto slicingContourNode = vtkSmartPointer<vtkMRMLLiverMarkupsSlicingContourNode>::New();
+    auto slicingContourNode = vtkSmartPointer<vtkMRMLMarkupsSlicingContourNode>::New();
 
     selectionNode->AddNewPlaceNodeClassNameToList(slicingContourNode->GetClassName(),
                                                   slicingContourNode->GetAddIcon(),
@@ -135,14 +135,13 @@ void vtkSlicerLiverMarkupsLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
 {
   Superclass::OnMRMLSceneNodeAdded(node);
 
-  vtkMRMLMarkupsNode* markupsNode =
-    vtkMRMLMarkupsNode::SafeDownCast(node);
+  auto markupsNode = vtkMRMLMarkupsSlicingContourNode::SafeDownCast(node);
   if (!markupsNode)
     {
     return;
     }
 
-  vtkMRMLMarkupsDisplayNode* displayNode =
-    vtkMRMLMarkupsDisplayNode::SafeDownCast(markupsNode->GetDisplayNode());
-  displayNode->SetTextScale(0.0);
+  auto displayNode = vtkMRMLMarkupsDisplayNode::SafeDownCast(markupsNode->GetDisplayNode());
+  displayNode->PropertiesLabelVisibilityOff();
+  displayNode->SetSnapMode(vtkMRMLMarkupsDisplayNode::SnapModeUnconstrained);
 }
