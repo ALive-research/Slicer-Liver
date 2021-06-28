@@ -40,7 +40,7 @@
 #ifndef __vtkmrmlmarkupsslicingcontournode_h_
 #define __vtkmrmlmarkupsslicingcontournode_h_
 
-#include "vtkSlicerMarkupsModuleMRMLExport.h"
+#include "vtkSlicerLiverMarkupsModuleMRMLExport.h"
 
 // MRML includes
 #include <vtkMRMLMarkupsLineNode.h>
@@ -50,7 +50,7 @@
 #include <vtkWeakPointer.h>
 
 //-----------------------------------------------------------------------------
-class VTK_SLICER_MARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsSlicingContourNode
+class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsSlicingContourNode
 : public vtkMRMLMarkupsLineNode
 {
 public:
