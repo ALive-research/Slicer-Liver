@@ -337,11 +337,15 @@ class LiverTest(ScriptedLoadableModuleTest):
     inputModelNode = SampleData.downloadSample('LiverParenchymaModel01')
     self.delayDisplay('Loaded test data set')
 
-    slicingContourMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsSlicingContourNode")
-    slicingContourMarkupNode.AddControlPoint(vtk.vtkVector3d(205, 11, 153))
-    slicingContourMarkupNode.AddControlPoint(vtk.vtkVector3d(-92, 11, 94))
-    slicingContourMarkupNode.SetTarget(inputModelNode)
+    # slicingContourMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsSlicingContourNode")
+    # slicingContourMarkupNode.AddControlPoint(vtk.vtkVector3d(205, 11, 153))
+    # slicingContourMarkupNode.AddControlPoint(vtk.vtkVector3d(-92, 11, 94))
+    # slicingContourMarkupNode.SetTarget(inputModelNode)
 
+    distanceContourMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsDistanceContourNode")
+    distanceContourMarkupNode.AddControlPoint(vtk.vtkVector3d(205, 11, 153))
+    distanceContourMarkupNode.AddControlPoint(vtk.vtkVector3d(-92, 11, 94))
+    distanceContourMarkupNode.SetTarget(inputModelNode)
 
     # Test the module logic
 

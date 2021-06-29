@@ -35,58 +35,64 @@
   Oslo University Hospital) and was supported by The Research Council of Norway
   through the ALive project (grant nr. 311393).
 
-==============================================================================*/
+  ==============================================================================*/
 
-#ifndef vtkslicershaderhelper_h_
-#define vtkslicershaderhelper_h_
+#include "vtkSlicerDistanceContourWidget.h"
 
-#include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
-
-// MRML includes
-#include <vtkMRMLModelNode.h>
+// Liver Markups VTKWidgets include
+#include "vtkSlicerDistanceContourRepresentation3D.h"
 
 // VTK includes
-#include <vtkActor.h>
-#include <vtkCollection.h>
-#include <vtkObject.h>
-#include <vtkWeakPointer.h>
+#include <vtkObjectFactory.h>
+
+// Markups VTKWidgets includes
+#include <vtkSlicerLineRepresentation2D.h>
 
 //------------------------------------------------------------------------------
-class vtkCollection;
-class vtkMRMLModelNode;
-class vtkShaderProperty;
+vtkStandardNewMacro(vtkSlicerDistanceContourWidget);
 
 //------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerShaderHelper
-: public vtkObject
+vtkSlicerDistanceContourWidget::vtkSlicerDistanceContourWidget()
 {
-public:
-  static vtkSlicerShaderHelper* New();
-  vtkTypeMacro(vtkSlicerShaderHelper, vtkObject);
-  void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  void SetTargetModelNode(vtkMRMLModelNode* modelNode){this->TargetModelNode = modelNode;}
-  vtkMRMLModelNode* GetTargetModelNode(){return this->TargetModelNode;}
-  vtkCollection* GetTargetModelVertexVBOs(){return this->TargetModelVertexVBOs;}
-  vtkCollection* GetTargetActors(){return this->TargetModelActors;}
-  void AttachSlicingContourShader();
-  void AttachDistanceContourShader();
+}
 
-protected:
-  vtkWeakPointer<vtkMRMLModelNode> TargetModelNode;
-  vtkNew<vtkCollection> TargetModelVertexVBOs;
-  vtkNew<vtkCollection> TargetModelActors;
+//------------------------------------------------------------------------------
+vtkSlicerDistanceContourWidget::~vtkSlicerDistanceContourWidget() = default;
 
-protected:
-  vtkSlicerShaderHelper();
-  ~vtkSlicerShaderHelper() = default;
+//------------------------------------------------------------------------------
+void vtkSlicerDistanceContourWidget::CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode,
+                                                                vtkMRMLAbstractViewNode* viewNode,
+                                                                vtkRenderer* renderer)
+{
+  vtkSmartPointer<vtkSlicerMarkupsWidgetRepresentation> rep = nullptr;
+  if (vtkMRMLSliceNode::SafeDownCast(viewNode))
+    {
+    rep = vtkSmartPointer<vtkSlicerLineRepresentation2D>::New();
+    }
+  else
+    {
+    rep = vtkSmartPointer<vtkSlicerDistanceContourRepresentation3D>::New();
+    }
+  this->SetRenderer(renderer);
+  this->SetRepresentation(rep);
+  rep->SetViewNode(viewNode);
+  rep->SetMarkupsDisplayNode(markupsDisplayNode);
+  rep->UpdateFromMRML(nullptr, 0); // full update
+}
 
-private:
-  void getShaderProperties(vtkCollection* propertiesCollection);
+//------------------------------------------------------------------------------
+vtkSlicerMarkupsWidget* vtkSlicerDistanceContourWidget::CreateInstance() const
+{
+  vtkObject* ret = vtkObjectFactory::CreateInstance("vtkSlcierDistanceContourWidget");
+  if(ret)
+    {
+    return static_cast<vtkSlicerDistanceContourWidget*>(ret);
+    }
 
-private:
-  vtkSlicerShaderHelper(const vtkSlicerShaderHelper&) = delete;
-  void operator=(const vtkSlicerShaderHelper&) = delete;
-};
-
-#endif // vtkslicershaderhelper_h_
+  vtkSlicerDistanceContourWidget* result = new vtkSlicerDistanceContourWidget;
+#ifdef VTK_HAS_INITIALIZE_OBJECT_BASE
+  result->InitializeObjectBase();
+#endif
+  return result;
+}

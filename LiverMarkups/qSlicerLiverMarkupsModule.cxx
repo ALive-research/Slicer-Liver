@@ -38,7 +38,10 @@
 ==============================================================================*/
 
 #include "qSlicerLiverMarkupsModule.h"
-#include "MRML/vtkMRMLMarkupsSlicingContourNode.h"
+
+// MRML includes
+#include "vtkMRMLMarkupsSlicingContourNode.h"
+#include "vtkMRMLMarkupsDistanceContourNode.h"
 
 // Qt includes
 #include <QDebug>
@@ -53,7 +56,8 @@
 #include <vtkSlicerLineWidget.h>
 
 // Liver Markups VTKWidgets includes
-#include <vtkSlicerSlicingContourWidget.h>
+#include "vtkSlicerSlicingContourWidget.h"
+#include "vtkSlicerDistanceContourWidget.h"
 
 #include <qSlicerModuleManager.h>
 #include <qSlicerCoreApplication.h>
@@ -159,6 +163,9 @@ void qSlicerLiverMarkupsModule::setup()
  vtkNew<vtkSlicerSlicingContourWidget> slicingContourWidget;
  markupsLogic->RegisterMarkupsNode(slicingContourNode, slicingContourWidget);
 
+ vtkNew<vtkMRMLMarkupsDistanceContourNode> distanceContourNode;
+ vtkNew<vtkSlicerDistanceContourWidget> distanceContourWidget;
+ markupsLogic->RegisterMarkupsNode(distanceContourNode, distanceContourWidget);
 
  qSlicerModuleManager* moduleManager = qSlicerCoreApplication::application()->moduleManager();
  if (!moduleManager)
@@ -190,7 +197,9 @@ vtkMRMLAbstractLogic* qSlicerLiverMarkupsModule::createLogic()
 //-----------------------------------------------------------------------------
 QStringList qSlicerLiverMarkupsModule::associatedNodeTypes() const
 {
- return QStringList() << "vtkMRMLMarkupsSlicingContourNode";
+  return QStringList()
+    << "vtkMRMLMarkupsSlicingContourNode"
+    << "vtkMRMLMarkupsDistanceContourNode";
 }
 
 //-----------------------------------------------------------------------------

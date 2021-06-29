@@ -37,56 +37,26 @@
 
 ==============================================================================*/
 
-#ifndef vtkslicershaderhelper_h_
-#define vtkslicershaderhelper_h_
-
-#include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
+#include "vtkMRMLMarkupsDistanceContourNode.h"
 
 // MRML includes
-#include <vtkMRMLModelNode.h>
+#include <vtkMRMLScene.h>
 
 // VTK includes
-#include <vtkActor.h>
-#include <vtkCollection.h>
-#include <vtkObject.h>
-#include <vtkWeakPointer.h>
+#include <vtkNew.h>
+#include <vtkObjectFactory.h>
 
-//------------------------------------------------------------------------------
-class vtkCollection;
-class vtkMRMLModelNode;
-class vtkShaderProperty;
+//--------------------------------------------------------------------------------
+vtkMRMLNodeNewMacro(vtkMRMLMarkupsDistanceContourNode);
 
-//------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerShaderHelper
-: public vtkObject
+//--------------------------------------------------------------------------------
+vtkMRMLMarkupsDistanceContourNode::vtkMRMLMarkupsDistanceContourNode()
+  :Superclass(), Target(nullptr)
 {
-public:
-  static vtkSlicerShaderHelper* New();
-  vtkTypeMacro(vtkSlicerShaderHelper, vtkObject);
-  void PrintSelf(ostream& os, vtkIndent indent) override;
+}
 
-  void SetTargetModelNode(vtkMRMLModelNode* modelNode){this->TargetModelNode = modelNode;}
-  vtkMRMLModelNode* GetTargetModelNode(){return this->TargetModelNode;}
-  vtkCollection* GetTargetModelVertexVBOs(){return this->TargetModelVertexVBOs;}
-  vtkCollection* GetTargetActors(){return this->TargetModelActors;}
-  void AttachSlicingContourShader();
-  void AttachDistanceContourShader();
-
-protected:
-  vtkWeakPointer<vtkMRMLModelNode> TargetModelNode;
-  vtkNew<vtkCollection> TargetModelVertexVBOs;
-  vtkNew<vtkCollection> TargetModelActors;
-
-protected:
-  vtkSlicerShaderHelper();
-  ~vtkSlicerShaderHelper() = default;
-
-private:
-  void getShaderProperties(vtkCollection* propertiesCollection);
-
-private:
-  vtkSlicerShaderHelper(const vtkSlicerShaderHelper&) = delete;
-  void operator=(const vtkSlicerShaderHelper&) = delete;
-};
-
-#endif // vtkslicershaderhelper_h_
+//----------------------------------------------------------------------------
+void vtkMRMLMarkupsDistanceContourNode::PrintSelf(ostream& os, vtkIndent indent)
+{
+  Superclass::PrintSelf(os,indent);
+}
