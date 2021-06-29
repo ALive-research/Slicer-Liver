@@ -87,16 +87,25 @@ def registerSampleData():
   # Liver Parenchyma 3D Model dataset
   SampleData.SampleDataLogic.registerCustomSampleDataSource(
     category='Liver',
-    sampleName='LiverParenchymaModel01',
-    thumbnailFileName=os.path.join(iconsPath, 'LiverParenchyma01.png'),
-    uris="https://github.com/ALive-Research/ALiveResearchTestingData/releases/download/SHA256/f385d2b93d87a871b7f16e31cb7db6a83cf4d95b13882c2d995af174bfc320c6",
-    fileNames='LiverParenchymaModel.vtk',
-    checksums = 'SHA256:f385d2b93d87a871b7f16e31cb7db6a83cf4d95b13882c2d995af174bfc320c6',
-    nodeNames='LiverParenchyma',
-    loadFileType='ModelFile'
+    sampleName='LiverVolume000',
+    thumbnailFileName=os.path.join(iconsPath, 'LiverVolume000.png'),
+    uris="https://github.com/ALive-Research/ALiveResearchTestingData/releases/download/SHA256/5df79d9077b1cf2b746ff5cf9268e0bc4d440eb50fa65308b47bde094640458a",
+    fileNames='LiverVolume000.nrrd',
+    checksums = 'SHA256:5df79d9077b1cf2b746ff5cf9268e0bc4d440eb50fa65308b47bde094640458a',
+    nodeNames='LiverVolume000',
+    loadFileType='VolumeFile'
   )
-  pass
 
+  SampleData.SampleDataLogic.registerCustomSampleDataSource(
+    category='Liver',
+    sampleName='LiverSegmentation000',
+    thumbnailFileName=os.path.join(iconsPath, 'LiverSegmentation000.png'),
+    uris="https://github.com/ALive-Research/ALiveResearchTestingData/releases/download/SHA256/83c285259a754a76a8d5129142b26d2ac8127360af9ea1e3465c13532651fed5",
+    fileNames='LiverSegmentation000.nrrd',
+    checksums = 'SHA256:83c285259a754a76a8d5129142b26d2ac8127360af9ea1e3465c13532651fed5',
+    nodeNames='LiverSegmentation000',
+    loadFileType='SegmentationFile'
+  )
 #
 # LiverWidget
 #
@@ -145,7 +154,8 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
     # (in the selected parameter node).
-    self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+    self.ui.volumeNodeComboBox.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+    self.ui.segmentationNodeComboBox.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
@@ -201,10 +211,15 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.setParameterNode(self.logic.getParameterNode())
 
     # Select default input nodes if nothing is selected yet to save a few clicks for the user
-    if not self._parameterNode.GetNodeReference("LiverModel"):
-      firstModelNode= slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLModelNode")
-      if firstModelNode:
-        self._parameterNode.SetNodeReferenceID("LiverModel", firstModelNode.GetID())
+    if not self._parameterNode.GetNodeReference("LiverVolume"):
+      firstVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
+      if firstVolumeNode:
+        self._parameterNode.SetNodeReferenceID("LiverVolume", firstVolumeNode.GetID())
+
+    if not self._parameterNode.GetNodeReference("LiverSegmentation"):
+      firstSegmentationNode= slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLSegmentationNode")
+      if firstSegmentationNode:
+        self._parameterNode.SetNodeReferenceID("LiverSegmentation", firstSegmentationNode.GetID())
 
   def setParameterNode(self, inputParameterNode):
     """
@@ -240,7 +255,8 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._updatingGUIFromParameterNode = True
 
     # Update node selectors and sliders
-    self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference("LiverModel"))
+    self.ui.volumeNodeComboBox.setCurrentNode(self._parameterNode.GetNodeReference("LiverVolume"))
+    self.ui.segmentationNodeComboBox.setCurrentNode(self._parameterNode.GetNodeReference("LiverSegmentation"))
 
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
@@ -256,7 +272,8 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
 
-    self._parameterNode.SetNodeReferenceID("LiverModel", self.ui.inputSelector.currentNodeID)
+    self._parameterNode.SetNodeReferenceID("LiverVolume", self.ui.segmentationNodeComboBox.currentNodeID)
+    self._parameterNode.SetNodeReferenceID("LiverSegmentation", self.ui.segmentationNodeComboBox.currentNodeID)
 
     self._parameterNode.EndModify(wasModified)
 
@@ -334,7 +351,8 @@ class LiverTest(ScriptedLoadableModuleTest):
 
     import SampleData
     registerSampleData()
-    inputModelNode = SampleData.downloadSample('LiverParenchymaModel01')
+    inputVolume = SampleData.downloadSample('LiverVolume000')
+    inputSegmentation = SampleData.downloadSample('LiverSegmentation000')
     self.delayDisplay('Loaded test data set')
 
     # slicingContourMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsSlicingContourNode")
@@ -342,10 +360,10 @@ class LiverTest(ScriptedLoadableModuleTest):
     # slicingContourMarkupNode.AddControlPoint(vtk.vtkVector3d(-92, 11, 94))
     # slicingContourMarkupNode.SetTarget(inputModelNode)
 
-    distanceContourMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsDistanceContourNode")
-    distanceContourMarkupNode.AddControlPoint(vtk.vtkVector3d(205, 11, 153))
-    distanceContourMarkupNode.AddControlPoint(vtk.vtkVector3d(-92, 11, 94))
-    distanceContourMarkupNode.SetTarget(inputModelNode)
+    # distanceContourMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsDistanceContourNode")
+    # distanceContourMarkupNode.AddControlPoint(vtk.vtkVector3d(205, 11, 153))
+    # distanceContourMarkupNode.AddControlPoint(vtk.vtkVector3d(-92, 11, 94))
+    # distanceContourMarkupNode.SetTarget(inputModelNode)
 
     # Test the module logic
 
