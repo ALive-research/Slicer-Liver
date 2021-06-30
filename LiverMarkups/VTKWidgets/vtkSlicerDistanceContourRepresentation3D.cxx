@@ -37,9 +37,9 @@
 
   ==============================================================================*/
 
-#include "vtkSlicerSlicingContourRepresentation3D.h"
+#include "vtkSlicerDistanceContourRepresentation3D.h"
 
-#include "vtkMRMLMarkupsSlicingContourNode.h"
+#include "vtkMRMLMarkupsDistanceContourNode.h"
 
 // MRML includes
 #include <qMRMLThreeDWidget.h>
@@ -57,48 +57,48 @@
 #include <vtkUniforms.h>
 
 //------------------------------------------------------------------------------
-vtkStandardNewMacro(vtkSlicerSlicingContourRepresentation3D);
+vtkStandardNewMacro(vtkSlicerDistanceContourRepresentation3D);
 
 //------------------------------------------------------------------------------
-vtkSlicerSlicingContourRepresentation3D::vtkSlicerSlicingContourRepresentation3D()
+vtkSlicerDistanceContourRepresentation3D::vtkSlicerDistanceContourRepresentation3D()
   :Superclass(), Target(nullptr)
 {
 }
 
 //------------------------------------------------------------------------------
-vtkSlicerSlicingContourRepresentation3D::~vtkSlicerSlicingContourRepresentation3D() = default;
+vtkSlicerDistanceContourRepresentation3D::~vtkSlicerDistanceContourRepresentation3D() = default;
 
 //------------------------------------------------------------------------------
-void vtkSlicerSlicingContourRepresentation3D::PrintSelf(ostream& os, vtkIndent indent)
+void vtkSlicerDistanceContourRepresentation3D::PrintSelf(ostream& os, vtkIndent indent)
 {
   Superclass::PrintSelf(os, indent);
 }
 
 //----------------------------------------------------------------------
-void vtkSlicerSlicingContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void *callData /*=nullptr*/)
+void vtkSlicerDistanceContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void *callData /*=nullptr*/)
 {
 
  this->Superclass::UpdateFromMRML(caller, event, callData);
 
- auto liverMarkupsSlicingContourNode =
-   vtkMRMLMarkupsSlicingContourNode::SafeDownCast(this->GetMarkupsNode());
- if (!liverMarkupsSlicingContourNode)
+ auto liverMarkupsDistanceContourNode =
+   vtkMRMLMarkupsDistanceContourNode::SafeDownCast(this->GetMarkupsNode());
+ if (!liverMarkupsDistanceContourNode)
    {
-   vtkWarningMacro("Invalid slicing contour node.");
+   vtkWarningMacro("Invalid distance contour node.");
    return;
    }
 
- auto targetModelNode = liverMarkupsSlicingContourNode->GetTarget();
+ auto targetModelNode = liverMarkupsDistanceContourNode->GetTarget();
 
  // If the target model node has changed -> Reassign the contour shader
  if (targetModelNode != this->Target)
    {
    this->ShaderHelper->SetTargetModelNode(targetModelNode);
-   this->ShaderHelper->AttachSlicingContourShader();
+   this->ShaderHelper->AttachDistanceContourShader();
    this->Target = targetModelNode;
    }
 
- if (liverMarkupsSlicingContourNode->GetNumberOfControlPoints() != 2)
+ if (liverMarkupsDistanceContourNode->GetNumberOfControlPoints() != 2)
    {
    return;
    }
@@ -107,26 +107,11 @@ void vtkSlicerSlicingContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller
  double point1Position[3] = {1.0f};
  double point2Position[3] = {1.0f};
 
- liverMarkupsSlicingContourNode->GetNthControlPointPosition(0, point1Position);
- liverMarkupsSlicingContourNode->GetNthControlPointPosition(1, point2Position);
+ liverMarkupsDistanceContourNode->GetNthControlPointPosition(0, point1Position);
+ liverMarkupsDistanceContourNode->GetNthControlPointPosition(1, point2Position);
 
- float middlePointPosition[3] = {
-   static_cast<float>(point2Position[0] + point1Position[0]) / 2.0f,
-   static_cast<float>(point2Position[1] + point1Position[1]) / 2.0f,
-   static_cast<float>(point2Position[2] + point1Position[2]) / 2.0f
- };
-
- float planeNormal[4] = {
-   static_cast<float>(point2Position[0] - point1Position[0]),
-   static_cast<float>(point2Position[1] - point1Position[1]),
-   static_cast<float>(point2Position[2] - point1Position[2]),
-   1.0f
- };
-
- float planeNormalNorm = vtkMath::Normalize(planeNormal);
- planeNormal[0] /= planeNormalNorm;
- planeNormal[1] /= planeNormalNorm;
- planeNormal[2] /= planeNormalNorm;
+ std::cout << "Point 1 " << point1Position[0] << " " << point1Position[1] << " " << point1Position[2] << std::endl;
+ //std::cout << "Point 2 " << point1Position[0] << " " << point1Position[1] << " " << point1Position[2] << std::endl;
 
  auto VBOs = this->ShaderHelper->GetTargetModelVertexVBOs();
  auto actors = this->ShaderHelper->GetTargetActors();
@@ -137,16 +122,22 @@ void vtkSlicerSlicingContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller
    auto scale = VBO->GetScale();
    auto shift = VBO->GetShift();
 
-   float middlePointPositionScaled[4] = {
-     (middlePointPosition[0] - shift[0]) * scale[0],
-     (middlePointPosition[1] - shift[1]) * scale[1],
-     (middlePointPosition[2] - shift[2]) * scale[2],
+   float externalPointPositionScaled[4] = {
+     (point1Position[0] - shift[0]) * scale[0],
+     (point1Position[1] - shift[1]) * scale[1],
+     (point1Position[2] - shift[2]) * scale[2],
+     1.0f};
+
+   float referencePointPositionScaled[4] = {
+     (point2Position[0] - shift[0]) * scale[0],
+     (point2Position[1] - shift[1]) * scale[1],
+     (point2Position[2] - shift[2]) * scale[2],
      1.0f};
 
    auto actor = vtkActor::SafeDownCast(this->ShaderHelper->GetTargetActors()->GetItemAsObject(index));
    auto fragmentUniforms = actor->GetShaderProperty()->GetFragmentCustomUniforms();
-   fragmentUniforms->SetUniform4f("planePositionMC", middlePointPositionScaled);
-   fragmentUniforms->SetUniform4f("planeNormalMC", planeNormal);
+   fragmentUniforms->SetUniform4f("externalPointMC", externalPointPositionScaled);
+   fragmentUniforms->SetUniform4f("referencePointMC", referencePointPositionScaled);
    fragmentUniforms->SetUniformf("contourThickness", 2.0f*(scale[0]+scale[1])/2.0f);
    fragmentUniforms->SetUniformi("contourVisibility", 1);
    }

@@ -40,6 +40,7 @@
 
 // Liver Markups MRML includes
 #include "vtkMRMLMarkupsSlicingContourNode.h"
+#include "vtkMRMLMarkupsDistanceContourNode.h"
 
 // MRML includes
 #include <vtkMRMLScene.h>
@@ -83,6 +84,7 @@ void vtkSlicerLiverMarkupsLogic::RegisterNodes()
 
   // Nodes
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsSlicingContourNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsDistanceContourNode>::New());
 }
 
 //---------------------------------------------------------------------------
@@ -123,6 +125,12 @@ void vtkSlicerLiverMarkupsLogic::ObserveMRMLScene()
                                                   slicingContourNode->GetAddIcon(),
                                                   slicingContourNode->GetMarkupType());
 
+    auto distanceContourNode = vtkSmartPointer<vtkMRMLMarkupsDistanceContourNode>::New();
+
+    selectionNode->AddNewPlaceNodeClassNameToList(distanceContourNode->GetClassName(),
+                                                  distanceContourNode->GetAddIcon(),
+                                                  distanceContourNode->GetMarkupType());
+
     // trigger an update on the mouse mode toolbar
     this->GetMRMLScene()->EndState(vtkMRMLScene::BatchProcessState);
     }
@@ -135,8 +143,16 @@ void vtkSlicerLiverMarkupsLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
 {
   Superclass::OnMRMLSceneNodeAdded(node);
 
-  auto markupsNode = vtkMRMLMarkupsSlicingContourNode::SafeDownCast(node);
+  auto markupsNode = vtkMRMLMarkupsNode::SafeDownCast(node);
   if (!markupsNode)
+    {
+    return;
+    }
+
+  auto markupsSlicingContourNode = vtkMRMLMarkupsSlicingContourNode::SafeDownCast(node);
+  auto markupsDistanceContourNode = vtkMRMLMarkupsDistanceContourNode::SafeDownCast(node);
+
+  if ( !markupsSlicingContourNode && !markupsDistanceContourNode)
     {
     return;
     }

@@ -37,56 +37,64 @@
 
 ==============================================================================*/
 
-#ifndef vtkslicershaderhelper_h_
-#define vtkslicershaderhelper_h_
+#ifndef __vtkmrmlmarkupsdistancecontournode_h_
+#define __vtkmrmlmarkupsdistancecontournode_h_
 
-#include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
+#include "vtkSlicerLiverMarkupsModuleMRMLExport.h"
 
 // MRML includes
+#include <vtkMRMLMarkupsLineNode.h>
 #include <vtkMRMLModelNode.h>
 
-// VTK includes
-#include <vtkActor.h>
-#include <vtkCollection.h>
-#include <vtkObject.h>
+//VTK includes
 #include <vtkWeakPointer.h>
 
-//------------------------------------------------------------------------------
-class vtkCollection;
-class vtkMRMLModelNode;
-class vtkShaderProperty;
-
-//------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerShaderHelper
-: public vtkObject
+//-----------------------------------------------------------------------------
+class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsDistanceContourNode
+: public vtkMRMLMarkupsLineNode
 {
 public:
-  static vtkSlicerShaderHelper* New();
-  vtkTypeMacro(vtkSlicerShaderHelper, vtkObject);
+  static vtkMRMLMarkupsDistanceContourNode* New();
+  vtkTypeMacro(vtkMRMLMarkupsDistanceContourNode, vtkMRMLMarkupsLineNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  void SetTargetModelNode(vtkMRMLModelNode* modelNode){this->TargetModelNode = modelNode;}
-  vtkMRMLModelNode* GetTargetModelNode(){return this->TargetModelNode;}
-  vtkCollection* GetTargetModelVertexVBOs(){return this->TargetModelVertexVBOs;}
-  vtkCollection* GetTargetActors(){return this->TargetModelActors;}
-  void AttachSlicingContourShader();
-  void AttachDistanceContourShader();
+  //--------------------------------------------------------------------------------
+  // MRMLNode methods
+  //--------------------------------------------------------------------------------
+  const char* GetIcon() override {return ":/Icons/MarkupsGeneric.png";}
+  const char* GetAddIcon() override {return ":/Icons/MarkupsGenericMouseModePlace.png";}
+  const char* GetPlaceAddIcon() override {return ":/Icons/MarkupsGenericMouseModePlaceAdd.png";}
+
+  vtkMRMLNode* CreateNodeInstance() override;
+
+  /// Get node XML tag name (like Volume, Model)
+  ///
+  const char* GetNodeTagName() override {return "MarkupsDistanceContour";}
+
+  /// Get markup name
+  const char* GetMarkupType() override {return "DistanceContour";}
+
+  /// Get markup short name
+  const char* GetDefaultNodeNamePrefix() override {return "SC";}
+
+  /// \sa vtkMRMLNode::CopyContent
+  vtkMRMLCopyContentDefaultMacro(vtkMRMLMarkupsDistanceContourNode);
+
+  vtkMRMLModelNode* GetTarget() const {return this->Target;}
+  void SetTarget(vtkMRMLModelNode* target) {this->Target = target; this->Modified();}
 
 protected:
-  vtkWeakPointer<vtkMRMLModelNode> TargetModelNode;
-  vtkNew<vtkCollection> TargetModelVertexVBOs;
-  vtkNew<vtkCollection> TargetModelActors;
-
-protected:
-  vtkSlicerShaderHelper();
-  ~vtkSlicerShaderHelper() = default;
+  vtkMRMLMarkupsDistanceContourNode();
+  ~vtkMRMLMarkupsDistanceContourNode() override = default;
 
 private:
-  void getShaderProperties(vtkCollection* propertiesCollection);
+ vtkWeakPointer<vtkMRMLModelNode> Target;
 
 private:
-  vtkSlicerShaderHelper(const vtkSlicerShaderHelper&) = delete;
-  void operator=(const vtkSlicerShaderHelper&) = delete;
+ vtkMRMLMarkupsDistanceContourNode(const vtkMRMLMarkupsDistanceContourNode&);
+ void operator=(const vtkMRMLMarkupsDistanceContourNode&);
+
+
 };
 
-#endif // vtkslicershaderhelper_h_
+#endif //__vtkmrmlmarkupsdistancecontournode_h_

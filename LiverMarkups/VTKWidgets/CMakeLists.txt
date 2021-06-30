@@ -18,6 +18,12 @@ set(${KIT}_SRCS
   vtkSlicerSlicingContourRepresentation3D.cxx
   vtkSlicerSlicingContourRepresentation2D.h
   vtkSlicerSlicingContourRepresentation2D.cxx
+  vtkSlicerDistanceContourWidget.h
+  vtkSlicerDistanceContourWidget.cxx
+  vtkSlicerDistanceContourRepresentation3D.h
+  vtkSlicerDistanceContourRepresentation3D.cxx
+  vtkSlicerDistanceContourRepresentation2D.h
+  vtkSlicerDistanceContourRepresentation2D.cxx
   vtkBezierSurfaceSource.h
   vtkBezierSurfaceSource.cxx
   vtkSlicerShaderHelper.h

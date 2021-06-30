@@ -37,56 +37,44 @@
 
 ==============================================================================*/
 
-#ifndef vtkslicershaderhelper_h_
-#define vtkslicershaderhelper_h_
+#ifndef __vtkslicerdistancecontourwidgetrepresentation3d_h_
+#define __vtkslicerdistancecontourwidgetrepresentation3d_h_
 
 #include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
+
+// Markups VTKWidgets includes
+#include "vtkSlicerLineRepresentation3D.h"
+#include "vtkSlicerShaderHelper.h"
 
 // MRML includes
 #include <vtkMRMLModelNode.h>
 
 // VTK includes
-#include <vtkActor.h>
-#include <vtkCollection.h>
-#include <vtkObject.h>
 #include <vtkWeakPointer.h>
 
-//------------------------------------------------------------------------------
-class vtkCollection;
-class vtkMRMLModelNode;
-class vtkShaderProperty;
 
 //------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerShaderHelper
-: public vtkObject
+class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerDistanceContourRepresentation3D
+: public vtkSlicerLineRepresentation3D
 {
 public:
-  static vtkSlicerShaderHelper* New();
-  vtkTypeMacro(vtkSlicerShaderHelper, vtkObject);
+  static vtkSlicerDistanceContourRepresentation3D* New();
+  vtkTypeMacro(vtkSlicerDistanceContourRepresentation3D, vtkSlicerLineRepresentation3D);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  void SetTargetModelNode(vtkMRMLModelNode* modelNode){this->TargetModelNode = modelNode;}
-  vtkMRMLModelNode* GetTargetModelNode(){return this->TargetModelNode;}
-  vtkCollection* GetTargetModelVertexVBOs(){return this->TargetModelVertexVBOs;}
-  vtkCollection* GetTargetActors(){return this->TargetModelActors;}
-  void AttachSlicingContourShader();
-  void AttachDistanceContourShader();
+  void UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void* callData=nullptr) override;
 
 protected:
-  vtkWeakPointer<vtkMRMLModelNode> TargetModelNode;
-  vtkNew<vtkCollection> TargetModelVertexVBOs;
-  vtkNew<vtkCollection> TargetModelActors;
-
-protected:
-  vtkSlicerShaderHelper();
-  ~vtkSlicerShaderHelper() = default;
+  vtkSlicerDistanceContourRepresentation3D();
+  ~vtkSlicerDistanceContourRepresentation3D() override;
 
 private:
-  void getShaderProperties(vtkCollection* propertiesCollection);
+  vtkWeakPointer<vtkMRMLModelNode> Target;
+  vtkNew<vtkSlicerShaderHelper> ShaderHelper;
 
 private:
-  vtkSlicerShaderHelper(const vtkSlicerShaderHelper&) = delete;
-  void operator=(const vtkSlicerShaderHelper&) = delete;
+  vtkSlicerDistanceContourRepresentation3D(const vtkSlicerDistanceContourRepresentation3D&) = delete;
+  void operator=(const vtkSlicerDistanceContourRepresentation3D&) = delete;
 };
 
-#endif // vtkslicershaderhelper_h_
+#endif // __vtkslicerdistancecontourwidgetrepresentation3d_h_

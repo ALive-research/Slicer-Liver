@@ -74,7 +74,7 @@ void vtkSlicerShaderHelper::PrintSelf(ostream& os, vtkIndent indent)
 }
 
 //------------------------------------------------------------------------------
-void vtkSlicerShaderHelper::AttachContourShader()
+void vtkSlicerShaderHelper::AttachSlicingContourShader()
 {
   vtkNew<vtkCollection> propertiesCollection;
   this->getShaderProperties(propertiesCollection.GetPointer());
@@ -138,6 +138,70 @@ void vtkSlicerShaderHelper::AttachContourShader()
     }
 }
 
+//------------------------------------------------------------------------------
+void vtkSlicerShaderHelper::AttachDistanceContourShader()
+{
+  vtkNew<vtkCollection> propertiesCollection;
+  this->getShaderProperties(propertiesCollection.GetPointer());
+
+  for(int index=0; index<propertiesCollection->GetNumberOfItems(); ++index)
+    {
+    auto shaderProperty =
+      vtkShaderProperty::SafeDownCast(propertiesCollection->GetItemAsObject(index));
+    if (!shaderProperty)
+      {
+      continue;
+      }
+
+    shaderProperty->AddVertexShaderReplacement(
+      "//VTK::PositionVC::Dec",
+      true,
+      "//VTK::PositionVC::Dec\n"
+      "out vec4 vertexMCVSOutput;\n",
+      false
+    );
+
+    shaderProperty->AddVertexShaderReplacement(
+      "//VTK::PositionVC::Impl",
+      true,
+      "//VTK::PositionVC::Impl\n"
+      "vertexMCVSOutput = vertexMC;\n",
+      false
+    );
+
+    shaderProperty->AddFragmentShaderReplacement(
+      "//VTK::PositionVC::Dec",
+      true,
+      "//VTK::PositionVC::Dec\n"
+      "in vec4 vertexMCVSOutput;\n"
+      "vec4 fragPositionMC = vertexMCVSOutput;\n",
+      false
+    );
+
+    shaderProperty->AddFragmentShaderReplacement(
+      "//VTK::Color::Impl",
+      true,
+      "//VTK::Color::Impl\n"
+      "  vec3 contourColor= vec3(1.0, 1.0 ,1.0);\n"
+      "  float refDist= distance(externalPointMC, referencePointMC);\n"
+      "  float dist = distance(referencePointMC, fragPositionMC);\n"
+      "  if(abs(dist-refDist) < contourThickness && contourVisibility != 0){\n"
+      "     ambientColor = ambientIntensity * contourColor;\n"
+      "     diffuseColor = diffuseIntensity * contourColor;\n"
+      "  }\n",
+      false
+    );
+
+    float externalPointMC[] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float referencePointMC[] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+    auto fragmentUniforms = shaderProperty->GetFragmentCustomUniforms();
+    fragmentUniforms->SetUniform4f("externalPointMC", externalPointMC);
+    fragmentUniforms->SetUniform4f("referencePointMC", referencePointMC);
+    fragmentUniforms->SetUniformf("contourThickness", 0.05);
+    fragmentUniforms->SetUniformi("contourVisibility", 0);
+    }
+}
 //------------------------------------------------------------------------------
 void vtkSlicerShaderHelper::getShaderProperties(vtkCollection* propertiesCollection)
 {

@@ -35,58 +35,24 @@
   Oslo University Hospital) and was supported by The Research Council of Norway
   through the ALive project (grant nr. 311393).
 
-==============================================================================*/
+  ==============================================================================*/
 
-#ifndef vtkslicershaderhelper_h_
-#define vtkslicershaderhelper_h_
-
-#include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
-
-// MRML includes
-#include <vtkMRMLModelNode.h>
-
-// VTK includes
-#include <vtkActor.h>
-#include <vtkCollection.h>
-#include <vtkObject.h>
-#include <vtkWeakPointer.h>
+#include "vtkSlicerDistanceContourRepresentation2D.h"
 
 //------------------------------------------------------------------------------
-class vtkCollection;
-class vtkMRMLModelNode;
-class vtkShaderProperty;
+vtkStandardNewMacro(vtkSlicerDistanceContourRepresentation2D);
 
 //------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerShaderHelper
-: public vtkObject
+vtkSlicerDistanceContourRepresentation2D::vtkSlicerDistanceContourRepresentation2D()
 {
-public:
-  static vtkSlicerShaderHelper* New();
-  vtkTypeMacro(vtkSlicerShaderHelper, vtkObject);
-  void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  void SetTargetModelNode(vtkMRMLModelNode* modelNode){this->TargetModelNode = modelNode;}
-  vtkMRMLModelNode* GetTargetModelNode(){return this->TargetModelNode;}
-  vtkCollection* GetTargetModelVertexVBOs(){return this->TargetModelVertexVBOs;}
-  vtkCollection* GetTargetActors(){return this->TargetModelActors;}
-  void AttachSlicingContourShader();
-  void AttachDistanceContourShader();
+}
 
-protected:
-  vtkWeakPointer<vtkMRMLModelNode> TargetModelNode;
-  vtkNew<vtkCollection> TargetModelVertexVBOs;
-  vtkNew<vtkCollection> TargetModelActors;
+//------------------------------------------------------------------------------
+vtkSlicerDistanceContourRepresentation2D::~vtkSlicerDistanceContourRepresentation2D() = default;
 
-protected:
-  vtkSlicerShaderHelper();
-  ~vtkSlicerShaderHelper() = default;
-
-private:
-  void getShaderProperties(vtkCollection* propertiesCollection);
-
-private:
-  vtkSlicerShaderHelper(const vtkSlicerShaderHelper&) = delete;
-  void operator=(const vtkSlicerShaderHelper&) = delete;
-};
-
-#endif // vtkslicershaderhelper_h_
+//------------------------------------------------------------------------------
+void vtkSlicerDistanceContourRepresentation2D::PrintSelf(ostream& os, vtkIndent indent)
+{
+  Superclass::PrintSelf(os, indent);
+}
