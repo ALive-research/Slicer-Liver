@@ -121,8 +121,9 @@ void vtkSlicerShaderHelper::AttachSlicingContourShader()
       "  vec3 w = -(planePositionMC.xyz*fragPositionMC.w - fragPositionMC.xyz);\n"
       "  float dist = (planeNormalMC.x * w.x + planeNormalMC.y * w.y + planeNormalMC.z * w.z) / sqrt( pow(planeNormalMC.x,2) + pow(planeNormalMC.y,2)+ pow(planeNormalMC.z,2));\n"
       "  if(abs(dist) < contourThickness && contourVisibility != 0){\n"
-      "     ambientColor = ambientIntensity * contourColor;\n"
-      "     diffuseColor = diffuseIntensity * contourColor;\n"
+      "     ambientColor = contourColor;\n"
+      "     diffuseColor = contourColor;\n"
+      "     opacity = 1.0;\n"
       "  }\n",
       false
     );
@@ -188,6 +189,7 @@ void vtkSlicerShaderHelper::AttachDistanceContourShader()
       "  if(abs(dist-refDist) < contourThickness && contourVisibility != 0){\n"
       "     ambientColor = ambientIntensity * contourColor;\n"
       "     diffuseColor = diffuseIntensity * contourColor;\n"
+      "     float opacity = 1.0;\n"
       "  }\n",
       false
     );
