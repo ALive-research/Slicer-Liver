@@ -125,6 +125,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._nodeAddedObserverTag = None
 
     self._inputSegmentationNodeSelector = None
+    self._resectionsTableView = None
 
   def setup(self):
     """
@@ -151,10 +152,15 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.layout.addWidget(self._inputSegmentationNodeSelector)
 
+    import qSlicerLiverResectionsModuleWidgetsPythonQt as resectionWidgets
+    self._resectionsTableView = resectionWidgets.qSlicerLiverResectionsTableView()
+    self._resectionsTableView.setMRMLScene(slicer.mrmlScene)
+    self.layout.addWidget(self._resectionsTableView)
+
     # Add vertical spacer
     self.layout.addStretch(1)
 
-    self._nodeAddedObserverTag = slicer.mrmlScene.AddObserver(slicer.vtkMRMLScene.NodeAddedEvent, self.nodeAddedCallback)
+    #self._nodeAddedObserverTag = slicer.mrmlScene.AddObserver(slicer.vtkMRMLScene.NodeAddedEvent, self.nodeAddedCallback)
 
     # Connections
 
@@ -179,7 +185,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Called when the application closes and the module widget is destroyed.
     """
     self.removeObservers()
-    slicer.mrmlScene.RemoveObserver(self._nodeAddedObserverTag)
+    #slicer.mrmlScene.RemoveObserver(self._nodeAddedObserverTag)
 
   def enter(self):
     """
@@ -374,7 +380,12 @@ class LiverLogic(ScriptedLoadableModuleLogic):
 
     liverDisplayNode.SetOpacity(0.2)
 
-    self._selectedTargetLiverModelNode = liverModelNode
+    # import vtkSlicerLiverResectionsModuleLogicPython as lrml
+    # resectionLogic = lrml.vtkSlicerLiverResectionsLogic()
+    resectionLogic = slicer.modules.liverresections.logic()
+    resectionLogic.SetTargetParenchyma(liverModelNode)
+
+    #self._selectedTargetLiverModelNode = liverModelNode
 
   def getSelectedTargetLiverModel(self):
     return self._selectedTargetLiverModelNode

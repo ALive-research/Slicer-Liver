@@ -37,81 +37,67 @@
 
 ==============================================================================*/
 
-#include "qSlicerLiverMarkupsModule.h"
-
-// MRML includes
-#include "vtkMRMLMarkupsSlicingContourNode.h"
-#include "vtkMRMLMarkupsDistanceContourNode.h"
+#include "qSlicerLiverResectionsModule.h"
 
 // Qt includes
 #include <QDebug>
 
-// Liver Markups Logic includes
-#include "vtkSlicerLiverMarkupsLogic.h"
-
-// Markups Logic includes
-#include <vtkSlicerMarkupsLogic.h>
-
-// Markups VTKWidgets includes
-#include <vtkSlicerLineWidget.h>
-
-// Liver Markups VTKWidgets includes
-#include "vtkSlicerSlicingContourWidget.h"
-#include "vtkSlicerDistanceContourWidget.h"
+// Liver Resections Logic includes
+#include "vtkSlicerLiverResectionsLogic.h"
 
 #include <qSlicerModuleManager.h>
 #include <qSlicerCoreApplication.h>
 
 //-----------------------------------------------------------------------------
 /// \ingroup Slicer_QtModules_ExtensionTemplate
-class qSlicerLiverMarkupsModulePrivate
+class qSlicerLiverResectionsModulePrivate
 {
 public:
-  qSlicerLiverMarkupsModulePrivate();
+  qSlicerLiverResectionsModulePrivate();
 };
 
 //-----------------------------------------------------------------------------
-// qSlicerLiverMarkupsModulePrivate methods
+// qSlicerLiverResectionsModulePrivate methods
 
 //-----------------------------------------------------------------------------
-qSlicerLiverMarkupsModulePrivate::qSlicerLiverMarkupsModulePrivate()
+qSlicerLiverResectionsModulePrivate::qSlicerLiverResectionsModulePrivate()
 {
 }
 
 //-----------------------------------------------------------------------------
-// qSlicerLiverMarkupsModule methods
+// qSlicerLiverResectionsModule methods
 
 //-----------------------------------------------------------------------------
-qSlicerLiverMarkupsModule::qSlicerLiverMarkupsModule(QObject* _parent)
+qSlicerLiverResectionsModule::qSlicerLiverResectionsModule(QObject* _parent)
   : Superclass(_parent)
-  , d_ptr(new qSlicerLiverMarkupsModulePrivate)
+  , d_ptr(new qSlicerLiverResectionsModulePrivate)
 {
 }
 
 //-----------------------------------------------------------------------------
-qSlicerLiverMarkupsModule::~qSlicerLiverMarkupsModule()
+qSlicerLiverResectionsModule::~qSlicerLiverResectionsModule()
 {
 }
 
-bool qSlicerLiverMarkupsModule::isHidden() const
+bool qSlicerLiverResectionsModule::isHidden() const
 {
     return true;
 }
 
 //-----------------------------------------------------------------------------
-QString qSlicerLiverMarkupsModule::helpText() const
+QString qSlicerLiverResectionsModule::helpText() const
 {
   return "This module contains fundamental markups to be used in the Slicer-Liver extension.";
 }
 
 //-----------------------------------------------------------------------------
-QString qSlicerLiverMarkupsModule::acknowledgementText() const
+QString qSlicerLiverResectionsModule::acknowledgementText() const
 {
   return "This work has been partially funded by The Research Council of Norway (grant nr. 311393)";
 }
 
 //-----------------------------------------------------------------------------
-QStringList qSlicerLiverMarkupsModule::contributors() const
+QStringList qSlicerLiverResectionsModule::contributors() const
 {
   QStringList moduleContributors;
   moduleContributors << QString("Rafael Palomar (Oslo University Hospital / NTNU) ");
@@ -121,93 +107,54 @@ QStringList qSlicerLiverMarkupsModule::contributors() const
 }
 
 //-----------------------------------------------------------------------------
-QIcon qSlicerLiverMarkupsModule::icon() const
+QIcon qSlicerLiverResectionsModule::icon() const
 {
-  return QIcon(":/Icons/LiverMarkups.png");
+  return QIcon(":/Icons/LiverResections.png");
 }
 
 //-----------------------------------------------------------------------------
-QStringList qSlicerLiverMarkupsModule::categories() const
+QStringList qSlicerLiverResectionsModule::categories() const
 {
   return QStringList() << "Liver";
 }
 
 //-----------------------------------------------------------------------------
-QStringList qSlicerLiverMarkupsModule::dependencies() const
+QStringList qSlicerLiverResectionsModule::dependencies() const
 {
-  return QStringList() << "Markups";
+  return QStringList() << "LiverMarkups";
 }
 
 //-----------------------------------------------------------------------------
-void qSlicerLiverMarkupsModule::setup()
+void qSlicerLiverResectionsModule::setup()
 {
   this->Superclass::setup();
-
- vtkSlicerApplicationLogic* appLogic = this->appLogic();
- if (!appLogic)
-   {
-   qCritical() << Q_FUNC_INFO << " : invalid application logic.";
-   return;
-   }
-
- vtkSlicerMarkupsLogic* markupsLogic =
-   vtkSlicerMarkupsLogic::SafeDownCast(appLogic->GetModuleLogic("Markups"));
- if (!markupsLogic)
-   {
-   qCritical() << Q_FUNC_INFO << " : invalid markups logic.";
-   return;
-   }
-
- // Register markups
- vtkNew<vtkMRMLMarkupsSlicingContourNode> slicingContourNode;
- vtkNew<vtkSlicerSlicingContourWidget> slicingContourWidget;
- markupsLogic->RegisterMarkupsNode(slicingContourNode, slicingContourWidget);
-
- vtkNew<vtkMRMLMarkupsDistanceContourNode> distanceContourNode;
- vtkNew<vtkSlicerDistanceContourWidget> distanceContourWidget;
- markupsLogic->RegisterMarkupsNode(distanceContourNode, distanceContourWidget);
-
- // qSlicerModuleManager* moduleManager = qSlicerCoreApplication::application()->moduleManager();
- // if (!moduleManager)
- //   {
- //   return;
- //   }
-
- // qSlicerAbstractCoreModule* markupsModule = moduleManager->module("Markups");
- // if(!markupsModule)
- //   {
- //   qCritical() << Q_FUNC_INFO << ": Could not get the Markups module.";
- //   return;
- //   }
 }
 
 //-----------------------------------------------------------------------------
-qSlicerAbstractModuleRepresentation* qSlicerLiverMarkupsModule
+qSlicerAbstractModuleRepresentation* qSlicerLiverResectionsModule
 ::createWidgetRepresentation()
 {
     return nullptr;
 }
 
 //-----------------------------------------------------------------------------
-vtkMRMLAbstractLogic* qSlicerLiverMarkupsModule::createLogic()
+vtkMRMLAbstractLogic* qSlicerLiverResectionsModule::createLogic()
 {
-  return vtkSlicerLiverMarkupsLogic::New();
+  return vtkSlicerLiverResectionsLogic::New();
 }
 
 //-----------------------------------------------------------------------------
-QStringList qSlicerLiverMarkupsModule::associatedNodeTypes() const
+QStringList qSlicerLiverResectionsModule::associatedNodeTypes() const
 {
-  return QStringList()
-    << "vtkMRMLMarkupsSlicingContourNode"
-    << "vtkMRMLMarkupsDistanceContourNode";
+  return QStringList();
 }
 
 //-----------------------------------------------------------------------------
-void qSlicerLiverMarkupsModule::setMRMLScene(vtkMRMLScene* scene)
+void qSlicerLiverResectionsModule::setMRMLScene(vtkMRMLScene* scene)
 {
   Superclass::setMRMLScene(scene);
-  vtkSlicerLiverMarkupsLogic* logic =
-    vtkSlicerLiverMarkupsLogic::SafeDownCast(this->logic());
+  vtkSlicerLiverResectionsLogic* logic =
+    vtkSlicerLiverResectionsLogic::SafeDownCast(this->logic());
   if (!logic)
     {
     qCritical() << Q_FUNC_INFO << " failed: logic is invalid";

@@ -43,6 +43,7 @@
 #include "vtkMRMLMarkupsDistanceContourNode.h"
 
 // MRML includes
+#include <vtkMRMLModelNode.h>
 #include <vtkMRMLScene.h>
 #include <vtkMRMLSelectionNode.h>
 
