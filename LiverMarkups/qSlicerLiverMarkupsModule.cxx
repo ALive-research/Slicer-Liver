@@ -40,6 +40,7 @@
 #include "qSlicerLiverMarkupsModule.h"
 
 // MRML includes
+#include "vtkMRMLMarkupsBezierSurfaceNode.h"
 #include "vtkMRMLMarkupsSlicingContourNode.h"
 #include "vtkMRMLMarkupsDistanceContourNode.h"
 
@@ -58,6 +59,7 @@
 // Liver Markups VTKWidgets includes
 #include "vtkSlicerSlicingContourWidget.h"
 #include "vtkSlicerDistanceContourWidget.h"
+#include "vtkSlicerBezierSurfaceWidget.h"
 
 #include <qSlicerModuleManager.h>
 #include <qSlicerCoreApplication.h>
@@ -167,6 +169,10 @@ void qSlicerLiverMarkupsModule::setup()
  vtkNew<vtkSlicerDistanceContourWidget> distanceContourWidget;
  markupsLogic->RegisterMarkupsNode(distanceContourNode, distanceContourWidget);
 
+ vtkNew<vtkMRMLMarkupsBezierSurfaceNode> bezierSurfaceNode;
+ vtkNew<vtkSlicerBezierSurfaceWidget> bezierSurfaceWidget;
+ markupsLogic->RegisterMarkupsNode(bezierSurfaceNode, bezierSurfaceWidget);
+
  // qSlicerModuleManager* moduleManager = qSlicerCoreApplication::application()->moduleManager();
  // if (!moduleManager)
  //   {
@@ -199,7 +205,8 @@ QStringList qSlicerLiverMarkupsModule::associatedNodeTypes() const
 {
   return QStringList()
     << "vtkMRMLMarkupsSlicingContourNode"
-    << "vtkMRMLMarkupsDistanceContourNode";
+    << "vtkMRMLMarkupsDistanceContourNode"
+    << "vtkMRMLMarkupsBezierSurfaceNode";
 }
 
 //-----------------------------------------------------------------------------
