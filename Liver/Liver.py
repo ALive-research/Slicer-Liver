@@ -118,9 +118,14 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     ScriptedLoadableModuleWidget.__init__(self, parent)
     VTKObservationMixin.__init__(self)  # needed for parameter node observation
+
     self.logic = None
     self._parameterNode = None
     self._updatingGUIFromParameterNode = False
+    self._nodeAddedObserverTag = None
+
+    self._inputSegmentationNodeSelector = None
+    self._resectionsTableView = None
 
   def setup(self):
     """
@@ -128,20 +133,34 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     ScriptedLoadableModuleWidget.setup(self)
 
-    # Load widget from .ui file (created by Qt Designer).
-    # Additional widgets can be instantiated manually and added to self.layout.
-    uiWidget = slicer.util.loadUI(self.resourcePath('UI/Liver.ui'))
-    self.layout.addWidget(uiWidget)
-    self.ui = slicer.util.childWidgetVariables(uiWidget)
-
-    # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
-    # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
-    # "setMRMLScene(vtkMRMLScene*)" slot.
-    uiWidget.setMRMLScene(slicer.mrmlScene)
-
     # Create logic class. Logic implements all computations that should be possible to run
     # in batch mode, without a graphical user interface.
     self.logic = LiverLogic()
+
+    # Create and configure the input segmentation node selector
+    self._inputSegmentationNodeSelector = slicer.qMRMLNodeComboBox()
+    self._inputSegmentationNodeSelector.nodeTypes = ["vtkMRMLSegmentationNode"]
+    self._inputSegmentationNodeSelector.selectNodeUponCreation = False
+    self._inputSegmentationNodeSelector.addEnabled = False
+    self._inputSegmentationNodeSelector.removeEnabled = False
+    self._inputSegmentationNodeSelector.noneEnabled = True
+    self._inputSegmentationNodeSelector.noneDisplay = "(Liver Segmentation)"
+    self._inputSegmentationNodeSelector.showHidden = False
+    self._inputSegmentationNodeSelector.setMRMLScene(slicer.mrmlScene)
+    self._inputSegmentationNodeSelector.setToolTip("Segmentation to perform planning on.")
+    self._inputSegmentationNodeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+
+    self.layout.addWidget(self._inputSegmentationNodeSelector)
+
+    import qSlicerLiverResectionsModuleWidgetsPythonQt as resectionWidgets
+    self._resectionsTableView = resectionWidgets.qSlicerLiverResectionsTableView()
+    self._resectionsTableView.setMRMLScene(slicer.mrmlScene)
+    self.layout.addWidget(self._resectionsTableView)
+
+    # Add vertical spacer
+    self.layout.addStretch(1)
+
+    #self._nodeAddedObserverTag = slicer.mrmlScene.AddObserver(slicer.vtkMRMLScene.NodeAddedEvent, self.nodeAddedCallback)
 
     # Connections
 
@@ -150,12 +169,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
     # This connection listens for new node added.
-    #self.addObserver(slicer.mrmlScene, slicer.mrmlScene.NodeAddedEvent, self.onSceneNodeAdded)
-
-    # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
-    # (in the selected parameter node).
-    self.ui.volumeNodeComboBox.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    self.ui.segmentationNodeComboBox.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+    # self.addObserver(slicer.mrmlScene, slicer.mrmlScene.NodeAddedEvent, self.onSceneNodeAdded)
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
@@ -171,6 +185,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Called when the application closes and the module widget is destroyed.
     """
     self.removeObservers()
+    #slicer.mrmlScene.RemoveObserver(self._nodeAddedObserverTag)
 
   def enter(self):
     """
@@ -185,6 +200,13 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
     self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
+
+  @vtk.calldata_type(vtk.VTK_OBJECT)
+  def nodeAddedCallback(self, caller, eventId, callData):
+    if isinstance(callData, slicer.vtkMRMLMarkupsSlicingContourNode) or\
+       isinstance(callData, slicer.vtkMRMLMarkupsDistanceContourNode):
+
+      callData.SetTarget(self.logic.getSelectedTargetLiverModel())
 
   def onSceneStartClose(self, caller, event):
     """
@@ -210,16 +232,16 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.setParameterNode(self.logic.getParameterNode())
 
-    # Select default input nodes if nothing is selected yet to save a few clicks for the user
-    if not self._parameterNode.GetNodeReference("LiverVolume"):
-      firstVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
-      if firstVolumeNode:
-        self._parameterNode.SetNodeReferenceID("LiverVolume", firstVolumeNode.GetID())
+    # # Select default input nodes if nothing is selected yet to save a few clicks for the user
+    # if not self._parameterNode.GetNodeReference("LiverVolume"):
+    #   firstVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
+    #   if firstVolumeNode:
+    #     self._parameterNode.SetNodeReferenceID("LiverVolume", firstVolumeNode.GetID())
 
-    if not self._parameterNode.GetNodeReference("LiverSegmentation"):
-      firstSegmentationNode= slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLSegmentationNode")
-      if firstSegmentationNode:
-        self._parameterNode.SetNodeReferenceID("LiverSegmentation", firstSegmentationNode.GetID())
+    # if not self._parameterNode.GetNodeReference("LiverSegmentation"):
+    #   firstSegmentationNode= slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLSegmentationNode")
+    #   if firstSegmentationNode:
+    #     self._parameterNode.SetNodeReferenceID("LiverSegmentation", firstSegmentationNode.GetID())
 
   def setParameterNode(self, inputParameterNode):
     """
@@ -255,8 +277,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._updatingGUIFromParameterNode = True
 
     # Update node selectors and sliders
-    self.ui.volumeNodeComboBox.setCurrentNode(self._parameterNode.GetNodeReference("LiverVolume"))
-    self.ui.segmentationNodeComboBox.setCurrentNode(self._parameterNode.GetNodeReference("LiverSegmentation"))
+    self._inputSegmentationNodeSelector.setCurrentNode(self._parameterNode.GetNodeReference("LiverSegmentation"))
 
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
@@ -272,8 +293,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
 
-    self._parameterNode.SetNodeReferenceID("LiverVolume", self.ui.segmentationNodeComboBox.currentNodeID)
-    self._parameterNode.SetNodeReferenceID("LiverSegmentation", self.ui.segmentationNodeComboBox.currentNodeID)
+    self._parameterNode.SetNodeReferenceID("LiverSegmentation", self._inputSegmentationNodeSelector.currentNodeID)
 
     self._parameterNode.EndModify(wasModified)
 
@@ -306,19 +326,69 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     self._markupsLineNode = None
     self._markupsLineDisplayNode = None
 
+    self._volumeNode = None
+    self._segmentationNode = None
+
+    self._distanceMapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode")
+    self._parenchymaModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
+    self._hepaticModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
+    self._portalModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
+
+    self._selectedTargetLiverModelNode = None
+
   def setDefaultParameters(self, parameterNode):
     """
     Initialize parameter node with default settings.
     """
     pass
 
-
   def parameterNodeChanged(self,parameterNode):
     """
     Called when the parameter node has changed
     """
-    pass
 
+    volumeNode = parameterNode.GetNodeReference('LiverVolume')
+
+    segmentationNode = parameterNode.GetNodeReference('LiverSegmentation')
+
+    if segmentationNode is self._segmentationNode:
+      return
+
+    if segmentationNode is None:
+      return
+
+    self._segmentationNode = segmentationNode
+
+    shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
+    folderItemID = shNode.CreateFolderItem(shNode.GetSceneItemID(), '3D Models')
+    segmentationsLogic = slicer.modules.segmentations.logic()
+
+    self._segmentationNode.CreateDefaultDisplayNodes()
+    segmentationDisplayNode = self._segmentationNode.GetDisplayNode()
+    segmentationDisplayNode.Visibility3DOff()
+
+    self._segmentationNode.CreateClosedSurfaceRepresentation()
+    segmentationsLogic.ExportAllSegmentsToModels(self._segmentationNode, folderItemID)
+
+    liverModelNode = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'liver').GetItemAsObject(0)
+    if liverModelNode is None:
+      return
+
+    liverDisplayNode = liverModelNode.GetDisplayNode()
+    if liverDisplayNode is None:
+      return
+
+    liverDisplayNode.SetOpacity(0.2)
+
+    # import vtkSlicerLiverResectionsModuleLogicPython as lrml
+    # resectionLogic = lrml.vtkSlicerLiverResectionsLogic()
+    resectionLogic = slicer.modules.liverresections.logic()
+    resectionLogic.SetTargetParenchyma(liverModelNode)
+
+    #self._selectedTargetLiverModelNode = liverModelNode
+
+  def getSelectedTargetLiverModel(self):
+    return self._selectedTargetLiverModelNode
 
 
 #
@@ -367,7 +437,7 @@ class LiverTest(ScriptedLoadableModuleTest):
 
     # Test the module logic
 
-    #logic = LiverLogic()
+    logic = LiverLogic()
 
     # # Test algorithm with non-inverted threshold
     # logic.process(inputVolume, outputVolume, threshold, True)

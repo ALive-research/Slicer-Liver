@@ -39,10 +39,12 @@
 #include "vtkSlicerLiverMarkupsLogic.h"
 
 // Liver Markups MRML includes
+#include "vtkMRMLMarkupsBezierSurfaceNode.h"
 #include "vtkMRMLMarkupsSlicingContourNode.h"
 #include "vtkMRMLMarkupsDistanceContourNode.h"
 
 // MRML includes
+#include <vtkMRMLModelNode.h>
 #include <vtkMRMLScene.h>
 #include <vtkMRMLSelectionNode.h>
 
@@ -85,6 +87,7 @@ void vtkSlicerLiverMarkupsLogic::RegisterNodes()
   // Nodes
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsSlicingContourNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsDistanceContourNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>::New());
 }
 
 //---------------------------------------------------------------------------
@@ -120,16 +123,19 @@ void vtkSlicerLiverMarkupsLogic::ObserveMRMLScene()
     this->GetMRMLScene()->StartState(vtkMRMLScene::BatchProcessState);
 
     auto slicingContourNode = vtkSmartPointer<vtkMRMLMarkupsSlicingContourNode>::New();
-
     selectionNode->AddNewPlaceNodeClassNameToList(slicingContourNode->GetClassName(),
                                                   slicingContourNode->GetAddIcon(),
                                                   slicingContourNode->GetMarkupType());
 
     auto distanceContourNode = vtkSmartPointer<vtkMRMLMarkupsDistanceContourNode>::New();
-
     selectionNode->AddNewPlaceNodeClassNameToList(distanceContourNode->GetClassName(),
                                                   distanceContourNode->GetAddIcon(),
                                                   distanceContourNode->GetMarkupType());
+
+    auto bezierSurfaceNode= vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>::New();
+    selectionNode->AddNewPlaceNodeClassNameToList(bezierSurfaceNode->GetClassName(),
+                                                  bezierSurfaceNode->GetAddIcon(),
+                                                  bezierSurfaceNode->GetMarkupType());
 
     // trigger an update on the mouse mode toolbar
     this->GetMRMLScene()->EndState(vtkMRMLScene::BatchProcessState);

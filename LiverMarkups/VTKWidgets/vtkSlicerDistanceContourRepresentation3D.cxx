@@ -110,9 +110,6 @@ void vtkSlicerDistanceContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* calle
  liverMarkupsDistanceContourNode->GetNthControlPointPosition(0, point1Position);
  liverMarkupsDistanceContourNode->GetNthControlPointPosition(1, point2Position);
 
- std::cout << "Point 1 " << point1Position[0] << " " << point1Position[1] << " " << point1Position[2] << std::endl;
- //std::cout << "Point 2 " << point1Position[0] << " " << point1Position[1] << " " << point1Position[2] << std::endl;
-
  auto VBOs = this->ShaderHelper->GetTargetModelVertexVBOs();
  auto actors = this->ShaderHelper->GetTargetActors();
 

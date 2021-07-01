@@ -144,12 +144,6 @@ void vtkSlicerSlicingContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller
    auto scale = VBO->GetScale();
    auto shift = VBO->GetShift();
 
-   std::cout << scale.size() << std::endl;
-   std::cout << shift.size() << std::endl;
-   std::cout << "a" << std::endl;
-   std::cout << VBO->GetCoordShiftAndScaleMethod() << std::endl;
-   std::cout << VBO->GetCoordShiftAndScaleEnabled() << std::endl;
-
    if (scale.size() != 3  || shift.size() != 3)
      {
      scale.clear();
@@ -169,7 +163,7 @@ void vtkSlicerSlicingContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller
    auto fragmentUniforms = actor->GetShaderProperty()->GetFragmentCustomUniforms();
    fragmentUniforms->SetUniform4f("planePositionMC", middlePointPositionScaled);
    fragmentUniforms->SetUniform4f("planeNormalMC", planeNormal);
-   fragmentUniforms->SetUniformf("contourThickness", 20.0f*(scale[0]+scale[1])/2.0f);
+   fragmentUniforms->SetUniformf("contourThickness", 2.0f*(scale[0]+scale[1])/2.0f);
    fragmentUniforms->SetUniformi("contourVisibility", 1);
    }
 

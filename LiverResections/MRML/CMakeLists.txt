@@ -8,17 +8,12 @@ set(${KIT}_INCLUDE_DIRECTORIES
   )
 
 set(${KIT}_SRCS
-  vtkMRMLMarkupsSlicingContourNode.h
-  vtkMRMLMarkupsSlicingContourNode.cxx
-  vtkMRMLMarkupsDistanceContourNode.h
-  vtkMRMLMarkupsDistanceContourNode.cxx
-  vtkMRMLMarkupsBezierSurfaceNode.h
-  vtkMRMLMarkupsBezierSurfaceNode.cxx
+  vtkMRMLLiverResectionNode.h
+  vtkMRMLLiverResectionNode.cxx
   )
 
 set(${KIT}_TARGET_LIBRARIES
   ${MRML_LIBRARIES}
-  vtkSlicerMarkupsModuleMRML
   )
 
 #-----------------------------------------------------------------------------
