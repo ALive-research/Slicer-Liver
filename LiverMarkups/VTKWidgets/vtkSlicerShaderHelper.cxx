@@ -187,9 +187,9 @@ void vtkSlicerShaderHelper::AttachDistanceContourShader()
       "  float refDist= distance(externalPointMC, referencePointMC);\n"
       "  float dist = distance(referencePointMC, fragPositionMC);\n"
       "  if(abs(dist-refDist) < contourThickness && contourVisibility != 0){\n"
-      "     ambientColor = ambientIntensity * contourColor;\n"
-      "     diffuseColor = diffuseIntensity * contourColor;\n"
-      "     float opacity = 1.0;\n"
+      "     ambientColor = contourColor;\n"
+      "     diffuseColor = contourColor;\n"
+      "     opacity = 1.0;\n"
       "  }\n",
       false
     );

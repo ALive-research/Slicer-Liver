@@ -117,9 +117,6 @@ void vtkSlicerLiverResectionsLogic::AddResectionSlicingContour(vtkMRMLModelNode 
   auto slicingContourNode = vtkSmartPointer<vtkMRMLMarkupsSlicingContourNode>::New();
   slicingContourNode->AddControlPoint(p1);
   slicingContourNode->AddControlPoint(p2);
-
-
-
 }
 //------------------------------------------------------------------------------
 void vtkSlicerLiverResectionsLogic::AddResection(InitializationType type)
