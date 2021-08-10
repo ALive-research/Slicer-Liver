@@ -17,7 +17,7 @@ set(EXTENSION_DEPENDS "Markups") # Specified as a list or "NA" if no dependencie
 find_package(Slicer REQUIRED)
 include(${Slicer_USE_FILE})
 
-#-----------------  ------------------------------------------------------------
+#-----------------------------------------------------------------------------
 # Extension modules
 add_subdirectory(LiverMarkups)
 add_subdirectory(LiverResections)
