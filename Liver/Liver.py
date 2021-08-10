@@ -329,11 +329,6 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     self._volumeNode = None
     self._segmentationNode = None
 
-    self._distanceMapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode")
-    self._parenchymaModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
-    self._hepaticModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
-    self._portalModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
-
     self._selectedTargetLiverModelNode = None
 
   def setDefaultParameters(self, parameterNode):
