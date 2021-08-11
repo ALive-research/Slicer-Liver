@@ -57,6 +57,14 @@ public:
   vtkTypeMacro(vtkMRMLLiverResectionNode, vtkMRMLNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
+  // Possible resection states
+  enum ResectionStatus
+    {
+      Initialization,
+      Deformation,
+      Completed
+    };
+
   //--------------------------------------------------------------------------------
   // MRMLNode methods
   //--------------------------------------------------------------------------------
@@ -72,18 +80,23 @@ public:
   vtkMRMLModelNode* GetTarget() const {return this->Target;}
   void SetTarget(vtkMRMLModelNode* target) {this->Target = target; this->Modified();}
 
+  // Get resection margin
+  vtkGetMacro(ResectionMargin, float);
+
+  // Get resection margin
+  vtkSetMacro(ResectionMargin, float);
+
 protected:
   vtkMRMLLiverResectionNode();
   ~vtkMRMLLiverResectionNode() override = default;
 
 private:
  vtkWeakPointer<vtkMRMLModelNode> Target;
+ float ResectionMargin = 10.0;
 
 private:
  vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);
  void operator=(const vtkMRMLLiverResectionNode&);
-
-
 };
 
 #endif //__vtkmrmlliverresectionnode_h_
