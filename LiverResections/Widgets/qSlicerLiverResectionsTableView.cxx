@@ -216,12 +216,12 @@ void qSlicerLiverResectionsTableView::setMRMLScene(vtkMRMLScene* newScene)
 //------------------------------------------------------------------------------
 bool qSlicerLiverResectionsTableView::eventFilter(QObject* target, QEvent* event)
 {
+  return false;
 }
 
 //------------------------------------------------------------------------------
 void qSlicerLiverResectionsTableView::contextMenuEvent(QContextMenuEvent* event)
 {
-
 }
 
 //------------------------------------------------------------------------------
