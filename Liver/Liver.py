@@ -127,6 +127,8 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._inputSegmentationNodeSelector = None
     self._resectionsTableView = None
 
+    self._selectedTumors = str('')
+
   def setup(self):
     """
     Called when the user opens the module the first time and the widget is initialized.
@@ -155,8 +157,8 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     import qSlicerSegmentationsModuleWidgetsPythonQt as segmentationWidgets
     self._tumorsTableView = segmentationWidgets.qMRMLSegmentsTableView()
     self._tumorsTableView.setMRMLScene(slicer.mrmlScene)
-    self._tumorsTableView.connect("selectionChanged(const QItemSelection&, const QItemSelection&)",
-                                  self.tumorSelectionChanged)
+    self._tumorsTableView.connect("selectionChanged(const QItemSelection&, const QItemSelection&)",self.updateParameterNodeFromGUI)
+
     self.layout.addWidget(self._tumorsTableView)
 
     import qSlicerLiverResectionsModuleWidgetsPythonQt as resectionWidgets
@@ -283,13 +285,13 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     This method is called when the user makes any change in the GUI.
     The changes are saved into the parameter node (so that they are restored when the scene is saved and loaded).
     """
-
     if self._parameterNode is None or self._updatingGUIFromParameterNode:
       return
 
     wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
 
     self._parameterNode.SetNodeReferenceID("LiverSegmentation", self._inputSegmentationNodeSelector.currentNodeID)
+    self._parameterNode.SetParameter("SelectedTumors", ' '.join(self._tumorsTableView.selectedSegmentIDs()))
 
     self._parameterNode.EndModify(wasModified)
 
@@ -299,9 +301,10 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic.parameterNodeChanged(self._parameterNode)
 
   def tumorSelectionChanged(self, selected, deselected):
-    selected = self._tumorsTableView.selectedSegmentIDs();
-    segmentationNode = slicer.mrmlScene.GetNodeByID(self._inputSegmentationNodeSelector.currentNodeID)
-    print(selected)
+    self._selectedTumors = self._tumorsTableView.selectedSegmentIDs();
+    self.updateParameterNodeFromGUI()
+    # segmentationNode = slicer.mrmlScene.GetNodeByID(self._inputSegmentationNodeSelector.currentNodeID)
+    # print(selected)
 
 #
 # LiverLogic
@@ -338,6 +341,8 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     """
     Initialize parameter node with default settings.
     """
+    parameterNode.SetNodeReferenceID('LiverSegmentation', None)
+    parameterNode.SetParameter('SelectedTumors', str(''))
     pass
 
   def parameterNodeChanged(self,parameterNode):
@@ -345,9 +350,9 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     Called when the parameter node has changed
     """
 
-    volumeNode = parameterNode.GetNodeReference('LiverVolume')
-
     segmentationNode = parameterNode.GetNodeReference('LiverSegmentation')
+    selectedTumors = parameterNode.GetParameter('SelectedTumors')
+    print(selectedTumors)
 
     if segmentationNode is self._segmentationNode:
       return
@@ -356,6 +361,7 @@ class LiverLogic(ScriptedLoadableModuleLogic):
       return
 
     self._segmentationNode = segmentationNode
+    self._selectedTumors = selectedTumors
 
     shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
     folderItemID = shNode.CreateFolderItem(shNode.GetSceneItemID(), '3D Models')
@@ -419,7 +425,6 @@ class LiverTest(ScriptedLoadableModuleTest):
 
     import SampleData
     registerSampleData()
-    inputVolume = SampleData.downloadSample('LiverVolume000')
     inputSegmentation = SampleData.downloadSample('LiverSegmentation000')
     self.delayDisplay('Loaded test data set')
 
