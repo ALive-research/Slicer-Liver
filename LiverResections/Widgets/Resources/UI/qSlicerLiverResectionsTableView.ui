@@ -59,65 +59,6 @@
       <property name="bottomMargin">
        <number>0</number>
       </property>
-      <item>
-       <widget class="QPushButton" name="AddResectionContourDistancePushButton">
-        <property name="toolTip">
-         <string>Show/Hide not started segments</string>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
-        <property name="icon">
-         <iconset resource="../qSlicerLiverResectionsModuleWidgets.qrc">
-          <normaloff>:/Icons/AddResectionDistanceContour.png</normaloff>:/Icons/AddResectionDistanceContour.png</iconset>
-        </property>
-        <property name="iconSize">
-         <size>
-          <width>16</width>
-          <height>16</height>
-         </size>
-        </property>
-        <property name="checkable">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="AddResectionSlicingContourPushButton">
-        <property name="toolTip">
-         <string>Show/Hide in progress segments</string>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
-        <property name="icon">
-         <iconset resource="../qSlicerLiverResectionsModuleWidgets.qrc">
-          <normaloff>:/Icons/AddResectionSlicingContour.png</normaloff>:/Icons/AddResectionSlicingContour.png</iconset>
-        </property>
-        <property name="iconSize">
-         <size>
-          <width>16</width>
-          <height>16</height>
-         </size>
-        </property>
-        <property name="checkable">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <spacer name="horizontalSpacer">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>40</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
      </layout>
     </widget>
    </item>

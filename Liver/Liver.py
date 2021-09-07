@@ -151,16 +151,29 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._inputSegmentationNodeSelector.setMRMLScene(slicer.mrmlScene)
     self._inputSegmentationNodeSelector.setToolTip("Segmentation to perform planning on.")
     self._inputSegmentationNodeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-
     self.layout.addWidget(self._inputSegmentationNodeSelector)
 
+    # Create and configure segments widget
     import qSlicerSegmentationsModuleWidgetsPythonQt as segmentationWidgets
     self._tumorsTableView = segmentationWidgets.qMRMLSegmentsTableView()
     self._tumorsTableView.setMRMLScene(slicer.mrmlScene)
-    self._tumorsTableView.connect("selectionChanged(const QItemSelection&, const QItemSelection&)",self.updateParameterNodeFromGUI)
-
+    self._tumorsTableView.connect("selectionChanged(const QItemSelection&, const QItemSelection&)",self.onSelectionUpdate)
     self.layout.addWidget(self._tumorsTableView)
 
+    # Create and configure the therapy bar
+    therapyHBoxLayout = qt.QHBoxLayout()
+    self._addResectionPlanePushButton = qt.QPushButton("|")
+    self._addResectionPlanePushButton.setEnabled(False)
+    self._addResectionPlanePushButton.connect("clicked(bool)", self.onAddResectionPlane)
+    self._addResectionContourPushButton = qt.QPushButton("O")
+    self._addResectionContourPushButton.setEnabled(False)
+    self._addResectionContourPushButton.connect("clicked(bool)", self.onAddResectionContour)
+    therapyHBoxLayout.addWidget(self._addResectionPlanePushButton)
+    therapyHBoxLayout.addWidget(self._addResectionContourPushButton)
+    therapyHBoxLayout.addSpacing(1)
+    self.layout.addLayout(therapyHBoxLayout)
+
+    # Create and configure resectionwidgets
     import qSlicerLiverResectionsModuleWidgetsPythonQt as resectionWidgets
     self._resectionsTableView = resectionWidgets.qSlicerLiverResectionsTableView()
     self._resectionsTableView.setMRMLScene(slicer.mrmlScene)
@@ -217,6 +230,19 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
       callData.SetTarget(self.logic.getSelectedTargetLiverModel())
 
+  def onSelectionUpdate(self):
+    """
+    Called each time a there is a selection change
+    """
+    selected = self._tumorsTableView.selectedSegmentIDs();
+    if len(selected) > 0:
+      self._addResectionPlanePushButton.setEnabled(True)
+      self._addResectionContourPushButton.setEnabled(True)
+    else:
+      self._addResectionPlanePushButton.setEnabled(False)
+      self._addResectionContourPushButton.setEnabled(False)
+    self.updateGUIFromParameterNode()
+
   def onSceneStartClose(self, caller, event):
     """
     Called just before the scene is closed.
@@ -231,6 +257,15 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
     if self.parent.isEntered:
       self.initializeParameterNode()
+
+  def onAddResectionPlane(self):
+    print("Add resection plane")
+    self.logic.addResectionPlane()
+
+
+  def onAddResectionContour(self):
+    print("Add resection contour")
+    self.logic.addResectionContour()
 
   def initializeParameterNode(self):
     """
@@ -267,7 +302,6 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     This method is called whenever parameter node is changed.
     The module GUI is updated to show the current state of the parameter node.
     """
-
     if self._parameterNode is None or self._updatingGUIFromParameterNode:
       return
 
@@ -386,14 +420,25 @@ class LiverLogic(ScriptedLoadableModuleLogic):
 
     # import vtkSlicerLiverResectionsModuleLogicPython as lrml
     # resectionLogic = lrml.vtkSlicerLiverResectionsLogic()
-    resectionLogic = slicer.modules.liverresections.logic()
-    resectionLogic.SetTargetParenchyma(liverModelNode)
 
     #self._selectedTargetLiverModelNode = liverModelNode
 
   def getSelectedTargetLiverModel(self):
     return self._selectedTargetLiverModelNode
 
+  def addResectionPlane(self):
+    resectionLogic = slicer.modules.liverresections.logic()
+    liverModelNode = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'liver').GetItemAsObject(0)
+    if liverModelNode is None:
+      return
+    resectionLogic.AddResectionPlane(liverModelNode)
+
+  def addResectionContour(self):
+    resectionLogic = slicer.modules.liverresections.logic()
+    liverModelNode = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'liver').GetItemAsObject(0)
+    if liverModelNode is None:
+      return
+    resectionLogic.AddResectionContour(liverModelNode, None)
 
 #
 # LiverTest

@@ -75,16 +75,12 @@ public:
     DistanceContour
   };
 
-  /// Adds a new resection (Initialization state) using slicing contours initialization
-  /// NOTE: Probably we prefer passing the target directly instead of keeping an internal target
-  void AddResectionSlicingContour(vtkMRMLModelNode *targetParenchyma);
-  void AddResection(InitializationType type);
+  /// Adds a new resection using contour initialization using slicing contours initialization
+  void AddResectionContour(vtkMRMLModelNode *targetParenchyma, vtkCollection *targetTumors);
 
-  /// Sets the internal target parenchyma
-  void SetTargetParenchyma(vtkMRMLModelNode *targetParenchymaModelNode);
+  /// Adds a new resection using planar initialization
+  void AddResectionPlane(vtkMRMLModelNode *targetParenchyma);
 
-  /// Sets the target parenchyma
-  /// NOTE: This is something we want to probably change
 protected:
   vtkSlicerLiverResectionsLogic();
   ~vtkSlicerLiverResectionsLogic() override;
@@ -92,10 +88,6 @@ protected:
   void ObserveMRMLScene() override;
 
   void OnMRMLSceneNodeAdded(vtkMRMLNode* node) override;
-
-private:
-
-  vtkWeakPointer<vtkMRMLModelNode> TargetParenchymaModelNode;
 
 private:
   vtkSlicerLiverResectionsLogic(const vtkSlicerLiverResectionsLogic&) = delete;

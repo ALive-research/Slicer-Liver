@@ -76,10 +76,6 @@ public:
   /// Set MRML scene
   void setMRMLScene(vtkMRMLScene* newScene) override;
 
-public slots:
-  void addResection(vtkSlicerLiverResectionsLogic::InitializationType type);
-
-
 protected:
   /// To prevent accidentally moving out of the widget when pressing up/down arrows
   bool eventFilter(QObject* target, QEvent* event) override;

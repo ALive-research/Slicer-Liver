@@ -108,11 +108,6 @@ void qSlicerLiverResectionsTableViewPrivate::init()
 
   this->setupUi(q);
 
-  QObject::connect(this->AddResectionSlicingContourPushButton, &QPushButton::clicked,
-                   q, [q] {q->addResection(vtkSlicerLiverResectionsLogic::SlicingContour);});
-  QObject::connect(this->AddResectionContourDistancePushButton, &QPushButton::clicked,
-                   q, [q] {q->addResection(vtkSlicerLiverResectionsLogic::DistanceContour);});
-
   // this->Model = new qSlicerLiverResectionsModel(this->SegmentsTable);
   // this->SortFilterModel = new qMRMLSortFilterSegmentsProxyModel(this->SegmentsTable);
   // this->SortFilterModel->setSourceModel(this->Model);
@@ -221,25 +216,4 @@ bool qSlicerLiverResectionsTableView::eventFilter(QObject* target, QEvent* event
 void qSlicerLiverResectionsTableView::contextMenuEvent(QContextMenuEvent* event)
 {
 
-}
-
-//------------------------------------------------------------------------------
-void qSlicerLiverResectionsTableView::addResection(vtkSlicerLiverResectionsLogic::InitializationType type)
-{
-
- auto appLogic = qSlicerApplication::application()->applicationLogic();
- if (!appLogic)
-   {
-   qCritical() << Q_FUNC_INFO << " : invalid application logic.";
-   return;
-   }
-
- vtkSlicerLiverResectionsLogic* markupsLogic =
-   vtkSlicerLiverResectionsLogic::SafeDownCast(appLogic->GetModuleLogic("LiverResections"));
- if (!markupsLogic)
-   {
-   qCritical() << Q_FUNC_INFO << " : invalid markups logic.";
-   return;
-   }
-  markupsLogic->AddResection(type);
 }
