@@ -140,17 +140,24 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Create and configure the input segmentation node selector
     self._inputSegmentationNodeSelector = slicer.qMRMLNodeComboBox()
     self._inputSegmentationNodeSelector.nodeTypes = ["vtkMRMLSegmentationNode"]
-    self._inputSegmentationNodeSelector.selectNodeUponCreation = False
+    self._inputSegmentationNodeSelector.selectNodeUponCreation = True
     self._inputSegmentationNodeSelector.addEnabled = False
     self._inputSegmentationNodeSelector.removeEnabled = False
     self._inputSegmentationNodeSelector.noneEnabled = True
-    self._inputSegmentationNodeSelector.noneDisplay = "(Liver Segmentation)"
+    self._inputSegmentationNodeSelector.noneDisplay = "(Choose active liver segmentation)"
     self._inputSegmentationNodeSelector.showHidden = False
     self._inputSegmentationNodeSelector.setMRMLScene(slicer.mrmlScene)
     self._inputSegmentationNodeSelector.setToolTip("Segmentation to perform planning on.")
     self._inputSegmentationNodeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
 
     self.layout.addWidget(self._inputSegmentationNodeSelector)
+
+    import qSlicerSegmentationsModuleWidgetsPythonQt as segmentationWidgets
+    self._tumorsTableView = segmentationWidgets.qMRMLSegmentsTableView()
+    self._tumorsTableView.setMRMLScene(slicer.mrmlScene)
+    self._tumorsTableView.connect("selectionChanged(const QItemSelection&, const QItemSelection&)",
+                                  self.tumorSelectionChanged)
+    self.layout.addWidget(self._tumorsTableView)
 
     import qSlicerLiverResectionsModuleWidgetsPythonQt as resectionWidgets
     self._resectionsTableView = resectionWidgets.qSlicerLiverResectionsTableView()
@@ -232,17 +239,6 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.setParameterNode(self.logic.getParameterNode())
 
-    # # Select default input nodes if nothing is selected yet to save a few clicks for the user
-    # if not self._parameterNode.GetNodeReference("LiverVolume"):
-    #   firstVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
-    #   if firstVolumeNode:
-    #     self._parameterNode.SetNodeReferenceID("LiverVolume", firstVolumeNode.GetID())
-
-    # if not self._parameterNode.GetNodeReference("LiverSegmentation"):
-    #   firstSegmentationNode= slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLSegmentationNode")
-    #   if firstSegmentationNode:
-    #     self._parameterNode.SetNodeReferenceID("LiverSegmentation", firstSegmentationNode.GetID())
-
   def setParameterNode(self, inputParameterNode):
     """
     Set and observe parameter node.
@@ -297,8 +293,15 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self._parameterNode.EndModify(wasModified)
 
+    segmentationNode = slicer.mrmlScene.GetNodeByID(self._inputSegmentationNodeSelector.currentNodeID)
+    self._tumorsTableView.setSegmentationNode(segmentationNode)
+
     self.logic.parameterNodeChanged(self._parameterNode)
 
+  def tumorSelectionChanged(self, selected, deselected):
+    selected = self._tumorsTableView.selectedSegmentIDs();
+    segmentationNode = slicer.mrmlScene.GetNodeByID(self._inputSegmentationNodeSelector.currentNodeID)
+    print(selected)
 
 #
 # LiverLogic

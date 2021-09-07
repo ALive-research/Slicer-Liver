@@ -211,7 +211,6 @@ void qSlicerLiverResectionsTableView::setMRMLScene(vtkMRMLScene* newScene)
   Q_D(qSlicerLiverResectionsTableView);
 
   Superclass::setMRMLScene(newScene);
-  d->TumorComboBox->setMRMLScene(newScene);
 }
 //------------------------------------------------------------------------------
 bool qSlicerLiverResectionsTableView::eventFilter(QObject* target, QEvent* event)
