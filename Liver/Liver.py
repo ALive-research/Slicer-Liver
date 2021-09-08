@@ -259,12 +259,10 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.initializeParameterNode()
 
   def onAddResectionPlane(self):
-    print("Add resection plane")
     self.logic.addResectionPlane()
 
 
   def onAddResectionContour(self):
-    print("Add resection contour")
     self.logic.addResectionContour()
 
   def initializeParameterNode(self):
@@ -417,11 +415,6 @@ class LiverLogic(ScriptedLoadableModuleLogic):
       return
 
     liverDisplayNode.SetOpacity(0.2)
-
-    # import vtkSlicerLiverResectionsModuleLogicPython as lrml
-    # resectionLogic = lrml.vtkSlicerLiverResectionsLogic()
-
-    #self._selectedTargetLiverModelNode = liverModelNode
 
   def getSelectedTargetLiverModel(self):
     return self._selectedTargetLiverModelNode
