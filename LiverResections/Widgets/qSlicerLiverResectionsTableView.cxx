@@ -41,7 +41,9 @@
 
 #include "ui_qSlicerLiverResectionsTableView.h"
 
+// Slicer includes
 #include "qSlicerApplication.h"
+#include "qSlicerLiverResectionsModel.h"
 
 #include <QDebug>
 
@@ -74,7 +76,7 @@ public:
 
   bool IsFilterBarVisible;
 
-  // qSlicerSegmentsModel* Model;
+  qSlicerLiverResectionsModel* Model;
   // qSlicerSortFilterSegmentsProxyModel* SortFilterModel;
 
   // QIcon StatusIcons[vtkSlicerLiverResectionsLogic::LastStatus];
@@ -108,84 +110,20 @@ void qSlicerLiverResectionsTableViewPrivate::init()
 
   this->setupUi(q);
 
-  // this->Model = new qSlicerLiverResectionsModel(this->SegmentsTable);
-  // this->SortFilterModel = new qMRMLSortFilterSegmentsProxyModel(this->SegmentsTable);
-  // this->SortFilterModel->setSourceModel(this->Model);
-  // this->SegmentsTable->setModel(this->SortFilterModel);
+  this->Model = new qSlicerLiverResectionsModel(this->ResectionsTable);
+  this->ResectionsTable->setModel(this->Model);
 
-  // for (int status = 0; status < vtkSlicerSegmentationsModuleLogic::LastStatus; ++status)
-  //   {
-  //   switch (status)
-  //     {
-  //     case vtkSlicerSegmentationsModuleLogic::NotStarted:
-  //       this->ShowStatusButtons[status] = this->ShowNotStartedButton;
-  //       this->StatusIcons[status] = QIcon(":Icons/NotStarted.png");
-  //       break;
-  //     case vtkSlicerSegmentationsModuleLogic::InProgress:
-  //       this->ShowStatusButtons[status] = this->ShowInProgressButton;
-  //       this->StatusIcons[status] = QIcon(":Icons/InProgress.png");
-  //       break;
-  //     case vtkSlicerSegmentationsModuleLogic::Completed:
-  //       this->ShowStatusButtons[status] = this->ShowCompletedButton;
-  //       this->StatusIcons[status] = QIcon(":Icons/Completed.png");
-  //       break;
-  //     case vtkSlicerSegmentationsModuleLogic::Flagged:
-  //       this->ShowStatusButtons[status] = this->ShowFlaggedButton;
-  //       this->StatusIcons[status] = QIcon(":Icons/Flagged.png");
-  //       break;
-  //     default:
-  //       this->ShowStatusButtons[status] = nullptr;
-  //       this->StatusIcons[status] = QIcon();
-  //     }
-  //   if (this->ShowStatusButtons[status])
-  //     {
-  //     this->ShowStatusButtons[status]->setProperty(STATUS_PROPERTY, status);
-  //     }
-  //   }
 
-  // // Hide filter bar to simplify default GUI. User can enable to handle many segments
-  // q->setFilterBarVisible(false);
+  this->ResectionsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+  this->ResectionsTable->horizontalHeader()->setSectionResizeMode(this->Model->nameColumn(), QHeaderView::Stretch);
+  this->ResectionsTable->horizontalHeader()->setStretchLastSection(false);
+  this->ResectionsTable->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
 
-  // // Hide layer column
-  // q->setLayerColumnVisible(false);
+  // Select rows
+  this->ResectionsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
 
-  // this->setMessage(QString());
-
-  // this->SegmentsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
-  // this->SegmentsTable->horizontalHeader()->setSectionResizeMode(this->Model->nameColumn(), QHeaderView::Stretch);
-  // this->SegmentsTable->horizontalHeader()->setStretchLastSection(false);
-  // this->SegmentsTable->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
-
-  // // Select rows
-  // this->SegmentsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-
-  // // Unset read-only by default (edit triggers are double click and edit key press)
-  // q->setReadOnly(false);
-
-  // // Setup filter parameter changed timer
-  // this->FilterParameterChangedTimer.setInterval(500);
-  // this->FilterParameterChangedTimer.setSingleShot(true);
-
-  // // Make connections
-  // QObject::connect(&this->FilterParameterChangedTimer, &QTimer::timeout, q, &qSlicerLiverResectionsTableView::updateMRMLFromFilterParameters);
-  // QObject::connect(this->SegmentsTable->selectionModel(), &QItemSelectionModel::selectionChanged, q, &qSlicerLiverResectionsTableView::onSegmentSelectionChanged);
-  // QObject::connect(this->Model, &qSlicerLiverResectionsModel::segmentAboutToBeModified, q, &qSlicerLiverResectionsTableView::segmentAboutToBeModified);
-  // QObject::connect(this->SegmentsTable, &QTableView::clicked, q, &qSlicerLiverResectionsTableView::onSegmentsTableClicked);
-  // QObject::connect(this->FilterLineEdit, &ctkSearchBox::textEdited, this->SortFilterModel, &qMRMLSortFilterSegmentsProxyModel::setTextFilter);
-  // for (QPushButton* button : this->ShowStatusButtons)
-  //   {
-  //   if (!button)
-  //     {
-  //     continue;
-  //     }
-  //   QObject::connect(button, &QToolButton::clicked, q, &qSlicerLiverResectionsTableView::onShowStatusButtonClicked);
-  //   }
-  // QObject::connect(this->SortFilterModel, &qMRMLSortFilterSegmentsProxyModel::filterModified, q, &qSlicerLiverResectionsTableView::onSegmentsFilterModified);
-
-  // // Set item delegate to handle color and opacity changes
-  // this->SegmentsTable->setItemDelegateForColumn(this->Model->colorColumn(), new qSlicerTerminologyItemDelegate(this->SegmentsTable));
-  // this->SegmentsTable->setItemDelegateForColumn(this->Model->opacityColumn(), new qMRMLItemDelegate(this->SegmentsTable));
-  // this->SegmentsTable->installEventFilter(q);
+  // Unset read-only by default (edit triggers are double click and edit key press)
+  //q->setReadOnly(false);
 }
 
 //-----------------------------------------------------------------------------

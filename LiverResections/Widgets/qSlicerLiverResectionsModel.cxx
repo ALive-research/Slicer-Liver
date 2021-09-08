@@ -40,6 +40,9 @@
 #include "qSlicerLiverResectionsModel.h"
 #include "qSlicerLiverResectionsModel_p.h"
 
+// MRML includes
+#include <vtkMRMLLiverResectionNode.h>
+
 //Qt includes
 #include <QStringList>
 #include <QIcon>
@@ -53,11 +56,7 @@ qSlicerLiverResectionsModelPrivate::qSlicerLiverResectionsModelPrivate(qSlicerLi
     ResectionMarginColumn(-1),
     StatusColumn(-1)
 {
-  Q_Q(qSlicerLiverResectionsModel);
-
   this->Callback = vtkSmartPointer<vtkCallbackCommand>::New();
-  this->Callback->SetClientData(q);
-  this->Callback->SetCallback(qSlicerLiverResectionsModel::onEvent);
 
   this->HiddenIcon = QIcon(":Icons/VisibleOff.png");
   this->VisibleIcon = QIcon(":Icons/VisibleOn.png");
@@ -71,8 +70,17 @@ qSlicerLiverResectionsModelPrivate::qSlicerLiverResectionsModelPrivate(qSlicerLi
 
 
 //------------------------------------------------------------------------------
-qSlicerLiverResectionsModelPrivate::~qSlicerLiverResectionsModelPrivate() = default;
+qSlicerLiverResectionsModelPrivate::~qSlicerLiverResectionsModelPrivate()
+{
 
+  foreach(auto &resectionNode, this->ResectionNodes)
+    {
+      if (resectionNode)
+        {
+          resectionNode->RemoveObserver(this->Callback);
+        }
+    }
+}
 
 //------------------------------------------------------------------------------
 void qSlicerLiverResectionsModelPrivate::init()
@@ -83,6 +91,7 @@ void qSlicerLiverResectionsModelPrivate::init()
   this->Callback->SetCallback(qSlicerLiverResectionsModel::onEvent);
 
   QObject::connect(q, SIGNAL(itemChanged(QStandardItem*)), q, SLOT(onItemChanged(QStandardItem*)));
+
   q->setVisibilityColumn(0);
   q->setNameColumn(1);
   q->setResectionMarginColumn(2);
@@ -93,7 +102,7 @@ void qSlicerLiverResectionsModelPrivate::init()
     {
       if (i == q->visibilityColumn())
         {
-          columnLabels << "";
+          columnLabels << "Visibility";
         }
       else if (i == q->nameColumn())
         {
@@ -105,18 +114,18 @@ void qSlicerLiverResectionsModelPrivate::init()
         }
       else if (i == q->statusColumn())
         {
-          columnLabels << "";
+          columnLabels << "Status";
         }
     }
 
   q->setHorizontalHeaderLabels(columnLabels);
 
-  q->horizontalHeaderItem(q->nameColumn())->setToolTip(qSlicerLiverResectionsModel::tr("Resection Name"));
-  q->horizontalHeaderItem(q->visibilityColumn())->setToolTip(qSlicerLiverResectionsModel::tr("Resection Visibility"));
-  q->horizontalHeaderItem(q->resectionMarginColumn())->setToolTip(qSlicerLiverResectionsModel::tr("Resection Margin"));
-  q->horizontalHeaderItem(q->statusColumn())->setToolTip(qSlicerLiverResectionsModel::tr("Resection Status"));
+  // q->horizontalHeaderItem(q->nameColumn())->setToolTip(qSlicerLiverResectionsModel::tr("Resection Name"));
+  // q->horizontalHeaderItem(q->visibilityColumn())->setToolTip(qSlicerLiverResectionsModel::tr("Resection Visibility"));
+  // q->horizontalHeaderItem(q->resectionMarginColumn())->setToolTip(qSlicerLiverResectionsModel::tr("Resection Margin"));
+  // q->horizontalHeaderItem(q->statusColumn())->setToolTip(qSlicerLiverResectionsModel::tr("Resection Status"));
 
-  q->horizontalHeaderItem(q->visibilityColumn())->setIcon(QIcon(":/Icons/Small/SlicerVisibleInvisible.png"));
+  //q->horizontalHeaderItem(q->visibilityColumn())->setIcon(QIcon(":/Icons/Small/SlicerVisibleInvisible.png"));
 
 }
 
@@ -153,7 +162,7 @@ void qSlicerLiverResectionsModel::onEvent(vtkObject* caller,
 
 }
 //------------------------------------------------------------------------------
-void qSlicerLiverResectionsModel::onItemChanged(const QStandardItem* item)
+void qSlicerLiverResectionsModel::onItemChanged(QStandardItem* item)
 {
   Q_D(qSlicerLiverResectionsModel);
   this->updateResectionNodeFromItem(this->resectionNodeIDFromItem(item), item);
@@ -161,10 +170,10 @@ void qSlicerLiverResectionsModel::onItemChanged(const QStandardItem* item)
 
 //-----------------------------------------------------------------------------
 int qSlicerLiverResectionsModel::nameColumn() const
-  {
-    Q_D(const qSlicerLiverResectionsModel);
-    return d->NameColumn;
-  }
+{
+  Q_D(const qSlicerLiverResectionsModel);
+  return d->NameColumn;
+}
 
 //------------------------------------------------------------------------------
 void qSlicerLiverResectionsModel::setNameColumn(int column)
@@ -176,10 +185,10 @@ void qSlicerLiverResectionsModel::setNameColumn(int column)
 
 //-----------------------------------------------------------------------------
 int qSlicerLiverResectionsModel::visibilityColumn() const
-  {
-    Q_D(const qSlicerLiverResectionsModel);
-    return d->VisibilityColumn;
-  }
+{
+  Q_D(const qSlicerLiverResectionsModel);
+  return d->VisibilityColumn;
+}
 
 //------------------------------------------------------------------------------
 void qSlicerLiverResectionsModel::setVisibilityColumn(int column)
@@ -191,10 +200,10 @@ void qSlicerLiverResectionsModel::setVisibilityColumn(int column)
 
 //-----------------------------------------------------------------------------
 int qSlicerLiverResectionsModel::resectionMarginColumn() const
-  {
-    Q_D(const qSlicerLiverResectionsModel);
-    return d->ResectionMarginColumn;
-  }
+{
+  Q_D(const qSlicerLiverResectionsModel);
+  return d->ResectionMarginColumn;
+}
 
 //------------------------------------------------------------------------------
 void qSlicerLiverResectionsModel::setResectionMarginColumn(int column)
@@ -206,10 +215,10 @@ void qSlicerLiverResectionsModel::setResectionMarginColumn(int column)
 
 //-----------------------------------------------------------------------------
 int qSlicerLiverResectionsModel::statusColumn() const
-  {
-    Q_D(const qSlicerLiverResectionsModel);
-    return d->ResectionMarginColumn;
-  }
+{
+  Q_D(const qSlicerLiverResectionsModel);
+  return d->StatusColumn;
+}
 
 //------------------------------------------------------------------------------
 void qSlicerLiverResectionsModel::setStatusColumn(int column)
@@ -224,9 +233,9 @@ void qSlicerLiverResectionsModel::updateColumnCount()
 {
   Q_D(const qSlicerLiverResectionsModel);
 
-  // int max = this->maxColumnId();
-  // int oldColumnCount = this->columnCount();
-  // this->setColumnCount(max + 1);
+  int max = this->maxColumnId();
+  int oldColumnCount = this->columnCount();
+  this->setColumnCount(max + 1);
   // if (oldColumnCount == 0)
   //   {
   //   this->rebuildFromSegments();
@@ -245,6 +254,18 @@ void qSlicerLiverResectionsModel::updateColumnCount()
   //     this->updateItemsFromSegmentID(itemIt->c_str());
   //     }
   //   }
+}
+
+//------------------------------------------------------------------------------
+int qSlicerLiverResectionsModel::maxColumnId()const
+{
+  Q_D(const qSlicerLiverResectionsModel);
+  int maxId = -1;
+  maxId = qMax(maxId, d->NameColumn);
+  maxId = qMax(maxId, d->VisibilityColumn);
+  maxId = qMax(maxId, d->ResectionMarginColumn);
+  maxId = qMax(maxId, d->StatusColumn);
+  return maxId;
 }
 
 //------------------------------------------------------------------------------

@@ -98,7 +98,7 @@ signals:
 
 protected slots:
   /// Invoked when an item in the model is changed
-  virtual void onItemChanged(const QStandardItem *item);
+  virtual void onItemChanged(QStandardItem *item);
 
 protected:
  qSlicerLiverResectionsModel(qSlicerLiverResectionsModelPrivate *impl,
@@ -128,6 +128,8 @@ protected:
 
   void updateColumnCount();
 
+  int maxColumnId() const;
+
   /// Invoked when the segmentation node is modified with one of these events:
   /// vtkSegmentation::SegmentAdded,
   /// vtkSegmentation::SegmentRemoved,
@@ -137,7 +139,7 @@ protected:
 
   void onResectionNodeAdded(const QString &resectionNodeID);
   void onResectionNodeRemoved(const QString &resectionNodeID);
-  void onResectionNodeModiifed(const QString &resectionNodeID);
+  void onResectionNodeModified(const QString &resectionNodeID);
 
 protected:
   QScopedPointer<qSlicerLiverResectionsModelPrivate> d_ptr;
