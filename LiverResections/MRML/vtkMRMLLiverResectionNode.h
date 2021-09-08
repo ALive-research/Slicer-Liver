@@ -47,6 +47,14 @@
 
 //VTK includes
 #include <vtkWeakPointer.h>
+#include <vtkCollection.h>
+
+//STD includes
+#include <set>
+#include <string>
+
+//-----------------------------------------------------------------------------
+class vtkMRMLSegmentationNode;
 
 //-----------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
@@ -71,18 +79,34 @@ public:
   vtkMRMLNode* CreateNodeInstance() override;
 
   /// Get node XML tag name (like Volume, Model)
-  ///
   const char* GetNodeTagName() override {return "LiverResection";}
 
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLLiverResectionNode);
 
-  vtkMRMLModelNode* GetTarget() const {return this->Target;}
-  void SetTarget(vtkMRMLModelNode* target) {this->Target = target; this->Modified();}
+  /// Get a pointer to the target organ
+  std::string GetTargetOrganID() const {return this->TargetOrganID;}
+  /// Set the target organ
+  void SetTargetOrganID(const std::string targetOrganID)
+  {this->TargetOrganID = targetOrganID; this->Modified();}
+
+  /// Get the resection status
+  ResectionStatus GetResectionStatus() const {return this->Status;}
+  /// Get the resection status
+  void SetResectionstatus(ResectionStatus status)
+  {this->Status = status; this->Modified();}
+
+  /// Get target lesions identifiers
+  std::set<std::string> GetTargetLesionsIDs() const {return this->TargetLesionsIDs;}
+  /// Add a new lesion identifier
+  void AddTargetLesionID(const std::string& lesionID)
+  {this->TargetLesionsIDs.insert(lesionID); this->Modified();}
+  /// Remove a lesion identifier
+  void RemoveTargetLesionID(const std::string& lesionID)
+  {this->TargetLesionsIDs.erase(lesionID); this->Modified();}
 
   // Get resection margin
   vtkGetMacro(ResectionMargin, float);
-
   // Get resection margin
   vtkSetMacro(ResectionMargin, float);
 
@@ -91,8 +115,11 @@ protected:
   ~vtkMRMLLiverResectionNode() override = default;
 
 private:
- vtkWeakPointer<vtkMRMLModelNode> Target;
- float ResectionMargin = 10.0;
+  vtkWeakPointer<vtkMRMLSegmentationNode> SegmentationNode;
+  std::string TargetOrganID;
+  std::set<std::string> TargetLesionsIDs;
+  ResectionStatus Status;
+  float ResectionMargin; //Resection margin in mm
 
 private:
  vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);

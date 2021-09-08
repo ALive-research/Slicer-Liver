@@ -41,6 +41,7 @@
 
 // MRML includes
 #include <vtkMRMLScene.h>
+#include <vtkMRMLSegmentationNode.h>
 
 // VTK includes
 #include <vtkNew.h>
@@ -51,7 +52,8 @@ vtkMRMLNodeNewMacro(vtkMRMLLiverResectionNode);
 
 //--------------------------------------------------------------------------------
 vtkMRMLLiverResectionNode::vtkMRMLLiverResectionNode()
-  :Superclass(), Target(nullptr)
+  :Superclass(), SegmentationNode(nullptr),
+   Status(ResectionStatus::Initialization), ResectionMargin(10.0)
 {
 }
 
