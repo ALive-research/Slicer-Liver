@@ -112,7 +112,7 @@ public:
 
 protected:
   vtkMRMLLiverResectionNode();
-  ~vtkMRMLLiverResectionNode() override = default;
+  ~vtkMRMLLiverResectionNode() override;
 
 private:
   vtkWeakPointer<vtkMRMLSegmentationNode> SegmentationNode;

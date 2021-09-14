@@ -58,6 +58,9 @@ vtkMRMLLiverResectionNode::vtkMRMLLiverResectionNode()
 }
 
 //----------------------------------------------------------------------------
+vtkMRMLLiverResectionNode::~vtkMRMLLiverResectionNode() = default;
+
+//----------------------------------------------------------------------------
 void vtkMRMLLiverResectionNode::PrintSelf(ostream& os, vtkIndent indent)
 {
   Superclass::PrintSelf(os,indent);

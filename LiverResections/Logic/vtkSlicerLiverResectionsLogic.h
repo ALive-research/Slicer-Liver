@@ -75,6 +75,9 @@ public:
     DistanceContour
   };
 
+  /// Register module MRML nodes
+  void RegisterNodes() override;
+
   /// Adds a new resection using contour initialization using slicing contours initialization
   void AddResectionContour(vtkMRMLModelNode *targetParenchyma, vtkCollection *targetTumors);
 
