@@ -52,7 +52,7 @@ vtkMRMLNodeNewMacro(vtkMRMLLiverResectionNode);
 
 //--------------------------------------------------------------------------------
 vtkMRMLLiverResectionNode::vtkMRMLLiverResectionNode()
-  :Superclass(), SegmentationNode(nullptr),
+  :Superclass(), TargetOrganID(""), SegmentationNode(nullptr),
    Status(ResectionStatus::Initialization), ResectionMargin(10.0)
 {
 }

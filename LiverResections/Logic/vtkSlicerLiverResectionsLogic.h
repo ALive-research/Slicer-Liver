@@ -48,6 +48,7 @@
 
 //------------------------------------------------------------------------------
 class vtkMRMLModelNode;
+class vtkMRMLSegmentationNode;
 
 //------------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_LOGIC_EXPORT vtkSlicerLiverResectionsLogic:
@@ -79,7 +80,9 @@ public:
   void RegisterNodes() override;
 
   /// Adds a new resection using contour initialization using slicing contours initialization
-  void AddResectionContour(vtkMRMLModelNode *targetParenchyma, vtkCollection *targetTumors);
+  void AddResectionContour(vtkMRMLSegmentationNode* segmentationNode,
+                           vtkMRMLModelNode* targetParenchyma,
+                           vtkCollection* targetTumors) const;
 
   /// Adds a new resection using planar initialization
   void AddResectionPlane(vtkMRMLModelNode *targetParenchyma);

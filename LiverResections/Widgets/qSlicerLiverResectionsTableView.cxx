@@ -77,7 +77,6 @@ public:
   bool IsFilterBarVisible;
 
   qSlicerLiverResectionsModel* Model;
-  // qSlicerSortFilterSegmentsProxyModel* SortFilterModel;
 
   // QIcon StatusIcons[vtkSlicerLiverResectionsLogic::LastStatus];
   QPushButton* ShowStatusButtons[vtkSlicerLiverResectionsLogic::LastStatus];
@@ -113,7 +112,6 @@ void qSlicerLiverResectionsTableViewPrivate::init()
   this->Model = new qSlicerLiverResectionsModel(this->ResectionsTable);
   this->ResectionsTable->setModel(this->Model);
 
-
   this->ResectionsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
   this->ResectionsTable->horizontalHeader()->setSectionResizeMode(this->Model->nameColumn(), QHeaderView::Stretch);
   this->ResectionsTable->horizontalHeader()->setStretchLastSection(false);
@@ -143,7 +141,14 @@ void qSlicerLiverResectionsTableView::setMRMLScene(vtkMRMLScene* newScene)
 {
   Q_D(qSlicerLiverResectionsTableView);
 
+ std::cout << "Setting MRMLScene" << std::endl;
+
   Superclass::setMRMLScene(newScene);
+
+  if (d->Model)
+    {
+      d->Model->setMRMLScene(newScene);
+    }
 }
 //------------------------------------------------------------------------------
 bool qSlicerLiverResectionsTableView::eventFilter(QObject* target, QEvent* event)

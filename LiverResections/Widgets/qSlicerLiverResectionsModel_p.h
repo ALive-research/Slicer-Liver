@@ -52,6 +52,7 @@
 
 //------------------------------------------------------------------------------
 class vtkMRMLLiverResectionNode;
+class vtkMRMLScene;
 class qSlicerLiverResectionsModel;
 
 //------------------------------------------------------------------------------
@@ -85,7 +86,7 @@ public:
   QIcon DeformationIcon;
   QIcon CompletedIcon;
 
-  QList<vtkWeakPointer<vtkMRMLLiverResectionNode>> ResectionNodes;
+  vtkWeakPointer<vtkMRMLScene> MRMLScene;
 };
 
 #endif // qSlicerLiverResectionsModel_p_h_

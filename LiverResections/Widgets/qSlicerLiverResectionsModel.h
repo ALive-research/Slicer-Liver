@@ -50,6 +50,8 @@
 
 //------------------------------------------------------------------------------
 class qSlicerLiverResectionsModelPrivate;
+class vtkMRMLScene;
+class vtkMRMLLiverResectionNode;
 
 //------------------------------------------------------------------------------
 class Q_SLICER_MODULE_LIVERRESECTIONS_WIDGETS_EXPORT qSlicerLiverResectionsModel
@@ -63,6 +65,13 @@ class Q_SLICER_MODULE_LIVERRESECTIONS_WIDGETS_EXPORT qSlicerLiverResectionsModel
   Q_PROPERTY(int statusColumn READ statusColumn WRITE setStatusColumn);
 
  public:
+
+  enum ResectionTableItemDataRole
+  {
+    VisibilityRole = Qt::UserRole + 1,
+    StatusRole,
+  };
+
   typedef QStandardItemModel Superclass;
   qSlicerLiverResectionsModel(QObject *parent=nullptr);
   ~qSlicerLiverResectionsModel() override;
@@ -75,6 +84,8 @@ class Q_SLICER_MODULE_LIVERRESECTIONS_WIDGETS_EXPORT qSlicerLiverResectionsModel
   void setResectionMarginColumn(int column);
   int statusColumn() const;
   void setStatusColumn(int column);
+
+  void setMRMLScene(vtkMRMLScene *);
 
   /// Returns the resection node id from a given index
   QString resectionNodeIDFromIndex(const QModelIndex &index) const;
@@ -105,9 +116,9 @@ protected:
                               QObject *parent=nullptr);
 
   /// Update QStandardItem associated using resectionNodeID and column
-  void updateItemFromResection(QStandardItem &item,
-                                 const QString &resectionNodeID,
-                                 int column) const;
+  void updateItemFromResectionNode(QStandardItem *item,
+                                   vtkMRMLLiverResectionNode *resectionNode,
+                                   int column); 
 
   void updateResectionNodeFromItemData(const QString &segmentID, const QStandardItem* item);
 
@@ -115,7 +126,7 @@ protected:
   /// Update QstandardItem data associated using resectionNodeID and column.
   void updateItemDataFromResectionNode(QStandardItem &item,
                                        const QString &resectionNodeID,
-                                       int column) const;
+                                       int column);
   /// Update MRML node using the associated QstandardItem
   void updateResectionNodeFromItem(const QString &resectionNodeID,
                                    const QStandardItem *item);
@@ -130,16 +141,16 @@ protected:
 
   int maxColumnId() const;
 
-  /// Invoked when the segmentation node is modified with one of these events:
-  /// vtkSegmentation::SegmentAdded,
-  /// vtkSegmentation::SegmentRemoved,
-  /// vtkSegmentation::SegmentModified,
-  /// vtkSegmentation::SegmentsOrderModified
+  /// Invoked when the MRML scene is changed (nodes added/removed)
+  /// This function will set up internal callbacks to follow up on the modification of resection nodes
   static void onEvent(vtkObject* caller, unsigned long event, void* clientData, void* callData);
 
-  void onResectionNodeAdded(const QString &resectionNodeID);
-  void onResectionNodeRemoved(const QString &resectionNodeID);
-  void onResectionNodeModified(const QString &resectionNodeID);
+  /// Invoked when a new resection node is added
+  void onResectionNodeAdded(vtkMRMLLiverResectionNode* node);
+  /// Invoked when a new resection node is removed
+  void onResectionNodeRemoved(vtkMRMLLiverResectionNode* node);
+  /// Invoked when a new resection node is modified
+  void onResectionNodeModified(vtkMRMLLiverResectionNode* node);
 
 protected:
   QScopedPointer<qSlicerLiverResectionsModelPrivate> d_ptr;

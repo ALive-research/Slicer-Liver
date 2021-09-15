@@ -431,7 +431,7 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     liverModelNode = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'liver').GetItemAsObject(0)
     if liverModelNode is None:
       return
-    resectionLogic.AddResectionContour(liverModelNode, None)
+    resectionLogic.AddResectionContour(self._segmentationNode, liverModelNode, vtk.vtkCollection())
 
 #
 # LiverTest

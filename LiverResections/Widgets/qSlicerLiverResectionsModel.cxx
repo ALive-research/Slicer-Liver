@@ -42,10 +42,12 @@
 
 // MRML includes
 #include <vtkMRMLLiverResectionNode.h>
+#include <vtkMRMLScene.h>
 
 //Qt includes
 #include <QStringList>
 #include <QIcon>
+#include <QDebug>
 
 //------------------------------------------------------------------------------
 qSlicerLiverResectionsModelPrivate::qSlicerLiverResectionsModelPrivate(qSlicerLiverResectionsModel &object)
@@ -54,7 +56,9 @@ qSlicerLiverResectionsModelPrivate::qSlicerLiverResectionsModelPrivate(qSlicerLi
     NameColumn(-1),
     VisibilityColumn(-1),
     ResectionMarginColumn(-1),
-    StatusColumn(-1)
+    StatusColumn(-1),
+    MRMLScene(nullptr)
+
 {
   this->Callback = vtkSmartPointer<vtkCallbackCommand>::New();
 
@@ -73,13 +77,6 @@ qSlicerLiverResectionsModelPrivate::qSlicerLiverResectionsModelPrivate(qSlicerLi
 qSlicerLiverResectionsModelPrivate::~qSlicerLiverResectionsModelPrivate()
 {
 
-  foreach(auto &resectionNode, this->ResectionNodes)
-    {
-      if (resectionNode)
-        {
-          resectionNode->RemoveObserver(this->Callback);
-        }
-    }
 }
 
 //------------------------------------------------------------------------------
@@ -87,6 +84,7 @@ void qSlicerLiverResectionsModelPrivate::init()
 {
   Q_Q(qSlicerLiverResectionsModel);
 
+  std::cout << "Init resection model" << std::endl;
   this->Callback->SetClientData(q);
   this->Callback->SetCallback(qSlicerLiverResectionsModel::onEvent);
 
@@ -152,6 +150,26 @@ qSlicerLiverResectionsModel::qSlicerLiverResectionsModel(qSlicerLiverResectionsM
 //------------------------------------------------------------------------------
 qSlicerLiverResectionsModel::~qSlicerLiverResectionsModel() = default;
 
+//-----------------------------------------------------------------------------
+void qSlicerLiverResectionsModel::setMRMLScene(vtkMRMLScene *scene)
+{
+  Q_D(qSlicerLiverResectionsModel);
+
+  if(d->MRMLScene == scene)
+    {
+      return;
+    }
+  d->MRMLScene = scene;
+
+  if(!d->MRMLScene)
+    {
+      return;
+    }
+
+  d->MRMLScene->AddObserver(vtkMRMLScene::NodeAddedEvent, d->Callback, 10);
+  d->MRMLScene->AddObserver(vtkMRMLScene::NodeRemovedEvent, d->Callback, 10);
+}
+
 
 //-----------------------------------------------------------------------------
 void qSlicerLiverResectionsModel::onEvent(vtkObject* caller,
@@ -160,6 +178,45 @@ void qSlicerLiverResectionsModel::onEvent(vtkObject* caller,
                                           void* callData )
 {
 
+  std::cout << "on event" << std::endl;
+
+  // Verify it is a correct call
+  vtkMRMLScene *mrmlScene = reinterpret_cast<vtkMRMLScene*>(caller);
+  qSlicerLiverResectionsModel *model = reinterpret_cast<qSlicerLiverResectionsModel*>(clientData);
+
+  if (!model || !mrmlScene)
+    {
+     qCritical() << Q_FUNC_INFO << ": Invalid event parameters.";
+     return;
+    }
+
+  // Check associated data (node ID)
+  vtkMRMLNode *node= nullptr;
+  if (callData && (event == vtkMRMLScene::NodeAddedEvent
+                   || event == vtkMRMLScene::NodeRemovedEvent))
+    {
+      node = reinterpret_cast<vtkMRMLLiverResectionNode*>(callData);
+    }
+
+  vtkMRMLLiverResectionNode *resectionNode =
+    vtkMRMLLiverResectionNode::SafeDownCast(node);
+
+  // Test it referes to a vtkMRMLLiverResectionNode
+  if (!resectionNode)
+    {
+      return;
+    }
+
+  // Take action on the events
+  switch(event)
+    {
+      case vtkMRMLScene::NodeAddedEvent:
+        model->onResectionNodeAdded(resectionNode);
+        break;
+      case vtkMRMLScene::NodeRemovedEvent:
+        model->onResectionNodeRemoved(resectionNode);
+        break;
+    }
 }
 //------------------------------------------------------------------------------
 void qSlicerLiverResectionsModel::onItemChanged(QStandardItem* item)
@@ -418,4 +475,66 @@ QString qSlicerLiverResectionsModel::resectionNodeIDFromItem(QStandardItem const
   //   }
   // return item->data(qMRMLResectionNodesModel::ResectionNodeIDRole).toString();
 }
+
 //------------------------------------------------------------------------------
+void qSlicerLiverResectionsModel::onResectionNodeAdded(vtkMRMLLiverResectionNode* node)
+{
+
+  // Check if it is a valid node
+  if (!node)
+    {
+      qCritical() << Q_FUNC_INFO << ": Invalid resection node";
+      return;
+    }
+
+  if (!node->GetSegmentationNode())
+    {
+      return;
+    }
+
+  std::cout << "Res " << node->GetSegmentationNode() << std::endl;
+
+  QList<QStandardItem*> items;
+
+  // Update each of the columns for the item
+  for (int col=0; col < this->columnCount(); ++col)
+    {
+      std::cout << "column" << std::endl;
+      QStandardItem* newItem = new QStandardItem();
+      this->updateItemFromResectionNode(newItem, node, col);
+      items.append(newItem);
+    }
+
+  this->appendRow(items);
+
+}
+
+//------------------------------------------------------------------------------
+void qSlicerLiverResectionsModel::onResectionNodeRemoved(vtkMRMLLiverResectionNode* node)
+{
+  if (node)
+    std::cout << "Resection Removed" << std::endl;
+}
+
+//------------------------------------------------------------------------------
+void qSlicerLiverResectionsModel::updateItemFromResectionNode(QStandardItem *item,
+                                                              vtkMRMLLiverResectionNode *resectionNode,
+                                                              int column)
+{
+  std::cout << "Entra" << std::endl;
+
+  Q_D(qSlicerLiverResectionsModel);
+
+  if (!resectionNode)
+    {
+      qCritical() << Q_FUNC_INFO << ": Invalid resection node";
+      return;
+    }
+
+  if (column == this->visibilityColumn())
+    {
+      std::cout << "Test" << std::endl;
+      item->setText("test");
+    }
+
+}

@@ -46,6 +46,7 @@
 // MRML includes
 #include <vtkMRMLScene.h>
 #include <vtkMRMLSelectionNode.h>
+#include <vtkMRMLSegmentationNode.h>
 
 // VTK includes
 #include <vtkObjectFactory.h>
@@ -141,14 +142,33 @@ void vtkSlicerLiverResectionsLogic::AddResectionPlane(vtkMRMLModelNode *targetPa
 }
 
 //---------------------------------------------------------------------------
-void vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLModelNode *targetParenchymaModelNode,
-                                                        vtkCollection *targetTumor)
+void vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLSegmentationNode* segmentationNode,
+                                                        vtkMRMLModelNode *targetParenchymaModelNode,
+                                                        vtkCollection *targetTumors) const
 {
   auto mrmlScene = this->GetMRMLScene();
   if (!mrmlScene)
     {
-    vtkErrorMacro("Error in AddResectionSlicingContour: no valid MRML scene.");
+    vtkErrorMacro("Error in AddResectionContour: no valid MRML scene.");
     return;
+    }
+
+  if (!segmentationNode)
+    {
+     vtkErrorMacro("Error in AddResectionContour: no valid segmentation node.");
+     return;
+    }
+
+  if (!targetParenchymaModelNode)
+    {
+      vtkErrorMacro("Error in AddResectionContour: no valid target parenchyma node.");
+      return;
+    }
+
+  if (!targetTumors)
+    {
+      vtkErrorMacro("Error in AddResectionContour: no valid target tumor.");
+      return;
     }
 
   // if (!targetParenchymaModelNode)
@@ -183,7 +203,22 @@ void vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLModelNode *target
   // distanceContourNode->SetAndObserveDisplayNodeID(distanceContourDisplayNode->GetID());
   // mrmlScene->AddNode(distanceContourNode);
 
-  mrmlScene->AddNewNodeByClass("vtkMRMLLiverResectionNode");
+  vtkSmartPointer<vtkMRMLLiverResectionNode> node =
+    vtkSmartPointer<vtkMRMLLiverResectionNode>::New();
 
+  node->SetSegmentationNode(segmentationNode);
+  node->SetTargetOrganID(targetParenchymaModelNode->GetID());
+
+  for (int i=0; i<targetTumors->GetNumberOfItems(); ++i)
+    {
+      vtkMRMLNode *tumorNode = vtkMRMLNode::SafeDownCast(targetTumors->GetItemAsObject(i));
+      if (!tumorNode)
+        {
+          continue;
+        }
+
+      node->AddTargetTumorID(tumorNode->GetID());
+    }
+
+  mrmlScene->AddNode(node);
 }
-

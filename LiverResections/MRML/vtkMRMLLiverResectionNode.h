@@ -44,6 +44,7 @@
 
 // MRML includes
 #include <vtkMRMLModelNode.h>
+#include <vtkMRMLSegmentationNode.h>
 
 //VTK includes
 #include <vtkWeakPointer.h>
@@ -52,9 +53,6 @@
 //STD includes
 #include <set>
 #include <string>
-
-//-----------------------------------------------------------------------------
-class vtkMRMLSegmentationNode;
 
 //-----------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
@@ -97,13 +95,17 @@ public:
   {this->Status = status; this->Modified();}
 
   /// Get target lesions identifiers
-  std::set<std::string> GetTargetLesionsIDs() const {return this->TargetLesionsIDs;}
+  std::set<std::string> GetTargetTumorsIDs() const {return this->TargetTumorsIDs;}
   /// Add a new lesion identifier
-  void AddTargetLesionID(const std::string& lesionID)
-  {this->TargetLesionsIDs.insert(lesionID); this->Modified();}
+  void AddTargetTumorID(const std::string& lesionID)
+  {this->TargetTumorsIDs.insert(lesionID); this->Modified();}
   /// Remove a lesion identifier
-  void RemoveTargetLesionID(const std::string& lesionID)
-  {this->TargetLesionsIDs.erase(lesionID); this->Modified();}
+  void RemoveTargetTumorID(const std::string& lesionID)
+  {this->TargetTumorsIDs.erase(lesionID); this->Modified();}
+
+  vtkMRMLSegmentationNode* GetSegmentationNode() const {return this->SegmentationNode;}
+  void SetSegmentationNode(vtkMRMLSegmentationNode *segmentationNode)
+  {this->SegmentationNode = segmentationNode; this->Modified();}
 
   // Get resection margin
   vtkGetMacro(ResectionMargin, float);
@@ -117,7 +119,7 @@ protected:
 private:
   vtkWeakPointer<vtkMRMLSegmentationNode> SegmentationNode;
   std::string TargetOrganID;
-  std::set<std::string> TargetLesionsIDs;
+  std::set<std::string> TargetTumorsIDs;
   ResectionStatus Status;
   float ResectionMargin; //Resection margin in mm
 
