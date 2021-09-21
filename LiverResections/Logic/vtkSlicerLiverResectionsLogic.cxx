@@ -42,6 +42,7 @@
 #include <vtkMRMLMarkupsDistanceContourNode.h>
 #include <vtkMRMLMarkupsDisplayNode.h>
 #include <vtkMRMLLiverResectionNode.h>
+#include <vtkMRMLLiverResectionDisplayNode.h>
 
 // MRML includes
 #include <vtkMRMLScene.h>
@@ -78,8 +79,8 @@ void vtkSlicerLiverResectionsLogic::RegisterNodes()
 
   // Nodes
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLLiverResectionNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLLiverResectionDisplayNode>::New());
 }
-
 
 //---------------------------------------------------------------------------
 void vtkSlicerLiverResectionsLogic::ObserveMRMLScene()

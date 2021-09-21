@@ -10,9 +10,12 @@ set(${KIT}_INCLUDE_DIRECTORIES
 set(${KIT}_SRCS
   vtkMRMLLiverResectionNode.h
   vtkMRMLLiverResectionNode.cxx
+  vtkMRMLLiverResectionDisplayNode.h
+  vtkMRMLLiverResectionDisplayNode.cxx
   )
 
 set(${KIT}_TARGET_LIBRARIES
+  vtkSlicerLiverMarkupsModuleMRML
   ${MRML_LIBRARIES}
   )
 
