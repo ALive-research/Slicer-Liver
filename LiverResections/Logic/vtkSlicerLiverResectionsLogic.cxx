@@ -83,6 +83,16 @@ void vtkSlicerLiverResectionsLogic::RegisterNodes()
 }
 
 //---------------------------------------------------------------------------
+void vtkSlicerLiverResectionsLogic::SetMRMLSceneInternal(vtkMRMLScene * newScene)
+{
+  vtkNew<vtkIntArray> events;
+  events->InsertNextValue(vtkMRMLScene::NodeAddedEvent);
+  events->InsertNextValue(vtkMRMLScene::NodeRemovedEvent);
+  events->InsertNextValue(vtkMRMLScene::EndBatchProcessEvent);
+  this->SetAndObserveMRMLSceneEventsInternal(newScene, events.GetPointer());
+}
+
+//---------------------------------------------------------------------------
 void vtkSlicerLiverResectionsLogic::ObserveMRMLScene()
 {
   if (!this->GetMRMLScene())
@@ -92,6 +102,23 @@ void vtkSlicerLiverResectionsLogic::ObserveMRMLScene()
 
  this->Superclass::ObserveMRMLScene();
 }
+
+
+//---------------------------------------------------------------------------
+void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
+                                                   unsigned long event,
+                                                   void *callData)
+{
+  // return if the node is not a liver resection node
+  vtkMRMLLiverResectionNode *resectionNode =
+    vtkMRMLLiverResectionNode::SafeDownCast(caller);
+  if(!resectionNode)
+    {
+    return;
+    }
+}
+
+
 
 //---------------------------------------------------------------------------
 void vtkSlicerLiverResectionsLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)

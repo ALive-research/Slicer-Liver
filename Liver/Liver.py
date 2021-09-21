@@ -434,6 +434,7 @@ class LiverLogic(ScriptedLoadableModuleLogic):
 
   def addResectionContour(self):
     liverModelNode = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'liver').GetItemAsObject(0)
+    tumorModelNode = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'tumor1').GetItemAsObject(0)
     if liverModelNode is None:
       return
     if self._segmentationNode is None:
@@ -442,6 +443,7 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     liverResectionNode.SetScene(slicer.mrmlScene)
     liverResectionNode.SetSegmentationNode(self._segmentationNode)
     liverResectionNode.SetTargetOrgan(liverModelNode)
+    liverResectionNode.AddTargetTumor(tumorModelNode)
     liverResectionNode.SetResectionInitialization(liverResectionNode.Curved)
     liverResectionNode.CreateDefaultDisplayNodes()
     slicer.mrmlScene.AddNode(liverResectionNode)

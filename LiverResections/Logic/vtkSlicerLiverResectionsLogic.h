@@ -86,6 +86,13 @@ public:
     DistanceContour
   };
 
+  void ProcessMRMLNodesEvents(vtkObject *caller,
+                              unsigned long event,
+                              void *callData) override;
+
+  /// Set mrml scene
+  void SetMRMLSceneInternal(vtkMRMLScene *newScene) override;
+
   /// Register module MRML nodes
   void RegisterNodes() override;
 

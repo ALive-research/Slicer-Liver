@@ -129,7 +129,7 @@ public:
 
   // Set Target Organ
   void SetTargetOrgan(vtkMRMLModelNode *targetOrgan)
-  {this->TargetOrgan; this->Modified();}
+  {this->TargetOrgan = targetOrgan; this->Modified();}
 
 
 protected:
