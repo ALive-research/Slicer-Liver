@@ -40,15 +40,25 @@
 #ifndef __vtkslicerlivermarkupslogic_h_
 #define __vtkslicerlivermarkupslogic_h_
 
+#include "vtkSlicerLiverResectionsModuleLogicExport.h"
+
+// Slicer include
 #include <vtkSlicerModuleLogic.h>
 
+// VTK includes
 #include <vtkWeakPointer.h>
+#include <vtkSmartPointer.h>
 
-#include "vtkSlicerLiverResectionsModuleLogicExport.h"
+// STD include
+#include <map>
 
 //------------------------------------------------------------------------------
 class vtkMRMLModelNode;
 class vtkMRMLSegmentationNode;
+class vtkMRMLLiverResectionNode;
+class vtkMRMLMarkupsNode;
+class vtkMRMLMarkupsDistanceContourNode;
+class vtkMRMLMarkupsSlicingContourNode;
 
 //------------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_LOGIC_EXPORT vtkSlicerLiverResectionsLogic:
@@ -80,20 +90,20 @@ public:
   void RegisterNodes() override;
 
   /// Adds a new resection using contour initialization using slicing contours initialization
-  void AddResectionContour(vtkMRMLSegmentationNode* segmentationNode,
-                           vtkMRMLModelNode* targetParenchyma,
-                           vtkCollection* targetTumors) const;
+  vtkMRMLMarkupsDistanceContourNode* AddResectionContour(vtkMRMLLiverResectionNode *resectionNode) const;
 
   /// Adds a new resection using planar initialization
-  void AddResectionPlane(vtkMRMLModelNode *targetParenchyma);
+  vtkMRMLMarkupsSlicingContourNode* AddResectionPlane(vtkMRMLLiverResectionNode *resectionNode) const;
 
 protected:
   vtkSlicerLiverResectionsLogic();
   ~vtkSlicerLiverResectionsLogic() override;
 
   void ObserveMRMLScene() override;
-
   void OnMRMLSceneNodeAdded(vtkMRMLNode* node) override;
+
+protected:
+  std::map<vtkSmartPointer<vtkMRMLLiverResectionNode>, vtkSmartPointer<vtkMRMLMarkupsNode>> ResectionsMarkupsMap;
 
 private:
   vtkSlicerLiverResectionsLogic(const vtkSlicerLiverResectionsLogic&) = delete;

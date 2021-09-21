@@ -97,30 +97,61 @@ void vtkSlicerLiverResectionsLogic::ObserveMRMLScene()
 void vtkSlicerLiverResectionsLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
 {
   Superclass::OnMRMLSceneNodeAdded(node);
+
+  std::cout << "1" << std::endl;
+
+  // check for nullptr
+  if (!node)
+    {
+    return;
+    }
+
+  std::cout << "2" << std::endl;
+  // Check wether it is a relevant node to handle
+  vtkMRMLLiverResectionNode *resectionNode =
+    vtkMRMLLiverResectionNode::SafeDownCast(node);
+  if(!resectionNode)
+    {
+    return;
+    }
+
+  std::cout << "3" << std::endl;
+  vtkMRMLMarkupsNode *markupsNode;
+  switch(resectionNode->GetResectionInitialization())
+    {
+    case vtkMRMLLiverResectionNode::Flat:
+      markupsNode = this->AddResectionPlane(resectionNode);
+      break;
+
+    case vtkMRMLLiverResectionNode::Curved:
+      markupsNode = this->AddResectionContour(resectionNode);
+      break;
+    }
+
+  this->ResectionsMarkupsMap[resectionNode] = markupsNode;
 }
 
-
 //---------------------------------------------------------------------------
-void vtkSlicerLiverResectionsLogic::AddResectionPlane(vtkMRMLModelNode *targetParenchymaModelNode)
+vtkMRMLMarkupsSlicingContourNode* vtkSlicerLiverResectionsLogic::AddResectionPlane(vtkMRMLLiverResectionNode *resectionNode) const
 {
   auto mrmlScene = this->GetMRMLScene();
   if (!mrmlScene)
     {
       vtkErrorMacro("Error in AddResectionPlane: no valid MRML scene.");
-      return;
+      return nullptr;
     }
 
-  if (!targetParenchymaModelNode)
+  if (!resectionNode->GetTargetOrgan())
     {
       vtkErrorMacro("Error in AddResectionPlane: invalid internal target parenchyma.");
-      return;
+      return nullptr;
     }
 
-  auto targetParenchymaPolyData = targetParenchymaModelNode->GetPolyData();
+  auto targetParenchymaPolyData = resectionNode->GetTargetOrgan()->GetPolyData();
   if (!targetParenchymaPolyData)
     {
       vtkErrorMacro("Error in AddResectionPlane: target liver model does not contain valid polydata.");
-      return;
+      return nullptr;
     }
 
   // Computing the position of the initial points
@@ -131,7 +162,7 @@ void vtkSlicerLiverResectionsLogic::AddResectionPlane(vtkMRMLModelNode *targetPa
   auto slicingContourNode = vtkSmartPointer<vtkMRMLMarkupsSlicingContourNode>::New();
   slicingContourNode->AddControlPoint(p1);
   slicingContourNode->AddControlPoint(p2);
-  slicingContourNode->SetTarget(targetParenchymaModelNode);
+  slicingContourNode->SetTarget(resectionNode->GetTargetOrgan());
 
   auto slicingContourDisplayNode = vtkSmartPointer<vtkMRMLMarkupsDisplayNode>::New();
   slicingContourDisplayNode->PropertiesLabelVisibilityOff();
@@ -140,86 +171,73 @@ void vtkSlicerLiverResectionsLogic::AddResectionPlane(vtkMRMLModelNode *targetPa
   mrmlScene->AddNode(slicingContourDisplayNode);
   slicingContourNode->SetAndObserveDisplayNodeID(slicingContourDisplayNode->GetID());
   mrmlScene->AddNode(slicingContourNode);
+
+  return slicingContourNode;
 }
 
 //---------------------------------------------------------------------------
-void vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLSegmentationNode* segmentationNode,
-                                                        vtkMRMLModelNode *targetParenchymaModelNode,
-                                                        vtkCollection *targetTumors) const
+vtkMRMLMarkupsDistanceContourNode* vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLLiverResectionNode *resectionNode) const
 {
   auto mrmlScene = this->GetMRMLScene();
   if (!mrmlScene)
     {
     vtkErrorMacro("Error in AddResectionContour: no valid MRML scene.");
-    return;
+    return nullptr;
     }
 
-  if (!segmentationNode)
+  if (!resectionNode->GetSegmentationNode())
     {
      vtkErrorMacro("Error in AddResectionContour: no valid segmentation node.");
-     return;
+     return nullptr;
     }
 
-  if (!targetParenchymaModelNode)
+  if (!resectionNode->GetTargetOrgan())
     {
       vtkErrorMacro("Error in AddResectionContour: no valid target parenchyma node.");
-      return;
+      return nullptr;
     }
 
-  if (!targetTumors)
+  if (resectionNode->GetTargetTumors().empty())
     {
       vtkErrorMacro("Error in AddResectionContour: no valid target tumor.");
-      return;
+      return nullptr;
     }
 
-  // if (!targetParenchymaModelNode)
+  // Computing the position of the initial points
+  const double *bounds = resectionNode->GetTargetOrgan()->GetPolyData()->GetBounds();
+
+  auto p1 = vtkVector3d(bounds[0],(bounds[3]-bounds[2])/2.0, (bounds[5]-bounds[4])/2.0);
+  auto p2 = vtkVector3d((bounds[1]-bounds[0])/2.0,(bounds[3]-bounds[2])/2.0, (bounds[5]-bounds[4])/2.0);
+
+  auto distanceContourNode = vtkSmartPointer<vtkMRMLMarkupsDistanceContourNode>::New();
+  distanceContourNode->AddControlPoint(p1);
+  distanceContourNode->AddControlPoint(p2);
+  distanceContourNode->SetTarget(resectionNode->GetTargetOrgan());
+
+  auto distanceContourDisplayNode = vtkSmartPointer<vtkMRMLMarkupsDisplayNode>::New();
+  distanceContourDisplayNode->PropertiesLabelVisibilityOff();
+  distanceContourDisplayNode->SetSnapMode(vtkMRMLMarkupsDisplayNode::SnapModeUnconstrained);
+
+  mrmlScene->AddNode(distanceContourDisplayNode);
+  distanceContourNode->SetAndObserveDisplayNodeID(distanceContourDisplayNode->GetID());
+  mrmlScene->AddNode(distanceContourNode);
+
+  // vtkSmartPointer<vtkMRMLLiverResectionNode> node =
+  //   vtkSmartPointer<vtkMRMLLiverResectionNode>::New();
+
+  // node->SetSegmentationNode(segmentationNode);
+  // node->SetTargetOrganID(targetParenchymaModelNode->GetID());
+
+  // for (int i=0; i<targetTumors->GetNumberOfItems(); ++i)
   //   {
-  //   vtkErrorMacro("Error in AddResectionSlicingContour: no target liver model provided.");
-  //   return;
+  //     vtkMRMLNode *tumorNode = vtkMRMLNode::SafeDownCast(targetTumors->GetItemAsObject(i));
+  //     if (!tumorNode)
+  //       {
+  //         continue;
+  //       }
+
+  //     node->AddTargetTumorID(tumorNode->GetID());
   //   }
 
-  // auto targetParenchymaPolyData = targetParenchymaModelNode->GetPolyData();
-  // if (!targetParenchymaPolyData)
-  //   {
-  //   vtkErrorMacro("Error in AddResectionSlicingContour: target liver model does not contain valid polydata.");
-  //   return;
-  //   }
-
-  // // Computing the position of the initial points
-  // const double *bounds = targetParenchymaPolyData->GetBounds();
-
-  // auto p1 = vtkVector3d(bounds[0],(bounds[3]-bounds[2])/2.0, (bounds[5]-bounds[4])/2.0);
-  // auto p2 = vtkVector3d((bounds[1]-bounds[0])/2.0,(bounds[3]-bounds[2])/2.0, (bounds[5]-bounds[4])/2.0);
-
-  // auto distanceContourNode = vtkSmartPointer<vtkMRMLMarkupsDistanceContourNode>::New();
-  // distanceContourNode->AddControlPoint(p1);
-  // distanceContourNode->AddControlPoint(p2);
-  // distanceContourNode->SetTarget(targetParenchymaModelNode);
-
-  // auto distanceContourDisplayNode = vtkSmartPointer<vtkMRMLMarkupsDisplayNode>::New();
-  // distanceContourDisplayNode->PropertiesLabelVisibilityOff();
-  // distanceContourDisplayNode->SetSnapMode(vtkMRMLMarkupsDisplayNode::SnapModeUnconstrained);
-
-  // mrmlScene->AddNode(distanceContourDisplayNode);
-  // distanceContourNode->SetAndObserveDisplayNodeID(distanceContourDisplayNode->GetID());
-  // mrmlScene->AddNode(distanceContourNode);
-
-  vtkSmartPointer<vtkMRMLLiverResectionNode> node =
-    vtkSmartPointer<vtkMRMLLiverResectionNode>::New();
-
-  node->SetSegmentationNode(segmentationNode);
-  node->SetTargetOrganID(targetParenchymaModelNode->GetID());
-
-  for (int i=0; i<targetTumors->GetNumberOfItems(); ++i)
-    {
-      vtkMRMLNode *tumorNode = vtkMRMLNode::SafeDownCast(targetTumors->GetItemAsObject(i));
-      if (!tumorNode)
-        {
-          continue;
-        }
-
-      node->AddTargetTumorID(tumorNode->GetID());
-    }
-
-  mrmlScene->AddNode(node);
+  // mrmlScene->AddNode(node);
 }

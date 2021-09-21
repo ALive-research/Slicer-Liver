@@ -38,6 +38,7 @@
 ==============================================================================*/
 
 #include "vtkMRMLLiverResectionNode.h"
+#include "vtkMRMLLiverResectionDisplayNode.h"
 
 // MRML includes
 #include <vtkMRMLScene.h>
@@ -52,8 +53,8 @@ vtkMRMLNodeNewMacro(vtkMRMLLiverResectionNode);
 
 //--------------------------------------------------------------------------------
 vtkMRMLLiverResectionNode::vtkMRMLLiverResectionNode()
-  :Superclass(), TargetOrganID(""), SegmentationNode(nullptr),
-   Status(ResectionStatus::Initialization), ResectionMargin(10.0)
+  :Superclass(), TargetOrgan(nullptr), SegmentationNode(nullptr), ResectionMargin(10.0),
+   Status(ResectionStatus::Initialization), ResectionInitialization(InitializationMode::Flat)
 {
 }
 
@@ -64,4 +65,34 @@ vtkMRMLLiverResectionNode::~vtkMRMLLiverResectionNode() = default;
 void vtkMRMLLiverResectionNode::PrintSelf(ostream& os, vtkIndent indent)
 {
   Superclass::PrintSelf(os,indent);
+}
+
+//----------------------------------------------------------------------------
+void vtkMRMLLiverResectionNode::CreateDefaultDisplayNodes()
+{
+  auto displayNode = this->GetDisplayNode();
+  auto mrmlScene = this->GetScene();
+
+  if (displayNode != nullptr &&
+    vtkMRMLMarkupsDisplayNode::SafeDownCast(displayNode) != nullptr)
+    {
+    // display node already exists
+    return;
+    }
+
+  if (mrmlScene == nullptr)
+    {
+    vtkErrorMacro("vtkMRMLLiverResectionNode::CreateDefaultDisplayNodes failed: scene is invalid");
+    return;
+    }
+
+  vtkMRMLLiverResectionDisplayNode* dispNode =
+    vtkMRMLLiverResectionDisplayNode::SafeDownCast(mrmlScene->AddNewNodeByClass("vtkMRMLLiverResectionDisplayNode"));
+  if (!dispNode)
+    {
+    vtkErrorMacro("vtkMRMLLiverResectionNode::CreateDefaultDisplayNodes failed: unable to create vtkMRMLLiverResectionDisplayNode");
+    return;
+    }
+
+  this->SetAndObserveDisplayNodeID(dispNode->GetID());
 }

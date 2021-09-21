@@ -381,7 +381,6 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     """
     Called when the parameter node has changed
     """
-
     segmentationNode = parameterNode.GetNodeReference('LiverSegmentation')
     selectedTumors = parameterNode.GetParameter('SelectedTumors')
     print(selectedTumors)
@@ -420,19 +419,32 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     return self._selectedTargetLiverModelNode
 
   def addResectionPlane(self):
-    resectionLogic = slicer.modules.liverresections.logic()
     liverModelNode = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'liver').GetItemAsObject(0)
     if liverModelNode is None:
       return
-    resectionLogic.AddResectionPlane(liverModelNode)
+    if self._segmentationNode is None:
+      return
+    liverResectionNode = slicer.vtkMRMLLiverResectionNode()
+    liverResectionNode.SetScene(slicer.mrmlScene)
+    liverResectionNode.SetSegmentationNode(self._segmentationNode)
+    liverResectionNode.SetTargetOrgan(liverModelNode)
+    liverResectionNode.SetResectionInitialization(liverResectionNode.Flat)
+    liverResectionNode.CreateDefaultDisplayNodes()
+    slicer.mrmlScene.AddNode(liverResectionNode)
 
   def addResectionContour(self):
-    resectionLogic = slicer.modules.liverresections.logic()
     liverModelNode = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'liver').GetItemAsObject(0)
     if liverModelNode is None:
       return
-    resectionLogic.AddResectionContour(self._segmentationNode, liverModelNode, vtk.vtkCollection())
-
+    if self._segmentationNode is None:
+      return
+    liverResectionNode = slicer.vtkMRMLLiverResectionNode()
+    liverResectionNode.SetScene(slicer.mrmlScene)
+    liverResectionNode.SetSegmentationNode(self._segmentationNode)
+    liverResectionNode.SetTargetOrgan(liverModelNode)
+    liverResectionNode.SetResectionInitialization(liverResectionNode.Curved)
+    liverResectionNode.CreateDefaultDisplayNodes()
+    slicer.mrmlScene.AddNode(liverResectionNode)
 #
 # LiverTest
 #
