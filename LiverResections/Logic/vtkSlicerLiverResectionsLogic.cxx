@@ -43,6 +43,7 @@
 #include <vtkMRMLMarkupsDisplayNode.h>
 #include <vtkMRMLLiverResectionNode.h>
 #include <vtkMRMLLiverResectionDisplayNode.h>
+#include <vtkMRMLMarkupsBezierSurfaceNode.h>
 
 // MRML includes
 #include <vtkMRMLScene.h>
@@ -52,6 +53,7 @@
 // VTK includes
 #include <vtkObjectFactory.h>
 #include <vtkCollection.h>
+#include <vtkSmartPointer.h>
 
 //----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerLiverResectionsLogic);
@@ -103,11 +105,10 @@ void vtkSlicerLiverResectionsLogic::ObserveMRMLScene()
  this->Superclass::ObserveMRMLScene();
 }
 
-
 //---------------------------------------------------------------------------
 void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
-                                                   unsigned long event,
-                                                   void *callData)
+                                                           unsigned long vtkNotUsed(event),
+                                                           void *vtkNotUsed(callData))
 {
   // return if the node is not a liver resection node
   vtkMRMLLiverResectionNode *resectionNode =
@@ -118,14 +119,10 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
     }
 }
 
-
-
 //---------------------------------------------------------------------------
 void vtkSlicerLiverResectionsLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
 {
   Superclass::OnMRMLSceneNodeAdded(node);
-
-  std::cout << "1" << std::endl;
 
   // check for nullptr
   if (!node)
@@ -133,7 +130,6 @@ void vtkSlicerLiverResectionsLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
     return;
     }
 
-  std::cout << "2" << std::endl;
   // Check wether it is a relevant node to handle
   vtkMRMLLiverResectionNode *resectionNode =
     vtkMRMLLiverResectionNode::SafeDownCast(node);
@@ -142,24 +138,32 @@ void vtkSlicerLiverResectionsLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
     return;
     }
 
-  std::cout << "3" << std::endl;
-  vtkMRMLMarkupsNode *markupsNode;
-  switch(resectionNode->GetResectionInitialization())
+  // Create the relevant initialization type
+  vtkMRMLMarkupsNode *initializationMarkupsNode;
+  switch(resectionNode->GetInitialization())
     {
     case vtkMRMLLiverResectionNode::Flat:
-      markupsNode = this->AddResectionPlane(resectionNode);
+      initializationMarkupsNode = this->AddResectionPlane(resectionNode);
       break;
 
     case vtkMRMLLiverResectionNode::Curved:
-      markupsNode = this->AddResectionContour(resectionNode);
+      initializationMarkupsNode = this->AddResectionContour(resectionNode);
       break;
     }
+  initializationMarkupsNode->SetHideFromEditors(true);
 
-  this->ResectionsMarkupsMap[resectionNode] = markupsNode;
+  this->ResectionsInitializationMarkupsMap[resectionNode] = initializationMarkupsNode;
+
+  // Create the associated bezier surface
+  auto markupsBezierNode = this->AddBezierSurface(resectionNode);
+  markupsBezierNode->SetHideFromEditors(true);
+
+  this->ResectionsBezierMarkupsMap[resectionNode] = markupsBezierNode;
 }
 
 //---------------------------------------------------------------------------
-vtkMRMLMarkupsSlicingContourNode* vtkSlicerLiverResectionsLogic::AddResectionPlane(vtkMRMLLiverResectionNode *resectionNode) const
+vtkMRMLMarkupsSlicingContourNode*
+vtkSlicerLiverResectionsLogic::AddResectionPlane(vtkMRMLLiverResectionNode *resectionNode) const
 {
   auto mrmlScene = this->GetMRMLScene();
   if (!mrmlScene)
@@ -203,12 +207,19 @@ vtkMRMLMarkupsSlicingContourNode* vtkSlicerLiverResectionsLogic::AddResectionPla
 }
 
 //---------------------------------------------------------------------------
-vtkMRMLMarkupsDistanceContourNode* vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLLiverResectionNode *resectionNode) const
+vtkMRMLMarkupsDistanceContourNode*
+vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLLiverResectionNode *resectionNode) const
 {
   auto mrmlScene = this->GetMRMLScene();
   if (!mrmlScene)
     {
     vtkErrorMacro("Error in AddResectionContour: no valid MRML scene.");
+    return nullptr;
+    }
+
+  if(!resectionNode)
+    {
+    vtkErrorMacro("Error in AddResectionContour: no valid resection node.");
     return nullptr;
     }
 
@@ -248,23 +259,25 @@ vtkMRMLMarkupsDistanceContourNode* vtkSlicerLiverResectionsLogic::AddResectionCo
   mrmlScene->AddNode(distanceContourDisplayNode);
   distanceContourNode->SetAndObserveDisplayNodeID(distanceContourDisplayNode->GetID());
   mrmlScene->AddNode(distanceContourNode);
+}
 
-  // vtkSmartPointer<vtkMRMLLiverResectionNode> node =
-  //   vtkSmartPointer<vtkMRMLLiverResectionNode>::New();
+//------------------------------------------------------------------------------
+vtkMRMLMarkupsBezierSurfaceNode*
+vtkSlicerLiverResectionsLogic::AddBezierSurface(vtkMRMLLiverResectionNode *resectionNode) const
+{
+  auto mrmlScene = this->GetMRMLScene();
+  if (!mrmlScene)
+    {
+    vtkErrorMacro("Error in AddResectionContour: no valid MRML scene.");
+    return nullptr;
+    }
 
-  // node->SetSegmentationNode(segmentationNode);
-  // node->SetTargetOrganID(targetParenchymaModelNode->GetID());
+  if(!resectionNode)
+    {
+    vtkErrorMacro("Error in AddResectionContour: no valid resection node.");
+    return nullptr;
+    }
 
-  // for (int i=0; i<targetTumors->GetNumberOfItems(); ++i)
-  //   {
-  //     vtkMRMLNode *tumorNode = vtkMRMLNode::SafeDownCast(targetTumors->GetItemAsObject(i));
-  //     if (!tumorNode)
-  //       {
-  //         continue;
-  //       }
-
-  //     node->AddTargetTumorID(tumorNode->GetID());
-  //   }
-
-  // mrmlScene->AddNode(node);
+  auto markupsBezierSurfaceNode = vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>::New();
+  mrmlScene->AddNode(markupsBezierSurfaceNode);
 }

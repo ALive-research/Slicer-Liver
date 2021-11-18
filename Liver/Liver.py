@@ -428,7 +428,7 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     liverResectionNode.SetScene(slicer.mrmlScene)
     liverResectionNode.SetSegmentationNode(self._segmentationNode)
     liverResectionNode.SetTargetOrgan(liverModelNode)
-    liverResectionNode.SetResectionInitialization(liverResectionNode.Flat)
+    liverResectionNode.SetInitialization(liverResectionNode.Flat)
     liverResectionNode.CreateDefaultDisplayNodes()
     slicer.mrmlScene.AddNode(liverResectionNode)
 
@@ -447,6 +447,7 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     liverResectionNode.SetResectionInitialization(liverResectionNode.Curved)
     liverResectionNode.CreateDefaultDisplayNodes()
     slicer.mrmlScene.AddNode(liverResectionNode)
+
 #
 # LiverTest
 #

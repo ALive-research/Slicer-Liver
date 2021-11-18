@@ -59,6 +59,7 @@ class vtkMRMLLiverResectionNode;
 class vtkMRMLMarkupsNode;
 class vtkMRMLMarkupsDistanceContourNode;
 class vtkMRMLMarkupsSlicingContourNode;
+class vtkMRMLMarkupsBezierSurfaceNode;
 
 //------------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_LOGIC_EXPORT vtkSlicerLiverResectionsLogic:
@@ -96,11 +97,12 @@ public:
   /// Register module MRML nodes
   void RegisterNodes() override;
 
-  /// Adds a new resection using contour initialization using slicing contours initialization
+  /// Add a new resection using contour initialization using slicing contours initialization
   vtkMRMLMarkupsDistanceContourNode* AddResectionContour(vtkMRMLLiverResectionNode *resectionNode) const;
 
-  /// Adds a new resection using planar initialization
+  /// Add a new resection using planar initialization
   vtkMRMLMarkupsSlicingContourNode* AddResectionPlane(vtkMRMLLiverResectionNode *resectionNode) const;
+
 
 protected:
   vtkSlicerLiverResectionsLogic();
@@ -109,8 +111,14 @@ protected:
   void ObserveMRMLScene() override;
   void OnMRMLSceneNodeAdded(vtkMRMLNode* node) override;
 
+  /// Add a bezier surface markup
+  vtkMRMLMarkupsBezierSurfaceNode* AddBezierSurface(vtkMRMLLiverResectionNode *resectionNode) const;
+
 protected:
-  std::map<vtkSmartPointer<vtkMRMLLiverResectionNode>, vtkSmartPointer<vtkMRMLMarkupsNode>> ResectionsMarkupsMap;
+  std::map<vtkSmartPointer<vtkMRMLLiverResectionNode>,
+           vtkSmartPointer<vtkMRMLMarkupsNode>> ResectionsInitializationMarkupsMap;
+  std::map<vtkSmartPointer<vtkMRMLLiverResectionNode>,
+           vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>> ResectionsBezierMarkupsMap;
 
 private:
   vtkSlicerLiverResectionsLogic(const vtkSlicerLiverResectionsLogic&) = delete;

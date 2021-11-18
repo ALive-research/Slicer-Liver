@@ -66,7 +66,7 @@ public:
   // Possible resection states
   enum ResectionStatus
     {
-      Initialization=0,
+      Initializing=0,
       Deformation,
       Completed
     };
@@ -94,12 +94,6 @@ public:
   //--------------------------------------------------------------------------------
   void CreateDefaultDisplayNodes() override;
 
-  /// Get the resection status
-  ResectionStatus GetResectionStatus() const {return this->Status;}
-  /// Get the resection status
-  void SetResectionstatus(ResectionStatus status)
-  {this->Status = status; this->Modified();}
-
   /// Get target lesions identifiers
   std::set<vtkMRMLModelNode*> GetTargetTumors() const {return this->TargetTumors;}
   /// Add a new lesion identifier
@@ -118,10 +112,15 @@ public:
   // Set resection margin
   vtkSetMacro(ResectionMargin, float);
 
+  // Get resection status
+  vtkGetMacro(Status, ResectionStatus);
+  // Set resection status
+  vtkSetMacro(Status, ResectionStatus);
+
   // Get resection initialization
-  vtkGetMacro(ResectionInitialization, InitializationMode);
+  vtkGetMacro(Initialization, InitializationMode);
   // Set resection initialization
-  vtkSetMacro(ResectionInitialization, InitializationMode);
+  vtkSetMacro(Initialization, InitializationMode);
 
   // Get Target Organ
   vtkMRMLModelNode *GetTargetOrgan() const
@@ -141,7 +140,7 @@ private:
   vtkWeakPointer<vtkMRMLModelNode> TargetOrgan;
   std::set<vtkMRMLModelNode*> TargetTumors;
   ResectionStatus Status;
-  InitializationMode ResectionInitialization;
+  InitializationMode Initialization;
   float ResectionMargin; //Resection margin in mm
 
 private:
