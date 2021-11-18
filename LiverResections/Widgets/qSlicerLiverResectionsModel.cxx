@@ -177,9 +177,6 @@ void qSlicerLiverResectionsModel::onEvent(vtkObject* caller,
                                           void* clientData,
                                           void* callData )
 {
-
-  std::cout << "on event" << std::endl;
-
   // Verify it is a correct call
   vtkMRMLScene *mrmlScene = reinterpret_cast<vtkMRMLScene*>(caller);
   qSlicerLiverResectionsModel *model = reinterpret_cast<qSlicerLiverResectionsModel*>(clientData);

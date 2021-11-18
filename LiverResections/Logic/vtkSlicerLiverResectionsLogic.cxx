@@ -44,6 +44,7 @@
 #include <vtkMRMLLiverResectionNode.h>
 #include <vtkMRMLLiverResectionDisplayNode.h>
 #include <vtkMRMLMarkupsBezierSurfaceNode.h>
+#include <vtkMRMLMarkupsBezierSurfaceDisplayNode.h>
 
 // MRML includes
 #include <vtkMRMLScene.h>
@@ -259,6 +260,8 @@ vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLLiverResectionNode *re
   mrmlScene->AddNode(distanceContourDisplayNode);
   distanceContourNode->SetAndObserveDisplayNodeID(distanceContourDisplayNode->GetID());
   mrmlScene->AddNode(distanceContourNode);
+
+  return distanceContourNode;
 }
 
 //------------------------------------------------------------------------------
@@ -278,6 +281,16 @@ vtkSlicerLiverResectionsLogic::AddBezierSurface(vtkMRMLLiverResectionNode *resec
     return nullptr;
     }
 
+  auto markupsBezierSurfaceDisplayNode =
+    vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceDisplayNode>::New();
+  mrmlScene->AddNode(markupsBezierSurfaceDisplayNode);
+
   auto markupsBezierSurfaceNode = vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>::New();
+  for (int i = 0; i<16; ++i) {
+    markupsBezierSurfaceNode->AddControlPoint({0.0f, 0.0f, 0.0f});
+  }
+  markupsBezierSurfaceNode->SetAndObserveDisplayNodeID(markupsBezierSurfaceDisplayNode->GetID());
   mrmlScene->AddNode(markupsBezierSurfaceNode);
+
+  return markupsBezierSurfaceNode;
 }
