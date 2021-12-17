@@ -40,6 +40,7 @@
 #ifndef __vtkslicerlivermarkupslogic_h_
 #define __vtkslicerlivermarkupslogic_h_
 
+#include "vtkMRMLMarkupsLineNode.h"
 #include "vtkSlicerLiverResectionsModuleLogicExport.h"
 
 // Slicer include
@@ -103,25 +104,38 @@ public:
   /// Add a new resection using planar initialization
   vtkMRMLMarkupsSlicingContourNode* AddResectionPlane(vtkMRMLLiverResectionNode *resectionNode) const;
 
-
 protected:
   vtkSlicerLiverResectionsLogic();
   ~vtkSlicerLiverResectionsLogic() override;
 
+protected:
   void ObserveMRMLScene() override;
   void OnMRMLSceneNodeAdded(vtkMRMLNode* node) override;
+  void HideBezierSurfaceMarkup(vtkMRMLMarkupsNode* initializationNode);
+  void ShowBezierSurfaceMarkup(vtkMRMLMarkupsNode* initializationNode);
+  void UpdateBezierWidgetOnInitialization(vtkMRMLMarkupsNode* initializationNode);
 
   /// Add a bezier surface markup
   vtkMRMLMarkupsBezierSurfaceNode* AddBezierSurface(vtkMRMLLiverResectionNode *resectionNode) const;
 
 protected:
+
+  /// TODO: Too many maps here. We should try to improve the design to avoid this.
+
   std::map<vtkSmartPointer<vtkMRMLLiverResectionNode>,
-           vtkSmartPointer<vtkMRMLMarkupsNode>> ResectionsInitializationMarkupsMap;
+           vtkSmartPointer<vtkMRMLMarkupsNode>> ResectionToInitializationMap;
+
+  std::map<vtkSmartPointer<vtkMRMLMarkupsNode>,
+           vtkSmartPointer<vtkMRMLLiverResectionNode>> InitializationToResectionMap;
+
   std::map<vtkSmartPointer<vtkMRMLLiverResectionNode>,
-           vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>> ResectionsBezierMarkupsMap;
+           vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>> ResectionToBezierMap;
+
+  std::map<vtkWeakPointer<vtkMRMLMarkupsNode>,
+           vtkWeakPointer<vtkMRMLMarkupsNode>> InitializationToBezierMap;
 
 private:
-  vtkSlicerLiverResectionsLogic(const vtkSlicerLiverResectionsLogic&) = delete;
+  vtkSlicerLiverResectionsLogic(const vtkSlicerLiverResectionsLogic &) = delete;
   void operator=(const vtkSlicerLiverResectionsLogic&) = delete;
 };
 
