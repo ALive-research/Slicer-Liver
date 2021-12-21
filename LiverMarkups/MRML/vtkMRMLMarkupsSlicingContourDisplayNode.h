@@ -36,44 +36,38 @@
   through the ALive project (grant nr. 311393).
 
 ==============================================================================*/
-#ifndef __vtkslicerbeziersurfacewidget_h_
-#define __vtkslicerbeziersurfacewidget_h_
 
-#include "vtkMRMLMarkupsBezierSurfaceNode.h"
-#include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
+#ifndef __vtkmrmlmarkupsslicingcontourdisplaynode_h_
+#define __vtkmrmlmarkupsslicingcontourdisplaynode_h_
 
-// SLicer includes
-#include <vtkSlicerMarkupsWidget.h>
+#include "vtkSlicerLiverMarkupsModuleMRMLExport.h"
 
-//------------------------------------------------------------------------------
-class vtkMRMLMarkupsBezierSurfaceNode;
+#include <vtkMRMLMarkupsDisplayNode.h>
 
-//------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerBezierSurfaceWidget
-: public vtkSlicerMarkupsWidget
+//-----------------------------------------------------------------------------
+class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsSlicingContourDisplayNode
+: public vtkMRMLMarkupsDisplayNode
 {
-public:
-  static vtkSlicerBezierSurfaceWidget *New();
-  vtkTypeMacro(vtkSlicerBezierSurfaceWidget, vtkSlicerMarkupsWidget);
+ public:
+  static vtkMRMLMarkupsSlicingContourDisplayNode* New();
+  vtkTypeMacro(vtkMRMLMarkupsSlicingContourDisplayNode, vtkMRMLMarkupsDisplayNode);
+  void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  void CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode,
-                                  vtkMRMLAbstractViewNode* viewNode,
-                                  vtkRenderer* renderer) override;
+  //--------------------------------------------------------------------------
+  // MRMLNode methods
+  //--------------------------------------------------------------------------
 
-  /// Create instance of the markups widget
-  vtkSlicerMarkupsWidget* CreateInstance() const override;
+  vtkMRMLNode* CreateNodeInstance() override;
+
+  /// Get node XML tag name (like Volume, Markups)
+  const char* GetNodeTagName() override { return "MarkupsSlicingContourDisplay"; };
 
 protected:
-  bool ProcessInteractionEvent(vtkMRMLInteractionEventData* eventData);
-  vtkMRMLMarkupsBezierSurfaceNode* GetMRMLMarkupsNode();
-
-protected:
-  vtkSlicerBezierSurfaceWidget();
-  ~vtkSlicerBezierSurfaceWidget();
-
-private:
-  vtkSlicerBezierSurfaceWidget(const vtkSlicerBezierSurfaceWidget&) = delete;
-  void operator=(const vtkSlicerBezierSurfaceWidget) = delete;
+  vtkMRMLMarkupsSlicingContourDisplayNode();
+  ~vtkMRMLMarkupsSlicingContourDisplayNode() override;
+  vtkMRMLMarkupsSlicingContourDisplayNode( const vtkMRMLMarkupsSlicingContourDisplayNode& );
+  void operator= ( const vtkMRMLMarkupsSlicingContourDisplayNode& );
 };
 
-#endif // __vtkslicerbeziersurfacewidget_h_
+
+#endif // __vtkmrmlmarkupsslicingcontourdisplaynode_h_

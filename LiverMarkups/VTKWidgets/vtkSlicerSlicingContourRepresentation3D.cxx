@@ -39,6 +39,7 @@
 
 #include "vtkSlicerSlicingContourRepresentation3D.h"
 
+#include "vtkMRMLMarkupsSlicingContourDisplayNode.h"
 #include "vtkMRMLMarkupsSlicingContourNode.h"
 
 // MRML includes
@@ -98,6 +99,15 @@ void vtkSlicerSlicingContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller
    this->Target = targetModelNode;
    }
 
+ auto liverMarkupsSlicingContourDisplayNode =
+   vtkMRMLMarkupsSlicingContourDisplayNode::SafeDownCast(liverMarkupsSlicingContourNode->GetDisplayNode());
+
+ if (!liverMarkupsSlicingContourDisplayNode)
+   {
+   vtkWarningMacro("Invalid vtkMRMLMarkupsSlicingContourDisplayNode.");
+   return;
+   }
+
  if (liverMarkupsSlicingContourNode->GetNumberOfControlPoints() != 2)
    {
    return;
@@ -129,7 +139,7 @@ void vtkSlicerSlicingContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller
  planeNormal[2] /= planeNormalNorm;
 
  auto VBOs = this->ShaderHelper->GetTargetModelVertexVBOs();
- auto actors = this->ShaderHelper->GetTargetActors();
+ // auto actors = this->ShaderHelper->GetTargetActors();
 
  for(int index = 0; index < VBOs->GetNumberOfItems(); ++index)
    {
@@ -154,9 +164,9 @@ void vtkSlicerSlicingContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller
      }
 
    float middlePointPositionScaled[4] = {
-     (middlePointPosition[0] - shift[0]) * scale[0],
-     (middlePointPosition[1] - shift[1]) * scale[1],
-     (middlePointPosition[2] - shift[2]) * scale[2],
+     static_cast<float>((middlePointPosition[0] - shift[0]) * scale[0]),
+     static_cast<float>((middlePointPosition[1] - shift[1]) * scale[1]),
+     static_cast<float>((middlePointPosition[2] - shift[2]) * scale[2]),
      1.0f};
 
    auto actor = vtkActor::SafeDownCast(this->ShaderHelper->GetTargetActors()->GetItemAsObject(index));
@@ -164,7 +174,7 @@ void vtkSlicerSlicingContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller
    fragmentUniforms->SetUniform4f("planePositionMC", middlePointPositionScaled);
    fragmentUniforms->SetUniform4f("planeNormalMC", planeNormal);
    fragmentUniforms->SetUniformf("contourThickness", 2.0f*(scale[0]+scale[1])/2.0f);
-   fragmentUniforms->SetUniformi("contourVisibility", 1);
+   fragmentUniforms->SetUniformi("contourVisibility", liverMarkupsSlicingContourDisplayNode->GetVisibility());
    }
 
  this->NeedToRenderOn();

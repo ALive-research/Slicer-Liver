@@ -36,44 +36,27 @@
   through the ALive project (grant nr. 311393).
 
 ==============================================================================*/
-#ifndef __vtkslicerbeziersurfacewidget_h_
-#define __vtkslicerbeziersurfacewidget_h_
 
-#include "vtkMRMLMarkupsBezierSurfaceNode.h"
-#include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
+#include "vtkMRMLMarkupsSlicingContourDisplayNode.h"
 
-// SLicer includes
-#include <vtkSlicerMarkupsWidget.h>
+// VTK includes
+#include <vtkNew.h>
+#include <vtkObjectFactory.h>
 
-//------------------------------------------------------------------------------
-class vtkMRMLMarkupsBezierSurfaceNode;
+//----------------------------------------------------------------------------
+vtkMRMLNodeNewMacro(vtkMRMLMarkupsSlicingContourDisplayNode);
 
-//------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerBezierSurfaceWidget
-: public vtkSlicerMarkupsWidget
+//----------------------------------------------------------------------------
+vtkMRMLMarkupsSlicingContourDisplayNode::vtkMRMLMarkupsSlicingContourDisplayNode()
+  :Superclass()
 {
-public:
-  static vtkSlicerBezierSurfaceWidget *New();
-  vtkTypeMacro(vtkSlicerBezierSurfaceWidget, vtkSlicerMarkupsWidget);
+}
 
-  void CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode,
-                                  vtkMRMLAbstractViewNode* viewNode,
-                                  vtkRenderer* renderer) override;
+//----------------------------------------------------------------------------
+vtkMRMLMarkupsSlicingContourDisplayNode::~vtkMRMLMarkupsSlicingContourDisplayNode()=default;
 
-  /// Create instance of the markups widget
-  vtkSlicerMarkupsWidget* CreateInstance() const override;
-
-protected:
-  bool ProcessInteractionEvent(vtkMRMLInteractionEventData* eventData);
-  vtkMRMLMarkupsBezierSurfaceNode* GetMRMLMarkupsNode();
-
-protected:
-  vtkSlicerBezierSurfaceWidget();
-  ~vtkSlicerBezierSurfaceWidget();
-
-private:
-  vtkSlicerBezierSurfaceWidget(const vtkSlicerBezierSurfaceWidget&) = delete;
-  void operator=(const vtkSlicerBezierSurfaceWidget) = delete;
-};
-
-#endif // __vtkslicerbeziersurfacewidget_h_
+//----------------------------------------------------------------------------
+void vtkMRMLMarkupsSlicingContourDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
+{
+  Superclass::PrintSelf(os,indent);
+}

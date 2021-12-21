@@ -112,6 +112,7 @@ protected:
   void ObserveMRMLScene() override;
   void OnMRMLSceneNodeAdded(vtkMRMLNode* node) override;
   void HideBezierSurfaceMarkup(vtkMRMLMarkupsNode* initializationNode);
+  void HideInitialization(vtkMRMLMarkupsNode* bezierNode);
   void ShowBezierSurfaceMarkup(vtkMRMLMarkupsNode* initializationNode);
   void UpdateBezierWidgetOnInitialization(vtkMRMLMarkupsNode* initializationNode);
 
@@ -133,6 +134,9 @@ protected:
 
   std::map<vtkWeakPointer<vtkMRMLMarkupsNode>,
            vtkWeakPointer<vtkMRMLMarkupsNode>> InitializationToBezierMap;
+
+  std::map<vtkWeakPointer<vtkMRMLMarkupsNode>,
+           vtkWeakPointer<vtkMRMLMarkupsNode>> BezierToInitializationMap;
 
 private:
   vtkSlicerLiverResectionsLogic(const vtkSlicerLiverResectionsLogic &) = delete;

@@ -80,6 +80,8 @@ public:
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLMarkupsBezierSurfaceNode);
 
+  void CreateDefaultDisplayNodes() override;
+
 protected:
   vtkMRMLMarkupsBezierSurfaceNode();
   ~vtkMRMLMarkupsBezierSurfaceNode() override = default;

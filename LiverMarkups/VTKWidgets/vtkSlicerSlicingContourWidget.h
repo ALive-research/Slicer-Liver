@@ -63,7 +63,7 @@ public:
 
 protected:
   bool ProcessInteractionEvent(vtkMRMLInteractionEventData* eventData) override;
-  vtkMRMLMarkupsSlicingContourNode* GetMarkupsSlicingContourNode();
+  vtkMRMLMarkupsSlicingContourNode* GetMRMLMarkupsNode();
 
 protected:
   vtkSlicerSlicingContourWidget();

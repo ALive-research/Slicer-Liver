@@ -108,7 +108,7 @@ vtkSlicerMarkupsWidget* vtkSlicerSlicingContourWidget::CreateInstance() const
 //------------------------------------------------------------------------------
  bool vtkSlicerSlicingContourWidget::ProcessInteractionEvent(vtkMRMLInteractionEventData* eventData)
  {
-  vtkMRMLMarkupsSlicingContourNode* markupsNode = this->GetMarkupsSlicingContourNode();
+  vtkMRMLMarkupsSlicingContourNode* markupsNode = this->GetMRMLMarkupsNode();
 
   unsigned long widgetEvent = this->TranslateInteractionEventToWidgetEvent(eventData);
 
@@ -144,7 +144,7 @@ vtkSlicerMarkupsWidget* vtkSlicerSlicingContourWidget::CreateInstance() const
  }
 
 //----------------------------------------------------------------------
-vtkMRMLMarkupsSlicingContourNode* vtkSlicerSlicingContourWidget::GetMarkupsSlicingContourNode()
+vtkMRMLMarkupsSlicingContourNode* vtkSlicerSlicingContourWidget::GetMRMLMarkupsNode()
 {
   vtkSlicerMarkupsWidgetRepresentation* rep = this->GetMarkupsRepresentation();
   if (!rep)

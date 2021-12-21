@@ -38,6 +38,7 @@
 ==============================================================================*/
 
 #include "vtkMRMLMarkupsBezierSurfaceNode.h"
+#include "vtkMRMLMarkupsBezierSurfaceDisplayNode.h"
 
 // MRML includes
 #include <vtkMRMLScene.h>
@@ -61,4 +62,25 @@ vtkMRMLMarkupsBezierSurfaceNode::vtkMRMLMarkupsBezierSurfaceNode()
 void vtkMRMLMarkupsBezierSurfaceNode::PrintSelf(ostream& os, vtkIndent indent)
 {
   Superclass::PrintSelf(os,indent);
+}
+
+//----------------------------------------------------------------------------
+void vtkMRMLMarkupsBezierSurfaceNode::CreateDefaultDisplayNodes()
+{
+  if (vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(this->GetDisplayNode()))
+    {
+    // display node already exists
+    return;
+    }
+
+  auto scene = this->GetScene();
+  if (scene == nullptr)
+    {
+    vtkErrorMacro("vtkMRMLMarkupsBezierSurfaceNode::CreateDefaultDisplayNodes failed: scene is invalid");
+    return;
+    }
+
+  auto dispNode = scene->AddNewNodeByClass("vtkMRMLMarkupsBezierSurfaceDisplayNode");
+
+  this->SetAndObserveDisplayNodeID( dispNode->GetID() );
 }
