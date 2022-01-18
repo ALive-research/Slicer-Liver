@@ -83,6 +83,8 @@ public:
   vtkMRMLModelNode* GetTarget() const {return this->Target;}
   void SetTarget(vtkMRMLModelNode* target) {this->Target = target; this->Modified();}
 
+  void CreateDefaultDisplayNodes() override;
+
 protected:
   vtkMRMLMarkupsSlicingContourNode();
   ~vtkMRMLMarkupsSlicingContourNode() override = default;

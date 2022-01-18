@@ -44,18 +44,39 @@
 
 // MRML includes
 #include <vtkMRMLModelNode.h>
+#include <vtkMRMLSegmentationNode.h>
 
 //VTK includes
 #include <vtkWeakPointer.h>
+#include <vtkCollection.h>
+
+//STD includes
+#include <set>
+#include <string>
 
 //-----------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
-: public vtkMRMLNode
+: public vtkMRMLDisplayableNode
 {
 public:
   static vtkMRMLLiverResectionNode* New();
-  vtkTypeMacro(vtkMRMLLiverResectionNode, vtkMRMLNode);
+  vtkTypeMacro(vtkMRMLLiverResectionNode, vtkMRMLDisplayableNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
+
+  // Possible resection states
+  enum ResectionStatus
+    {
+      Initializing=0,
+      Deformation,
+      Completed
+    };
+
+  // Possible initialization modes
+  enum InitializationMode
+    {
+      Flat=0,
+      Curved,
+    };
 
   //--------------------------------------------------------------------------------
   // MRMLNode methods
@@ -63,27 +84,68 @@ public:
   vtkMRMLNode* CreateNodeInstance() override;
 
   /// Get node XML tag name (like Volume, Model)
-  ///
   const char* GetNodeTagName() override {return "LiverResection";}
 
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLLiverResectionNode);
 
-  vtkMRMLModelNode* GetTarget() const {return this->Target;}
-  void SetTarget(vtkMRMLModelNode* target) {this->Target = target; this->Modified();}
+  //--------------------------------------------------------------------------------
+  // MRMLDisplayNode methods
+  //--------------------------------------------------------------------------------
+  void CreateDefaultDisplayNodes() override;
+
+  /// Get target lesions identifiers
+  std::set<vtkMRMLModelNode*> GetTargetTumors() const {return this->TargetTumors;}
+  /// Add a new lesion identifier
+  void AddTargetTumor(vtkMRMLModelNode* tumorModel)
+  {this->TargetTumors.insert(tumorModel); this->Modified();}
+  /// Remove a lesion identifier
+  void RemoveTargetTumor(vtkMRMLModelNode* tumorModel)
+  {this->TargetTumors.erase(tumorModel); this->Modified();}
+
+  vtkMRMLSegmentationNode* GetSegmentationNode() const {return this->SegmentationNode;}
+  void SetSegmentationNode(vtkMRMLSegmentationNode *segmentationNode)
+  {this->SegmentationNode = segmentationNode; this->Modified();}
+
+  // Get resection margin
+  vtkGetMacro(ResectionMargin, float);
+  // Set resection margin
+  vtkSetMacro(ResectionMargin, float);
+
+  // Get resection status
+  vtkGetMacro(Status, ResectionStatus);
+  // Set resection status
+  vtkSetMacro(Status, ResectionStatus);
+
+  // Get resection initialization
+  vtkGetMacro(Initialization, InitializationMode);
+  // Set resection initialization
+  vtkSetMacro(Initialization, InitializationMode);
+
+  // Get Target Organ
+  vtkMRMLModelNode *GetTargetOrgan() const
+  {return this->TargetOrgan;}
+
+  // Set Target Organ
+  void SetTargetOrgan(vtkMRMLModelNode *targetOrgan)
+  {this->TargetOrgan = targetOrgan; this->Modified();}
+
 
 protected:
   vtkMRMLLiverResectionNode();
-  ~vtkMRMLLiverResectionNode() override = default;
+  ~vtkMRMLLiverResectionNode() override;
 
 private:
- vtkWeakPointer<vtkMRMLModelNode> Target;
+  vtkWeakPointer<vtkMRMLSegmentationNode> SegmentationNode;
+  vtkWeakPointer<vtkMRMLModelNode> TargetOrgan;
+  std::set<vtkMRMLModelNode*> TargetTumors;
+  ResectionStatus Status;
+  InitializationMode Initialization;
+  float ResectionMargin; //Resection margin in mm
 
 private:
  vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);
  void operator=(const vtkMRMLLiverResectionNode&);
-
-
 };
 
 #endif //__vtkmrmlliverresectionnode_h_

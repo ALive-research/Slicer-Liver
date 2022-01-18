@@ -40,14 +40,27 @@
 #ifndef __vtkslicerlivermarkupslogic_h_
 #define __vtkslicerlivermarkupslogic_h_
 
+#include "vtkMRMLMarkupsLineNode.h"
+#include "vtkSlicerLiverResectionsModuleLogicExport.h"
+
+// Slicer include
 #include <vtkSlicerModuleLogic.h>
 
+// VTK includes
 #include <vtkWeakPointer.h>
+#include <vtkSmartPointer.h>
 
-#include "vtkSlicerLiverResectionsModuleLogicExport.h"
+// STD include
+#include <map>
 
 //------------------------------------------------------------------------------
 class vtkMRMLModelNode;
+class vtkMRMLSegmentationNode;
+class vtkMRMLLiverResectionNode;
+class vtkMRMLMarkupsNode;
+class vtkMRMLMarkupsDistanceContourNode;
+class vtkMRMLMarkupsSlicingContourNode;
+class vtkMRMLMarkupsBezierSurfaceNode;
 
 //------------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_LOGIC_EXPORT vtkSlicerLiverResectionsLogic:
@@ -75,30 +88,58 @@ public:
     DistanceContour
   };
 
-  /// Adds a new resection (Initialization state) using slicing contours initialization
-  /// NOTE: Probably we prefer passing the target directly instead of keeping an internal target
-  void AddResectionSlicingContour(vtkMRMLModelNode *targetParenchyma);
-  void AddResection(InitializationType type);
+  void ProcessMRMLNodesEvents(vtkObject *caller,
+                              unsigned long event,
+                              void *callData) override;
 
-  /// Sets the internal target parenchyma
-  void SetTargetParenchyma(vtkMRMLModelNode *targetParenchymaModelNode);
+  /// Set mrml scene
+  void SetMRMLSceneInternal(vtkMRMLScene *newScene) override;
 
-  /// Sets the target parenchyma
-  /// NOTE: This is something we want to probably change
+  /// Register module MRML nodes
+  void RegisterNodes() override;
+
+  /// Add a new resection using contour initialization using slicing contours initialization
+  vtkMRMLMarkupsDistanceContourNode* AddResectionContour(vtkMRMLLiverResectionNode *resectionNode) const;
+
+  /// Add a new resection using planar initialization
+  vtkMRMLMarkupsSlicingContourNode* AddResectionPlane(vtkMRMLLiverResectionNode *resectionNode) const;
+
 protected:
   vtkSlicerLiverResectionsLogic();
   ~vtkSlicerLiverResectionsLogic() override;
 
+protected:
   void ObserveMRMLScene() override;
-
   void OnMRMLSceneNodeAdded(vtkMRMLNode* node) override;
+  void HideBezierSurfaceMarkup(vtkMRMLMarkupsNode* initializationNode);
+  void HideInitialization(vtkMRMLMarkupsNode* bezierNode);
+  void ShowBezierSurfaceMarkup(vtkMRMLMarkupsNode* initializationNode);
+  void UpdateBezierWidgetOnInitialization(vtkMRMLMarkupsNode* initializationNode);
+
+  /// Add a bezier surface markup
+  vtkMRMLMarkupsBezierSurfaceNode* AddBezierSurface(vtkMRMLLiverResectionNode *resectionNode) const;
+
+protected:
+
+  /// TODO: Too many maps here. We should try to improve the design to avoid this.
+
+  std::map<vtkSmartPointer<vtkMRMLLiverResectionNode>,
+           vtkSmartPointer<vtkMRMLMarkupsNode>> ResectionToInitializationMap;
+
+  std::map<vtkSmartPointer<vtkMRMLMarkupsNode>,
+           vtkSmartPointer<vtkMRMLLiverResectionNode>> InitializationToResectionMap;
+
+  std::map<vtkSmartPointer<vtkMRMLLiverResectionNode>,
+           vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>> ResectionToBezierMap;
+
+  std::map<vtkWeakPointer<vtkMRMLMarkupsNode>,
+           vtkWeakPointer<vtkMRMLMarkupsNode>> InitializationToBezierMap;
+
+  std::map<vtkWeakPointer<vtkMRMLMarkupsNode>,
+           vtkWeakPointer<vtkMRMLMarkupsNode>> BezierToInitializationMap;
 
 private:
-
-  vtkWeakPointer<vtkMRMLModelNode> TargetParenchymaModelNode;
-
-private:
-  vtkSlicerLiverResectionsLogic(const vtkSlicerLiverResectionsLogic&) = delete;
+  vtkSlicerLiverResectionsLogic(const vtkSlicerLiverResectionsLogic &) = delete;
   void operator=(const vtkSlicerLiverResectionsLogic&) = delete;
 };
 

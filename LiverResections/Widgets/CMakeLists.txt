@@ -11,10 +11,15 @@ set(${KIT}_INCLUDE_DIRECTORIES
 set(${KIT}_SRCS
   qSlicerLiverResectionsTableView.cxx
   qSlicerLiverResectionsTableView.h
+  qSlicerLiverResectionsModel.h
+  qSlicerLiverResectionsModel_p.h
+  qSlicerLiverResectionsModel.cxx
   )
 
 set(${KIT}_MOC_SRCS
   qSlicerLiverResectionsTableView.h
+  qSlicerLiverResectionsModel.h
+  qSlicerLiverResectionsModel_p.h
 )
 
 set(${KIT}_UI_SRCS

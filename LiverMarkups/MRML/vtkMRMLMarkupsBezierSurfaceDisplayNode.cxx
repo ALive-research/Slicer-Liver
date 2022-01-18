@@ -15,9 +15,9 @@
     notice, this list of conditions and the following disclaimer in the
     documentation and/or other materials provided with the distribution.
 
-  * Neither the name of Kitware, Inc. nor the names of Contributors
-    may be used to endorse or promote products derived from this
-    software without specific prior written permission.
+  * Neither the name of Oslo University Hospital nor the names
+    of Contributors may be used to endorse or promote products derived
+    from this software without specific prior written permission.
 
   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
@@ -37,59 +37,26 @@
 
 ==============================================================================*/
 
-#ifndef qslicerliverresectionstableview_h_
-#define qslicerliverresectionstableview_h_
+#include "vtkMRMLMarkupsBezierSurfaceDisplayNode.h"
 
-// Resections includes
-#include "qSlicerLiverResectionsModuleWidgetsExport.h"
+// VTK includes
+#include <vtkNew.h>
+#include <vtkObjectFactory.h>
 
-#include "vtkSlicerLiverResectionsLogic.h"
+//----------------------------------------------------------------------------
+vtkMRMLNodeNewMacro(vtkMRMLMarkupsBezierSurfaceDisplayNode);
 
-// MRMLWidgets includes
-#include <qMRMLWidget.h>
-
-// CTK includes
-#include <ctkPimpl.h>
-#include <ctkVTKObject.h>
-
-// Qt includes
-#include <QScopedPointer>
-
-//------------------------------------------------------------------------------
-class qSlicerLiverResectionsTableViewPrivate;
-
-//------------------------------------------------------------------------------
-class Q_SLICER_MODULE_LIVERRESECTIONS_WIDGETS_EXPORT qSlicerLiverResectionsTableView: public qMRMLWidget
+//----------------------------------------------------------------------------
+vtkMRMLMarkupsBezierSurfaceDisplayNode::vtkMRMLMarkupsBezierSurfaceDisplayNode()
+  :Superclass()
 {
-  Q_OBJECT;
-  QVTK_OBJECT;
+}
 
-public:
-  using Superclass = qMRMLWidget;
+//----------------------------------------------------------------------------
+vtkMRMLMarkupsBezierSurfaceDisplayNode::~vtkMRMLMarkupsBezierSurfaceDisplayNode()=default;
 
-  /// Constructor
-  explicit qSlicerLiverResectionsTableView(QWidget* parent = nullptr);
-
-  /// Destructor
-  ~qSlicerLiverResectionsTableView() override;
-
-  /// Set MRML scene
-  void setMRMLScene(vtkMRMLScene* newScene) override;
-
-protected:
-  /// To prevent accidentally moving out of the widget when pressing up/down arrows
-  bool eventFilter(QObject* target, QEvent* event) override;
-
-  /// Handle context menu events
-  void contextMenuEvent(QContextMenuEvent* event) override;
-
-protected:
-  QScopedPointer<qSlicerLiverResectionsTableViewPrivate> d_ptr;
-
-private:
-  Q_DECLARE_PRIVATE(qSlicerLiverResectionsTableView);
-  Q_DISABLE_COPY(qSlicerLiverResectionsTableView);
-
-};
-
-#endif // qslicerliverresectionstableview_h_
+//----------------------------------------------------------------------------
+void vtkMRMLMarkupsBezierSurfaceDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
+{
+  Superclass::PrintSelf(os,indent);
+}

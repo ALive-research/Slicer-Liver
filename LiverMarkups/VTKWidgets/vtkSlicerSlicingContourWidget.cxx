@@ -40,10 +40,13 @@
 #include "vtkSlicerSlicingContourWidget.h"
 
 // Liver Markups VTKWidgets include
+#include "vtkMRMLMarkupsSlicingContourNode.h"
+#include "vtkSlicerMarkupsWidget.h"
 #include "vtkSlicerSlicingContourRepresentation3D.h"
 
 // VTK includes
 #include <vtkObjectFactory.h>
+#include <vtkEvent.h>
 
 // Markups VTKWidgets includes
 #include <vtkSlicerLineRepresentation2D.h>
@@ -54,7 +57,12 @@ vtkStandardNewMacro(vtkSlicerSlicingContourWidget);
 //------------------------------------------------------------------------------
 vtkSlicerSlicingContourWidget::vtkSlicerSlicingContourWidget()
 {
-
+  // this->SetEventTranslationClickAndDrag(WidgetStateOnWidget,
+  //                                       vtkCommand::LeftButtonPressEvent,
+  //                                       vtkEvent::NoModifier,
+  //                                       WidgetStateMoveContour,
+  //                                       WidgetEventContourMoveStart,
+  //                                       WidgetEventContourMoveEnd);
 }
 
 //------------------------------------------------------------------------------
@@ -95,4 +103,54 @@ vtkSlicerMarkupsWidget* vtkSlicerSlicingContourWidget::CreateInstance() const
   result->InitializeObjectBase();
 #endif
   return result;
+}
+
+//------------------------------------------------------------------------------
+ bool vtkSlicerSlicingContourWidget::ProcessInteractionEvent(vtkMRMLInteractionEventData* eventData)
+ {
+  vtkMRMLMarkupsSlicingContourNode* markupsNode = this->GetMRMLMarkupsNode();
+
+  unsigned long widgetEvent = this->TranslateInteractionEventToWidgetEvent(eventData);
+
+  bool processedEvent = false;
+  switch (widgetEvent)
+  {
+  case WidgetEventControlPointMoveStart:
+    this->SetWidgetState(WidgetStateTranslateControlPoint);
+    this->StartWidgetInteraction(eventData);
+    markupsNode->InvokeEvent(vtkCommand::StartInteractionEvent);
+    processedEvent = true;
+    break;
+
+  case WidgetEventMouseMove:
+    processedEvent = Superclass::ProcessMouseMove(eventData);
+    break;
+
+  case WidgetEventControlPointMoveEnd:
+    this->EndWidgetInteraction();
+    this->SetWidgetState(WidgetStateOnWidget);
+    markupsNode->InvokeEvent(vtkCommand::EndInteractionEvent);
+    processedEvent = true;
+    break;
+  }
+
+  if (!processedEvent)
+    {
+    processedEvent = Superclass::ProcessInteractionEvent(eventData);
+    }
+
+  return processedEvent;
+
+ }
+
+//----------------------------------------------------------------------
+vtkMRMLMarkupsSlicingContourNode* vtkSlicerSlicingContourWidget::GetMRMLMarkupsNode()
+{
+  vtkSlicerMarkupsWidgetRepresentation* rep = this->GetMarkupsRepresentation();
+  if (!rep)
+    {
+    return nullptr;
+    }
+
+  return vtkMRMLMarkupsSlicingContourNode::SafeDownCast(rep->GetMarkupsNode());
 }

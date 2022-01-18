@@ -38,6 +38,7 @@
 ==============================================================================*/
 
 #include "vtkMRMLMarkupsSlicingContourNode.h"
+#include "vtkMRMLMarkupsSlicingContourDisplayNode.h"
 
 // MRML includes
 #include <vtkMRMLScene.h>
@@ -59,4 +60,27 @@ vtkMRMLMarkupsSlicingContourNode::vtkMRMLMarkupsSlicingContourNode()
 void vtkMRMLMarkupsSlicingContourNode::PrintSelf(ostream& os, vtkIndent indent)
 {
   Superclass::PrintSelf(os,indent);
+}
+
+//----------------------------------------------------------------------------
+void vtkMRMLMarkupsSlicingContourNode::CreateDefaultDisplayNodes()
+{
+  if (vtkMRMLMarkupsSlicingContourDisplayNode::SafeDownCast(this->GetDisplayNode()))
+    {
+    // display node already exists
+    return;
+    }
+
+  auto scene = this->GetScene();
+  if (!scene)
+    {
+    vtkErrorMacro("vtkMRMLMarkupsSlicingContourNode::CreateDefaultDisplayNodes failed: scene is invalid");
+    return;
+    }
+
+  auto dispNode = scene->AddNewNodeByClass("vtkMRMLMarkupsSlicingContourDisplayNode");
+
+  this->SetAndObserveDisplayNodeID(dispNode->GetID());
+
+  std::cout << "NODE ADDED" << std::endl;
 }

@@ -43,6 +43,10 @@
 
 #include <vtkSlicerMarkupsWidget.h>
 
+//----------------------------------------------------------------------------
+class vtkMRMLMarkupsSlicingContourNode;
+
+//----------------------------------------------------------------------------
 class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerSlicingContourWidget
 : public vtkSlicerMarkupsWidget
 {
@@ -56,6 +60,10 @@ public:
 
   /// Create instance of the markups widget
   vtkSlicerMarkupsWidget* CreateInstance() const override;
+
+protected:
+  bool ProcessInteractionEvent(vtkMRMLInteractionEventData* eventData) override;
+  vtkMRMLMarkupsSlicingContourNode* GetMRMLMarkupsNode();
 
 protected:
   vtkSlicerSlicingContourWidget();

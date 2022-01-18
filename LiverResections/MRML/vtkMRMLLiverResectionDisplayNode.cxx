@@ -35,45 +35,45 @@
   Oslo University Hospital) and was supported by The Research Council of Norway
   through the ALive project (grant nr. 311393).
 
-==============================================================================*/
-#ifndef __vtkslicerbeziersurfacewidget_h_
-#define __vtkslicerbeziersurfacewidget_h_
+  ==============================================================================*/
 
-#include "vtkMRMLMarkupsBezierSurfaceNode.h"
-#include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
+#include "vtkMRMLLiverResectionDisplayNode.h"
 
-// SLicer includes
-#include <vtkSlicerMarkupsWidget.h>
+#include <vtkMRMLScene.h>
 
-//------------------------------------------------------------------------------
-class vtkMRMLMarkupsBezierSurfaceNode;
+#include <vtkObjectFactory.h>
+//----------------------------------------------------------------------------
+vtkMRMLNodeNewMacro(vtkMRMLLiverResectionDisplayNode);
 
-//------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerBezierSurfaceWidget
-: public vtkSlicerMarkupsWidget
+//----------------------------------------------------------------------------
+
+vtkMRMLLiverResectionDisplayNode::vtkMRMLLiverResectionDisplayNode()
 {
-public:
-  static vtkSlicerBezierSurfaceWidget *New();
-  vtkTypeMacro(vtkSlicerBezierSurfaceWidget, vtkSlicerMarkupsWidget);
+}
 
-  void CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode,
-                                  vtkMRMLAbstractViewNode* viewNode,
-                                  vtkRenderer* renderer) override;
+//----------------------------------------------------------------------------
+void vtkMRMLLiverResectionDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
+{
+  Superclass::PrintSelf(os,indent);
+}
 
-  /// Create instance of the markups widget
-  vtkSlicerMarkupsWidget* CreateInstance() const override;
+//----------------------------------------------------------------------------
+void vtkMRMLLiverResectionDisplayNode::ReadXMLAttributes(const char** atts)
+{
+  MRMLNodeModifyBlocker blocker(this);
 
-protected:
-  bool ProcessInteractionEvent(vtkMRMLInteractionEventData* eventData);
-  vtkMRMLMarkupsBezierSurfaceNode* GetMRMLMarkupsNode();
+  Superclass::ReadXMLAttributes(atts);
+}
 
-protected:
-  vtkSlicerBezierSurfaceWidget();
-  ~vtkSlicerBezierSurfaceWidget();
+//----------------------------------------------------------------------------
+void vtkMRMLLiverResectionDisplayNode::WriteXML(ostream& of, int nIndent)
+{
+  Superclass::WriteXML(of, nIndent);
+}
 
-private:
-  vtkSlicerBezierSurfaceWidget(const vtkSlicerBezierSurfaceWidget&) = delete;
-  void operator=(const vtkSlicerBezierSurfaceWidget) = delete;
-};
-
-#endif // __vtkslicerbeziersurfacewidget_h_
+//----------------------------------------------------------------------------
+void vtkMRMLLiverResectionDisplayNode::CopyContent(vtkMRMLNode* anode, bool deepCopy/*=true*/)
+{
+  MRMLNodeModifyBlocker blocker(this);
+  Superclass::CopyContent(anode, deepCopy);
+}

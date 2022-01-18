@@ -38,99 +38,8 @@
    <property name="bottomMargin">
     <number>0</number>
    </property>
-   <item row="0" column="0">
-    <widget class="QWidget" name="FilterBar" native="true">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <layout class="QHBoxLayout" name="horizontalLayout">
-      <property name="leftMargin">
-       <number>0</number>
-      </property>
-      <property name="topMargin">
-       <number>0</number>
-      </property>
-      <property name="rightMargin">
-       <number>0</number>
-      </property>
-      <property name="bottomMargin">
-       <number>0</number>
-      </property>
-      <item>
-       <widget class="qMRMLNodeComboBox" name="TumorComboBox">
-        <property name="nodeTypes">
-         <stringlist>
-          <string>vtkMRMLModelNode</string>
-         </stringlist>
-        </property>
-        <property name="addEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="removeEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="selectNodeUponCreation">
-         <bool>false</bool>
-        </property>
-        <property name="noneDisplay">
-         <string>Tumor</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="AddResectionContourDistancePushButton">
-        <property name="toolTip">
-         <string>Show/Hide not started segments</string>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
-        <property name="icon">
-         <iconset resource="../qSlicerLiverResectionsModuleWidgets.qrc">
-          <normaloff>:/Icons/AddResectionDistanceContour.png</normaloff>:/Icons/AddResectionDistanceContour.png</iconset>
-        </property>
-        <property name="iconSize">
-         <size>
-          <width>16</width>
-          <height>16</height>
-         </size>
-        </property>
-        <property name="checkable">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="AddResectionSlicingContourPushButton">
-        <property name="toolTip">
-         <string>Show/Hide in progress segments</string>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
-        <property name="icon">
-         <iconset resource="../qSlicerLiverResectionsModuleWidgets.qrc">
-          <normaloff>:/Icons/AddResectionSlicingContour.png</normaloff>:/Icons/AddResectionSlicingContour.png</iconset>
-        </property>
-        <property name="iconSize">
-         <size>
-          <width>16</width>
-          <height>16</height>
-         </size>
-        </property>
-        <property name="checkable">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item row="2" column="0">
-    <widget class="QTableView" name="SegmentsTable">
+   <item row="1" column="0">
+    <widget class="QTableView" name="ResectionsTable">
      <property name="enabled">
       <bool>true</bool>
      </property>
@@ -180,13 +89,6 @@
    </item>
   </layout>
  </widget>
- <customwidgets>
-  <customwidget>
-   <class>qMRMLNodeComboBox</class>
-   <extends>QWidget</extends>
-   <header>qMRMLNodeComboBox.h</header>
-  </customwidget>
- </customwidgets>
  <resources>
   <include location="../qSlicerLiverResectionsModuleWidgets.qrc"/>
  </resources>

@@ -40,6 +40,7 @@
 #include "vtkSlicerBezierSurfaceWidget.h"
 
 // Liver Markups VTKWidgets include
+#include "vtkMRMLMarkupsSlicingContourNode.h"
 #include "vtkSlicerBezierSurfaceRepresentation3D.h"
 
 // VTK includes
@@ -47,6 +48,9 @@
 
 // Markups VTKWidgets includes
 #include <vtkSlicerLineRepresentation2D.h>
+
+// MRML includes
+#include <vtkMRMLMarkupsBezierSurfaceNode.h>
 
 //------------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerBezierSurfaceWidget);
@@ -95,4 +99,53 @@ vtkSlicerMarkupsWidget* vtkSlicerBezierSurfaceWidget::CreateInstance() const
   result->InitializeObjectBase();
 #endif
   return result;
+}
+
+//------------------------------------------------------------------------------
+bool vtkSlicerBezierSurfaceWidget::ProcessInteractionEvent(vtkMRMLInteractionEventData* eventData)
+{
+  auto markupsNode = this->GetMarkupsNode();
+
+  unsigned long widgetEvent = this->TranslateInteractionEventToWidgetEvent(eventData);
+
+  bool processedEvent = false;
+  switch (widgetEvent)
+  {
+  case WidgetEventControlPointMoveStart:
+    this->SetWidgetState(WidgetStateTranslateControlPoint);
+    this->StartWidgetInteraction(eventData);
+    markupsNode->InvokeEvent(vtkCommand::StartInteractionEvent);
+    processedEvent = true;
+    break;
+
+  case WidgetEventMouseMove:
+    processedEvent = Superclass::ProcessMouseMove(eventData);
+    break;
+
+  case WidgetEventControlPointMoveEnd:
+    this->EndWidgetInteraction();
+    this->SetWidgetState(WidgetStateOnWidget);
+    markupsNode->InvokeEvent(vtkCommand::EndInteractionEvent);
+    processedEvent = true;
+    break;
+  }
+
+  if (!processedEvent)
+    {
+    processedEvent = Superclass::ProcessInteractionEvent(eventData);
+    }
+
+  return processedEvent;
+}
+
+//----------------------------------------------------------------------
+vtkMRMLMarkupsBezierSurfaceNode* vtkSlicerBezierSurfaceWidget::GetMRMLMarkupsNode()
+{
+  auto representation = this->GetMarkupsRepresentation();
+  if (!representation)
+    {
+    return nullptr;
+    }
+
+  return vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(representation->GetMarkupsNode());
 }

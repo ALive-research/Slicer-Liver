@@ -14,6 +14,10 @@ set(${KIT}_SRCS
   vtkMRMLMarkupsDistanceContourNode.cxx
   vtkMRMLMarkupsBezierSurfaceNode.h
   vtkMRMLMarkupsBezierSurfaceNode.cxx
+  vtkMRMLMarkupsBezierSurfaceDisplayNode.h
+  vtkMRMLMarkupsBezierSurfaceDisplayNode.cxx
+  vtkMRMLMarkupsSlicingContourDisplayNode.h
+  vtkMRMLMarkupsSlicingContourDisplayNode.cxx
   )
 
 set(${KIT}_TARGET_LIBRARIES
