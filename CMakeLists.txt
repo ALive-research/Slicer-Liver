@@ -21,6 +21,7 @@ include(${Slicer_USE_FILE})
 # Extension modules
 add_subdirectory(LiverMarkups)
 add_subdirectory(LiverResections)
+add_subdirectory(BranchSplitting)
 add_subdirectory(Liver)
 
 #-----------------------------------------------------------------------------
