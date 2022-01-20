@@ -150,7 +150,7 @@ void vtkSlicerSlicingContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller
      return;
      }
 
-   VBO->SetCoordShiftAndScaleMethod(vtkOpenGLVertexBufferObject::AUTO_SHIFT_SCALE);
+   //VBO->SetCoordShiftAndScaleMethod(vtkOpenGLVertexBufferObject::AUTO_SHIFT_SCALE);
    auto scale = VBO->GetScale();
    auto shift = VBO->GetShift();
 
