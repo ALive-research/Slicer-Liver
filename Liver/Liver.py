@@ -239,18 +239,15 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 
     #
-    # Add segment button
+    # Add segment and Segments classificaion buttons
     #
     self.addSegmentCenterline = qt.QPushButton("Add segment")
-    self.layout.addWidget(self.addSegmentCenterline)
-
-
-    #
-    # Segments classificaion button
-    #
     self.segmentsClassificationPushButton = qt.QPushButton("Compute segments")
-    
-    self.layout.addWidget(self.segmentsClassificationPushButton)
+    segmentButtonsHBoxLayout = qt.QHBoxLayout()
+    parametersFormLayout.addRow(segmentButtonsHBoxLayout)
+    segmentButtonsHBoxLayout.addWidget(self.addSegmentCenterline)
+    segmentButtonsHBoxLayout.addWidget(self.segmentsClassificationPushButton)
+
     ########## BRANCH SPLITTING UI ############
     
     # Add vertical spacer
