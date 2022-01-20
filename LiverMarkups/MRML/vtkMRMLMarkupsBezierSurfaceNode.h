@@ -48,6 +48,7 @@
 
 //VTK includes
 #include <vtkWeakPointer.h>
+#include <vtkMRMLScalarVolumeNode.h>
 
 //-----------------------------------------------------------------------------
 class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsBezierSurfaceNode
@@ -77,6 +78,14 @@ public:
   /// Get markup short name
   const char* GetDefaultNodeNamePrefix() override {return "BS";}
 
+  /// Set the distance map
+  void SetDistanceMap(vtkMRMLScalarVolumeNode* volumeNode)
+  {this->DistanceMap = volumeNode; this->Modified();}
+
+  /// Get the distance map
+  vtkMRMLScalarVolumeNode* GetDistanceMap() const
+  {return this->DistanceMap;}
+
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLMarkupsBezierSurfaceNode);
 
@@ -88,12 +97,11 @@ protected:
 
 private:
  vtkWeakPointer<vtkMRMLModelNode> Target;
+ vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMap;
 
 private:
  vtkMRMLMarkupsBezierSurfaceNode(const vtkMRMLMarkupsBezierSurfaceNode&);
  void operator=(const vtkMRMLMarkupsBezierSurfaceNode&);
-
-
 };
 
 #endif //__vtkmrmlmarkupsbeziersurfacenode_h_

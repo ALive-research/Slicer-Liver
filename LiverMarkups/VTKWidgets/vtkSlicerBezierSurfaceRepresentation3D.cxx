@@ -54,19 +54,23 @@
 // VTK includes
 #include <vtkActor.h>
 #include <vtkCollection.h>
+#include <vtkImageData.h>
 #include <vtkNew.h>
+#include <vtkOpenGLRenderWindow.h>
 #include <vtkPlaneSource.h>
 #include <vtkPolyDataMapper.h>
 #include <vtkPolyDataNormals.h>
 #include <vtkPolyLine.h>
 #include <vtkProperty.h>
+#include <vtkRenderer.h>
+#include <vtkRenderWindow.h>
+#include <vtkTextureObject.h>
 
 //------------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerBezierSurfaceRepresentation3D);
 
 //------------------------------------------------------------------------------
 vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
-  :Superclass()
 {
   this->BezierSurfaceSource= vtkSmartPointer<vtkBezierSurfaceSource>::New();
 
@@ -98,6 +102,9 @@ vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
 
   this->ControlPolygonActor = vtkSmartPointer<vtkActor>::New();
   this->ControlPolygonActor->SetMapper(this->ControlPolygonMapper);
+
+  this->DistanceMapTexture = vtkSmartPointer<vtkTextureObject>::New();
+  this->DistanceMap = nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -131,7 +138,40 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
     }
   this->ControlPolygonActor->SetProperty(this->GetControlPointsPipeline(controlPointType)->Property);
 
- this->NeedToRenderOn();
+  //Texture update
+  auto distanceMap = liverMarkupsBezierSurfaceNode->GetDistanceMap();
+  if ( this->DistanceMap != distanceMap)
+    {
+
+    bool created = false;
+    auto renderWindow = vtkOpenGLRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
+    if (renderWindow)
+      {
+      this->DistanceMapTexture->SetContext(renderWindow);
+      this->DistanceMap = distanceMap;
+      auto imageData = this->DistanceMap->GetImageData();
+      auto dimensions = imageData->GetDimensions();
+      created = this->DistanceMapTexture->Create3DFromRaw(
+          dimensions[0], dimensions[2], dimensions[3], 1,
+          VTK_FLOAT, imageData->GetScalarPointer());
+      }
+
+    if (created)
+      {
+      std::cout << "Texture created!!" << std::endl;
+      }
+    else
+      {
+      std::cout << "Texture not created!!" << std::endl;
+      }
+  }
+  else {
+
+    std::cout << "No texture changes!!" << std::endl;
+  }
+
+
+  this->NeedToRenderOn();
 }
 
 //----------------------------------------------------------------------
