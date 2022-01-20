@@ -7,7 +7,6 @@ add_subdirectory(Logic)
 
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
-  ${MODULE_NAME}.py
   ${MODULE_NAME}Lib/__init__.py
   ${MODULE_NAME}Lib/CenterlineHelper.py
   ${MODULE_NAME}Lib/BranchPointerHelper.py
