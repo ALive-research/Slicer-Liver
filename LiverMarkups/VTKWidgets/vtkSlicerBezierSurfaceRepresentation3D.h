@@ -57,8 +57,12 @@ class vtkBezierSurfaceSource;
 class vtkPolyData;
 class vtkPolyDataNormals;
 class vtkPoints;
+class vtkTextureObject;
 class vtkTubeFilter;
+
+//------------------------------------------------------------------------------
 class vtkMRMLMarkupsBezierSurfaceNode;
+class vtkMRMLScalarVolumeNode;
 
 //------------------------------------------------------------------------------
 class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerBezierSurfaceRepresentation3D
@@ -95,6 +99,9 @@ protected:
   vtkSmartPointer<vtkTubeFilter> ControlPolygonTubeFilter;
   vtkSmartPointer<vtkPolyDataMapper> ControlPolygonMapper;
   vtkSmartPointer<vtkActor> ControlPolygonActor;
+
+  vtkSmartPointer<vtkTextureObject> DistanceMapTexture;
+  vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMap;
 
 protected:
   vtkSlicerBezierSurfaceRepresentation3D();
