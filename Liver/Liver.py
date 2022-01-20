@@ -178,7 +178,6 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     import qSlicerLiverResectionsModuleWidgetsPythonQt as resectionWidgets
     self._resectionsTableView = resectionWidgets.qSlicerLiverResectionsTableView()
     self._resectionsTableView.setMRMLScene(slicer.mrmlScene)
-    self.layout.addWidget(self._resectionsTableView)
 
     ########## BRANCH SPLITTING UI ############
     # Parameters Area
@@ -186,6 +185,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     parametersCollapsibleButton = ctk.ctkCollapsibleButton()
     parametersCollapsibleButton.text = "Liver Segments"
     self.layout.addWidget(parametersCollapsibleButton)
+    self.layout.addWidget(self._resectionsTableView)
 
     # Layout within the dummy collapsible button
     parametersFormLayout = qt.QFormLayout(parametersCollapsibleButton)
@@ -752,7 +752,7 @@ class LiverTest(ScriptedLoadableModuleTest):
     self.setUp()
     self.test_Liver1()
   ######## BRANCH SPLITTING TEST ########
-    self.test_BranchSplitting()
+    #self.test_BranchSplitting()
   ######## BRANCH SPLITTING TEST ########
 
   def test_Liver1(self):
