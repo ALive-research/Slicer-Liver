@@ -52,7 +52,7 @@ vtkMRMLNodeNewMacro(vtkMRMLMarkupsBezierSurfaceNode);
 
 //--------------------------------------------------------------------------------
 vtkMRMLMarkupsBezierSurfaceNode::vtkMRMLMarkupsBezierSurfaceNode()
-  :Superclass()
+  :Target(nullptr), DistanceMap(nullptr)
 {
   this->MaximumNumberOfControlPoints = 16;
   this->RequiredNumberOfControlPoints = 16;

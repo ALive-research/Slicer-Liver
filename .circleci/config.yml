@@ -1,7 +1,7 @@
 version: 2.1
 jobs:
   build:
-    working_directory: /usr/src/Slicer-LiverAnalysis
+    working_directory: /usr/src/Slicer-Liver
     docker:
       - image: olevs/slicer-build-ubuntu2004
     steps:
@@ -25,26 +25,26 @@ jobs:
       
       # Not needed, as this is done by the checkout step
       #- run:
-      #    name: Update LiverAnalysis extension
+      #    name: Update Liver extension
       #    command: |
-      #      git clone https://github.com/ALive-research/Slicer-LiverAnalysis.git
-      #      cd /usr/src/Slicer-LiverAnalysis
+      #      git clone https://github.com/ALive-research/Slicer-Liver.git
+      #      cd /usr/src/Slicer-Liver
       #      git checkout .
       #      git pull
       
       - run:
-          name: Configure LiverAnalysis extension
+          name: Configure Liver extension
           command: |
-            mkdir /usr/src/Slicer-LiverAnalysis-Build
-            cd /usr/src/Slicer-LiverAnalysis-Build
-            cmake -DCMAKE_BUILD_TYPE:STRING=Release -DSlicer_DIR:PATH=/usr/src/Slicer-build/Slicer-build ../Slicer-LiverAnalysis
+            mkdir /usr/src/Slicer-Liver-Build
+            cd /usr/src/Slicer-Liver-Build
+            cmake -DCMAKE_BUILD_TYPE:STRING=Release -DSlicer_DIR:PATH=/usr/src/Slicer-build/Slicer-build ../Slicer-Liver
             
       - run:
-          name: Build LiverAnalysis extension
+          name: Build Liver extension
           environment:
             BUILD_TOOL_FLAGS: "-j1"
           command: |
-            cd /usr/src/Slicer-LiverAnalysis-Build
+            cd /usr/src/Slicer-Liver-Build
             make
             
 
@@ -53,7 +53,7 @@ jobs:
           command: Xvfb :99 -screen 0 640x480x8 -nolisten tcp
           background: true
       - run:
-          name: Run LiverAnalysis plugin tests
+          name: Run Liver plugin tests
           command: |
-            cd /usr/src/Slicer-LiverAnalysis-Build
+            cd /usr/src/Slicer-Liver-Build
             ctest
