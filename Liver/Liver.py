@@ -405,7 +405,9 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     self._segmentationNode.CreateClosedSurfaceRepresentation()
     segmentationsLogic.ExportAllSegmentsToModels(self._segmentationNode, folderItemID)
 
-    liverModelNode = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'liver').GetItemAsObject(0)
+    liverModelNodes = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'liver')
+    liverModelNodes.UnRegister(None)
+    liverModelNode = liverModelNodes.GetItemAsObject(0)
     if liverModelNode is None:
       return
 
@@ -419,7 +421,10 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     return self._selectedTargetLiverModelNode
 
   def addResectionPlane(self):
-    liverModelNode = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'liver').GetItemAsObject(0)
+    liverModelNodes = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'liver')
+    liverModelNodes.UnRegister(None)
+    liverModelNode = liverModelNodes.GetItemAsObject(0)
+
     if liverModelNode is None:
       return
     if self._segmentationNode is None:
@@ -433,8 +438,12 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     slicer.mrmlScene.AddNode(liverResectionNode)
 
   def addResectionContour(self):
-    liverModelNode = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'liver').GetItemAsObject(0)
-    tumorModelNode = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'tumor1').GetItemAsObject(0)
+    liverModelNodes = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'liver')
+    liverModelNode.UnRegister(None)
+    liverModelNode = liberModelNodes.GetItemAsObject(0)
+    tumorModelNodes = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'tumor1')
+    tumorMOdelNodes.UnRegister(0)
+    tumorModelNode = tumorModelNodes.GetItemAsObject(0)
     if liverModelNode is None:
       return
     if self._segmentationNode is None:
