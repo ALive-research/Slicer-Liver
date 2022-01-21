@@ -274,7 +274,7 @@ void vtkSlicerShaderHelper::getShaderProperties(vtkCollection* propertiesCollect
 
       // NOTE: Query and cache the target model VBOs as they are useful during update in the widget representation
 
-      auto modelMapper =vtkOpenGLPolyDataMapper::SafeDownCast(modelActor->GetMapper());
+      auto modelMapper = vtkOpenGLPolyDataMapper::SafeDownCast(modelActor->GetMapper());
       if (!modelMapper)
         {
         vtkWarningMacro("Invalid model mapper");

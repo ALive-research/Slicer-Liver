@@ -54,11 +54,13 @@
 
 //------------------------------------------------------------------------------
 class vtkBezierSurfaceSource;
+class vtkOpenGLActor;
 class vtkPolyData;
 class vtkPolyDataNormals;
 class vtkPoints;
 class vtkTextureObject;
 class vtkTubeFilter;
+class vtkOpenGLPolyDataMapper;
 
 //------------------------------------------------------------------------------
 class vtkMRMLMarkupsBezierSurfaceNode;
@@ -90,8 +92,8 @@ protected:
   // Bezier surface releated elements
   vtkSmartPointer<vtkBezierSurfaceSource> BezierSurfaceSource;
   vtkSmartPointer<vtkPoints> BezierSurfaceControlPoints;
-  vtkSmartPointer<vtkPolyDataMapper> BezierSurfaceMapper;
-  vtkSmartPointer<vtkActor> BezierSurfaceActor;
+  vtkSmartPointer<vtkOpenGLPolyDataMapper> BezierSurfaceMapper;
+  vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor;
   vtkSmartPointer<vtkPolyDataNormals> BezierSurfaceNormals;
 
   // Control polygon related elements
@@ -100,8 +102,15 @@ protected:
   vtkSmartPointer<vtkPolyDataMapper> ControlPolygonMapper;
   vtkSmartPointer<vtkActor> ControlPolygonActor;
 
+  // Distance mapping related elements
   vtkSmartPointer<vtkTextureObject> DistanceMapTexture;
   vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMap;
+  vtkNew<vtkMatrix4x4> VBOShiftScale;
+  vtkNew<vtkTransform> VBOInverseTransform;
+  vtkWeakPointer<vtkShaderProperty> ShaderProperty;
+  vtkWeakPointer<vtkMatrix4x4> rasToIjk;
+  vtkWeakPointer<vtkMatrix4x4> ijkToTexture;
+  vtkWeakPointer<vtkMatrix4x4> shiftScale;
 
 protected:
   vtkSlicerBezierSurfaceRepresentation3D();
