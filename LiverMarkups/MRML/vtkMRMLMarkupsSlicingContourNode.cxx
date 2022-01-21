@@ -81,6 +81,4 @@ void vtkMRMLMarkupsSlicingContourNode::CreateDefaultDisplayNodes()
   auto dispNode = scene->AddNewNodeByClass("vtkMRMLMarkupsSlicingContourDisplayNode");
 
   this->SetAndObserveDisplayNodeID(dispNode->GetID());
-
-  std::cout << "NODE ADDED" << std::endl;
 }

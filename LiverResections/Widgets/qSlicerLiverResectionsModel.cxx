@@ -84,7 +84,6 @@ void qSlicerLiverResectionsModelPrivate::init()
 {
   Q_Q(qSlicerLiverResectionsModel);
 
-  std::cout << "Init resection model" << std::endl;
   this->Callback->SetClientData(q);
   this->Callback->SetCallback(qSlicerLiverResectionsModel::onEvent);
 
@@ -489,14 +488,11 @@ void qSlicerLiverResectionsModel::onResectionNodeAdded(vtkMRMLLiverResectionNode
       return;
     }
 
-  std::cout << "Res " << node->GetSegmentationNode() << std::endl;
-
   QList<QStandardItem*> items;
 
   // Update each of the columns for the item
   for (int col=0; col < this->columnCount(); ++col)
     {
-      std::cout << "column" << std::endl;
       QStandardItem* newItem = new QStandardItem();
       this->updateItemFromResectionNode(newItem, node, col);
       items.append(newItem);
@@ -518,8 +514,6 @@ void qSlicerLiverResectionsModel::updateItemFromResectionNode(QStandardItem *ite
                                                               vtkMRMLLiverResectionNode *resectionNode,
                                                               int column)
 {
-  std::cout << "Entra" << std::endl;
-
   Q_D(qSlicerLiverResectionsModel);
 
   if (!resectionNode)
