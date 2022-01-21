@@ -141,8 +141,6 @@ void qSlicerLiverResectionsTableView::setMRMLScene(vtkMRMLScene* newScene)
 {
   Q_D(qSlicerLiverResectionsTableView);
 
- std::cout << "Setting MRMLScene" << std::endl;
-
   Superclass::setMRMLScene(newScene);
 
   if (d->Model)

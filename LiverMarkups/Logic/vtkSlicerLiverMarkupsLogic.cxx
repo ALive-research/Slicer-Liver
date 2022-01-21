@@ -81,8 +81,6 @@ void vtkSlicerLiverMarkupsLogic::PrintSelf(ostream& os, vtkIndent indent)
 //-----------------------------------------------------------------------------
 void vtkSlicerLiverMarkupsLogic::RegisterNodes()
 {
-  std::cout << "Register Nodes" << std::endl;
-
   assert(this->GetMRMLScene() != nullptr);
 
   vtkMRMLScene *scene = this->GetMRMLScene();
