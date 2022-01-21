@@ -15,9 +15,9 @@ The extension is currently under development and will feature:
 - Rafael Palomar (Oslo University Hospital / NTNU, Norway)
 - Ole Vegard Solberg (SINTEF, Norway)
 - Geir Arne Tangen (SINTEF, Norway)
-- Javier Pére de Frutos (SINTEF, Norway)
+- Javier Pérez de Frutos (SINTEF, Norway)
 
-Contact: [rafael.palomar@ous.no](mailto:rafael.palomar@ous-research.no "rafael.palomar at ous.no")rafael.palomar@ous-research.no
+Contact: [rafael.palomar@ous.no](mailto:rafael.palomar@ous-research.no "rafael.palomar at ous.no")
 
 # License
 
