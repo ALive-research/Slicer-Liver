@@ -51,12 +51,20 @@
 #include <qSlicerApplication.h>
 #include <qSlicerLayoutManager.h>
 
+// VTK-Addon includes
+#include <vtkAddonMathUtilities.h>
+
 // VTK includes
 #include <vtkActor.h>
+#include <vtkOpenGLCamera.h>
 #include <vtkCollection.h>
 #include <vtkImageData.h>
 #include <vtkNew.h>
+#include <vtkOpenGLActor.h>
 #include <vtkOpenGLRenderWindow.h>
+#include <vtkOpenGLPolyDataMapper.h>
+#include <vtkOpenGLVertexBufferObjectGroup.h>
+#include <vtkOpenGLVertexBufferObject.h>
 #include <vtkPlaneSource.h>
 #include <vtkPolyDataMapper.h>
 #include <vtkPolyDataNormals.h>
@@ -64,7 +72,9 @@
 #include <vtkProperty.h>
 #include <vtkRenderer.h>
 #include <vtkRenderWindow.h>
+#include <vtkShaderProperty.h>
 #include <vtkTextureObject.h>
+#include <vtkUniforms.h>
 
 //------------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerBezierSurfaceRepresentation3D);
@@ -72,7 +82,8 @@ vtkStandardNewMacro(vtkSlicerBezierSurfaceRepresentation3D);
 //------------------------------------------------------------------------------
 vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
 {
-  this->BezierSurfaceSource= vtkSmartPointer<vtkBezierSurfaceSource>::New();
+  this->BezierSurfaceSource = vtkSmartPointer<vtkBezierSurfaceSource>::New();
+  this->BezierSurfaceSource->SetResolution(20,20);
 
   // Set the initial position of the bezier surface
   auto planeSource = vtkSmartPointer<vtkPlaneSource>::New();
@@ -86,9 +97,9 @@ vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
   this->BezierSurfaceControlPoints->SetNumberOfPoints(16);
   this->BezierSurfaceControlPoints->DeepCopy(planeSource->GetOutput()->GetPoints());;
 
-  this->BezierSurfaceMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+  this->BezierSurfaceMapper = vtkSmartPointer<vtkOpenGLPolyDataMapper>::New();
   this->BezierSurfaceMapper->SetInputConnection(this->BezierSurfaceNormals->GetOutputPort());
-  this->BezierSurfaceActor = vtkSmartPointer<vtkActor>::New();
+  this->BezierSurfaceActor = vtkSmartPointer<vtkOpenGLActor>::New();
   this->BezierSurfaceActor->SetMapper(this->BezierSurfaceMapper);
 
   this->ControlPolygonPolyData = vtkSmartPointer<vtkPolyData>::New();
@@ -138,12 +149,10 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
     }
   this->ControlPolygonActor->SetProperty(this->GetControlPointsPipeline(controlPointType)->Property);
 
-  //Texture update
+  // Update the distance map as 3D texture (if changed)
   auto distanceMap = liverMarkupsBezierSurfaceNode->GetDistanceMap();
   if ( this->DistanceMap != distanceMap)
     {
-
-    bool created = false;
     auto renderWindow = vtkOpenGLRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
     if (renderWindow)
       {
@@ -151,25 +160,108 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
       this->DistanceMap = distanceMap;
       auto imageData = this->DistanceMap->GetImageData();
       auto dimensions = imageData->GetDimensions();
-      created = this->DistanceMapTexture->Create3DFromRaw(
-          dimensions[0], dimensions[2], dimensions[3], 1,
-          VTK_FLOAT, imageData->GetScalarPointer());
+      this->DistanceMapTexture->SetWrapS(vtkTextureObject::ClampToBorder);
+      this->DistanceMapTexture->SetWrapT(vtkTextureObject::ClampToBorder);
+      this->DistanceMapTexture->SetWrapR(vtkTextureObject::ClampToBorder);
+      this->DistanceMapTexture->SetMinificationFilter(vtkTextureObject::Linear);
+      this->DistanceMapTexture->SetMagnificationFilter(vtkTextureObject::Linear);
+      this->DistanceMapTexture->SetBorderColor(1000.0f, 0.0f, 0.0f, 0.0f);
+      this->DistanceMapTexture->Create3DFromRaw(dimensions[0], dimensions[1], dimensions[2], 1,
+                                                VTK_FLOAT, imageData->GetScalarPointer());
       }
+    this->DistanceMap = distanceMap;
+    }
 
-    if (created)
-      {
-      std::cout << "Texture created!!" << std::endl;
+  auto mapper = vtkOpenGLPolyDataMapper::SafeDownCast(this->BezierSurfaceActor->GetMapper());
+  if (mapper) {
+    auto VBOs = mapper->GetVBOs();
+    if (VBOs) {
+      auto vertexVBO = VBOs->GetVBO("vertexMC");
+      if (vertexVBO) {
+        auto shift = vertexVBO->GetShift();
+        auto scale = vertexVBO->GetScale();
+
+        this->VBOInverseTransform->Identity();
+        if (shift.size() == 3 && scale.size() == 3)
+          {
+          this->VBOInverseTransform->Translate(shift[0], shift[1], shift[2]);
+          this->VBOInverseTransform->Scale(1.0/scale[0], 1.0/scale[1], 1.0/scale[2]);
+          }
+
+        this->VBOInverseTransform->GetTranspose(this->VBOShiftScale);
       }
-    else
-      {
-      std::cout << "Texture not created!!" << std::endl;
-      }
+    }
   }
-  else {
 
-    std::cout << "No texture changes!!" << std::endl;
+
+  auto shaderProperty = this->BezierSurfaceActor->GetShaderProperty();
+  if (this->ShaderProperty != shaderProperty)
+    {
+    shaderProperty->AddVertexShaderReplacement("//VTK::PositionVC::Dec", true,
+                                               "//VTK::PositionVC::Dec\n"
+                                               "out vec4 vertexMCVSOutput;\n"
+                                               "out vec4 vertexWCVSOutput;\n",
+                                               false);
+
+    shaderProperty->AddVertexShaderReplacement(
+        "//VTK::PositionVC::Impl", true,
+        "//VTK::PositionVC::Impl\n"
+        "vertexMCVSOutput = vertexMC;\n"
+        "vertexWCVSOutput = ijkToTexture*rasToIjk*shiftScale*vertexMC;\n",
+        false);
+
+    shaderProperty->AddFragmentShaderReplacement(
+        "//VTK::PositionVC::Dec", true,
+        "//VTK::PositionVC::Dec\n"
+        "in vec4 vertexMCVSOutput;\n"
+        "in vec4 vertexWCVSOutput;\n"
+        "vec4 fragPositionMC = vertexWCVSOutput;\n",
+        false);
+
+    shaderProperty->AddFragmentShaderReplacement(
+        "//VTK::Color::Dec", true,
+        "//VTK::Color::Dec\n"
+        "uniform sampler3D distanceTexture;\n",
+        false);
+
+    shaderProperty->AddFragmentShaderReplacement(
+        "//VTK::Color::Impl", true,
+        "//VTK::Color::Impl\n"
+        "float dist = texture(distanceTexture, fragPositionMC.xyz).r;\n"
+        "  if(dist<20){\n"
+        "     ambientColor = vec3(1.0, 1.0, 0.0);\n"
+        "     diffuseColor = vec3(0.0, 0.0, 0.0);\n"
+        "  }\n"
+        "  else{\n"
+        "    ambientColor = vec3(0.2, 0.2 ,0.2);\n"
+        "  }\n",
+        false);
+    this->ShaderProperty = shaderProperty;
   }
 
+  auto rasToIjk = vtkSmartPointer<vtkMatrix4x4>::New();
+  auto ijkToTexture = vtkSmartPointer<vtkMatrix4x4>::New();
+
+  if (distanceMap)
+    {
+    auto imageData = distanceMap->GetImageData();
+    auto dimensions = imageData->GetDimensions();
+
+    distanceMap->GetRASToIJKMatrix(rasToIjk);
+    rasToIjk->Transpose();
+    this->rasToIjk = rasToIjk;
+
+    auto scaling = vtkSmartPointer<vtkTransform>::New();
+    scaling->Scale(1.0/dimensions[0], 1.0/dimensions[1], 1.0/dimensions[2]);
+    scaling->GetTranspose(ijkToTexture);
+    }
+
+
+  // this->BezierSurfaceActor->GetKeyMatrices(mcwc, anorms);
+  auto vertexUniforms= shaderProperty->GetVertexCustomUniforms();
+  vertexUniforms->SetUniformMatrix("shiftScale", this->VBOShiftScale);
+  vertexUniforms->SetUniformMatrix("rasToIjk", rasToIjk);
+  vertexUniforms->SetUniformMatrix("ijkToTexture", ijkToTexture);
 
   this->NeedToRenderOn();
 }
