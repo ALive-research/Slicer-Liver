@@ -470,6 +470,7 @@ QString qSlicerLiverResectionsModel::resectionNodeIDFromItem(QStandardItem const
   //   return "";
   //   }
   // return item->data(qMRMLResectionNodesModel::ResectionNodeIDRole).toString();
+    return "";
 }
 
 //------------------------------------------------------------------------------
