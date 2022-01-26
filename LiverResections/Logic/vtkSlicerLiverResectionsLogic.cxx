@@ -273,11 +273,11 @@ vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLLiverResectionNode *re
     return nullptr;
     }
 
-  if (!resectionNode->GetSegmentationNode())
-    {
-     vtkErrorMacro("Error in AddResectionContour: no valid segmentation node.");
-     return nullptr;
-    }
+  // if (!resectionNode->GetSegmentationNode())
+  //   {
+  //    vtkErrorMacro("Error in AddResectionContour: no valid segmentation node.");
+  //    return nullptr;
+  //   }
 
   if (!resectionNode->GetTargetOrgan())
     {
@@ -285,11 +285,11 @@ vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLLiverResectionNode *re
       return nullptr;
     }
 
-  if (resectionNode->GetTargetTumors().empty())
-    {
-      vtkErrorMacro("Error in AddResectionContour: no valid target tumor.");
-      return nullptr;
-    }
+  // if (resectionNode->GetTargetTumors().empty())
+  //   {
+  //     vtkErrorMacro("Error in AddResectionContour: no valid target tumor.");
+  //     return nullptr;
+  //   }
 
   // Computing the position of the initial points
   const double *bounds = resectionNode->GetTargetOrgan()->GetPolyData()->GetBounds();

@@ -37,62 +37,35 @@
 
 ==============================================================================*/
 
-#include "vtkMRMLLiverResectionNode.h"
-#include "vtkMRMLLiverResectionDisplayNode.h"
-
 // MRML includes
-#include <vtkMRMLScene.h>
-#include <vtkMRMLSegmentationNode.h>
+#include "vtkMRMLCoreTestingMacros.h"
+#include "vtkMRMLLiverResectionNode.h"
+#include "vtkMRMLModelNode.h"
+#include "vtkMRMLScene.h"
+
 
 // VTK includes
 #include <vtkNew.h>
-#include <vtkObjectFactory.h>
+#include <vtkType.h>
 
-//--------------------------------------------------------------------------------
-vtkMRMLNodeNewMacro(vtkMRMLLiverResectionNode);
-
-//--------------------------------------------------------------------------------
-vtkMRMLLiverResectionNode::vtkMRMLLiverResectionNode()
-  :Superclass(), TargetOrgan(nullptr), ResectionMargin(10.0),
-   Status(ResectionStatus::Initializing), Initialization(InitializationMode::Flat)
+//------------------------------------------------------------------------------
+int vtkMRMLLiverResectionNodeTest1(int, char *[])
 {
-}
+  vtkNew<vtkMRMLLiverResectionNode> node1;
+  vtkNew<vtkMRMLScene> scene;
 
-//----------------------------------------------------------------------------
-vtkMRMLLiverResectionNode::~vtkMRMLLiverResectionNode() = default;
+  EXERCISE_ALL_BASIC_MRML_METHODS(node1.GetPointer());
 
-//----------------------------------------------------------------------------
-void vtkMRMLLiverResectionNode::PrintSelf(ostream& os, vtkIndent indent)
-{
-  Superclass::PrintSelf(os,indent);
-}
+  TEST_SET_GET_DOUBLE_RANGE(node1, ResectionMargin, 1.0, VTK_DOUBLE_MAX);
 
-//----------------------------------------------------------------------------
-void vtkMRMLLiverResectionNode::CreateDefaultDisplayNodes()
-{
-  auto displayNode = this->GetDisplayNode();
-  auto mrmlScene = this->GetScene();
+  TEST_SET_GET_VALUE(node1, Status, vtkMRMLLiverResectionNode::Initializing);
+  TEST_SET_GET_VALUE(node1, Status, vtkMRMLLiverResectionNode::Deformation);
+  TEST_SET_GET_VALUE(node1, Status, vtkMRMLLiverResectionNode::Completed);
 
-  if (displayNode != nullptr &&
-    vtkMRMLMarkupsDisplayNode::SafeDownCast(displayNode) != nullptr)
-    {
-    // display node already exists
-    return;
-    }
+  vtkNew<vtkMRMLModelNode> modelNode;
+  auto modelNodePtr = modelNode.GetPointer();
 
-  if (mrmlScene == nullptr)
-    {
-    vtkErrorMacro("vtkMRMLLiverResectionNode::CreateDefaultDisplayNodes failed: scene is invalid");
-    return;
-    }
+  TEST_SET_GET_VALUE(node1, TargetOrgan, modelNodePtr);
 
-  vtkMRMLLiverResectionDisplayNode* dispNode =
-    vtkMRMLLiverResectionDisplayNode::SafeDownCast(mrmlScene->AddNewNodeByClass("vtkMRMLLiverResectionDisplayNode"));
-  if (!dispNode)
-    {
-    vtkErrorMacro("vtkMRMLLiverResectionNode::CreateDefaultDisplayNodes failed: unable to create vtkMRMLLiverResectionDisplayNode");
-    return;
-    }
-
-  this->SetAndObserveDisplayNodeID(dispNode->GetID());
+  return EXIT_SUCCESS;
 }
