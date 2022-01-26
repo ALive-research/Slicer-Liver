@@ -8,7 +8,7 @@ string(TOUPPER ${MODULE_NAME} MODULE_NAME_UPPER)
 #-----------------------------------------------------------------------------
 add_subdirectory(MRML)
 add_subdirectory(Logic)
-add_subdirectory(Widgets)
+#add_subdirectory(Widgets)
 
 #-----------------------------------------------------------------------------
 set(MODULE_EXPORT_DIRECTIVE "Q_SLICER_QTMODULES_${MODULE_NAME_UPPER}_EXPORT")
@@ -51,6 +51,6 @@ slicerMacroBuildLoadableModule(
   )
 
 #-----------------------------------------------------------------------------
-# if(BUILD_TESTING)
-#   add_subdirectory(Testing)
-# endif()
+if(BUILD_TESTING)
+  add_subdirectory(Testing)
+endif()
