@@ -31,12 +31,16 @@
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  This file was originally developed by Rafael Palomar (The Intervention Centre,
-  Oslo University Hospital) and was supported by The Research Council of Norway
+  This file was originally developed by Rafael Palomar (Oslo University,
+  Hospital and NTNU) and was supported by The Research Council of Norway
   through the ALive project (grant nr. 311393).
 
 ==============================================================================*/
+
+//NOTE: Some of the functions of this file are inspired in vtkSlicerMarkupsLogic
+
 #include "vtkSlicerLiverResectionsLogic.h"
+#include "vtkMRMLAbstractLogic.h"
 
 #include <vtkCommand.h>
 #include <vtkMRMLMarkupsSlicingContourNode.h>
@@ -44,7 +48,6 @@
 #include <vtkMRMLMarkupsDistanceContourNode.h>
 #include <vtkMRMLMarkupsDisplayNode.h>
 #include <vtkMRMLLiverResectionNode.h>
-#include <vtkMRMLLiverResectionDisplayNode.h>
 #include <vtkMRMLMarkupsBezierSurfaceNode.h>
 #include <vtkMRMLMarkupsBezierSurfaceDisplayNode.h>
 
@@ -56,6 +59,7 @@
 // VTK includes
 #include <vtkObjectFactory.h>
 #include <vtkCollection.h>
+#include <vtkSetGet.h>
 #include <vtkSmartPointer.h>
 #include <vtkIntArray.h>
 #include <vtkPlane.h>
@@ -92,27 +96,21 @@ void vtkSlicerLiverResectionsLogic::RegisterNodes()
 
   // Nodes
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLLiverResectionNode>::New());
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLLiverResectionDisplayNode>::New());
 }
 
 //---------------------------------------------------------------------------
 void vtkSlicerLiverResectionsLogic::SetMRMLSceneInternal(vtkMRMLScene * newScene)
 {
-  vtkNew<vtkIntArray> events;
-  events->InsertNextValue(vtkMRMLScene::NodeAddedEvent);
-  events->InsertNextValue(vtkMRMLScene::NodeRemovedEvent);
-  events->InsertNextValue(vtkMRMLScene::EndBatchProcessEvent);
-  this->SetAndObserveMRMLSceneEventsInternal(newScene, events.GetPointer());
+   vtkNew<vtkIntArray> events;
+   events->InsertNextValue(vtkMRMLScene::NodeAddedEvent);
+   events->InsertNextValue(vtkMRMLScene::NodeRemovedEvent);
+   events->InsertNextValue(vtkMRMLScene::EndBatchProcessEvent);
+   this->SetAndObserveMRMLSceneEventsInternal(newScene, events.GetPointer());
 }
 
 //---------------------------------------------------------------------------
 void vtkSlicerLiverResectionsLogic::ObserveMRMLScene()
 {
-  if (!this->GetMRMLScene())
-    {
-    return;
-    }
-
  this->Superclass::ObserveMRMLScene();
 }
 
@@ -141,7 +139,29 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
   auto bezierSurfaceNode = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(caller);
   if (bezierSurfaceNode && event == vtkCommand::StartInteractionEvent)
     {
-    this->HideInitialization(bezierSurfaceNode);
+    this->HideInitializationMarkup(bezierSurfaceNode);
+    auto resectionNode = this->GetResectionFromBezier(bezierSurfaceNode);
+    if (resectionNode)
+      {
+      MRMLNodeModifyBlocker blocker(resectionNode);
+      resectionNode->SetState(vtkMRMLLiverResectionNode::Deformation);
+      }
+    }
+
+  // Process resection node
+  auto resectionNode = vtkMRMLLiverResectionNode::SafeDownCast(caller);
+  if (resectionNode && event == vtkCommand::ModifiedEvent)
+    {
+    // Create the resection elements
+    if (this->ResectionToInitializationMap.find(resectionNode) == this->ResectionToInitializationMap.end())
+      {
+      this->CreateInitializationAndResectionMarkups(resectionNode);
+      }
+    auto bezierSurfaceNode = this->GetBezierFromResection(resectionNode);
+    if (bezierSurfaceNode)
+      {
+      bezierSurfaceNode->SetDistanceMap(resectionNode->GetDistanceMapVolume());
+      }
     }
 }
 
@@ -150,58 +170,92 @@ void vtkSlicerLiverResectionsLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
 {
   Superclass::OnMRMLSceneNodeAdded(node);
 
-  // check for nullptr
-  if (!node)
+  auto resectionNode = vtkMRMLLiverResectionNode::SafeDownCast(node);
+
+  // check for nullptr and target organ
+  if (!resectionNode)
     {
     return;
     }
 
-  // Check wether it is a relevant node to handle
-  vtkMRMLLiverResectionNode *resectionNode =
-    vtkMRMLLiverResectionNode::SafeDownCast(node);
-  if(!resectionNode)
+  // Add callbacks dealing with the modification of the resection node. Its
+  // modification may trigger changes on the underlying initialization/bezier status
+  vtkNew<vtkIntArray> resectionNodeEvents;
+  resectionNodeEvents->InsertNextValue(vtkCommand::ModifiedEvent);
+  vtkUnObserveMRMLNodeMacro(resectionNode);
+  vtkObserveMRMLNodeEventsMacro(resectionNode, resectionNodeEvents.GetPointer());
+
+  if (resectionNode->GetTargetOrganModel())
+    {
+    // Create resection initialization a surface markups.
+    this->CreateInitializationAndResectionMarkups(resectionNode);
+    }
+}
+
+//---------------------------------------------------------------------------
+void vtkSlicerLiverResectionsLogic::OnMRMLSceneNodeRemoved(vtkMRMLNode* node)
+{
+  auto resectionNode = vtkMRMLLiverResectionNode::SafeDownCast(node);
+
+  // check for nullptr and target organ
+  if (!resectionNode)
     {
     return;
     }
 
-  // Create the relevant initialization type
-  vtkMRMLMarkupsNode *initializationMarkupsNode;
-  switch(resectionNode->GetInitialization())
+  vtkMRMLMarkupsNode* initializationNode = nullptr;
+  vtkMRMLMarkupsBezierSurfaceNode* bezierSurfaceNode = nullptr;
+
+  auto riMapIt = this->ResectionToInitializationMap.find(resectionNode);
+  if (riMapIt != this->ResectionToInitializationMap.end())
     {
-    case vtkMRMLLiverResectionNode::Flat:
-      initializationMarkupsNode = this->AddResectionPlane(resectionNode);
-      break;
-
-    case vtkMRMLLiverResectionNode::Curved:
-      initializationMarkupsNode = this->AddResectionContour(resectionNode);
-      break;
+    initializationNode = riMapIt->second.GetPointer();
+    this->ResectionToInitializationMap.erase(riMapIt);
     }
-  initializationMarkupsNode->SetHideFromEditors(false);
-  initializationMarkupsNode->GetDisplayNode()->SetVisibility(true); // Initially visible
 
-  this->ResectionToInitializationMap[resectionNode] = initializationMarkupsNode;
-  this->InitializationToResectionMap[initializationMarkupsNode] = resectionNode;
+  auto irMapIt = this->InitializationToResectionMap.find(initializationNode);
+  if (irMapIt != this->InitializationToResectionMap.end())
+    {
+    this->InitializationToResectionMap.erase(irMapIt);
+    }
 
-  // Create the associated bezier surface
-  auto markupsBezierNode = this->AddBezierSurface(resectionNode);
-  markupsBezierNode->SetHideFromEditors(false);
-  markupsBezierNode->GetDisplayNode()->SetVisibility(false); // Initially hidden
+  auto rbMapIt = this->ResectionToBezierMap.find(resectionNode);
+  if (rbMapIt != this->ResectionToBezierMap.end())
+    {
+    bezierSurfaceNode = rbMapIt->second.GetPointer();
+    this->ResectionToBezierMap.erase(rbMapIt);
+    }
 
-  this->ResectionToBezierMap[resectionNode] = markupsBezierNode;
+  auto brMapIt = this->BezierToResectionMap.find(bezierSurfaceNode);
+  if (brMapIt != this->BezierToResectionMap.end())
+    {
+    resectionNode = brMapIt->second.GetPointer();
+    this->BezierToResectionMap.erase(brMapIt);
+    }
 
-  //Add callbacks dealing with the coordination of the resection representation,
-  //this is, whether the resection is visualized as contour, contour + bezier or
-  //bezier.
-  vtkNew<vtkIntArray> nodeEvents;
-  nodeEvents->InsertNextValue(vtkCommand::StartInteractionEvent);
-  nodeEvents->InsertNextValue(vtkCommand::EndInteractionEvent);
-  vtkUnObserveMRMLNodeMacro(markupsBezierNode);
-  vtkUnObserveMRMLNodeMacro(initializationMarkupsNode);
-  vtkObserveMRMLNodeEventsMacro(markupsBezierNode, nodeEvents.GetPointer());
-  vtkObserveMRMLNodeEventsMacro(initializationMarkupsNode, nodeEvents.GetPointer());
+  auto ibMapIt = this->InitializationToBezierMap.find(initializationNode);
+  if (ibMapIt != this->InitializationToBezierMap.end())
+    {
+    this->InitializationToBezierMap.erase(ibMapIt);
+    }
 
-  this->InitializationToBezierMap[initializationMarkupsNode] = markupsBezierNode;
-  this->BezierToInitializationMap[markupsBezierNode] = initializationMarkupsNode;
+  auto biMapIt = this->BezierToInitializationMap.find(bezierSurfaceNode);
+  if (biMapIt != this->BezierToInitializationMap.end())
+    {
+    this->BezierToInitializationMap.erase(biMapIt);
+    }
+
+  // NOTE: This is a workaround to "delete" the contour from visualization.
+  // A better option would be that the markup takes care of this.
+  this->HideBezierSurfaceMarkup(initializationNode);
+
+  vtkUnObserveMRMLNodeMacro(bezierSurfaceNode);
+  vtkUnObserveMRMLNodeMacro(initializationNode);
+
+  this->GetMRMLScene()->RemoveNode(bezierSurfaceNode);
+  this->GetMRMLScene()->RemoveNode(initializationNode);
+
+  Superclass::OnMRMLSceneNodeRemoved(node);
 }
 
 //---------------------------------------------------------------------------
@@ -215,13 +269,13 @@ vtkSlicerLiverResectionsLogic::AddResectionPlane(vtkMRMLLiverResectionNode *rese
       return nullptr;
     }
 
-  if (!resectionNode->GetTargetOrgan())
+  if (!resectionNode->GetTargetOrganModel())
     {
       vtkErrorMacro("Error in AddResectionPlane: invalid internal target parenchyma.");
       return nullptr;
     }
 
-  auto targetParenchymaPolyData = resectionNode->GetTargetOrgan()->GetPolyData();
+  auto targetParenchymaPolyData = resectionNode->GetTargetOrganModel()->GetPolyData();
   if (!targetParenchymaPolyData)
     {
       vtkErrorMacro("Error in AddResectionPlane: target liver model does not contain valid polydata.");
@@ -242,7 +296,7 @@ vtkSlicerLiverResectionsLogic::AddResectionPlane(vtkMRMLLiverResectionNode *rese
   slicingContourNode->CreateDefaultDisplayNodes();
   slicingContourNode->AddControlPoint(p1);
   slicingContourNode->AddControlPoint(p2);
-  slicingContourNode->SetTarget(resectionNode->GetTargetOrgan());
+  slicingContourNode->SetTarget(resectionNode->GetTargetOrganModel());
 
   auto slicingContourDisplayNode = vtkMRMLMarkupsSlicingContourDisplayNode::SafeDownCast(slicingContourNode->GetDisplayNode());
   if (!slicingContourDisplayNode)
@@ -273,26 +327,14 @@ vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLLiverResectionNode *re
     return nullptr;
     }
 
-  // if (!resectionNode->GetSegmentationNode())
-  //   {
-  //    vtkErrorMacro("Error in AddResectionContour: no valid segmentation node.");
-  //    return nullptr;
-  //   }
-
-  if (!resectionNode->GetTargetOrgan())
+  if (!resectionNode->GetTargetOrganModel())
     {
       vtkErrorMacro("Error in AddResectionContour: no valid target parenchyma node.");
       return nullptr;
     }
 
-  // if (resectionNode->GetTargetTumors().empty())
-  //   {
-  //     vtkErrorMacro("Error in AddResectionContour: no valid target tumor.");
-  //     return nullptr;
-  //   }
-
   // Computing the position of the initial points
-  const double *bounds = resectionNode->GetTargetOrgan()->GetPolyData()->GetBounds();
+  const double *bounds = resectionNode->GetTargetOrganModel()->GetPolyData()->GetBounds();
 
   auto p1 = vtkVector3d(bounds[0],(bounds[3]-bounds[2])/2.0, (bounds[5]-bounds[4])/2.0);
   auto p2 = vtkVector3d((bounds[1]-bounds[0])/2.0,(bounds[3]-bounds[2])/2.0, (bounds[5]-bounds[4])/2.0);
@@ -300,7 +342,7 @@ vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLLiverResectionNode *re
   auto distanceContourNode = vtkSmartPointer<vtkMRMLMarkupsDistanceContourNode>::New();
   distanceContourNode->AddControlPoint(p1);
   distanceContourNode->AddControlPoint(p2);
-  distanceContourNode->SetTarget(resectionNode->GetTargetOrgan());
+  distanceContourNode->SetTarget(resectionNode->GetTargetOrganModel());
 
   auto distanceContourDisplayNode = vtkSmartPointer<vtkMRMLMarkupsDisplayNode>::New();
   distanceContourDisplayNode->PropertiesLabelVisibilityOff();
@@ -348,61 +390,230 @@ vtkSlicerLiverResectionsLogic::AddBezierSurface(vtkMRMLLiverResectionNode *resec
       }
     }
 
+  markupsBezierSurfaceNode->SetHideFromEditors(false);
+
+  auto markupsBezierSurfaceDisplayNode = vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(markupsBezierSurfaceNode->GetDisplayNode());
+  if (markupsBezierSurfaceDisplayNode)
+    {
+    markupsBezierSurfaceDisplayNode->SetVisibility(false); // Initially hidden
+    markupsBezierSurfaceDisplayNode->SetSnapMode(vtkMRMLMarkupsDisplayNode::SnapModeUnconstrained);
+    }
+
   return markupsBezierSurfaceNode;
 }
 
 //------------------------------------------------------------------------------
-void vtkSlicerLiverResectionsLogic::HideBezierSurfaceMarkup(vtkMRMLMarkupsNode* initializationNode)
+vtkMRMLLiverResectionNode* vtkSlicerLiverResectionsLogic
+::GetResectionFromBezier(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const
 {
-  if (!initializationNode)
+  auto bezierToResection = this->BezierToResectionMap.find(markupsBezierNode);
+  if (bezierToResection == this->BezierToResectionMap.end())
     {
-    vtkErrorMacro("Error in HideBezierSurfaceMarkup: initialization node not valid");
-    return;
+    return nullptr;
     }
-
-  auto initializationToBezier= this->InitializationToBezierMap.find(initializationNode);
-
-  if (initializationToBezier == this->InitializationToBezierMap.end())
-    {
-    vtkErrorMacro("Error in HideBezierSurfaceMarkup: initialization does not have a corresponding bezier");
-    return;
-    }
-
-  auto bezierSurface = initializationToBezier->second;
-  if (!initializationToBezier->second)
-    {
-    vtkErrorMacro("Error in HideBezierSurfaceMarkup: initialization does not have a valid corresponding bezier");
-    return;
-    }
-
-  bezierSurface->GetDisplayNode()->SetVisibility(false);
+  return bezierToResection->second;
 }
 
 //------------------------------------------------------------------------------
-void vtkSlicerLiverResectionsLogic::HideInitialization(vtkMRMLMarkupsNode* bezierNode)
+vtkMRMLLiverResectionNode* vtkSlicerLiverResectionsLogic
+::GetResectionFromInitialization(vtkMRMLMarkupsNode* initializationNode) const
 {
-  if (!bezierNode)
+  auto initializationToResection = this->InitializationToResectionMap.find(initializationNode);
+  if (initializationToResection == this->InitializationToResectionMap.end())
     {
-    vtkErrorMacro("Error in HideBezierSurfaceMarkup: Bezier markups node is node not valid.");
-    return;
+    return nullptr;
     }
+  return initializationToResection->second;
+}
+//------------------------------------------------------------------------------
+vtkMRMLMarkupsNode* vtkSlicerLiverResectionsLogic
+::GetInitializationFromResection(vtkMRMLLiverResectionNode* resectionNode) const
+{
+  auto resectionToInitialization = this->ResectionToInitializationMap.find(resectionNode);
+  if (resectionToInitialization == this->ResectionToInitializationMap.end())
+    {
+    return nullptr;
+    }
+  return resectionToInitialization->second;
+}
 
-  auto BezierToInitialization= this->BezierToInitializationMap.find(bezierNode);
+//------------------------------------------------------------------------------
+vtkMRMLMarkupsBezierSurfaceNode* vtkSlicerLiverResectionsLogic
+::GetBezierFromResection(vtkMRMLLiverResectionNode* resectionNode) const
+{
+  auto resectionToBezier = this->ResectionToBezierMap.find(resectionNode);
+  if (resectionToBezier == this->ResectionToBezierMap.end())
+    {
+    return nullptr;
+    }
+  return resectionToBezier->second;
+}
 
+//------------------------------------------------------------------------------
+vtkMRMLMarkupsBezierSurfaceNode* vtkSlicerLiverResectionsLogic
+::GetBezierFromInitialization(vtkMRMLMarkupsNode *initializationNode) const
+{
+  auto initializationToBezier = this->InitializationToBezierMap.find(initializationNode);
+  if (initializationToBezier == this->InitializationToBezierMap.end())
+    {
+    return nullptr;
+    }
+  return initializationToBezier->second;
+}
+
+//------------------------------------------------------------------------------
+vtkMRMLMarkupsNode * vtkSlicerLiverResectionsLogic
+::GetInitializationFromBezier(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const
+{
+  auto BezierToInitialization = this->BezierToInitializationMap.find(markupsBezierNode);
   if (BezierToInitialization == this->BezierToInitializationMap.end())
     {
-    vtkErrorMacro("Error in HideBezierSurfaceMarkup: Bezier markups does not have a corresponding initialization.");
-    return;
+    return nullptr;
     }
+  return BezierToInitialization->second;
+}
 
-  auto initialization = BezierToInitialization->second;
-  if (!BezierToInitialization->second)
+//------------------------------------------------------------------------------
+void vtkSlicerLiverResectionsLogic::ShowBezierSurfaceMarkupFromResection(vtkMRMLLiverResectionNode* resectionNode) const
+{
+  auto bezierSurfaceNode = this->GetBezierFromResection(resectionNode);
+  if (!bezierSurfaceNode)
     {
-    vtkErrorMacro("Error in HideBezierSurfaceMarkup: Bezier does not have a valid corresponding initialization.");
     return;
     }
 
-  initialization->GetDisplayNode()->SetVisibility(false);
+  auto bezierSurfaceDisplayNode = bezierSurfaceNode->GetDisplayNode();
+  if (!bezierSurfaceDisplayNode)
+    {
+    return;
+    }
+
+  bezierSurfaceDisplayNode->VisibilityOn();
+}
+
+//------------------------------------------------------------------------------
+void vtkSlicerLiverResectionsLogic::HideBezierSurfaceMarkupFromResection(vtkMRMLLiverResectionNode* resectionNode) const
+{
+  auto bezierSurfaceNode = this->GetBezierFromResection(resectionNode);
+  if (!bezierSurfaceNode)
+    {
+    return;
+    }
+
+  auto bezierSurfaceDisplayNode = bezierSurfaceNode->GetDisplayNode();
+  if (!bezierSurfaceDisplayNode)
+    {
+    return;
+    }
+
+  bezierSurfaceDisplayNode->VisibilityOff();
+}
+
+//------------------------------------------------------------------------------
+void vtkSlicerLiverResectionsLogic::ShowInitializationMarkupFromResection(vtkMRMLLiverResectionNode* resectionNode) const
+{
+  auto initializationNode = this->GetInitializationFromResection(resectionNode);
+  if (!initializationNode)
+    {
+    return;
+    }
+
+  auto initializationDisplayNode = initializationNode->GetDisplayNode();
+  if (!initializationDisplayNode)
+    {
+    return;
+    }
+
+  initializationDisplayNode->VisibilityOn();
+}
+
+//------------------------------------------------------------------------------
+void vtkSlicerLiverResectionsLogic::HideInitializationMarkupFromResection(vtkMRMLLiverResectionNode* resectionNode) const
+{
+  auto initializationNode = this->GetInitializationFromResection(resectionNode);
+  if (!initializationNode)
+    {
+    return;
+    }
+
+  auto initializationDisplayNode = initializationNode->GetDisplayNode();
+  if (!initializationDisplayNode)
+    {
+    return;
+    }
+
+  initializationDisplayNode->VisibilityOff();
+}
+
+//------------------------------------------------------------------------------
+void vtkSlicerLiverResectionsLogic::ShowBezierSurfaceMarkup(vtkMRMLMarkupsNode* initializationNode) const
+{
+  auto bezierSurfaceNode = this->GetBezierFromInitialization(initializationNode);
+  if (!bezierSurfaceNode)
+    {
+    return;
+    }
+
+  auto bezierSurfaceDisplayNode = bezierSurfaceNode->GetDisplayNode();
+  if (!bezierSurfaceDisplayNode)
+    {
+    return;
+    }
+
+  bezierSurfaceDisplayNode->VisibilityOn();
+}
+
+//------------------------------------------------------------------------------
+void vtkSlicerLiverResectionsLogic::HideBezierSurfaceMarkup(vtkMRMLMarkupsNode* initializationNode) const
+{
+  auto bezierSurfaceNode = this->GetBezierFromInitialization(initializationNode);
+  if (!bezierSurfaceNode)
+    {
+    return;
+    }
+
+  auto bezierSurfaceDisplayNode = bezierSurfaceNode->GetDisplayNode();
+  if (bezierSurfaceDisplayNode)
+    {
+    return;
+    }
+
+  bezierSurfaceDisplayNode->VisibilityOff();
+}
+
+// TODO: These functions perhaps could be replaced by SetInitializationMarkupsVisibility(node, bool);
+//------------------------------------------------------------------------------
+void vtkSlicerLiverResectionsLogic::ShowInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const
+{
+  auto markupsInitializationNode = this->GetInitializationFromBezier(markupsBezierNode);
+  if (!markupsInitializationNode)
+    {
+    return;
+    }
+
+  auto markupsInitializationDisplayNode = markupsInitializationNode->GetDisplayNode();
+  if (!markupsInitializationDisplayNode)
+    {
+    return;
+    }
+
+  markupsInitializationDisplayNode->SetVisibility(false);
+}
+
+//------------------------------------------------------------------------------
+void vtkSlicerLiverResectionsLogic::HideInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const
+{
+  auto markupsInitializationNode = this->GetInitializationFromBezier(markupsBezierNode);
+  if (!markupsInitializationNode)
+    {
+    return;
+    }
+  auto markupsInitializationDisplayNode = markupsInitializationNode->GetDisplayNode();
+  if (!markupsInitializationDisplayNode)
+    {
+    return;
+    }
+  markupsInitializationDisplayNode->SetVisibility(false);
 }
 
 //------------------------------------------------------------------------------
@@ -432,7 +643,7 @@ void vtkSlicerLiverResectionsLogic::UpdateBezierWidgetOnInitialization(vtkMRMLMa
     }
 
   // Check for target organ model node
-  auto parenchymaModelNode = initializationToResection->second->GetTargetOrgan();
+  auto parenchymaModelNode = initializationToResection->second->GetTargetOrganModel();
   if (!parenchymaModelNode)
     {
     vtkErrorMacro("Error in UpdateBezierWidgetOnInitialization: resection node does not have a valid target organ.");
@@ -447,7 +658,6 @@ void vtkSlicerLiverResectionsLogic::UpdateBezierWidgetOnInitialization(vtkMRMLMa
     }
 
   auto controlPoints =  initializationNode->GetControlPoints();
-
 
   // This algorithm is based on NorMIT-Plan
   // https://github.com/TheInterventionCentre/NorMIT-Plan
@@ -601,4 +811,61 @@ void vtkSlicerLiverResectionsLogic::UpdateBezierWidgetOnInitialization(vtkMRMLMa
     }
 
   bezierDisplayNode->VisibilityOn();
+}
+
+//------------------------------------------------------------------------------
+vtkMRMLMarkupsNode* vtkSlicerLiverResectionsLogic::AddInitializationMarkupsNode(vtkMRMLLiverResectionNode* resectionNode) const
+{
+  vtkMRMLMarkupsNode* initializationMarkupsNode = nullptr;
+
+  switch(resectionNode->GetInitMode())
+    {
+    case vtkMRMLLiverResectionNode::Flat:
+      initializationMarkupsNode = this->AddResectionPlane(resectionNode);
+      break;
+
+    case vtkMRMLLiverResectionNode::Curved:
+      initializationMarkupsNode = this->AddResectionContour(resectionNode);
+      break;
+    }
+
+  if (!initializationMarkupsNode)
+    {
+    return nullptr;
+    }
+
+  initializationMarkupsNode->SetHideFromEditors(false);
+  initializationMarkupsNode->GetDisplayNode()->SetVisibility(true); // Initially visible
+
+  return initializationMarkupsNode;
+}
+
+//------------------------------------------------------------------------------
+void vtkSlicerLiverResectionsLogic::CreateInitializationAndResectionMarkups(vtkMRMLLiverResectionNode* resectionNode)
+{
+  // Create the relevant initialization node
+  vtkMRMLMarkupsNode *initializationMarkupsNode = this->AddInitializationMarkupsNode(resectionNode);
+
+  // Register the resection-initialization association
+  this->ResectionToInitializationMap[resectionNode] = initializationMarkupsNode;
+  this->InitializationToResectionMap[initializationMarkupsNode] = resectionNode;
+
+  // Create the associated bezier surface
+  vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode = this->AddBezierSurface(resectionNode);
+  this->ResectionToBezierMap[resectionNode] = markupsBezierNode;
+  this->BezierToResectionMap[markupsBezierNode] = resectionNode;
+
+  //Add callbacks dealing with the coordination of the resection representation,
+  //this is, whether the resection is visualized as contour, contour + bezier or
+  //bezier.
+  vtkNew<vtkIntArray> nodeEvents;
+  nodeEvents->InsertNextValue(vtkCommand::StartInteractionEvent);
+  nodeEvents->InsertNextValue(vtkCommand::EndInteractionEvent);
+  vtkUnObserveMRMLNodeMacro(markupsBezierNode);
+  vtkUnObserveMRMLNodeMacro(initializationMarkupsNode);
+  vtkObserveMRMLNodeEventsMacro(markupsBezierNode, nodeEvents.GetPointer());
+  vtkObserveMRMLNodeEventsMacro(initializationMarkupsNode, nodeEvents.GetPointer());
+
+  this->InitializationToBezierMap[initializationMarkupsNode] = markupsBezierNode;
+  this->BezierToInitializationMap[markupsBezierNode] = initializationMarkupsNode;
 }

@@ -31,8 +31,8 @@
 #   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 #   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-#   This file was originally developed by Rafael Palomar (The Intervention Centre,
-#   Oslo University Hospital) and was supported by The Research Council of Norway
+#   This file was originally developed by Rafael Palomar (Oslo University
+#   Hospital and NTNU) and was supported by The Research Council of Norway
 #   through the ALive project (grant nr. 311393).
 #
 # ==============================================================================
@@ -62,12 +62,12 @@ class Liver(ScriptedLoadableModule):
 
     self.parent.helpText = """
     This module offers tools for making liver resection plans in 3D liver models.
-""
-    This file was originally developed by Rafael Palomar, Oslo University
-    Hospital/NTNU, Ole Vegard Solberg, SINTEF, Geir Arne Tangen, SINTEF and
-    Javier Pérez de Frutos. This work was funded by The Research Council of
+    ""
+    This file was originally developed by Rafael Palomar (Oslo University
+    Hospital/NTNU), Ole Vegard Solberg (SINTEF) Geir Arne Tangen, SINTEF and
+    Javier Pérez de Frutos (SINTEF). This work was funded by The Research Council of
     Norway through the project ALive (grant nr. 311393).
-"""
+    """
 
     # Additional initialization step after application startup is complete
     slicer.app.connect("startupCompleted()", registerSampleData)
@@ -83,38 +83,63 @@ def registerSampleData():
   import SampleData
   iconsPath = os.path.join(os.path.dirname(__file__), 'Resources/Icons')
 
+  aliveDataURL ='https://github.com/alive-research/aliveresearchtestingdata/releases/download/'
+
   # Liver dataset
   SampleData.SampleDataLogic.registerCustomSampleDataSource(
-    category='Liver',
-    sampleName='LiverVolume000',
-    thumbnailFileName=os.path.join(iconsPath, 'LiverVolume000.png'),
-    uris='https://github.com/alive-research/aliveresearchtestingdata/releases/download/SHA256/5df79d9077b1cf2b746ff5cf9268e0bc4d440eb50fa65308b47bde094640458a',
-    fileNames='LiverVolume000.nrrd',
+    category ='Liver',
+    sampleName ='LiverVolume000',
+    thumbnailFileName = os.path.join(iconsPath, 'LiverVolume000.png'),
+    uris = aliveDataURL+'SHA256/5df79d9077b1cf2b746ff5cf9268e0bc4d440eb50fa65308b47bde094640458a',
+    fileNames ='LiverVolume000.nrrd',
     checksums = 'SHA256:5df79d9077b1cf2b746ff5cf9268e0bc4d440eb50fa65308b47bde094640458a',
-    nodeNames='LiverVolume000',
-    loadFileType='VolumeFile'
+    nodeNames ='LiverVolume000',
+    loadFileType ='VolumeFile'
   )
 
   SampleData.SampleDataLogic.registerCustomSampleDataSource(
-    category='Liver',
-    sampleName='LiverSegmentation000',
-    thumbnailFileName=os.path.join(iconsPath, 'LiverSegmentation000.png'),
-    uris='https://github.com/alive-research/aliveresearchtestingdata/releases/download/SHA256/56aa9ee4658904dfae5cca514f594fa6c5b490376514358137234e22d57452a4',
-    fileNames='LiverSegmentation000.seg.nrrd',
+    category ='Liver',
+    sampleName ='LiverSegmentation000',
+    thumbnailFileName = os.path.join(iconsPath, 'LiverSegmentation000.png'),
+    uris = aliveDataURL+'SHA256/56aa9ee4658904dfae5cca514f594fa6c5b490376514358137234e22d57452a4',
+    fileNames ='LiverSegmentation000.seg.nrrd',
     checksums = 'SHA256:56aa9ee4658904dfae5cca514f594fa6c5b490376514358137234e22d57452a4',
-    nodeNames='LiverSegmentation000',
-    loadFileType='SegmentationFile'
+    nodeNames ='LiverSegmentation000',
+    loadFileType = 'SegmentationFile'
   )
 
   SampleData.SampleDataLogic.registerCustomSampleDataSource(
     category='Liver',
-    sampleName='DistanceMap000',
-    thumbnailFileName=os.path.join(iconsPath, 'DistanceMap000.png'),
-    uris='https://github.com/alive-research/aliveresearchtestingdata/releases/download/SHA256/bc003e745c357f49a54b3ac843cd03b7724c3c6b4e35c793cc450875608880f2',
-    fileNames='DistanceMap000.nrrd',
+    sampleName = 'DistanceMap000',
+    thumbnailFileName = os.path.join(iconsPath, 'DistanceMap000.png'),
+    uris = aliveDataURL+'SHA256/bc003e745c357f49a54b3ac843cd03b7724c3c6b4e35c793cc450875608880f2',
+    fileNames = 'DistanceMap000.nrrd',
     checksums = 'SHA256:bc003e745c357f49a54b3ac843cd03b7724c3c6b4e35c793cc450875608880f2',
-    nodeNames='DistanceMap000',
-    loadFileType='VolumeFile'
+    nodeNames = 'DistanceMap000',
+    loadFileType = 'VolumeFile'
+  )
+
+  SampleData.SampleDataLogic.registerCustomSampleDataSource(
+    category = 'Liver',
+    sampleName = 'LiverModels000',
+    thumbnailFileName = os.path.join(iconsPath, 'LiverModels000.png'),
+    uris=[aliveDataURL+'SHA256/0985286b9fcd7ed21ba0d3051427c0cc9026ea93004f7732cf7e0fb2dfb99b65',
+          aliveDataURL+'SHA256/b09b791bd2b3fdc4fdcfae5f743b43b56f9741f3393f142ad68653d5c8febc2b',
+          aliveDataURL+'SHA256/e79add071630cd5155dfb29a38ac49aec8503eddc7442bb4602249129161d9fe',
+          aliveDataURL+'SHA256/87339e3f3d806c218c01dbaedcec029fcefb1bc78d3a707313151029c4fb83be'],
+    fileNames = ['HepaticModel000.vtk',
+                 'LiverModel000.vtk',
+                 'PortalModel.vtk',
+                 'Tumor1Model.vtk'],
+    checksums = ['SHA256:0985286b9fcd7ed21ba0d3051427c0cc9026ea93004f7732cf7e0fb2dfb99b65',
+                 'SHA256:b09b791bd2b3fdc4fdcfae5f743b43b56f9741f3393f142ad68653d5c8febc2b',
+                 'SHA256:e79add071630cd5155dfb29a38ac49aec8503eddc7442bb4602249129161d9fe',
+                 'SHA256:87339e3f3d806c218c01dbaedcec029fcefb1bc78d3a707313151029c4fb83be'],
+    nodeNames = ['HepaticModel000',
+                 'LiverModel000',
+                 'PortalModel',
+                 'Tumor1Model'],
+    loadFileType = ['ModelFile', 'ModelFile', 'ModelFile', 'ModelFile']
   )
 
 #
@@ -132,10 +157,21 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.logic = None
     self._uiLoader = loader = qt.QUiLoader()
 
+    # GUI elements for distance maps computation
     self.distanceCollapsibleButton = None
     self.tumorLabelMapSelector = None
     self.outputVolumeLabelMapSelector = None
     self.computeDistanceMapPushButton = None
+
+    # GUI elements for resections
+    self.resectionCollapsiblebutton = None
+    self.distanceMapSelector = None
+    self.liverModelSelector = None
+    self.resectionSelector = None
+    self.resectionMarginSpinBox = None
+
+    # Current resection
+    self.currentResectionNode = None
 
   def setup(self):
     """
@@ -152,13 +188,14 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       renderer = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers().GetFirstRenderer()
       renderer.UseFXAAOn()
 
-    # Instantiate and connect widgets ...
+    #
+    # Distance Maps Group
+    #
     path = os.path.join(os.path.dirname(__file__), 'Resources', 'UI','qSlicerDistanceMapsComputationWidget.ui')
     qfile = qt.QFile(path)
     qfile.open(qt.QFile.ReadOnly)
     distanceMapsWidget = self._uiLoader.load(qfile)
 
-    # Distance Maps Group
     self.distanceCollapsibleButton = slicer.util.findChild(widget=distanceMapsWidget, name='DistanceMapsCollapsibleButton')
     self.tumorLabelMapSelector = slicer.util.findChild(widget=self.distanceCollapsibleButton, name='TumorLabelMapComboBox')
     self.tumorLabelMapSelector.setMRMLScene(slicer.mrmlScene)
@@ -166,11 +203,67 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.outputVolumeLabelMapSelector.setMRMLScene(slicer.mrmlScene)
     self.computeDistanceMapPushButton = slicer.util.findChild(widget=self.distanceCollapsibleButton, name='ComputeDistanceMapsPushButton')
     self.computeDistanceMapPushButton.connect('clicked()', self.computeDistanceMapPushButtonClicked)
-
     self.layout.addWidget(distanceMapsWidget)
 
+    # Vascular Territories Group goes here!
+
+    #
+    # Resections Maps Group
+    #
+    path = os.path.join(os.path.dirname(__file__), 'Resources', 'UI','qSlicerResectionsWidget.ui')
+    qfile = qt.QFile(path)
+    qfile.open(qt.QFile.ReadOnly)
+    resectionsWidget = self._uiLoader.load(qfile)
+
+    self.resectionCollapsiblebutton = slicer.util.findChild(widget=resectionsWidget, name='ResectionsCollapsibleButton')
+    self.distanceMapSelector = slicer.util.findChild(widget=resectionsWidget, name='DistanceMapComboBox')
+    self.distanceMapSelector.setMRMLScene(slicer.mrmlScene)
+    self.distanceMapSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onResectionParametersChanged)
+    self.resectionSelector = slicer.util.findChild(widget=resectionsWidget, name='ResectionComboBox')
+    self.resectionSelector.setMRMLScene(slicer.mrmlScene)
+    self.resectionSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onResectionParametersChanged)
+    self.liverModelSelector = slicer.util.findChild(widget=resectionsWidget, name='LiverModelComboBox')
+    self.liverModelSelector.setMRMLScene(slicer.mrmlScene)
+    self.liverModelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onResectionParametersChanged)
+    self.resectionMarginSpinBox = slicer.util.findChild(widget=resectionsWidget, name='ResectionMarginSpinBox')
+    self.layout.addWidget(resectionsWidget)
+
+    # Add a spacer at the botton to keep the UI flowing from top to bottom
     spacerItem = qt.QSpacerItem(0,0, qt.QSizePolicy.Minimum, qt.QSizePolicy.MinimumExpanding)
     self.layout.addSpacerItem(spacerItem)
+
+  def onResectionParametersChanged(self):
+    """
+    This reassigns the resection node parameters according to the UI selectors
+    """
+
+    lvLogic = slicer.modules.liverresections.logic()
+
+    liverModelNode = self.liverModelSelector.currentNode()
+    resectionNode = self.resectionSelector.currentNode()
+    distanceMapNode = self.distanceMapSelector.currentNode()
+
+    if resectionNode is not None: # No resection, no business
+
+      if resectionNode is not self.currentResectionNode: # Same resection, no business
+
+        if self.currentResectionNode is not None: #No current resection, nothing to hide
+
+          if resectionNode.GetState()  == resectionNode.Initialization: # Show initialization
+            lvLogic.HideBezierSurfaceMarkupFromResection(self.currentResectionNode)
+            lvLogic.HideInitializationMarkupFromResection(self.currentResectionNode)
+            lvLogic.ShowInitializationMarkupFromResection(resectionNode)
+            lvLogic.ShowBezierSurfaceMarkupFromResection(resectionNode)
+
+          elif resectionNode.GetState() == resectionNode.Deformation: # Show bezier surface
+            lvLogic.HideInitializationMarkupFromResection(self.currentResectionNode)
+            lvLogic.HideBezierSurfaceMarkupFromResection(self.currentResectionNode)
+            lvLogic.ShowBezierSurfaceMarkupFromResection(resectionNode)
+
+        self.currentResectionNode = resectionNode
+
+      resectionNode.SetTargetOrganModel(liverModelNode)
+      resectionNode.SetDistanceMapVolume(distanceMapNode)
 
   def computeDistanceMapPushButtonClicked(self):
 

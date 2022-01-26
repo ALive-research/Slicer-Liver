@@ -41,6 +41,7 @@
 #include "vtkMRMLCoreTestingMacros.h"
 #include "vtkMRMLLiverResectionNode.h"
 #include "vtkMRMLModelNode.h"
+#include "vtkMRMLScalarVolumeNode.h"
 #include "vtkMRMLScene.h"
 
 
@@ -53,19 +54,28 @@ int vtkMRMLLiverResectionNodeTest1(int, char *[])
 {
   vtkNew<vtkMRMLLiverResectionNode> node1;
   vtkNew<vtkMRMLScene> scene;
+  vtkNew<vtkMRMLModelNode> modelNode;
+  vtkNew<vtkMRMLScalarVolumeNode> volumeNode;
 
   EXERCISE_ALL_BASIC_MRML_METHODS(node1.GetPointer());
 
+  // Test value setting/getting in resection margin
   TEST_SET_GET_DOUBLE_RANGE(node1, ResectionMargin, 1.0, VTK_DOUBLE_MAX);
 
-  TEST_SET_GET_VALUE(node1, Status, vtkMRMLLiverResectionNode::Initializing);
-  TEST_SET_GET_VALUE(node1, Status, vtkMRMLLiverResectionNode::Deformation);
-  TEST_SET_GET_VALUE(node1, Status, vtkMRMLLiverResectionNode::Completed);
+  // Test value setting/getting in resection state
+  TEST_SET_GET_VALUE(node1, State, vtkMRMLLiverResectionNode::Initialization);
+  TEST_SET_GET_VALUE(node1, State, vtkMRMLLiverResectionNode::Deformation);
+  TEST_SET_GET_VALUE(node1, State, vtkMRMLLiverResectionNode::Completed);
 
-  vtkNew<vtkMRMLModelNode> modelNode;
-  auto modelNodePtr = modelNode.GetPointer();
+  // Test value setting/getting in organ model
+  TEST_SET_GET_VALUE(node1, TargetOrganModel, modelNode.GetPointer());
 
-  TEST_SET_GET_VALUE(node1, TargetOrgan, modelNodePtr);
+  // Test value setting/getting in distance map
+  TEST_SET_GET_VALUE(node1, DistanceMapVolume, volumeNode.GetPointer());
+
+  // Test value setting/getting in distance map
+  TEST_SET_GET_VALUE(node1, InitMode, vtkMRMLLiverResectionNode::Flat);
+  TEST_SET_GET_VALUE(node1, InitMode, vtkMRMLLiverResectionNode::Curved);
 
   return EXIT_SUCCESS;
 }

@@ -38,8 +38,6 @@
 ==============================================================================*/
 
 #include "vtkMRMLLiverResectionNode.h"
-#include "vtkMRMLLiverResectionDisplayNode.h"
-
 // MRML includes
 #include <vtkMRMLScene.h>
 #include <vtkMRMLSegmentationNode.h>
@@ -53,8 +51,9 @@ vtkMRMLNodeNewMacro(vtkMRMLLiverResectionNode);
 
 //--------------------------------------------------------------------------------
 vtkMRMLLiverResectionNode::vtkMRMLLiverResectionNode()
-  :Superclass(), TargetOrgan(nullptr), ResectionMargin(10.0),
-   Status(ResectionStatus::Initializing), Initialization(InitializationMode::Flat)
+  :Superclass(), TargetOrganModel(nullptr), DistanceMapVolume(nullptr),
+   State(ResectionState::Initialization), InitMode(InitializationMode::Flat),
+   ResectionMargin(10.0)
 {
 }
 
@@ -68,31 +67,33 @@ void vtkMRMLLiverResectionNode::PrintSelf(ostream& os, vtkIndent indent)
 }
 
 //----------------------------------------------------------------------------
-void vtkMRMLLiverResectionNode::CreateDefaultDisplayNodes()
+bool vtkMRMLLiverResectionNode::SetInitializationControlPoints(vtkPoints* controlPoints)
 {
-  auto displayNode = this->GetDisplayNode();
-  auto mrmlScene = this->GetScene();
-
-  if (displayNode != nullptr &&
-    vtkMRMLMarkupsDisplayNode::SafeDownCast(displayNode) != nullptr)
+  if (!controlPoints || controlPoints->GetNumberOfPoints() < 2)
     {
-    // display node already exists
-    return;
+    return false;
     }
 
-  if (mrmlScene == nullptr)
+  this->InitializationControlPoints->SetPoint(0, controlPoints->GetPoint(0));
+  this->InitializationControlPoints->SetPoint(1, controlPoints->GetPoint(1));
+  this->Modified();
+
+  return true;
+}
+
+//----------------------------------------------------------------------------
+bool vtkMRMLLiverResectionNode::SetBezierSurfaceControlPoints(vtkPoints* controlPoints)
+{
+  if (!controlPoints || controlPoints->GetNumberOfPoints() < 16)
     {
-    vtkErrorMacro("vtkMRMLLiverResectionNode::CreateDefaultDisplayNodes failed: scene is invalid");
-    return;
+    return false;
     }
 
-  vtkMRMLLiverResectionDisplayNode* dispNode =
-    vtkMRMLLiverResectionDisplayNode::SafeDownCast(mrmlScene->AddNewNodeByClass("vtkMRMLLiverResectionDisplayNode"));
-  if (!dispNode)
+  for (int i=0; i<16; ++i)
     {
-    vtkErrorMacro("vtkMRMLLiverResectionNode::CreateDefaultDisplayNodes failed: unable to create vtkMRMLLiverResectionDisplayNode");
-    return;
+    this->InitializationControlPoints->SetPoint(i, controlPoints->GetPoint(i));
     }
+  this->Modified();
 
-  this->SetAndObserveDisplayNodeID(dispNode->GetID());
+  return true;
 }
