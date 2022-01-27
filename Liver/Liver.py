@@ -238,6 +238,20 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     parametersFormLayout.addRow("Output LabelMap: ", self.outputLabelMapSelector)
 
 
+    # Seed selector, same as used by Slicer-vmtk
+    self.seedFiducialsNodeSelector = slicer.qSlicerSimpleMarkupsWidget()
+    self.seedFiducialsNodeSelector.objectName = 'seedFiducialsNodeSelector'
+    self.seedFiducialsNodeSelector.toolTip = "Select initial endpoints for the Centerline."
+    self.seedFiducialsNodeSelector.setNodeBaseName("SeedPoint")
+    self.seedFiducialsNodeSelector.defaultNodeColor = qt.QColor(0, 255, 0)
+    #self.seedFiducialsNodeSelector.tableWidget().hide()
+    self.seedFiducialsNodeSelector.markupsSelectorComboBox().noneEnabled = False
+    self.seedFiducialsNodeSelector.markupsPlaceWidget().placeMultipleMarkups = slicer.qSlicerMarkupsPlaceWidget.ForcePlaceSingleMarkup
+    self.seedFiducialsNodeSelector.setMRMLScene( slicer.mrmlScene )
+    parametersFormLayout.addRow("Start point:", self.seedFiducialsNodeSelector)
+    self.parent.connect('mrmlSceneChanged(vtkMRMLScene*)',
+                            self.seedFiducialsNodeSelector, 'setMRMLScene(vtkMRMLScene*)')
+
     #
     # Add segment and Segments classificaion buttons
     #
@@ -286,6 +300,8 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                                                   self.onSegmentsClassificationClicked)
     self.addSegmentCenterline.connect("clicked()",
                                        self.onAddSegmentCenterlineClicked)
+
+    self.seedFiducialsNodeSelector.connect("markupsNodeChanged()", self.onSeedPointSelect)
 
     ########## BRANCH SPLITTING SINGALS ############
 
@@ -452,6 +468,10 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onSegmentsClassificationClicked(self):
     self.logic.doSegmentsClassification()
+
+  def onSeedPointSelect(self):
+      #print("onSeedPointSelect: ", self.seedFiducialsNodeSelector.currentNode())
+      print("onSeedPointSelect")
   ########## BRANCH SPLITTING SIGNALS FNCS ##########
 #
 # LiverLogic
