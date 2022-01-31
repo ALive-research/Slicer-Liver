@@ -15,9 +15,9 @@
     notice, this list of conditions and the following disclaimer in the
     documentation and/or other materials provided with the distribution.
 
-  * Neither the name of Kitware, Inc. nor the names of Contributors
-    may be used to endorse or promote products derived from this
-    software without specific prior written permission.
+  * Neither the name of Oslo University Hospital nor the names
+    of Contributors may be used to endorse or promote products derived
+    from this software without specific prior written permission.
 
   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
@@ -37,59 +37,32 @@
 
 ==============================================================================*/
 
-#ifndef qslicerliverresectionstableview_h_
-#define qslicerliverresectionstableview_h_
+// NOTE: This file is inspired in vtkSlicerMarkupsLogicTest1.cxx from 3D Slicer
 
-// Resections includes
-#include "qSlicerLiverResectionsModuleWidgetsExport.h"
+// MRML includes
+#include "vtkMRMLCoreTestingMacros.h"
+#include "vtkMRMLScene.h"
 
+// VTKSlicer includes
 #include "vtkSlicerLiverResectionsLogic.h"
 
-// MRMLWidgets includes
-#include <qMRMLWidget.h>
+// VTK includes
+#include <vtkNew.h>
+#include <vtkSmartPointer.h>
 
-// CTK includes
-#include <ctkPimpl.h>
-#include <ctkVTKObject.h>
+// STD includes
+#include <cstdlib>
 
-// Qt includes
-#include <QScopedPointer>
-
-//------------------------------------------------------------------------------
-class qSlicerLiverResectionsTableViewPrivate;
-
-//------------------------------------------------------------------------------
-class Q_SLICER_MODULE_LIVERRESECTIONS_WIDGETS_EXPORT qSlicerLiverResectionsTableView: public qMRMLWidget
+int vtkSlicerLiverResectionsLogicTest1(int, char * [])
 {
-  Q_OBJECT;
-  QVTK_OBJECT;
+  auto scene = vtkSmartPointer<vtkMRMLScene>::New();
 
-public:
-  using Superclass = qMRMLWidget;
+  vtkNew<vtkSlicerLiverResectionsLogic> logic1;
 
-  /// Constructor
-  explicit qSlicerLiverResectionsTableView(QWidget* parent = nullptr);
+  // Try to add a resection node with a valid scene
+  logic1->SetMRMLScene(scene);
 
-  /// Destructor
-  ~qSlicerLiverResectionsTableView() override;
+  // TODO: This tests need to be completed
 
-  /// Set MRML scene
-  void setMRMLScene(vtkMRMLScene* newScene) override;
-
-protected:
-  /// To prevent accidentally moving out of the widget when pressing up/down arrows
-  bool eventFilter(QObject* target, QEvent* event) override;
-
-  /// Handle context menu events
-  void contextMenuEvent(QContextMenuEvent* event) override;
-
-protected:
-  QScopedPointer<qSlicerLiverResectionsTableViewPrivate> d_ptr;
-
-private:
-  Q_DECLARE_PRIVATE(qSlicerLiverResectionsTableView);
-  Q_DISABLE_COPY(qSlicerLiverResectionsTableView);
-
-};
-
-#endif // qslicerliverresectionstableview_h_
+  return EXIT_SUCCESS;
+}

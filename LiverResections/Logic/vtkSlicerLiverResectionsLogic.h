@@ -31,8 +31,8 @@
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  This file was originally developed by Rafael Palomar (The Intervention Centre,
-  Oslo University Hospital) and was supported by The Research Council of Norway
+  This file was originally developed by Rafael Palomar (Oslo University
+  Hospital and NTNU) and was supported by The Research Council of Norway
   through the ALive project (grant nr. 311393).
 
 ==============================================================================*/
@@ -40,7 +40,6 @@
 #ifndef __vtkslicerlivermarkupslogic_h_
 #define __vtkslicerlivermarkupslogic_h_
 
-#include "vtkMRMLMarkupsLineNode.h"
 #include "vtkSlicerLiverResectionsModuleLogicExport.h"
 
 // Slicer include
@@ -53,9 +52,7 @@
 // STD include
 #include <map>
 
-//------------------------------------------------------------------------------
-class vtkMRMLModelNode;
-class vtkMRMLSegmentationNode;
+//j------------------------------------------------------------------------------
 class vtkMRMLLiverResectionNode;
 class vtkMRMLMarkupsNode;
 class vtkMRMLMarkupsDistanceContourNode;
@@ -71,22 +68,6 @@ public:
   vtkTypeMacro(vtkSlicerLiverResectionsLogic, vtkSlicerModuleLogic);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  /// States for resection
-  enum ResectionStatus
-  {
-    NotStarted,
-    InProgress,
-    Completed,
-    Flagged,
-    LastStatus
-  };
-
-  /// Types of initializations
-  enum InitializationType
-  {
-    SlicingContour,
-    DistanceContour
-  };
 
   void ProcessMRMLNodesEvents(vtkObject *caller,
                               unsigned long event,
@@ -104,6 +85,15 @@ public:
   /// Add a new resection using planar initialization
   vtkMRMLMarkupsSlicingContourNode* AddResectionPlane(vtkMRMLLiverResectionNode *resectionNode) const;
 
+  void ShowBezierSurfaceMarkupFromResection(vtkMRMLLiverResectionNode* resectionNode) const;
+  void HideBezierSurfaceMarkupFromResection(vtkMRMLLiverResectionNode* resectionNode) const;
+  void ShowInitializationMarkupFromResection(vtkMRMLLiverResectionNode* resectionNode) const;
+  void HideInitializationMarkupFromResection(vtkMRMLLiverResectionNode* resectionNode) const;
+  void ShowBezierSurfaceMarkup(vtkMRMLMarkupsNode* markupsInitializationNode) const;
+  void HideBezierSurfaceMarkup(vtkMRMLMarkupsNode* markupsInitializationNode) const;
+  void ShowInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const;
+  void HideInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const;
+
 protected:
   vtkSlicerLiverResectionsLogic();
   ~vtkSlicerLiverResectionsLogic() override;
@@ -111,13 +101,33 @@ protected:
 protected:
   void ObserveMRMLScene() override;
   void OnMRMLSceneNodeAdded(vtkMRMLNode* node) override;
-  void HideBezierSurfaceMarkup(vtkMRMLMarkupsNode* initializationNode);
-  void HideInitialization(vtkMRMLMarkupsNode* bezierNode);
-  void ShowBezierSurfaceMarkup(vtkMRMLMarkupsNode* initializationNode);
+  void OnMRMLSceneNodeRemoved(vtkMRMLNode* node) override;
   void UpdateBezierWidgetOnInitialization(vtkMRMLMarkupsNode* initializationNode);
+  void CreateInitializationAndResectionMarkups(vtkMRMLLiverResectionNode* resectionNode);
 
-  /// Add a bezier surface markup
+  /// This function returns a bezier surface node from a provided resection node
+  vtkMRMLLiverResectionNode* GetResectionFromBezier(vtkMRMLMarkupsBezierSurfaceNode* resectionNode) const;
+
+  /// This function returns a initialization surface node from a provided resection node
+  vtkMRMLLiverResectionNode* GetResectionFromInitialization(vtkMRMLMarkupsNode* resectionNode) const;
+
+  /// This function returns a bezier surface node from a provided resection node
+  vtkMRMLMarkupsBezierSurfaceNode* GetBezierFromResection(vtkMRMLLiverResectionNode* resectionNode) const;
+
+  /// This function returns an initialization node from a provided resection node
+  vtkMRMLMarkupsNode* GetInitializationFromResection(vtkMRMLLiverResectionNode* resectionNode) const;
+
+  /// This function returns a bezier surface node from a provided initialization node
+  vtkMRMLMarkupsBezierSurfaceNode* GetBezierFromInitialization(vtkMRMLMarkupsNode *initializationNode) const;
+
+  /// This function returns an initialization node from a provided bezier surface node
+  vtkMRMLMarkupsNode * GetInitializationFromBezier(vtkMRMLMarkupsBezierSurfaceNode* bezierNode) const;
+
+  /// Add a bezier surface markup and set the default properties
   vtkMRMLMarkupsBezierSurfaceNode* AddBezierSurface(vtkMRMLLiverResectionNode *resectionNode) const;
+
+  /// Add the initialization markup of the correct type associated to the provided resection node
+  vtkMRMLMarkupsNode* AddInitializationMarkupsNode(vtkMRMLLiverResectionNode* resectionNode) const;
 
 protected:
 
@@ -132,10 +142,13 @@ protected:
   std::map<vtkSmartPointer<vtkMRMLLiverResectionNode>,
            vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>> ResectionToBezierMap;
 
-  std::map<vtkWeakPointer<vtkMRMLMarkupsNode>,
-           vtkWeakPointer<vtkMRMLMarkupsNode>> InitializationToBezierMap;
+  std::map<vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>,
+           vtkSmartPointer<vtkMRMLLiverResectionNode>> BezierToResectionMap;
 
   std::map<vtkWeakPointer<vtkMRMLMarkupsNode>,
+           vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode>> InitializationToBezierMap;
+
+  std::map<vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode>,
            vtkWeakPointer<vtkMRMLMarkupsNode>> BezierToInitializationMap;
 
 private:

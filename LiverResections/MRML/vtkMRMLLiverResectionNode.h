@@ -45,10 +45,12 @@
 // MRML includes
 #include <vtkMRMLModelNode.h>
 #include <vtkMRMLSegmentationNode.h>
+#include <vtkMRMLScalarVolumeNode.h>
 
 //VTK includes
 #include <vtkWeakPointer.h>
 #include <vtkCollection.h>
+#include <vtkPoints.h>
 
 //STD includes
 #include <set>
@@ -56,17 +58,17 @@
 
 //-----------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
-: public vtkMRMLDisplayableNode
+: public vtkMRMLNode
 {
 public:
   static vtkMRMLLiverResectionNode* New();
-  vtkTypeMacro(vtkMRMLLiverResectionNode, vtkMRMLDisplayableNode);
+  vtkTypeMacro(vtkMRMLLiverResectionNode, vtkMRMLNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   // Possible resection states
-  enum ResectionStatus
+  enum ResectionState
     {
-      Initializing=0,
+      Initialization=0,
       Deformation,
       Completed
     };
@@ -89,12 +91,6 @@ public:
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLLiverResectionNode);
 
-  //--------------------------------------------------------------------------------
-  // MRMLDisplayNode methods
-  //--------------------------------------------------------------------------------
-  void CreateDefaultDisplayNodes() override;
-
-
   // TODO: Review the need for this further down the road
   /// Get target lesions identifiers
   // std::set<vtkMRMLModelNode*> GetTargetTumors() const {return this->TargetTumors;}
@@ -116,22 +112,58 @@ public:
   vtkSetClampMacro(ResectionMargin, double, 0.0, VTK_DOUBLE_MAX);
 
   // Get resection status
-  vtkGetMacro(Status, ResectionStatus);
+  vtkGetMacro(State, ResectionState);
   // Set resection status
-  vtkSetMacro(Status, ResectionStatus);
+  vtkSetMacro(State, ResectionState);
 
   // Get resection initialization
-  vtkGetMacro(Initialization, InitializationMode);
+  vtkGetMacro(InitMode, InitializationMode);
   // Set resection initialization
-  vtkSetMacro(Initialization, InitializationMode);
+  vtkSetMacro(InitMode, InitializationMode);
 
   // Get Target Organ
-  vtkMRMLModelNode *GetTargetOrgan() const
-  {return this->TargetOrgan;}
+  vtkMRMLModelNode *GetTargetOrganModel() const
+  {return this->TargetOrganModel;}
 
   // Set Target Organ
-  void SetTargetOrgan(vtkMRMLModelNode *targetOrgan)
-  {this->TargetOrgan = targetOrgan; this->Modified();}
+  void SetTargetOrganModel(vtkMRMLModelNode *targetOrgan)
+  {this->TargetOrganModel = targetOrgan; this->Modified();}
+
+  // Get Target Organ
+  vtkMRMLScalarVolumeNode*GetDistanceMapVolume() const
+  {return this->DistanceMapVolume;}
+
+  // Set Target Organ
+  void SetDistanceMapVolume(vtkMRMLScalarVolumeNode* distanceMapVolume)
+  {this->DistanceMapVolume = distanceMapVolume; this->Modified();}
+
+  /// This is a function to set the initialization control points as vtkPoints.
+  /// Since the expected number of points for the initialization is two, the
+  /// function requires at least two points in the vtkPoints provided; if more
+  /// points are provided, the points from 2nd onwards will be ignored. The
+  /// function returns true if thw points were set correctly, otherwise, it
+  /// returns false.
+  bool SetInitializationControlPoints(vtkPoints* controlPoints);
+
+  // Get initialization control points
+  vtkPoints const* GetInitializationPoints() const
+  {return const_cast<vtkPoints const*>(this->InitializationControlPoints.GetPointer());}
+
+  /// This is a function to set the bezier surface control points as vtkPoints.
+  /// Since the expected number of points for the bezier is 16, the function
+  /// requires at least 16 points in the vtkPoints provided; if more points are
+  /// provided, the points from 2nd onwards will be ignored. The function
+  /// returns true if thw points were set correctly, otherwise, it returns
+  /// false.
+  bool SetBezierSurfaceControlPoints(vtkPoints* controlPoints);
+
+  // Get bezier surface control points
+  vtkPoints const* GetBezierSurfacePoints() const
+  {return const_cast<vtkPoints const*>(this->InitializationControlPoints.GetPointer());}
+
+  // Get bezier control points
+  vtkPoints const* GetBezierPoints() const
+  {return const_cast<vtkPoints const*>(this->BezierSurfaceControlPoints.GetPointer());}
 
 protected:
   vtkMRMLLiverResectionNode();
@@ -142,10 +174,13 @@ private:
   // TODO: Review the need of this further down the road
   // std::set<vtkMRMLModelNode*> TargetTumors;
   // vtkWeakPointer<vtkMRMLSegmentationNode> SegmentationNode;
-  vtkWeakPointer<vtkMRMLModelNode> TargetOrgan;
-  ResectionStatus Status;
-  InitializationMode Initialization;
+  vtkWeakPointer<vtkMRMLModelNode> TargetOrganModel;
+  vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolume;
+  ResectionState State;
+  InitializationMode InitMode;
   double ResectionMargin; //Resection margin in mm
+  vtkNew<vtkPoints> InitializationControlPoints;
+  vtkNew<vtkPoints> BezierSurfaceControlPoints;
 
 private:
  vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);
