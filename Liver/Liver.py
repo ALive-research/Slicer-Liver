@@ -199,8 +199,10 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.distanceCollapsibleButton = slicer.util.findChild(widget=distanceMapsWidget, name='DistanceMapsCollapsibleButton')
     self.tumorLabelMapSelector = slicer.util.findChild(widget=self.distanceCollapsibleButton, name='TumorLabelMapComboBox')
     self.tumorLabelMapSelector.setMRMLScene(slicer.mrmlScene)
-    self.outputVolumeLabelMapSelector = slicer.util.findChild(widget=self.distanceCollapsibleButton, name='OutputVolumeComboBox')
-    self.outputVolumeLabelMapSelector.setMRMLScene(slicer.mrmlScene)
+    self.outputDistanceMapSelector = slicer.util.findChild(widget=self.distanceCollapsibleButton, name='OutputVolumeComboBox')
+    self.outputDistanceMapSelector.baseName = "DistanceMap"
+    self.outputDistanceMapSelector.addAttribute("vtkMRMLScalarVolumeNode", "DistanceMap", "True")
+    self.outputDistanceMapSelector.setMRMLScene(slicer.mrmlScene)
     self.computeDistanceMapPushButton = slicer.util.findChild(widget=self.distanceCollapsibleButton, name='ComputeDistanceMapsPushButton')
     self.computeDistanceMapPushButton.connect('clicked()', self.computeDistanceMapPushButtonClicked)
     self.layout.addWidget(distanceMapsWidget)
@@ -217,6 +219,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
 
     self.resectionCollapsiblebutton = slicer.util.findChild(widget=resectionsWidget, name='ResectionsCollapsibleButton')
     self.distanceMapSelector = slicer.util.findChild(widget=resectionsWidget, name='DistanceMapComboBox')
+    self.distanceMapSelector.addAttribute("vtkMRMLScalarVolumeNode", "DistanceMap", "True")
     self.distanceMapSelector.setMRMLScene(slicer.mrmlScene)
     self.distanceMapSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onResectionParametersChanged)
     self.resectionSelector = slicer.util.findChild(widget=resectionsWidget, name='ResectionComboBox')
@@ -268,7 +271,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
   def computeDistanceMapPushButtonClicked(self):
 
     tumorLabelMapNode = self.tumorLabelMapSelector.currentNode()
-    outputVolumeNode = self.outputVolumeLabelMapSelector.currentNode()
+    outputVolumeNode = self.outputDistanceMapSelector.currentNode()
 
     self.logic.computeDistanceMaps(tumorLabelMapNode, outputVolumeNode)
 
@@ -312,12 +315,14 @@ class LiverLogic(ScriptedLoadableModuleLogic):
 
   def computeDistanceMaps(self, tumorNode, outputNode):
 
-    import sitkUtils
-    import SimpleITK as sitk
-    image = sitkUtils.PullVolumeFromSlicer(tumorNode)
-    distance = sitk.SignedMaurerDistanceMap(image,False,False,True)
-    logging.debug("Computing Distance Map...")
-    sitkUtils.PushVolumeToSlicer(distance, targetNode = outputNode)
+    if outputNode is not None:
+      import sitkUtils
+      import SimpleITK as sitk
+      image = sitkUtils.PullVolumeFromSlicer(tumorNode)
+      distance = sitk.SignedMaurerDistanceMap(image,False,False,True)
+      logging.debug("Computing Distance Map...")
+      sitkUtils.PushVolumeToSlicer(distance, targetNode = outputNode)
+      outputNode.SetAttribute("DistanceMap", "True");
 
 #
 # LiverTest
@@ -348,7 +353,7 @@ class LiverTest(ScriptedLoadableModuleTest):
     liverWidget= slicer.modules.liver.widgetRepresentation()
     distanceCollapsibleButton = slicer.util.findChild(widget=liverWidget, name='DistanceMapsCollapsibleButton')
     tumorLabelMapSelector = slicer.util.findChild(widget=distanceCollapsibleButton, name='TumorLabelMapComboBox')
-    outputVolumeLabelMapSelector = slicer.util.findChild(widget=distanceCollapsibleButton, name='OutputVolumeComboBox')
+    outputDistanceMapSelector = slicer.util.findChild(widget=distanceCollapsibleButton, name='OutputVolumeComboBox')
     computeDistanceMapPushButton = slicer.util.findChild(widget=distanceCollapsibleButton, name='ComputeDistanceMapsPushButton')
 
     self.delayDisplay("Extracting tumor labelmap from segmentation")
@@ -361,6 +366,7 @@ class LiverTest(ScriptedLoadableModuleTest):
     outputVolume = slicer.vtkMRMLScalarVolumeNode()
     slicer.mrmlScene.AddNode(outputVolume)
     outputVolume.CreateDefaultDisplayNodes()
+    outputVolume.SetAttribute("DistanceMap", "True");
     volumeNode = slicer.util.getNode('LiverVolume000')
 
     segmentationNode = slicer.util.getNode('LiverSegmentation000')
@@ -375,7 +381,7 @@ class LiverTest(ScriptedLoadableModuleTest):
     self.delayDisplay("Computing distance map")
 
     tumorLabelMapSelector.setCurrentNode(labelNode)
-    outputVolumeLabelMapSelector.setCurrentNode(outputVolume)
+    outputDistanceMapSelector.setCurrentNode(outputVolume)
     computeDistanceMapPushButton.click()
 
     self.delayDisplay("Testing difference with groundtruth image")
