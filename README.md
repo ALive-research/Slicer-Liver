@@ -17,7 +17,7 @@ The extension is currently under development and will feature:
 - Geir Arne Tangen (SINTEF, Norway)
 - Javier Pérez de Frutos (SINTEF, Norway)
 
-Contact: [rafael.palomar@ous.no](mailto:rafael.palomar@ous-research.no "rafael.palomar at ous.no")
+Contact: [rafael.palomar@ous-research.no](mailto:rafael.palomar@ous-research.no)
 
 # License
 
