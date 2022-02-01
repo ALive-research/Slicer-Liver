@@ -28,7 +28,7 @@
         <item row="0" column="0">
          <widget class="QLabel" name="TumorNodeLabel">
           <property name="text">
-           <string>Tumor Labelmap:</string>
+           <string>Tumor Label Map:</string>
           </property>
          </widget>
         </item>
@@ -53,7 +53,7 @@
         <item row="1" column="0">
          <widget class="QLabel" name="OutputVolumeLabel">
           <property name="text">
-           <string>Output Volume:</string>
+           <string>Output Distance Map: </string>
           </property>
          </widget>
         </item>
