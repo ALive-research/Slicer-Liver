@@ -160,7 +160,8 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
     auto bezierSurfaceNode = this->GetBezierFromResection(resectionNode);
     if (bezierSurfaceNode)
       {
-      bezierSurfaceNode->SetDistanceMap(resectionNode->GetDistanceMapVolume());
+      bezierSurfaceNode->SetDistanceMapVolumeNode(resectionNode->GetDistanceMapVolumeNode());
+      bezierSurfaceNode->SetDistanceMargin(resectionNode->GetResectionMargin());
       }
     }
 }
@@ -185,7 +186,7 @@ void vtkSlicerLiverResectionsLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
   vtkUnObserveMRMLNodeMacro(resectionNode);
   vtkObserveMRMLNodeEventsMacro(resectionNode, resectionNodeEvents.GetPointer());
 
-  if (resectionNode->GetTargetOrganModel())
+  if (resectionNode->GetTargetOrganModelNode())
     {
     // Create resection initialization a surface markups.
     this->CreateInitializationAndResectionMarkups(resectionNode);
@@ -269,13 +270,13 @@ vtkSlicerLiverResectionsLogic::AddResectionPlane(vtkMRMLLiverResectionNode *rese
       return nullptr;
     }
 
-  if (!resectionNode->GetTargetOrganModel())
+  if (!resectionNode->GetTargetOrganModelNode())
     {
       vtkErrorMacro("Error in AddResectionPlane: invalid internal target parenchyma.");
       return nullptr;
     }
 
-  auto targetParenchymaPolyData = resectionNode->GetTargetOrganModel()->GetPolyData();
+  auto targetParenchymaPolyData = resectionNode->GetTargetOrganModelNode()->GetPolyData();
   if (!targetParenchymaPolyData)
     {
       vtkErrorMacro("Error in AddResectionPlane: target liver model does not contain valid polydata.");
@@ -296,7 +297,7 @@ vtkSlicerLiverResectionsLogic::AddResectionPlane(vtkMRMLLiverResectionNode *rese
   slicingContourNode->CreateDefaultDisplayNodes();
   slicingContourNode->AddControlPoint(p1);
   slicingContourNode->AddControlPoint(p2);
-  slicingContourNode->SetTarget(resectionNode->GetTargetOrganModel());
+  slicingContourNode->SetTarget(resectionNode->GetTargetOrganModelNode());
 
   auto slicingContourDisplayNode = vtkMRMLMarkupsSlicingContourDisplayNode::SafeDownCast(slicingContourNode->GetDisplayNode());
   if (!slicingContourDisplayNode)
@@ -327,14 +328,14 @@ vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLLiverResectionNode *re
     return nullptr;
     }
 
-  if (!resectionNode->GetTargetOrganModel())
+  if (!resectionNode->GetTargetOrganModelNode())
     {
       vtkErrorMacro("Error in AddResectionContour: no valid target parenchyma node.");
       return nullptr;
     }
 
   // Computing the position of the initial points
-  const double *bounds = resectionNode->GetTargetOrganModel()->GetPolyData()->GetBounds();
+  const double *bounds = resectionNode->GetTargetOrganModelNode()->GetPolyData()->GetBounds();
 
   auto p1 = vtkVector3d(bounds[0],(bounds[3]-bounds[2])/2.0, (bounds[5]-bounds[4])/2.0);
   auto p2 = vtkVector3d((bounds[1]-bounds[0])/2.0,(bounds[3]-bounds[2])/2.0, (bounds[5]-bounds[4])/2.0);
@@ -342,7 +343,7 @@ vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLLiverResectionNode *re
   auto distanceContourNode = vtkSmartPointer<vtkMRMLMarkupsDistanceContourNode>::New();
   distanceContourNode->AddControlPoint(p1);
   distanceContourNode->AddControlPoint(p2);
-  distanceContourNode->SetTarget(resectionNode->GetTargetOrganModel());
+  distanceContourNode->SetTarget(resectionNode->GetTargetOrganModelNode());
 
   auto distanceContourDisplayNode = vtkSmartPointer<vtkMRMLMarkupsDisplayNode>::New();
   distanceContourDisplayNode->PropertiesLabelVisibilityOff();
@@ -643,7 +644,7 @@ void vtkSlicerLiverResectionsLogic::UpdateBezierWidgetOnInitialization(vtkMRMLMa
     }
 
   // Check for target organ model node
-  auto parenchymaModelNode = initializationToResection->second->GetTargetOrganModel();
+  auto parenchymaModelNode = initializationToResection->second->GetTargetOrganModelNode();
   if (!parenchymaModelNode)
     {
     vtkErrorMacro("Error in UpdateBezierWidgetOnInitialization: resection node does not have a valid target organ.");

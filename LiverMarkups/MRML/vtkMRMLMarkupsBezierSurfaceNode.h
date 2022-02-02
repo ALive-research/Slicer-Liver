@@ -47,6 +47,7 @@
 #include <vtkMRMLModelNode.h>
 
 //VTK includes
+#include <vtkSetGet.h>
 #include <vtkWeakPointer.h>
 #include <vtkMRMLScalarVolumeNode.h>
 
@@ -78,12 +79,18 @@ public:
   const char* GetDefaultNodeNamePrefix() override {return "BS";}
 
   /// Set the distance map
-  void SetDistanceMap(vtkMRMLScalarVolumeNode* volumeNode)
+  void SetDistanceMapVolumeNode(vtkMRMLScalarVolumeNode* volumeNode)
   {this->DistanceMap = volumeNode; this->Modified();}
 
   /// Get the distance map
-  vtkMRMLScalarVolumeNode* GetDistanceMap() const
+  vtkMRMLScalarVolumeNode* GetDistanceMapVolumeNode() const
   {return this->DistanceMap;}
+
+  /// Get the distance map margin
+  vtkGetMacro(DistanceMargin, double);
+
+  /// Set the distance map margin
+  vtkSetMacro(DistanceMargin, double);
 
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLMarkupsBezierSurfaceNode);
@@ -97,6 +104,7 @@ protected:
 private:
  vtkWeakPointer<vtkMRMLModelNode> Target;
  vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMap;
+ double DistanceMargin;
 
 private:
  vtkMRMLMarkupsBezierSurfaceNode(const vtkMRMLMarkupsBezierSurfaceNode&);

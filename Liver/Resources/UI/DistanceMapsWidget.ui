@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>Form</class>
- <widget class="QWidget" name="Form">
+ <class>DistanceMapsComputationWidget</class>
+ <widget class="qMRMLWidget" name="DistanceMapsComputationWidget">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>603</width>
-    <height>509</height>
+    <width>622</width>
+    <height>168</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -20,7 +20,7 @@
       <string>Distance Maps Computation</string>
      </property>
      <property name="collapsed">
-      <bool>true</bool>
+      <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout">
       <item>
@@ -51,18 +51,21 @@
          </widget>
         </item>
         <item row="1" column="0">
-         <widget class="QLabel" name="OutputVolumeLabel">
+         <widget class="QLabel" name="OutputDistanceMapLabel">
           <property name="text">
            <string>Output Distance Map: </string>
           </property>
          </widget>
         </item>
         <item row="1" column="1">
-         <widget class="qMRMLNodeComboBox" name="OutputVolumeComboBox">
+         <widget class="qMRMLNodeComboBox" name="OutputDistanceMapNodeComboBox">
           <property name="nodeTypes">
            <stringlist>
             <string>vtkMRMLScalarVolumeNode</string>
            </stringlist>
+          </property>
+          <property name="baseName">
+           <string>DistanceMap</string>
           </property>
           <property name="editEnabled">
            <bool>false</bool>
@@ -76,6 +79,9 @@
       </item>
       <item>
        <widget class="QPushButton" name="ComputeDistanceMapsPushButton">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
         <property name="text">
          <string>Compute Distance Maps</string>
         </property>
@@ -83,6 +89,19 @@
       </item>
      </layout>
     </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>53</height>
+      </size>
+     </property>
+    </spacer>
    </item>
   </layout>
  </widget>
@@ -99,6 +118,12 @@
    <header>qMRMLNodeComboBox.h</header>
   </customwidget>
   <customwidget>
+   <class>qMRMLWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
    <class>ctkCollapsibleButton</class>
    <extends>QWidget</extends>
    <header>ctkCollapsibleButton.h</header>
@@ -106,5 +131,38 @@
   </customwidget>
  </customwidgets>
  <resources/>
- <connections/>
+ <connections>
+  <connection>
+   <sender>DistanceMapsComputationWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>OutputDistanceMapNodeComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>310</x>
+     <y>314</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>276</x>
+     <y>175</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>DistanceMapsComputationWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>TumorLabelMapComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>310</x>
+     <y>314</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>276</x>
+     <y>141</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
 </ui>

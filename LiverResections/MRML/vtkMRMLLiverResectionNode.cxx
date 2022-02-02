@@ -51,7 +51,7 @@ vtkMRMLNodeNewMacro(vtkMRMLLiverResectionNode);
 
 //--------------------------------------------------------------------------------
 vtkMRMLLiverResectionNode::vtkMRMLLiverResectionNode()
-  :Superclass(), TargetOrganModel(nullptr), DistanceMapVolume(nullptr),
+  :Superclass(), TargetOrganModelNode(nullptr), DistanceMapVolume(nullptr),
    State(ResectionState::Initialization), InitMode(InitializationMode::Flat),
    ResectionMargin(10.0)
 {
