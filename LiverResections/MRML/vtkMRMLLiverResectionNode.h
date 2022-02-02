@@ -122,19 +122,19 @@ public:
   vtkSetMacro(InitMode, InitializationMode);
 
   // Get Target Organ
-  vtkMRMLModelNode *GetTargetOrganModel() const
-  {return this->TargetOrganModel;}
+  vtkMRMLModelNode *GetTargetOrganModelNode() const
+  {return this->TargetOrganModelNode;}
 
   // Set Target Organ
-  void SetTargetOrganModel(vtkMRMLModelNode *targetOrgan)
-  {this->TargetOrganModel = targetOrgan; this->Modified();}
+  void SetTargetOrganModelNode(vtkMRMLModelNode *targetOrgan)
+  {this->TargetOrganModelNode = targetOrgan; this->Modified();}
 
   // Get Target Organ
-  vtkMRMLScalarVolumeNode*GetDistanceMapVolume() const
+  vtkMRMLScalarVolumeNode*GetDistanceMapVolumeNode() const
   {return this->DistanceMapVolume;}
 
   // Set Target Organ
-  void SetDistanceMapVolume(vtkMRMLScalarVolumeNode* distanceMapVolume)
+  void SetDistanceMapVolumeNode(vtkMRMLScalarVolumeNode* distanceMapVolume)
   {this->DistanceMapVolume = distanceMapVolume; this->Modified();}
 
   /// This is a function to set the initialization control points as vtkPoints.
@@ -174,7 +174,7 @@ private:
   // TODO: Review the need of this further down the road
   // std::set<vtkMRMLModelNode*> TargetTumors;
   // vtkWeakPointer<vtkMRMLSegmentationNode> SegmentationNode;
-  vtkWeakPointer<vtkMRMLModelNode> TargetOrganModel;
+  vtkWeakPointer<vtkMRMLModelNode> TargetOrganModelNode;
   vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolume;
   ResectionState State;
   InitializationMode InitMode;

@@ -10,9 +10,9 @@ set(MODULE_PYTHON_RESOURCES
   Resources/Icons/${MODULE_NAME}.png
   Resources/Icons/LiverVolume000.png
   Resources/Icons/LiverSegmentation000.png
-  Resources/Icons/LiverModels000.png
-  Resources/UI/qSlicerDistanceMapsComputationWidget.ui
-  Resources/UI/qSlicerResectionsWidget.ui
+  Resources/Icons/DistanceMap000.png
+  Resources/UI/ResectionsWidget.ui
+  Resources/UI/DistanceMapsWidget.ui
   )
 
 #-----------------------------------------------------------------------------

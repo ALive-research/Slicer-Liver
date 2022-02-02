@@ -150,11 +150,11 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
   this->ControlPolygonActor->SetProperty(this->GetControlPointsPipeline(controlPointType)->Property);
 
   // Update the distance map as 3D texture (if changed)
-  auto distanceMap = liverMarkupsBezierSurfaceNode->GetDistanceMap();
+  auto distanceMap = liverMarkupsBezierSurfaceNode->GetDistanceMapVolumeNode();
   if ( this->DistanceMap != distanceMap)
     {
     auto renderWindow = vtkOpenGLRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
-    if (renderWindow)
+    if (renderWindow && distanceMap)
       {
       this->DistanceMapTexture->SetContext(renderWindow);
       this->DistanceMap = distanceMap;
@@ -228,7 +228,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
         "//VTK::Color::Impl", true,
         "//VTK::Color::Impl\n"
         "float dist = texture(distanceTexture, fragPositionMC.xyz).r;\n"
-        "  if(dist<20){\n"
+        "  if(dist<margin){\n"
         "     ambientColor = vec3(1.0, 1.0, 0.0);\n"
         "     diffuseColor = vec3(0.0, 0.0, 0.0);\n"
         "  }\n"
@@ -262,6 +262,9 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
   vertexUniforms->SetUniformMatrix("shiftScale", this->VBOShiftScale);
   vertexUniforms->SetUniformMatrix("rasToIjk", rasToIjk);
   vertexUniforms->SetUniformMatrix("ijkToTexture", ijkToTexture);
+
+  auto fragmentUniforms = shaderProperty->GetFragmentCustomUniforms();
+  fragmentUniforms->SetUniformf("margin", static_cast<float>(liverMarkupsBezierSurfaceNode->GetDistanceMargin()));
 
   this->NeedToRenderOn();
 }

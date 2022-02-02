@@ -68,14 +68,15 @@ int vtkMRMLLiverResectionNodeTest1(int, char *[])
   TEST_SET_GET_VALUE(node1, State, vtkMRMLLiverResectionNode::Completed);
 
   // Test value setting/getting in organ model
-  TEST_SET_GET_VALUE(node1, TargetOrganModel, modelNode.GetPointer());
+  TEST_SET_GET_VALUE(node1, TargetOrganModelNode, modelNode.GetPointer());
 
   // Test value setting/getting in distance map
-  TEST_SET_GET_VALUE(node1, DistanceMapVolume, volumeNode.GetPointer());
+  TEST_SET_GET_VALUE(node1, DistanceMapVolumeNode, volumeNode.GetPointer());
 
   // Test value setting/getting in distance map
   TEST_SET_GET_VALUE(node1, InitMode, vtkMRMLLiverResectionNode::Flat);
   TEST_SET_GET_VALUE(node1, InitMode, vtkMRMLLiverResectionNode::Curved);
+  // Test value setting/getting in distance map
 
   return EXIT_SUCCESS;
 }
