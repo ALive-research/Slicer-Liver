@@ -81,16 +81,8 @@ void vtkSlicerLiverMarkupsLogic::PrintSelf(ostream& os, vtkIndent indent)
 //-----------------------------------------------------------------------------
 void vtkSlicerLiverMarkupsLogic::RegisterNodes()
 {
-  assert(this->GetMRMLScene() != nullptr);
-
-  vtkMRMLScene *scene = this->GetMRMLScene();
-
-  // Nodes
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsSlicingContourNode>::New());
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsDistanceContourNode>::New());
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>::New());
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceDisplayNode>::New());
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsSlicingContourDisplayNode>::New());
+  // Markups nodes are registerd by vtkSlicerMarkupsLogic::RegisterMarkupsNode
+  // called in the module class
 }
 
 //---------------------------------------------------------------------------
