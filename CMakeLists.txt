@@ -6,7 +6,7 @@ project(SlicerLiver)
 # Extension meta-information
 set(EXTENSION_HOMEPAGE "https://www.slicer.org/wiki/Documentation/Nightly/Extensions/SlicerLiver")
 set(EXTENSION_CATEGORY "Liver")
-set(EXTENSION_CONTRIBUTORS "Rafael Palomar (Oslo University Hospital / NTNU), Ole Vegard Solberg (SINTEF), Geir Arne Tangen (SINTEF), Javier Pérez de Frutos (SINTEF)")
+set(EXTENSION_CONTRIBUTORS "Rafael Palomar (Oslo University Hospital / NTNU), Egidijus Pelanis (Oslo University Hospital), Davit Aghayan (Oslo University Hospital), Gabriella D'Albenzio (Oslo University Hospital) Ole Vegard Solberg (SINTEF), Geir Arne Tangen (SINTEF), Javier Pérez de Frutos (SINTEF)")
 set(EXTENSION_DESCRIPTION "3D Slicer extension for liver analysis and therapy planning")
 set(EXTENSION_ICONURL "http://www.slicer.org/slicerWiki/images/f/ff/SlicerLiver.png")
 set(EXTENSION_SCREENSHOTURLS "http://www.slicer.org/slicerWiki/images/a/ae/BasicLiverResection.png")
