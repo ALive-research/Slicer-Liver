@@ -146,7 +146,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     resectionsUI= slicer.util.loadUI(self.resourcePath('UI/ResectionsWidget.ui'))
     resectionsUI.setMRMLScene(slicer.mrmlScene)
 
-    segmentsUI= slicer.util.loadUI(self.resourcePath('UI/segments.ui'))
+    segmentsUI= slicer.util.loadUI(self.resourcePath('UI/SegmentsWidget.ui'))
     segmentsUI.setMRMLScene(slicer.mrmlScene)
 
     self.layout.addWidget(distanceMapsUI)
