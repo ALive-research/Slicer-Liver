@@ -120,15 +120,15 @@ void vtkSlicerDistanceContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* calle
    auto shift = VBO->GetShift();
 
    float externalPointPositionScaled[4] = {
-     (point1Position[0] - shift[0]) * scale[0],
-     (point1Position[1] - shift[1]) * scale[1],
-     (point1Position[2] - shift[2]) * scale[2],
+     static_cast<float>((point1Position[0] - shift[0]) * scale[0]),
+     static_cast<float>((point1Position[1] - shift[1]) * scale[1]),
+     static_cast<float>((point1Position[2] - shift[2]) * scale[2]),
      1.0f};
 
    float referencePointPositionScaled[4] = {
-     (point2Position[0] - shift[0]) * scale[0],
-     (point2Position[1] - shift[1]) * scale[1],
-     (point2Position[2] - shift[2]) * scale[2],
+     static_cast<float>((point2Position[0] - shift[0]) * scale[0]),
+     static_cast<float>((point2Position[1] - shift[1]) * scale[1]),
+     static_cast<float>((point2Position[2] - shift[2]) * scale[2]),
      1.0f};
 
    auto actor = vtkActor::SafeDownCast(this->ShaderHelper->GetTargetActors()->GetItemAsObject(index));
