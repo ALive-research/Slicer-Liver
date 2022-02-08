@@ -146,11 +146,16 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     resectionsUI= slicer.util.loadUI(self.resourcePath('UI/ResectionsWidget.ui'))
     resectionsUI.setMRMLScene(slicer.mrmlScene)
 
+    segmentsUI= slicer.util.loadUI(self.resourcePath('UI/segments.ui'))
+    segmentsUI.setMRMLScene(slicer.mrmlScene)
+
     self.layout.addWidget(distanceMapsUI)
     self.layout.addWidget(resectionsUI)
+    self.layout.addWidget(segmentsUI)
 
     self.distanceMapsWidget = slicer.util.childWidgetVariables(distanceMapsUI)
     self.resectionsWidget = slicer.util.childWidgetVariables(resectionsUI)
+    self.segmentsWidget = slicer.util.childWidgetVariables(segmentsUI)
 
     # Add a spacer at the botton to keep the UI flowing from top to bottom
     spacerItem = qt.QSpacerItem(0,0, qt.QSizePolicy.Minimum, qt.QSizePolicy.MinimumExpanding)
