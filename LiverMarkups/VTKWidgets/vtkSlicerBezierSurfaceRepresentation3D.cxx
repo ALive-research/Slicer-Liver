@@ -228,7 +228,11 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
         "//VTK::Color::Impl", true,
         "//VTK::Color::Impl\n"
         "float dist = texture(distanceTexture, fragPositionMC.xyz).r;\n"
-        "  if(dist<margin){\n"
+        "  if(dist<margin-uncertainty){\n"
+        "     ambientColor = vec3(1.0, 0.0, 0.0);\n"
+        "     diffuseColor = vec3(0.0, 0.0, 0.0);\n"
+        "  }\n"
+        "  else if(dist<margin+uncertainty){\n"
         "     ambientColor = vec3(1.0, 1.0, 0.0);\n"
         "     diffuseColor = vec3(0.0, 0.0, 0.0);\n"
         "  }\n"
@@ -256,7 +260,6 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
     scaling->GetTranspose(ijkToTexture);
     }
 
-
   // this->BezierSurfaceActor->GetKeyMatrices(mcwc, anorms);
   auto vertexUniforms= shaderProperty->GetVertexCustomUniforms();
   vertexUniforms->SetUniformMatrix("shiftScale", this->VBOShiftScale);
@@ -265,6 +268,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
 
   auto fragmentUniforms = shaderProperty->GetFragmentCustomUniforms();
   fragmentUniforms->SetUniformf("margin", static_cast<float>(liverMarkupsBezierSurfaceNode->GetDistanceMargin()));
+  fragmentUniforms->SetUniformf("uncertainty", static_cast<float>(liverMarkupsBezierSurfaceNode->GetUncertaintyMargin()));
 
   this->NeedToRenderOn();
 }
