@@ -62,6 +62,25 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsBezierSurfaceDisp
   /// Get node XML tag name (like Volume, Markups)
   const char* GetNodeTagName() override { return "MarkupsBezierSurfaceDisplay"; };
 
+  // Set the clipout state variable
+  vtkSetMacro(ClipOut, bool);
+
+  // Get the clipout state variable
+  vtkGetMacro(ClipOut, bool);
+
+  //--------------------------------------------------------------------------
+  // MarkupsBezierSurfaceDisplay methods
+  //--------------------------------------------------------------------------
+  // Get the clipout state variable as integer
+  int GetClipOut() const
+  { return static_cast<int>(this->ClipOut);}
+
+  void SetClipOut(int value)
+  { this->ClipOut = value!=0?1:0; this->Modified();}
+
+protected:
+  bool ClipOut;
+
 protected:
   vtkMRMLMarkupsBezierSurfaceDisplayNode();
   ~vtkMRMLMarkupsBezierSurfaceDisplayNode() override;

@@ -92,10 +92,10 @@ public:
   /// Set the distance map margin
   vtkSetMacro(DistanceMargin, double);
 
-  /// Set the distance map margin
+  /// Set the uncertainty margin
   vtkSetMacro(UncertaintyMargin, double);
 
-  /// Set the distance map margin
+  /// Set the uncertainty margin
   vtkGetMacro(UncertaintyMargin, double);
 
   /// \sa vtkMRMLNode::CopyContent

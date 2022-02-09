@@ -48,7 +48,7 @@ vtkMRMLNodeNewMacro(vtkMRMLMarkupsBezierSurfaceDisplayNode);
 
 //----------------------------------------------------------------------------
 vtkMRMLMarkupsBezierSurfaceDisplayNode::vtkMRMLMarkupsBezierSurfaceDisplayNode()
-  :Superclass()
+  :ClipOut(false)
 {
 }
 
