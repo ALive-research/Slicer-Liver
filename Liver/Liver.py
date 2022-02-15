@@ -61,7 +61,7 @@ class Liver(ScriptedLoadableModule):
     self.parent.contributors = ["Rafael Palomar (Oslo University Hospital / NTNU)"]
 
     self.parent.helpText = """
-    This module offers tools for making liver resection plans in 3D liver models.
+    This module offers tools for computing liver resection plans in 3D liver models.
     ""
     This file was originally developed by Rafael Palomar (Oslo University
     Hospital/NTNU), Ole Vegard Solberg (SINTEF) Geir Arne Tangen, SINTEF and
@@ -167,6 +167,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
 
     # Connections
     self.distanceMapsWidget.TumorLabelMapComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
+    self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
+    self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.distanceMapsWidget.OutputDistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
     self.distanceMapsWidget.OutputDistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.connect('clicked(bool)', self.onComputeDistanceMapButtonClicked)
@@ -176,12 +178,14 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'Computed', 'True')
     self.resectionsWidget.LiverModelNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionLiverModelNodeChanged)
     self.resectionsWidget.ResectionMarginSpinBox.connect('valueChanged(double)', self.onResectionMarginChanged)
+    self.resectionsWidget.ResectionLockCheckBox.connect('stateChanged(int)', self.onResectionLockChanged)
 
   def onDistanceMapParameterChanged(self):
 
     node1 = self.distanceMapsWidget.TumorLabelMapComboBox.currentNode()
-    node2 = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
-    self.distanceMapsWidget.ComputeDistanceMapsPushButton.setEnabled(node1 is not None and node2 is not None)
+    node2 = self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.currentNode()
+    node3 = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
+    self.distanceMapsWidget.ComputeDistanceMapsPushButton.setEnabled(None not in [node1, node2, node3])
 
   def onResectionNodeChanged(self):
     """
@@ -245,15 +249,25 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     if self._currentResectionNode is not None:
       self._currentResectionNode.SetResectionMargin(self.resectionsWidget.ResectionMarginSpinBox.value)
 
+  def onResectionLockChanged(self):
+    """
+    This function is called when the resection margin spinbox changes.
+    """
+    if self._currentResectionNode is not None:
+      self._currentResectionNode.SetClipOut(self.resectionsWidget.ResectionLockCheckBox.isChecked())
+
   def onComputeDistanceMapButtonClicked(self):
+    """
+    This function is called when the distance map calculation button is pressed
+    """
 
     tumorLabelMapNode = self.distanceMapsWidget.TumorLabelMapComboBox.currentNode()
+    parenchymaLabelMapNode = self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.currentNode()
     outputVolumeNode = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
 
-    slicer.util.showStatusMessage('Computing distance map...')
     slicer.app.pauseRender()
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
-    self.logic.computeDistanceMaps(tumorLabelMapNode, outputVolumeNode)
+    self.logic.computeDistanceMaps(tumorLabelMapNode, parenchymaLabelMapNode, outputVolumeNode)
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
     slicer.util.showStatusMessage('')
@@ -296,17 +310,27 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     """
     ScriptedLoadableModuleLogic.__init__(self)
 
-  def computeDistanceMaps(self, tumorNode, outputNode):
+  def computeDistanceMaps(self, tumorNode, parenchymaNode, outputNode):
 
     if outputNode is not None:
       import sitkUtils
       import SimpleITK as sitk
-      image = sitkUtils.PullVolumeFromSlicer(tumorNode)
-      distance = sitk.SignedMaurerDistanceMap(image,False,False,True)
-      logging.debug("Computing Distance Map...")
-      sitkUtils.PushVolumeToSlicer(distance, targetNode = outputNode)
-      outputNode.SetAttribute('DistanceMap', "True");
-      outputNode.SetAttribute('Computed', "True");
+
+      # # Compute tumor distance map
+      # tumorImage = sitkUtils.PullVolumeFromSlicer(tumorNode)
+      # tumorDistanceImage = sitk.SignedMaurerDistanceMap(tumorImage,False,False,True)
+      # logging.debug("Computing Tumor Distance Map...")
+
+      # # Compute tumor distance map
+      # parenchymaImage = sitkUtils.PullVolumeFromSlicer(parenchymaNode)
+      # parenchymaDistanceImage = sitk.SignedMaurerDistanceMap(parenchymaImage,False,False,True)
+      # logging.debug("Computing Parenchyma Distance Map...")
+
+      #Combine distance maps
+      # compositeDistanceMap = sitk.Compose(tumorDistanceImage,parenchymaDistanceImage)
+      # sitkUtils.PushVolumeToSlicer(compositeDistanceMap, targetNode = outputNode, className='vtkMRMLVectorVolumeNode')
+      # outputNode.SetAttribute('DistanceMap', "True");
+      # outputNode.SetAttribute('Computed', "True");
 
 #
 # LiverTest

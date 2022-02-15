@@ -6,14 +6,14 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>587</width>
+    <width>485</width>
     <height>731</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_2">
+  <layout class="QVBoxLayout" name="verticalLayout_4">
    <item>
     <widget class="qMRMLCollapsibleButton" name="ResectionsCollapsibleButton">
      <property name="text">
@@ -60,7 +60,7 @@
         <property name="title">
          <string>Resection Parameters:</string>
         </property>
-        <layout class="QVBoxLayout" name="verticalLayout">
+        <layout class="QVBoxLayout" name="verticalLayout_2">
          <item>
           <layout class="QFormLayout" name="formLayout">
            <item row="0" column="0">
@@ -109,7 +109,7 @@
              </property>
              <property name="nodeTypes">
               <stringlist>
-               <string>vtkMRMLScalarVolumeNode</string>
+               <string>vtkMRMLVectorVolumeNode</string>
               </stringlist>
              </property>
              <property name="addEnabled">
@@ -155,19 +155,67 @@
             </layout>
            </item>
            <item>
-            <spacer name="horizontalSpacer">
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>40</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
+            <layout class="QFormLayout" name="formLayout_5">
+             <item row="0" column="0">
+              <widget class="QLabel" name="ResectionLockLabel">
+               <property name="text">
+                <string>Lock resection:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="ctkCheckBox" name="ResectionLockCheckBox">
+               <property name="tristate">
+                <bool>false</bool>
+               </property>
+              </widget>
+             </item>
+            </layout>
            </item>
           </layout>
+         </item>
+         <item>
+          <widget class="ctkCollapsibleGroupBox" name="AdvancedCollapsibleGroupBox">
+           <property name="title">
+            <string>Advanced</string>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout">
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_2">
+              <item>
+               <widget class="QLabel" name="UncertaintyMarginLabel">
+                <property name="text">
+                 <string>Uncertainty margin ±:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="qMRMLSpinBox" name="UncertaintyMarginSpinBox">
+                <property name="decimalsOption">
+                 <set>ctkDoubleSpinBox::DecimalsByShortcuts|ctkDoubleSpinBox::InsertDecimals</set>
+                </property>
+                <property name="value">
+                 <double>0.000000000000000</double>
+                </property>
+                <property name="invertedControls">
+                 <bool>false</bool>
+                </property>
+                <property name="quantity">
+                 <string>millimeters</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="ctkComboBox" name="UncertaintyMarginComboBox">
+                <property name="defaultText">
+                 <string>None</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </widget>
          </item>
         </layout>
        </widget>
@@ -182,8 +230,8 @@
      </property>
      <property name="sizeHint" stdset="0">
       <size>
-       <width>438</width>
-       <height>571</height>
+       <width>20</width>
+       <height>40</height>
       </size>
      </property>
     </spacer>
@@ -214,10 +262,26 @@
    <container>1</container>
   </customwidget>
   <customwidget>
+   <class>ctkCheckBox</class>
+   <extends>QCheckBox</extends>
+   <header>ctkCheckBox.h</header>
+  </customwidget>
+  <customwidget>
    <class>ctkCollapsibleButton</class>
    <extends>QWidget</extends>
    <header>ctkCollapsibleButton.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkCollapsibleGroupBox</class>
+   <extends>QGroupBox</extends>
+   <header>ctkCollapsibleGroupBox.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkComboBox</class>
+   <extends>QComboBox</extends>
+   <header>ctkComboBox.h</header>
   </customwidget>
   <customwidget>
    <class>ctkDoubleSpinBox</class>
