@@ -167,10 +167,13 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
       this->DistanceMapTexture->SetMinificationFilter(vtkTextureObject::Linear);
       this->DistanceMapTexture->SetMagnificationFilter(
           vtkTextureObject::Linear);
-      this->DistanceMapTexture->SetBorderColor(1000.0f, 0.0f, 0.0f, 0.0f);
+      this->DistanceMapTexture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
+      std::cout << "Transferring Image"<< std::endl;
+      std::cout << imageData->GetNumberOfScalarComponents();
       this->DistanceMapTexture->Create3DFromRaw(dimensions[0], dimensions[1],
-                                                dimensions[2], 1, VTK_FLOAT,
+                                                dimensions[2], 2, VTK_FLOAT,
                                                 imageData->GetScalarPointer());
+      std::cout << "Trasnferred" << std::endl;
     }
     this->DistanceMap = distanceMap;
     }
@@ -230,15 +233,15 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
     shaderProperty->AddFragmentShaderReplacement(
         "//VTK::Color::Impl", true,
         "//VTK::Color::Impl\n"
-        "float dist = texture(distanceTexture, fragPositionMC.xyz).r;\n"
-        "if(clipOut == 1 && dist > 200.0){\n"
+        "vec4 dist = texture(distanceTexture, fragPositionMC.xyz);\n"
+        "if(clipOut == 1 && dist[1] > 2.0){\n"
         "  discard;\n"
         "}\n"
-        "if(dist<margin-uncertainty){\n"
+        "if(dist.r<margin-uncertainty){\n"
         "   ambientColor = vec3(1.0, 0.0, 0.0);\n"
         "   diffuseColor = vec3(0.0, 0.0, 0.0);\n"
         "}\n"
-        "else if(dist<margin+uncertainty){\n"
+        "else if(dist[0]<margin+uncertainty){\n"
         "   ambientColor = vec3(1.0, 1.0, 0.0);\n"
         "   diffuseColor = vec3(0.0, 0.0, 0.0);\n"
         "}\n"
