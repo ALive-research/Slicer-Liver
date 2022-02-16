@@ -86,25 +86,17 @@ public:
   vtkMRMLScalarVolumeNode* GetDistanceMapVolumeNode() const
   {return this->DistanceMap;}
 
-  /// Set the distance map
-  void SetParenchymaDistanceMapVolumeNode(vtkMRMLScalarVolumeNode* volumeNode)
-  {this->ParenchymaDistanceMap = volumeNode; this->Modified();}
-
-  /// Get the distance map
-  vtkMRMLScalarVolumeNode* GetParenchymaDistanceMapVolumeNode() const
-  {return this->ParenchymaDistanceMap;}
-
   /// Get the distance map margin
-  vtkGetMacro(DistanceMargin, double);
+  vtkGetMacro(ResectionMargin, double);
 
   /// Set the distance map margin
-  vtkSetMacro(DistanceMargin, double);
+  vtkSetMacro(ResectionMargin, double);
 
-  /// Set the uncertainty margin
-  vtkSetMacro(UncertaintyMargin, double);
-
-  /// Set the uncertainty margin
+  /// Get the distance map margin
   vtkGetMacro(UncertaintyMargin, double);
+
+  /// Set the distance map margin
+  vtkSetMacro(UncertaintyMargin, double);
 
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLMarkupsBezierSurfaceNode);
@@ -118,8 +110,7 @@ protected:
 private:
  vtkWeakPointer<vtkMRMLModelNode> Target;
  vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMap;
- vtkWeakPointer<vtkMRMLScalarVolumeNode> ParenchymaDistanceMap;
- double DistanceMargin;
+ double ResectionMargin;
  double UncertaintyMargin;
 
 private:

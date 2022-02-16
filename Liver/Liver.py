@@ -161,9 +161,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.logic = LiverLogic()
 
     # # Enable the use of FXAA (antialiasing)
-    if not slicer.app.commandOptions().noMainWindow:
-      renderer = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers().GetFirstRenderer()
-      renderer.UseFXAAOn()
+    # if not slicer.app.commandOptions().noMainWindow:
+    #   renderer = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers().GetFirstRenderer()
+    #   renderer.UseFXAAOn()
 
     # Connections
     self.distanceMapsWidget.TumorLabelMapComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
@@ -179,6 +179,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.LiverModelNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionLiverModelNodeChanged)
     self.resectionsWidget.ResectionMarginSpinBox.connect('valueChanged(double)', self.onResectionMarginChanged)
     self.resectionsWidget.ResectionLockCheckBox.connect('stateChanged(int)', self.onResectionLockChanged)
+    self.resectionsWidget.UncertaintyMarginSpinBox.connect('valueChanged(double)', self.onUncertaintyMarginChanged)
 
   def onDistanceMapParameterChanged(self):
 
@@ -210,6 +211,28 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectionsWidget.DistanceMapNodeComboBox.blockSignals(True)
         self.resectionsWidget.DistanceMapNodeComboBox.setCurrentNode(activeResectionNode.GetDistanceMapVolumeNode())
         self.resectionsWidget.DistanceMapNodeComboBox.blockSignals(False)
+
+        self.resectionsWidget.ResectionMarginSpinBox.blockSignals(True)
+        self.resectionsWidget.ResectionMarginSpinBox.setValue(activeResectionNode.GetResectionMargin())
+        self.resectionsWidget.ResectionMarginSpinBox.blockSignals(False)
+
+        self.resectionsWidget.ResectionLockCheckBox.blockSignals(True)
+        if (activeResectionNode.GetWidgetVisibility()):
+          self.resectionsWidget.ResectionLockCheckBox.setCheckState(0)
+        else:
+          self.resectionsWidget.ResectionLockCheckBox.setCheckState(2)
+        self.resectionsWidget.ResectionLockCheckBox.blockSignals(False)
+
+        self.resectionsWidget.UncertaintyMarginSpinBox.blockSignals(True)
+        self.resectionsWidget.UncertaintyMarginSpinBox.setValue(activeResectionNode.GetUncertaintyMargin())
+        self.resectionsWidget.UncertaintyMarginSpinBox.blockSignals(False)
+
+        self.resectionsWidget.ResectionLockCheckBox.blockSignals(True)
+        if activeResectionNode.GetWidgetVisibility():
+          self.resectionsWidget.ResectionLockCheckBox.setCheckState(0) # Checked
+        else:
+          self.resectionsWidget.ResectionLockCheckBox.setCheckState(2) # Unchecked
+        self.resectionsWidget.ResectionLockCheckBox.blockSignals(False)
 
         if activeResectionNode.GetState()  == activeResectionNode.Initialization: # Show initialization
           lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
@@ -249,18 +272,25 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     if self._currentResectionNode is not None:
       self._currentResectionNode.SetResectionMargin(self.resectionsWidget.ResectionMarginSpinBox.value)
 
+  def onUncertaintyMarginChanged(self):
+    """
+    This function is called when the resection margin spinbox changes.
+    """
+    if self._currentResectionNode is not None:
+      self._currentResectionNode.SetUncertaintyMargin(self.resectionsWidget.UncertaintyMarginSpinBox.value)
+
   def onResectionLockChanged(self):
     """
     This function is called when the resection margin spinbox changes.
     """
     if self._currentResectionNode is not None:
       self._currentResectionNode.SetClipOut(self.resectionsWidget.ResectionLockCheckBox.isChecked())
+      self._currentResectionNode.SetWidgetVisibility(not self.resectionsWidget.ResectionLockCheckBox.isChecked())
 
   def onComputeDistanceMapButtonClicked(self):
     """
     This function is called when the distance map calculation button is pressed
     """
-
     tumorLabelMapNode = self.distanceMapsWidget.TumorLabelMapComboBox.currentNode()
     parenchymaLabelMapNode = self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.currentNode()
     outputVolumeNode = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
@@ -316,21 +346,21 @@ class LiverLogic(ScriptedLoadableModuleLogic):
       import sitkUtils
       import SimpleITK as sitk
 
-      # # Compute tumor distance map
-      # tumorImage = sitkUtils.PullVolumeFromSlicer(tumorNode)
-      # tumorDistanceImage = sitk.SignedMaurerDistanceMap(tumorImage,False,False,True)
-      # logging.debug("Computing Tumor Distance Map...")
+      # Compute tumor distance map
+      tumorImage = sitkUtils.PullVolumeFromSlicer(tumorNode)
+      tumorDistanceImage = sitk.SignedMaurerDistanceMap(tumorImage,False,False,True)
+      logging.debug("Computing Tumor Distance Map...")
 
-      # # Compute tumor distance map
-      # parenchymaImage = sitkUtils.PullVolumeFromSlicer(parenchymaNode)
-      # parenchymaDistanceImage = sitk.SignedMaurerDistanceMap(parenchymaImage,False,False,True)
-      # logging.debug("Computing Parenchyma Distance Map...")
+      # Compute tumor distance map
+      parenchymaImage = sitkUtils.PullVolumeFromSlicer(parenchymaNode)
+      parenchymaDistanceImage = sitk.SignedMaurerDistanceMap(parenchymaImage,False,False,True)
+      logging.debug("Computing Parenchyma Distance Map...")
 
       #Combine distance maps
-      # compositeDistanceMap = sitk.Compose(tumorDistanceImage,parenchymaDistanceImage)
-      # sitkUtils.PushVolumeToSlicer(compositeDistanceMap, targetNode = outputNode, className='vtkMRMLVectorVolumeNode')
-      # outputNode.SetAttribute('DistanceMap', "True");
-      # outputNode.SetAttribute('Computed', "True");
+      compositeDistanceMap = sitk.Compose(tumorDistanceImage,parenchymaDistanceImage)
+      sitkUtils.PushVolumeToSlicer(compositeDistanceMap, targetNode = outputNode, className='vtkMRMLVectorVolumeNode')
+      outputNode.SetAttribute('DistanceMap', "True");
+      outputNode.SetAttribute('Computed', "True");
 
 #
 # LiverTest

@@ -62,24 +62,36 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsBezierSurfaceDisp
   /// Get node XML tag name (like Volume, Markups)
   const char* GetNodeTagName() override { return "MarkupsBezierSurfaceDisplay"; };
 
-  // Set the clipout state variable
-  vtkSetMacro(ClipOut, bool);
-
-  // Get the clipout state variable
-  vtkGetMacro(ClipOut, bool);
 
   //--------------------------------------------------------------------------
   // MarkupsBezierSurfaceDisplay methods
   //--------------------------------------------------------------------------
-  // Get the clipout state variable as integer
+
+  /// Set the clipout state variable
+  vtkSetMacro(ClipOut, bool);
+  /// Get the clipout state variable
+  vtkGetMacro(ClipOut, bool);
+  /// Get the clipout state variable as integer
   int GetClipOut() const
   { return static_cast<int>(this->ClipOut);}
-
+  /// set the clipout state variable as integer
   void SetClipOut(int value)
   { this->ClipOut = value!=0?1:0; this->Modified();}
 
+  /// Set the clipout state variable
+  vtkSetMacro(WidgetVisibility, bool);
+  /// Get the clipout state variable
+  vtkGetMacro(WidgetVisibility, bool);
+  /// Get the clipout state variable as integer
+  int GetWidgetVisibility() const
+  { return static_cast<int>(this->WidgetVisibility);}
+  /// set the clipout state variable as integer
+  void SetWidgetVisibility(int value)
+  { this->WidgetVisibility = value!=0?1:0; this->Modified();}
+
 protected:
   bool ClipOut;
+  bool WidgetVisibility;
 
 protected:
   vtkMRMLMarkupsBezierSurfaceDisplayNode();

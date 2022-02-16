@@ -42,6 +42,7 @@
 #include "vtkMRMLMarkupsBezierSurfaceNode.h"
 #include "vtkMRMLMarkupsBezierSurfaceDisplayNode.h"
 #include "vtkBezierSurfaceSource.h"
+#include "vtkSlicerMarkupsWidgetRepresentation.h"
 
 // MRML includes
 #include <qMRMLThreeDWidget.h>
@@ -154,27 +155,23 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
   if ( this->DistanceMap != distanceMap)
     {
     auto renderWindow = vtkOpenGLRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
-    if (renderWindow && distanceMap)
+    auto imageData = distanceMap?distanceMap->GetImageData():nullptr;
+
+    if (renderWindow && imageData)
       {
       this->DistanceMapTexture = vtkSmartPointer<vtkTextureObject>::New();
       this->DistanceMapTexture->SetContext(renderWindow);
       this->DistanceMap = distanceMap;
-      auto imageData = this->DistanceMap->GetImageData();
       auto dimensions = imageData->GetDimensions();
       this->DistanceMapTexture->SetWrapS(vtkTextureObject::ClampToBorder);
       this->DistanceMapTexture->SetWrapT(vtkTextureObject::ClampToBorder);
       this->DistanceMapTexture->SetWrapR(vtkTextureObject::ClampToBorder);
       this->DistanceMapTexture->SetMinificationFilter(vtkTextureObject::Linear);
-      this->DistanceMapTexture->SetMagnificationFilter(
-          vtkTextureObject::Linear);
+      this->DistanceMapTexture->SetMagnificationFilter(vtkTextureObject::Linear);
       this->DistanceMapTexture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
-      std::cout << "Transferring Image"<< std::endl;
-      std::cout << imageData->GetNumberOfScalarComponents();
-      this->DistanceMapTexture->Create3DFromRaw(dimensions[0], dimensions[1],
-                                                dimensions[2], 2, VTK_FLOAT,
-                                                imageData->GetScalarPointer());
-      std::cout << "Trasnferred" << std::endl;
-    }
+      this->DistanceMapTexture->Create3DFromRaw(dimensions[0], dimensions[1], dimensions[2], 2, VTK_FLOAT, imageData->GetScalarPointer());
+      }
+
     this->DistanceMap = distanceMap;
     }
 
@@ -237,11 +234,11 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
         "if(clipOut == 1 && dist[1] > 2.0){\n"
         "  discard;\n"
         "}\n"
-        "if(dist.r<margin-uncertainty){\n"
+        "if(dist[0] < resectionMargin-uncertaintyMargin){\n"
         "   ambientColor = vec3(1.0, 0.0, 0.0);\n"
         "   diffuseColor = vec3(0.0, 0.0, 0.0);\n"
         "}\n"
-        "else if(dist[0]<margin+uncertainty){\n"
+        "else if(dist[0] < resectionMargin+uncertaintyMargin){\n"
         "   ambientColor = vec3(1.0, 1.0, 0.0);\n"
         "   diffuseColor = vec3(0.0, 0.0, 0.0);\n"
         "}\n"
@@ -255,9 +252,9 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
   auto rasToIjk = vtkSmartPointer<vtkMatrix4x4>::New();
   auto ijkToTexture = vtkSmartPointer<vtkMatrix4x4>::New();
 
-  if (distanceMap)
+  auto imageData = distanceMap?distanceMap->GetImageData():nullptr;
+  if (imageData)
     {
-    auto imageData = distanceMap->GetImageData();
     auto dimensions = imageData->GetDimensions();
 
     distanceMap->GetRASToIJKMatrix(rasToIjk);
@@ -279,8 +276,9 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
     vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(liverMarkupsBezierSurfaceNode->GetDisplayNode());
 
   auto fragmentUniforms = shaderProperty->GetFragmentCustomUniforms();
-  fragmentUniforms->SetUniformf("margin", static_cast<float>(liverMarkupsBezierSurfaceNode->GetDistanceMargin()));
-  fragmentUniforms->SetUniformf("uncertainty", static_cast<float>(liverMarkupsBezierSurfaceNode->GetUncertaintyMargin()));
+  fragmentUniforms->SetUniformf("resectionMargin", static_cast<float>(liverMarkupsBezierSurfaceNode->GetResectionMargin()));
+  fragmentUniforms->SetUniformf("uncertaintyMargin", static_cast<float>(liverMarkupsBezierSurfaceNode->GetUncertaintyMargin()));
+
   if (!liverMarkupsBezierSurfaceDisplayNode)
   {
     fragmentUniforms->SetUniformi("clipOut", 0);
@@ -289,6 +287,16 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
   {
     fragmentUniforms->SetUniformi("clipOut", liverMarkupsBezierSurfaceDisplayNode->GetClipOut());
   }
+
+  if (liverMarkupsBezierSurfaceDisplayNode)
+    {
+    this->ControlPolygonActor->SetVisibility(liverMarkupsBezierSurfaceDisplayNode->GetWidgetVisibility());
+    for(int type = 0; type < vtkSlicerMarkupsWidgetRepresentation::NumberOfControlPointTypes; ++type)
+      {
+      auto controlPoints = reinterpret_cast<ControlPointsPipeline3D *>(this->ControlPoints[type]);
+      controlPoints->Actor->SetVisibility(liverMarkupsBezierSurfaceDisplayNode->GetWidgetVisibility());
+      }
+    }
 
   this->NeedToRenderOn();
 }
