@@ -111,6 +111,11 @@ public:
   // Set resection margin
   vtkSetClampMacro(ResectionMargin, double, 0.0, VTK_DOUBLE_MAX);
 
+  // Get resection margin
+  vtkGetMacro(UncertaintyMargin, double);
+  // Set resection margin
+  vtkSetClampMacro(UncertaintyMargin, double, 0.0, VTK_DOUBLE_MAX);
+
   // Get resection status
   vtkGetMacro(State, ResectionState);
   // Set resection status
@@ -136,7 +141,6 @@ public:
   // Set Distance Map
   void SetDistanceMapVolumeNode(vtkMRMLScalarVolumeNode* distanceMapVolumeNode)
   {this->DistanceMapVolumeNode = distanceMapVolumeNode; this->Modified();}
-
 
   /// This is a function to set the initialization control points as vtkPoints.
   /// Since the expected number of points for the initialization is two, the
@@ -175,6 +179,15 @@ public:
   // Set the clipout state variable
   vtkSetMacro(ClipOut, int);
 
+  // Set the widget visibility variable
+  vtkSetMacro(WidgetVisibility, bool);
+
+  // Get the widget visibility variable
+  vtkGetMacro(WidgetVisibility, bool);
+
+  // Set the widget visibility variable
+  vtkSetMacro(WidgetVisibility, int);
+
 protected:
   vtkMRMLLiverResectionNode();
   ~vtkMRMLLiverResectionNode() override;
@@ -189,9 +202,11 @@ private:
   ResectionState State;
   InitializationMode InitMode;
   double ResectionMargin; //Resection margin in mm
+  double UncertaintyMargin; //Uncertainty margin in mm
   vtkNew<vtkPoints> InitializationControlPoints;
   vtkNew<vtkPoints> BezierSurfaceControlPoints;
   bool ClipOut;
+  bool WidgetVisibility;
 
 private:
  vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);

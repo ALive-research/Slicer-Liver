@@ -62,6 +62,9 @@ int vtkMRMLLiverResectionNodeTest1(int, char *[])
   // Test value setting/getting in resection margin
   TEST_SET_GET_DOUBLE_RANGE(node1, ResectionMargin, 1.0, VTK_DOUBLE_MAX);
 
+  // Test value setting/getting in resection margin
+  TEST_SET_GET_DOUBLE_RANGE(node1, UncertaintyMargin, 1.0, VTK_DOUBLE_MAX);
+
   // Test value setting/getting in resection state
   TEST_SET_GET_VALUE(node1, State, vtkMRMLLiverResectionNode::Initialization);
   TEST_SET_GET_VALUE(node1, State, vtkMRMLLiverResectionNode::Deformation);
@@ -76,7 +79,18 @@ int vtkMRMLLiverResectionNodeTest1(int, char *[])
   // Test value setting/getting in distance map
   TEST_SET_GET_VALUE(node1, InitMode, vtkMRMLLiverResectionNode::Flat);
   TEST_SET_GET_VALUE(node1, InitMode, vtkMRMLLiverResectionNode::Curved);
-  // Test value setting/getting in distance map
+
+  // Test value setting/getting on ClipOut
+  TEST_SET_GET_VALUE(node1, ClipOut, true );
+  TEST_SET_GET_VALUE(node1, ClipOut, false);
+  TEST_SET_GET_VALUE(node1, ClipOut, 1);
+  TEST_SET_GET_VALUE(node1, ClipOut, 0);
+
+  // Test value setting/getting on WidgetVisibility
+  TEST_SET_GET_VALUE(node1, WidgetVisibility, true );
+  TEST_SET_GET_VALUE(node1, WidgetVisibility, false);
+  TEST_SET_GET_VALUE(node1, WidgetVisibility, 1);
+  TEST_SET_GET_VALUE(node1, WidgetVisibility, 0);
 
   return EXIT_SUCCESS;
 }

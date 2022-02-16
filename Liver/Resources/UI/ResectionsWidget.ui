@@ -142,7 +142,7 @@
                 <set>ctkDoubleSpinBox::DecimalsByShortcuts|ctkDoubleSpinBox::InsertDecimals</set>
                </property>
                <property name="value">
-                <double>10.000000000000000</double>
+                <double>0.000000000000000</double>
                </property>
                <property name="invertedControls">
                 <bool>false</bool>
