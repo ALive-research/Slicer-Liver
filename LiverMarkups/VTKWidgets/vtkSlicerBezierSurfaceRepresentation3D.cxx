@@ -231,16 +231,19 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
         "//VTK::Color::Impl", true,
         "//VTK::Color::Impl\n"
         "vec4 dist = texture(distanceTexture, fragPositionMC.xyz);\n"
+        "float lowMargin = resectionMargin-uncertaintyMargin;\n"
+        "float highMargin = resectionMargin+uncertaintyMargin;\n"
         "if(clipOut == 1 && dist[1] > 2.0){\n"
         "  discard;\n"
         "}\n"
-        "if(dist[0] < resectionMargin-uncertaintyMargin){\n"
-        "   ambientColor = vec3(1.0, 0.0, 0.0);\n"
-        "   diffuseColor = vec3(0.0, 0.0, 0.0);\n"
+        "if(dist[0] < lowMargin){\n"
+        "   ambientColor = rMarginColor;\n"
+        "   diffuseColor = vec3(0.0);\n"
         "}\n"
-        "else if(dist[0] < resectionMargin+uncertaintyMargin){\n"
-        "   ambientColor = vec3(1.0, 1.0, 0.0);\n"
-        "   diffuseColor = vec3(0.0, 0.0, 0.0);\n"
+        "else if(dist[0] < highMargin){\n"
+        "   ambientColor = uMarginColor;\n"
+        "   ambientColor = mix(rMarginColor, uMarginColor, (dist[0]-lowMargin)/(highMargin-lowMargin));\n"
+        "   diffuseColor = vec3(0.0);\n"
         "}\n"
         "else{\n"
         "  ambientColor = vec3(0.2, 0.2 ,0.2);\n"
@@ -275,9 +278,13 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
   auto liverMarkupsBezierSurfaceDisplayNode =
     vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(liverMarkupsBezierSurfaceNode->GetDisplayNode());
 
+  const float resectionMarginColor[3] = {1.0f, 0.0f, 0.0f};
+  const float uncertaintyMarginColor[3] = {1.0f, 1.0f, 0.0f};
   auto fragmentUniforms = shaderProperty->GetFragmentCustomUniforms();
   fragmentUniforms->SetUniformf("resectionMargin", static_cast<float>(liverMarkupsBezierSurfaceNode->GetResectionMargin()));
   fragmentUniforms->SetUniformf("uncertaintyMargin", static_cast<float>(liverMarkupsBezierSurfaceNode->GetUncertaintyMargin()));
+  fragmentUniforms->SetUniform3f("rMarginColor", resectionMarginColor);
+  fragmentUniforms->SetUniform3f("uMarginColor", uncertaintyMarginColor);
 
   if (!liverMarkupsBezierSurfaceDisplayNode)
   {
