@@ -214,6 +214,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
 
         self.resectionsWidget.ResectionMarginSpinBox.blockSignals(True)
         self.resectionsWidget.ResectionMarginSpinBox.setValue(activeResectionNode.GetResectionMargin())
+        self.resectionsWidget.ResectionMarginSpinBox.minimum = activeResectionNode.GetUncertaintyMargin()
         self.resectionsWidget.ResectionMarginSpinBox.blockSignals(False)
 
         self.resectionsWidget.ResectionLockCheckBox.blockSignals(True)
@@ -278,6 +279,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     if self._currentResectionNode is not None:
       self._currentResectionNode.SetUncertaintyMargin(self.resectionsWidget.UncertaintyMarginSpinBox.value)
+      self.resectionsWidget.ResectionMarginSpinBox.minimum = self._currentResectionNode.GetUncertaintyMargin()
 
   def onResectionLockChanged(self):
     """
