@@ -165,6 +165,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     #   renderer = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers().GetFirstRenderer()
     #   renderer.UseFXAAOn()
 
+    # Configure uncertainty margin combo box
+    self.resectionsWidget.UncertaintyMarginComboBox.addItems(['Custom', 'Max. Spacing', 'RMS Spacing'])
+
     # Connections
     self.distanceMapsWidget.TumorLabelMapComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
     self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
@@ -180,8 +183,13 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.ResectionMarginSpinBox.connect('valueChanged(double)', self.onResectionMarginChanged)
     self.resectionsWidget.ResectionLockCheckBox.connect('stateChanged(int)', self.onResectionLockChanged)
     self.resectionsWidget.UncertaintyMarginSpinBox.connect('valueChanged(double)', self.onUncertaintyMarginChanged)
+    self.resectionsWidget.UncertaintyMarginComboBox.connect('currentIndexChanged(int)', self.onUncertaintyMaginComboBoxChanged)
 
   def onDistanceMapParameterChanged(self):
+    """
+    This function is triggered whenever any parameter of the distance maps are changed
+    """
+
 
     node1 = self.distanceMapsWidget.TumorLabelMapComboBox.currentNode()
     node2 = self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.currentNode()
@@ -305,6 +313,24 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     slicer.util.showStatusMessage('')
 
 
+  def onUncertaintyMaginComboBoxChanged(self):
+    """
+    This function is called whenever the uncertainty combo box is changed
+    """
+    uncertaintyMode = self.resectionsWidget.UncertaintyMarginComboBox.currentText
+    self.resectionsWidget.UncertaintyMarginSpinBox.setEnabled(uncertaintyMode == 'Custom')
+    distanceMap = self.resectionsWidget.DistanceMapNodeComboBox.currentNode()
+
+    if uncertaintyMode == 'Max. Spacing':
+      if distanceMap is not None:
+        maxSpacing = max(distanceMap.GetSpacing())
+        self.resectionsWidget.UncertaintyMarginSpinBox.setValue(maxSpacing)
+
+    if uncertaintyMode == 'RMS Spacing':
+      if distanceMap is not None:
+        rmsSpacing = np.sqrt(np.mean(np.square(distanceMap.GetSpacing())))
+        self.resectionsWidget.UncertaintyMarginSpinBox.setValue(rmsSpacing)
+
   def cleanup(self):
     """
     Called when the application closes and the module widget is destroyed.
@@ -321,6 +347,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     Called each time the user opens a different module.
     """
+    pass
 
 #
 # LiverLogic
