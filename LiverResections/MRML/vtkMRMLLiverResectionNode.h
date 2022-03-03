@@ -111,6 +111,11 @@ public:
   // Set resection margin
   vtkSetClampMacro(ResectionMargin, double, 0.0, VTK_DOUBLE_MAX);
 
+  // Get resection margin
+  vtkGetMacro(UncertaintyMargin, double);
+  // Set resection margin
+  vtkSetClampMacro(UncertaintyMargin, double, 0.0, VTK_DOUBLE_MAX);
+
   // Get resection status
   vtkGetMacro(State, ResectionState);
   // Set resection status
@@ -129,13 +134,13 @@ public:
   void SetTargetOrganModelNode(vtkMRMLModelNode *targetOrgan)
   {this->TargetOrganModelNode = targetOrgan; this->Modified();}
 
-  // Get Target Organ
+  // Get Distance Map
   vtkMRMLScalarVolumeNode*GetDistanceMapVolumeNode() const
-  {return this->DistanceMapVolume;}
+  {return this->DistanceMapVolumeNode;}
 
-  // Set Target Organ
-  void SetDistanceMapVolumeNode(vtkMRMLScalarVolumeNode* distanceMapVolume)
-  {this->DistanceMapVolume = distanceMapVolume; this->Modified();}
+  // Set Distance Map
+  void SetDistanceMapVolumeNode(vtkMRMLScalarVolumeNode* distanceMapVolumeNode)
+  {this->DistanceMapVolumeNode = distanceMapVolumeNode; this->Modified();}
 
   /// This is a function to set the initialization control points as vtkPoints.
   /// Since the expected number of points for the initialization is two, the
@@ -165,6 +170,24 @@ public:
   vtkPoints const* GetBezierPoints() const
   {return const_cast<vtkPoints const*>(this->BezierSurfaceControlPoints.GetPointer());}
 
+  // Set the clipout state variable
+  vtkSetMacro(ClipOut, bool);
+
+  // Get the clipout state variable
+  vtkGetMacro(ClipOut, bool);
+
+  // Set the clipout state variable
+  vtkSetMacro(ClipOut, int);
+
+  // Set the widget visibility variable
+  vtkSetMacro(WidgetVisibility, bool);
+
+  // Get the widget visibility variable
+  vtkGetMacro(WidgetVisibility, bool);
+
+  // Set the widget visibility variable
+  vtkSetMacro(WidgetVisibility, int);
+
 protected:
   vtkMRMLLiverResectionNode();
   ~vtkMRMLLiverResectionNode() override;
@@ -175,12 +198,15 @@ private:
   // std::set<vtkMRMLModelNode*> TargetTumors;
   // vtkWeakPointer<vtkMRMLSegmentationNode> SegmentationNode;
   vtkWeakPointer<vtkMRMLModelNode> TargetOrganModelNode;
-  vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolume;
+  vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolumeNode;
   ResectionState State;
   InitializationMode InitMode;
   double ResectionMargin; //Resection margin in mm
+  double UncertaintyMargin; //Uncertainty margin in mm
   vtkNew<vtkPoints> InitializationControlPoints;
   vtkNew<vtkPoints> BezierSurfaceControlPoints;
+  bool ClipOut;
+  bool WidgetVisibility;
 
 private:
  vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);

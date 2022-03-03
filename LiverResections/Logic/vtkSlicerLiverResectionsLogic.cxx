@@ -70,13 +70,15 @@
 #include <vtkPlaneSource.h>
 #include <vtkTable.h>
 
+#include <vtkMRMLGlyphableVolumeDisplayNode.h>
+
 //----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerLiverResectionsLogic);
 
 //---------------------------------------------------------------------------
 vtkSlicerLiverResectionsLogic::vtkSlicerLiverResectionsLogic()
 {
-
+  //auto node = vtkSmartPointer<vtkMRMLGlyphableVolumeDisplayNode>::New();
 }
 
 //---------------------------------------------------------------------------
@@ -161,7 +163,17 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
     if (bezierSurfaceNode)
       {
       bezierSurfaceNode->SetDistanceMapVolumeNode(resectionNode->GetDistanceMapVolumeNode());
-      bezierSurfaceNode->SetDistanceMargin(resectionNode->GetResectionMargin());
+      bezierSurfaceNode->SetResectionMargin(resectionNode->GetResectionMargin());
+      bezierSurfaceNode->SetUncertaintyMargin(resectionNode->GetUncertaintyMargin());
+
+      auto bezierSurfaceDisplayNode =
+        vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(bezierSurfaceNode->GetDisplayNode());
+      if (bezierSurfaceDisplayNode)
+        {
+        bezierSurfaceDisplayNode->SetClipOut(resectionNode->GetClipOut());
+        bezierSurfaceDisplayNode->SetWidgetVisibility(resectionNode->GetWidgetVisibility());
+        }
+      bezierSurfaceNode->SetLocked(!resectionNode->GetWidgetVisibility());
       }
     }
 }

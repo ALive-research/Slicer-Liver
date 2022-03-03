@@ -87,10 +87,16 @@ public:
   {return this->DistanceMap;}
 
   /// Get the distance map margin
-  vtkGetMacro(DistanceMargin, double);
+  vtkGetMacro(ResectionMargin, double);
 
   /// Set the distance map margin
-  vtkSetMacro(DistanceMargin, double);
+  vtkSetMacro(ResectionMargin, double);
+
+  /// Get the distance map margin
+  vtkGetMacro(UncertaintyMargin, double);
+
+  /// Set the distance map margin
+  vtkSetMacro(UncertaintyMargin, double);
 
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLMarkupsBezierSurfaceNode);
@@ -104,7 +110,8 @@ protected:
 private:
  vtkWeakPointer<vtkMRMLModelNode> Target;
  vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMap;
- double DistanceMargin;
+ double ResectionMargin;
+ double UncertaintyMargin;
 
 private:
  vtkMRMLMarkupsBezierSurfaceNode(const vtkMRMLMarkupsBezierSurfaceNode&);

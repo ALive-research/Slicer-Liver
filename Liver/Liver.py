@@ -61,7 +61,7 @@ class Liver(ScriptedLoadableModule):
     self.parent.contributors = ["Rafael Palomar (Oslo University Hospital / NTNU)"]
 
     self.parent.helpText = """
-    This module offers tools for making liver resection plans in 3D liver models.
+    This module offers tools for computing liver resection plans in 3D liver models.
     ""
     This file was originally developed by Rafael Palomar (Oslo University
     Hospital/NTNU), Ole Vegard Solberg (SINTEF) Geir Arne Tangen, SINTEF and
@@ -166,12 +166,17 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.logic = LiverLogic()
 
     # # Enable the use of FXAA (antialiasing)
-    if not slicer.app.commandOptions().noMainWindow:
-      renderer = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers().GetFirstRenderer()
-      renderer.UseFXAAOn()
+    # if not slicer.app.commandOptions().noMainWindow:
+    #   renderer = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers().GetFirstRenderer()
+    #   renderer.UseFXAAOn()
+
+    # Configure uncertainty margin combo box
+    self.resectionsWidget.UncertaintyMarginComboBox.addItems(['Custom', 'Max. Spacing', 'RMS Spacing'])
 
     # Connections
     self.distanceMapsWidget.TumorLabelMapComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
+    self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
+    self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.distanceMapsWidget.OutputDistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
     self.distanceMapsWidget.OutputDistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.connect('clicked(bool)', self.onComputeDistanceMapButtonClicked)
@@ -181,12 +186,20 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'Computed', 'True')
     self.resectionsWidget.LiverModelNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionLiverModelNodeChanged)
     self.resectionsWidget.ResectionMarginSpinBox.connect('valueChanged(double)', self.onResectionMarginChanged)
+    self.resectionsWidget.ResectionLockCheckBox.connect('stateChanged(int)', self.onResectionLockChanged)
+    self.resectionsWidget.UncertaintyMarginSpinBox.connect('valueChanged(double)', self.onUncertaintyMarginChanged)
+    self.resectionsWidget.UncertaintyMarginComboBox.connect('currentIndexChanged(int)', self.onUncertaintyMaginComboBoxChanged)
 
   def onDistanceMapParameterChanged(self):
+    """
+    This function is triggered whenever any parameter of the distance maps are changed
+    """
+
 
     node1 = self.distanceMapsWidget.TumorLabelMapComboBox.currentNode()
-    node2 = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
-    self.distanceMapsWidget.ComputeDistanceMapsPushButton.setEnabled(node1 is not None and node2 is not None)
+    node2 = self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.currentNode()
+    node3 = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
+    self.distanceMapsWidget.ComputeDistanceMapsPushButton.setEnabled(None not in [node1, node2, node3])
 
   def onResectionNodeChanged(self):
     """
@@ -211,6 +224,29 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectionsWidget.DistanceMapNodeComboBox.blockSignals(True)
         self.resectionsWidget.DistanceMapNodeComboBox.setCurrentNode(activeResectionNode.GetDistanceMapVolumeNode())
         self.resectionsWidget.DistanceMapNodeComboBox.blockSignals(False)
+
+        self.resectionsWidget.ResectionMarginSpinBox.blockSignals(True)
+        self.resectionsWidget.ResectionMarginSpinBox.setValue(activeResectionNode.GetResectionMargin())
+        self.resectionsWidget.ResectionMarginSpinBox.minimum = activeResectionNode.GetUncertaintyMargin()
+        self.resectionsWidget.ResectionMarginSpinBox.blockSignals(False)
+
+        self.resectionsWidget.ResectionLockCheckBox.blockSignals(True)
+        if (activeResectionNode.GetWidgetVisibility()):
+          self.resectionsWidget.ResectionLockCheckBox.setCheckState(0)
+        else:
+          self.resectionsWidget.ResectionLockCheckBox.setCheckState(2)
+        self.resectionsWidget.ResectionLockCheckBox.blockSignals(False)
+
+        self.resectionsWidget.UncertaintyMarginSpinBox.blockSignals(True)
+        self.resectionsWidget.UncertaintyMarginSpinBox.setValue(activeResectionNode.GetUncertaintyMargin())
+        self.resectionsWidget.UncertaintyMarginSpinBox.blockSignals(False)
+
+        self.resectionsWidget.ResectionLockCheckBox.blockSignals(True)
+        if activeResectionNode.GetWidgetVisibility():
+          self.resectionsWidget.ResectionLockCheckBox.setCheckState(0) # Checked
+        else:
+          self.resectionsWidget.ResectionLockCheckBox.setCheckState(2) # Unchecked
+        self.resectionsWidget.ResectionLockCheckBox.blockSignals(False)
 
         if activeResectionNode.GetState()  == activeResectionNode.Initialization: # Show initialization
           lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
@@ -250,19 +286,55 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     if self._currentResectionNode is not None:
       self._currentResectionNode.SetResectionMargin(self.resectionsWidget.ResectionMarginSpinBox.value)
 
-  def onComputeDistanceMapButtonClicked(self):
+  def onUncertaintyMarginChanged(self):
+    """
+    This function is called when the resection margin spinbox changes.
+    """
+    if self._currentResectionNode is not None:
+      self._currentResectionNode.SetUncertaintyMargin(self.resectionsWidget.UncertaintyMarginSpinBox.value)
+      self.resectionsWidget.ResectionMarginSpinBox.minimum = self._currentResectionNode.GetUncertaintyMargin()
 
+  def onResectionLockChanged(self):
+    """
+    This function is called when the resection margin spinbox changes.
+    """
+    if self._currentResectionNode is not None:
+      self._currentResectionNode.SetClipOut(self.resectionsWidget.ResectionLockCheckBox.isChecked())
+      self._currentResectionNode.SetWidgetVisibility(not self.resectionsWidget.ResectionLockCheckBox.isChecked())
+
+  def onComputeDistanceMapButtonClicked(self):
+    """
+    This function is called when the distance map calculation button is pressed
+    """
     tumorLabelMapNode = self.distanceMapsWidget.TumorLabelMapComboBox.currentNode()
+    parenchymaLabelMapNode = self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.currentNode()
     outputVolumeNode = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
 
-    slicer.util.showStatusMessage('Computing distance map...')
     slicer.app.pauseRender()
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
-    self.logic.computeDistanceMaps(tumorLabelMapNode, outputVolumeNode)
+    self.logic.computeDistanceMaps(tumorLabelMapNode, parenchymaLabelMapNode, outputVolumeNode)
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
     slicer.util.showStatusMessage('')
 
+
+  def onUncertaintyMaginComboBoxChanged(self):
+    """
+    This function is called whenever the uncertainty combo box is changed
+    """
+    uncertaintyMode = self.resectionsWidget.UncertaintyMarginComboBox.currentText
+    self.resectionsWidget.UncertaintyMarginSpinBox.setEnabled(uncertaintyMode == 'Custom')
+    distanceMap = self.resectionsWidget.DistanceMapNodeComboBox.currentNode()
+
+    if uncertaintyMode == 'Max. Spacing':
+      if distanceMap is not None:
+        maxSpacing = max(distanceMap.GetSpacing())
+        self.resectionsWidget.UncertaintyMarginSpinBox.setValue(maxSpacing)
+
+    if uncertaintyMode == 'RMS Spacing':
+      if distanceMap is not None:
+        rmsSpacing = np.sqrt(np.mean(np.square(distanceMap.GetSpacing())))
+        self.resectionsWidget.UncertaintyMarginSpinBox.setValue(rmsSpacing)
 
   def cleanup(self):
     """
@@ -280,6 +352,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     Called each time the user opens a different module.
     """
+    pass
 
 #
 # LiverLogic
@@ -301,15 +374,25 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     """
     ScriptedLoadableModuleLogic.__init__(self)
 
-  def computeDistanceMaps(self, tumorNode, outputNode):
+  def computeDistanceMaps(self, tumorNode, parenchymaNode, outputNode):
 
     if outputNode is not None:
       import sitkUtils
       import SimpleITK as sitk
-      image = sitkUtils.PullVolumeFromSlicer(tumorNode)
-      distance = sitk.SignedMaurerDistanceMap(image,False,False,True)
-      logging.debug("Computing Distance Map...")
-      sitkUtils.PushVolumeToSlicer(distance, targetNode = outputNode)
+
+      # Compute tumor distance map
+      tumorImage = sitkUtils.PullVolumeFromSlicer(tumorNode)
+      tumorDistanceImage = sitk.SignedMaurerDistanceMap(tumorImage,False,False,True)
+      logging.debug("Computing Tumor Distance Map...")
+
+      # Compute tumor distance map
+      parenchymaImage = sitkUtils.PullVolumeFromSlicer(parenchymaNode)
+      parenchymaDistanceImage = sitk.SignedMaurerDistanceMap(parenchymaImage,False,False,True)
+      logging.debug("Computing Parenchyma Distance Map...")
+
+      #Combine distance maps
+      compositeDistanceMap = sitk.Compose(tumorDistanceImage,parenchymaDistanceImage)
+      sitkUtils.PushVolumeToSlicer(compositeDistanceMap, targetNode = outputNode, className='vtkMRMLVectorVolumeNode')
       outputNode.SetAttribute('DistanceMap', "True");
       outputNode.SetAttribute('Computed', "True");
 

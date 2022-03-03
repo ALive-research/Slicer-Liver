@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>622</width>
-    <height>168</height>
+    <width>792</width>
+    <height>579</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -24,7 +24,7 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout">
       <item>
-       <layout class="QFormLayout" name="formLayout">
+       <layout class="QGridLayout" name="gridLayout">
         <item row="0" column="0">
          <widget class="QLabel" name="TumorNodeLabel">
           <property name="text">
@@ -32,8 +32,11 @@
           </property>
          </widget>
         </item>
-        <item row="0" column="1">
+        <item row="0" column="1" colspan="3">
          <widget class="qMRMLNodeComboBox" name="TumorLabelMapComboBox">
+          <property name="enabled">
+           <bool>true</bool>
+          </property>
           <property name="nodeTypes">
            <stringlist>
             <string>vtkMRMLLabelMapVolumeNode</string>
@@ -50,28 +53,59 @@
           </property>
          </widget>
         </item>
-        <item row="1" column="0">
+        <item row="1" column="0" colspan="3">
+         <widget class="QLabel" name="ParenchymadistanceMapNodeLabel">
+          <property name="text">
+           <string>Parenchyma Label Map:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0" colspan="2">
          <widget class="QLabel" name="OutputDistanceMapLabel">
           <property name="text">
            <string>Output Distance Map: </string>
           </property>
          </widget>
         </item>
-        <item row="1" column="1">
+        <item row="2" column="2" colspan="2">
          <widget class="qMRMLNodeComboBox" name="OutputDistanceMapNodeComboBox">
+          <property name="enabled">
+           <bool>true</bool>
+          </property>
           <property name="nodeTypes">
            <stringlist>
-            <string>vtkMRMLScalarVolumeNode</string>
+            <string>vtkMRMLVectorVolumeNode</string>
            </stringlist>
           </property>
           <property name="baseName">
-           <string>DistanceMap</string>
+           <string/>
           </property>
           <property name="editEnabled">
            <bool>false</bool>
           </property>
           <property name="renameEnabled">
            <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="3">
+         <widget class="qMRMLNodeComboBox" name="ParenchymaLabelMapNodeComboBox">
+          <property name="enabled">
+           <bool>true</bool>
+          </property>
+          <property name="nodeTypes">
+           <stringlist>
+            <string>vtkMRMLLabelMapVolumeNode</string>
+           </stringlist>
+          </property>
+          <property name="addEnabled">
+           <bool>false</bool>
+          </property>
+          <property name="removeEnabled">
+           <bool>false</bool>
+          </property>
+          <property name="selectNodeUponCreation">
+           <bool>false</bool>
           </property>
          </widget>
         </item>
@@ -161,6 +195,22 @@
     <hint type="destinationlabel">
      <x>276</x>
      <y>141</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>DistanceMapsComputationWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>ParenchymaLabelMapNodeComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>395</x>
+     <y>289</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>501</x>
+     <y>110</y>
     </hint>
    </hints>
   </connection>
