@@ -63,9 +63,9 @@ public:
   //--------------------------------------------------------------------------------
   // MRMLNode methods
   //--------------------------------------------------------------------------------
-  const char* GetIcon() override {return ":/Icons/MarkupsGeneric.png";}
-  const char* GetAddIcon() override {return ":/Icons/MarkupsGenericMouseModePlace.png";}
-  const char* GetPlaceAddIcon() override {return ":/Icons/MarkupsGenericMouseModePlaceAdd.png";}
+  const char* GetIcon() override {return ":/Icons/MarkupsBezierSurface.png";}
+  const char* GetAddIcon() override {return ":/Icons/MarkupsBezierSurfaceMouseModePlace.png";}
+  const char* GetPlaceAddIcon() override {return ":/Icons/MarkupsBezierSurfaceMouseModePlaceAdd.png";}
 
   vtkMRMLNode* CreateNodeInstance() override;
 
@@ -74,6 +74,9 @@ public:
 
   /// Get markup name
   const char* GetMarkupType() override {return "BezierSurface";}
+
+  // Get markup type GUI display name
+  const char* GetTypeDisplayName() override {return "Bezier Surface";};
 
   /// Get markup short name
   const char* GetDefaultNodeNamePrefix() override {return "BS";}

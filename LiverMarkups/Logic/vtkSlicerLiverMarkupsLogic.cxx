@@ -57,6 +57,12 @@
 // Markups MRML includes
 #include <vtkMRMLMarkupsDisplayNode.h>
 
+// Slicer includes
+#include <qSlicerApplication.h>
+
+// Qt includes
+#include <QSettings>
+
 // VTK includes
 #include <vtkObjectFactory.h>
 
@@ -121,15 +127,20 @@ void vtkSlicerLiverMarkupsLogic::ObserveMRMLScene()
     // bar is triggered when leave it
     this->GetMRMLScene()->StartState(vtkMRMLScene::BatchProcessState);
 
-    auto slicingContourNode = vtkSmartPointer<vtkMRMLMarkupsSlicingContourNode>::New();
-    selectionNode->AddNewPlaceNodeClassNameToList(slicingContourNode->GetClassName(),
-                                                  slicingContourNode->GetAddIcon(),
-                                                  slicingContourNode->GetMarkupType());
 
-    auto distanceContourNode = vtkSmartPointer<vtkMRMLMarkupsDistanceContourNode>::New();
-    selectionNode->AddNewPlaceNodeClassNameToList(distanceContourNode->GetClassName(),
-                                                  distanceContourNode->GetAddIcon(),
-                                                  distanceContourNode->GetMarkupType());
+    if (qSlicerApplication::application()->userSettings()->value("Developer/DeveloperMode").toBool())
+      {
+
+      auto slicingContourNode = vtkSmartPointer<vtkMRMLMarkupsSlicingContourNode>::New();
+      selectionNode->AddNewPlaceNodeClassNameToList(slicingContourNode->GetClassName(),
+                                                    slicingContourNode->GetAddIcon(),
+                                                    slicingContourNode->GetMarkupType());
+
+      auto distanceContourNode = vtkSmartPointer<vtkMRMLMarkupsDistanceContourNode>::New();
+      selectionNode->AddNewPlaceNodeClassNameToList(distanceContourNode->GetClassName(),
+                                                    distanceContourNode->GetAddIcon(),
+                                                    distanceContourNode->GetMarkupType());
+      }
 
     auto bezierSurfaceNode= vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>::New();
     selectionNode->AddNewPlaceNodeClassNameToList(bezierSurfaceNode->GetClassName(),
