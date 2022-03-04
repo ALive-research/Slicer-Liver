@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/">
+    <file>Icons/MarkupsBezierSurface.png</file>
+    <file>Icons/MarkupsBezierSurfaceMouseModePlace.png</file>
+    <file>Icons/MarkupsBezierSurfaceMouseModePlaceAdd.png</file>
+  </qresource>
+</RCC>

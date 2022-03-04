@@ -61,11 +61,16 @@
 #include "vtkSlicerDistanceContourWidget.h"
 #include "vtkSlicerBezierSurfaceWidget.h"
 
+// Slicer includes
 #include <qSlicerModuleManager.h>
 #include <qSlicerCoreApplication.h>
+#include <qSlicerIOManager.h>
+
+// Qt includes
+#include <QDebug>
+#include <QSettings>
 
 //-----------------------------------------------------------------------------
-/// \ingroup Slicer_QtModules_ExtensionTemplate
 class qSlicerLiverMarkupsModulePrivate
 {
 public:
@@ -145,46 +150,37 @@ void qSlicerLiverMarkupsModule::setup()
 {
   this->Superclass::setup();
 
- vtkSlicerApplicationLogic* appLogic = this->appLogic();
- if (!appLogic)
-   {
-   qCritical() << Q_FUNC_INFO << " : invalid application logic.";
-   return;
-   }
+  vtkSlicerApplicationLogic *appLogic = this->appLogic();
+  if (!appLogic) {
+    qCritical() << Q_FUNC_INFO << " : invalid application logic.";
+    return;
+  }
 
- vtkSlicerMarkupsLogic* markupsLogic =
-   vtkSlicerMarkupsLogic::SafeDownCast(appLogic->GetModuleLogic("Markups"));
- if (!markupsLogic)
-   {
-   qCritical() << Q_FUNC_INFO << " : invalid markups logic.";
-   return;
-   }
+  auto markupsLogic =
+      vtkSlicerMarkupsLogic::SafeDownCast(appLogic->GetModuleLogic("Markups"));
+  if (!markupsLogic) {
+    qCritical() << Q_FUNC_INFO << " : invalid markups logic.";
+    return;
+  }
 
- // Register markups
- vtkNew<vtkMRMLMarkupsSlicingContourNode> slicingContourNode;
- vtkNew<vtkSlicerSlicingContourWidget> slicingContourWidget;
- markupsLogic->RegisterMarkupsNode(slicingContourNode, slicingContourWidget);
+  bool createPushButton = false;
+  if (qSlicerApplication::application()->userSettings()->value("Developer/DeveloperMode") .toBool())
+    {
+    createPushButton = true; // Ephimeral markups should not create a push button unless in developer mode.
+    }
 
- vtkNew<vtkMRMLMarkupsDistanceContourNode> distanceContourNode;
- vtkNew<vtkSlicerDistanceContourWidget> distanceContourWidget;
- markupsLogic->RegisterMarkupsNode(distanceContourNode, distanceContourWidget);
+  // Register markups
+  vtkNew<vtkMRMLMarkupsSlicingContourNode> slicingContourNode;
+  vtkNew<vtkSlicerSlicingContourWidget> slicingContourWidget;
+  markupsLogic->RegisterMarkupsNode(slicingContourNode, slicingContourWidget, createPushButton);
 
- vtkNew<vtkMRMLMarkupsBezierSurfaceNode> bezierSurfaceNode;
- vtkNew<vtkSlicerBezierSurfaceWidget> bezierSurfaceWidget;
- markupsLogic->RegisterMarkupsNode(bezierSurfaceNode, bezierSurfaceWidget);
+  vtkNew<vtkMRMLMarkupsDistanceContourNode> distanceContourNode;
+  vtkNew<vtkSlicerDistanceContourWidget> distanceContourWidget;
+  markupsLogic->RegisterMarkupsNode(distanceContourNode, distanceContourWidget, createPushButton);
 
- // qSlicerModuleManager* moduleManager = qSlicerCoreApplication::application()->moduleManager();
- // if (!moduleManager)
- //   {
- //   return;
- //   }
-
- // qSlicerAbstractCoreModule* markupsModule = moduleManager->module("Markups");
- // if(!markupsModule)
- //   {
- //   qCritical() << Q_FUNC_INFO << ": Could not get the Markups module.";
- //   return;
- //   }
+  vtkNew<vtkMRMLMarkupsBezierSurfaceNode> bezierSurfaceNode;
+  vtkNew<vtkSlicerBezierSurfaceWidget> bezierSurfaceWidget;
+  markupsLogic->RegisterMarkupsNode(bezierSurfaceNode, bezierSurfaceWidget);
 }
 
 //-----------------------------------------------------------------------------
