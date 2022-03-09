@@ -31,8 +31,8 @@
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  This file was originally developed by Rafael Palomar (The Intervention Centre,
-  Oslo University Hospital) and was supported by The Research Council of Norway
+  This file was originally developed by Rafael Palomar (Oslo University
+  Hospital and NTNU) and was supported by The Research Council of Norway
   through the ALive project (grant nr. 311393).
 
   ==============================================================================*/
