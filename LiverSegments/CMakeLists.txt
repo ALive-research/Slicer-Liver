@@ -1,5 +1,8 @@
 #-----------------------------------------------------------------------------
-set(MODULE_NAME Liver)
+set(MODULE_NAME LiverSegments)
+string(TOUPPER ${MODULE_NAME} MODULE_NAME_UPPER)
+
+#-----------------------------------------------------------------------------
 
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
@@ -8,11 +11,7 @@ set(MODULE_PYTHON_SCRIPTS
 
 set(MODULE_PYTHON_RESOURCES
   Resources/Icons/${MODULE_NAME}.png
-  Resources/Icons/LiverVolume000.png
-  Resources/Icons/LiverSegmentation000.png
-  Resources/Icons/DistanceMap000.png
-  Resources/UI/ResectionsWidget.ui
-  Resources/UI/DistanceMapsWidget.ui
+  Resources/UI/${MODULE_NAME}.ui
   )
 
 #-----------------------------------------------------------------------------
