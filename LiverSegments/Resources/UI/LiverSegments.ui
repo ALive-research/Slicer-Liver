@@ -15,9 +15,12 @@
   </property>
   <layout class="QGridLayout" name="gridLayout_2">
    <item row="0" column="0">
-    <widget class="qMRMLCollapsibleButton" name="ResectionsCollapsibleButton">
+    <widget class="qMRMLCollapsibleButton" name="segmentsCollapsibleButton">
      <property name="text">
       <string>Segments</string>
+     </property>
+     <property name="collapsed">
+      <bool>false</bool>
      </property>
      <layout class="QGridLayout" name="gridLayout">
       <item row="0" column="0">
@@ -67,7 +70,7 @@
        </layout>
       </item>
       <item row="1" column="0">
-       <widget class="qMRMLSegmentSelectorWidget" name="SegmentSelectorWidget">
+       <widget class="qMRMLSegmentSelectorWidget" name="inputSegmentSelectorWidget">
         <property name="segmentationNodeSelectorVisible">
          <bool>false</bool>
         </property>
@@ -76,7 +79,7 @@
       <item row="2" column="0">
        <layout class="QHBoxLayout" name="horizontalLayout">
         <item>
-         <widget class="qMRMLNodeComboBox" name="MRMLNodeComboBox">
+         <widget class="qMRMLNodeComboBox" name="endPointsMarkupsSelector">
           <property name="nodeTypes">
            <stringlist>
             <string>vtkMRMLMarkupsFiducialNode</string>
@@ -100,7 +103,7 @@
          </widget>
         </item>
         <item>
-         <widget class="qSlicerMarkupsPlaceWidget" name="MarkupsPlaceWidget"/>
+         <widget class="qSlicerMarkupsPlaceWidget" name="endPointsMarkupsPlaceWidget"/>
         </item>
        </layout>
       </item>
@@ -162,7 +165,7 @@
   <connection>
    <sender>SegmentsWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>MarkupsPlaceWidget</receiver>
+   <receiver>endPointsMarkupsPlaceWidget</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
     <hint type="sourcelabel">
@@ -178,7 +181,7 @@
   <connection>
    <sender>SegmentsWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>MRMLNodeComboBox</receiver>
+   <receiver>endPointsMarkupsSelector</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
     <hint type="sourcelabel">
@@ -210,7 +213,7 @@
   <connection>
    <sender>SegmentsWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>SegmentSelectorWidget</receiver>
+   <receiver>inputSegmentSelectorWidget</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
     <hint type="sourcelabel">
@@ -226,7 +229,7 @@
   <connection>
    <sender>inputSurfaceSelector</sender>
    <signal>currentNodeChanged(vtkMRMLNode*)</signal>
-   <receiver>SegmentSelectorWidget</receiver>
+   <receiver>inputSegmentSelectorWidget</receiver>
    <slot>setCurrentNode(vtkMRMLNode*)</slot>
    <hints>
     <hint type="sourcelabel">
@@ -240,9 +243,9 @@
    </hints>
   </connection>
   <connection>
-   <sender>MRMLNodeComboBox</sender>
+   <sender>endPointsMarkupsSelector</sender>
    <signal>currentNodeChanged(vtkMRMLNode*)</signal>
-   <receiver>MarkupsPlaceWidget</receiver>
+   <receiver>endPointsMarkupsPlaceWidget</receiver>
    <slot>setCurrentNode(vtkMRMLNode*)</slot>
    <hints>
     <hint type="sourcelabel">

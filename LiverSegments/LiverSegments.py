@@ -62,6 +62,11 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.layout.addWidget(uiWidget)
     self.ui = slicer.util.childWidgetVariables(uiWidget)
 
+    self.nodeSelectors = [
+        (self.ui.inputSurfaceSelector, "InputSurface"),
+        (self.ui.endPointsMarkupsSelector, "EndPoints"),
+        ]
+
     # Set scene in MRML widgets. Make sure that in Qt designer
     # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
     # "setMRMLScene(vtkMRMLScene*)" slot.
@@ -73,6 +78,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Connections
     # These connections ensure that we update parameter node when scene is closed
+    self.ui.inputSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.updateParameterNodeFromGUI)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
@@ -149,14 +155,23 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if inputParameterNode:
       self.logic.setDefaultParameters(inputParameterNode)
 
+    # Set parameter node in the parameter node selector widget
+#    wasBlocked = self.ui.parameterNodeSelector.blockSignals(True)
+#    self.ui.parameterNodeSelector.setCurrentNode(inputParameterNode)
+#    self.ui.parameterNodeSelector.blockSignals(wasBlocked)
+
+    if inputParameterNode == self._parameterNode:
+      # No change
+      return
+
     # Unobserve previously selected parameter node and add an observer to the newly selected.
     # Changes of parameter node are observed so that whenever parameters are changed by a script or any other module
     # those are reflected immediately in the GUI.
     if self._parameterNode is not None:
       self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
-    self._parameterNode = inputParameterNode
     if self._parameterNode is not None:
       self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
+    self._parameterNode = inputParameterNode
 
     # Initial GUI update
     self.updateGUIFromParameterNode()
@@ -167,13 +182,32 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     The module GUI is updated to show the current state of the parameter node.
     """
 
+    # Disable all sections if no parameternode is selected
+    parameterNode = self._parameterNode
+    if not slicer.mrmlScene.IsNodePresent(parameterNode):
+        parameterNode = None
+    self.ui.segmentsCollapsibleButton.enabled = parameterNode is not None
+    if parameterNode is None:
+        return
+
     if self._parameterNode is None or self._updatingGUIFromParameterNode:
       return
 
     # Make sure GUI changes do not call updateParameterNodeFromGUI (it could cause infinite loop)
     self._updatingGUIFromParameterNode = True
 
+
     # Update node selectors and sliders
+    for nodeSelector, roleName in self.nodeSelectors:
+        nodeSelector.setCurrentNode(self._parameterNode.GetNodeReference(roleName))
+    inputSurfaceNode = self._parameterNode.GetNodeReference("InputSurface")
+    if inputSurfaceNode and inputSurfaceNode.IsA("vtkMRMLSegmentationNode"):
+        self.ui.inputSegmentSelectorWidget.setCurrentSegmentID(self._parameterNode.GetParameter("InputSegmentID"))
+        self.ui.inputSegmentSelectorWidget.setVisible(True)
+    else:
+        self.ui.inputSegmentSelectorWidget.setVisible(False)
+
+
     #    self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputVolume"))
     #     self.ui.outputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolume"))
     #    self.ui.invertedOutputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolumeInverse"))
@@ -199,6 +233,16 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     if self._parameterNode is None or self._updatingGUIFromParameterNode:
       return
+
+    for nodeSelector, roleName in self.nodeSelectors:
+      self._parameterNode.SetNodeReferenceID(roleName, nodeSelector.currentNodeID)
+
+    inputSurfaceNode = self._parameterNode.GetNodeReference("InputSurface")
+    if inputSurfaceNode and inputSurfaceNode.IsA("vtkMRMLSegmentationNode"):
+        self._parameterNode.SetParameter("InputSegmentID", self.ui.inputSegmentSelectorWidget.currentSegmentID())
+
+    self.ui.inputSegmentSelectorWidget.setCurrentSegmentID(self._parameterNode.GetParameter("InputSegmentID"))
+    self.ui.inputSegmentSelectorWidget.setVisible(inputSurfaceNode and inputSurfaceNode.IsA("vtkMRMLSegmentationNode"))
 
     #    wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
 

@@ -10,7 +10,10 @@ set(EXTENSION_CONTRIBUTORS "Rafael Palomar (Oslo University Hospital / NTNU), Eg
 set(EXTENSION_DESCRIPTION "3D Slicer extension for liver analysis and therapy planning")
 set(EXTENSION_ICONURL "http://www.slicer.org/slicerWiki/images/f/ff/SlicerLiver.png")
 set(EXTENSION_SCREENSHOTURLS "http://www.slicer.org/slicerWiki/images/a/ae/BasicLiverResection.png")
-set(EXTENSION_DEPENDS "Markups")
+set(EXTENSION_DEPENDS
+  Markups
+  SlicerVMTK
+  )
 
 #-----------------------------------------------------------------------------
 # Extension dependencies
