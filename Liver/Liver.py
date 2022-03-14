@@ -108,17 +108,6 @@ def registerSampleData():
     loadFileType = 'SegmentationFile'
   )
 
-  SampleData.SampleDataLogic.registerCustomSampleDataSource(
-    category='Liver',
-    sampleName = 'DistanceMap000',
-    thumbnailFileName = os.path.join(iconsPath, 'DistanceMap000.png'),
-    uris = aliveDataURL+'SHA256/bc003e745c357f49a54b3ac843cd03b7724c3c6b4e35c793cc450875608880f2',
-    fileNames = 'DistanceMap000.nrrd',
-    checksums = 'SHA256:bc003e745c357f49a54b3ac843cd03b7724c3c6b4e35c793cc450875608880f2',
-    nodeNames = 'DistanceMap000',
-    loadFileType = 'VolumeFile'
-  )
-
 #
 # LiverWidget
 #
@@ -478,5 +467,4 @@ class LiverTest(ScriptedLoadableModuleTest):
     registerSampleData()
     inputSegmentation = SampleData.downloadSample('LiverSegmentation000')
     inputVolume= SampleData.downloadSample('LiverVolume000')
-    distanceMap = SampleData.downloadSample('DistanceMap000')
     self.delayDisplay('Loaded test data set')
