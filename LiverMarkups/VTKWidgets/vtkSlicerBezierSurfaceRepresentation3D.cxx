@@ -240,10 +240,14 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
         "   ambientColor = rMarginColor;\n"
         "   diffuseColor = vec3(0.0);\n"
         "}\n"
-        "else if(dist[0] < highMargin-(highMargin-lowMargin)*0.05){\n"
+        "else if(dist[0] < highMargin-(highMargin-lowMargin)*0.1){\n"
+        "  if(interpolatedMargins == 0){\n"
         "   ambientColor = uMarginColor;\n"
+        "  }\n"
+        "  else{\n"
         "   ambientColor = mix(rMarginColor, uMarginColor, (dist[0]-lowMargin)/(highMargin-lowMargin));\n"
         "   diffuseColor = vec3(0.0);\n"
+        "  }\n"
         "}\n"
         "else if(dist[0] < highMargin){\n"
         "   ambientColor = vec3(0.0);\n"
@@ -287,6 +291,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
   auto fragmentUniforms = shaderProperty->GetFragmentCustomUniforms();
   fragmentUniforms->SetUniformf("resectionMargin", static_cast<float>(liverMarkupsBezierSurfaceNode->GetResectionMargin()));
   fragmentUniforms->SetUniformf("uncertaintyMargin", static_cast<float>(liverMarkupsBezierSurfaceNode->GetUncertaintyMargin()));
+  fragmentUniforms->SetUniformi("interpolatedMargins", static_cast<float>(liverMarkupsBezierSurfaceDisplayNode->GetInterpolatedMargins()));
   fragmentUniforms->SetUniform3f("rMarginColor", resectionMarginColor);
   fragmentUniforms->SetUniform3f("uMarginColor", uncertaintyMarginColor);
 
@@ -412,7 +417,6 @@ double *vtkSlicerBezierSurfaceRepresentation3D::GetBounds()
   boundingBox.GetBounds(this->Bounds);
   return this->Bounds;
 }
-
 
 //----------------------------------------------------------------------
 // void vtkSlicerBezierSurfaceRepresentation3D::CanInteract(

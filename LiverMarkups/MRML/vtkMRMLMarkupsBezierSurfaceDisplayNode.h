@@ -88,10 +88,17 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsBezierSurfaceDisp
   /// set the clipout state variable as integer
   void SetWidgetVisibility(int value)
   { this->WidgetVisibility = value!=0?1:0; this->Modified();}
+  /// Get the clipout state variable as integer
+  int GetInterpolatedMargins() const
+  { return static_cast<int>(this->InterpolatedMargins);}
+  /// set the clipout state variable as integer
+  void SetInterpolatedMargins(int value)
+  { this->InterpolatedMargins = value!=0?1:0; this->Modified();}
 
 protected:
   bool ClipOut;
   bool WidgetVisibility;
+  bool InterpolatedMargins;
 
 protected:
   vtkMRMLMarkupsBezierSurfaceDisplayNode();

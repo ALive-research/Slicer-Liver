@@ -173,6 +173,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.ResectionLockCheckBox.connect('stateChanged(int)', self.onResectionLockChanged)
     self.resectionsWidget.UncertaintyMarginSpinBox.connect('valueChanged(double)', self.onUncertaintyMarginChanged)
     self.resectionsWidget.UncertaintyMarginComboBox.connect('currentIndexChanged(int)', self.onUncertaintyMaginComboBoxChanged)
+    self.resectionsWidget.InterpolatedMarginsCheckBox.connect('stateChanged(int)', self.onInterpolatedMarginsChanged)
 
   def onDistanceMapParameterChanged(self):
     """
@@ -232,6 +233,13 @@ class LiverWidget(ScriptedLoadableModuleWidget):
           self.resectionsWidget.ResectionLockCheckBox.setCheckState(2) # Unchecked
         self.resectionsWidget.ResectionLockCheckBox.blockSignals(False)
 
+        self.resectionsWidget.InterpolatedMarginsCheckBox.blockSignals(True)
+        if activeResectionNode.GetWidgetVisibility():
+          self.resectionsWidget.InterpolatedMarginsCheckBox.setCheckState(0) # Checked
+        else:
+          self.resectionsWidget.InterpolatedMarginsCheckBox.setCheckState(2) # Unchecked
+        self.resectionsWidget.InterpolatedMarginsCheckBox.blockSignals(False)
+
         if activeResectionNode.GetState()  == activeResectionNode.Initialization: # Show initialization
           lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
           lvLogic.HideInitializationMarkupFromResection(self._currentResectionNode)
@@ -254,7 +262,11 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     This function is called when the resection distance map selector changes
     """
     if self._currentResectionNode is not None:
+
+      distanceMapNode = self.resectionsWidget.DistanceMapNodeComboBox.currentNode()
       self._currentResectionNode.SetDistanceMapVolumeNode(self.resectionsWidget.DistanceMapNodeComboBox.currentNode())
+      self.resectionsWidget.ResectionMarginGroupBox.setEnabled(distanceMapNode is not None)
+      self.resectionsWidget.UncertaintyMarginGroupBox.setEnabled(distanceMapNode is not None)
 
   def onResectionLiverModelNodeChanged(self):
     """
@@ -269,6 +281,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     if self._currentResectionNode is not None:
       self._currentResectionNode.SetResectionMargin(self.resectionsWidget.ResectionMarginSpinBox.value)
+      self.updateTotalMargin()
 
   def onUncertaintyMarginChanged(self):
     """
@@ -277,6 +290,13 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     if self._currentResectionNode is not None:
       self._currentResectionNode.SetUncertaintyMargin(self.resectionsWidget.UncertaintyMarginSpinBox.value)
       self.resectionsWidget.ResectionMarginSpinBox.minimum = self._currentResectionNode.GetUncertaintyMargin()
+      self.updateTotalMargin()
+
+  def updateTotalMargin(self):
+    uncertainty = self._currentResectionNode.GetUncertaintyMargin()
+    resection = self._currentResectionNode.GetResectionMargin()
+    self.resectionsWidget.TotalMarginLabel.setText('{:.2f} mm'.format(resection+uncertainty))
+
 
   def onResectionLockChanged(self):
     """
@@ -301,7 +321,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     qt.QApplication.restoreOverrideCursor()
     slicer.util.showStatusMessage('')
 
-
   def onUncertaintyMaginComboBoxChanged(self):
     """
     This function is called whenever the uncertainty combo box is changed
@@ -319,6 +338,14 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       if distanceMap is not None:
         rmsSpacing = np.sqrt(np.mean(np.square(distanceMap.GetSpacing())))
         self.resectionsWidget.UncertaintyMarginSpinBox.setValue(rmsSpacing)
+
+  def onInterpolatedMarginsChanged(self):
+    """
+    This function is called whenever the interpolated contour has changed
+    """
+    if self._currentResectionNode is not None:
+      self._currentResectionNode.SetInterpolatedMargins(self.resectionsWidget.InterpolatedMarginsCheckBox.isChecked())
+
 
   def cleanup(self):
     """
