@@ -170,6 +170,8 @@ public:
   vtkPoints const* GetBezierPoints() const
   {return const_cast<vtkPoints const*>(this->BezierSurfaceControlPoints.GetPointer());}
 
+  // TODO: Some of these properties could very well be in a display node
+  //
   // Set the clipout state variable
   vtkSetMacro(ClipOut, bool);
 
@@ -187,6 +189,12 @@ public:
 
   // Set the widget visibility variable
   vtkSetMacro(WidgetVisibility, int);
+
+  // Get interpolated margins property
+  vtkGetMacro(InterpolatedMargins, bool);
+
+  // Set interpolated margins property
+  vtkSetMacro(InterpolatedMargins, bool);
 
 protected:
   vtkMRMLLiverResectionNode();
@@ -207,6 +215,7 @@ private:
   vtkNew<vtkPoints> BezierSurfaceControlPoints;
   bool ClipOut;
   bool WidgetVisibility;
+  bool InterpolatedMargins;
 
 private:
  vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);

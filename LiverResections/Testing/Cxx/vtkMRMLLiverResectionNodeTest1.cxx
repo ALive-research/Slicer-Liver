@@ -92,5 +92,11 @@ int vtkMRMLLiverResectionNodeTest1(int, char *[])
   TEST_SET_GET_VALUE(node1, WidgetVisibility, 1);
   TEST_SET_GET_VALUE(node1, WidgetVisibility, 0);
 
+  // Test value setting/getting on WidgetVisibility
+  TEST_SET_GET_VALUE(node1, InterpolatedMargins, true );
+  TEST_SET_GET_VALUE(node1, InterpolatedMargins, false);
+  TEST_SET_GET_VALUE(node1, InterpolatedMargins, 1);
+  TEST_SET_GET_VALUE(node1, InterpolatedMargins, 0);
+
   return EXIT_SUCCESS;
 }

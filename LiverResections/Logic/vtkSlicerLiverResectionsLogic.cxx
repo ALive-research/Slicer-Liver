@@ -172,6 +172,7 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
         {
         bezierSurfaceDisplayNode->SetClipOut(resectionNode->GetClipOut());
         bezierSurfaceDisplayNode->SetWidgetVisibility(resectionNode->GetWidgetVisibility());
+        bezierSurfaceDisplayNode->SetInterpolatedMargins(resectionNode->GetInterpolatedMargins());
         }
       bezierSurfaceNode->SetLocked(!resectionNode->GetWidgetVisibility());
       }
