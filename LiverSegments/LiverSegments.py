@@ -49,6 +49,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     ScriptedLoadableModuleWidget.__init__(self, parent)
     VTKObservationMixin.__init__(self)  # needed for parameter node observation
     self.logic = None
+    self.centerlineProcessingLogic = None
     self._parameterNode = None
     self._updatingGUIFromParameterNode = False
 
@@ -75,7 +76,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Create logic class. Logic implements all computations that should be possible to run
     # in batch mode, without a graphical user interface.
-    self.logic = ExtractCenterlineLogic()
+    self.logic = LiverSegmentsLogic()
+    self.centerlineProcessingLogic = ExtractCenterlineLogic()
 
     # Connections
     # These connections ensure that we update parameter node when scene is closed
@@ -263,7 +265,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #Using _parameterNode don't work yet
     #inputSurfacePolyData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputSurface"),
     #                                                   self._parameterNode.GetParameter("InputSegmentID"))
-    inputSurfacePolyData = self.logic.polyDataFromNode(surface, segmentId)
+    inputSurfacePolyData = self.centerlineProcessingLogic.polyDataFromNode(surface, segmentId)
     if not inputSurfacePolyData or inputSurfacePolyData.GetNumberOfPoints() == 0:
         raise ValueError("Valid input surface is required")
     print("got inputSurfacePolyData")
@@ -279,7 +281,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     targetNumberOfPoints = float(self._parameterNode.GetParameter("TargetNumberOfPoints"))
     decimationAggressiveness = float(self._parameterNode.GetParameter("DecimationAggressiveness"))
     subdivideInputSurface = (self._parameterNode.GetParameter("SubdivideInputSurface") == "true")
-    preprocessedPolyData = self.logic.preprocess(inputSurfacePolyData, targetNumberOfPoints, decimationAggressiveness, subdivideInputSurface)
+    preprocessedPolyData = self.centerlineProcessingLogic.preprocess(inputSurfacePolyData, targetNumberOfPoints, decimationAggressiveness, subdivideInputSurface)
     return preprocessedPolyData
 
   def onAddSegmentButton(self):
@@ -308,7 +310,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     preprocessedPolyData = self.getPreprocessedPolyData()
     print("extractCenterline")
-    centerlinePolyData, voronoiDiagramPolyData = self.logic.extractCenterline(preprocessedPolyData, endPointsMarkupsNode)
+    centerlinePolyData, voronoiDiagramPolyData = self.centerlineProcessingLogic.extractCenterline(preprocessedPolyData, endPointsMarkupsNode)
 
 # LiverSegmentsLogic
 #
