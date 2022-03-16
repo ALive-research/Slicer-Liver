@@ -303,13 +303,14 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 
     #endPointsMarkupsNode = self._parameterNode.GetNodeReference("EndPoints") #Don't work yet
-    endPointsMarkupsNode = self.ui.inputSegmentSelectorWidget.currentSegmentID()
+    endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
 
     if not endPointsMarkupsNode:
         raise ValueError("No endPointsMarkupsNode")
     print(endPointsMarkupsNode)
 
     preprocessedPolyData = self.getPreprocessedPolyData()
+    #Wery slow. Use preprocess
     print("extractCenterline")
     centerlinePolyData, voronoiDiagramPolyData = self.centerlineProcessingLogic.extractCenterline(preprocessedPolyData, endPointsMarkupsNode)
 
