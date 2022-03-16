@@ -313,9 +313,18 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     print(endPointsMarkupsNode)
 
     preprocessedPolyData = self.getPreprocessedPolyData()
-    #Wery slow. Use preprocess
+
+    #Create centerlineModelNode
+    centerlineModelNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode')
+
+    #Wery slow. Use preprocess?
     print("extractCenterline")
     centerlinePolyData, voronoiDiagramPolyData = self.centerlineProcessingLogic.extractCenterline(preprocessedPolyData, endPointsMarkupsNode)
+
+    centerlineModelNode.SetAndObserveMesh(centerlinePolyData)
+    centerlineModelNode.CreateDefaultDisplayNodes()
+    centerlineModelNode.GetDisplayNode().SetColor(0.0, 1.0, 0.0)
+    centerlineModelNode.GetDisplayNode().SetLineWidth(3)
 
 # LiverSegmentsLogic
 #
