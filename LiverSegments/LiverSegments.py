@@ -81,6 +81,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Connections
     # These connections ensure that we update parameter node when scene is closed
+    self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
     self.ui.inputSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.updateParameterNodeFromGUI)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
@@ -288,7 +289,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Run processing when user clicks button.
     """
-    slicer.util.showStatusMessage('Starting calculation')
+    slicer.util.showStatusMessage('Starting calculation', 3000)
     #    with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
     #      # Compute output
     #      self.logic.process(self.ui.inputSelector.currentNode(), self.ui.outputSelector.currentNode(),
