@@ -131,6 +131,9 @@
             <height>40</height>
            </size>
           </property>
+          <property name="placeMultipleMarkups">
+           <enum>qSlicerMarkupsPlaceWidget::ForcePlaceMultipleMarkups</enum>
+          </property>
          </widget>
         </item>
        </layout>
