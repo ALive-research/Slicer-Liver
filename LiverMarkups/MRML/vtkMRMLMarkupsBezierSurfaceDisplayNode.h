@@ -43,6 +43,7 @@
 #include "vtkSlicerLiverMarkupsModuleMRMLExport.h"
 
 #include <vtkMRMLMarkupsDisplayNode.h>
+#include <vtkSetGet.h>
 
 //-----------------------------------------------------------------------------
 class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsBezierSurfaceDisplayNode
@@ -91,14 +92,39 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsBezierSurfaceDisp
   /// Get the clipout state variable as integer
   int GetInterpolatedMargins() const
   { return static_cast<int>(this->InterpolatedMargins);}
-  /// set the clipout state variable as integer
+  /// Set the clipout state variable as integer
   void SetInterpolatedMargins(int value)
   { this->InterpolatedMargins = value!=0?1:0; this->Modified();}
+  /// Get the resection color
+  vtkGetVector3Macro(ResectionColor, float);
+  /// Set the resection color
+  vtkSetVector3Macro(ResectionColor, float);
+  /// Get the resection margin color
+  vtkGetVector3Macro(ResectionMarginColor, float);
+  /// Set the resection margin color
+  vtkSetVector3Macro(ResectionMarginColor, float);
+  /// Get the uncertainty margin color
+  vtkGetVector3Macro(UncertaintyMarginColor, float);
+  /// Set the uncertainty margin color
+  vtkSetVector3Macro(UncertaintyMarginColor, float);
+  /// Get the opacity margin color
+  vtkGetMacro(ResectionOpacity, float);
+  /// Set the opacity margin color
+  vtkSetClampMacro(ResectionOpacity, float, 0.0f, 1.0f);
+  /// Get the grid visibility
+  vtkGetMacro(GridVisibility, bool);
+  /// Set the opacity margin color
+  vtkSetMacro(GridVisibility, int);
 
 protected:
   bool ClipOut;
   bool WidgetVisibility;
   bool InterpolatedMargins;
+  float ResectionColor[3];
+  float ResectionMarginColor[3];
+  float UncertaintyMarginColor[3];
+  float ResectionOpacity;
+  bool GridVisibility;
 
 protected:
   vtkMRMLMarkupsBezierSurfaceDisplayNode();

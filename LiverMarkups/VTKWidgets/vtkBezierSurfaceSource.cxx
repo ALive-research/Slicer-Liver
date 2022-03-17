@@ -308,6 +308,38 @@ int vtkBezierSurfaceSource::RequestData(vtkInformation *vtkNotUsed(request),
   return 1;
 }
 
+// //-------------------------------------------------------------------------------
+// void vtkBezierSurfaceSource::UpdateTopology()
+// {
+//   unsigned int xRes = this->Resolution[0];
+//   unsigned int yRes = this->Resolution[1];
+
+//   this->Topology = vtkSmartPointer<vtkCellArray>::New();
+
+//   for (unsigned int i=0; i<xRes-1; i++)
+//     {
+//     for (unsigned int j=0; j<yRes-1; j++)
+//       {
+//       unsigned int base = i*yRes + j;
+//       unsigned int a = base;
+//       unsigned int b = base + 1;
+//       unsigned int c = base + yRes + 1;
+//       unsigned int d = base + yRes;
+//       vtkIdType triangle[3];
+
+//       triangle[0] = c;
+//       triangle[1] = b;
+//       triangle[2] = a;
+//       Topology->InsertNextCell(3, triangle);
+
+//       triangle[0] = d;
+//       triangle[1] = c;
+//       triangle[2] = a;
+//       Topology->InsertNextCell(3, triangle);
+//       }
+//     }
+// }
+
 //-------------------------------------------------------------------------------
 void vtkBezierSurfaceSource::UpdateTopology()
 {
@@ -325,20 +357,17 @@ void vtkBezierSurfaceSource::UpdateTopology()
       unsigned int b = base + 1;
       unsigned int c = base + yRes + 1;
       unsigned int d = base + yRes;
-      vtkIdType triangle[3];
+      vtkIdType quad[4];
 
-      triangle[0] = c;
-      triangle[1] = b;
-      triangle[2] = a;
-      Topology->InsertNextCell(3, triangle);
-
-      triangle[0] = d;
-      triangle[1] = c;
-      triangle[2] = a;
-      Topology->InsertNextCell(3, triangle);
+      quad[0] = d;
+      quad[1] = c;
+      quad[2] = b;
+      quad[3] = a;
+      Topology->InsertNextCell(4, quad);
       }
     }
 }
+
 
 //-------------------------------------------------------------------------------
 void vtkBezierSurfaceSource::ComputeBinomialCoefficients()
