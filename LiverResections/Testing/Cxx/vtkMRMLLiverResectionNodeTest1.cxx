@@ -98,5 +98,12 @@ int vtkMRMLLiverResectionNodeTest1(int, char *[])
   TEST_SET_GET_VALUE(node1, InterpolatedMargins, 1);
   TEST_SET_GET_VALUE(node1, InterpolatedMargins, 0);
 
+  // TODO: Uncomment when VECTOR3_FLOAT is added to testing macros
+  // // Test value setting/getting for resection margin color
+  // TEST_SET_GET_VECTOR3_FLOAT_RANGE(node1, ResectionMarginColor, 0.0, 1.0);
+
+  // // Test value setting/getting for uncertainty margin color
+  // TEST_SET_GET_VECTOR3_FLOAT_RANGE(node1, Uncertainty, 0.0, 1.0);
+
   return EXIT_SUCCESS;
 }

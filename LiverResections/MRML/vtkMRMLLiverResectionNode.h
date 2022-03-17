@@ -170,8 +170,6 @@ public:
   vtkPoints const* GetBezierPoints() const
   {return const_cast<vtkPoints const*>(this->BezierSurfaceControlPoints.GetPointer());}
 
-  // TODO: Some of these properties could very well be in a display node
-  //
   // Set the clipout state variable
   vtkSetMacro(ClipOut, bool);
 
@@ -196,6 +194,36 @@ public:
   // Set interpolated margins property
   vtkSetMacro(InterpolatedMargins, bool);
 
+  // Set interpolated property
+  vtkSetVector3Macro(ResectionColor, float);
+
+  // Get interpolated property
+  vtkGetVector3Macro(ResectionColor, float);
+
+  // Set interpolated margins property
+  vtkSetVector3Macro(ResectionMarginColor, float);
+
+  // Get interpolated margins property
+  vtkGetVector3Macro(ResectionMarginColor, float);
+
+  // Set interpolated margins property
+  vtkSetVector3Macro(UncertaintyMarginColor, float);
+
+  // Get interpolated margins property
+  vtkGetVector3Macro(UncertaintyMarginColor, float);
+
+  // Get resection opacity property
+  vtkGetMacro(ResectionOpacity, float);
+
+  // Set resection opacity property
+  vtkSetClampMacro(ResectionOpacity, float, 0.0f, 1.0f);
+
+  // Get the widget visibility variable
+  vtkGetMacro(GridVisibility, bool);
+
+  // Set the widget visibility variable
+  vtkSetMacro(GridVisibility, int);
+
 protected:
   vtkMRMLLiverResectionNode();
   ~vtkMRMLLiverResectionNode() override;
@@ -216,6 +244,11 @@ private:
   bool ClipOut;
   bool WidgetVisibility;
   bool InterpolatedMargins;
+  float ResectionColor[3];
+  float ResectionMarginColor[3];
+  float UncertaintyMarginColor[3];
+  float ResectionOpacity;
+  bool GridVisibility;
 
 private:
  vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);

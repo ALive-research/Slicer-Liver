@@ -94,6 +94,7 @@ protected:
   vtkSmartPointer<vtkPoints> BezierSurfaceControlPoints;
   vtkSmartPointer<vtkOpenGLPolyDataMapper> BezierSurfaceMapper;
   vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor;
+  vtkSmartPointer<vtkOpenGLActor> BezierSurfaceWireframeActor;
   vtkSmartPointer<vtkPolyDataNormals> BezierSurfaceNormals;
 
   // Control polygon related elements
@@ -108,6 +109,7 @@ protected:
   vtkNew<vtkMatrix4x4> VBOShiftScale;
   vtkNew<vtkTransform> VBOInverseTransform;
   vtkWeakPointer<vtkShaderProperty> ShaderProperty;
+  vtkWeakPointer<vtkShaderProperty> WireframeShaderProperty;
   vtkWeakPointer<vtkMatrix4x4> rasToIjk;
   vtkWeakPointer<vtkMatrix4x4> ijkToTexture;
   vtkWeakPointer<vtkMatrix4x4> shiftScale;
