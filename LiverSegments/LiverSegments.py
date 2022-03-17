@@ -274,17 +274,11 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         raise ValueError("Valid input surface is required")
     print("got inputSurfacePolyData")
 
-    preprocessEnabled = (self._parameterNode.GetParameter("PreprocessInputSurface") == "true")
-    print("preprocessEnabled: ", preprocessEnabled)
-    if not preprocessEnabled:
-        print("Don't preprocess")
-        return inputSurfacePolyData
+    targetNumberOfPoints = 5000
+    decimationAggressiveness = 4
+    subdivideInputSurface = 0
 
-    return inputSurfacePolyData #Don't preprocess for now
     print("Preprocess")
-    targetNumberOfPoints = float(self._parameterNode.GetParameter("TargetNumberOfPoints"))
-    decimationAggressiveness = float(self._parameterNode.GetParameter("DecimationAggressiveness"))
-    subdivideInputSurface = (self._parameterNode.GetParameter("SubdivideInputSurface") == "true")
     preprocessedPolyData = self.centerlineProcessingLogic.preprocess(inputSurfacePolyData, targetNumberOfPoints, decimationAggressiveness, subdivideInputSurface)
     return preprocessedPolyData
 
@@ -310,14 +304,12 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     if not endPointsMarkupsNode:
         raise ValueError("No endPointsMarkupsNode")
-    print(endPointsMarkupsNode)
 
     preprocessedPolyData = self.getPreprocessedPolyData()
 
     #Create centerlineModelNode
     centerlineModelNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode')
 
-    #Wery slow. Use preprocess?
     print("extractCenterline")
     centerlinePolyData, voronoiDiagramPolyData = self.centerlineProcessingLogic.extractCenterline(preprocessedPolyData, endPointsMarkupsNode)
 
