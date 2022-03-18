@@ -282,6 +282,30 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     preprocessedPolyData = self.centerlineProcessingLogic.preprocess(inputSurfacePolyData, targetNumberOfPoints, decimationAggressiveness, subdivideInputSurface)
     return preprocessedPolyData
 
+  def createSegmentName(self, endPointsMarkupsNode):
+    endpointsName = endPointsMarkupsNode.GetName()
+    split = endpointsName.split('_')
+    if len(split) > 1:
+      index = split[1]
+      nodeName = "Segment_" + str(index)
+    else:
+      nodeName = "Segment"
+    return nodeName
+
+  def createCenterlineNode(self, endPointsMarkupsNode):
+    nodeName = self.createSegmentName(endPointsMarkupsNode)
+    centerlineModelNode = slicer.mrmlScene.GetNodeByID(nodeName)
+    if centerlineModelNode:
+      print('Replacing centerlineModelNode:', nodeName)
+      slicer.mrmlScene.RemoveNode(centerlineModelNode)
+
+    centerlineModelNode = slicer.mrmlScene.AddNewNodeByClassWithID('vtkMRMLModelNode', nodeName, nodeName)
+
+    if not centerlineModelNode:
+      print('Error: Cannot create node: ', nodeName)
+
+    return centerlineModelNode
+
   def onAddSegmentButton(self):
     """
     Run processing when user clicks button.
@@ -307,8 +331,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     preprocessedPolyData = self.getPreprocessedPolyData()
 
-    #Create centerlineModelNode
-    centerlineModelNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode')
+    centerlineModelNode = self.createCenterlineNode(endPointsMarkupsNode)
 
     print("extractCenterline")
     centerlinePolyData, voronoiDiagramPolyData = self.centerlineProcessingLogic.extractCenterline(preprocessedPolyData, endPointsMarkupsNode)
