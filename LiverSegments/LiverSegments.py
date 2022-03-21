@@ -340,6 +340,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     centerlineModelNode.CreateDefaultDisplayNodes()
     centerlineModelNode.GetDisplayNode().SetColor(0.0, 1.0, 0.0)
     centerlineModelNode.GetDisplayNode().SetLineWidth(3)
+    endPointsMarkupsNode.SetDisplayVisibility(False)
 
 # LiverSegmentsLogic
 #
