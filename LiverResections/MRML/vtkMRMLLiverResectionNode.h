@@ -31,8 +31,8 @@
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  This file was originally developed by Rafael Palomar (The Intervention Centre,
-  Oslo University Hospital) and was supported by The Research Council of Norway
+  This file was originally developed by Rafael Palomar (Oslo University
+  Hospital and NTNU) and was supported by The Research Council of Norway
   through the ALive project (grant nr. 311393).
 
 ==============================================================================*/
@@ -188,6 +188,42 @@ public:
   // Set the widget visibility variable
   vtkSetMacro(WidgetVisibility, int);
 
+  // Get interpolated margins property
+  vtkGetMacro(InterpolatedMargins, bool);
+
+  // Set interpolated margins property
+  vtkSetMacro(InterpolatedMargins, bool);
+
+  // Set interpolated property
+  vtkSetVector3Macro(ResectionColor, float);
+
+  // Get interpolated property
+  vtkGetVector3Macro(ResectionColor, float);
+
+  // Set interpolated margins property
+  vtkSetVector3Macro(ResectionMarginColor, float);
+
+  // Get interpolated margins property
+  vtkGetVector3Macro(ResectionMarginColor, float);
+
+  // Set interpolated margins property
+  vtkSetVector3Macro(UncertaintyMarginColor, float);
+
+  // Get interpolated margins property
+  vtkGetVector3Macro(UncertaintyMarginColor, float);
+
+  // Get resection opacity property
+  vtkGetMacro(ResectionOpacity, float);
+
+  // Set resection opacity property
+  vtkSetClampMacro(ResectionOpacity, float, 0.0f, 1.0f);
+
+  // Get the widget visibility variable
+  vtkGetMacro(GridVisibility, bool);
+
+  // Set the widget visibility variable
+  vtkSetMacro(GridVisibility, int);
+
 protected:
   vtkMRMLLiverResectionNode();
   ~vtkMRMLLiverResectionNode() override;
@@ -207,6 +243,12 @@ private:
   vtkNew<vtkPoints> BezierSurfaceControlPoints;
   bool ClipOut;
   bool WidgetVisibility;
+  bool InterpolatedMargins;
+  float ResectionColor[3];
+  float ResectionMarginColor[3];
+  float UncertaintyMarginColor[3];
+  float ResectionOpacity;
+  bool GridVisibility;
 
 private:
  vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);

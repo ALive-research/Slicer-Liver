@@ -108,17 +108,6 @@ def registerSampleData():
     loadFileType = 'SegmentationFile'
   )
 
-  SampleData.SampleDataLogic.registerCustomSampleDataSource(
-    category='Liver',
-    sampleName = 'DistanceMap000',
-    thumbnailFileName = os.path.join(iconsPath, 'DistanceMap000.png'),
-    uris = aliveDataURL+'SHA256/bc003e745c357f49a54b3ac843cd03b7724c3c6b4e35c793cc450875608880f2',
-    fileNames = 'DistanceMap000.nrrd',
-    checksums = 'SHA256:bc003e745c357f49a54b3ac843cd03b7724c3c6b4e35c793cc450875608880f2',
-    nodeNames = 'DistanceMap000',
-    loadFileType = 'VolumeFile'
-  )
-
 #
 # LiverWidget
 #
@@ -180,10 +169,17 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'Computed', 'True')
     self.resectionsWidget.LiverModelNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionLiverModelNodeChanged)
+    self.resectionsWidget.ResectionColorPickerButton.connect('colorChanged(QColor)', self.onResectionColorChanged)
+    self.resectionsWidget.ResectionOpacityDoubleSlider.connect('valueChanged(double)', self.onResectionOpacityChanged)
+    self.resectionsWidget.ResectionOpacityDoubleSpinBox.connect('valueChanged(double)', self.onResectionOpacityChanged)
     self.resectionsWidget.ResectionMarginSpinBox.connect('valueChanged(double)', self.onResectionMarginChanged)
+    self.resectionsWidget.ResectionMarginColorPickerButton.connect('colorChanged(QColor)', self.onResectionMarginColorChanged)
+    self.resectionsWidget.ShowGridCheckBox.connect('stateChanged(int)', self.onShowGridChanged)
     self.resectionsWidget.ResectionLockCheckBox.connect('stateChanged(int)', self.onResectionLockChanged)
     self.resectionsWidget.UncertaintyMarginSpinBox.connect('valueChanged(double)', self.onUncertaintyMarginChanged)
+    self.resectionsWidget.UncertaintyMarginColorPickerButton.connect('colorChanged(QColor)', self.onUncertaintyMarginColorChanged)
     self.resectionsWidget.UncertaintyMarginComboBox.connect('currentIndexChanged(int)', self.onUncertaintyMaginComboBoxChanged)
+    self.resectionsWidget.InterpolatedMarginsCheckBox.connect('stateChanged(int)', self.onInterpolatedMarginsChanged)
 
   def onDistanceMapParameterChanged(self):
     """
@@ -220,10 +216,35 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectionsWidget.DistanceMapNodeComboBox.setCurrentNode(activeResectionNode.GetDistanceMapVolumeNode())
         self.resectionsWidget.DistanceMapNodeComboBox.blockSignals(False)
 
+        self.resectionsWidget.ResectionColorPickerButton.blockSignals(True)
+        color = activeResectionNode.GetResectionColor()
+        self.resectionsWidget.ResectionColorPickerButton.setColor(qt.QColor.fromRgbF(color[0], color[1], color[2]))
+        self.resectionsWidget.ResectionColorPickerButton.blockSignals(False)
+
         self.resectionsWidget.ResectionMarginSpinBox.blockSignals(True)
         self.resectionsWidget.ResectionMarginSpinBox.setValue(activeResectionNode.GetResectionMargin())
         self.resectionsWidget.ResectionMarginSpinBox.minimum = activeResectionNode.GetUncertaintyMargin()
         self.resectionsWidget.ResectionMarginSpinBox.blockSignals(False)
+
+        self.resectionsWidget.ResectionMarginColorPickerButton.blockSignals(True)
+        color = activeResectionNode.GetResectionMarginColor()
+        self.resectionsWidget.ResectionMarginColorPickerButton.setColor(qt.QColor.fromRgbF(color[0], color[1], color[2]))
+        self.resectionsWidget.ResectionMarginColorPickerButton.blockSignals(False)
+
+        self.resectionsWidget.ResectionOpacityDoubleSlider.blockSignals(True)
+        self.resectionsWidget.ResectionOpacityDoubleSlider.setValue(activeResectionNode.GetResectionOpacity())
+        self.resectionsWidget.ResectionOpacityDoubleSlider.blockSignals(False)
+
+        self.resectionsWidget.ResectionOpacityDoubleSpinBox.blockSignals(True)
+        self.resectionsWidget.ResectionOpacityDoubleSpinBox.setValue(activeResectionNode.GetResectionOpacity())
+        self.resectionsWidget.ResectionOpacityDoubleSpinBox.blockSignals(False)
+
+        self.resectionsWidget.ShowGridCheckBox.blockSignals(True)
+        if (activeResectionNode.GetWidgetVisibility()):
+          self.resectionsWidget.ShowGridCheckBox.setCheckState(0)
+        else:
+          self.resectionsWidget.ShowGridCheckBox.setCheckState(2)
+        self.resectionsWidget.ShowGridCheckBox.blockSignals(False)
 
         self.resectionsWidget.ResectionLockCheckBox.blockSignals(True)
         if (activeResectionNode.GetWidgetVisibility()):
@@ -236,12 +257,24 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectionsWidget.UncertaintyMarginSpinBox.setValue(activeResectionNode.GetUncertaintyMargin())
         self.resectionsWidget.UncertaintyMarginSpinBox.blockSignals(False)
 
+        self.resectionsWidget.UncertaintyMarginColorPickerButton.blockSignals(True)
+        color = activeResectionNode.GetUncertaintyMarginColor()
+        self.resectionsWidget.UncertaintyMarginColorPickerButton.setColor(qt.QColor.fromRgbF(color[0], color[1], color[2]))
+        self.resectionsWidget.UncertaintyMarginColorPickerButton.blockSignals(False)
+
         self.resectionsWidget.ResectionLockCheckBox.blockSignals(True)
         if activeResectionNode.GetWidgetVisibility():
-          self.resectionsWidget.ResectionLockCheckBox.setCheckState(0) # Checked
+          self.resectionsWidget.ResectionLockCheckBox.setCheckState(0) # Unchecked
         else:
-          self.resectionsWidget.ResectionLockCheckBox.setCheckState(2) # Unchecked
+          self.resectionsWidget.ResectionLockCheckBox.setCheckState(2) # Checked
         self.resectionsWidget.ResectionLockCheckBox.blockSignals(False)
+
+        self.resectionsWidget.InterpolatedMarginsCheckBox.blockSignals(True)
+        if activeResectionNode.GetInterpolatedMargins():
+          self.resectionsWidget.InterpolatedMarginsCheckBox.setCheckState(2) # Checked
+        else:
+          self.resectionsWidget.InterpolatedMarginsCheckBox.setCheckState(0) # Unchecked
+        self.resectionsWidget.InterpolatedMarginsCheckBox.blockSignals(False)
 
         if activeResectionNode.GetState()  == activeResectionNode.Initialization: # Show initialization
           lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
@@ -265,14 +298,21 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     This function is called when the resection distance map selector changes
     """
     if self._currentResectionNode is not None:
+
+      distanceMapNode = self.resectionsWidget.DistanceMapNodeComboBox.currentNode()
       self._currentResectionNode.SetDistanceMapVolumeNode(self.resectionsWidget.DistanceMapNodeComboBox.currentNode())
+      self.resectionsWidget.ResectionMarginGroupBox.setEnabled(distanceMapNode is not None)
+      self.resectionsWidget.UncertaintyMarginGroupBox.setEnabled(distanceMapNode is not None)
+      self.resectionsWidget.ResectionPreviewGroupBox.setEnabled(distanceMapNode is not None)
 
   def onResectionLiverModelNodeChanged(self):
     """
     This function is called when the resection liver model node changes
     """
     if self._currentResectionNode is not None:
-      self._currentResectionNode.SetTargetOrganModelNode(self.resectionsWidget.LiverModelNodeComboBox.currentNode())
+      modelNode = self.resectionsWidget.LiverModelNodeComboBox.currentNode()
+      self._currentResectionNode.SetTargetOrganModelNode(modelNode)
+      self.resectionsWidget.ResectionVisualizationGroupBox.setEnabled(modelNode is not None)
 
   def onResectionMarginChanged(self):
     """
@@ -280,6 +320,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     if self._currentResectionNode is not None:
       self._currentResectionNode.SetResectionMargin(self.resectionsWidget.ResectionMarginSpinBox.value)
+      self.updateTotalMargin()
 
   def onUncertaintyMarginChanged(self):
     """
@@ -288,6 +329,19 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     if self._currentResectionNode is not None:
       self._currentResectionNode.SetUncertaintyMargin(self.resectionsWidget.UncertaintyMarginSpinBox.value)
       self.resectionsWidget.ResectionMarginSpinBox.minimum = self._currentResectionNode.GetUncertaintyMargin()
+      self.updateTotalMargin()
+
+  def updateTotalMargin(self):
+    uncertainty = self._currentResectionNode.GetUncertaintyMargin()
+    resection = self._currentResectionNode.GetResectionMargin()
+    self.resectionsWidget.TotalMarginLabel.setText('{:.2f} mm'.format(resection+uncertainty))
+
+  def onShowGridChanged(self):
+    """
+    This function is called when the resection margin spinbox changes.
+    """
+    if self._currentResectionNode is not None:
+      self._currentResectionNode.SetGridVisibility(self.resectionsWidget.ShowGridCheckBox.isChecked())
 
   def onResectionLockChanged(self):
     """
@@ -312,7 +366,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     qt.QApplication.restoreOverrideCursor()
     slicer.util.showStatusMessage('')
 
-
   def onUncertaintyMaginComboBoxChanged(self):
     """
     This function is called whenever the uncertainty combo box is changed
@@ -330,6 +383,47 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       if distanceMap is not None:
         rmsSpacing = np.sqrt(np.mean(np.square(distanceMap.GetSpacing())))
         self.resectionsWidget.UncertaintyMarginSpinBox.setValue(rmsSpacing)
+
+  def onInterpolatedMarginsChanged(self):
+    """
+    This function is called whenever the interpolated contour has changed
+    """
+    if self._currentResectionNode is not None:
+      self._currentResectionNode.SetInterpolatedMargins(self.resectionsWidget.InterpolatedMarginsCheckBox.isChecked())
+
+  def onResectionColorChanged(self):
+    """
+    This function is called whenever the resection margin color has changed
+    """
+    if self._currentResectionNode is not None:
+      color = self.resectionsWidget.ResectionColorPickerButton.color
+      rgbF = [color.redF(),color.greenF(),color.blueF()]
+      self._currentResectionNode.SetResectionColor(rgbF)
+
+  def onResectionOpacityChanged(self):
+    """
+    This function is called whenever the resection margin color has changed
+    """
+    if self._currentResectionNode is not None:
+      self._currentResectionNode.SetResectionOpacity(self.resectionsWidget.ResectionOpacityDoubleSpinBox.value)
+
+  def onResectionMarginColorChanged(self):
+    """
+    This function is called whenever the resection margin color has changed
+    """
+    if self._currentResectionNode is not None:
+      color = self.resectionsWidget.ResectionMarginColorPickerButton.color
+      rgbF = [color.redF(),color.greenF(),color.blueF()]
+      self._currentResectionNode.SetResectionMarginColor(rgbF)
+
+  def onUncertaintyMarginColorChanged(self):
+    """
+    This function is called whenever the resection margin color has changed
+    """
+    if self._currentResectionNode is not None:
+      color = self.resectionsWidget.UncertaintyMarginColorPickerButton.color
+      rgbF = [color.redF(),color.greenF(),color.blueF()]
+      self._currentResectionNode.SetUncertaintyMarginColor(rgbF)
 
   def cleanup(self):
     """
@@ -478,5 +572,4 @@ class LiverTest(ScriptedLoadableModuleTest):
     registerSampleData()
     inputSegmentation = SampleData.downloadSample('LiverSegmentation000')
     inputVolume= SampleData.downloadSample('LiverVolume000')
-    distanceMap = SampleData.downloadSample('DistanceMap000')
     self.delayDisplay('Loaded test data set')

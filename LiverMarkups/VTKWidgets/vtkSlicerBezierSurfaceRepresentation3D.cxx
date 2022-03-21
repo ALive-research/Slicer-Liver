@@ -31,8 +31,8 @@
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  This file was originally developed by Rafael Palomar (The Intervention Centre,
-  Oslo University Hospital) and was supported by The Research Council of Norway
+  This file was originally developed by Rafael Palomar (Oslo University
+  Hospital and NTNU) and was supported by The Research Council of Norway
   through the ALive project (grant nr. 311393).
 
   ==============================================================================*/
@@ -103,6 +103,10 @@ vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
   this->BezierSurfaceMapper->SetInputConnection(this->BezierSurfaceNormals->GetOutputPort());
   this->BezierSurfaceActor = vtkSmartPointer<vtkOpenGLActor>::New();
   this->BezierSurfaceActor->SetMapper(this->BezierSurfaceMapper);
+  this->BezierSurfaceWireframeActor = vtkSmartPointer<vtkOpenGLActor>::New();
+  this->BezierSurfaceWireframeActor->SetMapper(this->BezierSurfaceMapper);
+  this->BezierSurfaceWireframeActor->GetProperty()->SetRepresentationToWireframe();
+  this->BezierSurfaceWireframeActor->GetProperty()->SetDiffuse(0.0);
 
   this->ControlPolygonPolyData = vtkSmartPointer<vtkPolyData>::New();
   this->ControlPolygonTubeFilter = vtkSmartPointer<vtkTubeFilter>::New();
@@ -240,22 +244,83 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
         "   ambientColor = rMarginColor;\n"
         "   diffuseColor = vec3(0.0);\n"
         "}\n"
-        "else if(dist[0] < highMargin-(highMargin-lowMargin)*0.05){\n"
+        "else if(dist[0] < highMargin-(highMargin-lowMargin)*0.1){\n"
+        "  if(interpolatedMargins == 0){\n"
         "   ambientColor = uMarginColor;\n"
-        "   ambientColor = mix(rMarginColor, uMarginColor, (dist[0]-lowMargin)/(highMargin-lowMargin));\n"
         "   diffuseColor = vec3(0.0);\n"
+        "  }\n"
+        "  else{\n"
+        "   ambientColor = mix(rMarginColor, uMarginColor, (dist[0]-lowMargin)/(highMargin-lowMargin));\n"
+        "   ambientColor = ambientColor;\n"
+        "   diffuseColor = vec3(0.0);\n"
+        "  }\n"
         "}\n"
         "else if(dist[0] < highMargin){\n"
         "   ambientColor = vec3(0.0);\n"
         "   diffuseColor = vec3(0.0);\n"
         "}\n"
         "else{\n"
-        "  ambientColor = vec3(0.2, 0.2 ,0.2);\n"
+        "  ambientColor = rColor;\n"
+        "  diffuseColor = vec3(0.6);\n"
         "}\n",
         false);
+
+    shaderProperty->AddFragmentShaderReplacement(
+      "//VTK::Light::Impl", true,
+      "//VTK::Light::Impl\n"
+      "fragOutput0 = vec4(ambientColor + diffuse + specular, rOpacity);\n",
+      false);
+
     this->ShaderProperty = shaderProperty;
   }
 
+  shaderProperty = this->BezierSurfaceWireframeActor->GetShaderProperty();
+  if (this->WireframeShaderProperty != shaderProperty)
+    {
+    shaderProperty->AddVertexShaderReplacement("//VTK::PositionVC::Dec", true,
+                                               "//VTK::PositionVC::Dec\n"
+                                               "out vec4 vertexMCVSOutput;\n"
+                                               "out vec4 vertexWCVSOutput;\n",
+                                               false);
+
+    shaderProperty->AddVertexShaderReplacement(
+        "//VTK::PositionVC::Impl", true,
+        "//VTK::PositionVC::Impl\n"
+        "vertexMCVSOutput = vertexMC;\n"
+        "vertexWCVSOutput = ijkToTexture*rasToIjk*shiftScale*vertexMC;\n",
+        false);
+
+    shaderProperty->AddFragmentShaderReplacement(
+        "//VTK::PositionVC::Dec", true,
+        "//VTK::PositionVC::Dec\n"
+        "in vec4 vertexMCVSOutput;\n"
+        "in vec4 vertexWCVSOutput;\n"
+        "vec4 fragPositionMC = vertexWCVSOutput;\n",
+        false);
+
+    shaderProperty->AddFragmentShaderReplacement(
+        "//VTK::Color::Dec", true,
+        "//VTK::Color::Dec\n"
+        "uniform sampler3D distanceTexture;\n",
+        false);
+
+    shaderProperty->AddFragmentShaderReplacement(
+        "//VTK::Color::Impl", true,
+        "//VTK::Color::Impl\n"
+        "vec4 dist = texture(distanceTexture, fragPositionMC.xyz);\n"
+        "if(clipOut == 1 && dist[1] > 2.0){\n"
+        "  discard;\n"
+        "}\n",
+        false);
+
+    shaderProperty->AddFragmentShaderReplacement(
+      "//VTK::Light::Impl", true,
+      "//VTK::Light::Impl\n"
+      "fragOutput0 = vec4(ambientColor + diffuse + specular, rOpacity);\n",
+      false);
+
+    this->WireframeShaderProperty = shaderProperty;
+  }
   auto rasToIjk = vtkSmartPointer<vtkMatrix4x4>::New();
   auto ijkToTexture = vtkSmartPointer<vtkMatrix4x4>::New();
 
@@ -273,31 +338,47 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
     scaling->GetTranspose(ijkToTexture);
     }
 
-  // this->BezierSurfaceActor->GetKeyMatrices(mcwc, anorms);
-  auto vertexUniforms= shaderProperty->GetVertexCustomUniforms();
+  auto vertexUniforms = this->ShaderProperty->GetVertexCustomUniforms();
   vertexUniforms->SetUniformMatrix("shiftScale", this->VBOShiftScale);
   vertexUniforms->SetUniformMatrix("rasToIjk", rasToIjk);
   vertexUniforms->SetUniformMatrix("ijkToTexture", ijkToTexture);
 
+  auto wireframeVertexUniforms= this->WireframeShaderProperty->GetVertexCustomUniforms();
+  wireframeVertexUniforms->SetUniformMatrix("shiftScale", this->VBOShiftScale);
+  wireframeVertexUniforms->SetUniformMatrix("rasToIjk", rasToIjk);
+  wireframeVertexUniforms->SetUniformMatrix("ijkToTexture", ijkToTexture);
+
   auto liverMarkupsBezierSurfaceDisplayNode =
     vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(liverMarkupsBezierSurfaceNode->GetDisplayNode());
 
-  const float resectionMarginColor[3] = {1.0f, 0.0f, 0.0f};
-  const float uncertaintyMarginColor[3] = {1.0f, 1.0f, 0.0f};
-  auto fragmentUniforms = shaderProperty->GetFragmentCustomUniforms();
+  auto fragmentUniforms = this->ShaderProperty->GetFragmentCustomUniforms();
+  auto wireframeFragmentUniforms = this->WireframeShaderProperty->GetFragmentCustomUniforms();
   fragmentUniforms->SetUniformf("resectionMargin", static_cast<float>(liverMarkupsBezierSurfaceNode->GetResectionMargin()));
   fragmentUniforms->SetUniformf("uncertaintyMargin", static_cast<float>(liverMarkupsBezierSurfaceNode->GetUncertaintyMargin()));
-  fragmentUniforms->SetUniform3f("rMarginColor", resectionMarginColor);
-  fragmentUniforms->SetUniform3f("uMarginColor", uncertaintyMarginColor);
+  fragmentUniforms->SetUniformi("interpolatedMargins", static_cast<float>(liverMarkupsBezierSurfaceDisplayNode->GetInterpolatedMargins()));
 
   if (!liverMarkupsBezierSurfaceDisplayNode)
-  {
+    {
+    const float resectionColor[3]= {1.0f};
+    const float resectionMarginColor[3] = {1.0f, 0.0f, 0.0f};
+    const float uncertaintyMarginColor[3] = {1.0f, 1.0f, 0.0f};
+    const float resectionOpacity = 1.0f;
     fragmentUniforms->SetUniformi("clipOut", 0);
-  }
+    wireframeFragmentUniforms->SetUniformi("clipOut", 0);
+    fragmentUniforms->SetUniform3f("rMarginColor", resectionMarginColor);
+    fragmentUniforms->SetUniform3f("uMarginColor", uncertaintyMarginColor);
+    fragmentUniforms->SetUniformf("rOpacity", resectionOpacity);
+    }
   else
-  {
+    {
     fragmentUniforms->SetUniformi("clipOut", liverMarkupsBezierSurfaceDisplayNode->GetClipOut());
-  }
+    wireframeFragmentUniforms->SetUniformi("clipOut", liverMarkupsBezierSurfaceDisplayNode->GetClipOut());
+    fragmentUniforms->SetUniform3f("rColor", liverMarkupsBezierSurfaceDisplayNode->GetResectionColor());
+    fragmentUniforms->SetUniform3f("rMarginColor", liverMarkupsBezierSurfaceDisplayNode->GetResectionMarginColor());
+    fragmentUniforms->SetUniform3f("uMarginColor", liverMarkupsBezierSurfaceDisplayNode->GetUncertaintyMarginColor());
+    fragmentUniforms->SetUniformf("rOpacity", liverMarkupsBezierSurfaceDisplayNode->GetResectionOpacity());
+    wireframeFragmentUniforms->SetUniformf("rOpacity", liverMarkupsBezierSurfaceDisplayNode->GetResectionOpacity());
+    }
 
   if (liverMarkupsBezierSurfaceDisplayNode)
     {
@@ -307,6 +388,8 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
       auto controlPoints = reinterpret_cast<ControlPointsPipeline3D *>(this->ControlPoints[type]);
       controlPoints->Actor->SetVisibility(liverMarkupsBezierSurfaceDisplayNode->GetWidgetVisibility());
       }
+
+    this->BezierSurfaceWireframeActor->SetVisibility(liverMarkupsBezierSurfaceDisplayNode->GetGridVisibility());
     }
 
   this->NeedToRenderOn();
@@ -317,6 +400,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::GetActors(vtkPropCollection *pc)
 {
   this->Superclass::GetActors(pc);
   this->BezierSurfaceActor->GetActors(pc);
+  this->BezierSurfaceWireframeActor->GetActors(pc);
   this->ControlPolygonActor->GetActors(pc);
 }
 
@@ -326,6 +410,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::ReleaseGraphicsResources(
 {
   this->Superclass::ReleaseGraphicsResources(win);
   this->BezierSurfaceActor->ReleaseGraphicsResources(win);
+  this->BezierSurfaceWireframeActor->ReleaseGraphicsResources(win);
   this->ControlPolygonActor->ReleaseGraphicsResources(win);
 }
 
@@ -337,6 +422,7 @@ int vtkSlicerBezierSurfaceRepresentation3D::RenderOverlay(vtkViewport *viewport)
   if (this->BezierSurfaceActor->GetVisibility())
     {
     count +=  this->BezierSurfaceActor->RenderOverlay(viewport);
+    count +=  this->BezierSurfaceWireframeActor->RenderOverlay(viewport);
     count +=  this->ControlPolygonActor->RenderOverlay(viewport);
     }
   return count;
@@ -351,6 +437,10 @@ int vtkSlicerBezierSurfaceRepresentation3D::RenderOpaqueGeometry(
   if (this->BezierSurfaceActor->GetVisibility())
     {
     count += this->BezierSurfaceActor->RenderOpaqueGeometry(viewport);
+    }
+  if (this->BezierSurfaceWireframeActor->GetVisibility())
+    {
+    count += this->BezierSurfaceWireframeActor->RenderOpaqueGeometry(viewport);
     }
   if (this->ControlPolygonActor->GetVisibility())
     {
@@ -375,6 +465,13 @@ int vtkSlicerBezierSurfaceRepresentation3D::RenderTranslucentPolygonalGeometry(
     this->BezierSurfaceActor->SetPropertyKeys(this->GetPropertyKeys());
     count += this->BezierSurfaceActor->RenderTranslucentPolygonalGeometry(viewport);
     }
+  if (this->BezierSurfaceWireframeActor->GetVisibility())
+    {
+    // The internal actor needs to share property keys.
+    // This ensures the mapper state is consistent and allows depth peeling to work as expected.
+    this->BezierSurfaceWireframeActor->SetPropertyKeys(this->GetPropertyKeys());
+    count += this->BezierSurfaceWireframeActor->RenderTranslucentPolygonalGeometry(viewport);
+    }
   if (this->ControlPolygonActor->GetVisibility())
     {
     // The internal actor needs to share property keys.
@@ -396,6 +493,10 @@ vtkTypeBool vtkSlicerBezierSurfaceRepresentation3D::HasTranslucentPolygonalGeome
     {
     return true;
     }
+  if (this->BezierSurfaceWireframeActor->GetVisibility() && this->BezierSurfaceWireframeActor->HasTranslucentPolygonalGeometry())
+    {
+    return true;
+    }
   if (this->ControlPolygonActor->GetVisibility() && this->ControlPolygonActor->HasTranslucentPolygonalGeometry())
     {
     return true;
@@ -407,12 +508,14 @@ vtkTypeBool vtkSlicerBezierSurfaceRepresentation3D::HasTranslucentPolygonalGeome
 double *vtkSlicerBezierSurfaceRepresentation3D::GetBounds()
 {
   vtkBoundingBox boundingBox;
-  const std::vector<vtkProp*> actors({ this->BezierSurfaceActor, this->ControlPolygonActor });
+  const std::vector<vtkProp*> actors({
+      this->BezierSurfaceActor,
+      this->BezierSurfaceWireframeActor,
+      this->ControlPolygonActor });
   this->AddActorsBounds(boundingBox, actors, Superclass::GetBounds());
   boundingBox.GetBounds(this->Bounds);
   return this->Bounds;
 }
-
 
 //----------------------------------------------------------------------
 // void vtkSlicerBezierSurfaceRepresentation3D::CanInteract(
@@ -449,6 +552,15 @@ void vtkSlicerBezierSurfaceRepresentation3D::PrintSelf(ostream& os, vtkIndent in
   else
     {
     os << indent << "BezierSurface Visibility: (none)\n";
+    }
+
+  if (this->BezierSurfaceWireframeActor)
+    {
+    os << indent << "BezierSurface Wireframe Visibility: " << this->BezierSurfaceWireframeActor->GetVisibility() << "\n";
+    }
+  else
+    {
+    os << indent << "BezierSurface Wireframe Visibility: (none)\n";
     }
 
   if (this->ControlPolygonActor)

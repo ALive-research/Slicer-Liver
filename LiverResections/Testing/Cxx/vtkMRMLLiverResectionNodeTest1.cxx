@@ -31,8 +31,8 @@
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  This file was originally developed by Rafael Palomar (The Intervention Centre,
-  Oslo University Hospital) and was supported by The Research Council of Norway
+  This file was originally developed by Rafael Palomar (Oslo University
+  Hospital and NTNU) and was supported by The Research Council of Norway
   through the ALive project (grant nr. 311393).
 
 ==============================================================================*/
@@ -91,6 +91,19 @@ int vtkMRMLLiverResectionNodeTest1(int, char *[])
   TEST_SET_GET_VALUE(node1, WidgetVisibility, false);
   TEST_SET_GET_VALUE(node1, WidgetVisibility, 1);
   TEST_SET_GET_VALUE(node1, WidgetVisibility, 0);
+
+  // Test value setting/getting on WidgetVisibility
+  TEST_SET_GET_VALUE(node1, InterpolatedMargins, true );
+  TEST_SET_GET_VALUE(node1, InterpolatedMargins, false);
+  TEST_SET_GET_VALUE(node1, InterpolatedMargins, 1);
+  TEST_SET_GET_VALUE(node1, InterpolatedMargins, 0);
+
+  // TODO: Uncomment when VECTOR3_FLOAT is added to testing macros
+  // // Test value setting/getting for resection margin color
+  // TEST_SET_GET_VECTOR3_FLOAT_RANGE(node1, ResectionMarginColor, 0.0, 1.0);
+
+  // // Test value setting/getting for uncertainty margin color
+  // TEST_SET_GET_VECTOR3_FLOAT_RANGE(node1, Uncertainty, 0.0, 1.0);
 
   return EXIT_SUCCESS;
 }
