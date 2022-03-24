@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>507</width>
-    <height>572</height>
+    <width>769</width>
+    <height>765</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -42,7 +42,7 @@
    <item row="1" column="0" colspan="2">
     <widget class="qMRMLCollapsibleButton" name="segmentsCollapsibleButton">
      <property name="text">
-      <string>Input Segments</string>
+      <string>Liver Segments</string>
      </property>
      <property name="collapsed">
       <bool>false</bool>
@@ -55,7 +55,7 @@
         </property>
        </widget>
       </item>
-      <item row="0" column="1" colspan="2">
+      <item row="0" column="1" colspan="3">
        <widget class="qMRMLNodeComboBox" name="inputSurfaceSelector">
         <property name="nodeTypes">
          <stringlist>
@@ -77,7 +77,7 @@
         </property>
        </widget>
       </item>
-      <item row="1" column="2">
+      <item row="1" column="2" colspan="2">
        <widget class="qMRMLSegmentSelectorWidget" name="inputSegmentSelectorWidget">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
@@ -97,7 +97,7 @@
         </property>
        </widget>
       </item>
-      <item row="2" column="2">
+      <item row="2" column="2" colspan="2">
        <layout class="QHBoxLayout" name="horizontalLayout">
         <item>
          <widget class="qMRMLNodeComboBox" name="endPointsMarkupsSelector">
@@ -138,10 +138,49 @@
         </item>
        </layout>
       </item>
-      <item row="3" column="0" colspan="3">
+      <item row="3" column="0" colspan="4">
        <widget class="QPushButton" name="addSegmentButton">
         <property name="text">
          <string>Add Segment</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="0" colspan="2">
+       <spacer name="verticalSpacer">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeType">
+         <enum>QSizePolicy::Fixed</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>40</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item row="5" column="0" colspan="3">
+       <widget class="QLabel" name="label_4">
+        <property name="text">
+         <string>Liver Segments:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="3">
+       <widget class="qMRMLNodeComboBox" name="outputSegmentsSelector">
+        <property name="nodeTypes">
+         <stringlist>
+          <string>vtkMRMLLabelMapVolumeNode</string>
+         </stringlist>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="0" colspan="4">
+       <widget class="QPushButton" name="calculateSegmentsButton">
+        <property name="text">
+         <string>Calculate Liver Segments</string>
         </property>
        </widget>
       </item>
@@ -302,6 +341,22 @@
     <hint type="destinationlabel">
      <x>170</x>
      <y>27</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>SegmentsWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>outputSegmentsSelector</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>255</x>
+     <y>296</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>308</x>
+     <y>429</y>
     </hint>
    </hints>
   </connection>
