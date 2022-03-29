@@ -60,7 +60,7 @@ class vtkPolyDataNormals;
 class vtkPoints;
 class vtkTextureObject;
 class vtkTubeFilter;
-class vtkOpenGLPolyDataMapper;
+class vtkOpenGLBezierResectionPolyDataMapper;
 
 //------------------------------------------------------------------------------
 class vtkMRMLMarkupsBezierSurfaceNode;
@@ -89,12 +89,15 @@ public:
   double *GetBounds() override;
 
 protected:
-  // Bezier surface releated elements
+  /// TransferDistanceMap
+  void CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode* node);
+
+protected:
+  //k Bezier surface releated elements
   vtkSmartPointer<vtkBezierSurfaceSource> BezierSurfaceSource;
   vtkSmartPointer<vtkPoints> BezierSurfaceControlPoints;
-  vtkSmartPointer<vtkOpenGLPolyDataMapper> BezierSurfaceMapper;
+  vtkSmartPointer<vtkOpenGLBezierResectionPolyDataMapper> BezierSurfaceResectionMapper;
   vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor;
-  vtkSmartPointer<vtkOpenGLActor> BezierSurfaceWireframeActor;
   vtkSmartPointer<vtkPolyDataNormals> BezierSurfaceNormals;
 
   // Control polygon related elements
@@ -105,21 +108,19 @@ protected:
 
   // Distance mapping related elements
   vtkSmartPointer<vtkTextureObject> DistanceMapTexture;
-  vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMap;
+  vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolumeNode;
   vtkNew<vtkMatrix4x4> VBOShiftScale;
   vtkNew<vtkTransform> VBOInverseTransform;
   vtkWeakPointer<vtkShaderProperty> ShaderProperty;
-  vtkWeakPointer<vtkShaderProperty> WireframeShaderProperty;
-  vtkWeakPointer<vtkMatrix4x4> rasToIjk;
-  vtkWeakPointer<vtkMatrix4x4> ijkToTexture;
-  vtkWeakPointer<vtkMatrix4x4> shiftScale;
 
 protected:
   vtkSlicerBezierSurfaceRepresentation3D();
   ~vtkSlicerBezierSurfaceRepresentation3D() override;
 
-  void UpdateControlPolygon(vtkMRMLMarkupsBezierSurfaceNode*);
-  void UpdateBezierSurface(vtkMRMLMarkupsBezierSurfaceNode*);
+  void UpdateControlPolygonGeometry(vtkMRMLMarkupsBezierSurfaceNode*);
+  void UpdateControlPolygonDisplay(vtkMRMLMarkupsBezierSurfaceNode*);
+  void UpdateBezierSurfaceGeometry(vtkMRMLMarkupsBezierSurfaceNode*);
+  void UpdateBezierSurfaceDisplay(vtkMRMLMarkupsBezierSurfaceNode*);
 
 private:
   vtkSlicerBezierSurfaceRepresentation3D(const vtkSlicerBezierSurfaceRepresentation3D&) = delete;

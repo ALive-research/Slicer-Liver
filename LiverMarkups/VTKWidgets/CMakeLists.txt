@@ -34,6 +34,8 @@ set(${KIT}_SRCS
   vtkBezierSurfaceSource.cxx
   vtkSlicerShaderHelper.h
   vtkSlicerShaderHelper.cxx
+  vtkOpenGLBezierResectionPolyDataMapper.h
+  vtkOpenGLBezierResectionPolyDataMapper.cxx
   )
 
 set(${KIT}_TARGET_LIBRARIES
