@@ -325,6 +325,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     #endPointsMarkupsNode = self._parameterNode.GetNodeReference("EndPoints") #Don't work yet
     endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
+    self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
 
     if not endPointsMarkupsNode:
         raise ValueError("No endPointsMarkupsNode")
