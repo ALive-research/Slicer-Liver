@@ -336,10 +336,17 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     print("extractCenterline")
     centerlinePolyData, voronoiDiagramPolyData = self.centerlineProcessingLogic.extractCenterline(preprocessedPolyData, endPointsMarkupsNode)
-
+    surface = self.ui.inputSurfaceSelector.currentNode()
+    if surface and surface.IsA("vtkMRMLSegmentationNode"):
+        segmentnode = self.ui.inputSegmentSelectorWidget.currentNode()
+        segmentID = self.ui.inputSegmentSelectorWidget.currentSegmentID()
+        segment = segmentnode.GetSegmentation().GetSegment(segmentID)
+        inputColor = segment.GetColor()
+    else:
+        inputColor = surface.GetDisplayNode().GetColor()
     centerlineModelNode.SetAndObserveMesh(centerlinePolyData)
     centerlineModelNode.CreateDefaultDisplayNodes()
-    centerlineModelNode.GetDisplayNode().SetColor(0.0, 1.0, 0.0)
+    centerlineModelNode.GetDisplayNode().SetColor(inputColor)
     centerlineModelNode.GetDisplayNode().SetLineWidth(3)
     endPointsMarkupsNode.SetDisplayVisibility(False)
 
