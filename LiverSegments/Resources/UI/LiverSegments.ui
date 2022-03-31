@@ -141,7 +141,7 @@
       <item row="3" column="0" colspan="4">
        <widget class="QPushButton" name="addSegmentButton">
         <property name="text">
-         <string>Add Segment</string>
+         <string>Add/Modify CenterlineSegment</string>
         </property>
        </widget>
       </item>
