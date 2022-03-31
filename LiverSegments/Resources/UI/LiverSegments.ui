@@ -110,7 +110,7 @@
            <bool>false</bool>
           </property>
           <property name="baseName">
-           <string>Endpoints</string>
+           <string>CenterlineSegment</string>
           </property>
           <property name="noneEnabled">
            <bool>true</bool>

@@ -66,7 +66,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.nodeSelectors = [
         (self.ui.inputSurfaceSelector, "InputSurface"),
-        (self.ui.endPointsMarkupsSelector, "EndPoints"),
+        (self.ui.endPointsMarkupsSelector, "CenterlineSegment"),
         ]
 
     # Set scene in MRML widgets. Make sure that in Qt designer
@@ -287,9 +287,9 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     split = endpointsName.split('_')
     if len(split) > 1:
       index = split[1]
-      nodeName = "Segment_" + str(index)
+      nodeName = "CenterlineSegment_" + str(index)
     else:
-      nodeName = "Segment"
+      nodeName = "CenterlineSegment"
     return nodeName
 
   def createCenterlineNode(self, endPointsMarkupsNode):
@@ -336,17 +336,11 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     print("extractCenterline")
     centerlinePolyData, voronoiDiagramPolyData = self.centerlineProcessingLogic.extractCenterline(preprocessedPolyData, endPointsMarkupsNode)
-    surface = self.ui.inputSurfaceSelector.currentNode()
-    if surface and surface.IsA("vtkMRMLSegmentationNode"):
-        segmentnode = self.ui.inputSegmentSelectorWidget.currentNode()
-        segmentID = self.ui.inputSegmentSelectorWidget.currentSegmentID()
-        segment = segmentnode.GetSegmentation().GetSegment(segmentID)
-        inputColor = segment.GetColor()
-    else:
-        inputColor = surface.GetDisplayNode().GetColor()
     centerlineModelNode.SetAndObserveMesh(centerlinePolyData)
     centerlineModelNode.CreateDefaultDisplayNodes()
-    centerlineModelNode.GetDisplayNode().SetColor(inputColor)
+
+    inputColor = self.ui.endPointsMarkupsPlaceWidget.ColorButton.color
+    centerlineModelNode.GetDisplayNode().SetColor(inputColor.redF(), inputColor.greenF(), inputColor.blueF())
     centerlineModelNode.GetDisplayNode().SetLineWidth(3)
     endPointsMarkupsNode.SetDisplayVisibility(False)
 
