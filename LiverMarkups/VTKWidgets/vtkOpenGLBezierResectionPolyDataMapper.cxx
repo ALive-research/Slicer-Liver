@@ -60,9 +60,9 @@ public:
   : Parent(parent), DistanceMapTextureObject(nullptr),
     RasToIjkMatrixT(nullptr), IjkToTextureMatrixT(nullptr),
     ResectionMargin(0.0f), UncertaintyMargin(0.0f),
-    ResectionMarginColor({1.0f, 0.0f, 0.0f}),
-    UncertaintyMarginColor({1.0f, 1.0f, 0.0f}),
-    ResectionColor({1.0f,1.0f, 1.0f}), ResectionOpacity(1.0f),
+    ResectionMarginColor{1.0f, 0.0f, 0.0f},
+    UncertaintyMarginColor{1.0f, 1.0f, 0.0f},
+    ResectionColor{1.0f,1.0f, 1.0f}, ResectionOpacity(1.0f),
     InterpolatedMargins(false), ResectionClipOut(false)
   {
     this->RasToIjkMatrixT = vtkSmartPointer<vtkMatrix4x4>::New();
