@@ -174,6 +174,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.ResectionOpacityDoubleSpinBox.connect('valueChanged(double)', self.onResectionOpacityChanged)
     self.resectionsWidget.ResectionMarginSpinBox.connect('valueChanged(double)', self.onResectionMarginChanged)
     self.resectionsWidget.ResectionMarginColorPickerButton.connect('colorChanged(QColor)', self.onResectionMarginColorChanged)
+    self.resectionsWidget.ResectionGridColorPickerButton.connect('colorChanged(QColor)', self.onResectionGridColorChanged)
     self.resectionsWidget.GridDivisionsDoubleSlider.connect('valueChanged(double)', self.onGridDivisionsChanged)
     self.resectionsWidget.GridThicknessDoubleSlider.connect('valueChanged(double)', self.onGridThicknessChanged)
     self.resectionsWidget.ResectionLockCheckBox.connect('stateChanged(int)', self.onResectionLockChanged)
@@ -186,8 +187,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     This function is triggered whenever any parameter of the distance maps are changed
     """
-
-
     node1 = self.distanceMapsWidget.TumorLabelMapComboBox.currentNode()
     node2 = self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.currentNode()
     node3 = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
@@ -240,6 +239,11 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectionsWidget.ResectionOpacityDoubleSpinBox.setValue(activeResectionNode.GetResectionOpacity())
         self.resectionsWidget.ResectionOpacityDoubleSpinBox.blockSignals(False)
 
+        self.resectionsWidget.ResectionGridColorPickerButton.blockSignals(True)
+        color = activeResectionNode.GetResectionGridColor()
+        self.resectionsWidget.ResectionGridColorPickerButton.setColor(qt.QColor.fromRgbF(color[0], color[1], color[2]))
+        self.resectionsWidget.ResectionGridColorPickerButton.blockSignals(False)
+
         self.resectionsWidget.ResectionLockCheckBox.blockSignals(True)
         if (activeResectionNode.GetWidgetVisibility()):
           self.resectionsWidget.ResectionLockCheckBox.setCheckState(0)
@@ -280,7 +284,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
           lvLogic.HideInitializationMarkupFromResection(self._currentResectionNode)
           lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
           lvLogic.ShowBezierSurfaceMarkupFromResection(activeResectionNode)
-
       else:
           lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
           lvLogic.HideInitializationMarkupFromResection(self._currentResectionNode)
@@ -388,9 +391,18 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       rgbF = [color.redF(),color.greenF(),color.blueF()]
       self._currentResectionNode.SetResectionColor(rgbF)
 
+  def onResectionGridColorChanged(self):
+    """
+    This function is called whenever the  grid color has changed
+    """
+    if self._currentResectionNode is not None:
+      color = self.resectionsWidget.ResectionGridColorPickerButton.color
+      rgbF = [color.redF(),color.greenF(),color.blueF()]
+      self._currentResectionNode.SetResectionGridColor(rgbF)
+
   def onResectionOpacityChanged(self):
     """
-    This function is called whenever the resection margin color has changed
+    This function is called whenever the resection opacity has changed
     """
     if self._currentResectionNode is not None:
       self._currentResectionNode.SetResectionOpacity(self.resectionsWidget.ResectionOpacityDoubleSpinBox.value)

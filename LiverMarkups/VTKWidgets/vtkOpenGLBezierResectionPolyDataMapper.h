@@ -102,12 +102,19 @@ public:
   /// Set the resection margin
   void SetUncertaintyMarginColor(float red, float green, float blue);
 
-  /// Get the interpolated margin
+  /// Get the resection color
   float const* GetResectionColor() const;
-  /// Set the resection margin
+  /// Set the resection color
   void SetResectionColor(float color[3]);
-  /// Set the resection margin
+  /// Set the resection color
   void SetResectionColor(float red, float green, float blue);
+
+  /// Get the resection grid color
+  float const* GetResectionGridColor() const;
+  /// Set the resection gird color
+  void SetResectionGridColor(float color[3]);
+  /// Set the resection grid color
+  void SetResectionGridColor(float red, float green, float blue);
 
   /// Get the uncertainty margin
   float GetResectionOpacity() const;

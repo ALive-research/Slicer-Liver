@@ -69,7 +69,9 @@ public:
     ResectionMargin(0.0f), UncertaintyMargin(0.0f),
     ResectionMarginColor({1.0f, 0.0f, 0.0f}),
     UncertaintyMarginColor({1.0f, 1.0f, 0.0f}),
-    ResectionColor({1.0f,1.0f, 1.0f}), ResectionOpacity(1.0f),
+    ResectionColor({1.0f,1.0f, 1.0f}),
+    ResectionGridColor({0.0f,0.0f, 0.0f}),
+    ResectionOpacity(1.0f),
     InterpolatedMargins(false), ResectionClipOut(false)
   {
     this->RasToIjkMatrixT = vtkSmartPointer<vtkMatrix4x4>::New();
@@ -85,6 +87,7 @@ public:
   float ResectionMarginColor[3];
   float UncertaintyMarginColor[3];
   float ResectionColor[3];
+  float ResectionGridColor[3];
   float ResectionOpacity;
   bool  InterpolatedMargins;
   bool  ResectionClipOut;
@@ -166,6 +169,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
     "uniform vec3 uResectionMarginColor;\n"
     "uniform vec3 uUncertaintyMarginColor;\n"
     "uniform vec3 uResectionColor;\n"
+    "uniform vec3 uResectionGridColor;\n"
     "uniform int uResectionClipOut;\n"
     "uniform int uInterpolatedMargins;\n"
     "uniform int uGridDivisions;\n"
@@ -184,7 +188,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
     "  discard;\n"
     "}\n"
     "if(tan(uvCoordsOutput.x*M_PI*uGridDivisions)>10.0-uGridThickness || tan(uvCoordsOutput.y*M_PI*uGridDivisions)>10.0-uGridThickness){\n"
-    "   ambientColor = vec3(0.0);\n"
+    "   ambientColor = uResectionGridColor;\n"
     "   diffuseColor = vec3(0.0);\n"
     "}\n"
     "else{\n"
@@ -296,6 +300,11 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetMapperShaderParameters(
     cellBO.Program->SetUniform3f("uResectionColor", this->Impl->ResectionColor);
     }
 
+  if (cellBO.Program->IsUniformUsed("uResectionGridColor"))
+    {
+    cellBO.Program->SetUniform3f("uResectionGridColor", this->Impl->ResectionGridColor);
+    }
+
   if (cellBO.Program->IsUniformUsed("uResectionOpacity"))
     {
     cellBO.Program->SetUniformf("uResectionOpacity", this->Impl->ResectionOpacity);
@@ -347,7 +356,6 @@ vtkMatrix4x4 const* vtkOpenGLBezierResectionPolyDataMapper::GetRasToIjkMatrixT()
 {
   return this->Impl->RasToIjkMatrixT;
 }
-
 
 //------------------------------------------------------------------------------
 void vtkOpenGLBezierResectionPolyDataMapper::SetRasToIjkMatrixT(const vtkMatrix4x4* matrix)
@@ -502,6 +510,31 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetResectionColor(float red, float 
   this->Impl->ResectionColor[2] = blue;
   this->Modified();
 }
+
+//------------------------------------------------------------------------------
+float const* vtkOpenGLBezierResectionPolyDataMapper::GetResectionGridColor() const
+{
+  return this->Impl->ResectionGridColor;
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::SetResectionGridColor(float color[3])
+{
+  this->Impl->ResectionGridColor[0] = color[0];
+  this->Impl->ResectionGridColor[1] = color[1];
+  this->Impl->ResectionGridColor[2] = color[2];
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::SetResectionGridColor(float red, float green, float blue)
+{
+  this->Impl->ResectionGridColor[0] = red;
+  this->Impl->ResectionGridColor[1] = green;
+  this->Impl->ResectionGridColor[2] = blue;
+  this->Modified();
+}
+
 
 //------------------------------------------------------------------------------
 float vtkOpenGLBezierResectionPolyDataMapper::GetResectionOpacity() const
