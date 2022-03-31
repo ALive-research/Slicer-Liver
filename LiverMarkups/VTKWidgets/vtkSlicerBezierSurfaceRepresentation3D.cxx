@@ -70,6 +70,7 @@
 #include <vtkOpenGLVertexBufferObjectGroup.h>
 #include <vtkOpenGLVertexBufferObject.h>
 #include <vtkPlaneSource.h>
+#include <vtkPointData.h>
 #include <vtkPolyDataMapper.h>
 #include <vtkPolyDataNormals.h>
 #include <vtkPolyLine.h>
@@ -78,6 +79,8 @@
 #include <vtkRenderWindow.h>
 #include <vtkSetGet.h>
 #include <vtkShaderProperty.h>
+#include <vtkSmartPointer.h>
+#include <vtkTexture.h>
 #include <vtkTextureObject.h>
 #include <vtkUniforms.h>
 
@@ -106,6 +109,16 @@ vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
   this->BezierSurfaceResectionMapper->SetInputConnection(this->BezierSurfaceNormals->GetOutputPort());
   this->BezierSurfaceActor = vtkSmartPointer<vtkOpenGLActor>::New();
   this->BezierSurfaceActor->SetMapper(this->BezierSurfaceResectionMapper);
+
+  // if (!this->BezierSurfaceActor->GetTexture())
+  //   {
+  //   auto image = vtkSmartPointer<vtkImageData>::New();
+  //   image->SetDimensions(1,1,1);
+  //   image->AllocateScalars(VTK_FLOAT, 2);
+  //   auto fakeTexture = vtkSmartPointer<vtkTexture>::New();
+  //   fakeTexture->SetInputData(image);
+  //   this->BezierSurfaceActor->SetTexture(fakeTexture);
+  //   }
 
   this->ControlPolygonPolyData = vtkSmartPointer<vtkPolyData>::New();
   this->ControlPolygonTubeFilter = vtkSmartPointer<vtkTubeFilter>::New();
@@ -410,7 +423,6 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture
   this->DistanceMapTexture = vtkSmartPointer<vtkTextureObject>::New();
   this->DistanceMapTexture->SetContext(renderWindow);
 
-  std::cout << "CreateAndTransferDistanceMapTexture" << std::endl;
   if (!node)
     {
     vtkWarningMacro("vtkSlicerBezierSurfaceRepresentation::CreateAndTransferDistanceMap:"
@@ -418,7 +430,6 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture
     return;
     }
 
-  std::cout << "CreateAndTransferDistanceMapTexture2" << std::endl;
   auto imageData = node->GetImageData();
   if (!imageData)
     {
@@ -427,7 +438,6 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture
     return;
     }
 
-  std::cout << "CreateAndTransferDistanceMapTexture3" << std::endl;
   auto dimensions = imageData->GetDimensions();
   this->DistanceMapTexture->SetWrapS(vtkTextureObject::ClampToBorder);
   this->DistanceMapTexture->SetWrapT(vtkTextureObject::ClampToBorder);
@@ -454,6 +464,8 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceDisplay(vtkMRMLM
     this->BezierSurfaceResectionMapper->SetResectionOpacity(displayNode->GetResectionOpacity());
     this->BezierSurfaceResectionMapper->SetResectionClipOut(displayNode->GetClipOut());
     this->BezierSurfaceResectionMapper->SetInterpolatedMargins(displayNode->GetInterpolatedMargins());
+    this->BezierSurfaceResectionMapper->SetGridDivisions(displayNode->GetGridDivisions());
+    this->BezierSurfaceResectionMapper->SetGridThicknessFactor(displayNode->GetGridThickness());
     }
 }
 

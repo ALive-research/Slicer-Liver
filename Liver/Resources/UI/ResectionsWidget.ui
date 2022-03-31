@@ -13,7 +13,7 @@
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_6">
+  <layout class="QVBoxLayout" name="verticalLayout_7">
    <item>
     <widget class="qMRMLCollapsibleButton" name="ResectionsCollapsibleButton">
      <property name="text">
@@ -220,39 +220,91 @@
               </item>
              </layout>
             </item>
-            <item>
-             <layout class="QHBoxLayout" name="horizontalLayout_6">
-              <item>
-               <widget class="QLabel" name="ShowGridLabel">
-                <property name="text">
-                 <string>Show grid:</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="ctkCheckBox" name="ShowGridCheckBox">
-                <property name="tristate">
-                 <bool>false</bool>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <spacer name="horizontalSpacer_4">
-                <property name="orientation">
-                 <enum>Qt::Horizontal</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
-                 <size>
-                  <width>40</width>
-                  <height>20</height>
-                 </size>
-                </property>
-               </spacer>
-              </item>
-             </layout>
-            </item>
            </layout>
           </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="ctkCollapsibleGroupBox" name="GridGroupBox">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="title">
+         <string>Resection grid</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_6">
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_8">
+           <item>
+            <widget class="QLabel" name="GridDivisionsLabel">
+             <property name="text">
+              <string>Divisions:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="ctkDoubleSlider" name="GridDivisionsDoubleSlider">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="ctkDoubleSpinBox" name="GridDivisionsDoubleSpinBox">
+             <property name="decimals">
+              <number>0</number>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_9">
+           <item>
+            <widget class="QLabel" name="GridThicknessLabel">
+             <property name="text">
+              <string>Thickness:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="ctkDoubleSlider" name="GridThicknessDoubleSlider">
+             <property name="value">
+              <double>5.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>0.100000000000000</double>
+             </property>
+             <property name="pageStep">
+              <double>1.000000000000000</double>
+             </property>
+             <property name="maximum">
+              <double>10.000000000000000</double>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="ctkDoubleSpinBox" name="GridThicknessDoubleSpinBox">
+             <property name="decimals">
+              <number>2</number>
+             </property>
+             <property name="maximum">
+              <double>10.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>0.500000000000000</double>
+             </property>
+             <property name="value">
+              <double>5.000000000000000</double>
+             </property>
+            </widget>
+           </item>
+          </layout>
          </item>
         </layout>
        </widget>
@@ -649,6 +701,70 @@
     <hint type="destinationlabel">
      <x>355</x>
      <y>582</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>GridDivisionsDoubleSlider</sender>
+   <signal>valueChanged(double)</signal>
+   <receiver>GridDivisionsDoubleSpinBox</receiver>
+   <slot>setValue(double)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>285</x>
+     <y>407</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>485</x>
+     <y>407</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>GridDivisionsDoubleSpinBox</sender>
+   <signal>valueChanged(double)</signal>
+   <receiver>GridDivisionsDoubleSlider</receiver>
+   <slot>setValue(double)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>485</x>
+     <y>407</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>285</x>
+     <y>407</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>GridThicknessDoubleSlider</sender>
+   <signal>valueChanged(double)</signal>
+   <receiver>GridThicknessDoubleSpinBox</receiver>
+   <slot>setValue(double)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>282</x>
+     <y>449</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>477</x>
+     <y>449</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>GridThicknessDoubleSpinBox</sender>
+   <signal>valueChanged(double)</signal>
+   <receiver>GridThicknessDoubleSlider</receiver>
+   <slot>setValue(double)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>477</x>
+     <y>449</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>282</x>
+     <y>449</y>
     </hint>
    </hints>
   </connection>

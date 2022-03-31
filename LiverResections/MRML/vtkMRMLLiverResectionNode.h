@@ -224,6 +224,18 @@ public:
   // Set the widget visibility variable
   vtkSetMacro(GridVisibility, int);
 
+  // Get the widget visibility variable
+  vtkGetMacro(GridDivisions, float);
+
+  // Set the widget visibility variable
+  vtkSetMacro(GridDivisions, float);
+
+  // Get the widget visibility variable
+  vtkGetMacro(GridThickness, float);
+
+  // Set the widget visibility variable
+  vtkSetMacro(GridThickness, float);
+
 protected:
   vtkMRMLLiverResectionNode();
   ~vtkMRMLLiverResectionNode() override;
@@ -249,6 +261,8 @@ private:
   float UncertaintyMarginColor[3];
   float ResectionOpacity;
   bool GridVisibility;
+  float GridDivisions;
+  float GridThickness;
 
 private:
  vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);
