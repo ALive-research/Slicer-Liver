@@ -177,7 +177,8 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
         bezierSurfaceDisplayNode->SetResectionMarginColor(resectionNode->GetResectionMarginColor());
         bezierSurfaceDisplayNode->SetUncertaintyMarginColor(resectionNode->GetUncertaintyMarginColor());
         bezierSurfaceDisplayNode->SetResectionOpacity(resectionNode->GetResectionOpacity());
-        bezierSurfaceDisplayNode->SetGridVisibility(resectionNode->GetGridVisibility());
+        bezierSurfaceDisplayNode->SetGridDivisions(resectionNode->GetGridDivisions());
+        bezierSurfaceDisplayNode->SetGridThickness(resectionNode->GetGridThickness());
         }
       bezierSurfaceNode->SetLocked(!resectionNode->GetWidgetVisibility());
       }

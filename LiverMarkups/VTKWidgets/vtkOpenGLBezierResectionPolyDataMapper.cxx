@@ -41,16 +41,23 @@
 #include "vtkOpenGLBezierResectionPolyDataMapper.h"
 
 // VTK includes
+#include <vtkCellData.h>
+#include <vtkFloatArray.h>
 #include <vtkImageData.h>
 #include <vtkMatrix4x4.h>
 #include <vtkObjectFactory.h>
+#include <vtkOpenGLError.h>
+#include <vtkOpenGLRenderWindow.h>
 #include <vtkOpenGLVertexBufferObject.h>
 #include <vtkOpenGLVertexBufferObjectGroup.h>
+#include <vtkPointData.h>
+#include <vtkPolyData.h>
+#include <vtkProperty.h>
+#include <vtkRenderer.h>
 #include <vtkSmartPointer.h>
+#include <vtkShaderProgram.h>
 #include <vtkTextureObject.h>
 #include <vtkTransform.h>
-#include <vtkShaderProgram.h>
-#include <vtkSmartPointer.h>
 
 //------------------------------------------------------------------------------
 class vtkOpenGLBezierResectionPolyDataMapper::vtkInternal
@@ -81,6 +88,8 @@ public:
   float ResectionOpacity;
   bool  InterpolatedMargins;
   bool  ResectionClipOut;
+  unsigned int GridDivisions;
+  float GridThicknessFactor;
 };
 
 //------------------------------------------------------------------------------
@@ -103,6 +112,20 @@ void vtkOpenGLBezierResectionPolyDataMapper::PrintSelf(ostream& os, vtkIndent in
 }
 
 //------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::BuildBufferObjects(vtkRenderer* ren, vtkActor* act)
+{
+  if (this->CurrentInput && this->HaveTCoords(this->CurrentInput))
+    {
+    auto renWin = vtkOpenGLRenderWindow::SafeDownCast(ren->GetRenderWindow());
+    vtkOpenGLVertexBufferObjectCache* cache = renWin->GetVBOCache();
+    auto tcoords = this->CurrentInput->GetPointData()->GetTCoords();
+    this->VBOs->CacheDataArray("uvCoords", tcoords, cache, VTK_FLOAT);
+    }
+
+  Superclass::BuildBufferObjects(ren, act);
+}
+
+//------------------------------------------------------------------------------
 void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
   std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer* ren, vtkActor* actor)
 {
@@ -111,28 +134,32 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
 
   vtkShaderProgram::Substitute(
     VSSource, "//VTK::PositionVC::Dec",
-    "//VTK::PositionVC::Dec"
+    "//VTK::PositionVC::Dec\n"
     "out vec4 vertexMCVSOutput;\n"
     "out vec4 vertexWCVSOutput;\n"
+    "in vec2  uvCoords;\n"
+    "out vec2 uvCoordsOutput;\n"
     "uniform mat4 uShiftScale;\n"
     "uniform mat4 uRasToIjk;\n"
     "uniform mat4 uIjkToTexture;\n");
 
   vtkShaderProgram::Substitute(
     VSSource, "//VTK::PositionVC::Impl",
-    "//VTK::PositionVC::Impl"
+    "//VTK::PositionVC::Impl\n"
     "vertexMCVSOutput = vertexMC;\n"
+    "uvCoordsOutput = uvCoords;\n"
     "vertexWCVSOutput = uIjkToTexture*uRasToIjk*uShiftScale*vertexMC;\n");
 
   vtkShaderProgram::Substitute(
     FSSource, "//VTK::PositionVC::Dec",
-    "//VTK::PositionVC::Dec"
+    "//VTK::PositionVC::Dec\n"
+    "#define M_PI 3.1415926535897932384626433832795\n"
     "uniform sampler3D distanceTexture;\n"
     "//vec4 fragPositionMC = vertexWCVSOutput;\n");
 
   vtkShaderProgram::Substitute(
     FSSource, "//VTK::Color::Dec",
-    "//VTK::Color::Dec"
+    "//VTK::Color::Dec\n"
     "uniform float uResectionMargin;\n"
     "uniform float uUncertaintyMargin;\n"
     "uniform float uResectionOpacity;\n"
@@ -141,49 +168,56 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
     "uniform vec3 uResectionColor;\n"
     "uniform int uResectionClipOut;\n"
     "uniform int uInterpolatedMargins;\n"
+    "uniform int uGridDivisions;\n"
+    "uniform float uGridThickness;\n"
     "in vec4 vertexWCVSOutput;\n"
+    "in vec2 uvCoordsOutput;\n"
     "vec4 fragPositionMC = vertexWCVSOutput;\n");
 
   vtkShaderProgram::Substitute(
     FSSource, "//VTK::Color::Impl",
-    "//VTK::Color::Impl"
+    "//VTK::Color::Impl\n"
     "vec4 dist = texture(distanceTexture, fragPositionMC.xyz);\n"
     "float lowMargin = uResectionMargin - uUncertaintyMargin;\n"
     "float highMargin = uResectionMargin + uUncertaintyMargin;\n"
     "if(uResectionClipOut == 1 && dist[1] > 2.0){\n"
     "  discard;\n"
     "}\n"
-    "if(dist[0] < lowMargin){\n"
-    "   ambientColor = uResectionMarginColor;\n"
-    "   diffuseColor = vec3(0.0);\n"
-    "}\n"
-    "else if(dist[0] < highMargin-(highMargin-lowMargin)*0.1){\n"
-    "  if(uInterpolatedMargins == 0){\n"
-    "   ambientColor = uUncertaintyMarginColor;\n"
-    "   diffuseColor = vec3(0.0);\n"
-    "  }\n"
-    "  else{\n"
-    "   ambientColor = mix(uResectionMarginColor, uUncertaintyMarginColor, "
-    "(dist[0]-lowMargin)/(highMargin-lowMargin));\n"
-    "   ambientColor = ambientColor;\n"
-    "   diffuseColor = vec3(0.0);\n"
-    "  }\n"
-    "}\n"
-    "else if(dist[0] < highMargin){\n"
+    "if(tan(uvCoordsOutput.x*M_PI*uGridDivisions)>10.0-uGridThickness || tan(uvCoordsOutput.y*M_PI*uGridDivisions)>10.0-uGridThickness){\n"
     "   ambientColor = vec3(0.0);\n"
     "   diffuseColor = vec3(0.0);\n"
     "}\n"
     "else{\n"
-    "  ambientColor = uResectionColor;\n"
-    "  diffuseColor = vec3(0.6);\n"
-    "}\n",
-    "in vec4 vertexMCVSOutput;\n"
-    "in vec4 vertexWCVSOutput;\n");
+    "  if(dist[0] < lowMargin){\n"
+    "   ambientColor = uResectionMarginColor;\n"
+    "   diffuseColor = vec3(0.0);\n"
+    "  }\n"
+    "  else if(dist[0] < highMargin-(highMargin-lowMargin)*0.1){\n"
+    "    if(uInterpolatedMargins == 0){\n"
+    "     ambientColor = uUncertaintyMarginColor;\n"
+    "     diffuseColor = vec3(0.0);\n"
+    "    }\n"
+    "    else{\n"
+    "     ambientColor = mix(uResectionMarginColor, uUncertaintyMarginColor, "
+    "     (dist[0]-lowMargin)/(highMargin-lowMargin));\n"
+    "     ambientColor = ambientColor;\n"
+    "     diffuseColor = vec3(0.0);\n"
+    "    }\n"
+    "  }\n"
+    "  else if(dist[0] < highMargin){\n"
+    "   ambientColor = vec3(0.0);\n"
+    "   diffuseColor = vec3(0.0);\n"
+    "  }\n"
+    "  else{\n"
+    "    ambientColor = uResectionColor;\n"
+    "    diffuseColor = vec3(0.6);\n"
+    "  }\n"
+    "}\n");
 
    vtkShaderProgram::Substitute(
     FSSource, "//VTK::Light::Impl",
-    "//VTK::Light::Impl"
-    "fragOutput0 = vec4(ambientColor + diffuse + specular, uResectionOpacity);\n");
+    "//VTK::Light::Impl\n"
+    "fragOutput0 = vec4(ambientColor+vec3(uvCoordsOutput,0.0)*0.00001 + diffuse + specular, uResectionOpacity);\n");
 
   shaders[vtkShader::Vertex]->SetSource(VSSource);
   shaders[vtkShader::Fragment]->SetSource(FSSource);
@@ -270,6 +304,16 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetMapperShaderParameters(
   if (cellBO.Program->IsUniformUsed("uResectionClipOut"))
     {
     cellBO.Program->SetUniformi("uResectionClipOut", this->Impl->ResectionClipOut);
+    }
+
+  if (cellBO.Program->IsUniformUsed("uGridDivisions"))
+    {
+    cellBO.Program->SetUniformi("uGridDivisions", this->Impl->GridDivisions);
+    }
+
+  if (cellBO.Program->IsUniformUsed("uGridThickness"))
+    {
+    cellBO.Program->SetUniformf("uGridThickness", this->Impl->GridThicknessFactor);
     }
 
   Superclass::SetMapperShaderParameters(cellBO, ren, actor);
@@ -496,4 +540,30 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetInterpolatedMargins(bool clipOut
 {
   this->Impl->InterpolatedMargins = clipOut;
   this->Modified();
+}
+
+//------------------------------------------------------------------------------
+unsigned int vtkOpenGLBezierResectionPolyDataMapper::GetGridDivisions() const
+{
+  return this->Impl->GridDivisions;
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::SetGridDivisions(unsigned int divisions)
+{
+ this->Impl->GridDivisions = divisions;
+ this->Modified();
+}
+
+//------------------------------------------------------------------------------
+float vtkOpenGLBezierResectionPolyDataMapper::GetGridThicknessFactor() const
+{
+  return this->Impl->GridThicknessFactor;
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::SetGridThicknessFactor(float thickness)
+{
+ this->Impl->GridThicknessFactor = thickness;
+ this->Modified();
 }

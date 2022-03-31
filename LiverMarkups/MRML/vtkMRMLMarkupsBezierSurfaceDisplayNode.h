@@ -111,10 +111,14 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsBezierSurfaceDisp
   vtkGetMacro(ResectionOpacity, float);
   /// Set the opacity margin color
   vtkSetClampMacro(ResectionOpacity, float, 0.0f, 1.0f);
-  /// Get the grid visibility
-  vtkGetMacro(GridVisibility, bool);
-  /// Set the opacity margin color
-  vtkSetMacro(GridVisibility, int);
+  /// Get the grid divisions
+  vtkGetMacro(GridDivisions, float);
+  /// Set the grid divisions
+  vtkSetMacro(GridDivisions, float);
+  /// Get the grid thickness
+  vtkGetMacro(GridThickness, float);
+  /// Set the grid thickness
+  vtkSetMacro(GridThickness, float);
 
 protected:
   bool ClipOut;
@@ -124,7 +128,9 @@ protected:
   float ResectionMarginColor[3];
   float UncertaintyMarginColor[3];
   float ResectionOpacity;
-  bool GridVisibility;
+  float GridDivisions;
+  float GridThickness;
+
 
 protected:
   vtkMRMLMarkupsBezierSurfaceDisplayNode();

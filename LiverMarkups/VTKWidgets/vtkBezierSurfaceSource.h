@@ -38,6 +38,7 @@
 #include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
 
 // VTK includes
+#include <vtkFloatArray.h>
 #include <vtkPolyDataAlgorithm.h>
 #include <vtkSmartPointer.h>
 
@@ -203,6 +204,8 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkBezierSurfaceSource : 
   double *BinomialCoefficientsY;
   vtkSmartPointer<vtkDoubleArray> DataArray;
   vtkSmartPointer<vtkCellArray> Topology;
+  vtkSmartPointer<vtkFloatArray> TCoords;
+
 };
 
 #endif

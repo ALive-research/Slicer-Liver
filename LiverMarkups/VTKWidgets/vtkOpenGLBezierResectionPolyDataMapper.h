@@ -124,12 +124,23 @@ public:
   /// Set the resection margin
   void SetInterpolatedMargins(bool interpolated);
 
+  /// Get the number of divisions for the grid (both u,v directions)
+  unsigned int GetGridDivisions() const;
+  /// Set the number of divisions for the grid (both u,v directions)
+  void SetGridDivisions(unsigned int divisions);
+
+  /// Get thickness factor for the grid
+  float GetGridThicknessFactor() const;
+  /// Set the thickness factor for the grid
+  void SetGridThicknessFactor(float thicknessFactor);
+
 protected:
   vtkOpenGLBezierResectionPolyDataMapper();
   ~vtkOpenGLBezierResectionPolyDataMapper();
 
+  void BuildBufferObjects(vtkRenderer* ren, vtkActor* act) override;
+
   // Perform string replacements on the shader templates
-  //
   void ReplaceShaderValues(std::map<vtkShader::Type, vtkShader*> shaders,
                            vtkRenderer* ren,
                            vtkActor* act) override;
