@@ -459,6 +459,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceDisplay(vtkMRMLM
   if (displayNode)
     {
     this->BezierSurfaceResectionMapper->SetResectionColor(displayNode->GetResectionColor());
+    this->BezierSurfaceResectionMapper->SetResectionGridColor(displayNode->GetResectionGridColor());
     this->BezierSurfaceResectionMapper->SetResectionMarginColor(displayNode->GetResectionMarginColor());
     this->BezierSurfaceResectionMapper->SetUncertaintyMarginColor(displayNode->GetUncertaintyMarginColor());
     this->BezierSurfaceResectionMapper->SetResectionOpacity(displayNode->GetResectionOpacity());

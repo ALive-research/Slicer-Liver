@@ -99,6 +99,10 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsBezierSurfaceDisp
   vtkGetVector3Macro(ResectionColor, float);
   /// Set the resection color
   vtkSetVector3Macro(ResectionColor, float);
+  /// Get the resection color
+  vtkGetVector3Macro(ResectionGridColor, float);
+  /// Set the resection color
+  vtkSetVector3Macro(ResectionGridColor, float);
   /// Get the resection margin color
   vtkGetVector3Macro(ResectionMarginColor, float);
   /// Set the resection margin color
@@ -125,6 +129,7 @@ protected:
   bool WidgetVisibility;
   bool InterpolatedMargins;
   float ResectionColor[3];
+  float ResectionGridColor[3];
   float ResectionMarginColor[3];
   float UncertaintyMarginColor[3];
   float ResectionOpacity;

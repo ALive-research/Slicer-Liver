@@ -200,6 +200,12 @@ public:
   // Get interpolated property
   vtkGetVector3Macro(ResectionColor, float);
 
+  // Set interpolated property
+  vtkSetVector3Macro(ResectionGridColor, float);
+
+  // Get interpolated property
+  vtkGetVector3Macro(ResectionGridColor, float);
+
   // Set interpolated margins property
   vtkSetVector3Macro(ResectionMarginColor, float);
 
@@ -257,6 +263,7 @@ private:
   bool WidgetVisibility;
   bool InterpolatedMargins;
   float ResectionColor[3];
+  float ResectionGridColor[3];
   float ResectionMarginColor[3];
   float UncertaintyMarginColor[3];
   float ResectionOpacity;
