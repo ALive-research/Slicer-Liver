@@ -46,12 +46,12 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Called when the user opens the module the first time and the widget is initialized.
     """
-    ScriptedLoadableModuleWidget.__init__(self, parent)
-    VTKObservationMixin.__init__(self)  # needed for parameter node observation
     self.logic = None
     self.centerlineProcessingLogic = None
     self._parameterNode = None
     self._updatingGUIFromParameterNode = False
+    ScriptedLoadableModuleWidget.__init__(self, parent)
+    VTKObservationMixin.__init__(self)  # needed for parameter node observation
 
   def setup(self):
     """
@@ -275,13 +275,11 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     inputSurfacePolyData = self.centerlineProcessingLogic.polyDataFromNode(surface, segmentId)
     if not inputSurfacePolyData or inputSurfacePolyData.GetNumberOfPoints() == 0:
         raise ValueError("Valid input surface is required")
-    print("got inputSurfacePolyData")
 
     targetNumberOfPoints = 5000
     decimationAggressiveness = 4
     subdivideInputSurface = 0
 
-    print("Preprocess")
     preprocessedPolyData = self.centerlineProcessingLogic.preprocess(inputSurfacePolyData, targetNumberOfPoints, decimationAggressiveness, subdivideInputSurface)
     return preprocessedPolyData
 
@@ -317,7 +315,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def updateSelectorColor(self):
     color = self.getCurrentColor()
     color255 = [int(i * 255) for i in color]
-    print("Set new CenterlineColor from table: ", color255)
     self.ui.endPointsMarkupsPlaceWidget.ColorButton.setColor(qt.QColor(color255[0], color255[1], color255[2]))
 
   def getCurrentColor(self):
@@ -359,7 +356,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     centerlineModelNode = self.createCenterlineNode(endPointsMarkupsNode)
 
-    print("extractCenterline")
     centerlinePolyData, voronoiDiagramPolyData = self.centerlineProcessingLogic.extractCenterline(preprocessedPolyData, endPointsMarkupsNode)
     centerlineModelNode.SetAndObserveMesh(centerlinePolyData)
     centerlineModelNode.CreateDefaultDisplayNodes()

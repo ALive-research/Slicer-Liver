@@ -43,6 +43,7 @@ import logging
 import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 import numpy as np
+import LiverSegments
 
 #
 # Liver
@@ -140,6 +141,14 @@ class LiverWidget(ScriptedLoadableModuleWidget):
 
     self.distanceMapsWidget = slicer.util.childWidgetVariables(distanceMapsUI)
     self.resectionsWidget = slicer.util.childWidgetVariables(resectionsUI)
+
+    # Add LiverSegmentsWidget
+    wrapperWidget = slicer.qMRMLWidget()
+    wrapperWidget.setLayout(qt.QVBoxLayout())
+    wrapperWidget.setMRMLScene(slicer.mrmlScene)
+    segemtsWidget = LiverSegments.LiverSegmentsWidget(wrapperWidget)
+    segemtsWidget.setup()
+    self.layout.addWidget(wrapperWidget)
 
     # Add a spacer at the botton to keep the UI flowing from top to bottom
     spacerItem = qt.QSpacerItem(0,0, qt.QSizePolicy.Minimum, qt.QSizePolicy.MinimumExpanding)
