@@ -312,6 +312,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def newEndpointsListCreated(self):
     self.colorNumber += 1
     self.updateSelectorColor()
+    self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(True)
 
   def updateSelectorColor(self):
     color = self.getCurrentColor()
