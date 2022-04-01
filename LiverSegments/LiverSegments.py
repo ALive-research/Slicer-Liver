@@ -81,6 +81,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.parameterNodeSelector.addAttribute("vtkMRMLScriptedModuleNode", "ModuleName", self.moduleName)
     self.setParameterNode(self.logic.getParameterNode())
 
+    # Color number in lookup table
+    self.colorNumber = 0
 
     # Connections
     self.ui.parameterNodeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.setParameterNode)
@@ -88,6 +90,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.inputSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.updateParameterNodeFromGUI)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
+    self.ui.endPointsMarkupsSelector.connect('nodeAddedByUser(vtkMRMLNode*)', self.newEndpointsListCreated)
 
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
     # (in the selected parameter node).
@@ -306,6 +309,27 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     return centerlineModelNode
 
+  def newEndpointsListCreated(self):
+    self.colorNumber += 1
+    self.updateSelectorColor()
+
+  def updateSelectorColor(self):
+    color = self.getCurrentColor()
+    color255 = [int(i * 255) for i in color]
+    print("Set new CenterlineColor from table: ", color255)
+    self.ui.endPointsMarkupsPlaceWidget.ColorButton.setColor(qt.QColor(color255[0], color255[1], color255[2]))
+
+  def getCurrentColor(self):
+    color = [1, 1, 1, 1]
+    colormap = slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels')
+    colormap.GetColor(self.colorNumber, color)
+    del color[3:]
+    return color
+
+  def useColorFromSelector(self, centerlineModelNode):
+    inputColor = self.ui.endPointsMarkupsPlaceWidget.ColorButton.color
+    centerlineModelNode.GetDisplayNode().SetColor(inputColor.redF(), inputColor.greenF(), inputColor.blueF())
+
   def onAddSegmentButton(self):
     """
     Run processing when user clicks button.
@@ -338,9 +362,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     centerlinePolyData, voronoiDiagramPolyData = self.centerlineProcessingLogic.extractCenterline(preprocessedPolyData, endPointsMarkupsNode)
     centerlineModelNode.SetAndObserveMesh(centerlinePolyData)
     centerlineModelNode.CreateDefaultDisplayNodes()
-
-    inputColor = self.ui.endPointsMarkupsPlaceWidget.ColorButton.color
-    centerlineModelNode.GetDisplayNode().SetColor(inputColor.redF(), inputColor.greenF(), inputColor.blueF())
+    self.useColorFromSelector(centerlineModelNode)
     centerlineModelNode.GetDisplayNode().SetLineWidth(3)
     endPointsMarkupsNode.SetDisplayVisibility(False)
 
