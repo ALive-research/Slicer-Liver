@@ -41,6 +41,7 @@
 #include <vtkExecutive.h>
 #include <vtkInformationVector.h>
 #include <vtkDoubleArray.h>
+#include <vtkPointData.h>
 
 // STD includes
 #include <cmath>
@@ -281,6 +282,11 @@ void vtkBezierSurfaceSource::SetResolution(unsigned int x, unsigned int y)
   this->DataArray->SetNumberOfComponents(3);
   this->DataArray->SetNumberOfTuples(x*y);
   this->UpdateTopology();
+
+  this->TCoords = vtkSmartPointer<vtkFloatArray>::New();
+  this->TCoords->SetNumberOfComponents(2);
+  this->TCoords->SetNumberOfTuples(x*y);
+
   this->Modified();
 }
 
@@ -418,6 +424,7 @@ void vtkBezierSurfaceSource::UpdateBezierSurfacePolyData(vtkPolyData *polyData)
 
   this->EvaluateBezierSurface(surfacePoints);
   polyData->SetPoints(surfacePoints);
+  polyData->GetPointData()->SetTCoords(this->TCoords);
 }
 
 //-------------------------------------------------------------------------------
@@ -465,6 +472,9 @@ void vtkBezierSurfaceSource::EvaluateBezierSurface(vtkPoints *points)
           }
         }
       DataArray->SetTuple(i*yRes+j,point);
+
+      double tcoord[2] = {u,v};
+      TCoords->SetTuple(i*yRes+j, tcoord);
       }
     }
   //END: parallel for
