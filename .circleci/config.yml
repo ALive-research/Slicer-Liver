@@ -56,4 +56,4 @@ jobs:
           name: Run Liver plugin tests
           command: |
             cd /usr/src/Slicer-Liver-Build
-            ctest
+            ctest -VV
