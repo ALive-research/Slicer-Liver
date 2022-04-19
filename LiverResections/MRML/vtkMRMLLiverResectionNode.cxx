@@ -57,7 +57,7 @@ vtkMRMLLiverResectionNode::vtkMRMLLiverResectionNode()
    ResectionMargin(0.0), UncertaintyMargin(0.0), ClipOut(false), WidgetVisibility(true),
    InterpolatedMargins(false), ResectionColor{1.0f, 1.0f, 1.0f},
    ResectionMarginColor{1.0f, 0.0f, 0.0f}, UncertaintyMarginColor{1.0f, 1.0f, 0.0f},
-   ResectionOpacity(1.0f), GridVisibility(false)
+   ResectionOpacity(1.0f), GridVisibility(false), GridThickness(0.0f)
 {
 }
 

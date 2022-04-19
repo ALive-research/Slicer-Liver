@@ -200,6 +200,12 @@ public:
   // Get interpolated property
   vtkGetVector3Macro(ResectionColor, float);
 
+  // Set interpolated property
+  vtkSetVector3Macro(ResectionGridColor, float);
+
+  // Get interpolated property
+  vtkGetVector3Macro(ResectionGridColor, float);
+
   // Set interpolated margins property
   vtkSetVector3Macro(ResectionMarginColor, float);
 
@@ -224,6 +230,18 @@ public:
   // Set the widget visibility variable
   vtkSetMacro(GridVisibility, int);
 
+  // Get the widget visibility variable
+  vtkGetMacro(GridDivisions, float);
+
+  // Set the widget visibility variable
+  vtkSetMacro(GridDivisions, float);
+
+  // Get the widget visibility variable
+  vtkGetMacro(GridThickness, float);
+
+  // Set the widget visibility variable
+  vtkSetMacro(GridThickness, float);
+
 protected:
   vtkMRMLLiverResectionNode();
   ~vtkMRMLLiverResectionNode() override;
@@ -245,10 +263,13 @@ private:
   bool WidgetVisibility;
   bool InterpolatedMargins;
   float ResectionColor[3];
+  float ResectionGridColor[3];
   float ResectionMarginColor[3];
   float UncertaintyMarginColor[3];
   float ResectionOpacity;
   bool GridVisibility;
+  float GridDivisions;
+  float GridThickness;
 
 private:
  vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);

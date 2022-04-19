@@ -150,9 +150,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.logic = LiverLogic()
 
     # # Enable the use of FXAA (antialiasing)
-    # if not slicer.app.commandOptions().noMainWindow:
-    #   renderer = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers().GetFirstRenderer()
-    #   renderer.UseFXAAOn()
+    if not slicer.app.commandOptions().noMainWindow:
+      renderer = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers().GetFirstRenderer()
+      renderer.UseFXAAOn()
 
     # Configure uncertainty margin combo box
     self.resectionsWidget.UncertaintyMarginComboBox.addItems(['Custom', 'Max. Spacing', 'RMS Spacing'])
@@ -174,7 +174,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.ResectionOpacityDoubleSpinBox.connect('valueChanged(double)', self.onResectionOpacityChanged)
     self.resectionsWidget.ResectionMarginSpinBox.connect('valueChanged(double)', self.onResectionMarginChanged)
     self.resectionsWidget.ResectionMarginColorPickerButton.connect('colorChanged(QColor)', self.onResectionMarginColorChanged)
-    self.resectionsWidget.ShowGridCheckBox.connect('stateChanged(int)', self.onShowGridChanged)
+    self.resectionsWidget.ResectionGridColorPickerButton.connect('colorChanged(QColor)', self.onResectionGridColorChanged)
+    self.resectionsWidget.GridDivisionsDoubleSlider.connect('valueChanged(double)', self.onGridDivisionsChanged)
+    self.resectionsWidget.GridThicknessDoubleSlider.connect('valueChanged(double)', self.onGridThicknessChanged)
     self.resectionsWidget.ResectionLockCheckBox.connect('stateChanged(int)', self.onResectionLockChanged)
     self.resectionsWidget.UncertaintyMarginSpinBox.connect('valueChanged(double)', self.onUncertaintyMarginChanged)
     self.resectionsWidget.UncertaintyMarginColorPickerButton.connect('colorChanged(QColor)', self.onUncertaintyMarginColorChanged)
@@ -185,8 +187,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     This function is triggered whenever any parameter of the distance maps are changed
     """
-
-
     node1 = self.distanceMapsWidget.TumorLabelMapComboBox.currentNode()
     node2 = self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.currentNode()
     node3 = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
@@ -239,12 +239,10 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectionsWidget.ResectionOpacityDoubleSpinBox.setValue(activeResectionNode.GetResectionOpacity())
         self.resectionsWidget.ResectionOpacityDoubleSpinBox.blockSignals(False)
 
-        self.resectionsWidget.ShowGridCheckBox.blockSignals(True)
-        if (activeResectionNode.GetWidgetVisibility()):
-          self.resectionsWidget.ShowGridCheckBox.setCheckState(0)
-        else:
-          self.resectionsWidget.ShowGridCheckBox.setCheckState(2)
-        self.resectionsWidget.ShowGridCheckBox.blockSignals(False)
+        self.resectionsWidget.ResectionGridColorPickerButton.blockSignals(True)
+        color = activeResectionNode.GetResectionGridColor()
+        self.resectionsWidget.ResectionGridColorPickerButton.setColor(qt.QColor.fromRgbF(color[0], color[1], color[2]))
+        self.resectionsWidget.ResectionGridColorPickerButton.blockSignals(False)
 
         self.resectionsWidget.ResectionLockCheckBox.blockSignals(True)
         if (activeResectionNode.GetWidgetVisibility()):
@@ -286,7 +284,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
           lvLogic.HideInitializationMarkupFromResection(self._currentResectionNode)
           lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
           lvLogic.ShowBezierSurfaceMarkupFromResection(activeResectionNode)
-
       else:
           lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
           lvLogic.HideInitializationMarkupFromResection(self._currentResectionNode)
@@ -313,6 +310,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       modelNode = self.resectionsWidget.LiverModelNodeComboBox.currentNode()
       self._currentResectionNode.SetTargetOrganModelNode(modelNode)
       self.resectionsWidget.ResectionVisualizationGroupBox.setEnabled(modelNode is not None)
+      self.resectionsWidget.GridGroupBox.setEnabled(modelNode is not None)
 
   def onResectionMarginChanged(self):
     """
@@ -335,13 +333,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     uncertainty = self._currentResectionNode.GetUncertaintyMargin()
     resection = self._currentResectionNode.GetResectionMargin()
     self.resectionsWidget.TotalMarginLabel.setText('{:.2f} mm'.format(resection+uncertainty))
-
-  def onShowGridChanged(self):
-    """
-    This function is called when the resection margin spinbox changes.
-    """
-    if self._currentResectionNode is not None:
-      self._currentResectionNode.SetGridVisibility(self.resectionsWidget.ShowGridCheckBox.isChecked())
 
   def onResectionLockChanged(self):
     """
@@ -400,9 +391,18 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       rgbF = [color.redF(),color.greenF(),color.blueF()]
       self._currentResectionNode.SetResectionColor(rgbF)
 
+  def onResectionGridColorChanged(self):
+    """
+    This function is called whenever the  grid color has changed
+    """
+    if self._currentResectionNode is not None:
+      color = self.resectionsWidget.ResectionGridColorPickerButton.color
+      rgbF = [color.redF(),color.greenF(),color.blueF()]
+      self._currentResectionNode.SetResectionGridColor(rgbF)
+
   def onResectionOpacityChanged(self):
     """
-    This function is called whenever the resection margin color has changed
+    This function is called whenever the resection opacity has changed
     """
     if self._currentResectionNode is not None:
       self._currentResectionNode.SetResectionOpacity(self.resectionsWidget.ResectionOpacityDoubleSpinBox.value)
@@ -424,6 +424,20 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       color = self.resectionsWidget.UncertaintyMarginColorPickerButton.color
       rgbF = [color.redF(),color.greenF(),color.blueF()]
       self._currentResectionNode.SetUncertaintyMarginColor(rgbF)
+
+  def onGridDivisionsChanged(self):
+    """
+    This function is called whenever the resection grid divisions has changed
+    """
+    if self._currentResectionNode is not None:
+      self._currentResectionNode.SetGridDivisions(self.resectionsWidget.GridDivisionsDoubleSlider.value)
+
+  def onGridThicknessChanged(self):
+    """
+    This function is called whenever the resection grid thickness has changed
+    """
+    if self._currentResectionNode is not None:
+      self._currentResectionNode.SetGridThickness(self.resectionsWidget.GridThicknessDoubleSlider.value)
 
   def cleanup(self):
     """
