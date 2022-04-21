@@ -363,6 +363,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     centerlineModelNode.GetDisplayNode().SetLineWidth(3)
     endPointsMarkupsNode.SetDisplayVisibility(False)
 
+    self.logic.process(centerlinePolyData)
+
 # LiverSegmentsLogic
 #
 
@@ -382,6 +384,11 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     """
     ScriptedLoadableModuleLogic.__init__(self)
 
+    from vtkSlicerLiverSegmentsModuleLogicPython import vtkSegmentClassificationLogic
+    # Create the segmentsclassification logic
+    self.scl = vtkSegmentClassificationLogic()
+    print("Created Segmentation Classification logic: ", str(self.scl))
+
   def setDefaultParameters(self, parameterNode):
     """
     Initialize parameter node with default settings.
@@ -391,7 +398,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     #    if not parameterNode.GetParameter("Invert"):
     #      parameterNode.SetParameter("Invert", "false")
 
-  def process(self, inputVolume, outputVolume, imageThreshold, invert=False, showResult=True):
+  def process(self, centerline):
     """
     Run the processing algorithm.
     Can be used without GUI widget.
@@ -405,9 +412,10 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     #    if not inputVolume or not outputVolume:
     #      raise ValueError("Input or output volume is invalid")
 
-    #    import time
-    #    startTime = time.time()
-    #    logging.info('Processing started')
+    import time
+    startTime = time.time()
+    logging.info('Processing started')
+    self.scl.SegmentClassification(centerline)
 
     #    # Compute the thresholded output volume using the "Threshold Scalar Volume" CLI module
     #    cliParams = {
