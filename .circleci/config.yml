@@ -53,7 +53,7 @@ jobs:
           command: Xvfb :99 -screen 0 640x480x8 -nolisten tcp
           background: true
 
-      -run:
+      - run:
           name: Replace AdditionalLauncherSettings.ini for use of VMTK extension
           command: cp /usr/src/Slicer-Liver/.circleci/AdditionalLauncherSettings.ini /usr/src/Slicer-Liver-Build/AdditionalLauncherSettings.ini
 
