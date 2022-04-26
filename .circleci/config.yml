@@ -56,8 +56,8 @@ jobs:
       - run:
           name: Print AdditionalLauncherSettings.ini
           command: |
-          cd /usr/src/Slicer-Liver-Build
-          cat AdditionalLauncherSettings.ini
+            cd /usr/src/Slicer-Liver-Build
+            cat AdditionalLauncherSettings.ini
 
       - run:
           name: Run Liver plugin tests
