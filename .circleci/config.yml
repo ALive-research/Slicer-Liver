@@ -52,6 +52,13 @@ jobs:
           name: Run X virtual framebuffer
           command: Xvfb :99 -screen 0 640x480x8 -nolisten tcp
           background: true
+
+      - run:
+          name: Print AdditionalLauncherSettings.ini
+          command: |
+          cd /usr/src/Slicer-Liver-Build
+          cat AdditionalLauncherSettings.ini
+
       - run:
           name: Run Liver plugin tests
           command: |
