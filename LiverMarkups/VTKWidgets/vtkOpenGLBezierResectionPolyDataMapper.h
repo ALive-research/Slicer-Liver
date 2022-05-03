@@ -40,6 +40,8 @@
 #ifndef vtkopenglresectionbezierpolydatamapper_h_
 #define vtkopenglresectionbezierpolydatamapper_h_
 
+#include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
+
 // VTK includes
 #include <vtkOpenGLPolyDataMapper.h>
 #include <vtkRenderingOpenGL2Module.h>
@@ -51,7 +53,7 @@
 class vtkTextureObject;
 
 //-------------------------------------------------------------------------------
-class VTKRENDERINGOPENGL2_EXPORT vtkOpenGLBezierResectionPolyDataMapper : public vtkOpenGLPolyDataMapper
+class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLBezierResectionPolyDataMapper : public vtkOpenGLPolyDataMapper
 {
 public:
   static vtkOpenGLBezierResectionPolyDataMapper *New();
