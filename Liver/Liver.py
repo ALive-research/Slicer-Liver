@@ -146,9 +146,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     wrapperWidget = slicer.qMRMLWidget()
     wrapperWidget.setLayout(qt.QVBoxLayout())
     wrapperWidget.setMRMLScene(slicer.mrmlScene)
-    segemtsWidget = LiverSegments.LiverSegmentsWidget(wrapperWidget)
-    segemtsWidget.setup()
-    self.layout.addWidget(wrapperWidget)
 
     # Add a spacer at the botton to keep the UI flowing from top to bottom
     spacerItem = qt.QSpacerItem(0,0, qt.QSizePolicy.Minimum, qt.QSizePolicy.MinimumExpanding)
