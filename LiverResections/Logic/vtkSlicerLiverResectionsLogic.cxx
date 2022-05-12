@@ -41,6 +41,7 @@
 
 #include "vtkSlicerLiverResectionsLogic.h"
 #include "vtkMRMLAbstractLogic.h"
+#include "vtkMRMLLiverResectionCSVStorageNode.h"
 
 #include <vtkCommand.h>
 #include <vtkMRMLMarkupsSlicingContourNode.h>
@@ -98,6 +99,7 @@ void vtkSlicerLiverResectionsLogic::RegisterNodes()
 
   // Nodes
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLLiverResectionNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLLiverResectionCSVStorageNode>::New());
 }
 
 //---------------------------------------------------------------------------
@@ -419,6 +421,8 @@ vtkSlicerLiverResectionsLogic::AddBezierSurface(vtkMRMLLiverResectionNode *resec
     markupsBezierSurfaceDisplayNode->SetVisibility(false); // Initially hidden
     markupsBezierSurfaceDisplayNode->SetSnapMode(vtkMRMLMarkupsDisplayNode::SnapModeUnconstrained);
     }
+
+  resectionNode->SetBezierSurfaceNode(markupsBezierSurfaceNode);
 
   return markupsBezierSurfaceNode;
 }
