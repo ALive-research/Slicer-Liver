@@ -40,6 +40,7 @@
 #ifndef __vtkmrmlliverresectionnode_h_
 #define __vtkmrmlliverresectionnode_h_
 
+#include "vtkMRMLMarkupsBezierSurfaceNode.h"
 #include "vtkSlicerLiverResectionsModuleMRMLExport.h"
 
 // MRML includes
@@ -48,6 +49,7 @@
 #include <vtkMRMLScalarVolumeNode.h>
 
 //VTK includes
+#include <vtkSetGet.h>
 #include <vtkWeakPointer.h>
 #include <vtkCollection.h>
 #include <vtkPoints.h>
@@ -58,11 +60,11 @@
 
 //-----------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
-: public vtkMRMLNode
+: public vtkMRMLStorableNode
 {
 public:
   static vtkMRMLLiverResectionNode* New();
-  vtkTypeMacro(vtkMRMLLiverResectionNode, vtkMRMLNode);
+  vtkTypeMacro(vtkMRMLLiverResectionNode, vtkMRMLStorableNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   // Possible resection states
@@ -90,6 +92,10 @@ public:
 
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLLiverResectionNode);
+
+  /// Create default storage node or nullptr if does not have one
+  vtkMRMLStorageNode* CreateDefaultStorageNode();
+
 
   // TODO: Review the need for this further down the road
   /// Get target lesions identifiers
@@ -242,6 +248,15 @@ public:
   // Set the widget visibility variable
   vtkSetMacro(GridThickness, float);
 
+  // Get bezier surface
+  vtkMRMLMarkupsBezierSurfaceNode* GetBezierSurfaceNode() const
+  {return this->BezierSurfaceNode;}
+
+  // Set bezier surface
+  void SetBezierSurfaceNode(vtkMRMLMarkupsBezierSurfaceNode *node)
+  {this->BezierSurfaceNode = node; this->Modified();}
+
+
 protected:
   vtkMRMLLiverResectionNode();
   ~vtkMRMLLiverResectionNode() override;
@@ -253,11 +268,13 @@ private:
   // vtkWeakPointer<vtkMRMLSegmentationNode> SegmentationNode;
   vtkWeakPointer<vtkMRMLModelNode> TargetOrganModelNode;
   vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolumeNode;
+  vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode> BezierSurfaceNode;
   ResectionState State;
   InitializationMode InitMode;
   double ResectionMargin; //Resection margin in mm
   double UncertaintyMargin; //Uncertainty margin in mm
   vtkNew<vtkPoints> InitializationControlPoints;
+  // TODO: Review the need for this. We already have a pointer to the surface node
   vtkNew<vtkPoints> BezierSurfaceControlPoints;
   bool ClipOut;
   bool WidgetVisibility;

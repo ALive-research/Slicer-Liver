@@ -37,7 +37,9 @@
 
 ==============================================================================*/
 
+// This module MRML includes
 #include "vtkMRMLLiverResectionNode.h"
+#include "vtkMRMLLiverResectionCSVStorageNode.h"
 
 // MRML includes
 #include <vtkMRMLScene.h>
@@ -52,7 +54,7 @@ vtkMRMLNodeNewMacro(vtkMRMLLiverResectionNode);
 
 //--------------------------------------------------------------------------------
 vtkMRMLLiverResectionNode::vtkMRMLLiverResectionNode()
-  :Superclass(), TargetOrganModelNode(nullptr), DistanceMapVolumeNode(nullptr),
+  :TargetOrganModelNode(nullptr), DistanceMapVolumeNode(nullptr),
    State(ResectionState::Initialization), InitMode(InitializationMode::Flat),
    ResectionMargin(0.0), UncertaintyMargin(0.0), ClipOut(false), WidgetVisibility(true),
    InterpolatedMargins(false), ResectionColor{1.0f, 1.0f, 1.0f},
@@ -68,6 +70,19 @@ vtkMRMLLiverResectionNode::~vtkMRMLLiverResectionNode() = default;
 void vtkMRMLLiverResectionNode::PrintSelf(ostream& os, vtkIndent indent)
 {
   Superclass::PrintSelf(os,indent);
+}
+
+//-------------------------------------------------------------------------
+vtkMRMLStorageNode* vtkMRMLLiverResectionNode::CreateDefaultStorageNode()
+{
+  vtkMRMLScene* scene = this->GetScene();
+  if (scene == nullptr)
+    {
+    vtkErrorMacro("CreateDefaultStorageNode failed: scene is invalid");
+    return nullptr;
+    }
+  return vtkMRMLStorageNode::SafeDownCast(
+    scene->CreateNodeByClass("vtkMRMLLiverResectionCSVStorageNode"));
 }
 
 //----------------------------------------------------------------------------
