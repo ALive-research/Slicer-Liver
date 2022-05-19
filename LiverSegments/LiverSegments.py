@@ -52,6 +52,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._updatingGUIFromParameterNode = False
     ScriptedLoadableModuleWidget.__init__(self, parent)
     VTKObservationMixin.__init__(self)  # needed for parameter node observation
+    self._vascularModelForPointSelection = None
 
   def setup(self):
     """
@@ -102,6 +103,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Buttons
     self.ui.addSegmentButton.connect('clicked(bool)', self.onAddSegmentButton)
+    self.ui.calculateSegmentsButton.connect('clicked(bool)', self.onCalculateSegmentButton)
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
@@ -329,23 +331,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     centerlineModelNode.GetDisplayNode().SetColor(inputColor.redF(), inputColor.greenF(), inputColor.blueF())
 
   def onAddSegmentButton(self):
-    """
-    Run processing when user clicks button.
-    """
-    slicer.util.showStatusMessage('Starting calculation', 3000)
-    #    with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
-    #      # Compute output
-    #      self.logic.process(self.ui.inputSelector.currentNode(), self.ui.outputSelector.currentNode(),
-    #      self.ui.imageThresholdSliderWidget.value, self.ui.invertOutputCheckBox.checked)
-
-    #      # Compute inverted output (if needed)
-    #      if self.ui.invertedOutputSelector.currentNode():
-    #        # If additional output volume is selected then result with inverted threshold is written there
-    #        self.logic.process(self.ui.inputSelector.currentNode(), self.ui.invertedOutputSelector.currentNode(),
-    #          self.ui.imageThresholdSliderWidget.value, not self.ui.invertOutputCheckBox.checked, showResult=False)
-
-
-    #endPointsMarkupsNode = self._parameterNode.GetNodeReference("EndPoints") #Don't work yet
+#    slicer.util.showStatusMessage('Starting calculation', 3000)
     endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
     self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
 
@@ -363,7 +349,23 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     centerlineModelNode.GetDisplayNode().SetLineWidth(3)
     endPointsMarkupsNode.SetDisplayVisibility(False)
 
-    self.logic.process(centerlinePolyData)
+    self.logic.build_centerline_model(centerlinePolyData, centerlineModelNode.GetID())
+
+  def onCalculateSegmentButton(self):
+#    vascularSegmentsOutputNode = self.ui.outputSegmentsSelector.currentNode()
+#    if not vascularSegmentsOutputNode:
+#      raise ValueError("No vascularSegmentsOutputNode")
+#    print(vascularSegmentsOutputNode)
+#    get volumenode
+#    specify metadata for the labelmap
+#    or set as reference volume?
+    refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
+    segmentationNode = self.ui.inputSurfaceSelector.currentNode()
+    if not (refVolumeNode and segmentationNode):
+        raise ValueError("Missing inputs to calculate vascular segments")
+    self.logic.calculateSegments(refVolumeNode, segmentationNode)
+
+
 
 # LiverSegmentsLogic
 #
@@ -384,10 +386,15 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     """
     ScriptedLoadableModuleLogic.__init__(self)
 
-    from vtkSlicerLiverSegmentsModuleLogicPython import vtkSegmentClassificationLogic
+    self._vascularSegmentTupleList = list()
+    self._centerlines = list()
+    self._inputLabelMap = None
+    self._outputLabelMap = None
+
+#    from vtkSlicerLiverSegmentsModuleLogicPython import vtkSegmentClassificationLogic
     # Create the segmentsclassification logic
-    self.scl = vtkSegmentClassificationLogic()
-    print("Created Segmentation Classification logic: ", str(self.scl))
+#    self.scl = vtkSegmentClassificationLogic()
+#    print("Created Segmentation Classification logic: ", str(self.scl))
 
   def setDefaultParameters(self, parameterNode):
     """
@@ -398,38 +405,54 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     #    if not parameterNode.GetParameter("Invert"):
     #      parameterNode.SetParameter("Invert", "false")
 
-  def process(self, centerline):
-    """
-    Run the processing algorithm.
-    Can be used without GUI widget.
-    :param inputVolume: volume to be thresholded
-    :param outputVolume: thresholding result
-    :param imageThreshold: values above/below this threshold will be set to 0
-    :param invert: if True then values above the threshold will be set to 0, otherwise values below are set to 0
-    :param showResult: show output volume in slice viewers
-    """
+#  def process(self, centerline):
 
-    #    if not inputVolume or not outputVolume:
-    #      raise ValueError("Input or output volume is invalid")
+#    import time
+#    startTime = time.time()
+#    logging.info('Processing started')
+#    self.scl.SegmentClassification(centerline)
 
-    import time
-    startTime = time.time()
-    logging.info('Processing started')
-    self.scl.SegmentClassification(centerline)
 
-    #    # Compute the thresholded output volume using the "Threshold Scalar Volume" CLI module
-    #    cliParams = {
-    #      'InputVolume': inputVolume.GetID(),
-    #      'OutputVolume': outputVolume.GetID(),
-    #      'ThresholdValue' : imageThreshold,
-    #      'ThresholdType' : 'Above' if invert else 'Below'
-    #      }
-    #    cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True, update_display=showResult)
-    #     # We don't need the CLI module node anymore, remove it to not clutter the scene with it
-    #    slicer.mrmlScene.RemoveNode(cliNode)
+#    stopTime = time.time()
+#    logging.info(f'Processing completed in {stopTime-startTime:.2f} seconds')
 
-    stopTime = time.time()
-    logging.info(f'Processing completed in {stopTime-startTime:.2f} seconds')
+  def build_centerline_model(self, centerline, centerlineSegmentID):
+#    pointdata = vtk.vtkPointData()
+    stringArray = vtk.vtkStringArray()
+    stringArray.SetName('segmentID')
+    for i in range(centerline.GetNumberOfPoints()):
+        stringArray.InsertNextValue(centerlineSegmentID)
+#    centerlineData = {centerlineSegmentID, centerline}
+    centerline.GetPointData().AddArray(stringArray)
+    self._centerlines.append(centerline)
+#    print(self._centerlines)
+
+  def setInputLabelMap(self, labelMapNode):
+      self._inputLabelMap = labelMapNode
+
+  def setOutputLabelMap(self, labelMapNode):
+      self._outputLabelMap = labelMapNode
+
+  def calculateSegments(self, refVolume, segmentation):
+    segmentsNames = ["liver"]
+    segmentsIds = vtk.vtkStringArray()
+    labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
+    segmentId = segmentation.GetSegmentation().GetSegmentIdBySegmentName('liver')
+    segmentsIds.InsertNextValue(segmentId)
+    slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentation, segmentsIds, labelmapVolumeNode, refVolume)
+    self.setOutputLabelMap(labelmapVolumeNode)
+    appendPolyData = vtk.vtkAppendPolyData()
+    for i in range(len(self._centerlines)):
+        appendPolyData.AddInputData(self._centerlines[i])
+    appendPolyData.Update()
+    print("calculate segments")
+    from vtkSlicerLiverSegmentsModuleLogicPython import vtkSegmentClassificationLogic
+    # Create the segmentsclassification logic
+    self.scl = vtkSegmentClassificationLogic()
+
+    self.scl.SegmentClassification(appendPolyData.GetOutput(),
+                                    labelmapVolumeNode)
+
 
 class LiverSegmentsTest(ScriptedLoadableModuleTest):
   """

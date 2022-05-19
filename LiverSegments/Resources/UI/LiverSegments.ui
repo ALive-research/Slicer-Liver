@@ -48,6 +48,13 @@
       <bool>false</bool>
      </property>
      <layout class="QGridLayout" name="gridLayout">
+      <item row="5" column="0" colspan="4">
+       <widget class="QPushButton" name="calculateSegmentsButton">
+        <property name="text">
+         <string>Calculate Liver Vascular Segments</string>
+        </property>
+       </widget>
+      </item>
       <item row="0" column="0">
        <widget class="QLabel" name="label">
         <property name="text">
@@ -55,45 +62,26 @@
         </property>
        </widget>
       </item>
-      <item row="0" column="1" colspan="3">
-       <widget class="qMRMLNodeComboBox" name="inputSurfaceSelector">
-        <property name="nodeTypes">
-         <stringlist>
-          <string>vtkMRMLModelNode</string>
-          <string>vtkMRMLSegmentationNode</string>
-         </stringlist>
+      <item row="4" column="0" colspan="2">
+       <spacer name="verticalSpacer">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
         </property>
-        <property name="showChildNodeTypes">
-         <bool>false</bool>
+        <property name="sizeType">
+         <enum>QSizePolicy::Fixed</enum>
         </property>
-        <property name="addEnabled">
-         <bool>false</bool>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>40</height>
+         </size>
         </property>
-        <property name="removeEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="editEnabled">
-         <bool>true</bool>
-        </property>
-       </widget>
+       </spacer>
       </item>
-      <item row="1" column="2" colspan="2">
-       <widget class="qMRMLSegmentSelectorWidget" name="inputSegmentSelectorWidget">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="segmentationNodeSelectorVisible">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="0" colspan="2">
-       <widget class="QLabel" name="label_3">
+      <item row="3" column="0" colspan="4">
+       <widget class="QPushButton" name="addSegmentButton">
         <property name="text">
-         <string>Endpoints:</string>
+         <string>Add Vessel Centerline Segments</string>
         </property>
        </widget>
       </item>
@@ -138,49 +126,45 @@
         </item>
        </layout>
       </item>
-      <item row="3" column="0" colspan="4">
-       <widget class="QPushButton" name="addSegmentButton">
+      <item row="2" column="0" colspan="2">
+       <widget class="QLabel" name="label_3">
         <property name="text">
-         <string>Add/Modify CenterlineSegment</string>
+         <string>Vessel points:</string>
         </property>
        </widget>
       </item>
-      <item row="4" column="0" colspan="2">
-       <spacer name="verticalSpacer">
-        <property name="orientation">
-         <enum>Qt::Vertical</enum>
-        </property>
-        <property name="sizeType">
-         <enum>QSizePolicy::Fixed</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>20</width>
-          <height>40</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-      <item row="5" column="0" colspan="3">
-       <widget class="QLabel" name="label_4">
-        <property name="text">
-         <string>Liver Segments:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="3">
-       <widget class="qMRMLNodeComboBox" name="outputSegmentsSelector">
+      <item row="0" column="1" colspan="3">
+       <widget class="qMRMLNodeComboBox" name="inputSurfaceSelector">
         <property name="nodeTypes">
          <stringlist>
-          <string>vtkMRMLLabelMapVolumeNode</string>
+          <string>vtkMRMLModelNode</string>
+          <string>vtkMRMLSegmentationNode</string>
          </stringlist>
+        </property>
+        <property name="showChildNodeTypes">
+         <bool>false</bool>
+        </property>
+        <property name="addEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="removeEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="editEnabled">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
-      <item row="6" column="0" colspan="4">
-       <widget class="QPushButton" name="calculateSegmentsButton">
-        <property name="text">
-         <string>Calculate Liver Segments</string>
+      <item row="1" column="2" colspan="2">
+       <widget class="qMRMLSegmentSelectorWidget" name="inputSegmentSelectorWidget">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="segmentationNodeSelectorVisible">
+         <bool>false</bool>
         </property>
        </widget>
       </item>
@@ -341,22 +325,6 @@
     <hint type="destinationlabel">
      <x>170</x>
      <y>27</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>SegmentsWidget</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>outputSegmentsSelector</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>255</x>
-     <y>296</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>308</x>
-     <y>429</y>
     </hint>
    </hints>
   </connection>

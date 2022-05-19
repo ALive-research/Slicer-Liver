@@ -34,10 +34,8 @@ vtkSegmentClassificationLogic : public vtkObject
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
  public:
-//  void SegmentClassification(vtkPolyData *centerlines,
-//			     vtkMRMLLabelMapVolumeNode *inputLabelmap,
-//			     vtkMRMLLabelMapVolumeNode *outputLabelmap);
-  void SegmentClassification(vtkPolyData *centerlines);
+  void SegmentClassification(vtkPolyData *centerlines,
+                             vtkMRMLLabelMapVolumeNode *labelMap);
 
  protected:
   vtkSegmentClassificationLogic();

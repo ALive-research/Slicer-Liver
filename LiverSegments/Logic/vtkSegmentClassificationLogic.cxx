@@ -51,11 +51,8 @@ void vtkSegmentClassificationLogic::PrintSelf(ostream &os, vtkIndent indent)
   Superclass::PrintSelf(os, indent);
 }
 
-//------------------------------------------------------------------------------
-//void vtkSegmentClassificationLogic::SegmentClassification(vtkPolyData *centerlines,
-//							  vtkMRMLLabelMapVolumeNode *inputLabelMap,
-//							  vtkMRMLLabelMapVolumeNode *outputLabelMap)
-void vtkSegmentClassificationLogic::SegmentClassification(vtkPolyData *centerlines)
+void vtkSegmentClassificationLogic::SegmentClassification(vtkPolyData *centerlines,
+                                                          vtkMRMLLabelMapVolumeNode *labelMap)
 {
   std::cout << "vtkSegmentClassificationLogic::SegmentClassification()" << std::endl;
   if (centerlines == nullptr)
@@ -65,17 +62,11 @@ void vtkSegmentClassificationLogic::SegmentClassification(vtkPolyData *centerlin
     }
   centerlines->Print(std::cout);
 
-//  if (inputLabelMap == nullptr)
-//    {
-//      std::cerr << "No input label map." << std::endl;
-//      return;
-//    }
-
-//  if (outputLabelMap == nullptr)
-//    {
-//      std::cerr << "No output labe map." << std::endl;
-//      return;
-//    }
+  if (labelMap == nullptr)
+    {
+      std::cerr << "No label map defined." << std::endl;
+      return;
+    }
 
 //  // VTK objects
 //  auto KDTree = vtkSmartPointer<vtkKdTreePointLocator>::New();
