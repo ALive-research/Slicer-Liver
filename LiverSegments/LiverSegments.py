@@ -391,10 +391,10 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     self._inputLabelMap = None
     self._outputLabelMap = None
 
-#    from vtkSlicerLiverSegmentsModuleLogicPython import vtkSegmentClassificationLogic
+    from vtkSlicerLiverSegmentsModuleLogicPython import vtkSegmentClassificationLogic
     # Create the segmentsclassification logic
-#    self.scl = vtkSegmentClassificationLogic()
-#    print("Created Segmentation Classification logic: ", str(self.scl))
+    self.scl = vtkSegmentClassificationLogic()
+    print("Created Segmentation Classification logic: ", str(self.scl))
 
   def setDefaultParameters(self, parameterNode):
     """
@@ -446,10 +446,6 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
         appendPolyData.AddInputData(self._centerlines[i])
     appendPolyData.Update()
     print("calculate segments")
-    from vtkSlicerLiverSegmentsModuleLogicPython import vtkSegmentClassificationLogic
-    # Create the segmentsclassification logic
-    self.scl = vtkSegmentClassificationLogic()
-
     self.scl.SegmentClassification(appendPolyData.GetOutput(),
                                     labelmapVolumeNode)
 

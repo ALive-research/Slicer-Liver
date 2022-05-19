@@ -36,7 +36,7 @@ vtkStandardNewMacro(vtkSegmentClassificationLogic);
 vtkSegmentClassificationLogic::vtkSegmentClassificationLogic()
 {
 
-  std::cout << "Testing !!" << std::endl;
+  std::cout << "vtkSegmentClassificationLogic Constructor" << std::endl;
 }
 
 //------------------------------------------------------------------------------
