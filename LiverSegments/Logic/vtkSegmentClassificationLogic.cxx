@@ -20,8 +20,10 @@
 #include <vtkKdTreePointLocator.h>
 #include <vtkPointSet.h>
 #include <vtkPolyData.h>
-#include <vtkCellData.h>
-#include <vtkIntArray.h>
+//#include <vtkCellData.h>
+#include <vtkPointData.h>
+//#include <vtkIntArray.h>
+#include <vtkStringArray.h>
 
 #include <itkImage.h>
 #include <itkImageFileWriter.h>
@@ -60,7 +62,6 @@ void vtkSegmentClassificationLogic::SegmentClassification(vtkPolyData *centerlin
       std::cerr << "No centerlines polydata." << std::endl;
       return;
     }
-  centerlines->Print(std::cout);
 
   if (labelMap == nullptr)
     {
@@ -68,10 +69,17 @@ void vtkSegmentClassificationLogic::SegmentClassification(vtkPolyData *centerlin
       return;
     }
 
-//  // VTK objects
-//  auto KDTree = vtkSmartPointer<vtkKdTreePointLocator>::New();
-//  KDTree->SetDataSet(dynamic_cast<vtkPointSet*>(centerlines));
-//  KDTree->BuildLocator();
+  auto pointData = centerlines->GetPointData();
+  auto centerlineSegmentIDs = vtkStringArray::SafeDownCast(pointData->GetArray("segmentID"));
+
+  if(!centerlineSegmentIDs)
+  {
+      std::cerr << "No segmentIds in pointdata" << std::endl;
+  }
+
+  auto KDTree = vtkSmartPointer<vtkKdTreePointLocator>::New();
+  KDTree->SetDataSet(dynamic_cast<vtkPointSet*>(centerlines));
+  KDTree->BuildLocator();
 
 //  auto cells = vtkSmartPointer<vtkIdList>::New();
 
