@@ -435,7 +435,10 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
   def calculateSegments(self, refVolume, segmentation):
     segmentsNames = ["liver"]
     segmentsIds = vtk.vtkStringArray()
-    labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
+    labelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("VascularSegments")
+    if not labelmapVolumeNode:
+        labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "VascularSegments")
+
     segmentId = segmentation.GetSegmentation().GetSegmentIdBySegmentName('liver')
     segmentsIds.InsertNextValue(segmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentation, segmentsIds, labelmapVolumeNode, refVolume)

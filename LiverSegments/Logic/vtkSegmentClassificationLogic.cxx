@@ -70,7 +70,7 @@ void vtkSegmentClassificationLogic::SegmentClassification(vtkPolyData *centerlin
     }
 
   auto pointData = centerlines->GetPointData();
-  auto centerlineSegmentIDs = vtkStringArray::SafeDownCast(pointData->GetArray("segmentID"));
+  auto centerlineSegmentIDs = pointData->GetAbstractArray("segmentID");
 
   if(!centerlineSegmentIDs)
   {
