@@ -363,7 +363,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
     if not (refVolumeNode and segmentationNode):
         raise ValueError("Missing inputs to calculate vascular segments")
-    self.logic.calculateSegments(refVolumeNode, segmentationNode)
+    self.logic.calculateVascularSegments(refVolumeNode, segmentationNode)
 
 
 
@@ -371,19 +371,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 #
 
 class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
-  """This class should implement all the actual
-  computation done by your module.  The interface
-  should be such that other python code can import
-  this class and make use of the functionality without
-  requiring an instance of the Widget.
-  Uses ScriptedLoadableModuleLogic base class, available at:
-  https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
-  """
 
   def __init__(self):
-    """
-    Called when the logic class is instantiated. Can be used for initializing member variables.
-    """
     ScriptedLoadableModuleLogic.__init__(self)
 
     self._vascularSegmentTupleList = list()
@@ -399,10 +388,6 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     """
     Initialize parameter node with default settings.
     """
-    #    if not parameterNode.GetParameter("Threshold"):
-    #      parameterNode.SetParameter("Threshold", "100.0")
-    #    if not parameterNode.GetParameter("Invert"):
-    #      parameterNode.SetParameter("Invert", "false")
 
 #  def process(self, centerline):
 
@@ -432,23 +417,43 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
   def setOutputLabelMap(self, labelMapNode):
       self._outputLabelMap = labelMapNode
 
-  def calculateSegments(self, refVolume, segmentation):
-    segmentsNames = ["liver"]
-    segmentsIds = vtk.vtkStringArray()
+  def calculateVascularSegments(self, refVolume, segmentation):
+#    segmentsNames = ["liver"]
+    segmentationIds = vtk.vtkStringArray()
     labelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("VascularSegments")
     if not labelmapVolumeNode:
         labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "VascularSegments")
 
     segmentId = segmentation.GetSegmentation().GetSegmentIdBySegmentName('liver')
-    segmentsIds.InsertNextValue(segmentId)
-    slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentation, segmentsIds, labelmapVolumeNode, refVolume)
-    self.setOutputLabelMap(labelmapVolumeNode)
-    appendPolyData = vtk.vtkAppendPolyData()
-    for i in range(len(self._centerlines)):
-        appendPolyData.AddInputData(self._centerlines[i])
-    appendPolyData.Update()
-    self.scl.SegmentClassification(appendPolyData.GetOutput(),
-                                    labelmapVolumeNode)
+#    segmentationIds.InsertNextValue(segmentId)
+#    slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume)
+#    self.setOutputLabelMap(labelmapVolumeNode)
+    import numpy as np
+    labelArray = slicer.util.arrayFromSegmentBinaryLabelmap(segmentation, segmentId, refVolume)
+    print(labelArray.shape)
+    print(labelArray.size)
+#    points = np.where(labelArray == 1)
+    # Get indexes with non-zero label
+    points = np.nonzero(labelArray)
+    list_of_points = list(zip(points[0], points[1], points[2]))
+    print(len(list_of_points))
+#    for elements in list_of_points:
+#        print(elements)
+#    print(points.shape)
+#    print(points)
+#    points_z_array = points[:,
+#    vol = slicer.util.arrayFromVolume(refVolume)
+#    values = vol[points]
+#    print(points)
+#    print(points.shape)
+
+#    appendPolyData = vtk.vtkAppendPolyData()
+#    for i in range(len(self._centerlines)):
+#        appendPolyData.AddInputData(self._centerlines[i])
+#    appendPolyData.Update()
+
+#    self.scl.SegmentClassification(appendPolyData.GetOutput(),
+#                                    labelmapVolumeNode)
 
 
 class LiverSegmentsTest(ScriptedLoadableModuleTest):
