@@ -39,6 +39,7 @@
 
 #include "vtkMRMLLiverResectionCSVStorageNode.h"
 #include "vtkMRMLLiverResectionNode.h"
+#include "vtkMRMLMarkupsBezierSurfaceNode.h"
 
 // VTK includes
 #include <vtkObjectFactory.h>
@@ -100,4 +101,38 @@ int vtkMRMLLiverResectionCSVStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
     }
 
   return Superclass::WriteDataInternal(bezierSurfaceNode);
+}
+
+//----------------------------------------------------------------------------
+int vtkMRMLLiverResectionCSVStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
+{
+  if (!refNode)
+    {
+    vtkErrorMacro("ReadDataInternal: null reference node!");
+    return 0;
+    }
+
+  std::string fullName = this->GetFullNameFromFileName();
+
+  if (fullName.empty())
+    {
+    vtkErrorMacro("vtkMRMLLiverResectionsFiducialStorageNode: File name not specified");
+    return 0;
+    }
+
+  // cast the input node
+  auto resectionNode = vtkMRMLLiverResectionNode::SafeDownCast(refNode);
+  if (!resectionNode)
+    {
+    return 0;
+    }
+
+  auto bezierSurfaceNode = resectionNode->GetBezierSurfaceNode();
+  if(!bezierSurfaceNode)
+    {
+    vtkErrorMacro("vtkMRMLLiverResectionCSVStorageNode: resection node does not have a valid bezier surface node associated.");
+    return 0;
+    }
+
+  return Superclass::ReadDataInternal(bezierSurfaceNode);
 }

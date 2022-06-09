@@ -48,6 +48,7 @@
 // VTK includes
 #include <vtkWeakPointer.h>
 #include <vtkSmartPointer.h>
+#include <vtkMRMLMessageCollection.h>
 
 // STD include
 #include <map>
@@ -94,6 +95,13 @@ public:
   void ShowInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const;
   void HideInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const;
 
+  char* LoadLiverResection(const std::string& fileName,
+                           const std::string& nodeName/*=nullptr*/,
+                           vtkMRMLMessageCollection* userMessages/*=nullptr*/);
+
+  char* LoadLiverResectionFromFcsv(const std::string& fileName,
+                                   const std::string& nodeName/*=nullptr*/,
+                                   vtkMRMLMessageCollection* userMessages/*=nullptr*/);
 protected:
   vtkSlicerLiverResectionsLogic();
   ~vtkSlicerLiverResectionsLogic() override;
