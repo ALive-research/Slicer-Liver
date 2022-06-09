@@ -37,45 +37,45 @@
 
 ==============================================================================*/
 
-#ifndef __vtkmrmlliverresectionsfiducialstoragenode_h_
-#define __vtkmrmlliverresectionsfiducialstoragenode_h_
+// This file was based on qSlicerMarkupsReader.h in 3D Slicer
+//
+#ifndef __qSlicerLiverResectionsReader_h_
+#define __qSlicerLiverResectionsReader_h_
 
-#include "vtkSlicerLiverResectionsModuleMRMLExport.h"
+#include <qSlicerFileReader.h>
 
-#include <vtkMRMLMarkupsFiducialStorageNode.h>
+//----------------------------------------------------------------------------
+class qSlicerLiverResectionsReaderPrivate;
+class vtkSlicerLiverResectionsLogic;
 
-class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionCSVStorageNode : public vtkMRMLMarkupsFiducialStorageNode
+//----------------------------------------------------------------------------
+/// \ingroup Slicer_QtModules_LiverResections
+class qSlicerLiverResectionsReader
+  : public qSlicerFileReader
 {
+  Q_OBJECT
+public:
+  typedef qSlicerFileReader Superclass;
+  qSlicerLiverResectionsReader(QObject* parent = nullptr);
+  qSlicerLiverResectionsReader(vtkSlicerLiverResectionsLogic* logic, QObject* parent = nullptr);
+  ~qSlicerLiverResectionsReader() override;
 
-  public:
-  static vtkMRMLLiverResectionCSVStorageNode *New();
-  vtkTypeMacro(vtkMRMLLiverResectionCSVStorageNode, vtkMRMLMarkupsFiducialStorageNode);
-  void PrintSelf(ostream& os, vtkIndent indent) override;
+  vtkSlicerLiverResectionsLogic* liverResectionsLogic()const;
+  void setLiverResectionsLogic(vtkSlicerLiverResectionsLogic* logic);
 
-  vtkMRMLNode* CreateNodeInstance() override;
+  QString description()const override;
+  IOFileType fileType()const override;
+  QStringList extensions()const override;
 
-  ///
-  /// Get node XML tag name (like Storage, Model)
-  const char* GetNodeTagName() override {return "LiverResectionFiducialStorage";};
-
-  bool CanReadInReferenceNode(vtkMRMLNode *refNode) override;
-
-protected:
-  /// Initialize all the supported write file types
-  void InitializeSupportedReadFileTypes() override;
-
-  /// Initialize all the supported write file types
-  void InitializeSupportedWriteFileTypes() override;
-
-  int WriteDataInternal(vtkMRMLNode *refNode) override;
-  int ReadDataInternal(vtkMRMLNode *refNode) override;
+  bool load(const IOProperties& properties) override;
 
 protected:
-  vtkMRMLLiverResectionCSVStorageNode();
-  ~vtkMRMLLiverResectionCSVStorageNode() override;
-  vtkMRMLLiverResectionCSVStorageNode(const vtkMRMLLiverResectionCSVStorageNode&);
-  void operator=(const vtkMRMLLiverResectionCSVStorageNode&);
+  QScopedPointer<qSlicerLiverResectionsReaderPrivate> d_ptr;
+
+private:
+  Q_DECLARE_PRIVATE(qSlicerLiverResectionsReader);
+  Q_DISABLE_COPY(qSlicerLiverResectionsReader);
 };
 
 
-#endif // __vtkmrmlliverresectionsfiducialstoragenode_h_
+#endif // _qSlicerLiverResectionsReader_h_

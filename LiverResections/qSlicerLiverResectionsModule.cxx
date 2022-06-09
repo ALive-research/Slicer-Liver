@@ -47,6 +47,7 @@
 
 // Liver Resections MRML includes
 #include "qSlicerLiverResectionsWriter.h"
+#include "qSlicerLiverResectionsReader.h"
 
 #include <qSlicerModuleManager.h>
 #include <qSlicerCoreApplication.h>
@@ -133,10 +134,17 @@ void qSlicerLiverResectionsModule::setup()
 {
   this->Superclass::setup();
 
+  auto logic = vtkSlicerLiverResectionsLogic::SafeDownCast(this->logic());
+  if (!logic)
+    {
+    qCritical() << Q_FUNC_INFO << ": cannot get Markups logic.";
+    return;
+    }
+
   // Register IO
   qSlicerIOManager* ioManager = qSlicerApplication::application()->ioManager();
-  // qSlicerLiverResectionsReader *markupsReader = new qSlicerLiverResectionsReader(logic, this);
-  // ioManager->registerIO(markupsReader);
+  qSlicerLiverResectionsReader *markupsReader = new qSlicerLiverResectionsReader(logic, this);
+  ioManager->registerIO(markupsReader);
   ioManager->registerIO(new qSlicerLiverResectionsWriter(this));
 }
 
