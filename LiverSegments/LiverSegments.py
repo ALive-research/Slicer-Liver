@@ -1,6 +1,7 @@
 import os
 import unittest
 import logging
+import time
 import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
@@ -342,14 +343,24 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     centerlineModelNode = self.createCenterlineNode(endPointsMarkupsNode)
 
-    centerlinePolyData, voronoiDiagramPolyData = self.centerlineProcessingLogic.extractCenterline(preprocessedPolyData, endPointsMarkupsNode)
+    centerlinePolyData, voronoiDiagramPolyData = self.centerlineProcessingLogic.extractCenterline(
+        preprocessedPolyData, endPointsMarkupsNode)
     centerlineModelNode.SetAndObserveMesh(centerlinePolyData)
     centerlineModelNode.CreateDefaultDisplayNodes()
     self.useColorFromSelector(centerlineModelNode)
     centerlineModelNode.GetDisplayNode().SetLineWidth(3)
     endPointsMarkupsNode.SetDisplayVisibility(False)
 
+#    observationTag = endPointsMarkupsNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
+#        self.onControlPointsModified)
+
     self.logic.build_centerline_model(centerlinePolyData, centerlineModelNode.GetID())
+
+#  def onControlPointsModified(self, caller, event):
+#    print("onControlPointsModified")
+    # New centerline should be calculated
+    # The center model (composition of all centerlines) should be updated
+
 
   def onCalculateSegmentButton(self):
 #    vascularSegmentsOutputNode = self.ui.outputSegmentsSelector.currentNode()
@@ -389,17 +400,6 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     Initialize parameter node with default settings.
     """
 
-#  def process(self, centerline):
-
-#    import time
-#    startTime = time.time()
-#    logging.info('Processing started')
-#    self.scl.SegmentClassification(centerline)
-
-
-#    stopTime = time.time()
-#    logging.info(f'Processing completed in {stopTime-startTime:.2f} seconds')
-
   def build_centerline_model(self, centerline, centerlineSegmentID):
 #    pointdata = vtk.vtkPointData()
     stringArray = vtk.vtkStringArray()
@@ -418,27 +418,64 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
       self._outputLabelMap = labelMapNode
 
   def calculateVascularSegments(self, refVolume, segmentation):
-#    segmentsNames = ["liver"]
+    startTime = time.time()
     segmentationIds = vtk.vtkStringArray()
     labelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("VascularSegments")
     if not labelmapVolumeNode:
         labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "VascularSegments")
 
+
+    # Get voxels tagged as liver
     segmentId = segmentation.GetSegmentation().GetSegmentIdBySegmentName('liver')
-#    segmentationIds.InsertNextValue(segmentId)
-#    slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume)
+    #Check metadata for segmentation
+    #segm = vtk.vtkSegmentation()
+    segm = segmentation.GetSegmentation()
+    numberOfSegments = segm.GetNumberOfSegments()
+    print('Number of segments: ', numberOfSegments)
+    liverSegm = segm.GetSegment(segmentId)
+    print('Segment navn: ', liverSegm.GetName())
+    print('Segment Label: ', liverSegm.GetLabelValue())
+#    bounds = [0,0,0,0,0,0]
+#    refVolume.GetBounds(bounds)
+#    origin = refVolume.GetOrigin()
+#    print('Segment bounds: ', origin)
+
+    segmentationIds.InsertNextValue(segmentId)
+    slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume)
+
 #    self.setOutputLabelMap(labelmapVolumeNode)
     import numpy as np
     labelArray = slicer.util.arrayFromSegmentBinaryLabelmap(segmentation, segmentId, refVolume)
-    print(labelArray.shape)
-    print(labelArray.size)
+    print('labelArray shape: ', labelArray.shape)
+    print('labelArray size: ', labelArray.size)
 #    points = np.where(labelArray == 1)
     # Get indexes with non-zero label
-    points = np.nonzero(labelArray)
-    list_of_points = list(zip(points[0], points[1], points[2]))
-    print(len(list_of_points))
-#    for elements in list_of_points:
-#        print(elements)
+#    points = np.nonzero(labelArray)
+#    numberOfPoints = len(points[0])
+#    print(points)
+#    print(points[0][0], points[1][0], points[2][0])
+#    print("start gen list")
+#    list_of_points = list(zip(points[0], points[1], points[2]))
+#    print(len(list_of_points))
+#    p=0
+#    for i in range(numberOfPoints):
+#        coordinate = points[0][i], points[1][i], points[2][i]
+#        value = labelArray[coordinate]
+#        if value == 0:
+#            p = p+1
+#            print(coordinate)
+#    print(p)
+#    bounds = [0,0,0,0,0,0]
+#    labelmapVolumeNode.GetBounds(bounds)
+#    print('Bounds before : ', bounds)
+#    slicer.util.updateVolumeFromArray(labelmapVolumeNode, labelArray)
+#    labelmapVolumeNode.GetBounds(bounds)
+#    print('Bounds after : ', bounds)
+
+    self.scl.SegmentClassificationProcessing(labelmapVolumeNode)
+    stopTime = time.time()
+    logging.info(f'calculateVascularSegments processing completed in {stopTime-startTime:.2f} seconds')
+
 #    print(points.shape)
 #    print(points)
 #    points_z_array = points[:,

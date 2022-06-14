@@ -13,6 +13,7 @@
 #include "vtkSegmentClassificationLogic.h"
 
 #include <vtkMRMLLabelMapVolumeNode.h>
+#include <vtkMRMLSegmentationNode.h>
 
 #include <vtkObjectFactory.h>
 #include <vtkImageData.h>
@@ -24,6 +25,8 @@
 #include <vtkPointData.h>
 //#include <vtkIntArray.h>
 #include <vtkStringArray.h>
+#include <vtkAppendPolyData.h>
+#include <vtkOrientedImageData.h>
 
 #include <itkImage.h>
 #include <itkImageFileWriter.h>
@@ -39,6 +42,7 @@ vtkSegmentClassificationLogic::vtkSegmentClassificationLogic()
 {
 
   std::cout << "vtkSegmentClassificationLogic Constructor" << std::endl;
+  centerlineModel = vtkSmartPointer<vtkPolyData>::New();
 }
 
 //------------------------------------------------------------------------------
@@ -148,4 +152,55 @@ void vtkSegmentClassificationLogic::SegmentClassification(vtkPolyData *centerlin
   // writer->SetFileName("/tmp/a.nrrd");
   // writer->Update();
 }
+
+void vtkSegmentClassificationLogic::addSegmentToCenterlineModel(vtkSmartPointer<vtkPolyData> segment)
+{
+    vtkSmartPointer<vtkAppendPolyData> appendFilter = vtkSmartPointer<vtkAppendPolyData>::New();
+    vtkSmartPointer<vtkPolyData> summedModel = vtkSmartPointer<vtkPolyData>::New();
+    appendFilter->AddInputData(this->centerlineModel);
+    appendFilter->AddInputData(segment);
+    summedModel = appendFilter->GetOutput();
+    appendFilter->Update();
+
+    centerlineModel = summedModel;
+}
+
+void vtkSegmentClassificationLogic::BuildCenterlineSearchModel()
+{
+
+}
+
+int vtkSegmentClassificationLogic::SegmentClassificationProcessing(vtkMRMLLabelMapVolumeNode *labelMap)
+{
+//    vtkSmartPointer<vtkOrientedImageData> liverMap = vtkSmartPointer<vtkOrientedImageData>::New();
+//    segmentation->GetBinaryLabelmapRepresentation(Id, liverMap);
+     //    vtkSmartPointer<vtkImageData> image = liverMap->GetImageData();
+    int p=0;
+    vtkSmartPointer<vtkImageData> imageData = labelMap->GetImageData();
+    const char* scalarType = imageData->GetScalarTypeAsString();
+    std::cout << "Scalar type : " << scalarType[0] << scalarType[1] << scalarType[2] <<
+              scalarType[3] << scalarType[4] << std::endl;
+    int dims[3];
+    imageData->GetDimensions(dims);
+    std::cout << "Liver Image data dimensions : " << dims[0] << ", " << dims[1] << ", " << dims[2]  << std::endl;
+    int extent[6];
+    imageData->GetExtent(extent);
+    std::cout << "Liver Image data extent : [ " << extent[0] << ", " << extent[1] << ", " << extent[2] << ", " << extent[3]
+              << ", " << extent[4] << ", " << extent[5] << "]" << std::endl;
+
+    for (int z=extent[4]; z<=extent[5]; z++)
+        for(int y=extent[2]; y<=extent[3]; y++)
+            for(int x=extent[0]; x<=extent[1]; x++)
+            {
+                short *label = (short*)imageData->GetScalarPointer(x,y,z);
+                if(*label==1) {
+                    p=p+1;
+                    *label = 2;
+                }
+            }
+
+    std::cout << "Number of labelvalues: " << p << std::endl;
+    return 0;
+}
+
 

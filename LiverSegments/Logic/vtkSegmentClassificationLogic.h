@@ -17,16 +17,21 @@
 #include "vtkSlicerLiverSegmentsModuleLogicExport.h"
 
 #include <vtkObject.h>
+#include <vtkSmartPointer.h>
 
 // Forward delcarations
 class vtkPolyData;
 class vtkMRMLLabelMapVolumeNode;
+class vtkSegment;
+class vtkMRMLSegmentationNode;
 
 
 // Class vtkSegmentClassificationLogic
 class VTK_SLICER_LIVERSEGMENTS_MODULE_LOGIC_EXPORT
 vtkSegmentClassificationLogic : public vtkObject
 {
+ private:
+    vtkSmartPointer<vtkPolyData> centerlineModel;
 
  public:
   static vtkSegmentClassificationLogic *New();
@@ -36,6 +41,9 @@ vtkSegmentClassificationLogic : public vtkObject
  public:
   void SegmentClassification(vtkPolyData *centerlines,
                              vtkMRMLLabelMapVolumeNode *labelMap);
+  void addSegmentToCenterlineModel(vtkSmartPointer<vtkPolyData> segment);
+  void BuildCenterlineSearchModel();
+  int SegmentClassificationProcessing(/*vtkPolyData *centerlineModel, */vtkMRMLLabelMapVolumeNode *labelMap);
 
  protected:
   vtkSegmentClassificationLogic();
