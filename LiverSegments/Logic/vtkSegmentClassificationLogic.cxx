@@ -43,7 +43,7 @@ vtkSegmentClassificationLogic::vtkSegmentClassificationLogic()
 {
 
   std::cout << "vtkSegmentClassificationLogic Constructor" << std::endl;
-  centerlineModel = vtkSmartPointer<vtkPolyData>::New();
+  KDTree = vtkSmartPointer<vtkKdTreePointLocator>::New();
 }
 
 //------------------------------------------------------------------------------
@@ -212,6 +212,13 @@ int vtkSegmentClassificationLogic::SegmentClassificationProcessing(vtkMRMLLabelM
 
     std::cout << "Number of labelvalues: " << p << std::endl;
     return 0;
+}
+
+void vtkSegmentClassificationLogic::initializeCenterlineModel(vtkMRMLModelNode *summedCenterline)
+{
+    vtkPolyData *centerlineModel = summedCenterline->GetPolyData();
+    KDTree->SetDataSet(dynamic_cast<vtkPointSet*>(centerlineModel));
+    KDTree->BuildLocator();
 }
 
 

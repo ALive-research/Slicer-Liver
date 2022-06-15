@@ -371,6 +371,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 #    get volumenode
 #    specify metadata for the labelmap
 #    or set as reference volume?
+    startTime = time.time()
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
     self.logic.build_centerline_model(segmentationNode)
     refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
@@ -378,6 +379,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         raise ValueError("Missing inputs to calculate vascular segments")
 
     self.logic.calculateVascularSegments(refVolumeNode, segmentationNode)
+    stopTime = time.time()
+    logging.info(f'Vascular Segments processing completed in {stopTime-startTime:.2f} seconds')
 
 
 
@@ -430,6 +433,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
         print(name, segmentId, color)
         self.scl.markSegmentWithID(segmentObject, segmentId)
         self.scl.addSegmentToCenterlineModel(centerlineModel, segmentObject)
+    self.scl.initializeCenterlineModel(centerlineModel)
 
   def createColorMap(self):
     colorTableNode = slicer.mrmlScene.CreateNodeByClass("vtkMRMLColorTableNode")
@@ -449,7 +453,6 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
       self._outputLabelMap = labelMapNode
 
   def calculateVascularSegments(self, refVolume, segmentation):
-    startTime = time.time()
     segmentationIds = vtk.vtkStringArray()
     labelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("VascularSegments")
     if not labelmapVolumeNode:
@@ -504,8 +507,6 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
 #    print('Bounds after : ', bounds)
 
     self.scl.SegmentClassificationProcessing(labelmapVolumeNode)
-    stopTime = time.time()
-    logging.info(f'calculateVascularSegments processing completed in {stopTime-startTime:.2f} seconds')
 
 #    print(points.shape)
 #    print(points)

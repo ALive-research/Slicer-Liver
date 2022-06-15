@@ -21,6 +21,7 @@
 
 // Forward delcarations
 class vtkPolyData;
+class vtkKdTreePointLocator;
 class vtkMRMLLabelMapVolumeNode;
 class vtkSegment;
 class vtkMRMLSegmentationNode;
@@ -32,7 +33,7 @@ class VTK_SLICER_LIVERSEGMENTS_MODULE_LOGIC_EXPORT
 vtkSegmentClassificationLogic : public vtkObject
 {
  private:
-    vtkSmartPointer<vtkPolyData> centerlineModel;
+    vtkSmartPointer<vtkKdTreePointLocator> KDTree;
 
  public:
   static vtkSegmentClassificationLogic *New();
@@ -45,6 +46,7 @@ vtkSegmentClassificationLogic : public vtkObject
   void markSegmentWithID(vtkMRMLModelNode *segment, int segmentId);
   void addSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline);
   int SegmentClassificationProcessing(/*vtkPolyData *centerlineModel, */vtkMRMLLabelMapVolumeNode *labelMap);
+  void initializeCenterlineModel(vtkMRMLModelNode *summedCenterline);
 
  protected:
   vtkSegmentClassificationLogic();
