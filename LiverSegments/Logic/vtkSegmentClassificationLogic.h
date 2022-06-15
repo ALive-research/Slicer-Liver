@@ -24,6 +24,7 @@ class vtkPolyData;
 class vtkMRMLLabelMapVolumeNode;
 class vtkSegment;
 class vtkMRMLSegmentationNode;
+class vtkMRMLModelNode;
 
 
 // Class vtkSegmentClassificationLogic
@@ -41,8 +42,8 @@ vtkSegmentClassificationLogic : public vtkObject
  public:
   void SegmentClassification(vtkPolyData *centerlines,
                              vtkMRMLLabelMapVolumeNode *labelMap);
-  void addSegmentToCenterlineModel(vtkSmartPointer<vtkPolyData> segment);
-  void BuildCenterlineSearchModel();
+  void markSegmentWithID(vtkMRMLModelNode *segment, int segmentId);
+  void addSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline);
   int SegmentClassificationProcessing(/*vtkPolyData *centerlineModel, */vtkMRMLLabelMapVolumeNode *labelMap);
 
  protected:

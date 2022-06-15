@@ -86,6 +86,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Color number in lookup table
     self.colorNumber = 0
 
+
     # Connections
     self.ui.parameterNodeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.setParameterNode)
     self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
@@ -354,7 +355,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 #    observationTag = endPointsMarkupsNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
 #        self.onControlPointsModified)
 
-    self.logic.build_centerline_model(centerlinePolyData, centerlineModelNode.GetID())
+#    self.logic.build_centerline_model(centerlinePolyData, centerlineModelNode.GetID())
 
 #  def onControlPointsModified(self, caller, event):
 #    print("onControlPointsModified")
@@ -370,10 +371,12 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 #    get volumenode
 #    specify metadata for the labelmap
 #    or set as reference volume?
-    refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
-    if not (refVolumeNode and segmentationNode):
+    self.logic.build_centerline_model(segmentationNode)
+    refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
+    if not (refVolumeNode):
         raise ValueError("Missing inputs to calculate vascular segments")
+
     self.logic.calculateVascularSegments(refVolumeNode, segmentationNode)
 
 
@@ -400,16 +403,44 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     Initialize parameter node with default settings.
     """
 
-  def build_centerline_model(self, centerline, centerlineSegmentID):
-#    pointdata = vtk.vtkPointData()
-    stringArray = vtk.vtkStringArray()
-    stringArray.SetName('segmentID')
-    for i in range(centerline.GetNumberOfPoints()):
-        stringArray.InsertNextValue(centerlineSegmentID)
-#    centerlineData = {centerlineSegmentID, centerline}
-    centerline.GetPointData().AddArray(stringArray)
-    self._centerlines.append(centerline)
-#    print(self._centerlines)
+  def createCompleteCenterlineModel(self):
+    nodeName = "CenterlineModel"
+    completeCenterlineModelNode = slicer.mrmlScene.GetNodeByID(nodeName)
+    if completeCenterlineModelNode:
+        print('Replacing completeCenterlineModelNode: ', nodeName)
+        slicer.mrmlScene.RemoveNode(completeCenterlineModelNode)
+
+    completeCenterlineModelNode = slicer.mrmlScene.AddNewNodeByClassWithID('vtkMRMLModelNode', nodeName, nodeName)
+    dummyPolyData = vtk.vtkPolyData()
+    completeCenterlineModelNode.SetAndObservePolyData(dummyPolyData)
+    if not completeCenterlineModelNode:
+        print('Error: Cannot create node: ', nodeName)
+
+    return completeCenterlineModelNode
+
+
+  def build_centerline_model(self, segmentationNode):
+    centerlineModel = self.createCompleteCenterlineModel()
+    #centerlineModel is empty - Start filling it with segments
+    centerlineSegmentsDict = slicer.util.getNodes("CenterlineSegment*")
+    segmentId = 0
+    for name, segmentObject in centerlineSegmentsDict.items():
+        segmentId += 1
+        color = segmentObject.GetDisplayNode().GetColor()
+        print(name, segmentId, color)
+        self.scl.markSegmentWithID(segmentObject, segmentId)
+        self.scl.addSegmentToCenterlineModel(centerlineModel, segmentObject)
+
+  def createColorMap(self):
+    colorTableNode = slicer.mrmlScene.CreateNodeByClass("vtkMRMLColorTableNode")
+    colorTableNode.SetTypeToUser()
+    colorTableNode.HideFromEditorsOff()  # make the color table selectable in the GUI outside Colors module
+    slicer.mrmlScene.AddNode(colorTableNode); colorTableNode.UnRegister(None)
+    largestLabelValue = max([name_value[1] for name_value in segment_names_to_labels])
+    colorTableNode.SetNumberOfColors(largestLabelValue + 1)
+    colorTableNode.SetNamesInitialised(True) # prevent automatic color name generation
+
+#  def updateColorMap(self, labelValue, color, colorMap):
 
   def setInputLabelMap(self, labelMapNode):
       self._inputLabelMap = labelMapNode

@@ -14,6 +14,7 @@
 
 #include <vtkMRMLLabelMapVolumeNode.h>
 #include <vtkMRMLSegmentationNode.h>
+#include <vtkMRMLModelNode.h>>
 
 #include <vtkObjectFactory.h>
 #include <vtkImageData.h>
@@ -153,21 +154,31 @@ void vtkSegmentClassificationLogic::SegmentClassification(vtkPolyData *centerlin
   // writer->Update();
 }
 
-void vtkSegmentClassificationLogic::addSegmentToCenterlineModel(vtkSmartPointer<vtkPolyData> segment)
+void vtkSegmentClassificationLogic::markSegmentWithID(vtkMRMLModelNode *segment, int segmentId)
 {
-    vtkSmartPointer<vtkAppendPolyData> appendFilter = vtkSmartPointer<vtkAppendPolyData>::New();
+    vtkSmartPointer<vtkIntArray> idArray = vtkSmartPointer<vtkIntArray>::New();
+    idArray->SetName("segmentId");
+    vtkSmartPointer<vtkPolyData> polydata = segment->GetPolyData();
+    int numberOfPoints = polydata->GetNumberOfPoints();
+    for(int i=0;i<numberOfPoints;i++) {
+        idArray->InsertNextTuple1(segmentId);
+    }
+    polydata->GetPointData()->AddArray(idArray);
+}
+
+void vtkSegmentClassificationLogic::addSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline)
+{
+    vtkPolyData *segment = segmentCenterline->GetPolyData();
+    vtkPolyData *centerlineModel = summedCenterline->GetPolyData();
+
     vtkSmartPointer<vtkPolyData> summedModel = vtkSmartPointer<vtkPolyData>::New();
-    appendFilter->AddInputData(this->centerlineModel);
+    vtkSmartPointer<vtkAppendPolyData> appendFilter = vtkSmartPointer<vtkAppendPolyData>::New();
+    appendFilter->AddInputData(centerlineModel);
     appendFilter->AddInputData(segment);
     summedModel = appendFilter->GetOutput();
     appendFilter->Update();
 
-    centerlineModel = summedModel;
-}
-
-void vtkSegmentClassificationLogic::BuildCenterlineSearchModel()
-{
-
+    summedCenterline->SetAndObservePolyData(summedModel);
 }
 
 int vtkSegmentClassificationLogic::SegmentClassificationProcessing(vtkMRMLLabelMapVolumeNode *labelMap)
