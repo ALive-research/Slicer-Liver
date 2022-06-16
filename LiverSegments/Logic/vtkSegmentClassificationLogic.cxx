@@ -14,7 +14,7 @@
 
 #include <vtkMRMLLabelMapVolumeNode.h>
 #include <vtkMRMLSegmentationNode.h>
-#include <vtkMRMLModelNode.h>>
+#include <vtkMRMLModelNode.h>
 
 #include <vtkObjectFactory.h>
 #include <vtkImageData.h>
@@ -28,10 +28,7 @@
 #include <vtkStringArray.h>
 #include <vtkAppendPolyData.h>
 #include <vtkOrientedImageData.h>
-
-#include <itkImage.h>
-#include <itkImageFileWriter.h>
-#include <itkImageRegionIteratorWithIndex.h>
+#include <vtkMatrix4x4.h>
 
 #include <iostream>
 
@@ -43,7 +40,7 @@ vtkSegmentClassificationLogic::vtkSegmentClassificationLogic()
 {
 
   std::cout << "vtkSegmentClassificationLogic Constructor" << std::endl;
-  KDTree = vtkSmartPointer<vtkKdTreePointLocator>::New();
+  locator = vtkSmartPointer<vtkKdTreePointLocator>::New();
 }
 
 //------------------------------------------------------------------------------
@@ -82,76 +79,10 @@ void vtkSegmentClassificationLogic::SegmentClassification(vtkPolyData *centerlin
       std::cerr << "No segmentIds in pointdata" << std::endl;
   }
 
-  auto KDTree = vtkSmartPointer<vtkKdTreePointLocator>::New();
-  KDTree->SetDataSet(dynamic_cast<vtkPointSet*>(centerlines));
-  KDTree->BuildLocator();
+  auto locator = vtkSmartPointer<vtkKdTreePointLocator>::New();
+  locator->SetDataSet(dynamic_cast<vtkPointSet*>(centerlines));
+  locator->BuildLocator();
 
-//  auto cells = vtkSmartPointer<vtkIdList>::New();
-
-//  // ITK Objects
-//  typedef itk::Image<short, 3> LabelMapType;
-//  typedef itk::ImageRegionIteratorWithIndex<LabelMapType> LabelMapIteratorType;
-
-//  LabelMapType::Pointer labelMap = LabelMapType::New();
-
-
-//  // Conversion vtkMRMLLabelMapVolumeNode --> ITKImage
-////  LabelMapHelper::ConvertLabelMapVolumeNodeToItkImage(inputLabelMap,
-////						      labelMap,
-////						      true, false);
-
-//  // Get the ID of the different points in the array
-//  auto cellData = centerlines->GetCellData();
-//  if (cellData == nullptr)
-//    {
-//      std::cerr << "No cell data ssociated to the polydata." << std::endl;
-//      return;
-//    }
-
-//  auto groupIds = vtkIntArray::SafeDownCast(cellData->GetArray("GroupIds"));
-//  if (groupIds == nullptr)
-//    {
-//      std::cerr << "No GroupIds array found in cell data." << std::endl;
-//      return;
-//    }
-  
-//  LabelMapIteratorType labelMapIt(labelMap, labelMap->GetRequestedRegion());
-//  LabelMapType::IndexType index;
-//  LabelMapType::PointType point;
-
-//  // Segments classification loop
-//  labelMapIt.GoToBegin();
-
-//  while(!labelMapIt.IsAtEnd())
-//    {
-
-//      if (labelMapIt.Get())
-//	{
-//	  index = labelMapIt.GetIndex();
-//	  labelMap->TransformIndexToPhysicalPoint(index, point);
-
-//	  double vtkpoint[3] = {point[0], point[1], point[2]};
-
-//	  vtkIdType id = KDTree->FindClosestPoint(vtkpoint);
-//	  centerlines->GetPointCells(id, cells.GetPointer());
-//	  labelMapIt.Set(static_cast<short>(groupIds->GetTuple(cells->GetId(0))[0])+1);
-//	}
-      
-//      ++labelMapIt;
-//    }
-
-
-  // Conversion ITKImage --> vtkMRMLLabelMapVolumeNode
-//  LabelMapHelper::ConvertItkImageToLabelMapVolumeNode(labelMap,
-//  						      outputLabelMap,
-//  						      VTK_SHORT,
-//						      true, false);
-
-  // typedef itk::ImageFileWriter<LabelMapType> LabelMapFileWriter;
-  // LabelMapFileWriter::Pointer writer = LabelMapFileWriter::New();
-  // writer->SetInput(labelMap);
-  // writer->SetFileName("/tmp/a.nrrd");
-  // writer->Update();
 }
 
 void vtkSegmentClassificationLogic::markSegmentWithID(vtkMRMLModelNode *segment, int segmentId)
@@ -186,6 +117,9 @@ int vtkSegmentClassificationLogic::SegmentClassificationProcessing(vtkMRMLLabelM
 //    vtkSmartPointer<vtkOrientedImageData> liverMap = vtkSmartPointer<vtkOrientedImageData>::New();
 //    segmentation->GetBinaryLabelmapRepresentation(Id, liverMap);
      //    vtkSmartPointer<vtkImageData> image = liverMap->GetImageData();
+    vtkSmartPointer<vtkMatrix4x4> ijkToRas = vtkSmartPointer<vtkMatrix4x4>::New();
+    labelMap->GetIJKToRASMatrix(ijkToRas);
+
     int p=0;
     vtkSmartPointer<vtkImageData> imageData = labelMap->GetImageData();
     const char* scalarType = imageData->GetScalarTypeAsString();
@@ -205,6 +139,25 @@ int vtkSegmentClassificationLogic::SegmentClassificationProcessing(vtkMRMLLabelM
             {
                 short *label = (short*)imageData->GetScalarPointer(x,y,z);
                 if(*label==1) {
+                    double position_IJK[4];
+                    position_IJK[0] = (double)x;
+                    position_IJK[1] = (double)y;
+                    position_IJK[2] = (double)z;
+                    position_IJK[3] = 1.0;
+                    double position_RAS[4];
+                    ijkToRas->MultiplyPoint(position_IJK, position_RAS);
+                    double vtkPoints[3] = {position_RAS[0], position_RAS[1], position_RAS[2]};
+                    vtkIdType id = this->locator->FindClosestPoint(vtkPoints);
+//                    if(id != storedId) {
+//                        storedId = id;
+//                        std::cout << "Found id: " << id << std::endl;
+//                        std::cout << "Pos_ijk: [" << position_IJK[0] << ", " << position_IJK[1] << ", "
+//                                  << position_IJK[2] << "]" << std::endl;
+//                        std::cout << "Pos_ras: [" << vtkPoints[0] << ", " << vtkPoints[1] << ", "
+//                                  << vtkPoints[2] << std::endl;
+//                        ijkToRas->Print(std::cout);
+//                    }
+
                     p=p+1;
                     *label = 2;
                 }
@@ -217,8 +170,8 @@ int vtkSegmentClassificationLogic::SegmentClassificationProcessing(vtkMRMLLabelM
 void vtkSegmentClassificationLogic::initializeCenterlineModel(vtkMRMLModelNode *summedCenterline)
 {
     vtkPolyData *centerlineModel = summedCenterline->GetPolyData();
-    KDTree->SetDataSet(dynamic_cast<vtkPointSet*>(centerlineModel));
-    KDTree->BuildLocator();
+    locator->SetDataSet(dynamic_cast<vtkPointSet*>(centerlineModel));
+    locator->BuildLocator();
 }
 
 

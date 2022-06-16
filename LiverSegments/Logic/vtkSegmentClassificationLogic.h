@@ -33,7 +33,7 @@ class VTK_SLICER_LIVERSEGMENTS_MODULE_LOGIC_EXPORT
 vtkSegmentClassificationLogic : public vtkObject
 {
  private:
-    vtkSmartPointer<vtkKdTreePointLocator> KDTree;
+    vtkSmartPointer<vtkKdTreePointLocator> locator;
 
  public:
   static vtkSegmentClassificationLogic *New();
