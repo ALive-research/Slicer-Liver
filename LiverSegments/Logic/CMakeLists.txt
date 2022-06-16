@@ -9,8 +9,8 @@ set(${KIT}_INCLUDE_DIRECTORIES
    )
 
 set(${KIT}_SRCS
-  vtkSegmentClassificationLogic.h
-  vtkSegmentClassificationLogic.cxx
+  vtkLiverSegmentsLogic.h
+  vtkLiverSegmentsLogic.cxx
   )
 
 set(${KIT}_TARGET_LIBRARIES

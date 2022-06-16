@@ -11,8 +11,8 @@
   ===============================================================================*/
 
 
-#ifndef __vtkSegmentClassificationLogic_h
-#define __vtkSegmentClassificationLogic_h
+#ifndef __vtkLiverSegmentsLogic_h
+#define __vtkLiverSegmentsLogic_h
 
 #include "vtkSlicerLiverSegmentsModuleLogicExport.h"
 
@@ -30,14 +30,14 @@ class vtkMRMLModelNode;
 
 // Class vtkSegmentClassificationLogic
 class VTK_SLICER_LIVERSEGMENTS_MODULE_LOGIC_EXPORT
-vtkSegmentClassificationLogic : public vtkObject
+vtkLiverSegmentsLogic : public vtkObject
 {
  private:
     vtkSmartPointer<vtkKdTreePointLocator> locator;
 
  public:
-  static vtkSegmentClassificationLogic *New();
-  vtkTypeMacro(vtkSegmentClassificationLogic, vtkObject);
+  static vtkLiverSegmentsLogic *New();
+  vtkTypeMacro(vtkLiverSegmentsLogic, vtkObject);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
  public:
@@ -45,14 +45,14 @@ vtkSegmentClassificationLogic : public vtkObject
                              vtkMRMLLabelMapVolumeNode *labelMap);
   void markSegmentWithID(vtkMRMLModelNode *segment, int segmentId);
   void addSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline);
-  int SegmentClassificationProcessing(/*vtkPolyData *centerlineModel, */vtkMRMLLabelMapVolumeNode *labelMap);
+  int  SegmentClassificationProcessing(/*vtkPolyData *centerlineModel, */vtkMRMLLabelMapVolumeNode *labelMap);
   void initializeCenterlineModel(vtkMRMLModelNode *summedCenterline);
 
  protected:
-  vtkSegmentClassificationLogic();
-  ~vtkSegmentClassificationLogic() override;
-  vtkSegmentClassificationLogic(const vtkSegmentClassificationLogic&);
-  void operator=(const vtkSegmentClassificationLogic&);
+  vtkLiverSegmentsLogic();
+  ~vtkLiverSegmentsLogic() override;
+  vtkLiverSegmentsLogic(const vtkLiverSegmentsLogic&);
+  void operator=(const vtkLiverSegmentsLogic&);
 
 };
 

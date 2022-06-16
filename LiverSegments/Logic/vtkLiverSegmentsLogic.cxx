@@ -10,7 +10,7 @@
 
    ===============================================================================*/
 
-#include "vtkSegmentClassificationLogic.h"
+#include "vtkLiverSegmentsLogic.h"
 
 #include <vtkMRMLLabelMapVolumeNode.h>
 #include <vtkMRMLSegmentationNode.h>
@@ -33,10 +33,10 @@
 #include <iostream>
 
 //------------------------------------------------------------------------------
-vtkStandardNewMacro(vtkSegmentClassificationLogic);
+vtkStandardNewMacro(vtkLiverSegmentsLogic);
 
 //------------------------------------------------------------------------------
-vtkSegmentClassificationLogic::vtkSegmentClassificationLogic()
+vtkLiverSegmentsLogic::vtkLiverSegmentsLogic()
 {
 
   std::cout << "vtkSegmentClassificationLogic Constructor" << std::endl;
@@ -44,18 +44,18 @@ vtkSegmentClassificationLogic::vtkSegmentClassificationLogic()
 }
 
 //------------------------------------------------------------------------------
-vtkSegmentClassificationLogic::~vtkSegmentClassificationLogic()
+vtkLiverSegmentsLogic::~vtkLiverSegmentsLogic()
 {
   
 }
 
 //------------------------------------------------------------------------------
-void vtkSegmentClassificationLogic::PrintSelf(ostream &os, vtkIndent indent)
+void vtkLiverSegmentsLogic::PrintSelf(ostream &os, vtkIndent indent)
 {
   Superclass::PrintSelf(os, indent);
 }
 
-void vtkSegmentClassificationLogic::SegmentClassification(vtkPolyData *centerlines,
+void vtkLiverSegmentsLogic::SegmentClassification(vtkPolyData *centerlines,
                                                           vtkMRMLLabelMapVolumeNode *labelMap)
 {
   std::cout << "vtkSegmentClassificationLogic::SegmentClassification()" << std::endl;
@@ -85,7 +85,7 @@ void vtkSegmentClassificationLogic::SegmentClassification(vtkPolyData *centerlin
 
 }
 
-void vtkSegmentClassificationLogic::markSegmentWithID(vtkMRMLModelNode *segment, int segmentId)
+void vtkLiverSegmentsLogic::markSegmentWithID(vtkMRMLModelNode *segment, int segmentId)
 {
     vtkSmartPointer<vtkIntArray> idArray = vtkSmartPointer<vtkIntArray>::New();
     idArray->SetName("segmentId");
@@ -97,7 +97,7 @@ void vtkSegmentClassificationLogic::markSegmentWithID(vtkMRMLModelNode *segment,
     polydata->GetPointData()->AddArray(idArray);
 }
 
-void vtkSegmentClassificationLogic::addSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline)
+void vtkLiverSegmentsLogic::addSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline)
 {
     vtkPolyData *segment = segmentCenterline->GetPolyData();
     vtkPolyData *centerlineModel = summedCenterline->GetPolyData();
@@ -112,7 +112,7 @@ void vtkSegmentClassificationLogic::addSegmentToCenterlineModel(vtkMRMLModelNode
     summedCenterline->SetAndObservePolyData(summedModel);
 }
 
-int vtkSegmentClassificationLogic::SegmentClassificationProcessing(vtkMRMLLabelMapVolumeNode *labelMap)
+int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLLabelMapVolumeNode *labelMap)
 {
 //    vtkSmartPointer<vtkOrientedImageData> liverMap = vtkSmartPointer<vtkOrientedImageData>::New();
 //    segmentation->GetBinaryLabelmapRepresentation(Id, liverMap);
@@ -167,7 +167,7 @@ int vtkSegmentClassificationLogic::SegmentClassificationProcessing(vtkMRMLLabelM
     return 0;
 }
 
-void vtkSegmentClassificationLogic::initializeCenterlineModel(vtkMRMLModelNode *summedCenterline)
+void vtkLiverSegmentsLogic::initializeCenterlineModel(vtkMRMLModelNode *summedCenterline)
 {
     vtkPolyData *centerlineModel = summedCenterline->GetPolyData();
     locator->SetDataSet(dynamic_cast<vtkPointSet*>(centerlineModel));

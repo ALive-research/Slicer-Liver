@@ -443,9 +443,9 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     self._inputLabelMap = None
     self._outputLabelMap = None
 
-    from vtkSlicerLiverSegmentsModuleLogicPython import vtkSegmentClassificationLogic
+    from vtkSlicerLiverSegmentsModuleLogicPython import vtkLiverSegmentsLogic
     # Create the segmentsclassification logic
-    self.scl = vtkSegmentClassificationLogic()
+    self.scl = vtkLiverSegmentsLogic()
 
   def setDefaultParameters(self, parameterNode):
     """
