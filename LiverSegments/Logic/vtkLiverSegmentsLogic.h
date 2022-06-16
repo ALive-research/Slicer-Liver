@@ -45,7 +45,7 @@ vtkLiverSegmentsLogic : public vtkObject
                              vtkMRMLLabelMapVolumeNode *labelMap);
   void markSegmentWithID(vtkMRMLModelNode *segment, int segmentId);
   void addSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline);
-  int  SegmentClassificationProcessing(/*vtkPolyData *centerlineModel, */vtkMRMLLabelMapVolumeNode *labelMap);
+  int  SegmentClassificationProcessing(vtkMRMLModelNode *centerlineModel, vtkMRMLLabelMapVolumeNode *labelMap);
   void initializeCenterlineModel(vtkMRMLModelNode *summedCenterline);
 
  protected:

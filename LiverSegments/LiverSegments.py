@@ -417,12 +417,12 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 #    or set as reference volume?
     startTime = time.time()
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
-    self.logic.build_centerline_model(segmentationNode)
+    centerlineModel = self.logic.build_centerline_model(segmentationNode)
     refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
     if not (refVolumeNode):
         raise ValueError("Missing inputs to calculate vascular segments")
 
-    self.logic.calculateVascularSegments(refVolumeNode, segmentationNode)
+    self.logic.calculateVascularSegments(refVolumeNode, segmentationNode, centerlineModel)
     stopTime = time.time()
     logging.info(f'Vascular Segments processing completed in {stopTime-startTime:.2f} seconds')
 
@@ -480,6 +480,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
         self.scl.markSegmentWithID(segmentObject, segmentId)
         self.scl.addSegmentToCenterlineModel(centerlineModel, segmentObject)
     self.scl.initializeCenterlineModel(centerlineModel)
+    return centerlineModel
 
   def createColorMap(self):
     colorTableNode = slicer.mrmlScene.CreateNodeByClass("vtkMRMLColorTableNode")
@@ -498,7 +499,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
   def setOutputLabelMap(self, labelMapNode):
       self._outputLabelMap = labelMapNode
 
-  def calculateVascularSegments(self, refVolume, segmentation):
+  def calculateVascularSegments(self, refVolume, segmentation, centerlineModel):
     segmentationIds = vtk.vtkStringArray()
     labelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("VascularSegments")
     if not labelmapVolumeNode:
@@ -552,7 +553,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
 #    labelmapVolumeNode.GetBounds(bounds)
 #    print('Bounds after : ', bounds)
 
-    self.scl.SegmentClassificationProcessing(labelmapVolumeNode)
+    self.scl.SegmentClassificationProcessing(centerlineModel, labelmapVolumeNode)
 
 #    print(points.shape)
 #    print(points)

@@ -22,9 +22,7 @@
 #include <vtkKdTreePointLocator.h>
 #include <vtkPointSet.h>
 #include <vtkPolyData.h>
-//#include <vtkCellData.h>
 #include <vtkPointData.h>
-//#include <vtkIntArray.h>
 #include <vtkStringArray.h>
 #include <vtkAppendPolyData.h>
 #include <vtkOrientedImageData.h>
@@ -72,7 +70,7 @@ void vtkLiverSegmentsLogic::SegmentClassification(vtkPolyData *centerlines,
     }
 
   auto pointData = centerlines->GetPointData();
-  auto centerlineSegmentIDs = pointData->GetAbstractArray("segmentID");
+  auto centerlineSegmentIDs = pointData->GetScalars();
 
   if(!centerlineSegmentIDs)
   {
@@ -92,9 +90,9 @@ void vtkLiverSegmentsLogic::markSegmentWithID(vtkMRMLModelNode *segment, int seg
     vtkSmartPointer<vtkPolyData> polydata = segment->GetPolyData();
     int numberOfPoints = polydata->GetNumberOfPoints();
     for(int i=0;i<numberOfPoints;i++) {
-        idArray->InsertNextTuple1(segmentId);
+        idArray->InsertNextValue(segmentId);
     }
-    polydata->GetPointData()->AddArray(idArray);
+    polydata->GetPointData()->SetScalars(idArray);
 }
 
 void vtkLiverSegmentsLogic::addSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline)
@@ -112,7 +110,7 @@ void vtkLiverSegmentsLogic::addSegmentToCenterlineModel(vtkMRMLModelNode *summed
     summedCenterline->SetAndObservePolyData(summedModel);
 }
 
-int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLLabelMapVolumeNode *labelMap)
+int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLModelNode *centerlineModel, vtkMRMLLabelMapVolumeNode *labelMap)
 {
 //    vtkSmartPointer<vtkOrientedImageData> liverMap = vtkSmartPointer<vtkOrientedImageData>::New();
 //    segmentation->GetBinaryLabelmapRepresentation(Id, liverMap);
@@ -120,7 +118,16 @@ int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLLabelMapVolume
     vtkSmartPointer<vtkMatrix4x4> ijkToRas = vtkSmartPointer<vtkMatrix4x4>::New();
     labelMap->GetIJKToRASMatrix(ijkToRas);
 
-    int p=0;
+    vtkSmartPointer<vtkPolyData> centerlinePolyData = centerlineModel->GetPolyData();
+    vtkSmartPointer<vtkPointData> pointData = centerlinePolyData->GetPointData();
+
+    vtkSmartPointer<vtkIntArray> centerlineSegmentIDs = vtkIntArray::SafeDownCast(pointData->GetScalars());
+
+    if(centerlineSegmentIDs == nullptr) {
+        std::cout << "No PointData in Model" << std::endl;
+        return -1;
+    }
+
     vtkSmartPointer<vtkImageData> imageData = labelMap->GetImageData();
     const char* scalarType = imageData->GetScalarTypeAsString();
     std::cout << "Scalar type : " << scalarType[0] << scalarType[1] << scalarType[2] <<
@@ -140,30 +147,21 @@ int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLLabelMapVolume
                 short *label = (short*)imageData->GetScalarPointer(x,y,z);
                 if(*label==1) {
                     double position_IJK[4];
-                    position_IJK[0] = (double)x;
-                    position_IJK[1] = (double)y;
-                    position_IJK[2] = (double)z;
-                    position_IJK[3] = 1.0;
+                    position_IJK[0] = static_cast<double>(x);
+                    position_IJK[1] = static_cast<double>(y);
+                    position_IJK[2] = static_cast<double>(z);
+                    position_IJK[3] = 1.0f;
                     double position_RAS[4];
                     ijkToRas->MultiplyPoint(position_IJK, position_RAS);
-                    double vtkPoints[3] = {position_RAS[0], position_RAS[1], position_RAS[2]};
-                    vtkIdType id = this->locator->FindClosestPoint(vtkPoints);
-//                    if(id != storedId) {
-//                        storedId = id;
-//                        std::cout << "Found id: " << id << std::endl;
-//                        std::cout << "Pos_ijk: [" << position_IJK[0] << ", " << position_IJK[1] << ", "
-//                                  << position_IJK[2] << "]" << std::endl;
-//                        std::cout << "Pos_ras: [" << vtkPoints[0] << ", " << vtkPoints[1] << ", "
-//                                  << vtkPoints[2] << std::endl;
-//                        ijkToRas->Print(std::cout);
-//                    }
-
-                    p=p+1;
-                    *label = 2;
+                    double vtkVoxelPoint[3] = {position_RAS[0], position_RAS[1], position_RAS[2]};
+                    double vtkCenterlinePoint[3];
+                    vtkIdType id = this->locator->FindClosestPoint(vtkVoxelPoint);
+                    centerlinePolyData->GetPoint(id, vtkCenterlinePoint);
+                    int index = centerlineSegmentIDs->GetTuple1(id);
+                    *label = centerlineSegmentIDs->GetTuple1(id);
                 }
             }
 
-    std::cout << "Number of labelvalues: " << p << std::endl;
     return 0;
 }
 
