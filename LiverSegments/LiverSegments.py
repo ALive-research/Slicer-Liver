@@ -266,9 +266,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     #    self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputVolume"))
     #     self.ui.outputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolume"))
-    #    self.ui.invertedOutputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolumeInverse"))
-    #    self.ui.imageThresholdSliderWidget.value = float(self._parameterNode.GetParameter("Threshold"))
-    #    self.ui.invertOutputCheckBox.checked = (self._parameterNode.GetParameter("Invert") == "true")
 
     # Update buttons states and tooltips
     #    if self._parameterNode.GetNodeReference("InputVolume") and self._parameterNode.GetNodeReference("OutputVolume"):
@@ -304,9 +301,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     #    self._parameterNode.SetNodeReferenceID("InputVolume", self.ui.inputSelector.currentNodeID)
     #    self._parameterNode.SetNodeReferenceID("OutputVolume", self.ui.outputSelector.currentNodeID)
-    #    self._parameterNode.SetParameter("Threshold", str(self.ui.imageThresholdSliderWidget.value))
-    #    self._parameterNode.SetParameter("Invert", "true" if self.ui.invertOutputCheckBox.checked else "false")
-    #    self._parameterNode.SetNodeReferenceID("OutputVolumeInverse", self.ui.invertedOutputSelector.currentNodeID)
 
     #    self._parameterNode.EndModify(wasModified)
 
@@ -465,6 +459,15 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     if not completeCenterlineModelNode:
         print('Error: Cannot create node: ', nodeName)
 
+    completeCenterlineModelNode.CreateDefaultDisplayNodes()
+    displayNode = completeCenterlineModelNode.GetDisplayNode()
+    displayNode.ScalarVisibilityOn()
+    displayNode.SetActiveScalar('SegmentId', 2)
+    displayNode.SetScalarRangeFlagFromString('UseColorNodeScalarRange')
+    displayNode.SetLineWidth(3)
+    colormap = slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels')
+    completeCenterlineModelNode.GetDisplayNode().SetAndObserveColorNodeID(colormap.GetID())
+
     return completeCenterlineModelNode
 
 
@@ -475,36 +478,16 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     segmentId = 0
     for name, segmentObject in centerlineSegmentsDict.items():
         segmentId += 1
-        color = segmentObject.GetDisplayNode().GetColor()
-        print(name, segmentId, color)
         self.scl.markSegmentWithID(segmentObject, segmentId)
         self.scl.addSegmentToCenterlineModel(centerlineModel, segmentObject)
-    self.scl.initializeCenterlineModel(centerlineModel)
+    self.scl.initializeCenterlineSearchModel(centerlineModel)
     return centerlineModel
-
-  def createColorMap(self):
-    colorTableNode = slicer.mrmlScene.CreateNodeByClass("vtkMRMLColorTableNode")
-    colorTableNode.SetTypeToUser()
-    colorTableNode.HideFromEditorsOff()  # make the color table selectable in the GUI outside Colors module
-    slicer.mrmlScene.AddNode(colorTableNode); colorTableNode.UnRegister(None)
-    largestLabelValue = max([name_value[1] for name_value in segment_names_to_labels])
-    colorTableNode.SetNumberOfColors(largestLabelValue + 1)
-    colorTableNode.SetNamesInitialised(True) # prevent automatic color name generation
-
-#  def updateColorMap(self, labelValue, color, colorMap):
-
-  def setInputLabelMap(self, labelMapNode):
-      self._inputLabelMap = labelMapNode
-
-  def setOutputLabelMap(self, labelMapNode):
-      self._outputLabelMap = labelMapNode
 
   def calculateVascularSegments(self, refVolume, segmentation, centerlineModel):
     segmentationIds = vtk.vtkStringArray()
     labelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("VascularSegments")
     if not labelmapVolumeNode:
         labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "VascularSegments")
-
 
     # Get voxels tagged as liver
     segmentId = segmentation.GetSegmentation().GetSegmentIdBySegmentName('liver')
@@ -524,11 +507,10 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     segmentationIds.InsertNextValue(segmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume)
 
-#    self.setOutputLabelMap(labelmapVolumeNode)
-    import numpy as np
-    labelArray = slicer.util.arrayFromSegmentBinaryLabelmap(segmentation, segmentId, refVolume)
-    print('labelArray shape: ', labelArray.shape)
-    print('labelArray size: ', labelArray.size)
+#    import numpy as np
+#    labelArray = slicer.util.arrayFromSegmentBinaryLabelmap(segmentation, segmentId, refVolume)
+#    print('labelArray shape: ', labelArray.shape)
+#    print('labelArray size: ', labelArray.size)
 #    points = np.where(labelArray == 1)
     # Get indexes with non-zero label
 #    points = np.nonzero(labelArray)
@@ -554,22 +536,9 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
 #    print('Bounds after : ', bounds)
 
     self.scl.SegmentClassificationProcessing(centerlineModel, labelmapVolumeNode)
-
-#    print(points.shape)
-#    print(points)
-#    points_z_array = points[:,
-#    vol = slicer.util.arrayFromVolume(refVolume)
-#    values = vol[points]
-#    print(points)
-#    print(points.shape)
-
-#    appendPolyData = vtk.vtkAppendPolyData()
-#    for i in range(len(self._centerlines)):
-#        appendPolyData.AddInputData(self._centerlines[i])
-#    appendPolyData.Update()
-
-#    self.scl.SegmentClassification(appendPolyData.GetOutput(),
-#                                    labelmapVolumeNode)
+    colormap = slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels')
+    labelmapVolumeNode.GetDisplayNode().SetAndObserveColorNodeID(colormap.GetID())
+    slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
 
 
 class LiverSegmentsTest(ScriptedLoadableModuleTest):
