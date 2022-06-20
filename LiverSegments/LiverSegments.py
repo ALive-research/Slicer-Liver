@@ -402,13 +402,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 
   def onCalculateSegmentButton(self):
-#    vascularSegmentsOutputNode = self.ui.outputSegmentsSelector.currentNode()
-#    if not vascularSegmentsOutputNode:
-#      raise ValueError("No vascularSegmentsOutputNode")
-#    print(vascularSegmentsOutputNode)
-#    get volumenode
-#    specify metadata for the labelmap
-#    or set as reference volume?
     startTime = time.time()
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
     centerlineModel = self.logic.build_centerline_model(segmentationNode)
@@ -506,34 +499,6 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
 
     segmentationIds.InsertNextValue(segmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume)
-
-#    import numpy as np
-#    labelArray = slicer.util.arrayFromSegmentBinaryLabelmap(segmentation, segmentId, refVolume)
-#    print('labelArray shape: ', labelArray.shape)
-#    print('labelArray size: ', labelArray.size)
-#    points = np.where(labelArray == 1)
-    # Get indexes with non-zero label
-#    points = np.nonzero(labelArray)
-#    numberOfPoints = len(points[0])
-#    print(points)
-#    print(points[0][0], points[1][0], points[2][0])
-#    print("start gen list")
-#    list_of_points = list(zip(points[0], points[1], points[2]))
-#    print(len(list_of_points))
-#    p=0
-#    for i in range(numberOfPoints):
-#        coordinate = points[0][i], points[1][i], points[2][i]
-#        value = labelArray[coordinate]
-#        if value == 0:
-#            p = p+1
-#            print(coordinate)
-#    print(p)
-#    bounds = [0,0,0,0,0,0]
-#    labelmapVolumeNode.GetBounds(bounds)
-#    print('Bounds before : ', bounds)
-#    slicer.util.updateVolumeFromArray(labelmapVolumeNode, labelArray)
-#    labelmapVolumeNode.GetBounds(bounds)
-#    print('Bounds after : ', bounds)
 
     self.scl.SegmentClassificationProcessing(centerlineModel, labelmapVolumeNode)
     colormap = slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels')

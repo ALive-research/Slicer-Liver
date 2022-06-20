@@ -36,8 +36,6 @@ vtkStandardNewMacro(vtkLiverSegmentsLogic);
 //------------------------------------------------------------------------------
 vtkLiverSegmentsLogic::vtkLiverSegmentsLogic()
 {
-
-  std::cout << "vtkSegmentClassificationLogic Constructor" << std::endl;
   locator = vtkSmartPointer<vtkKdTreePointLocator>::New();
 }
 
@@ -56,7 +54,6 @@ void vtkLiverSegmentsLogic::PrintSelf(ostream &os, vtkIndent indent)
 void vtkLiverSegmentsLogic::SegmentClassification(vtkPolyData *centerlines,
                                                           vtkMRMLLabelMapVolumeNode *labelMap)
 {
-  std::cout << "vtkSegmentClassificationLogic::SegmentClassification()" << std::endl;
   if (centerlines == nullptr)
     {
       std::cerr << "No centerlines polydata." << std::endl;
@@ -80,7 +77,6 @@ void vtkLiverSegmentsLogic::SegmentClassification(vtkPolyData *centerlines,
   auto locator = vtkSmartPointer<vtkKdTreePointLocator>::New();
   locator->SetDataSet(dynamic_cast<vtkPointSet*>(centerlines));
   locator->BuildLocator();
-
 }
 
 void vtkLiverSegmentsLogic::markSegmentWithID(vtkMRMLModelNode *segment, int segmentId)
@@ -112,9 +108,6 @@ void vtkLiverSegmentsLogic::addSegmentToCenterlineModel(vtkMRMLModelNode *summed
 
 int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLModelNode *centerlineModel, vtkMRMLLabelMapVolumeNode *labelMap)
 {
-//    vtkSmartPointer<vtkOrientedImageData> liverMap = vtkSmartPointer<vtkOrientedImageData>::New();
-//    segmentation->GetBinaryLabelmapRepresentation(Id, liverMap);
-     //    vtkSmartPointer<vtkImageData> image = liverMap->GetImageData();
     vtkSmartPointer<vtkMatrix4x4> ijkToRas = vtkSmartPointer<vtkMatrix4x4>::New();
     labelMap->GetIJKToRASMatrix(ijkToRas);
 
@@ -129,16 +122,8 @@ int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLModelNode *cen
     }
 
     vtkSmartPointer<vtkImageData> imageData = labelMap->GetImageData();
-    const char* scalarType = imageData->GetScalarTypeAsString();
-    std::cout << "Scalar type : " << scalarType[0] << scalarType[1] << scalarType[2] <<
-              scalarType[3] << scalarType[4] << std::endl;
-    int dims[3];
-    imageData->GetDimensions(dims);
-    std::cout << "Liver Image data dimensions : " << dims[0] << ", " << dims[1] << ", " << dims[2]  << std::endl;
     int extent[6];
     imageData->GetExtent(extent);
-    std::cout << "Liver Image data extent : [ " << extent[0] << ", " << extent[1] << ", " << extent[2] << ", " << extent[3]
-              << ", " << extent[4] << ", " << extent[5] << "]" << std::endl;
 
     for (int z=extent[4]; z<=extent[5]; z++)
         for(int y=extent[2]; y<=extent[3]; y++)

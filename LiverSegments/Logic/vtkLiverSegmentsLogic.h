@@ -28,7 +28,6 @@ class vtkMRMLSegmentationNode;
 class vtkMRMLModelNode;
 
 
-// Class vtkSegmentClassificationLogic
 class VTK_SLICER_LIVERSEGMENTS_MODULE_LOGIC_EXPORT
 vtkLiverSegmentsLogic : public vtkObject
 {
