@@ -153,6 +153,7 @@ int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLModelNode *cen
 void vtkLiverSegmentsLogic::initializeCenterlineSearchModel(vtkMRMLModelNode *summedCenterline)
 {
     vtkPolyData *centerlineModel = summedCenterline->GetPolyData();
+    locator->Initialize();
     locator->SetDataSet(dynamic_cast<vtkPointSet*>(centerlineModel));
     locator->BuildLocator();
 }
