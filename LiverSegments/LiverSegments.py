@@ -316,12 +316,46 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if not inputSurfacePolyData or inputSurfacePolyData.GetNumberOfPoints() == 0:
         raise ValueError("Valid input surface is required")
 
-    targetNumberOfPoints = 5000
-    decimationAggressiveness = 4
-    subdivideInputSurface = 0
-
-    preprocessedPolyData = self.centerlineProcessingLogic.preprocess(inputSurfacePolyData, targetNumberOfPoints, decimationAggressiveness, subdivideInputSurface)
+    preprocessedPolyData = self.preprocessAndDecimate(inputSurfacePolyData)
     return preprocessedPolyData
+
+  #Using code from centerlineProcessingLogic.preprocess
+  def preprocessAndDecimate(self, surfacePolyData):
+    parameters = {}
+    inputSurfaceModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "tempInputSurfaceModel")
+    inputSurfaceModelNode.SetAndObserveMesh(surfacePolyData)
+    parameters["inputModel"] = inputSurfaceModelNode
+    outputSurfaceModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "tempDecimatedSurfaceModel")
+    parameters["outputModel"] = outputSurfaceModelNode
+    parameters["reductionFactor"] = 0.8
+    parameters["method"] = "FastQuadric"
+    parameters["aggressiveness"] = 4
+    decimation = slicer.modules.decimation
+    cliNode = slicer.cli.runSync(decimation, None, parameters)
+    surfacePolyData = outputSurfaceModelNode.GetPolyData()
+    slicer.mrmlScene.RemoveNode(inputSurfaceModelNode)
+    slicer.mrmlScene.RemoveNode(outputSurfaceModelNode)
+    slicer.mrmlScene.RemoveNode(cliNode)
+
+    surfaceCleaner = vtk.vtkCleanPolyData()
+    surfaceCleaner.SetInputData(surfacePolyData)
+    surfaceCleaner.Update()
+
+    surfaceTriangulator = vtk.vtkTriangleFilter()
+    surfaceTriangulator.SetInputData(surfaceCleaner.GetOutput())
+    surfaceTriangulator.PassLinesOff()
+    surfaceTriangulator.PassVertsOff()
+    surfaceTriangulator.Update()
+
+    normals = vtk.vtkPolyDataNormals()
+    normals.SetInputData(surfaceTriangulator.GetOutput())
+    normals.SetAutoOrientNormals(1)
+    normals.SetFlipNormals(0)
+    normals.SetConsistency(1)
+    normals.SplittingOff()
+    normals.Update()
+
+    return normals.GetOutput()
 
   def createSegmentName(self, endPointsMarkupsNode):
     endpointsName = endPointsMarkupsNode.GetName()
