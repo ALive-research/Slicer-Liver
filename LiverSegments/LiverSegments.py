@@ -337,10 +337,11 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     nodeName = self.createSegmentName(endPointsMarkupsNode)
     centerlineModelNode = slicer.mrmlScene.GetNodeByID(nodeName)
     if centerlineModelNode:
-      print('Replacing centerlineModelNode:', nodeName)
-      slicer.mrmlScene.RemoveNode(centerlineModelNode)
-
-    centerlineModelNode = slicer.mrmlScene.AddNewNodeByClassWithID('vtkMRMLModelNode', nodeName, nodeName)
+      print('Adding to existing centerlineModelNode')
+      #print('Replacing centerlineModelNode:', nodeName)
+      #slicer.mrmlScene.RemoveNode(centerlineModelNode)
+    else:
+      centerlineModelNode = slicer.mrmlScene.AddNewNodeByClassWithID('vtkMRMLModelNode', nodeName, nodeName)
 
     if not centerlineModelNode:
       print('Error: Cannot create node: ', nodeName)
@@ -384,7 +385,10 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     centerlinePolyData, voronoiDiagramPolyData = self.centerlineProcessingLogic.extractCenterline(
         preprocessedPolyData, endPointsMarkupsNode)
-    centerlineModelNode.SetAndObserveMesh(centerlinePolyData)
+
+    #centerlineModelNode.SetAndObserveMesh(centerlinePolyData)
+    centerlineModelNode.SetAndObserveMesh(self.mergePolydata(centerlineModelNode.GetMesh(), centerlinePolyData))
+
     centerlineModelNode.CreateDefaultDisplayNodes()
     self.useColorFromSelector(centerlineModelNode)
     centerlineModelNode.GetDisplayNode().SetLineWidth(3)
@@ -400,6 +404,12 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # New centerline should be calculated
     # The center model (composition of all centerlines) should be updated
 
+  def mergePolydata(self, existingPolyData, newPolyData):
+    combinedPolyData = vtk.vtkAppendPolyData()
+    combinedPolyData.AddInputData(existingPolyData)
+    combinedPolyData.AddInputData(newPolyData)
+    combinedPolyData.Update()
+    return combinedPolyData.GetOutput()
 
   def onCalculateSegmentButton(self):
     startTime = time.time()
