@@ -420,8 +420,9 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     centerlinePolyData, voronoiDiagramPolyData = self.centerlineProcessingLogic.extractCenterline(
         preprocessedPolyData, endPointsMarkupsNode)
 
-    #centerlineModelNode.SetAndObserveMesh(centerlinePolyData)
-    centerlineModelNode.SetAndObserveMesh(self.mergePolydata(centerlineModelNode.GetMesh(), centerlinePolyData))
+    decimatedCenterlinePolyData = self.decimateLine(centerlinePolyData)
+    mergedLines = self.mergePolydata(centerlineModelNode.GetMesh(), decimatedCenterlinePolyData)
+    centerlineModelNode.SetAndObserveMesh(mergedLines)
 
     centerlineModelNode.CreateDefaultDisplayNodes()
     self.useColorFromSelector(centerlineModelNode)
@@ -437,6 +438,13 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 #    print("onControlPointsModified")
     # New centerline should be calculated
     # The center model (composition of all centerlines) should be updated
+
+  def decimateLine(self, polyDataLine):
+    decimate = vtk.vtkDecimatePolylineFilter()
+    decimate.SetInputData(polyDataLine)
+    decimate.SetTargetReduction(.90)
+    decimate.Update()
+    return decimate.GetOutput()
 
   def mergePolydata(self, existingPolyData, newPolyData):
     combinedPolyData = vtk.vtkAppendPolyData()
