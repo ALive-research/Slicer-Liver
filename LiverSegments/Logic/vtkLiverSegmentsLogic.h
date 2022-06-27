@@ -40,8 +40,6 @@ vtkLiverSegmentsLogic : public vtkObject
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
  public:
-  void SegmentClassification(vtkPolyData *centerlines,
-                             vtkMRMLLabelMapVolumeNode *labelMap);
   void markSegmentWithID(vtkMRMLModelNode *segment, int segmentId);
   void addSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline);
   int  SegmentClassificationProcessing(vtkMRMLModelNode *centerlineModel, vtkMRMLLabelMapVolumeNode *labelMap);

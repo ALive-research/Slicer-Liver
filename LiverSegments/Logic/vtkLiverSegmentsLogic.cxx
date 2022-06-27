@@ -51,34 +51,6 @@ void vtkLiverSegmentsLogic::PrintSelf(ostream &os, vtkIndent indent)
   Superclass::PrintSelf(os, indent);
 }
 
-void vtkLiverSegmentsLogic::SegmentClassification(vtkPolyData *centerlines,
-                                                          vtkMRMLLabelMapVolumeNode *labelMap)
-{
-  if (centerlines == nullptr)
-    {
-      std::cerr << "No centerlines polydata." << std::endl;
-      return;
-    }
-
-  if (labelMap == nullptr)
-    {
-      std::cerr << "No label map defined." << std::endl;
-      return;
-    }
-
-  auto pointData = centerlines->GetPointData();
-  auto centerlineSegmentIDs = pointData->GetScalars();
-
-  if(!centerlineSegmentIDs)
-  {
-      std::cerr << "No segmentIds in pointdata" << std::endl;
-  }
-
-  auto locator = vtkSmartPointer<vtkKdTreePointLocator>::New();
-  locator->SetDataSet(dynamic_cast<vtkPointSet*>(centerlines));
-  locator->BuildLocator();
-}
-
 void vtkLiverSegmentsLogic::markSegmentWithID(vtkMRMLModelNode *segment, int segmentId)
 {
     vtkSmartPointer<vtkIntArray> idArray = vtkSmartPointer<vtkIntArray>::New();
