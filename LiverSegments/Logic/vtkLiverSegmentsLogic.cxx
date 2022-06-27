@@ -114,7 +114,6 @@ int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLModelNode *cen
                     double vtkCenterlinePoint[3];
                     vtkIdType id = this->locator->FindClosestPoint(vtkVoxelPoint);
                     centerlinePolyData->GetPoint(id, vtkCenterlinePoint);
-                    int index = centerlineSegmentIDs->GetTuple1(id);
                     *label = centerlineSegmentIDs->GetTuple1(id);
                 }
             }
