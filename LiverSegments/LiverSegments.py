@@ -123,14 +123,14 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # in batch mode, without a graphical user interface.
     self.logic = LiverSegmentsLogic()
     self.centerlineProcessingLogic = ExtractCenterlineLogic()
-    self.ui.parameterNodeSelector.addAttribute("vtkMRMLScriptedModuleNode", "ModuleName", self.moduleName)
+#    self.ui.parameterNodeSelector.addAttribute("vtkMRMLScriptedModuleNode", "ModuleName", self.moduleName)
     self.setParameterNode(self.logic.getParameterNode())
 
     # Color number in lookup table
     self.colorNumber = 0
 
     # Connections
-    self.ui.parameterNodeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.setParameterNode)
+#    self.ui.parameterNodeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.setParameterNode)
     self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
     self.ui.inputSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.updateParameterNodeFromGUI)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
@@ -212,9 +212,9 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.logic.setDefaultParameters(inputParameterNode)
 
     # Set parameter node in the parameter node selector widget
-    wasBlocked = self.ui.parameterNodeSelector.blockSignals(True)
-    self.ui.parameterNodeSelector.setCurrentNode(inputParameterNode)
-    self.ui.parameterNodeSelector.blockSignals(wasBlocked)
+#    wasBlocked = self.ui.parameterNodeSelector.blockSignals(True)
+#    self.ui.parameterNodeSelector.setCurrentNode(inputParameterNode)
+#    self.ui.parameterNodeSelector.blockSignals(wasBlocked)
 
     if inputParameterNode == self._parameterNode:
       # No change
