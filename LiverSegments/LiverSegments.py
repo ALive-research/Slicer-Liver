@@ -73,6 +73,9 @@ class LiverSegments(ScriptedLoadableModule):
     # Additional initialization step after application startup is complete
     #slicer.app.connect("startupCompleted()", registerSampleData)
 
+    #Hide module, so that it only shows up in the Liver module, and not as a separate module
+    parent.hidden = True
+
 #
 # Register sample data sets in Sample Data module
 #
