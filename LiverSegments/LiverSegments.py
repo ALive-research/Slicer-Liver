@@ -40,7 +40,6 @@
 import os
 import unittest
 import logging
-import time
 import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
@@ -457,7 +456,10 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return combinedPolyData.GetOutput()
 
   def onCalculateSegmentButton(self):
-    startTime = time.time()
+    if self.developerMode is True:
+      import time
+      startTime = time.time()
+
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
     centerlineModel = self.logic.build_centerline_model(segmentationNode)
     refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
@@ -465,8 +467,10 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         raise ValueError("Missing inputs to calculate vascular segments")
 
     self.logic.calculateVascularSegments(refVolumeNode, segmentationNode, centerlineModel)
-    stopTime = time.time()
-    logging.info(f'Vascular Segments processing completed in {stopTime-startTime:.2f} seconds')
+
+    if self.developerMode is True:
+      stopTime = time.time()
+      logging.info(f'Vascular Segments processing completed in {stopTime-startTime:.2f} seconds')
 
 #    slicer.app.resumeRender()
 #    qt.QApplication.restoreOverrideCursor()
