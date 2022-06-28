@@ -47,10 +47,8 @@
 #include <vtkSmartPointer.h>
 
 // Forward delcarations
-class vtkPolyData;
 class vtkKdTreePointLocator;
 class vtkMRMLLabelMapVolumeNode;
-class vtkSegment;
 class vtkMRMLSegmentationNode;
 class vtkMRMLModelNode;
 
@@ -59,7 +57,7 @@ class VTK_SLICER_LIVERSEGMENTS_MODULE_LOGIC_EXPORT
 vtkLiverSegmentsLogic : public vtkObject
 {
  private:
-    vtkSmartPointer<vtkKdTreePointLocator> locator;
+    vtkSmartPointer<vtkKdTreePointLocator> Locator;
 
  public:
   static vtkLiverSegmentsLogic *New();
@@ -67,10 +65,10 @@ vtkLiverSegmentsLogic : public vtkObject
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
  public:
-  void markSegmentWithID(vtkMRMLModelNode *segment, int segmentId);
-  void addSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline);
+  void MarkSegmentWithID(vtkMRMLModelNode *segment, int segmentId);
+  void AddSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline);
   int  SegmentClassificationProcessing(vtkMRMLModelNode *centerlineModel, vtkMRMLLabelMapVolumeNode *labelMap);
-  void initializeCenterlineSearchModel(vtkMRMLModelNode *summedCenterline);
+  void InitializeCenterlineSearchModel(vtkMRMLModelNode *summedCenterline);
 
  protected:
   vtkLiverSegmentsLogic();

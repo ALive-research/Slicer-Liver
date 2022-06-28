@@ -413,14 +413,14 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         raise ValueError("No endPointsMarkupsNode")
 
     slicer.app.pauseRender()
-    slicer.util.WaitCursor(True)
+    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
 
     try:
         preprocessedPolyData = self.getPreprocessedPolyData()
     except ValueError:
         print("Error: Preprocessing of polydata fails")
         slicer.app.resumeRender()
-        slicer.util.WaitCursor(False)
+        qt.QApplication.restoreOverrideCursor()
         raise
 
     try:
@@ -444,7 +444,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     endPointsMarkupsNode.SetDisplayVisibility(False)
 
     slicer.app.resumeRender()
-    slicer.util.WaitCursor(False)
+    qt.QApplication.restoreOverrideCursor()
 
 #    observationTag = endPointsMarkupsNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
 #        self.onControlPointsModified)
@@ -482,14 +482,15 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         raise ValueError("Missing inputs to calculate vascular segments")
 
     slicer.app.pauseRender()
-    slicer.util.WaitCursor(True)
+    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+
     try:
         self.logic.calculateVascularSegments(refVolumeNode, segmentationNode, centerlineModel)
     except ValueError:
         print("Error: Failing when calculating vascular segments")
 
     slicer.app.resumeRender()
-    slicer.util.WaitCursor(False)
+    qt.QApplication.restoreOverrideCursor()
 
     if self.developerMode is True:
       stopTime = time.time()
@@ -550,9 +551,9 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     segmentId = 0
     for name, segmentObject in centerlineSegmentsDict.items():
         segmentId += 1
-        self.scl.markSegmentWithID(segmentObject, segmentId)
-        self.scl.addSegmentToCenterlineModel(centerlineModel, segmentObject)
-    self.scl.initializeCenterlineSearchModel(centerlineModel)
+        self.scl.MarkSegmentWithID(segmentObject, segmentId)
+        self.scl.AddSegmentToCenterlineModel(centerlineModel, segmentObject)
+    self.scl.InitializeCenterlineSearchModel(centerlineModel)
     return centerlineModel
 
   def calculateVascularSegments(self, refVolume, segmentation, centerlineModel):
@@ -580,7 +581,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume)
 
     result = self.scl.SegmentClassificationProcessing(centerlineModel, labelmapVolumeNode)
-    if result!=0:
+    if result==0:
         raise ValueError("Corrupt centerline model - Not possible to calculate vascular segments")
 
     colormap = slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels')

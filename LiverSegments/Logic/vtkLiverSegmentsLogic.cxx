@@ -63,7 +63,7 @@ vtkStandardNewMacro(vtkLiverSegmentsLogic);
 //------------------------------------------------------------------------------
 vtkLiverSegmentsLogic::vtkLiverSegmentsLogic()
 {
-  locator = vtkSmartPointer<vtkKdTreePointLocator>::New();
+  this->Locator = vtkSmartPointer<vtkKdTreePointLocator>::New();
 }
 
 //------------------------------------------------------------------------------
@@ -78,11 +78,11 @@ void vtkLiverSegmentsLogic::PrintSelf(ostream &os, vtkIndent indent)
   Superclass::PrintSelf(os, indent);
 }
 
-void vtkLiverSegmentsLogic::markSegmentWithID(vtkMRMLModelNode *segment, int segmentId)
+void vtkLiverSegmentsLogic::MarkSegmentWithID(vtkMRMLModelNode *segment, int segmentId)
 {
-    vtkSmartPointer<vtkIntArray> idArray = vtkSmartPointer<vtkIntArray>::New();
+    auto idArray = vtkSmartPointer<vtkIntArray>::New();
     idArray->SetName("segmentId");
-    vtkSmartPointer<vtkPolyData> polydata = segment->GetPolyData();
+    auto polydata = segment->GetPolyData();
     int numberOfPoints = polydata->GetNumberOfPoints();
     for(int i=0;i<numberOfPoints;i++) {
         idArray->InsertNextValue(segmentId);
@@ -90,13 +90,13 @@ void vtkLiverSegmentsLogic::markSegmentWithID(vtkMRMLModelNode *segment, int seg
     polydata->GetPointData()->SetScalars(idArray);
 }
 
-void vtkLiverSegmentsLogic::addSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline)
+void vtkLiverSegmentsLogic::AddSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline)
 {
-    vtkPolyData *segment = segmentCenterline->GetPolyData();
-    vtkPolyData *centerlineModel = summedCenterline->GetPolyData();
+    auto segment = segmentCenterline->GetPolyData();
+    auto centerlineModel = summedCenterline->GetPolyData();
 
-    vtkSmartPointer<vtkPolyData> summedModel = vtkSmartPointer<vtkPolyData>::New();
-    vtkSmartPointer<vtkAppendPolyData> appendFilter = vtkSmartPointer<vtkAppendPolyData>::New();
+    auto summedModel = vtkSmartPointer<vtkPolyData>::New();
+    auto appendFilter = vtkSmartPointer<vtkAppendPolyData>::New();
     appendFilter->AddInputData(centerlineModel);
     appendFilter->AddInputData(segment);
     summedModel = appendFilter->GetOutput();
@@ -107,20 +107,20 @@ void vtkLiverSegmentsLogic::addSegmentToCenterlineModel(vtkMRMLModelNode *summed
 
 int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLModelNode *centerlineModel, vtkMRMLLabelMapVolumeNode *labelMap)
 {
-    vtkSmartPointer<vtkMatrix4x4> ijkToRas = vtkSmartPointer<vtkMatrix4x4>::New();
+    auto ijkToRas = vtkSmartPointer<vtkMatrix4x4>::New();
     labelMap->GetIJKToRASMatrix(ijkToRas);
 
-    vtkSmartPointer<vtkPolyData> centerlinePolyData = centerlineModel->GetPolyData();
-    vtkSmartPointer<vtkPointData> pointData = centerlinePolyData->GetPointData();
+    auto centerlinePolyData = centerlineModel->GetPolyData();
+    auto pointData = centerlinePolyData->GetPointData();
 
-    vtkSmartPointer<vtkIntArray> centerlineSegmentIDs = vtkIntArray::SafeDownCast(pointData->GetScalars());
+    auto centerlineSegmentIDs = vtkIntArray::SafeDownCast(pointData->GetScalars());
 
     if(centerlineSegmentIDs == nullptr) {
         std::cout << "Error: No PointData in centerline model" << std::endl;
-        return -1;
+        return 0;
     }
 
-    vtkSmartPointer<vtkImageData> imageData = labelMap->GetImageData();
+    auto imageData = labelMap->GetImageData();
     int extent[6];
     imageData->GetExtent(extent);
 
@@ -128,7 +128,7 @@ int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLModelNode *cen
         for(int y=extent[2]; y<=extent[3]; y++)
             for(int x=extent[0]; x<=extent[1]; x++)
             {
-                short *label = (short*)imageData->GetScalarPointer(x,y,z);
+                auto label = static_cast<short*>(imageData->GetScalarPointer(x,y,z));
                 if(*label==1) {
                     double position_IJK[4];
                     position_IJK[0] = static_cast<double>(x);
@@ -139,21 +139,21 @@ int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLModelNode *cen
                     ijkToRas->MultiplyPoint(position_IJK, position_RAS);
                     double vtkVoxelPoint[3] = {position_RAS[0], position_RAS[1], position_RAS[2]};
                     double vtkCenterlinePoint[3];
-                    vtkIdType id = this->locator->FindClosestPoint(vtkVoxelPoint);
+                    vtkIdType id = this->Locator->FindClosestPoint(vtkVoxelPoint);
                     centerlinePolyData->GetPoint(id, vtkCenterlinePoint);
                     *label = centerlineSegmentIDs->GetTuple1(id);
                 }
             }
 
-    return 0;
+    return 1;
 }
 
-void vtkLiverSegmentsLogic::initializeCenterlineSearchModel(vtkMRMLModelNode *summedCenterline)
+void vtkLiverSegmentsLogic::InitializeCenterlineSearchModel(vtkMRMLModelNode *summedCenterline)
 {
-    vtkPolyData *centerlineModel = summedCenterline->GetPolyData();
-    locator->Initialize();
-    locator->SetDataSet(dynamic_cast<vtkPointSet*>(centerlineModel));
-    locator->BuildLocator();
+    auto centerlineModel = summedCenterline->GetPolyData();
+    this->Locator->Initialize();
+    this->Locator->SetDataSet(vtkPointSet::SafeDownCast(centerlineModel));
+    this->Locator->BuildLocator();
 }
 
 
