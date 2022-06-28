@@ -89,7 +89,7 @@ int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLModelNode *cen
     vtkSmartPointer<vtkIntArray> centerlineSegmentIDs = vtkIntArray::SafeDownCast(pointData->GetScalars());
 
     if(centerlineSegmentIDs == nullptr) {
-        std::cout << "No PointData in Model" << std::endl;
+        std::cout << "Error: No PointData in centerline model" << std::endl;
         return -1;
     }
 

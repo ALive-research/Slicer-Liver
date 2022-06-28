@@ -378,7 +378,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       centerlineModelNode = slicer.mrmlScene.AddNewNodeByClassWithID('vtkMRMLModelNode', nodeName, nodeName)
 
     if not centerlineModelNode:
-      print('Error: Cannot create node: ', nodeName)
+        raise ValueError('Error: Cannot create node: ', nodeName)
 
     return centerlineModelNode
 
@@ -410,15 +410,27 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if not endPointsMarkupsNode:
         raise ValueError("No endPointsMarkupsNode")
 
-#    slicer.app.pauseRender()
-#    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+    slicer.app.pauseRender()
+    slicer.util.WaitCursor(True)
 
-    preprocessedPolyData = self.getPreprocessedPolyData()
+    try:
+        preprocessedPolyData = self.getPreprocessedPolyData()
+    except ValueError:
+        print("Error: Preprocessing of polydata fails")
+        slicer.app.resumeRender()
+        slicer.util.WaitCursor(False)
+        raise
 
-    centerlineModelNode = self.createCenterlineNode(endPointsMarkupsNode)
+    try:
+        centerlineModelNode = self.createCenterlineNode(endPointsMarkupsNode)
+    except ValueError:
+        print("Error: Failed to generate centerline model")
 
-    centerlinePolyData, voronoiDiagramPolyData = self.centerlineProcessingLogic.extractCenterline(
-        preprocessedPolyData, endPointsMarkupsNode)
+    try:
+        centerlinePolyData, voronoiDiagramPolyData = self.centerlineProcessingLogic.extractCenterline(
+            preprocessedPolyData, endPointsMarkupsNode)
+    except ValueError:
+        print("Error: Failed to extract centerline")
 
     decimatedCenterlinePolyData = self.decimateLine(centerlinePolyData)
     mergedLines = self.mergePolydata(centerlineModelNode.GetMesh(), decimatedCenterlinePolyData)
@@ -428,6 +440,9 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.useColorFromSelector(centerlineModelNode)
     centerlineModelNode.GetDisplayNode().SetLineWidth(3)
     endPointsMarkupsNode.SetDisplayVisibility(False)
+
+    slicer.app.resumeRender()
+    slicer.util.WaitCursor(False)
 
 #    observationTag = endPointsMarkupsNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
 #        self.onControlPointsModified)
@@ -461,7 +476,15 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if not (refVolumeNode):
         raise ValueError("Missing inputs to calculate vascular segments")
 
-    self.logic.calculateVascularSegments(refVolumeNode, segmentationNode, centerlineModel)
+    slicer.app.pauseRender()
+    slicer.util.WaitCursor(True)
+    try:
+        self.logic.calculateVascularSegments(refVolumeNode, segmentationNode, centerlineModel)
+    except ValueError:
+        print("Error: Failing when calculating vascular segments")
+
+    slicer.app.resumeRender()
+    slicer.util.WaitCursor(False)
     stopTime = time.time()
     logging.info(f'Vascular Segments processing completed in {stopTime-startTime:.2f} seconds')
 
@@ -552,7 +575,10 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     segmentationIds.InsertNextValue(segmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume)
 
-    self.scl.SegmentClassificationProcessing(centerlineModel, labelmapVolumeNode)
+    result = self.scl.SegmentClassificationProcessing(centerlineModel, labelmapVolumeNode)
+    if result!=0:
+        raise ValueError("Corrupt centerline model - Not possible to calculate vascular segments")
+
     colormap = slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels')
     labelmapVolumeNode.GetDisplayNode().SetAndObserveColorNodeID(colormap.GetID())
     slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
