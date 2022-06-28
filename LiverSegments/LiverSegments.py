@@ -40,7 +40,6 @@
 import os
 import unittest
 import logging
-import time
 import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
@@ -72,6 +71,9 @@ class LiverSegments(ScriptedLoadableModule):
 
     # Additional initialization step after application startup is complete
     #slicer.app.connect("startupCompleted()", registerSampleData)
+
+    #Hide module, so that it only shows up in the Liver module, and not as a separate module
+    parent.hidden = True
 
 #
 # Register sample data sets in Sample Data module
@@ -469,7 +471,10 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return combinedPolyData.GetOutput()
 
   def onCalculateSegmentButton(self):
-    startTime = time.time()
+    if self.developerMode is True:
+      import time
+      startTime = time.time()
+
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
     centerlineModel = self.logic.build_centerline_model(segmentationNode)
     refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
@@ -485,11 +490,10 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     slicer.app.resumeRender()
     slicer.util.WaitCursor(False)
-    stopTime = time.time()
-    logging.info(f'Vascular Segments processing completed in {stopTime-startTime:.2f} seconds')
 
-#    slicer.app.resumeRender()
-#    qt.QApplication.restoreOverrideCursor()
+    if self.developerMode is True:
+      stopTime = time.time()
+      logging.info(f'Vascular Segments processing completed in {stopTime-startTime:.2f} seconds')
 
 
 # LiverSegmentsLogic
