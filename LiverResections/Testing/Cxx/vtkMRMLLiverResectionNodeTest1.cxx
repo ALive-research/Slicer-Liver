@@ -57,6 +57,8 @@ int vtkMRMLLiverResectionNodeTest1(int, char *[])
   vtkNew<vtkMRMLModelNode> modelNode;
   vtkNew<vtkMRMLScalarVolumeNode> volumeNode;
 
+  node1->SetScene(scene.GetPointer());
+
   EXERCISE_ALL_BASIC_MRML_METHODS(node1.GetPointer());
 
   // Test value setting/getting in resection margin
