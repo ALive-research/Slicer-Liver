@@ -43,7 +43,6 @@ import logging
 import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
-from ExtractCenterline import ExtractCenterlineLogic
 
 #
 # LiverSegments
@@ -89,7 +88,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Called when the user opens the module the first time and the widget is initialized.
     """
     self.logic = None
-    self.centerlineProcessingLogic = None
     self._parameterNode = None
     self._updatingGUIFromParameterNode = False
     ScriptedLoadableModuleWidget.__init__(self, parent)
@@ -124,7 +122,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Create logic class. Logic implements all computations that should be possible to run
     # in batch mode, without a graphical user interface.
     self.logic = LiverSegmentsLogic()
-    self.centerlineProcessingLogic = ExtractCenterlineLogic()
 #    self.ui.parameterNodeSelector.addAttribute("vtkMRMLScriptedModuleNode", "ModuleName", self.moduleName)
     self.setParameterNode(self.logic.getParameterNode())
 
@@ -314,7 +311,9 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #Using _parameterNode don't work yet
     #inputSurfacePolyData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputSurface"),
     #                                                   self._parameterNode.GetParameter("InputSegmentID"))
-    inputSurfacePolyData = self.centerlineProcessingLogic.polyDataFromNode(surface, segmentId)
+
+    centerlineProcessingLogic = self.logic.getCenterlineLogic()
+    inputSurfacePolyData = centerlineProcessingLogic.polyDataFromNode(surface, segmentId)
     if not inputSurfacePolyData or inputSurfacePolyData.GetNumberOfPoints() == 0:
         raise ValueError("Valid input surface is required")
 
@@ -429,8 +428,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         print("Error: Failed to generate centerline model")
 
     try:
-        centerlinePolyData, voronoiDiagramPolyData = self.centerlineProcessingLogic.extractCenterline(
-            preprocessedPolyData, endPointsMarkupsNode)
+        centerlineProcessingLogic = self.logic.getCenterlineLogic()
+        centerlinePolyData, voronoiDiagramPolyData = centerlineProcessingLogic.extractCenterline(preprocessedPolyData, endPointsMarkupsNode)
     except ValueError:
         print("Error: Failed to extract centerline")
 
@@ -509,10 +508,20 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     self._centerlines = list()
     self._inputLabelMap = None
     self._outputLabelMap = None
+    self.centerlineProcessingLogic = None
 
     from vtkSlicerLiverSegmentsModuleLogicPython import vtkLiverSegmentsLogic
     # Create the segmentsclassification logic
     self.scl = vtkLiverSegmentsLogic()
+
+  def getCenterlineLogic(self):
+    """
+    Get the centerline logic. If the logic wasn't yet instantiated it does it
+    """
+    from ExtractCenterline import ExtractCenterlineLogic
+    if self.centerlineProcessingLogic is None:
+      self.centerlineProcessingLogic = ExtractCenterlineLogic()
+    return self.centerlineProcessingLogic
 
   def setDefaultParameters(self, parameterNode):
     """
