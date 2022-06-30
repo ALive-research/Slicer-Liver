@@ -181,9 +181,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.UncertaintyMarginComboBox.addItems(['Custom', 'Max. Spacing', 'RMS Spacing'])
 
     # Connections
-    self.distanceMapsWidget.TumorLabelMapComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
-    self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
-    self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
+    self.distanceMapsWidget.TumorSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onDistanceMapParameterChanged)
+    self.distanceMapsWidget.ParenchymaSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onDistanceMapParameterChanged)
+    self.distanceMapsWidget.ParenchymaSegmentComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.distanceMapsWidget.OutputDistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
     self.distanceMapsWidget.OutputDistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.connect('clicked(bool)', self.onComputeDistanceMapButtonClicked)
@@ -210,8 +210,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     This function is triggered whenever any parameter of the distance maps are changed
     """
-    node1 = self.distanceMapsWidget.TumorLabelMapComboBox.currentNode()
-    node2 = self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.currentNode()
+    node1 = self.distanceMapsWidget.TumorSegmentComboBox.currentNode()
+    node2 = self.distanceMapsWidget.ParenchymaSegmentComboBox.currentNode()
     node3 = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.setEnabled(None not in [node1, node2, node3])
 
@@ -369,8 +369,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     This function is called when the distance map calculation button is pressed
     """
-    tumorLabelMapNode = self.distanceMapsWidget.TumorLabelMapComboBox.currentNode()
-    parenchymaLabelMapNode = self.distanceMapsWidget.ParenchymaLabelMapNodeComboBox.currentNode()
+    tumorLabelMapNode = self.distanceMapsWidget.TumorSegmentComboBox.currentNode()
+    parenchymaLabelMapNode = self.distanceMapsWidget.ParenchymaSegmentComboBox.currentNode()
     outputVolumeNode = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
 
     slicer.app.pauseRender()

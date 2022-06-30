@@ -121,7 +121,6 @@
        <widget class="qMRMLNodeComboBox" name="inputSurfaceSelector">
         <property name="nodeTypes">
          <stringlist>
-          <string>vtkMRMLModelNode</string>
           <string>vtkMRMLSegmentationNode</string>
          </stringlist>
         </property>

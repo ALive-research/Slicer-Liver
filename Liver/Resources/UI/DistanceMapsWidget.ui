@@ -23,62 +23,7 @@
       <bool>false</bool>
      </property>
      <layout class="QGridLayout" name="gridLayout">
-      <item row="5" column="0" colspan="3">
-       <widget class="QLabel" name="OutputDistanceMapLabel">
-        <property name="text">
-         <string>Output Distance Map: </string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="0">
-       <widget class="QLabel" name="TumorNodeLabel">
-        <property name="text">
-         <string>Tumor Model:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="3">
-       <widget class="qMRMLSegmentSelectorWidget" name="TumorSegmentSelectorWidget"/>
-      </item>
-      <item row="2" column="0" colspan="3">
-       <widget class="QLabel" name="ParenchymadistanceMapNodeLabel">
-        <property name="text">
-         <string>Parenchyma Model:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="2" colspan="2">
-       <widget class="qMRMLNodeComboBox" name="TumorLabelMapComboBox">
-        <property name="enabled">
-         <bool>true</bool>
-        </property>
-        <property name="nodeTypes">
-         <stringlist>
-          <string>vtkMRMLSegmentationNode</string>
-         </stringlist>
-        </property>
-        <property name="addEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="removeEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="selectNodeUponCreation">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="6" column="0" colspan="4">
-       <widget class="QPushButton" name="ComputeDistanceMapsPushButton">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-        <property name="text">
-         <string>Compute Distance Maps</string>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="3">
+      <item row="6" column="3">
        <widget class="qMRMLNodeComboBox" name="OutputDistanceMapNodeComboBox">
         <property name="enabled">
          <bool>true</bool>
@@ -99,15 +44,38 @@
         </property>
        </widget>
       </item>
-      <item row="2" column="3">
-       <widget class="qMRMLNodeComboBox" name="ParenchymaLabelMapNodeComboBox">
+      <item row="4" column="3">
+       <widget class="qMRMLSegmentSelectorWidget" name="ParenchymaSegmentSelectorWidget">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="segmentationNodeSelectorVisible">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="0">
+       <widget class="QLabel" name="TumorNodeLabel">
+        <property name="text">
+         <string>Tumor Model:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="3">
+       <widget class="qMRMLNodeComboBox" name="ParenchymaSegmentComboBox">
         <property name="enabled">
-         <bool>true</bool>
+         <bool>false</bool>
         </property>
         <property name="nodeTypes">
          <stringlist>
           <string>vtkMRMLSegmentationNode</string>
          </stringlist>
+        </property>
+        <property name="showChildNodeTypes">
+         <bool>false</bool>
         </property>
         <property name="addEnabled">
          <bool>false</bool>
@@ -115,13 +83,77 @@
         <property name="removeEnabled">
          <bool>false</bool>
         </property>
+        <property name="editEnabled">
+         <bool>true</bool>
+        </property>
         <property name="selectNodeUponCreation">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="0" colspan="3">
+       <widget class="QLabel" name="OutputDistanceMapLabel">
+        <property name="text">
+         <string>Output Distance Map: </string>
+        </property>
+       </widget>
+      </item>
+      <item row="7" column="0" colspan="4">
+       <widget class="QPushButton" name="ComputeDistanceMapsPushButton">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="text">
+         <string>Compute Distance Maps</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="3">
+       <widget class="qMRMLSegmentSelectorWidget" name="TumorSegmentSelectorWidget">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="segmentationNodeSelectorVisible">
          <bool>false</bool>
         </property>
        </widget>
       </item>
-      <item row="3" column="0">
-       <widget class="qMRMLSegmentSelectorWidget" name="ParenchymaSegmentSelectorWidget"/>
+      <item row="3" column="0" colspan="3">
+       <widget class="QLabel" name="ParenchymadistanceMapNodeLabel">
+        <property name="text">
+         <string>Parenchyma Model:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="3">
+       <widget class="qMRMLNodeComboBox" name="TumorSegmentComboBox">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="nodeTypes">
+         <stringlist>
+          <string>vtkMRMLSegmentationNode</string>
+         </stringlist>
+        </property>
+        <property name="showChildNodeTypes">
+         <bool>false</bool>
+        </property>
+        <property name="addEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="removeEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="editEnabled">
+         <bool>true</bool>
+        </property>
+        <property name="selectNodeUponCreation">
+         <bool>true</bool>
+        </property>
+       </widget>
       </item>
      </layout>
     </widget>
@@ -179,7 +211,7 @@
   <connection>
    <sender>DistanceMapsComputationWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>TumorLabelMapComboBox</receiver>
+   <receiver>TumorSegmentComboBox</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
     <hint type="sourcelabel">
@@ -195,7 +227,7 @@
   <connection>
    <sender>DistanceMapsComputationWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>ParenchymaLabelMapNodeComboBox</receiver>
+   <receiver>ParenchymaSegmentComboBox</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
     <hint type="sourcelabel">
@@ -209,33 +241,65 @@
    </hints>
   </connection>
   <connection>
-   <sender>TumorLabelMapComboBox</sender>
+   <sender>TumorSegmentComboBox</sender>
    <signal>currentNodeChanged(vtkMRMLNode*)</signal>
    <receiver>TumorSegmentSelectorWidget</receiver>
    <slot>setCurrentNode(vtkMRMLNode*)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>455</x>
-     <y>73</y>
+     <x>468</x>
+     <y>114</y>
     </hint>
     <hint type="destinationlabel">
      <x>468</x>
-     <y>268</y>
+     <y>190</y>
     </hint>
    </hints>
   </connection>
   <connection>
-   <sender>ParenchymaLabelMapNodeComboBox</sender>
+   <sender>ParenchymaSegmentComboBox</sender>
    <signal>currentNodeChanged(vtkMRMLNode*)</signal>
    <receiver>ParenchymaSegmentSelectorWidget</receiver>
    <slot>setCurrentNode(vtkMRMLNode*)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>589</x>
+     <x>468</x>
+     <y>266</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>468</x>
+     <y>342</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>DistanceMapsComputationWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>TumorSegmentSelectorWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>395</x>
      <y>289</y>
     </hint>
     <hint type="destinationlabel">
-     <x>202</x>
+     <x>468</x>
+     <y>181</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>DistanceMapsComputationWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>ParenchymaSegmentSelectorWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>395</x>
+     <y>289</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>468</x>
      <y>397</y>
     </hint>
    </hints>
