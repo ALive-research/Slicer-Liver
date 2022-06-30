@@ -376,6 +376,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     parenchymaSegmentId = self.distanceMapsWidget.ParenchymaSegmentSelectorWidget.currentSegmentID()
     segmentationIds = vtk.vtkStringArray()
 
+    """
+    Export labelmaps volumes for the selected segmentations
+    """
     tumorLabelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("TumorLabelMap")
     if not tumorLabelmapVolumeNode:
         tumorLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "TumorLabelMap")
@@ -391,6 +394,17 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     segmentationIds.InsertNextValue(parenchymaSegmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
         parenchymaLabelmapVolumeNode, refVolumeNode)
+
+    """
+    Export model nodes for the selected segmentations
+    """
+    segmentationIds.Initialize()
+    segmentationIds.InsertNextValue(tumorSegmentId)
+    segmentationIds.InsertNextValue(parenchymaSegmentId)
+    shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
+    exportFolderItemId = shNode.CreateFolderItem(shNode.GetSceneItemID(), "Segment Models")
+    slicer.modules.segmentations.logic().ExportSegmentsToModels(segmentationNode, segmentationIds,
+        exportFolderItemId)
 
     outputVolumeNode = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
 
