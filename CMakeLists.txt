@@ -13,7 +13,7 @@ set(EXTENSION_ICONURL "http://www.slicer.org/slicerWiki/images/f/ff/SlicerLiver.
 set(EXTENSION_SCREENSHOTURLS "https://raw.githubusercontent.com/ALive-research/Slicer-Liver/master/Screenshots/Slicer-Liver_screenshot_01.png  https://raw.githubusercontent.com/ALive-research/Slicer-Liver/master/Screenshots/Slicer-Liver_screenshot_02.png  https://raw.githubusercontent.com/ALive-research/Slicer-Liver/master/Screenshots/Slicer-Liver_screenshot_03.png  https://raw.githubusercontent.com/ALive-research/Slicer-Liver/master/Screenshots/Slicer-Liver_screenshot_04.png  https://raw.githubusercontent.com/ALive-research/Slicer-Liver/master/Screenshots/Slicer-Liver_screenshot_05.png  https://raw.githubusercontent.com/ALive-research/Slicer-Liver/master/Screenshots/Slicer-Liver_screenshot_06.png  https://raw.githubusercontent.com/ALive-research/Slicer-Liver/master/Screenshots/Slicer-Liver_screenshot_07.png  https://raw.githubusercontent.com/ALive-research/Slicer-Liver/master/Screenshots/Slicer-Liver_screenshot_08.png")
 set(EXTENSION_DEPENDS
   Markups
-  ExtractCenterline
+  SlicerVMTK
   )
 
 #-----------------------------------------------------------------------------
