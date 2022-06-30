@@ -597,6 +597,9 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     labelmapVolumeNode.GetDisplayNode().SetAndObserveColorNodeID(colormap.GetID())
     slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
 
+    #Show label map volume
+    slicer.util.setSliceViewerLayers(label=labelmapVolumeNode)
+
 
 class LiverSegmentsTest(ScriptedLoadableModuleTest):
   """
