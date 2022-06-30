@@ -61,7 +61,7 @@ class Liver(ScriptedLoadableModule):
 
     self.parent.categories = ["IGT"]
 
-    self.parent.dependencies = ["ExtractCenterline", "LiverResections", "LiverMarkups", "LiverSegments"]
+    self.parent.dependencies = ["LiverResections", "LiverMarkups", "LiverSegments"]
 
     self.parent.contributors = ["Rafael Palomar (Oslo University Hospital / NTNU)",
                                 "Ole Vegard Solberg (SINTEF)",
