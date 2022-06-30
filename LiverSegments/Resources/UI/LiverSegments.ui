@@ -42,7 +42,7 @@
       <item row="0" column="0">
        <widget class="QLabel" name="label">
         <property name="text">
-         <string>Surface:</string>
+         <string>Segmentation:</string>
         </property>
        </widget>
       </item>
@@ -147,7 +147,7 @@
          </sizepolicy>
         </property>
         <property name="segmentationNodeSelectorVisible">
-         <bool>false</bool>
+         <bool>true</bool>
         </property>
        </widget>
       </item>
