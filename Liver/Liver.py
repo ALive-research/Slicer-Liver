@@ -56,18 +56,32 @@ class Liver(ScriptedLoadableModule):
 
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
-    self.parent.title = "Liver"
-    self.parent.categories = [""]
-    self.parent.dependencies = []
-    self.parent.contributors = ["Rafael Palomar (Oslo University Hospital / NTNU)"]
 
-    self.parent.helpText = """
-    This module offers tools for computing liver resection plans in 3D liver models.
-    ""
-    This file was originally developed by Rafael Palomar (Oslo University
-    Hospital/NTNU), Ole Vegard Solberg (SINTEF) Geir Arne Tangen, SINTEF and
-    Javier Pérez de Frutos (SINTEF). This work was funded by The Research Council of
+    self.parent.title = "Liver"
+
+    self.parent.categories = ["IGT"]
+
+    self.parent.dependencies = ["LiverResections", "LiverMarkups", "LiverSegments"]
+
+    self.parent.contributors = ["Rafael Palomar (Oslo University Hospital / NTNU)",
+                                "Ole Vegard Solberg (SINTEF)",
+                                "Geir Arne Tangen (SINTEF)",
+                                "Egidijus Pelanis (Oslo University Hospital)",
+                                "Davit Aghayan (Oslo University Hospital)",
+                                "Gabriella D'Albenzio (Oslo University Hospital)",
+                                "Ruoyan Meng (NTNU)",
+                                "Javier Pérez-de-Frutos (SINTEF)",
+                                "Héctor Mártinez (Universidad de Córdoba)",
+                                "Francisco Javier Rodríguez Lozano (Universidad de Córdoba)",
+                                "Joaquín Olivares Bueno (Universidad de Córdoba)",
+                                "José Manuel Palomares Muñoz (Universidad de Córdoba)"]
+
+    self.parent.acknowledgementText = """
+    This work was funded by The Research Council of
     Norway through the project ALive (grant nr. 311393).
+    """
+    self.parent.helpText = """
+    This module offers tools for liver perfusion analysis and resection planning.
     """
 
     # Additional initialization step after application startup is complete

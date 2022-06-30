@@ -4,12 +4,13 @@ project(SlicerLiver)
 
 #-----------------------------------------------------------------------------
 # Extension meta-information
-set(EXTENSION_HOMEPAGE "https://www.slicer.org/wiki/Documentation/Nightly/Extensions/SlicerLiver")
-set(EXTENSION_CATEGORY "Liver")
-set(EXTENSION_CONTRIBUTORS "Rafael Palomar (Oslo University Hospital / NTNU), Egidijus Pelanis (Oslo University Hospital), Davit Aghayan (Oslo University Hospital), Gabriella D'Albenzio (Oslo University Hospital) Ole Vegard Solberg (SINTEF), Geir Arne Tangen (SINTEF), Javier Pérez de Frutos (SINTEF)")
+set(EXTENSION_HOMEPAGE "https://github.com/ALive-research/Slicer-Liver")
+set(EXTENSION_CATEGORY "IGT")
+set(EXTENSION_STATUS "Beta")
+set(EXTENSION_CONTRIBUTORS "Rafael Palomar (Oslo University Hospital / NTNU), Ole Vegard Solberg (SINTEF), Geir Arne Tangen (SINTEF), Egidijus Pelanis (Oslo University Hospital), Davit Aghayan (Oslo University Hospital), Gabriella D'Albenzio (Oslo University Hospital) Javier Pérez de Frutos (SINTEF), Ruoyan Meng (NTNU), Héctor Martínez (Universidad de Córdoba), Francisco José Rodríguez Lozano (Universidad de Córdoba), Joaquín Olivares Bueno (Universidad de Córdoba), José Manuel Palomares Muñoz (Universidad de Córdoba)")
 set(EXTENSION_DESCRIPTION "3D Slicer extension for liver analysis and therapy planning")
 set(EXTENSION_ICONURL "http://www.slicer.org/slicerWiki/images/f/ff/SlicerLiver.png")
-set(EXTENSION_SCREENSHOTURLS "http://www.slicer.org/slicerWiki/images/a/ae/BasicLiverResection.png")
+set(EXTENSION_SCREENSHOTURLS "https://raw.githubusercontent.com/ALive-research/Slicer-Liver/master/Screenshots/Slicer-Liver_screenshot_01.png  https://raw.githubusercontent.com/ALive-research/Slicer-Liver/master/Screenshots/Slicer-Liver_screenshot_02.png  https://raw.githubusercontent.com/ALive-research/Slicer-Liver/master/Screenshots/Slicer-Liver_screenshot_03.png  https://raw.githubusercontent.com/ALive-research/Slicer-Liver/master/Screenshots/Slicer-Liver_screenshot_04.png  https://raw.githubusercontent.com/ALive-research/Slicer-Liver/master/Screenshots/Slicer-Liver_screenshot_05.png  https://raw.githubusercontent.com/ALive-research/Slicer-Liver/master/Screenshots/Slicer-Liver_screenshot_06.png  https://raw.githubusercontent.com/ALive-research/Slicer-Liver/master/Screenshots/Slicer-Liver_screenshot_07.png  https://raw.githubusercontent.com/ALive-research/Slicer-Liver/master/Screenshots/Slicer-Liver_screenshot_08.png")
 set(EXTENSION_DEPENDS
   Markups
   SlicerVMTK
