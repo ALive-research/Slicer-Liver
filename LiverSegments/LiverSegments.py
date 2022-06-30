@@ -258,9 +258,9 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     inputSurfaceNode = self._parameterNode.GetNodeReference("InputSurface")
     if inputSurfaceNode and inputSurfaceNode.IsA("vtkMRMLSegmentationNode"):
         self.ui.inputSegmentSelectorWidget.setCurrentSegmentID(self._parameterNode.GetParameter("InputSegmentID"))
-        self.ui.inputSegmentSelectorWidget.setVisible(True)
-    else:
-        self.ui.inputSegmentSelectorWidget.setVisible(False)
+#        self.ui.inputSegmentSelectorWidget.setVisible(True)
+#    else:
+#        self.ui.inputSegmentSelectorWidget.setVisible(False)
 
 
     #    self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputVolume"))
