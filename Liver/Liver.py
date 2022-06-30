@@ -169,7 +169,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     # Connections
     self.distanceMapsWidget.TumorSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onDistanceMapParameterChanged)
     self.distanceMapsWidget.ParenchymaSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onDistanceMapParameterChanged)
-    self.distanceMapsWidget.ParenchymaSegmentComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
+    self.distanceMapsWidget.SegmentationSelectorComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.distanceMapsWidget.OutputDistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
     self.distanceMapsWidget.OutputDistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.connect('clicked(bool)', self.onComputeDistanceMapButtonClicked)
@@ -196,8 +196,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     This function is triggered whenever any parameter of the distance maps are changed
     """
-    node1 = self.distanceMapsWidget.TumorSegmentComboBox.currentNode()
-    node2 = self.distanceMapsWidget.ParenchymaSegmentComboBox.currentNode()
+
+    node1 = self.distanceMapsWidget.TumorSegmentSelectorWidget.currentNode()
+    node2 = self.distanceMapsWidget.ParenchymaSegmentSelectorWidget.currentNode()
     node3 = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.setEnabled(None not in [node1, node2, node3])
 
@@ -355,13 +356,33 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     This function is called when the distance map calculation button is pressed
     """
-    tumorLabelMapNode = self.distanceMapsWidget.TumorSegmentComboBox.currentNode()
-    parenchymaLabelMapNode = self.distanceMapsWidget.ParenchymaSegmentComboBox.currentNode()
+    segmentationNode = self.distanceMapsWidget.SegmentationSelectorComboBox.currentNode()
+    refVolumeNode = self.distanceMapsWidget.ReferenceVolumeSelector.currentNode()
+    tumorSegmentId = self.distanceMapsWidget.TumorSegmentSelectorWidget.currentSegmentID()
+    parenchymaSegmentId = self.distanceMapsWidget.ParenchymaSegmentSelectorWidget.currentSegmentID()
+    segmentationIds = vtk.vtkStringArray()
+
+    tumorLabelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("TumorLabelMap")
+    if not tumorLabelmapVolumeNode:
+        tumorLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "TumorLabelMap")
+    parenchymaLabelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("ParenchymaLabelMap")
+    if not parenchymaLabelmapVolumeNode:
+        parenchymaLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "ParenchymaLabelMap")
+
+    segmentationIds.Initialize()
+    segmentationIds.InsertNextValue(tumorSegmentId)
+    slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
+        tumorLabelmapVolumeNode, refVolumeNode)
+    segmentationIds.Initialize()
+    segmentationIds.InsertNextValue(parenchymaSegmentId)
+    slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
+        parenchymaLabelmapVolumeNode, refVolumeNode)
+
     outputVolumeNode = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
 
     slicer.app.pauseRender()
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
-    self.logic.computeDistanceMaps(tumorLabelMapNode, parenchymaLabelMapNode, outputVolumeNode)
+    self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, outputVolumeNode)
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
     slicer.util.showStatusMessage('')
