@@ -515,6 +515,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     segmentId = 0
     for name, segmentObject in centerlineSegmentsDict.items():
         segmentId += 1
+      if segmentObject.GetClassName() == "vtkMRMLModelNode":
         self.scl.MarkSegmentWithID(segmentObject, segmentId)
         self.scl.AddSegmentToCenterlineModel(centerlineModel, segmentObject)
     self.scl.InitializeCenterlineSearchModel(centerlineModel)
