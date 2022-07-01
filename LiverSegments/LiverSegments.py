@@ -321,13 +321,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return preprocessedPolyData
 
   def createSegmentName(self, endPointsMarkupsNode):
-    endpointsName = endPointsMarkupsNode.GetName()
-    split = endpointsName.split('_')
-    if len(split) > 1:
-      index = split[1]
-      nodeName = "CenterlineSegment_" + str(index)
-    else:
-      nodeName = "CenterlineSegment"
+    nodeName = "CenterlineSegment_" + endPointsMarkupsNode.GetAttribute("SegmentIndex")
     return nodeName
 
   def createCenterlineNode(self, endPointsMarkupsNode):
@@ -343,6 +337,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if not centerlineModelNode:
         raise ValueError('Error: Cannot create node: ', nodeName)
 
+    self.logic.copyIndex(endPointsMarkupsNode, centerlineModelNode)
     return centerlineModelNode
 
   def newEndpointsListCreated(self):
@@ -369,9 +364,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onAddSegmentButton(self):
     endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
     self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
-
-    if not endPointsMarkupsNode:
-        raise ValueError("No endPointsMarkupsNode")
+    self.logic.setIndex(endPointsMarkupsNode)
 
     slicer.app.pauseRender()
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
@@ -392,17 +385,17 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     try:
         centerlineProcessingLogic = self.logic.getCenterlineLogic()
         centerlinePolyData, voronoiDiagramPolyData = centerlineProcessingLogic.extractCenterline(preprocessedPolyData, endPointsMarkupsNode)
+
+        decimatedCenterlinePolyData = self.logic.decimateLine(centerlinePolyData)
+        mergedLines = self.mergePolydata(centerlineModelNode.GetMesh(), decimatedCenterlinePolyData)
+        centerlineModelNode.SetAndObserveMesh(mergedLines)
+
+        centerlineModelNode.CreateDefaultDisplayNodes()
+        self.useColorFromSelector(centerlineModelNode)
+        centerlineModelNode.GetDisplayNode().SetLineWidth(3)
+        endPointsMarkupsNode.SetDisplayVisibility(False)
     except ValueError:
         print("Error: Failed to extract centerline")
-
-    decimatedCenterlinePolyData = self.logic.decimateLine(centerlinePolyData)
-    mergedLines = self.mergePolydata(centerlineModelNode.GetMesh(), decimatedCenterlinePolyData)
-    centerlineModelNode.SetAndObserveMesh(mergedLines)
-
-    centerlineModelNode.CreateDefaultDisplayNodes()
-    self.useColorFromSelector(centerlineModelNode)
-    centerlineModelNode.GetDisplayNode().SetLineWidth(3)
-    endPointsMarkupsNode.SetDisplayVisibility(False)
 
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
@@ -464,6 +457,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     self._inputLabelMap = None
     self._outputLabelMap = None
     self.centerlineProcessingLogic = None
+    self.segmentIndex = 0
 
     from vtkSlicerLiverSegmentsModuleLogicPython import vtkLiverSegmentsLogic
     # Create the segmentsclassification logic
@@ -482,6 +476,10 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     """
     Initialize parameter node with default settings.
     """
+
+  def getSegmentIndex(self):
+    self.segmentIndex += 1
+    return self.segmentIndex
 
   def createCompleteCenterlineModel(self):
     nodeName = "CenterlineModel"
@@ -512,10 +510,9 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     centerlineModel = self.createCompleteCenterlineModel()
     #centerlineModel is empty - Start filling it with segments
     centerlineSegmentsDict = slicer.util.getNodes("CenterlineSegment*")
-    segmentId = 0
     for name, segmentObject in centerlineSegmentsDict.items():
-        segmentId += 1
       if segmentObject.GetClassName() == "vtkMRMLModelNode":
+        segmentId = int(segmentObject.GetAttribute("SegmentIndex"))
         self.scl.MarkSegmentWithID(segmentObject, segmentId)
         self.scl.AddSegmentToCenterlineModel(centerlineModel, segmentObject)
     self.scl.InitializeCenterlineSearchModel(centerlineModel)
@@ -556,6 +553,18 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     #Show label map volume
     slicer.util.setSliceViewerLayers(label=labelmapVolumeNode)
 
+  def setIndex(self, endPointsMarkupsNode):
+    if not endPointsMarkupsNode:
+        raise ValueError("No endPointsMarkupsNode")
+    segmentIndex = endPointsMarkupsNode.GetAttribute("SegmentIndex")
+    print("SegmentIndex: ", segmentIndex)
+    if(segmentIndex == None):
+      endPointsMarkupsNode.SetAttribute("SegmentIndex", str(self.getSegmentIndex()))
+      segmentIndex = endPointsMarkupsNode.GetAttribute("SegmentIndex")
+      print("New segmentIndex: ", segmentIndex)
+
+  def copyIndex(self, endPointsMarkupsNode, centerlineModelNode):
+    centerlineModelNode.SetAttribute("SegmentIndex", endPointsMarkupsNode.GetAttribute("SegmentIndex"))
 
   #Using code from centerlineProcessingLogic.preprocess
   def preprocessAndDecimate(self, surfacePolyData):
