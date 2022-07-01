@@ -111,7 +111,6 @@ void vtkSlicerDistanceContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* calle
  liverMarkupsDistanceContourNode->GetNthControlPointPosition(1, point2Position);
 
  auto VBOs = this->ShaderHelper->GetTargetModelVertexVBOs();
- auto actors = this->ShaderHelper->GetTargetActors();
 
  for(int index = 0; index < VBOs->GetNumberOfItems(); ++index)
    {
