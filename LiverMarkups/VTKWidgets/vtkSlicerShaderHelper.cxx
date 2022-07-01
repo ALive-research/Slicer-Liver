@@ -124,6 +124,9 @@ void vtkSlicerShaderHelper::AttachSlicingContourShader()
       "     ambientColor = contourColor;\n"
       "     diffuseColor = contourColor;\n"
       "     opacity = 1.0;\n"
+      "  }\n"
+      "  else{\n"
+      "  discard;\n"
       "  }\n",
       false
     );
@@ -190,6 +193,9 @@ void vtkSlicerShaderHelper::AttachDistanceContourShader()
       "     ambientColor = contourColor;\n"
       "     diffuseColor = contourColor;\n"
       "     opacity = 1.0;\n"
+      "  }\n"
+      "  else{\n"
+      "  discard;\n"
       "  }\n",
       false
     );

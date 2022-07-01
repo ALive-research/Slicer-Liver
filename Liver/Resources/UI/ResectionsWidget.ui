@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>563</width>
-    <height>731</height>
+    <width>734</width>
+    <height>1117</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -64,6 +64,9 @@
          <string/>
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_2">
+         <property name="spacing">
+          <number>6</number>
+         </property>
          <property name="leftMargin">
           <number>0</number>
          </property>
@@ -77,29 +80,18 @@
           <number>0</number>
          </property>
          <item>
-          <layout class="QFormLayout" name="formLayout">
+          <layout class="QFormLayout" name="formLayout_4">
            <item row="0" column="0">
             <widget class="QLabel" name="LiverModelLabel">
              <property name="text">
-              <string>Target liver model:</string>
+              <string>Liver Segmentation:</string>
              </property>
             </widget>
            </item>
            <item row="0" column="1">
-            <widget class="qMRMLNodeComboBox" name="LiverModelNodeComboBox">
-             <property name="enabled">
-              <bool>false</bool>
-             </property>
-             <property name="nodeTypes">
-              <stringlist>
-               <string>vtkMRMLModelNode</string>
-              </stringlist>
-             </property>
-             <property name="addEnabled">
-              <bool>false</bool>
-             </property>
-             <property name="removeEnabled">
-              <bool>false</bool>
+            <widget class="qMRMLSegmentSelectorWidget" name="LiverSegmentSelectorWidget">
+             <property name="noneEnabled">
+              <bool>true</bool>
              </property>
              <property name="selectNodeUponCreation">
               <bool>false</bool>
@@ -621,6 +613,11 @@
    <container>1</container>
   </customwidget>
   <customwidget>
+   <class>qMRMLSegmentSelectorWidget</class>
+   <extends>qMRMLWidget</extends>
+   <header>qMRMLSegmentSelectorWidget.h</header>
+  </customwidget>
+  <customwidget>
    <class>ctkCheckBox</class>
    <extends>QCheckBox</extends>
    <header>ctkCheckBox.h</header>
@@ -689,22 +686,6 @@
     <hint type="destinationlabel">
      <x>376</x>
      <y>167</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>ResectionWidget</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>LiverModelNodeComboBox</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>293</x>
-     <y>365</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>368</x>
-     <y>131</y>
     </hint>
    </hints>
   </connection>
@@ -801,6 +782,86 @@
     <hint type="destinationlabel">
      <x>282</x>
      <y>449</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>LiverSegmentSelectorWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>366</x>
+     <y>558</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>422</x>
+     <y>380</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>LiverSegmentSelectorWidget</sender>
+   <signal>currentSegmentChanged(QString)</signal>
+   <receiver>LiverSegmentSelectorWidget</receiver>
+   <slot>hide()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>426</x>
+     <y>380</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>426</x>
+     <y>380</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>LiverSegmentSelectorWidget</sender>
+   <signal>currentSegmentChanged(QString)</signal>
+   <receiver>LiverModelLabel</receiver>
+   <slot>hide()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>426</x>
+     <y>380</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>75</x>
+     <y>373</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionNodeComboBox</sender>
+   <signal>currentNodeChanged(bool)</signal>
+   <receiver>LiverModelLabel</receiver>
+   <slot>show()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>398</x>
+     <y>197</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>75</x>
+     <y>373</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionNodeComboBox</sender>
+   <signal>currentNodeChanged(bool)</signal>
+   <receiver>LiverSegmentSelectorWidget</receiver>
+   <slot>show()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>398</x>
+     <y>197</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>426</x>
+     <y>380</y>
     </hint>
    </hints>
   </connection>

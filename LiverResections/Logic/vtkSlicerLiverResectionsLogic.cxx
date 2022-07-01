@@ -161,6 +161,14 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
       {
       this->CreateInitializationAndResectionMarkups(resectionNode);
       }
+
+    // Update the polydata
+    auto initializationNode =  vtkMRMLMarkupsSlicingContourNode::SafeDownCast(this->GetInitializationFromResection(resectionNode));
+    if(initializationNode)
+      {
+        initializationNode->SetTarget(resectionNode->GetTargetOrganModelNode());
+      }
+
     auto bezierSurfaceNode = this->GetBezierFromResection(resectionNode);
     if (bezierSurfaceNode)
       {
@@ -598,7 +606,7 @@ void vtkSlicerLiverResectionsLogic::HideBezierSurfaceMarkup(vtkMRMLMarkupsNode* 
     }
 
   auto bezierSurfaceDisplayNode = bezierSurfaceNode->GetDisplayNode();
-  if (bezierSurfaceDisplayNode)
+  if (!bezierSurfaceDisplayNode)
     {
     return;
     }

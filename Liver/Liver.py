@@ -191,7 +191,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.DistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionDistanceMapNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'Computed', 'True')
-    self.resectionsWidget.LiverModelNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionLiverModelNodeChanged)
+    self.resectionsWidget.LiverSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onResectionLiverModelNodeChanged)
+    self.resectionsWidget.LiverSegmentSelectorWidget.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionLiverSegmentationNodeChanged)
     self.resectionsWidget.ResectionColorPickerButton.connect('colorChanged(QColor)', self.onResectionColorChanged)
     self.resectionsWidget.ResectionOpacityDoubleSlider.connect('valueChanged(double)', self.onResectionOpacityChanged)
     self.resectionsWidget.ResectionOpacityDoubleSpinBox.connect('valueChanged(double)', self.onResectionOpacityChanged)
@@ -232,9 +233,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
 
       if activeResectionNode is not None:
 
-        self.resectionsWidget.LiverModelNodeComboBox.blockSignals(True)
-        self.resectionsWidget.LiverModelNodeComboBox.setCurrentNode(activeResectionNode.GetTargetOrganModelNode())
-        self.resectionsWidget.LiverModelNodeComboBox.blockSignals(False)
+        self.resectionsWidget.LiverSegmentSelectorWidget.blockSignals(True)
+        self.resectionsWidget.LiverSegmentSelectorWidget.setCurrentNode(None)
+        self.resectionsWidget.LiverSegmentSelectorWidget.blockSignals(False)
 
         self.resectionsWidget.DistanceMapNodeComboBox.blockSignals(True)
         self.resectionsWidget.DistanceMapNodeComboBox.setCurrentNode(activeResectionNode.GetDistanceMapVolumeNode())
@@ -326,12 +327,32 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       self.resectionsWidget.UncertaintyMarginGroupBox.setEnabled(distanceMapNode is not None)
       self.resectionsWidget.ResectionPreviewGroupBox.setEnabled(distanceMapNode is not None)
 
+  def onResectionLiverSegmentationNodeChanged(self):
+    self.resectionsWidget.LiverSegmentSelectorWidget.blockSignals(True)
+    self.resectionsWidget.LiverSegmentSelectorWidget.setCurrentSegmentID('')
+    self.resectionsWidget.LiverSegmentSelectorWidget.blockSignals(False)
+
   def onResectionLiverModelNodeChanged(self):
     """
     This function is called when the resection liver model node changes
     """
     if self._currentResectionNode is not None:
-      modelNode = self.resectionsWidget.LiverModelNodeComboBox.currentNode()
+      parenchymaSegmentId = self.resectionsWidget.LiverSegmentSelectorWidget.currentSegmentID()
+      if parenchymaSegmentId == '':
+        return
+      segmentationNode = self.resectionsWidget.LiverSegmentSelectorWidget.currentNode()
+      modelPolyData = segmentationNode.GetClosedSurfaceInternalRepresentation(parenchymaSegmentId)
+      if modelPolyData is None:
+        segmentationNode.CreateClosedSurfaceRepresentation()
+        modelPolyData = segmentationNode.GetClosedSurfaceInternalRepresentation(parenchymaSegmentId)
+      modelPolyDataCopy = vtk.vtkPolyData()
+      modelPolyDataCopy.DeepCopy(modelPolyData)
+      modelNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode')
+      modelNode.CreateDefaultDisplayNodes()
+      modelNode.SetHideFromEditors(True)
+      modelDisplayNode = modelNode.GetDisplayNode()
+      modelDisplayNode.SetOpacity(0.0)
+      modelNode.SetAndObservePolyData(modelPolyDataCopy)
       self._currentResectionNode.SetTargetOrganModelNode(modelNode)
       self.resectionsWidget.ResectionVisualizationGroupBox.setEnabled(modelNode is not None)
       self.resectionsWidget.GridGroupBox.setEnabled(modelNode is not None)
@@ -370,6 +391,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     This function is called when the distance map calculation button is pressed
     """
+
+    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
     segmentationNode = self.distanceMapsWidget.SegmentationSelectorComboBox.currentNode()
     refVolumeNode = self.distanceMapsWidget.ReferenceVolumeSelector.currentNode()
     tumorSegmentId = self.distanceMapsWidget.TumorSegmentSelectorWidget.currentSegmentID()
@@ -398,18 +421,28 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     Export model nodes for the selected segmentations
     """
-    segmentationIds.Initialize()
-    segmentationIds.InsertNextValue(tumorSegmentId)
-    segmentationIds.InsertNextValue(parenchymaSegmentId)
-    shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
-    exportFolderItemId = shNode.CreateFolderItem(shNode.GetSceneItemID(), "Segment Models")
-    slicer.modules.segmentations.logic().ExportSegmentsToModels(segmentationNode, segmentationIds,
-        exportFolderItemId)
+    # segmentationIds.Initialize()
+    # segmentationIds.InsertNextValue(tumorSegmentId)
+    # segmentationIds.InsertNextValue(parenchymaSegmentId)
+    # shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
+    # exportFolderItemId = shNode.CreateFolderItem(shNode.GetSceneItemID(), "Liver Models")
+    # slicer.app.pauseRender()
+    # slicer.modules.segmentations.logic().ExportSegmentsToModels(segmentationNode, segmentationIds,
+    #     exportFolderItemId)
+
+    # Hide the models to avoid collition with the 3D representation of segmentations
+    # pluginHandler = slicer.qSlicerSubjectHierarchyPluginHandler().instance()
+    # folderPlugin = pluginHandler.pluginByName("Folder")
+    # folderPlugin.setDisplayVisibility(exportFolderItemId, 0)
 
     outputVolumeNode = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
 
-    slicer.app.pauseRender()
-    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+    # Center the 3D view
+    # layoutManager = slicer.app.layoutManager()
+    # threeDWidget = layoutManager.threeDWidget(0)
+    # threeDView = threeDWidget.threeDView()
+    # threeDView.resetFocalPoint()
+
     self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, outputVolumeNode)
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
