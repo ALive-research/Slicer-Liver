@@ -15,7 +15,7 @@
 
 SlicerLiver is an extension for the medical research software [3D Slicer](https://slicer.org "3D Slicer") providing tools for analysis, quantification and therapy planning for hepatic interventions.
 
-The extension provides Our method is based on the use of Bézier surfaces, which can be deformed using a grid of control points
+The extension provides a fast and accurate solution for:
 
 - Computation and visualization of liver vascular territories (liver segments).
 - Definition of surgical resection in 3D using deformable surfaces, as well as the visualization of resection margins (risk areas).
