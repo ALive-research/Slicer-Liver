@@ -1,4 +1,3 @@
-<<<<<<< ours
 ## Table of content
 - [Introduction](#introduction)
     - [Installing the extension](#installing-the-extension)
@@ -12,8 +11,6 @@
     - [Compilation](#compilation)
     - [Testing](#testing)
     
-=======
->>>>>>> theirs
 ## Introduction
 
 SlicerLiver is an extension for the medical research software [3D Slicer](https://slicer.org "3D Slicer") providing tools for analysis, quantification and therapy planning for hepatic interventions.
