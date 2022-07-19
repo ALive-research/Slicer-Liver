@@ -1,3 +1,16 @@
+## Table of content
+- [Introduction](https://github.com/dalbenzioG/Slicer-Liver#introduction)
+    - [Installing the extension](https://github.com/dalbenzioG/Slicer-Liver#installing-the-extension)
+    - [Sample Data](https://github.com/dalbenzioG/Slicer-Liver#sample-data)
+- [Slicer-Liver Extension Usage](https://github.com/dalbenzioG/Slicer-Liver#slicer-liver-extension-usage)
+    - [Distance Map Computation](https://github.com/dalbenzioG/Slicer-Liver#distance-map-computation)
+    - [Resections](https://github.com/dalbenzioG/Slicer-Liver#resections)
+    - [Liver Segments](https://github.com/dalbenzioG/Slicer-Liver#liver-segments)
+    - [Video Tutorial](https://github.com/dalbenzioG/Slicer-Liver#video-tutorial)
+- [Developers](#developers)
+    - [Compilation](#compilation)
+    - [Testing](#testing)
+    
 ## Introduction
 
 SlicerLiver is an extension for the medical research software [3D Slicer](https://slicer.org "3D Slicer") providing tools for analysis, quantification and therapy planning for hepatic interventions.
