@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+<<<<<<< ours
 ## Table of content
 - [Introduction](#introduction)
     - [Installing the extension](#installing-the-extension)
@@ -13,7 +13,7 @@
     - [Testing](#testing)
     
 =======
->>>>>>> 58c4597 (Update README)
+>>>>>>> theirs
 ## Introduction
 
 SlicerLiver is an extension for the medical research software [3D Slicer](https://slicer.org "3D Slicer") providing tools for analysis, quantification and therapy planning for hepatic interventions.
@@ -25,11 +25,7 @@ The extension provides a fast and accurate solution for:
 
 ### Installing the extension
 
-<<<<<<< HEAD
 1.  Download and install 3D Slicer according to your operating system from here : https://download.slicer.org/.
-=======
-1.  Download and install 3D Slicer according to your operating system from here : https://download.slicer.org/
->>>>>>> 58c4597 (Update README)
 2.  Open Slicer.
 3.  Press Ctrl+4 to open the extension manager. Or click the blue upper-right icon with the letter `E`.
 4.  Once the Extension Manager pops up, make sure to select the `Install Extensions` tab.
@@ -54,11 +50,7 @@ The extension is separated in the following three sections:
 - Resections: computation of the first approximation (planar Bézier) of the resection surface which can be subsequently modified through 16 control points.
 - Liver Segments: calculation and visualization of liver vascular territories (liver segments).
 
-<<<<<<< HEAD
 Each section is oriented towards one part of the liver resection planning workflow but, if desired, can work independently of the other ones.
-=======
-Each sections is oriented towards one part of the liver resection planning workflow but, if desired, can work independently of the other ones.
->>>>>>> 58c4597 (Update README)
 At the end of the workflow, the distance map, resection plan and liver segments can be saved to a given output directory.
 
 ### Distance Map Computation
@@ -79,11 +71,7 @@ The liver resection can be planned through the following process:
 1.  Create a new *Liver Resection* for `Resection`.
 2.  Select the labelmap (the same used in step 2 for the Distance Map Computation) for `Liver Segmentation`.
 3.  Select the `Liver` segmentation.
-<<<<<<< HEAD
 4.  Optional: the user has the possibility to select the *Distance Map* computed at the end of the first section thought the collapsible button `Distance Map`.
-=======
-4.  Optional: the user has the possibility to select the Distance Map computed at the end of the first section thought the collapsible button `Distance Map`.
->>>>>>> 58c4597 (Update README)
 5.  In the 3D View, slide the contour surrounding the liver in the desired position through the *MarkupSlidingContour*.
 6.  The initial resection plane will appear after dropping the mouse.
 7.  The resection can be deformed using the control points (4x4). It is also possible to modify the `Resection grid`, `Resection margin` and `Uncertainty margin` as desired.
@@ -103,7 +91,6 @@ There are multiple options to create visualizations for the resection (color, op
 Our approach to liver segments definition consist of the defintion of a segment by the centerline connecting user-defined sets of points. These centerlines will be the base for computation of liver segments in image space. The computation is based on shortest-distance mapping.
 The Liver segments can be defined using the following steps:
 
-<<<<<<< HEAD
 1.  Select the `Segmentation`.
 2.  Select the hepatic/portal segmentation for `Segment`.
 3.  You can hide the liver segmentation for better visibility in the 3D view by going to: Modules > search for Data > click on Switch to Module > Click on the eye botton next to the liver segmentation.
@@ -112,16 +99,6 @@ The Liver segments can be defined using the following steps:
 6.  Click the arrow button next to `Vessel points`," and place fixed landmark points on the hepatic/portal segmentation. These points will be useful for extracting the centralines of user-defined vessel branches.
 7.  Once all the points are placed, Click `Add Vessel Centerline Segments`.
 8.  Repeat steps 5 and 6 for creating *new Point List*, i.e extracting new centerlines.
-=======
-1.  Select the `Segmentation`
-2.  Select the hepatic/portal segmentation for `Segment`
-3.  You can hide the liver segmentation for better visibility in the 3D view by going to: Modules > search for Data > click on Switch to Module > Click on the eye botton next to the liver segmentation.
-4.  Switch to *Liver* module again
-5.  Create a *new Point List* for `Vessels points`
-6.  Click the arrow button next to `Vessel points`," and place fixed landmark points on the hepatic/portal segmentation. These points will be useful for extracting the centralines of user-defined vessel branches.
-7.  Click `Add Vessel Centerline Segments`.
-8.  Repeat steps 5 and 6 for creating *new Point List*, i.e extracting new centerlines
->>>>>>> 58c4597 (Update README)
 9.  Click on `Calculate Vascular Segments`.
 
 ![Liver segments -- placing fiducials](https://github.com/ALive-research/Slicer-Liver/blob/master/Screenshots/Slicer-Liver_screenshot_06.png?raw=true)
@@ -130,7 +107,6 @@ The Liver segments can be defined using the following steps:
 
 10. If you want to visualize the liver segments in the 3D view:
 	1. Click the search icon on the left of the module selector and write 'Data'. Click switch to module.
-<<<<<<< HEAD
 	2. Select the created *VascularSegments* labelmap and right click to `Convert label map to segmentation node`.
 	3. Click again the search icon and go to `Segmentations` module.
 	4. Select the new *VascularSegmentations* as `Active segmentation`.
@@ -139,16 +115,6 @@ The Liver segments can be defined using the following steps:
  ![Slicer-Liver_screenshot_14](https://github.com/dalbenzioG/Slicer-Liver/blob/master/Screenshots/Slicer-Liver_screenshot_14.jpg?raw=true)
  
 ## Video Tutorial
-=======
-	2. Select the created *VascularSegments* labelmap and right click to `Convert label map to segmentation node`
-	3. Click again the search icon and go to `Segmentations` module
-	4. Select the new *VascularSegmentations* as `Active segmentation`
-	5. Click on `Show 3D` 
- 
- ![Slicer-Liver_screenshot_14](https://github.com/dalbenzioG/Slicer-Liver/blob/master/Screenshots/Slicer-Liver_screenshot_14.jpg?raw=true)
- 
- ## Video Tutorial
->>>>>>> 58c4597 (Update README)
 
 ## Developers
 
@@ -168,11 +134,7 @@ make package
 -  To enable the developer mode go to :
     - Edit > Application Settings > Developer
     
-<<<<<<< HEAD
 - Then check the `Enable developer mode` check box. The application may need to be restarted for this modification to be taken into account.
-=======
-- Then tick the `Enable developer mode` check box. The application may need to be restarted for this modification to be taken into account.
->>>>>>> 58c4597 (Update README)
     
 - To run the unit tests, open the Slicer-Liver extension, expand the `Reload & Test` menu and click on the `Reload and Test` button.
     
