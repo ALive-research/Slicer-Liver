@@ -112,6 +112,7 @@ The Liver segments can be defined using the following steps:
  ![Slicer-Liver_screenshot_14](https://github.com/dalbenzioG/Slicer-Liver/blob/master/Screenshots/Slicer-Liver_screenshot_14.jpg?raw=true)
  
 ## Video Tutorial
+[Slicer-Liver tutorial](https://www.youtube.com/watch?v=oRu624mtQZE)
 
 ## Developers
 
