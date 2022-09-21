@@ -128,6 +128,9 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Color number in lookup table
     self.colorNumber = 0
 
+    # Copy color map
+    self.createColorMap()
+
     # Connections
 #    self.ui.parameterNodeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.setParameterNode)
     self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
@@ -150,6 +153,21 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
+
+  def createColorMap(self):
+    self.colormap = slicer.vtkMRMLColorNode()
+    # Using example code from https://slicer.readthedocs.io/en/latest/developer_guide/script_repository.html
+    # and code from qSlicerColorsModuleWidget::copyCurrentColorNode()
+    self.colormap = slicer.mrmlScene.CreateNodeByClass("vtkMRMLProceduralColorNode")
+    self.colormap.UnRegister(None)  # to prevent memory leaks
+    self.colormap.SetName(slicer.mrmlScene.GenerateUniqueName("SlicerLiverColorMap"))
+    self.colormap.SetHideFromEditors(False)
+    #print("map1 ", self.colormap)
+    #print("self.colormap.GetID()", self.colormap.GetID())
+    self.colormap = slicer.app.applicationLogic().GetColorLogic().CopyNode(slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels'), "SlicerLiverColorMap")
+    slicer.mrmlScene.AddNode(self.colormap) # Creates the ID
+    #print("map3 ", self.colormap)
+    #print("self.colormap.GetID()", self.colormap.GetID())
 
   def cleanup(self):
     """
@@ -352,13 +370,14 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def getCurrentColor(self):
     color = [1, 1, 1, 1]
-    colormap = slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels')
-    colormap.GetColor(self.colorNumber, color)
+    self.colormap.GetColor(self.colorNumber, color)
     del color[3:]
     return color
 
   def useColorFromSelector(self, centerlineModelNode):
     inputColor = self.ui.endPointsMarkupsPlaceWidget.ColorButton.color
+    segmentIndex = int(centerlineModelNode.GetAttribute("SegmentIndex"))
+    self.colormap.SetColor(segmentIndex, inputColor.redF(), inputColor.greenF(), inputColor.blueF()) #Update index color in colormap
     centerlineModelNode.GetDisplayNode().SetColor(inputColor.redF(), inputColor.greenF(), inputColor.blueF())
 
   def onAddSegmentButton(self):
@@ -423,7 +442,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       startTime = time.time()
 
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
-    centerlineModel = self.logic.build_centerline_model(segmentationNode)
+    centerlineModel = self.logic.build_centerline_model(segmentationNode, self.colormap)
     refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
     if not (refVolumeNode):
         raise ValueError("Missing inputs to calculate vascular segments")
@@ -432,7 +451,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
 
     try:
-        self.logic.calculateVascularSegments(refVolumeNode, segmentationNode, centerlineModel)
+        self.logic.calculateVascularSegments(refVolumeNode, segmentationNode, centerlineModel, self.colormap)
     except ValueError:
         print("Error: Failing when calculating vascular segments")
 
@@ -481,7 +500,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     self.segmentIndex += 1
     return self.segmentIndex
 
-  def createCompleteCenterlineModel(self):
+  def createCompleteCenterlineModel(self, colormap):
     nodeName = "CenterlineModel"
     completeCenterlineModelNode = slicer.mrmlScene.GetNodeByID(nodeName)
     if completeCenterlineModelNode:
@@ -500,14 +519,13 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     displayNode.SetActiveScalar('SegmentId', 2)
     displayNode.SetScalarRangeFlagFromString('UseColorNodeScalarRange')
     displayNode.SetLineWidth(3)
-    colormap = slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels')
     completeCenterlineModelNode.GetDisplayNode().SetAndObserveColorNodeID(colormap.GetID())
 
     return completeCenterlineModelNode
 
 
-  def build_centerline_model(self, segmentationNode):
-    centerlineModel = self.createCompleteCenterlineModel()
+  def build_centerline_model(self, segmentationNode, colormap):
+    centerlineModel = self.createCompleteCenterlineModel(colormap)
     #centerlineModel is empty - Start filling it with segments
     centerlineSegmentsDict = slicer.util.getNodes("CenterlineSegment*")
     for name, segmentObject in centerlineSegmentsDict.items():
@@ -518,7 +536,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     self.scl.InitializeCenterlineSearchModel(centerlineModel)
     return centerlineModel
 
-  def calculateVascularSegments(self, refVolume, segmentation, centerlineModel):
+  def calculateVascularSegments(self, refVolume, segmentation, centerlineModel, colormap):
     segmentationIds = vtk.vtkStringArray()
     labelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("VascularSegments")
     if not labelmapVolumeNode:
@@ -546,7 +564,6 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     if result==0:
         raise ValueError("Corrupt centerline model - Not possible to calculate vascular segments")
 
-    colormap = slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels')
     labelmapVolumeNode.GetDisplayNode().SetAndObserveColorNodeID(colormap.GetID())
     slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
 
