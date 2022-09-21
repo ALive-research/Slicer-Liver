@@ -138,6 +138,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
     self.ui.endPointsMarkupsSelector.connect('nodeAddedByUser(vtkMRMLNode*)', self.newEndpointsListCreated)
+    self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.segmentationNodeSelected)
 
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
     # (in the selected parameter node).
@@ -153,6 +154,13 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
+
+  def segmentationNodeSelected(self):
+    self.ui.SegmentationShow3DButton.setEnabled(True)
+    segmentationNode = self.ui.inputSurfaceSelector.currentNode()
+    self.ui.SegmentationShow3DButton.setSegmentationNode(segmentationNode)
+    displayNode = segmentationNode.GetDisplayNode()
+    displayNode.SetOpacity(0.4)
 
   def createColorMap(self):
     self.colormap = slicer.vtkMRMLColorNode()
