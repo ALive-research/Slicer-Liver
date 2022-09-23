@@ -6,15 +6,15 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>721</width>
+    <width>811</width>
     <height>475</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout">
-   <item>
+  <layout class="QGridLayout" name="gridLayout_3">
+   <item row="0" column="0">
     <widget class="qMRMLCollapsibleButton" name="segmentsCollapsibleButton">
      <property name="text">
       <string>Liver Segments</string>
@@ -23,33 +23,45 @@
       <bool>false</bool>
      </property>
      <layout class="QGridLayout" name="gridLayout_2">
-      <item row="0" column="0">
-       <widget class="QLabel" name="label_2">
+      <item row="6" column="0" colspan="5">
+       <widget class="QPushButton" name="calculateSegmentsButton">
         <property name="text">
-         <string>Vascular Territory:</string>
+         <string>Calculate Liver Vascular Territory</string>
         </property>
        </widget>
       </item>
-      <item row="0" column="1" colspan="2">
-       <widget class="ctkComboBox" name="ComboBox">
-        <item>
-         <property name="text">
-          <string>Vascular Territory ID 1</string>
-         </property>
+      <item row="1" column="4">
+       <layout class="QGridLayout" name="gridLayout">
+        <item row="0" column="0">
+         <spacer name="horizontalSpacer_2">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>228</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
         </item>
-        <item>
-         <property name="text">
-          <string>Vascular Territory ID 2</string>
-         </property>
+        <item row="1" column="0" colspan="2">
+         <spacer name="horizontalSpacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>382</width>
+            <height>17</height>
+           </size>
+          </property>
+         </spacer>
         </item>
-       </widget>
-      </item>
-      <item row="1" column="0">
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Segmentation:</string>
-        </property>
-       </widget>
+        <item row="0" column="1">
+         <widget class="qMRMLSegmentationShow3DButton" name="SegmentationShow3DButton"/>
+        </item>
+       </layout>
       </item>
       <item row="1" column="1">
        <widget class="qMRMLNodeComboBox" name="inputSurfaceSelector">
@@ -72,54 +84,12 @@
         </property>
        </widget>
       </item>
-      <item row="1" column="2" rowspan="3">
-       <layout class="QGridLayout" name="gridLayout">
-        <item row="0" column="0">
-         <spacer name="horizontalSpacer_2">
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>228</width>
-            <height>20</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-        <item row="0" column="1">
-         <widget class="qMRMLSegmentationShow3DButton" name="SegmentationShow3DButton"/>
-        </item>
-        <item row="1" column="0" colspan="2">
-         <spacer name="horizontalSpacer">
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>382</width>
-            <height>17</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-        <item row="2" column="0">
-         <widget class="qSlicerMarkupsPlaceWidget" name="endPointsMarkupsPlaceWidget">
-          <property name="maximumSize">
-           <size>
-            <width>15000</width>
-            <height>40</height>
-           </size>
-          </property>
-          <property name="placeMultipleMarkups">
-           <enum>qSlicerMarkupsPlaceWidget::ForcePlaceMultipleMarkups</enum>
-          </property>
-         </widget>
-        </item>
-        <item row="2" column="1">
-         <widget class="qMRMLColorTableComboBox" name="ColorTableComboBox"/>
-        </item>
-       </layout>
+      <item row="3" column="0">
+       <widget class="QLabel" name="label_3">
+        <property name="text">
+         <string>Vessel points:</string>
+        </property>
+       </widget>
       </item>
       <item row="2" column="1">
        <widget class="qMRMLSegmentSelectorWidget" name="inputSegmentSelectorWidget">
@@ -134,10 +104,10 @@
         </property>
        </widget>
       </item>
-      <item row="3" column="0">
-       <widget class="QLabel" name="label_3">
+      <item row="1" column="0">
+       <widget class="QLabel" name="label">
         <property name="text">
-         <string>Vessel points:</string>
+         <string>Segmentation:</string>
         </property>
        </widget>
       </item>
@@ -165,6 +135,59 @@
         </property>
        </widget>
       </item>
+      <item row="5" column="0" colspan="5">
+       <widget class="QPushButton" name="addSegmentButton">
+        <property name="text">
+         <string>Add Vessel Centerline </string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="0" colspan="5">
+       <layout class="QHBoxLayout" name="horizontalLayout">
+        <item>
+         <widget class="QLabel" name="label_2">
+          <property name="text">
+           <string>Vascular Territory:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="ctkComboBox" name="vascularTerritoryId">
+          <property name="editable">
+           <bool>false</bool>
+          </property>
+          <property name="currentIndex">
+           <number>0</number>
+          </property>
+          <item>
+           <property name="text">
+            <string>Create new territory ID</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item>
+         <widget class="ctkColorPickerButton" name="ColorPickerButton">
+          <property name="displayColorName">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacer_3">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
       <item row="4" column="1">
        <spacer name="verticalSpacer">
         <property name="orientation">
@@ -181,17 +204,34 @@
         </property>
        </spacer>
       </item>
-      <item row="5" column="0" colspan="3">
-       <widget class="QPushButton" name="addSegmentButton">
-        <property name="text">
-         <string>Add Vessel Centerline </string>
+      <item row="3" column="2">
+       <widget class="qSlicerMarkupsPlaceWidget" name="endPointsMarkupsPlaceWidget">
+        <property name="maximumSize">
+         <size>
+          <width>15000</width>
+          <height>40</height>
+         </size>
+        </property>
+        <property name="placeMultipleMarkups">
+         <enum>qSlicerMarkupsPlaceWidget::ForcePlaceMultipleMarkups</enum>
         </property>
        </widget>
       </item>
-      <item row="6" column="0" colspan="3">
-       <widget class="QPushButton" name="calculateSegmentsButton">
+      <item row="2" column="2">
+       <widget class="QPushButton" name="pushButton">
         <property name="text">
-         <string>Calculate Liver Vascular Territory</string>
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset>
+          <normaloff>../../../../../../../../../../../../Slicer/Libs/MRML/Widgets/Resources/Icons/VisibleOff.png</normaloff>
+          <normalon>../../../../../../../../../../../../Slicer/Libs/MRML/Widgets/Resources/Icons/VisibleOn.png</normalon>../../../../../../../../../../../../Slicer/Libs/MRML/Widgets/Resources/Icons/VisibleOff.png</iconset>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -206,11 +246,6 @@
    <extends>ctkCollapsibleButton</extends>
    <header>qMRMLCollapsibleButton.h</header>
    <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>qMRMLColorTableComboBox</class>
-   <extends>qMRMLNodeComboBox</extends>
-   <header>qMRMLColorTableComboBox.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLNodeComboBox</class>
@@ -249,6 +284,11 @@
    <extends>QWidget</extends>
    <header>ctkCollapsibleButton.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkColorPickerButton</class>
+   <extends>QPushButton</extends>
+   <header>ctkColorPickerButton.h</header>
   </customwidget>
   <customwidget>
    <class>ctkComboBox</class>
