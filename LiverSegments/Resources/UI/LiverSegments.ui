@@ -106,20 +106,18 @@
        </spacer>
       </item>
       <item row="2" column="2">
-       <widget class="QPushButton" name="pushButton">
+       <widget class="QPushButton" name="showHideButton">
         <property name="text">
-         <string>Show/hide</string>
-        </property>
-        <property name="icon">
-         <iconset>
-          <normaloff>../../../../../../../../../../../../Slicer/Libs/MRML/Widgets/Resources/Icons/VisibleOff.png</normaloff>
-          <normalon>../../../../../../../../../../../../Slicer/Libs/MRML/Widgets/Resources/Icons/VisibleOn.png</normalon>../../../../../../../../../../../../Slicer/Libs/MRML/Widgets/Resources/Icons/VisibleOff.png</iconset>
+         <string>Show/Hide</string>
         </property>
         <property name="checkable">
          <bool>true</bool>
         </property>
         <property name="checked">
          <bool>true</bool>
+        </property>
+        <property name="flat">
+         <bool>false</bool>
         </property>
        </widget>
       </item>

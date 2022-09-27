@@ -154,6 +154,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.addSegmentButton.connect('clicked(bool)', self.onAddSegmentButton)
     self.ui.calculateSegmentsButton.connect('clicked(bool)', self.onCalculateSegmentButton)
     self.ui.ColorPickerButton.connect('colorChanged(QColor)', self.onColorChanged)
+    self.ui.showHideButton.connect('clicked(bool)', self.onShowHideButton)
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
@@ -167,6 +168,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return
     displayNode = segmentationNode.GetDisplayNode()
     displayNode.SetOpacity(0.3)
+    self.updateShowHideButtonText()
 
   #Auto create if name/id don't exist. Auto switch it it exists
   def onSegmentChanged(self):
@@ -179,6 +181,41 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       node = self.ui.endPointsMarkupsSelector.addNode()
       self.ui.endPointsMarkupsSelector.setCurrentNode(node)
     print('currentNode: ',self.ui.endPointsMarkupsSelector.currentNode().GetName())
+    self.refreshShowHideButton()
+
+  def onShowHideButton(self):
+    displayNode, segmentId = self.getDisplayNodeAndSegmentId()
+    if displayNode is None:
+      return
+    if self.ui.showHideButton.isChecked() is True:
+      displayNode.SetSegmentVisibility(segmentId, True)
+    else:
+      displayNode.SetSegmentVisibility(segmentId, False)
+    self.updateShowHideButtonText()
+
+  def refreshShowHideButton(self):
+    displayNode, segmentId = self.getDisplayNodeAndSegmentId()
+    if displayNode is None:
+      return
+    self.ui.showHideButton.setChecked(displayNode.GetSegmentVisibility(segmentId))
+    self.updateShowHideButtonText()
+
+  def getDisplayNodeAndSegmentId(self):
+    surface = self.ui.inputSurfaceSelector.currentNode()
+    if surface is None:
+      return None, None
+    displayNode = surface.GetDisplayNode()
+    if displayNode is None:
+      return None, None
+    return displayNode, self.ui.inputSegmentSelectorWidget.currentSegmentID()
+
+  def updateShowHideButtonText(self):
+    if self.ui.showHideButton.isChecked() is True:
+      self.ui.showHideButton.setText('Hide')
+      self.ui.showHideButton.setIcon(qt.QIcon("Icons/VisibleOn.png"))
+    else:
+      self.ui.showHideButton.setText('Show')
+      self.ui.showHideButton.setIcon(qt.QIcon("Icons/VisibleOff.png"))
 
   def getVesselSemgentfromName(self):
     segmentName = self.getVesselSegmentName()
