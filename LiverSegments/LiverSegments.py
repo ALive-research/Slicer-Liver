@@ -141,6 +141,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.vascularTerritoryId.connect('currentIndexChanged(int)', self.onVascularTerritoryIdChanged)
 
     self.onVascularTerritoryIdChanged()
+    self.ui.endPointsMarkupsSelector.setEnabled(False)#Disable selector for now, as the lists are automatically managed
 
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
     # (in the selected parameter node).
@@ -172,16 +173,21 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   #Auto create if name/id don't exist. Auto switch it it exists
   def onSegmentChanged(self):
-    node = self.getVesselSemgentfromName()
+    endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
+    if endPointsMarkupsNode is not None:
+      endPointsMarkupsNode.SetDisplayVisibility(False)#Hide previous markup points
+
+    endPointsMarkupsNode = self.getVesselSemgentfromName()
     #print('node: ', node)
     #print('Use vessel segment name: ', self.getVesselSegmentName())
     #self.ui.endPointsMarkupsSelector.setCurrentNodeID(self.getVesselSegmentName())#Error: Name cannot be used as id
-    if node is None:
+    if endPointsMarkupsNode is None:
       print('Creating new node: ')
-      node = self.ui.endPointsMarkupsSelector.addNode()
-      self.ui.endPointsMarkupsSelector.setCurrentNode(node)
+      endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.addNode()
+      self.ui.endPointsMarkupsSelector.setCurrentNode(endPointsMarkupsNode)
     print('currentNode: ',self.ui.endPointsMarkupsSelector.currentNode().GetName())
     self.refreshShowHideButton()
+    endPointsMarkupsNode.SetDisplayVisibility(True)#Show current markup points
 
   def onShowHideButton(self):
     displayNode, segmentId = self.getDisplayNodeAndSegmentId()
