@@ -249,6 +249,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #print("map1 ", self.colormap)
     #print("self.colormap.GetID()", self.colormap.GetID())
     self.colormap = slicer.app.applicationLogic().GetColorLogic().CopyNode(slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels'), "SlicerLiverColorMap")
+    self.colormap.UnRegister(None)  # to prevent memory leaks
     slicer.mrmlScene.AddNode(self.colormap) # Creates the ID
     #print("map3 ", self.colormap)
     #print("self.colormap.GetID()", self.colormap.GetID())
@@ -467,9 +468,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return qtColor
 
   def useColorFromSelector(self, centerlineModelNode):
-    inputColor = self.ui.endPointsMarkupsPlaceWidget.ColorButton.color
-    segmentIndex = int(centerlineModelNode.GetAttribute("SegmentIndex"))
-    self.colormap.SetColor(segmentIndex, inputColor.redF(), inputColor.greenF(), inputColor.blueF()) #Update index color in colormap. Too late? Only updating color when creating centerline
+    inputColor = self.getCurrentColorQt()
     centerlineModelNode.GetDisplayNode().SetColor(inputColor.redF(), inputColor.greenF(), inputColor.blueF())
 
   def onVascularTerritoryIdChanged(self):
