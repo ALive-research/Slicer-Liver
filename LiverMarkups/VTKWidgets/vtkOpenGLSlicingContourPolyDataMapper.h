@@ -37,8 +37,8 @@
 
 ==============================================================================*/
 
-#ifndef vtkopenglresectionbezierpolydatamapper_h_
-#define vtkopenglresectionbezierpolydatamapper_h_
+#ifndef vtkopengldistancecontourpolydatamapper_h_
+#define vtkopengldistancecontourpolydatamapper_h_
 
 #include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
 

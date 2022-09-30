@@ -120,12 +120,22 @@ void vtkOpenGLSlicingContourPolyDataMapper::ReplaceShaderValues(
     VSSource, "//VTK::PositionVC::Impl",
     "//VTK::PositionVC::Impl\n"
     "vertexMCVSOutput = vertexMC;\n"
-    "vertexWCVSOutput = uIjkToTexture*uRasToIjk*uShiftScale*vertexMC;\n");
+    "vertexWCVSOutput = uShiftScale*vertexMC;\n");
 
   vtkShaderProgram::Substitute(
     FSSource, "//VTK::PositionVC::Dec",
     "//VTK::PositionVC::Dec\n"
+    "in vec4 vertexWCVSOutput;"
     "vec4 fragPositionMC = vertexWCVSOutput;\n");
+
+  vtkShaderProgram::Substitute(
+    FSSource, "//VTK::Color::Dec",
+    "//VTK::Color::Dec\n"
+    "uniform float uContourThickness;\n"
+    "uniform int uContourVisibility;\n"
+    "uniform vec4 uPlanePositionMC;\n"
+    "uniform vec4 uPlaneNormalMC;\n"
+    );
 
   vtkShaderProgram::Substitute(
       FSSource, "//VTK::Color::Impl",
@@ -179,14 +189,14 @@ void vtkOpenGLSlicingContourPolyDataMapper::SetCameraShaderParameters(
 void vtkOpenGLSlicingContourPolyDataMapper::SetMapperShaderParameters(
     vtkOpenGLHelper &cellBO, vtkRenderer *ren, vtkActor *actor) {
 
-  if (cellBO.Program->IsUniformUsed("uPlanePosition"))
+  if (cellBO.Program->IsUniformUsed("uPlanePositionMC"))
     {
-    cellBO.Program->SetUniform4f("uPlanePosition", this->Impl->PlanePosition.data());
+    cellBO.Program->SetUniform4f("uPlanePositionMC", this->Impl->PlanePosition.data());
     }
 
-  if (cellBO.Program->IsUniformUsed("uPlaneNormal"))
+  if (cellBO.Program->IsUniformUsed("uPlaneNormalMC"))
     {
-    cellBO.Program->SetUniform4f("uPlaneNormal", this->Impl->PlaneNormal.data());
+    cellBO.Program->SetUniform4f("uPlaneNormalMC", this->Impl->PlaneNormal.data());
     }
 
   if (cellBO.Program->IsUniformUsed("uContourThickness"))
