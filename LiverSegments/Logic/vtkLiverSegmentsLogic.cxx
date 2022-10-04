@@ -153,7 +153,10 @@ void vtkLiverSegmentsLogic::InitializeCenterlineSearchModel(vtkMRMLModelNode *su
     auto centerlineModel = summedCenterline->GetPolyData();
     this->Locator->Initialize();
     this->Locator->SetDataSet(vtkPointSet::SafeDownCast(centerlineModel));
-    this->Locator->BuildLocator();
+    if(centerlineModel->GetPointData()->GetNumberOfArrays() > 0)
+        this->Locator->BuildLocator();
+    else
+        std::cout << "Error: No PointData in centerline model" << std::endl;
 }
 
 

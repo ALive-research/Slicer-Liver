@@ -18,11 +18,11 @@ class LiverSegmentsTestCase(unittest.TestCase):
     colormap = slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels')
     logic.createCompleteCenterlineModel(colormap)
 
-    centerlineModel = logic.build_centerline_model(colormap) # Fails in line 156 in vtkLiverSegmentsLogic.cxx
+    centerlineModel = logic.build_centerline_model(colormap)
 
     refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
     segmentation = self.createEmptyvtkMRMLSegmentationNode()
-    logic.calculateVascularSegments(refVolume, segmentation, centerlineModel, colormap) # Require build_centerline_model to succeed first
+    logic.calculateVascularSegments(refVolumeNode, segmentation, centerlineModel, colormap)
 
     node1, node2 = self.create2EmptyMarkupsFiducialNodes()
     logic.copyIndex(node1, node2)

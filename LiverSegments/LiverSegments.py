@@ -592,15 +592,16 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     numberOfSegments = segm.GetNumberOfSegments()
     logging.info('Number of segments: ' + str(numberOfSegments))
     liverSegm = segm.GetSegment(segmentId)
-    logging.info('Segment name: ' + liverSegm.GetName())
-    logging.info('Segment Label: ' + str(liverSegm.GetLabelValue()))
+    if liverSegm is not None:
+      logging.info('Segment name: ' + liverSegm.GetName())
+      logging.info('Segment Label: ' + str(liverSegm.GetLabelValue()))
 
     segmentationIds.InsertNextValue(segmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume)
 
     result = self.scl.SegmentClassificationProcessing(centerlineModel, labelmapVolumeNode)
     if result==0:
-        raise ValueError("Corrupt centerline model - Not possible to calculate vascular segments")
+      logging.error("Corrupt centerline model - Not possible to calculate vascular segments")
 
     labelmapVolumeNode.GetDisplayNode().SetAndObserveColorNodeID(colormap.GetID())
     slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
