@@ -143,6 +143,30 @@ public:
   /// Set the thickness factor for the grid
   void SetGridThicknessFactor(float thicknessFactor);
 
+    /// Get the hepatic contour margin
+    float GetHepaticContourSize() const;
+    /// Set the resection margin
+    void SetHepaticContourSize(float margin);
+
+    /// Get the uncertainty margin
+    float GetPortalContourSize() const;
+    /// Set the resection margin
+    void SetPortalContourSize(float margin);
+
+    /// Get the portal contour color
+    float const* GetPortalContourColor() const;
+    /// Set the portal contour color
+    void SetPortalContourColor(float color[3]);
+    /// Set the portal contour color
+    void SetPortalContourColor(float red, float green, float blue);
+
+    /// Get the hepatic contour color
+    float const* GetHepaticContourColor() const;
+    /// Set the hepatic contour color
+    void SetHepaticContourColor(float color[3]);
+    /// Set the hepatic contour color
+    void SetHepaticContourColor(float red, float green, float blue);
+
 protected:
   vtkOpenGLBezierResectionPolyDataMapper();
   ~vtkOpenGLBezierResectionPolyDataMapper();

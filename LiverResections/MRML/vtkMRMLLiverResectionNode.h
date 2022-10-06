@@ -60,237 +60,286 @@
 
 //-----------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
-: public vtkMRMLStorableNode
-{
+        : public vtkMRMLStorableNode {
 public:
-  static vtkMRMLLiverResectionNode* New();
-  vtkTypeMacro(vtkMRMLLiverResectionNode, vtkMRMLStorableNode);
-  void PrintSelf(ostream& os, vtkIndent indent) override;
+    static vtkMRMLLiverResectionNode *New();
 
-  // Possible resection states
-  enum ResectionState
-    {
-      Initialization=0,
-      Deformation,
-      Completed
+vtkTypeMacro(vtkMRMLLiverResectionNode, vtkMRMLStorableNode);
+
+    void PrintSelf(ostream &os, vtkIndent indent) override;
+
+    // Possible resection states
+    enum ResectionState {
+        Initialization = 0,
+        Deformation,
+        Completed
     };
 
-  // Possible initialization modes
-  enum InitializationMode
-    {
-      Flat=0,
-      Curved,
+    // Possible initialization modes
+    enum InitializationMode {
+        Flat = 0,
+        Curved,
     };
 
-  //--------------------------------------------------------------------------------
-  // MRMLNode methods
-  //--------------------------------------------------------------------------------
-  vtkMRMLNode* CreateNodeInstance() override;
+    //--------------------------------------------------------------------------------
+    // MRMLNode methods
+    //--------------------------------------------------------------------------------
+    vtkMRMLNode *CreateNodeInstance() override;
 
-  /// Get node XML tag name (like Volume, Model)
-  const char* GetNodeTagName() override {return "LiverResection";}
+    /// Get node XML tag name (like Volume, Model)
+    const char *GetNodeTagName() override { return "LiverResection"; }
 
-  /// \sa vtkMRMLNode::CopyContent
-  vtkMRMLCopyContentDefaultMacro(vtkMRMLLiverResectionNode);
+    /// \sa vtkMRMLNode::CopyContent
+    vtkMRMLCopyContentDefaultMacro(vtkMRMLLiverResectionNode);
 
-  /// Create default storage node or nullptr if does not have one
-  vtkMRMLStorageNode* CreateDefaultStorageNode();
+    /// Create default storage node or nullptr if does not have one
+    vtkMRMLStorageNode *CreateDefaultStorageNode();
 
 
-  // TODO: Review the need for this further down the road
-  /// Get target lesions identifiers
-  // std::set<vtkMRMLModelNode*> GetTargetTumors() const {return this->TargetTumors;}
-  // /// Add a new lesion identifier
-  // void AddTargetTumor(vtkMRMLModelNode* tumorModel)
-  // {this->TargetTumors.insert(tumorModel); this->Modified();}
-  // /// Remove a lesion identifier
-  // void RemoveTargetTumor(vtkMRMLModelNode* tumorModel)
-  // {this->TargetTumors.erase(tumorModel); this->Modified();}
+    // TODO: Review the need for this further down the road
+    /// Get target lesions identifiers
+    // std::set<vtkMRMLModelNode*> GetTargetTumors() const {return this->TargetTumors;}
+    // /// Add a new lesion identifier
+    // void AddTargetTumor(vtkMRMLModelNode* tumorModel)
+    // {this->TargetTumors.insert(tumorModel); this->Modified();}
+    // /// Remove a lesion identifier
+    // void RemoveTargetTumor(vtkMRMLModelNode* tumorModel)
+    // {this->TargetTumors.erase(tumorModel); this->Modified();}
 
-  // TODO: Review the need for this further down the road
-  // vtkMRMLSegmentationNode* GetSegmentationNode() const {return this->SegmentationNode;}
-  // void SetSegmentationNode(vtkMRMLSegmentationNode *segmentationNode)
-  // {this->SegmentationNode = segmentationNode; this->Modified();}
+    // TODO: Review the need for this further down the road
+    // vtkMRMLSegmentationNode* GetSegmentationNode() const {return this->SegmentationNode;}
+    // void SetSegmentationNode(vtkMRMLSegmentationNode *segmentationNode)
+    // {this->SegmentationNode = segmentationNode; this->Modified();}
 
-  // Get resection margin
-  vtkGetMacro(ResectionMargin, double);
-  // Set resection margin
-  vtkSetClampMacro(ResectionMargin, double, 0.0, VTK_DOUBLE_MAX);
+    // Get resection margin
+    vtkGetMacro(ResectionMargin, double);
+    // Set resection margin
+    vtkSetClampMacro(ResectionMargin, double, 0.0, VTK_DOUBLE_MAX);
 
-  // Get resection margin
-  vtkGetMacro(UncertaintyMargin, double);
-  // Set resection margin
-  vtkSetClampMacro(UncertaintyMargin, double, 0.0, VTK_DOUBLE_MAX);
+    // Get resection margin
+    vtkGetMacro(UncertaintyMargin, double);
+    // Set resection margin
+    vtkSetClampMacro(UncertaintyMargin, double, 0.0, VTK_DOUBLE_MAX);
 
-  // Get resection status
-  vtkGetMacro(State, ResectionState);
-  // Set resection status
-  vtkSetMacro(State, ResectionState);
+    // Get resection status
+    vtkGetMacro(State, ResectionState);
+    // Set resection status
+    vtkSetMacro(State, ResectionState);
 
-  // Get resection initialization
-  vtkGetMacro(InitMode, InitializationMode);
-  // Set resection initialization
-  vtkSetMacro(InitMode, InitializationMode);
+    // Get resection initialization
+    vtkGetMacro(InitMode, InitializationMode);
+    // Set resection initialization
+    vtkSetMacro(InitMode, InitializationMode);
 
-  // Get Target Organ
-  vtkMRMLModelNode *GetTargetOrganModelNode() const
-  {return this->TargetOrganModelNode;}
+    // Get Target Organ
+    vtkMRMLModelNode *GetTargetOrganModelNode() const { return this->TargetOrganModelNode; }
 
-  // Set Target Organ
-  void SetTargetOrganModelNode(vtkMRMLModelNode *targetOrgan)
-  {this->TargetOrganModelNode = targetOrgan; this->Modified();}
+    // Set Target Organ
+    void SetTargetOrganModelNode(vtkMRMLModelNode *targetOrgan) {
+        this->TargetOrganModelNode = targetOrgan;
+        this->Modified();
+    }
 
-  // Get Distance Map
-  vtkMRMLScalarVolumeNode*GetDistanceMapVolumeNode() const
-  {return this->DistanceMapVolumeNode;}
+    // Get Distance Map
+    vtkMRMLScalarVolumeNode *GetDistanceMapVolumeNode() const { return this->DistanceMapVolumeNode; }
 
-  // Set Distance Map
-  void SetDistanceMapVolumeNode(vtkMRMLScalarVolumeNode* distanceMapVolumeNode)
-  {this->DistanceMapVolumeNode = distanceMapVolumeNode; this->Modified();}
+    // Set Distance Map
+    void SetDistanceMapVolumeNode(vtkMRMLScalarVolumeNode *distanceMapVolumeNode) {
+        this->DistanceMapVolumeNode = distanceMapVolumeNode;
+        this->Modified();
+    }
 
-  /// This is a function to set the initialization control points as vtkPoints.
-  /// Since the expected number of points for the initialization is two, the
-  /// function requires at least two points in the vtkPoints provided; if more
-  /// points are provided, the points from 2nd onwards will be ignored. The
-  /// function returns true if thw points were set correctly, otherwise, it
-  /// returns false.
-  bool SetInitializationControlPoints(vtkPoints* controlPoints);
+    /// This is a function to set the initialization control points as vtkPoints.
+    /// Since the expected number of points for the initialization is two, the
+    /// function requires at least two points in the vtkPoints provided; if more
+    /// points are provided, the points from 2nd onwards will be ignored. The
+    /// function returns true if thw points were set correctly, otherwise, it
+    /// returns false.
+    bool SetInitializationControlPoints(vtkPoints *controlPoints);
 
-  // Get initialization control points
-  vtkPoints const* GetInitializationPoints() const
-  {return const_cast<vtkPoints const*>(this->InitializationControlPoints.GetPointer());}
+    // Get initialization control points
+    vtkPoints const *
+    GetInitializationPoints() const { return const_cast<vtkPoints const *>(this->InitializationControlPoints.GetPointer()); }
 
-  /// This is a function to set the bezier surface control points as vtkPoints.
-  /// Since the expected number of points for the bezier is 16, the function
-  /// requires at least 16 points in the vtkPoints provided; if more points are
-  /// provided, the points from 2nd onwards will be ignored. The function
-  /// returns true if thw points were set correctly, otherwise, it returns
-  /// false.
-  bool SetBezierSurfaceControlPoints(vtkPoints* controlPoints);
+    /// This is a function to set the bezier surface control points as vtkPoints.
+    /// Since the expected number of points for the bezier is 16, the function
+    /// requires at least 16 points in the vtkPoints provided; if more points are
+    /// provided, the points from 2nd onwards will be ignored. The function
+    /// returns true if thw points were set correctly, otherwise, it returns
+    /// false.
+    bool SetBezierSurfaceControlPoints(vtkPoints *controlPoints);
 
-  // Get bezier surface control points
-  vtkPoints const* GetBezierSurfacePoints() const
-  {return const_cast<vtkPoints const*>(this->InitializationControlPoints.GetPointer());}
+    // Get bezier surface control points
+    vtkPoints const *
+    GetBezierSurfacePoints() const { return const_cast<vtkPoints const *>(this->InitializationControlPoints.GetPointer()); }
 
-  // Get bezier control points
-  vtkPoints const* GetBezierPoints() const
-  {return const_cast<vtkPoints const*>(this->BezierSurfaceControlPoints.GetPointer());}
+    // Get bezier control points
+    vtkPoints const *
+    GetBezierPoints() const { return const_cast<vtkPoints const *>(this->BezierSurfaceControlPoints.GetPointer()); }
 
-  // Set the clipout state variable
-  vtkSetMacro(ClipOut, bool);
+    // Set the clipout state variable
+    vtkSetMacro(ClipOut, bool);
 
-  // Get the clipout state variable
-  vtkGetMacro(ClipOut, bool);
+    // Get the clipout state variable
+    vtkGetMacro(ClipOut, bool);
 
-  // Set the clipout state variable
-  vtkSetMacro(ClipOut, int);
+    // Set the clipout state variable
+    vtkSetMacro(ClipOut, int);
 
-  // Set the widget visibility variable
-  vtkSetMacro(WidgetVisibility, bool);
+    // Set the widget visibility variable
+    vtkSetMacro(WidgetVisibility, bool);
 
-  // Get the widget visibility variable
-  vtkGetMacro(WidgetVisibility, bool);
+    // Get the widget visibility variable
+    vtkGetMacro(WidgetVisibility, bool);
 
-  // Set the widget visibility variable
-  vtkSetMacro(WidgetVisibility, int);
+    // Set the widget visibility variable
+    vtkSetMacro(WidgetVisibility, int);
 
-  // Get interpolated margins property
-  vtkGetMacro(InterpolatedMargins, bool);
+    // Get interpolated margins property
+    vtkGetMacro(InterpolatedMargins, bool);
 
-  // Set interpolated margins property
-  vtkSetMacro(InterpolatedMargins, bool);
+    // Set interpolated margins property
+    vtkSetMacro(InterpolatedMargins, bool);
 
-  // Set interpolated property
-  vtkSetVector3Macro(ResectionColor, float);
+    // Set interpolated property
+    vtkSetVector3Macro(ResectionColor, float);
 
-  // Get interpolated property
-  vtkGetVector3Macro(ResectionColor, float);
+    // Get interpolated property
+    vtkGetVector3Macro(ResectionColor, float);
 
-  // Set interpolated property
-  vtkSetVector3Macro(ResectionGridColor, float);
+    // Set interpolated property
+    vtkSetVector3Macro(ResectionGridColor, float);
 
-  // Get interpolated property
-  vtkGetVector3Macro(ResectionGridColor, float);
+    // Get interpolated property
+    vtkGetVector3Macro(ResectionGridColor, float);
 
-  // Set interpolated margins property
-  vtkSetVector3Macro(ResectionMarginColor, float);
+    // Set interpolated margins property
+    vtkSetVector3Macro(ResectionMarginColor, float);
 
-  // Get interpolated margins property
-  vtkGetVector3Macro(ResectionMarginColor, float);
+    // Get interpolated margins property
+    vtkGetVector3Macro(ResectionMarginColor, float);
 
-  // Set interpolated margins property
-  vtkSetVector3Macro(UncertaintyMarginColor, float);
+    // Set interpolated margins property
+    vtkSetVector3Macro(UncertaintyMarginColor, float);
 
-  // Get interpolated margins property
-  vtkGetVector3Macro(UncertaintyMarginColor, float);
+    // Get interpolated margins property
+    vtkGetVector3Macro(UncertaintyMarginColor, float);
 
-  // Get resection opacity property
-  vtkGetMacro(ResectionOpacity, float);
+    // Get resection opacity property
+    vtkGetMacro(ResectionOpacity, float);
 
-  // Set resection opacity property
-  vtkSetClampMacro(ResectionOpacity, float, 0.0f, 1.0f);
+    // Set resection opacity property
+    vtkSetClampMacro(ResectionOpacity, float, 0.0f, 1.0f);
 
-  // Get the widget visibility variable
-  vtkGetMacro(GridVisibility, bool);
+    // Get the widget visibility variable
+    vtkGetMacro(GridVisibility, bool);
 
-  // Set the widget visibility variable
-  vtkSetMacro(GridVisibility, int);
+    // Set the widget visibility variable
+    vtkSetMacro(GridVisibility, int);
 
-  // Get the widget visibility variable
-  vtkGetMacro(GridDivisions, float);
+    // Get the widget visibility variable
+    vtkGetMacro(GridDivisions, float);
 
-  // Set the widget visibility variable
-  vtkSetMacro(GridDivisions, float);
+    // Set the widget visibility variable
+    vtkSetMacro(GridDivisions, float);
 
-  // Get the widget visibility variable
-  vtkGetMacro(GridThickness, float);
+    // Get the widget visibility variable
+    vtkGetMacro(GridThickness, float);
 
-  // Set the widget visibility variable
-  vtkSetMacro(GridThickness, float);
+    // Set the widget visibility variable
+    vtkSetMacro(GridThickness, float);
 
-  // Get bezier surface
-  vtkMRMLMarkupsBezierSurfaceNode* GetBezierSurfaceNode() const
-  {return this->BezierSurfaceNode;}
+    // Set the ShowResection2D state variable
+    vtkSetMacro(ShowResection2D, bool);
 
-  // Set bezier surface
-  void SetBezierSurfaceNode(vtkMRMLMarkupsBezierSurfaceNode *node)
-  {this->BezierSurfaceNode = node; this->Modified();}
+    // Get the ShowResection2D state variable
+    vtkGetMacro(ShowResection2D, bool);
+
+    // Set the ShowResection2D state variable
+    vtkSetMacro(ShowResection2D, int);
+
+    // Get HepaticContourSize margin
+    vtkGetMacro(HepaticContourSize, double);
+
+    // Set HepaticContourSize margin
+    vtkSetClampMacro(HepaticContourSize, double, 0.0, VTK_DOUBLE_MAX);
+
+    // Get PortalContourSize margin
+    vtkGetMacro(PortalContourSize, double);
+
+    // Set PortalContourSize margin
+    vtkSetClampMacro(PortalContourSize, double, 0.0, VTK_DOUBLE_MAX);
+
+    // Set HepaticContourColor
+    vtkSetVector3Macro(HepaticContourColor, float);
+
+    // Get HepaticContourColor
+    vtkGetVector3Macro(HepaticContourColor, float);
+
+    // Set PortalContourColor
+    vtkSetVector3Macro(PortalContourColor, float);
+
+    // Get PortalContourColor
+    vtkGetVector3Macro(PortalContourColor, float);
+
+    // Get the TextureNumComps state variable
+    vtkGetMacro(TextureNumComps, int);
+
+    // Set the TextureNumComps state variable
+    vtkSetMacro(TextureNumComps, int);
+
+    // Get bezier surface
+    vtkMRMLMarkupsBezierSurfaceNode *GetBezierSurfaceNode() const { return this->BezierSurfaceNode; }
+
+    // Set bezier surface
+    void SetBezierSurfaceNode(vtkMRMLMarkupsBezierSurfaceNode *node) {
+        this->BezierSurfaceNode = node;
+        this->Modified();
+    }
 
 
 protected:
-  vtkMRMLLiverResectionNode();
-  ~vtkMRMLLiverResectionNode() override;
+    vtkMRMLLiverResectionNode();
+
+    ~vtkMRMLLiverResectionNode() override;
 
 private:
 
-  // TODO: Review the need of this further down the road
-  // std::set<vtkMRMLModelNode*> TargetTumors;
-  // vtkWeakPointer<vtkMRMLSegmentationNode> SegmentationNode;
-  vtkWeakPointer<vtkMRMLModelNode> TargetOrganModelNode;
-  vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolumeNode;
-  vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode> BezierSurfaceNode;
-  ResectionState State;
-  InitializationMode InitMode;
-  double ResectionMargin; //Resection margin in mm
-  double UncertaintyMargin; //Uncertainty margin in mm
-  vtkNew<vtkPoints> InitializationControlPoints;
-  // TODO: Review the need for this. We already have a pointer to the surface node
-  vtkNew<vtkPoints> BezierSurfaceControlPoints;
-  bool ClipOut;
-  bool WidgetVisibility;
-  bool InterpolatedMargins;
-  float ResectionColor[3];
-  float ResectionGridColor[3];
-  float ResectionMarginColor[3];
-  float UncertaintyMarginColor[3];
-  float ResectionOpacity;
-  bool GridVisibility;
-  float GridDivisions;
-  float GridThickness;
+    // TODO: Review the need of this further down the road
+    // std::set<vtkMRMLModelNode*> TargetTumors;
+    // vtkWeakPointer<vtkMRMLSegmentationNode> SegmentationNode;
+    vtkWeakPointer<vtkMRMLModelNode> TargetOrganModelNode;
+    vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolumeNode;
+    vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode> BezierSurfaceNode;
+    ResectionState State;
+    InitializationMode InitMode;
+    double ResectionMargin; //Resection margin in mm
+    double UncertaintyMargin; //Uncertainty margin in mm
+    vtkNew<vtkPoints> InitializationControlPoints;
+    // TODO: Review the need for this. We already have a pointer to the surface node
+    vtkNew<vtkPoints> BezierSurfaceControlPoints;
+    bool ClipOut;
+    bool WidgetVisibility;
+    bool InterpolatedMargins;
+    float ResectionColor[3];
+    float ResectionGridColor[3];
+    float ResectionMarginColor[3];
+    float UncertaintyMarginColor[3];
+    float ResectionOpacity;
+    bool GridVisibility;
+    float GridDivisions;
+    float GridThickness;
+    bool ShowResection2D;
+    double HepaticContourSize; //Resection margin in mm
+    double PortalContourSize; //Uncertainty margin in mm
+    float HepaticContourColor[3];
+    float PortalContourColor[3];
+    int TextureNumComps;
 
 private:
- vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);
- void operator=(const vtkMRMLLiverResectionNode&);
+    vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode &);
+
+    void operator=(const vtkMRMLLiverResectionNode &);
 };
 
 #endif //__vtkmrmlliverresectionnode_h_

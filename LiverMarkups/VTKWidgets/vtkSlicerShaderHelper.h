@@ -65,7 +65,7 @@ public:
   vtkTypeMacro(vtkSlicerShaderHelper, vtkObject);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  void SetTargetModelNode(vtkMRMLModelNode* modelNode){this->TargetModelNode = modelNode; this->Modified();}
+  void SetTargetModelNode(vtkMRMLModelNode* modelNode){this->TargetModelNode = modelNode;}
   vtkMRMLModelNode* GetTargetModelNode(){return this->TargetModelNode;}
   vtkCollection* GetTargetModelVertexVBOs(){return this->TargetModelVertexVBOs;}
   vtkCollection* GetTargetActors(){return this->TargetModelActors;}
