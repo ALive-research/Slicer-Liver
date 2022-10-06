@@ -72,7 +72,11 @@ public:
     ResectionColor{1.0f,1.0f, 1.0f},
     ResectionGridColor{0.0f,0.0f, 0.0f},
     ResectionOpacity(1.0f),
-    InterpolatedMargins(false), ResectionClipOut(false)
+    InterpolatedMargins(false), ResectionClipOut(false), ShowResection2D(false),
+    PortalContourSize(0.0f), HepaticContourSize(0.0f),
+    PortalContourColor{1.0f, 0.0f, 0.0f},
+    HepaticContourColor{1.0f, 1.0f, 0.0f},
+    TextureNumComps(0)
   {
     this->RasToIjkMatrixT = vtkSmartPointer<vtkMatrix4x4>::New();
     this->IjkToTextureMatrixT = vtkSmartPointer<vtkMatrix4x4>::New();
@@ -93,6 +97,12 @@ public:
   bool  ResectionClipOut;
   unsigned int GridDivisions;
   float GridThicknessFactor;
+    bool ShowResection2D;
+    float PortalContourSize;
+    float HepaticContourSize;
+    float PortalContourColor[3];
+    float HepaticContourColor[3];
+    int TextureNumComps;
 };
 
 //------------------------------------------------------------------------------
@@ -599,4 +609,78 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetGridThicknessFactor(float thickn
 {
  this->Impl->GridThicknessFactor = thickness;
  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+float const* vtkOpenGLBezierResectionPolyDataMapper::GetHepaticContourColor() const
+{
+    return this->Impl->HepaticContourColor;
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::SetHepaticContourColor(float color[3])
+{
+    this->Impl->HepaticContourColor[0] = color[0];
+    this->Impl->HepaticContourColor[1] = color[1];
+    this->Impl->HepaticContourColor[2] = color[2];
+    this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::SetHepaticContourColor(float red, float green, float blue)
+{
+    this->Impl->HepaticContourColor[0] = red;
+    this->Impl->HepaticContourColor[1] = green;
+    this->Impl->HepaticContourColor[2] = blue;
+    this->Modified();
+}
+
+//------------------------------------------------------------------------------
+float const* vtkOpenGLBezierResectionPolyDataMapper::GetPortalContourColor() const
+{
+    return this->Impl->PortalContourColor;
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::SetPortalContourColor(float color[3])
+{
+    this->Impl->PortalContourColor[0] = color[0];
+    this->Impl->PortalContourColor[1] = color[1];
+    this->Impl->PortalContourColor[2] = color[2];
+    this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::SetPortalContourColor(float red, float green, float blue)
+{
+    this->Impl->PortalContourColor[0] = red;
+    this->Impl->PortalContourColor[1] = green;
+    this->Impl->PortalContourColor[2] = blue;
+    this->Modified();
+}
+
+//------------------------------------------------------------------------------
+float vtkOpenGLBezierResectionPolyDataMapper::GetHepaticContourSize() const
+{
+    return this->Impl->HepaticContourSize;
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::SetHepaticContourSize(float margin)
+{
+    this->Impl->HepaticContourSize = margin;
+    this->Modified();
+}
+
+//------------------------------------------------------------------------------
+float vtkOpenGLBezierResectionPolyDataMapper::GetPortalContourSize() const
+{
+    return this->Impl->PortalContourSize;
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::SetPortalContourSize(float margin)
+{
+    this->Impl->PortalContourSize = margin;
+    this->Modified();
 }

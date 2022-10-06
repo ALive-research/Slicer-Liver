@@ -51,80 +51,117 @@
 // VTK includes
 #include <vtkWeakPointer.h>
 #include <vtkSmartPointer.h>
-
+#include "vtkOpenGLPolyDataMapper2D.h"
+#include "vtkActor2D.h"
 //------------------------------------------------------------------------------
 class vtkBezierSurfaceSource;
+
 class vtkOpenGLActor;
+
 class vtkPolyData;
+
 class vtkPolyDataNormals;
+
 class vtkPoints;
+
 class vtkTextureObject;
+
 class vtkTubeFilter;
+
 class vtkOpenGLBezierResectionPolyDataMapper;
+
+class vtkOpenGLBezierResectionPolyDataMapper2D;
+
+class vtkOpenGLResection2DPolyDataMapper;
 
 //------------------------------------------------------------------------------
 class vtkMRMLMarkupsBezierSurfaceNode;
+
 class vtkMRMLScalarVolumeNode;
 
 //------------------------------------------------------------------------------
 class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerBezierSurfaceRepresentation3D
-: public vtkSlicerMarkupsWidgetRepresentation3D
-{
+        : public vtkSlicerMarkupsWidgetRepresentation3D {
 public:
-  static vtkSlicerBezierSurfaceRepresentation3D* New();
-  vtkTypeMacro(vtkSlicerBezierSurfaceRepresentation3D, vtkSlicerMarkupsWidgetRepresentation3D);
-  void PrintSelf(ostream& os, vtkIndent indent) override;
+    static vtkSlicerBezierSurfaceRepresentation3D *New();
 
-  void UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void* callData=nullptr) override;
+vtkTypeMacro(vtkSlicerBezierSurfaceRepresentation3D, vtkSlicerMarkupsWidgetRepresentation3D);
 
-  /// Methods to make this class behave as a vtkProp.
-  void GetActors(vtkPropCollection *) override;
-  void ReleaseGraphicsResources(vtkWindow *) override;
-  int RenderOverlay(vtkViewport *viewport) override;
-  int RenderOpaqueGeometry(vtkViewport *viewport) override;
-  int RenderTranslucentPolygonalGeometry(vtkViewport *viewport) override;
-  vtkTypeBool HasTranslucentPolygonalGeometry() override;
+    void PrintSelf(ostream &os, vtkIndent indent) override;
 
-  /// Return the bounds of the representation
-  double *GetBounds() override;
+    void UpdateFromMRML(vtkMRMLNode *caller, unsigned long event, void *callData = nullptr) override;
 
-protected:
-  /// TransferDistanceMap
-  void CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode* node);
+    /// Methods to make this class behave as a vtkProp.
+    void GetActors(vtkPropCollection *) override;
 
-protected:
-  //k Bezier surface releated elements
-  vtkSmartPointer<vtkBezierSurfaceSource> BezierSurfaceSource;
-  vtkSmartPointer<vtkPoints> BezierSurfaceControlPoints;
-  vtkSmartPointer<vtkOpenGLBezierResectionPolyDataMapper> BezierSurfaceResectionMapper;
-  vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor;
-  vtkSmartPointer<vtkPolyDataNormals> BezierSurfaceNormals;
+    void ReleaseGraphicsResources(vtkWindow *) override;
 
-  // Control polygon related elements
-  vtkSmartPointer<vtkPolyData> ControlPolygonPolyData;
-  vtkSmartPointer<vtkTubeFilter> ControlPolygonTubeFilter;
-  vtkSmartPointer<vtkPolyDataMapper> ControlPolygonMapper;
-  vtkSmartPointer<vtkActor> ControlPolygonActor;
+    int RenderOverlay(vtkViewport *viewport) override;
 
-  // Distance mapping related elements
-  vtkSmartPointer<vtkTextureObject> DistanceMapTexture;
-  vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolumeNode;
-  vtkNew<vtkMatrix4x4> VBOShiftScale;
-  vtkNew<vtkTransform> VBOInverseTransform;
-  vtkWeakPointer<vtkShaderProperty> ShaderProperty;
+    int RenderOpaqueGeometry(vtkViewport *viewport) override;
+
+    int RenderTranslucentPolygonalGeometry(vtkViewport *viewport) override;
+
+    vtkTypeBool HasTranslucentPolygonalGeometry() override;
+
+    /// Return the bounds of the representation
+    double *GetBounds() override;
 
 protected:
-  vtkSlicerBezierSurfaceRepresentation3D();
-  ~vtkSlicerBezierSurfaceRepresentation3D() override;
+    /// TransferDistanceMap
+    void CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode *node, int numComps);
 
-  void UpdateControlPolygonGeometry(vtkMRMLMarkupsBezierSurfaceNode*);
-  void UpdateControlPolygonDisplay(vtkMRMLMarkupsBezierSurfaceNode*);
-  void UpdateBezierSurfaceGeometry(vtkMRMLMarkupsBezierSurfaceNode*);
-  void UpdateBezierSurfaceDisplay(vtkMRMLMarkupsBezierSurfaceNode*);
+protected:
+    //k Bezier surface releated elements
+    vtkSmartPointer<vtkBezierSurfaceSource> BezierSurfaceSource;
+    vtkSmartPointer<vtkPoints> BezierSurfaceControlPoints;
+    vtkSmartPointer<vtkOpenGLBezierResectionPolyDataMapper> BezierSurfaceResectionMapper;
+    vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor;
+    vtkSmartPointer<vtkPolyDataNormals> BezierSurfaceNormals;
+//    vtkSmartPointer<vtkOpenGLBezierResectionPolyDataMapper2D> BezierSurfaceResectionMapper2D;
+    vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor2D;
+//    vtkSmartPointer<vtkActor2D> BezierSurfaceActor2D;
+//    vtkSmartPointer<vtkOpenGLPolyDataMapper2D> BezierSurfaceResectionMapper2D;
+
+
+    vtkSmartPointer<vtkOpenGLResection2DPolyDataMapper> BezierSurfaceResectionMapper2D;
+    vtkSmartPointer<vtkBezierSurfaceSource> BezierPlane;
+    vtkSmartPointer<vtkDataArray> p;
+
+    // Control polygon related elements
+    vtkSmartPointer<vtkPolyData> ControlPolygonPolyData;
+    vtkSmartPointer<vtkTubeFilter> ControlPolygonTubeFilter;
+    vtkSmartPointer<vtkPolyDataMapper> ControlPolygonMapper;
+    vtkSmartPointer<vtkActor> ControlPolygonActor;
+
+    // Distance mapping related elements
+    vtkSmartPointer<vtkTextureObject> DistanceMapTexture;
+    vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolumeNode;
+    vtkNew<vtkMatrix4x4> VBOShiftScale;
+    vtkNew<vtkTransform> VBOInverseTransform;
+    vtkWeakPointer<vtkShaderProperty> ShaderProperty;
+
+    vtkSmartPointer<vtkRenderer> CoRenderer2D;
+
+
+protected:
+    vtkSlicerBezierSurfaceRepresentation3D();
+
+    ~vtkSlicerBezierSurfaceRepresentation3D() override;
+
+    void UpdateControlPolygonGeometry(vtkMRMLMarkupsBezierSurfaceNode *);
+
+    void UpdateControlPolygonDisplay(vtkMRMLMarkupsBezierSurfaceNode *);
+
+    void UpdateBezierSurfaceGeometry(vtkMRMLMarkupsBezierSurfaceNode *);
+
+    void UpdateBezierSurfaceDisplay(vtkMRMLMarkupsBezierSurfaceNode *);
+
 
 private:
-  vtkSlicerBezierSurfaceRepresentation3D(const vtkSlicerBezierSurfaceRepresentation3D&) = delete;
-  void operator=(const vtkSlicerBezierSurfaceRepresentation3D&) = delete;
+    vtkSlicerBezierSurfaceRepresentation3D(const vtkSlicerBezierSurfaceRepresentation3D &) = delete;
+
+    void operator=(const vtkSlicerBezierSurfaceRepresentation3D &) = delete;
 };
 
 #endif // __vtkslicerbeziersurfacewidgetrepresentation3d_h_

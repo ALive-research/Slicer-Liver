@@ -3,25 +3,26 @@ set(MODULE_NAME Liver)
 
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
-  ${MODULE_NAME}.py
-  )
+        ${MODULE_NAME}.py
+        )
 
 set(MODULE_PYTHON_RESOURCES
-  Resources/Icons/${MODULE_NAME}.png
-  Resources/Icons/LiverVolume000.png
-  Resources/Icons/LiverSegmentation000.png
-  Resources/Icons/DistanceMap000.png
-  Resources/UI/ResectionsWidget.ui
-  Resources/UI/DistanceMapsWidget.ui
-  )
+        Resources/Icons/${MODULE_NAME}.png
+        Resources/Icons/LiverVolume000.png
+        Resources/Icons/LiverSegmentation000.png
+        Resources/Icons/DistanceMap000.png
+        Resources/UI/ResectionsWidget.ui
+        Resources/UI/DistanceMapsWidget.ui
+        Resources/UI/ResectogramWidget.ui
+        )
 
 #-----------------------------------------------------------------------------
 slicerMacroBuildScriptedModule(
-  NAME ${MODULE_NAME}
-  SCRIPTS ${MODULE_PYTHON_SCRIPTS}
-  RESOURCES ${MODULE_PYTHON_RESOURCES}
-  WITH_GENERIC_TESTS
-  )
+        NAME ${MODULE_NAME}
+        SCRIPTS ${MODULE_PYTHON_SCRIPTS}
+        RESOURCES ${MODULE_PYTHON_RESOURCES}
+        WITH_GENERIC_TESTS
+)
 
 #-----------------------------------------------------------------------------
 if(BUILD_TESTING)

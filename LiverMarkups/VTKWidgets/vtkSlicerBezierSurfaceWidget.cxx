@@ -77,6 +77,7 @@ void vtkSlicerBezierSurfaceWidget::CreateDefaultRepresentation(vtkMRMLMarkupsDis
   else
     {
     rep = vtkSmartPointer<vtkSlicerBezierSurfaceRepresentation3D>::New();
+    rep->Print(std::cout);
     }
   this->SetRenderer(renderer);
   this->SetRepresentation(rep);
