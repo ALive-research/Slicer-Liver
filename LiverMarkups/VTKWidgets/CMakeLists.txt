@@ -16,6 +16,8 @@ set(${KIT}_SRCS
   vtkSlicerSlicingContourWidget.cxx
   vtkOpenGLSlicingContourPolyDataMapper.h
   vtkOpenGLSlicingContourPolyDataMapper.cxx
+  vtkOpenGLDistanceContourPolyDataMapper.h
+  vtkOpenGLDistanceContourPolyDataMapper.cxx
   vtkSlicerSlicingContourRepresentation3D.h
   vtkSlicerSlicingContourRepresentation3D.cxx
   vtkSlicerSlicingContourRepresentation2D.h
