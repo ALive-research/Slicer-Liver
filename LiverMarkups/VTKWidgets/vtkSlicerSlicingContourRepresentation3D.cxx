@@ -41,6 +41,8 @@
 
 #include "vtkMRMLMarkupsSlicingContourDisplayNode.h"
 #include "vtkMRMLMarkupsSlicingContourNode.h"
+#include "vtkOpenGLSlicingContourPolyDataMapper.h"
+
 
 // MRML includes
 #include <qMRMLThreeDWidget.h>
@@ -100,8 +102,7 @@ void vtkSlicerSlicingContourRepresentation3D::UpdateFromMRML(
   if (targetModelNode != this->Target) {
     this->Target = targetModelNode;
     if (this->Target) {
-      this->SlicingContourMapper->SetInputConnection(
-          this->Target->GetPolyDataConnection());
+      this->SlicingContourMapper->SetInputConnection(this->Target->GetPolyDataConnection());
     }
   }
 
@@ -119,8 +120,8 @@ void vtkSlicerSlicingContourRepresentation3D::UpdateFromMRML(
   }
 
   // Recalculate the middle plane and update the shader parameters
-  double point1Position[3] = {1.0f};
-  double point2Position[3] = {1.0f};
+  double point1Position[3] = {0.0, 0.0, 0.0};
+  double point2Position[3] = {0.0, 0.0, 0.0};
 
   liverMarkupsSlicingContourNode->GetNthControlPointPosition(0, point1Position);
   liverMarkupsSlicingContourNode->GetNthControlPointPosition(1, point2Position);
