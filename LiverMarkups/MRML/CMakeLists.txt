@@ -10,14 +10,16 @@ set(${KIT}_INCLUDE_DIRECTORIES
 set(${KIT}_SRCS
   vtkMRMLMarkupsSlicingContourNode.h
   vtkMRMLMarkupsSlicingContourNode.cxx
+  vtkMRMLMarkupsSlicingContourDisplayNode.h
+  vtkMRMLMarkupsSlicingContourDisplayNode.cxx
   vtkMRMLMarkupsDistanceContourNode.h
   vtkMRMLMarkupsDistanceContourNode.cxx
+  vtkMRMLMarkupsDistanceContourDisplayNode.h
+  vtkMRMLMarkupsDistanceContourDisplayNode.cxx
   vtkMRMLMarkupsBezierSurfaceNode.h
   vtkMRMLMarkupsBezierSurfaceNode.cxx
   vtkMRMLMarkupsBezierSurfaceDisplayNode.h
   vtkMRMLMarkupsBezierSurfaceDisplayNode.cxx
-  vtkMRMLMarkupsSlicingContourDisplayNode.h
-  vtkMRMLMarkupsSlicingContourDisplayNode.cxx
   )
 
 set(${KIT}_TARGET_LIBRARIES
