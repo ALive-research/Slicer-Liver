@@ -172,6 +172,10 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
     if endPointsMarkupsNode is not None:
       endPointsMarkupsNode.SetDisplayVisibility(False)#Hide previous markup points
+    if self.ui.inputSurfaceSelector.currentNode() is None:
+      return
+    if not self.ui.inputSegmentSelectorWidget.currentSegmentID():
+      return
 
     endPointsMarkupsNode = self.getVesselSemgentfromName()
     if endPointsMarkupsNode is None:
