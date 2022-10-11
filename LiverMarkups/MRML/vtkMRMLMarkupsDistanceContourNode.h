@@ -66,6 +66,7 @@ public:
   const char* GetPlaceAddIcon() override {return ":/Icons/MarkupsGenericMouseModePlaceAdd.png";}
 
   vtkMRMLNode* CreateNodeInstance() override;
+  void CreateDefaultDisplayNodes() override;
 
   /// Get node XML tag name (like Volume, Model)
   ///

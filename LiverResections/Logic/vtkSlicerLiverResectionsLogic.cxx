@@ -366,22 +366,28 @@ vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLLiverResectionNode *re
 
   // Computing the position of the initial points
   const double *bounds = resectionNode->GetTargetOrganModelNode()->GetPolyData()->GetBounds();
-
   auto p1 = vtkVector3d(bounds[0],(bounds[3]-bounds[2])/2.0, (bounds[5]-bounds[4])/2.0);
   auto p2 = vtkVector3d((bounds[1]-bounds[0])/2.0,(bounds[3]-bounds[2])/2.0, (bounds[5]-bounds[4])/2.0);
 
-  auto distanceContourNode = vtkSmartPointer<vtkMRMLMarkupsDistanceContourNode>::New();
+  auto distanceContourNode = vtkMRMLMarkupsDistanceContourNode::SafeDownCast(mrmlScene->AddNewNodeByClass("vtkMRMLMarkupsDistanceContourNode"));
+  if (!distanceContourNode)
+    {
+      vtkErrorMacro("Error in AddResectionPlane: Error creating vtkMRMLMarkupsDistanceContourNode.");
+      return nullptr;
+    }
+
+  distanceContourNode->CreateDefaultDisplayNodes();
   distanceContourNode->AddControlPoint(p1);
   distanceContourNode->AddControlPoint(p2);
   distanceContourNode->SetTarget(resectionNode->GetTargetOrganModelNode());
 
-  auto distanceContourDisplayNode = vtkSmartPointer<vtkMRMLMarkupsDisplayNode>::New();
-  distanceContourDisplayNode->PropertiesLabelVisibilityOff();
-  distanceContourDisplayNode->SetSnapMode(vtkMRMLMarkupsDisplayNode::SnapModeUnconstrained);
+  // auto distanceContourDisplayNode = vtkSmartPointer<vtkMRMLMarkupsDisplayNode>::New();
+  // distanceContourDisplayNode->PropertiesLabelVisibilityOff();
+  // distanceContourDisplayNode->SetSnapMode(vtkMRMLMarkupsDisplayNode::SnapModeUnconstrained);
 
-  mrmlScene->AddNode(distanceContourDisplayNode);
-  distanceContourNode->SetAndObserveDisplayNodeID(distanceContourDisplayNode->GetID());
-  mrmlScene->AddNode(distanceContourNode);
+  // mrmlScene->AddNode(distanceContourDisplayNode);
+  // distanceContourNode->SetAndObserveDisplayNodeID(distanceContourDisplayNode->GetID());
+  // mrmlScene->AddNode(distanceContourNode);
 
   return distanceContourNode;
 }
@@ -853,11 +859,11 @@ vtkMRMLMarkupsNode* vtkSlicerLiverResectionsLogic::AddInitializationMarkupsNode(
 
   switch(resectionNode->GetInitMode())
     {
-    case vtkMRMLLiverResectionNode::Flat:
+    case vtkMRMLLiverResectionNode::Curved:
       initializationMarkupsNode = this->AddResectionPlane(resectionNode);
       break;
 
-    case vtkMRMLLiverResectionNode::Curved:
+    case vtkMRMLLiverResectionNode::Flat:
       initializationMarkupsNode = this->AddResectionContour(resectionNode);
       break;
     }
