@@ -141,12 +141,9 @@ void vtkOpenGLDistanceContourPolyDataMapper::ReplaceShaderValues(
       FSSource, "//VTK::Color::Impl",
       "//VTK::Color::Impl\n"
       "  vec3 contourColor= vec3(1.0, 1.0 ,1.0);\n"
-      "  vec3 w = -(uExternalPointMC.xyz*fragPositionMC.w - "
-      "fragPositionMC.xyz);\n"
-      "  float dist = (uReferencePointMC.x * w.x + uReferencePointMC.y * w.y + "
-      "uReferencePointMC.z * w.z) / sqrt( pow(uReferencePointMC.x,2) + "
-      "pow(uReferencePointMC.y,2)+ pow(uReferencePointMC.z,2));\n"
-      "  if(abs(dist) < uContourThickness && uContourVisibility != 0){\n"
+      "  float refDist= distance(uExternalPointMC, uReferencePointMC);\n"
+      "  float dist = distance(uReferencePointMC, fragPositionMC);\n"
+      "  if(abs(dist-refDist) < uContourThickness && uContourVisibility != 0){\n"
       "     ambientColor = contourColor;\n"
       "     diffuseColor = contourColor;\n"
       "     opacity = 1.0;\n"
@@ -154,6 +151,7 @@ void vtkOpenGLDistanceContourPolyDataMapper::ReplaceShaderValues(
       "  else{\n"
       "  discard;\n"
       "  }\n");
+
 
   shaders[vtkShader::Vertex]->SetSource(VSSource);
   shaders[vtkShader::Fragment]->SetSource(FSSource);
