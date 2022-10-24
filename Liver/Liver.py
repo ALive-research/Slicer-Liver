@@ -219,7 +219,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectogramWidget.HepaticContourColorPickerButton.connect('colorChanged(QColor)', self.onHepaticContourColorChanged)
         self.resectogramWidget.PortalContourSizeSpinBox.connect('valueChanged(double)', self.onPortalContourSizeChanged)
         self.resectogramWidget.PortalContourColorPickerButton.connect('colorChanged(QColor)', self.onPortalContourColorChanged)
-
+        self.resectogramWidget.VascularSegmentsNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onVascularSegmentsNodeChanged)
+        # self.resectogramWidget.VascularSegmentsNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'VascularSegments', 'True')
+        # self.resectogramWidget.VascularSegmentsNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'Computed', 'True')
 
     def onDistanceMapParameterChanged(self):
         """
@@ -257,6 +259,10 @@ class LiverWidget(ScriptedLoadableModuleWidget):
                 self.resectionsWidget.DistanceMapNodeComboBox.blockSignals(True)
                 self.resectionsWidget.DistanceMapNodeComboBox.setCurrentNode(activeResectionNode.GetDistanceMapVolumeNode())
                 self.resectionsWidget.DistanceMapNodeComboBox.blockSignals(False)
+
+                self.resectogramWidget.VascularSegmentsNodeComboBox.blockSignals(True)
+                self.resectogramWidget.VascularSegmentsNodeComboBox.setCurrentNode(activeResectionNode.GetDistanceMapVolumeNode())
+                self.resectogramWidget.VascularSegmentsNodeComboBox.blockSignals(False)
 
                 self.resectionsWidget.ResectionColorPickerButton.blockSignals(True)
                 color = activeResectionNode.GetResectionColor()
@@ -613,6 +619,14 @@ class LiverWidget(ScriptedLoadableModuleWidget):
             rgbF = [color.redF(), color.greenF(), color.blueF()]
             self._currentResectionNode.SetPortalContourColor(rgbF)
 
+    def onVascularSegmentsNodeChanged(self):
+        """
+        This function is called when the resection distance map selector changes
+        """
+        if self._currentResectionNode is not None:
+            VascularSegmentsNode = self.resectogramWidget.VascularSegmentsNodeComboBox.currentNode()
+            self._currentResectionNode.SetVascularSegmentsVolumeNode(VascularSegmentsNode)
+
     def cleanup(self):
         """
         Called when the application closes and the module widget is destroyed.
@@ -667,32 +681,43 @@ class LiverLogic(ScriptedLoadableModuleLogic):
                 tumorDistanceImage = sitk.SignedMaurerDistanceMap(tumorImage, False, False, True)
                 logging.debug("Computing Tumor Distance Map...")
                 # tumorDistanceImageDown =  self.imageResample( tumorDistanceImage, [150,150,150], "linear")
-
+                writer = sitk.ImageFileWriter()
+                writer.SetFileName("/home/ruoyan/Documents/vtk2DResection/data/tumorImageDist.nrrd")
+                writer.Execute(tumorDistanceImage)
             # Compute tumor distance map
             if parenchymaNode != None:
                 parenchymaImage = sitkUtils.PullVolumeFromSlicer(parenchymaNode)
                 parenchymaDistanceImage = sitk.SignedMaurerDistanceMap(parenchymaImage, False, False, True)
                 logging.debug("Computing Parenchyma Distance Map...")
                 # parenchymaDistanceImageDown = self.imageResample( parenchymaDistanceImage, [150,150,150], "linear")
+                writer = sitk.ImageFileWriter()
+                writer.SetFileName("/home/ruoyan/Documents/vtk2DResection/data/liverImageDist.nrrd")
+                writer.Execute(parenchymaDistanceImage)
 
             # Compute tumor distance map
             if hepaticNode != None:
                 hepaticImage = sitkUtils.PullVolumeFromSlicer(hepaticNode)
                 hepaticDistanceImage = sitk.SignedMaurerDistanceMap(hepaticImage, False, False, True)
                 logging.debug("Computing Hepatic Distance Map...")
+                writer = sitk.ImageFileWriter()
+                writer.SetFileName("/home/ruoyan/Documents/vtk2DResection/data/hepaticImageDist.nrrd")
+                writer.Execute(hepaticDistanceImage)
 
             # Compute tumor distance map
             if portalNode != None:
                 portalImage = sitkUtils.PullVolumeFromSlicer(portalNode)
                 portalDistanceImage = sitk.SignedMaurerDistanceMap(portalImage, False, False, True)
                 logging.debug("Computing Portal Distance Map...")
+                writer = sitk.ImageFileWriter()
+                writer.SetFileName("/home/ruoyan/Documents/vtk2DResection/data/portalImageDist.nrrd")
+                writer.Execute(portalDistanceImage)
 
             # Combine distance maps
             compositeDistanceMap = sitk.Compose(*[i for i in [tumorDistanceImage, parenchymaDistanceImage, hepaticDistanceImage, portalDistanceImage] if i])
             sitkUtils.PushVolumeToSlicer(compositeDistanceMap, targetNode=outputNode,
                                          className='vtkMRMLVectorVolumeNode')
-            outputNode.SetAttribute('DistanceMap', "True");
-            outputNode.SetAttribute('Computed', "True");
+            outputNode.SetAttribute('DistanceMap', "True")
+            outputNode.SetAttribute('Computed', "True")
 
     def imageResample(self, inputImage, resampledSize, interpolatorType):
         """

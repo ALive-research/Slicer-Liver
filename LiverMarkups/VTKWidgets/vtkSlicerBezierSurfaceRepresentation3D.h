@@ -44,7 +44,7 @@
 
 // Markups VTKWidgets includes
 #include "vtkSlicerMarkupsWidgetRepresentation3D.h"
-
+#include "vtkMultiTextureObjectHelper.h"
 // MRML includes
 #include <vtkMRMLModelNode.h>
 
@@ -69,8 +69,6 @@ class vtkTextureObject;
 class vtkTubeFilter;
 
 class vtkOpenGLBezierResectionPolyDataMapper;
-
-class vtkOpenGLBezierResectionPolyDataMapper2D;
 
 class vtkOpenGLResection2DPolyDataMapper;
 
@@ -110,7 +108,8 @@ vtkTypeMacro(vtkSlicerBezierSurfaceRepresentation3D, vtkSlicerMarkupsWidgetRepre
 protected:
     /// TransferDistanceMap
     void CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode *node, int numComps);
-
+    void CreateAndTransferVascularSegmentsTexture(vtkMRMLScalarVolumeNode *node);
+    void GenerateColorTable();
 protected:
     //k Bezier surface releated elements
     vtkSmartPointer<vtkBezierSurfaceSource> BezierSurfaceSource;
@@ -118,10 +117,8 @@ protected:
     vtkSmartPointer<vtkOpenGLBezierResectionPolyDataMapper> BezierSurfaceResectionMapper;
     vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor;
     vtkSmartPointer<vtkPolyDataNormals> BezierSurfaceNormals;
-//    vtkSmartPointer<vtkOpenGLBezierResectionPolyDataMapper2D> BezierSurfaceResectionMapper2D;
     vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor2D;
 //    vtkSmartPointer<vtkActor2D> BezierSurfaceActor2D;
-//    vtkSmartPointer<vtkOpenGLPolyDataMapper2D> BezierSurfaceResectionMapper2D;
 
 
     vtkSmartPointer<vtkOpenGLResection2DPolyDataMapper> BezierSurfaceResectionMapper2D;
@@ -135,14 +132,17 @@ protected:
     vtkSmartPointer<vtkActor> ControlPolygonActor;
 
     // Distance mapping related elements
-    vtkSmartPointer<vtkTextureObject> DistanceMapTexture;
+    vtkSmartPointer<vtkMultiTextureObjectHelper> DistanceMapTexture;
     vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolumeNode;
     vtkNew<vtkMatrix4x4> VBOShiftScale;
     vtkNew<vtkTransform> VBOInverseTransform;
     vtkWeakPointer<vtkShaderProperty> ShaderProperty;
 
-    vtkSmartPointer<vtkRenderer> CoRenderer2D;
+    vtkSmartPointer<vtkLookupTable> lut;
 
+    // Vascular Segments related elements
+    vtkSmartPointer<vtkMultiTextureObjectHelper> VascularSegmentsTexture;
+    vtkWeakPointer<vtkMRMLScalarVolumeNode> VascularSegmentsVolumeNode;
 
 protected:
     vtkSlicerBezierSurfaceRepresentation3D();

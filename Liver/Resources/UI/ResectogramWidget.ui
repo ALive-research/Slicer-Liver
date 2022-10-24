@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>563</width>
-    <height>213</height>
+    <height>231</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -16,13 +16,13 @@
   <property name="layoutDirection">
    <enum>Qt::LeftToRight</enum>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_7">
+  <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <widget class="qMRMLCollapsibleButton" name="ResectionsCollapsibleButton_2">
      <property name="text">
       <string>Resectogram</string>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout_9">
+     <layout class="QVBoxLayout" name="verticalLayout_2">
       <item>
        <widget class="QCheckBox" name="Resection2DCheckBox">
         <property name="enabled">
@@ -62,13 +62,13 @@
                 <set>ctkDoubleSpinBox::DecimalsByShortcuts|ctkDoubleSpinBox::InsertDecimals</set>
                </property>
                <property name="maximum">
-                <double>1</double>
+                <double>1.000000000000000</double>
                </property>
                <property name="singleStep">
-                <double>0.1</double>
+                <double>0.100000000000000</double>
                </property>
                <property name="value">
-                <double>0.3</double>
+                <double>0.300000000000000</double>
                </property>
                <property name="invertedControls">
                 <bool>false</bool>
@@ -134,13 +134,13 @@
                 <set>ctkDoubleSpinBox::DecimalsByShortcuts|ctkDoubleSpinBox::InsertDecimals</set>
                </property>
                <property name="maximum">
-                <double>1</double>
+                <double>1.000000000000000</double>
                </property>
                <property name="singleStep">
-                <double>0.1</double>
+                <double>0.100000000000000</double>
                </property>
                <property name="value">
-                <double>0.3</double>
+                <double>0.300000000000000</double>
                </property>
                <property name="invertedControls">
                 <bool>false</bool>
@@ -177,6 +177,56 @@
         </layout>
        </widget>
       </item>
+      <item>
+       <widget class="ctkCollapsibleGroupBox" name="VsacularSegmentsGroupBox">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="title">
+         <string>Vsacular Segments Choice</string>
+        </property>
+        <property name="collapsed">
+         <bool>true</bool>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_12">
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_15"/>
+         </item>
+         <item>
+          <layout class="QFormLayout" name="formLayout_18">
+           <item row="0" column="0">
+            <widget class="QLabel" name="DistanceMapLabel_10">
+             <property name="text">
+              <string>Vsacular Segments Volumn</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="qMRMLNodeComboBox" name="VascularSegmentsNodeComboBox">
+             <property name="nodeTypes">
+              <stringlist>
+               <string>vtkMRMLScalarVolumeNode</string>
+              </stringlist>
+             </property>
+             <property name="noneEnabled">
+              <bool>true</bool>
+             </property>
+             <property name="addEnabled">
+              <bool>false</bool>
+             </property>
+             <property name="removeEnabled">
+              <bool>false</bool>
+             </property>
+             <property name="selectNodeUponCreation">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
@@ -188,6 +238,11 @@
    <extends>ctkCollapsibleButton</extends>
    <header>qMRMLCollapsibleButton.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLNodeComboBox</class>
+   <extends>QWidget</extends>
+   <header>qMRMLNodeComboBox.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLSpinBox</class>
@@ -254,6 +309,22 @@
     <hint type="destinationlabel">
      <x>323</x>
      <y>180</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectogramWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>VascularSegmentsNodeComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>293</x>
+     <y>365</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>376</x>
+     <y>167</y>
     </hint>
    </hints>
   </connection>

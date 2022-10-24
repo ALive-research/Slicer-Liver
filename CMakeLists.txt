@@ -19,6 +19,10 @@ set(EXTENSION_DEPENDS
 #-----------------------------------------------------------------------------
 # Extension dependencies
 find_package(Slicer REQUIRED)
+find_package(VTK COMPONENTS
+        vtkRenderingOpenGL2
+        QUIET
+        )
 include(${Slicer_USE_FILE})
 
 #-----------------------------------------------------------------------------

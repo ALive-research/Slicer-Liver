@@ -30,6 +30,11 @@ vtkTypeMacro(vtkOpenGLResection2DPolyDataMapper, vtkOpenGLPolyDataMapper);
     /// Set distance map
     void SetDistanceMapTextureObject(vtkTextureObject* node);
 
+    /// Get Vascular Segments
+    vtkTextureObject* GetVascularSegmentsTextureObject() const;
+    /// Set Vascular Segments
+    void SetVascularSegmentsTextureObject(vtkTextureObject* object);
+
     /// Set RAS - IKJ matrix
     void SetRasToIjkMatrix(const vtkMatrix4x4*);
     /// Set RAS - IKJ matrix transposed
