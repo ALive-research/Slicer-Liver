@@ -89,6 +89,7 @@
 #include "vtkRendererCollection.h"
 #include <vtkNamedColors.h>
 #include <vtkTypeFloat32Array.h>
+#include <vtkImageCast.h>
 
 //------------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerBezierSurfaceRepresentation3D);
@@ -457,7 +458,6 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture
     }
 
     auto imageData = node->GetImageData();
-    imageData->GetPointData()->Print(std::cout);
     if (!imageData) {
         vtkWarningMacro("vtkSlicerBezierSurfaceRepresentation::CreateAndTransferDistanceMap:"
                         "There is no image data in the specified scalar volume node.");
@@ -495,36 +495,11 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferVascularSegmentsTe
         return;
     }
 
-    auto imageDataCopy = vtkSmartPointer<vtkImageData>::New();
-    imageDataCopy->DeepCopy(imageData);
-    imageData->GetPointData()->Print(std::cout);
-    GenerateColorTable();
-    std::vector<double*> colorVec;
-    if (this->lut){
-        clock_t tStart = clock();
-        auto scalars = imageData->GetPointData()->GetScalars();
-        auto newScalars = vtkSmartPointer<vtkFloatArray>::New();
-        newScalars->SetNumberOfComponents(4);
-        std::vector<double*> colorVec;
-        std::cout<<"GetMaxNorm: "<<scalars->GetMaxNorm()<<endl;
-        for(int i = 0; i < scalars->GetMaxNorm()+1; i++){
-            vtkIdType id;
-            id = i;
-            auto color = this->lut->GetTableValue(id);
-            colorVec.push_back(color);
-            std::cout<<"color: "<<color[0]<<"; "<<color[1]<<"; "<<color[2]<<endl;
-        }
-        std::cout<<"GetNumberOfTuples: "<<scalars->GetNumberOfTuples()<<endl;
-        for(int i = 0; i < scalars->GetNumberOfTuples(); i++){
-            auto color = colorVec[scalars->GetTuple(i)[0]];
-            newScalars->InsertNextTuple4(scalars->GetTuple(i)[0], color[0],color[1],color[2]);
-        }
-        std::cout<<"Time taken: "<<(double)(clock() - tStart)/CLOCKS_PER_SEC<<std::endl;
-        newScalars->Print(std::cout);
-        imageDataCopy->GetPointData()->SetScalars(newScalars);
-        imageDataCopy->GetPointData()->Print(std::cout);
-
-    }
+    vtkNew<vtkImageCast> cast;
+    cast->SetInputData(imageData);
+    cast->SetOutputScalarTypeToFloat();
+    cast->Update();
+    cast->GetOutput()->Print(std::cout);
 
     auto dimensions = imageData->GetDimensions();
 
@@ -534,8 +509,8 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferVascularSegmentsTe
     this->VascularSegmentsTexture->SetMinificationFilter(vtkTextureObject::Linear);
     this->VascularSegmentsTexture->SetMagnificationFilter(vtkTextureObject::Linear);
     this->VascularSegmentsTexture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
-    this->VascularSegmentsTexture->CreateSeq3DFromRaw(dimensions[0], dimensions[1], dimensions[2], 4, VTK_SHORT,
-                                                      imageDataCopy->GetScalarPointer(), 1);
+    this->VascularSegmentsTexture->CreateSeq3DFromRaw(dimensions[0], dimensions[1], dimensions[2], 1, VTK_FLOAT,
+                                                      cast->GetOutput()->GetScalarPointer(), 1);
 }
 
 //----------------------------------------------------------------------
@@ -590,24 +565,4 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateControlPolygonDisplay(vtkMRML
             controlPoints->Actor->SetVisibility(displayNode->GetWidgetVisibility());
         }
     }
-}
-
-
-//------------------------------------------------------------------------
-//Color Look Up Table from 3d Slicer vtkMRMLColorTableNode.cxx line 1088-1142
-void vtkSlicerBezierSurfaceRepresentation3D::GenerateColorTable(){
-    this->lut = vtkSmartPointer<vtkLookupTable>::New();
-    this->lut->SetNumberOfTableValues(11);
-    this->lut->Build();
-    this->lut->SetTableValue(0, 0, 0, 0, 0.0);
-    this->lut->SetTableValue(1, 0.2, 0.5, 0.8, 1.0);
-    this->lut->SetTableValue(2, 1.0, 0.8, 0.7, 1.0);
-    this->lut->SetTableValue(3, 1.0, 1.0, 1.0, 1.0);
-    this->lut->SetTableValue(4, 0.4, 0.7, 1.0, 1.0);
-    this->lut->SetTableValue(5, 0.9, 0.5, 0.5, 1.0);
-    this->lut->SetTableValue(6, 0.5, 0.9, 0.5, 1.0);
-    this->lut->SetTableValue(7, 0.5, 0.9, 0.9, 1.0);
-    this->lut->SetTableValue(8, 0.9, 0.9, 0.5, 1.0);
-    this->lut->SetTableValue(9, 0.9, 0.7, 0.9, 1.0);
-    this->lut->SetTableValue(10, 0.9, 0.9, 0.5, 1.0);
 }

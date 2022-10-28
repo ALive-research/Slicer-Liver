@@ -109,7 +109,6 @@ protected:
     /// TransferDistanceMap
     void CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode *node, int numComps);
     void CreateAndTransferVascularSegmentsTexture(vtkMRMLScalarVolumeNode *node);
-    void GenerateColorTable();
 protected:
     //k Bezier surface releated elements
     vtkSmartPointer<vtkBezierSurfaceSource> BezierSurfaceSource;
@@ -137,8 +136,6 @@ protected:
     vtkNew<vtkMatrix4x4> VBOShiftScale;
     vtkNew<vtkTransform> VBOInverseTransform;
     vtkWeakPointer<vtkShaderProperty> ShaderProperty;
-
-    vtkSmartPointer<vtkLookupTable> lut;
 
     // Vascular Segments related elements
     vtkSmartPointer<vtkMultiTextureObjectHelper> VascularSegmentsTexture;
