@@ -127,6 +127,17 @@ def registerSampleData():
     loadFileType='SegmentationFile'
   )
 
+  #if developerMode is True:
+  SampleData.SampleDataLogic.registerCustomSampleDataSource(
+    category ='Development',
+    sampleName ='3D-IRCADb-01_08',
+    thumbnailFileName = os.path.join(iconsPath, 'LiverSegmentation000.png'),
+    uris = aliveDataURL+'SHA256/2e25b8ce2c70cc2e1acd9b3356d0b1291b770274c16fcd0e2a5b69a4587fbf74',
+    fileNames ='3D-IRCADb-01_08.nrrd',
+    checksums = 'SHA256:2e25b8ce2c70cc2e1acd9b3356d0b1291b770274c16fcd0e2a5b69a4587fbf74',
+    nodeNames ='3D-IRCADb-01_08',
+    loadFileType = 'SegmentationFile'
+  )
 
 #
 # LiverWidget
