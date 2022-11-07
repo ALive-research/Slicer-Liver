@@ -47,6 +47,8 @@
 #include "vtkOpenGLBezierResectionPolyDataMapper.h"
 #include "vtkOpenGLResection2DPolyDataMapper.h"
 #include "vtkMultiTextureObjectHelper.h"
+#include "vtkMRMLMarkupsSlicingContourNode.h"
+#include "vtkMRMLMarkupsSlicingContourDisplayNode.h"
 
 
 // MRML includes
@@ -64,6 +66,7 @@
 // VTK includes
 #include "vtkRenderer.h"
 #include <vtkActor.h>
+#include <vtkOrientationMarkerWidget.h>
 #include <vtkOpenGLCamera.h>
 #include <vtkCollection.h>
 #include <vtkImageData.h>
@@ -90,6 +93,7 @@
 #include <vtkNamedColors.h>
 #include <vtkTypeFloat32Array.h>
 #include <vtkImageCast.h>
+#include <vtkRenderWindowInteractor.h>
 
 //------------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerBezierSurfaceRepresentation3D);
@@ -114,10 +118,10 @@ vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
     auto PlaneControlPoints = vtkSmartPointer<vtkPoints>::New();
 
     for(int i=0;i<4;i++){
-        PlaneControlPoints->InsertNextPoint(-60,(i*40),0);
-        PlaneControlPoints->InsertNextPoint(-20,(i*40),0);
-        PlaneControlPoints->InsertNextPoint(20,(i*40),0);
-        PlaneControlPoints->InsertNextPoint(60,(i*40),0);
+        PlaneControlPoints->InsertNextPoint(-120,(i*40),0);
+        PlaneControlPoints->InsertNextPoint(-80,(i*40),0);
+        PlaneControlPoints->InsertNextPoint(-40,(i*40),0);
+        PlaneControlPoints->InsertNextPoint(0,(i*40),0);
 
     }
 
@@ -205,18 +209,16 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode *caller,
     this->ControlPolygonActor->SetProperty(this->GetControlPointsPipeline(controlPointType)->Property);
 
     // Update the Vascular Segments as 3D texture (if changed)
-    std::cout<<"-ok 0-----------ok till here "<<endl;
+//    std::cout<<"-ok 0-----------ok till here "<<endl;
     auto VascularSegments = liverMarkupsBezierSurfaceNode->GetVascularSegmentsVolumeNode();
     if (this->VascularSegmentsVolumeNode != VascularSegments) {
-        std::cout<<"-ok 1-----------ok till here "<<endl;
         this->CreateAndTransferVascularSegmentsTexture(VascularSegments);
-        std::cout<<"-ok 2-----------ok till here "<<endl;
         this->VascularSegmentsVolumeNode = VascularSegments;
     }
+
     // Update the distance map as 3D texture (if changed)
     auto distanceMap = liverMarkupsBezierSurfaceNode->GetDistanceMapVolumeNode();
     auto BezierSurfaceDisplayNode = vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(liverMarkupsBezierSurfaceNode->GetDisplayNode());
-
     if (this->DistanceMapVolumeNode != distanceMap) {
         this->CreateAndTransferDistanceMapTexture(distanceMap, BezierSurfaceDisplayNode->GetTextureNumComps());
 
@@ -253,7 +255,6 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode *caller,
         if(renderers->GetNumberOfItems()!=5){
             std::cout<<"-------------------add new renderer------------------"<<endl;
             double yViewport[4] = {0, 0.6, 0.3, 1.0};
-
             if (renderWindow1->GetNumberOfLayers() < RENDERER_LAYER+1)
             {
                 renderWindow1->SetNumberOfLayers( RENDERER_LAYER+1 );
