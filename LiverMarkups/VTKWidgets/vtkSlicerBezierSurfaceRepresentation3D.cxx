@@ -47,8 +47,6 @@
 #include "vtkOpenGLBezierResectionPolyDataMapper.h"
 #include "vtkOpenGLResection2DPolyDataMapper.h"
 #include "vtkMultiTextureObjectHelper.h"
-#include "vtkMRMLMarkupsSlicingContourNode.h"
-#include "vtkMRMLMarkupsSlicingContourDisplayNode.h"
 
 
 // MRML includes
@@ -218,6 +216,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode *caller,
 
     // Update the distance map as 3D texture (if changed)
     auto distanceMap = liverMarkupsBezierSurfaceNode->GetDistanceMapVolumeNode();
+    auto markerStyle = liverMarkupsBezierSurfaceNode->GetMarkerStyleVolumeNode();
     auto BezierSurfaceDisplayNode = vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(liverMarkupsBezierSurfaceNode->GetDisplayNode());
     if (this->DistanceMapVolumeNode != distanceMap) {
         this->CreateAndTransferDistanceMapTexture(distanceMap, BezierSurfaceDisplayNode->GetTextureNumComps());
@@ -246,6 +245,12 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode *caller,
 
         this->DistanceMapVolumeNode = distanceMap;
     }
+
+    if (this->MarkerStyleVolumeNode != markerStyle) {
+            this->CreateAndTransferMarkerStyleTexture(markerStyle);
+            this->MarkerStyleVolumeNode = markerStyle;
+    }
+
 
     //------------------- add new renderer here ----------------------//
     auto renderWindow1 = vtkRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
@@ -473,6 +478,37 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture
     this->DistanceMapTexture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
     this->DistanceMapTexture->CreateSeq3DFromRaw(dimensions[0], dimensions[1], dimensions[2], numComps, VTK_FLOAT,
                                               imageData->GetScalarPointer(), 0);
+}
+
+
+//----------------------------------------------------------------------
+void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferMarkerStyleTexture(vtkMRMLScalarVolumeNode *node) {
+
+    auto renderWindow = vtkOpenGLRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
+    this->MarkerStyleTexture = vtkSmartPointer<vtkMultiTextureObjectHelper>::New();
+    this->MarkerStyleTexture->SetContext(renderWindow);
+
+    if (!node) {
+        vtkWarningMacro("vtkSlicerBezierSurfaceRepresentation::CreateAndTransferDistanceMap:"
+                        "There is no distance map node associated. Texture won't be generated.");
+        return;
+    }
+
+    auto imageData = node->GetImageData();
+    if (!imageData) {
+        vtkWarningMacro("vtkSlicerBezierSurfaceRepresentation::CreateAndTransferDistanceMap:"
+                        "There is no image data in the specified scalar volume node.");
+        return;
+    }
+    auto dimensions = imageData->GetDimensions();
+
+    this->MarkerStyleTexture->SetWrapS(vtkMultiTextureObjectHelper::ClampToBorder);
+    this->MarkerStyleTexture->SetWrapT(vtkMultiTextureObjectHelper::ClampToBorder);
+    this->MarkerStyleTexture->SetMinificationFilter(vtkMultiTextureObjectHelper::Linear);
+    this->MarkerStyleTexture->SetMagnificationFilter(vtkMultiTextureObjectHelper::Linear);
+    this->MarkerStyleTexture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
+    this->MarkerStyleTexture->CreateSeq2DFromRaw(dimensions[0], dimensions[1], 4, VTK_UNSIGNED_CHAR,
+                                         imageData->GetScalarPointer(),15);
 }
 
 

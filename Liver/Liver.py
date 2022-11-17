@@ -199,6 +199,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectionsWidget.DistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionDistanceMapNodeChanged)
         self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
         self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'Computed', 'True')
+        self.resectionsWidget.MarkerStyleNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onMarkerStyleNodeChanged)
+        self.resectionsWidget.MarkerStyleNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
+        self.resectionsWidget.MarkerStyleNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'Computed', 'True')
         self.resectionsWidget.LiverSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onResectionLiverModelNodeChanged)
         self.resectionsWidget.LiverSegmentSelectorWidget.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionLiverSegmentationNodeChanged)
         self.resectionsWidget.ResectionColorPickerButton.connect('colorChanged(QColor)', self.onResectionColorChanged)
@@ -355,11 +358,17 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         if self._currentResectionNode is not None:
             distanceMapNode = self.resectionsWidget.DistanceMapNodeComboBox.currentNode()
             self._currentResectionNode.SetTextureNumComps(self.numComps)
-            self._currentResectionNode.SetDistanceMapVolumeNode(self.resectionsWidget.DistanceMapNodeComboBox.currentNode())
+            self._currentResectionNode.SetDistanceMapVolumeNode(distanceMapNode)
             self.resectionsWidget.ResectionMarginGroupBox.setEnabled(distanceMapNode is not None)
             self.resectionsWidget.UncertaintyMarginGroupBox.setEnabled(distanceMapNode is not None)
             self.resectionsWidget.ResectionPreviewGroupBox.setEnabled(distanceMapNode is not None)
             self.resectogramWidget.Resection2DCheckBox.setEnabled(distanceMapNode is not None)
+
+    def onMarkerStyleNodeChanged(self):
+
+        if self._currentResectionNode is not None:
+            MarkerStyleNode = self.resectionsWidget.MarkerStyleNodeComboBox.currentNode()
+            self._currentResectionNode.SetMarkerStyleVolumeNode(MarkerStyleNode)
 
     def onResectionLiverSegmentationNodeChanged(self):
         self.resectionsWidget.LiverSegmentSelectorWidget.blockSignals(True)

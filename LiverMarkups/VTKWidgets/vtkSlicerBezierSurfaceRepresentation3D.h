@@ -109,6 +109,7 @@ protected:
     /// TransferDistanceMap
     void CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode *node, int numComps);
     void CreateAndTransferVascularSegmentsTexture(vtkMRMLScalarVolumeNode *node);
+    void CreateAndTransferMarkerStyleTexture(vtkMRMLScalarVolumeNode *node);
 protected:
     //k Bezier surface releated elements
     vtkSmartPointer<vtkBezierSurfaceSource> BezierSurfaceSource;
@@ -140,6 +141,9 @@ protected:
     // Vascular Segments related elements
     vtkSmartPointer<vtkMultiTextureObjectHelper> VascularSegmentsTexture;
     vtkWeakPointer<vtkMRMLScalarVolumeNode> VascularSegmentsVolumeNode;
+
+    vtkSmartPointer<vtkMultiTextureObjectHelper> MarkerStyleTexture;
+    vtkSmartPointer<vtkMRMLScalarVolumeNode> MarkerStyleVolumeNode;
 
 protected:
     vtkSlicerBezierSurfaceRepresentation3D();

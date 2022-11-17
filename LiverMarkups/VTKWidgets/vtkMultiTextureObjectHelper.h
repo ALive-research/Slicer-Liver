@@ -18,6 +18,7 @@ void PrintSelf(ostream& os, vtkIndent indent) override;
 
 bool CreateSeq3DFromRaw(unsigned int width, unsigned int height, unsigned int depth,
                         int numComps, int dataType, void* data, int texSeq=0);
+bool CreateSeq2DFromRaw(unsigned int width, unsigned int height, int numComps, int dataType, void* data,  int texSeq);
 
 void CreateSeqTexture(int texSeq=0);
 

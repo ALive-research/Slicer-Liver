@@ -168,6 +168,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
     "//VTK::PositionVC::Dec\n"
     "#define M_PI 3.1415926535897932384626433832795\n"
     "uniform sampler3D distanceTexture;\n"
+    "uniform sampler2D posMarker;\n"
     "//vec4 fragPositionMC = vertexWCVSOutput;\n");
 
   vtkShaderProgram::Substitute(
@@ -191,6 +192,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
   vtkShaderProgram::Substitute(
     FSSource, "//VTK::Color::Impl",
     "//VTK::Color::Impl\n"
+    "vec4 marker = texture(posMarker, uvCoordsOutput);\n"
     "vec4 dist = texture(distanceTexture, fragPositionMC.xyz);\n"
     "float lowMargin = uResectionMargin - uUncertaintyMargin;\n"
     "float highMargin = uResectionMargin + uUncertaintyMargin;\n"
@@ -226,7 +228,13 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
     "    ambientColor = uResectionColor;\n"
     "    diffuseColor = vec3(0.6);\n"
     "  }\n"
-    "}\n");
+    "}\n"
+
+    "if(marker.a != 0){\n"
+    "  ambientColor = vec3(marker.r,marker.g,marker.b);\n"
+    "  diffuseColor = vec3(0.0);\n"
+    "}\n"
+    );
 
    vtkShaderProgram::Substitute(
     FSSource, "//VTK::Light::Impl",
@@ -270,7 +278,17 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetCameraShaderParameters(
 void vtkOpenGLBezierResectionPolyDataMapper::SetMapperShaderParameters(
   vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor)
 {
-  if (cellBO.Program->IsUniformUsed("uRasToIjk"))
+    if (cellBO.Program->IsUniformUsed("distanceTexture"))
+    {
+        cellBO.Program->SetUniformi("distanceTexture", 0);
+    }
+
+    if (cellBO.Program->IsUniformUsed("posMarker"))
+    {
+        cellBO.Program->SetUniformi("posMarker", 15);
+    }
+
+    if (cellBO.Program->IsUniformUsed("uRasToIjk"))
     {
     cellBO.Program->SetUniformMatrix("uRasToIjk", this->Impl->RasToIjkMatrixT);
     }

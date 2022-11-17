@@ -30,6 +30,49 @@ void vtkMultiTextureObjectHelper::PrintSelf(ostream& os, vtkIndent indent)
 }
 vtkStandardNewMacro(vtkMultiTextureObjectHelper);
 
+bool vtkMultiTextureObjectHelper::CreateSeq2DFromRaw(
+        unsigned int width, unsigned int height, int numComps, int dataType, void* data,  int texSeq)
+{
+    assert(this->Context);
+
+    // Now determine the texture parameters using the arguments.
+    this->GetDataType(dataType);
+    this->GetInternalFormat(dataType, numComps, false);
+    this->GetFormat(dataType, numComps, false);
+
+    if (!this->InternalFormat || !this->Format || !this->Type)
+    {
+        vtkErrorMacro("Failed to determine texture parameters. IF="
+                              << this->InternalFormat << " F=" << this->Format << " T=" << this->Type);
+        return false;
+    }
+
+    GLenum target = GL_TEXTURE_2D;
+    this->Target = target;
+    this->Components = numComps;
+    this->Width = width;
+    this->Height = height;
+    this->Depth = 1;
+    this->NumberOfDimensions = 2;
+
+    GLint texunit = texSeq;
+    this->Context->GetState()->vtkglActiveTexture(GL_TEXTURE0+texunit);
+    this->CreateSeqTexture(texSeq);
+    this->Bind();
+
+    // Source texture data from the PBO.
+    this->Context->GetState()->vtkglPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexStorage2D(GL_TEXTURE_2D, 1, this->InternalFormat, static_cast<GLsizei>(this->Width),
+                   static_cast<GLsizei>(this->Height));
+    glTexSubImage2D(this->Target, 0,0,0, static_cast<GLsizei>(this->Width),
+                 static_cast<GLsizei>(this->Height), this->Format, this->Type,
+                 static_cast<const GLvoid*>(data));
+    vtkOpenGLCheckErrorMacro("failed at glTexImage2D");
+
+    this->Deactivate();
+    return true;
+}
+
 bool vtkMultiTextureObjectHelper::CreateSeq3DFromRaw(unsigned int width, unsigned int height, unsigned int depth,
                                                      int numComps, int dataType, void* data, int texSeq) {
 
@@ -124,7 +167,7 @@ void vtkMultiTextureObjectHelper::CreateSeqTexture(int texSeq)
                 glTexParameteri(this->Target, GL_TEXTURE_MAX_LEVEL, this->MaxLevel);
             }
 
-            glBindTexture(this->Target, 0);
+            glBindTexture(this->Target, this->Handle);
         }
     }
 }
