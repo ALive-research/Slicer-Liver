@@ -860,11 +860,11 @@ vtkMRMLMarkupsNode* vtkSlicerLiverResectionsLogic::AddInitializationMarkupsNode(
   switch(resectionNode->GetInitMode())
     {
     case vtkMRMLLiverResectionNode::Curved:
-      initializationMarkupsNode = this->AddResectionPlane(resectionNode);
+      initializationMarkupsNode = this->AddResectionContour(resectionNode);
       break;
 
     case vtkMRMLLiverResectionNode::Flat:
-      initializationMarkupsNode = this->AddResectionContour(resectionNode);
+      initializationMarkupsNode = this->AddResectionPlane(resectionNode);
       break;
     }
 
