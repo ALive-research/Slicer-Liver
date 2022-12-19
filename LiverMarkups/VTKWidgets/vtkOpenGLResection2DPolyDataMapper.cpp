@@ -35,7 +35,7 @@ public:
               ResectionColor{1.0f,1.0f, 1.0f},
               ResectionGridColor{0.0f,0.0f, 0.0f},
               ResectionOpacity(1.0f),
-              InterpolatedMargins(false), ResectionClipOut(false), ShowResection2D(false),
+              InterpolatedMargins(false), ResectionClipOut(false),
               PortalContourSize(0.3f), HepaticContourSize(0.3f),
               PortalContourColor{0.0f, 1.0f, 0.0f},
               HepaticContourColor{0.0f, 1.0f, 0.0f},
@@ -61,7 +61,6 @@ public:
     bool  ResectionClipOut;
     unsigned int GridDivisions;
     float GridThicknessFactor;
-    bool ShowResection2D;
     float PortalContourSize;
     float HepaticContourSize;
     float PortalContourColor[3];
@@ -272,6 +271,9 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
             "  ambientColor = vec3(marker.r,marker.g,marker.b);\n"
             "  diffuseColor = vec3(0.0);\n"
             "}\n"
+
+
+
             );
     vtkShaderProgram::Substitute(
             FSSource, "//VTK::Light::Impl",

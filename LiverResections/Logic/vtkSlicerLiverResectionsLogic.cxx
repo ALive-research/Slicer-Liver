@@ -171,6 +171,7 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
             auto bezierSurfaceDisplayNode =
                     vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(bezierSurfaceNode->GetDisplayNode());
             if (bezierSurfaceDisplayNode) {
+                bezierSurfaceDisplayNode->SetShowCurvatures2D(resectionNode->GetShowCurvatures2D());
                 bezierSurfaceDisplayNode->SetShowResection2D(resectionNode->GetShowResection2D());
                 bezierSurfaceDisplayNode->SetTextureNumComps(resectionNode->GetTextureNumComps());
                 bezierSurfaceDisplayNode->SetClipOut(resectionNode->GetClipOut());

@@ -60,8 +60,8 @@ vtkMRMLLiverResectionNode::vtkMRMLLiverResectionNode()
     InterpolatedMargins(false), ResectionColor{1.0f, 1.0f, 1.0f},
     ResectionMarginColor{1.0f, 0.0f, 0.0f}, UncertaintyMarginColor{1.0f, 1.0f, 0.0f},
     ResectionOpacity(1.0f), GridVisibility(false), GridThickness(0.0f),  ShowResection2D(false), HepaticContourSize(0.0), PortalContourSize(0.0),
-    HepaticContourColor{0.0f, 1.0f, 0.0f}, PortalContourColor{0.0f, 0.0f, 1.0f}, TextureNumComps(0)
-//    VesselSegsColorChart{{1.0f, 1.0f, 1.0f},{1.0f, 1.0f, 1.0f},{1.0f, 1.0f, 1.0f},{1.0f, 1.0f, 1.0f},{1.0f, 1.0f, 1.0f},{1.0f, 1.0f, 1.0f},{1.0f, 1.0f, 1.0f},{1.0f, 1.0f, 1.0f}}
+    HepaticContourColor{0.0f, 1.0f, 0.0f}, PortalContourColor{0.0f, 0.0f, 1.0f}, TextureNumComps(0),
+    ShowCurvatures2D(false)
 {
 }
 

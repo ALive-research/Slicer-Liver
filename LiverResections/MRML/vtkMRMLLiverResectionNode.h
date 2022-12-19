@@ -276,6 +276,15 @@ vtkTypeMacro(vtkMRMLLiverResectionNode, vtkMRMLStorableNode);
     // Set the ShowResection2D state variable
     vtkSetMacro(ShowResection2D, int);
 
+    // Set the ShowResection2D state variable
+    vtkSetMacro(ShowCurvatures2D, bool);
+
+    // Get the ShowResection2D state variable
+    vtkGetMacro(ShowCurvatures2D, bool);
+
+    // Set the ShowResection2D state variable
+    vtkSetMacro(ShowCurvatures2D, int);
+
     // Get HepaticContourSize margin
     vtkGetMacro(HepaticContourSize, double);
 
@@ -356,6 +365,7 @@ private:
     float PortalContourColor[3];
     int TextureNumComps;
     float VesselSegsColorChart;
+    bool ShowCurvatures2D;
 
 private:
     vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode &);

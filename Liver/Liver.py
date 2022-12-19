@@ -223,6 +223,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectogramWidget.PortalContourSizeSpinBox.connect('valueChanged(double)', self.onPortalContourSizeChanged)
         self.resectogramWidget.PortalContourColorPickerButton.connect('colorChanged(QColor)', self.onPortalContourColorChanged)
         self.resectogramWidget.VascularSegmentsNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onVascularSegmentsNodeChanged)
+        self.resectogramWidget.Curvatures2DCheckBox.connect('stateChanged(int)', self.onCurvatures2DChanged)
         # self.resectogramWidget.VascularSegmentsNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'VascularSegments', 'True')
         # self.resectogramWidget.VascularSegmentsNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'Computed', 'True')
 
@@ -607,6 +608,15 @@ class LiverWidget(ScriptedLoadableModuleWidget):
                 renderers.RemoveItem(4)
         else:
             self._currentResectionNode.SetShowResection2D(not self.resectogramWidget.Resection2DCheckBox.isChecked())
+
+    def onCurvatures2DChanged(self):
+        """
+        This function is called when the Curvatures2D checkbox changes.
+        """
+        if self._currentResectionNode is not None:
+            self._currentResectionNode.SetShowCurvatures2D(self.resectogramWidget.Curvatures2DCheckBox.isChecked())
+        else:
+            self._currentResectionNode.SetShowCurvatures2D(self.resectogramWidget.Curvatures2DCheckBox.isChecked())
 
     def onHepaticContourSizeChanged(self):
         """

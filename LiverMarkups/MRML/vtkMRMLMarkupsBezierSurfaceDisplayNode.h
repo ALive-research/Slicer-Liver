@@ -90,6 +90,18 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsBezierSurfaceDisp
     /// set the Resection2D state variable as integer
     void SetShowResection2D(int value)
     { this->ShowResection2D = value!=0?1:0; this->Modified();}
+
+
+    /// Set the ShowCurvatures2D state variable
+    vtkSetMacro(ShowCurvatures2D, bool);
+    /// Get the ShowCurvatures2D state variable
+    vtkGetMacro(ShowCurvatures2D, bool);
+    /// Get the ShowCurvatures2D state variable as integer
+    int GetShowCurvatures2D() const
+    { return static_cast<int>(this->ShowCurvatures2D);}
+    /// set the ShowCurvatures2D state variable as integer
+    void SetShowCurvatures2D(int value)
+    { this->ShowCurvatures2D = value!=0?1:0; this->Modified();}
   //////////////////////////////////
 
   /// Set the clipout state variable
@@ -164,6 +176,7 @@ protected:
   float HepaticContourColor[3];
   float PortalContourColor[3];
   int TextureNumComps;
+  bool ShowCurvatures2D;
 
 
 protected:

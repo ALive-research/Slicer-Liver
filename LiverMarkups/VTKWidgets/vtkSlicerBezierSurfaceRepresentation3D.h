@@ -110,6 +110,9 @@ protected:
     void CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode *node, int numComps);
     void CreateAndTransferVascularSegmentsTexture(vtkMRMLScalarVolumeNode *node);
     void CreateAndTransferMarkerStyleTexture(vtkMRMLScalarVolumeNode *node);
+    vtkSmartPointer<vtkPoints> Ratio();
+//    void CreateCurvatures2DTexture();
+//    void GeneratePlanarSurface();
 protected:
     //k Bezier surface releated elements
     vtkSmartPointer<vtkBezierSurfaceSource> BezierSurfaceSource;
@@ -142,8 +145,13 @@ protected:
     vtkSmartPointer<vtkMultiTextureObjectHelper> VascularSegmentsTexture;
     vtkWeakPointer<vtkMRMLScalarVolumeNode> VascularSegmentsVolumeNode;
 
+    // Marker Style related elements
     vtkSmartPointer<vtkMultiTextureObjectHelper> MarkerStyleTexture;
     vtkSmartPointer<vtkMRMLScalarVolumeNode> MarkerStyleVolumeNode;
+
+    // Curvatures2D related elements
+    vtkSmartPointer<vtkMultiTextureObjectHelper> Curvatures2DTexture;
+    vtkSmartPointer<vtkMRMLScalarVolumeNode> Curvatures2DVolumeNode;
 
 protected:
     vtkSlicerBezierSurfaceRepresentation3D();

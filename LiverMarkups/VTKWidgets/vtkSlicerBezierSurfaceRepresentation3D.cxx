@@ -62,6 +62,7 @@
 #include <vtkAddonMathUtilities.h>
 
 // VTK includes
+#include "vtkCurvatures.h"
 #include "vtkRenderer.h"
 #include <vtkActor.h>
 #include <vtkOrientationMarkerWidget.h>
@@ -92,6 +93,11 @@
 #include <vtkTypeFloat32Array.h>
 #include <vtkImageCast.h>
 #include <vtkRenderWindowInteractor.h>
+
+
+//#include "itkQuadEdgeMesh.h"
+//#include "VNLIterativeSparseSolverTraits.h"
+//#include "itkParameterizationQuadEdgeMeshFilter.h"
 
 //------------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerBezierSurfaceRepresentation3D);
@@ -133,7 +139,7 @@ vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
 
     this->BezierSurfaceControlPoints = vtkSmartPointer<vtkPoints>::New();
     this->BezierSurfaceControlPoints->SetNumberOfPoints(16);
-    this->BezierSurfaceControlPoints->DeepCopy(planeSource->GetOutput()->GetPoints());;
+    this->BezierSurfaceControlPoints->DeepCopy(planeSource->GetOutput()->GetPoints());
 
     this->BezierSurfaceResectionMapper = vtkSmartPointer<vtkOpenGLBezierResectionPolyDataMapper>::New();
     this->BezierSurfaceResectionMapper->SetInputConnection(this->BezierSurfaceNormals->GetOutputPort());
@@ -251,6 +257,12 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode *caller,
             this->MarkerStyleVolumeNode = markerStyle;
     }
 
+    if(BezierSurfaceDisplayNode->GetShowResection2D()){
+        if(BezierSurfaceDisplayNode->GetShowCurvatures2D()){
+
+        }
+    }
+
 
     //------------------- add new renderer here ----------------------//
     auto renderWindow1 = vtkRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
@@ -259,7 +271,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode *caller,
     if(BezierSurfaceDisplayNode->GetShowResection2D()){
         if(renderers->GetNumberOfItems()!=5){
             std::cout<<"-------------------add new renderer------------------"<<endl;
-            double yViewport[4] = {0, 0.6, 0.3, 1.0};
+            double yViewport[4] = {0, 0.6, 0.5, 1.0};
             if (renderWindow1->GetNumberOfLayers() < RENDERER_LAYER+1)
             {
                 renderWindow1->SetNumberOfLayers( RENDERER_LAYER+1 );
@@ -412,15 +424,21 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceGeometry(vtkMRML
                                                        static_cast<float>(point[1]),
                                                        static_cast<float>(point[2]));
         }
-
         this->BezierSurfaceSource->SetControlPoints(this->BezierSurfaceControlPoints);
         this->BezierSurfaceSource->Update();
         this->p = this->BezierSurfaceSource->GetOutput()->GetPoints()->GetData();
         this->p->SetName("BSPoints");
+//        this->GeneratePlanarSurface();
+        auto PlaneControlPoints = Ratio();
+        PlaneControlPoints->Print(std::cout);
         if(this->BezierPlane->GetOutput()->GetPointData()->GetArray("BSPoints")){
+            this->BezierPlane->SetControlPoints(PlaneControlPoints);
+            this->BezierPlane->Update();
             this->BezierPlane->GetOutput()->GetPointData()->RemoveArray("BSPoints");
             this->BezierPlane->GetOutput()->GetPointData()->AddArray(this->p);
         }else{
+            this->BezierPlane->SetControlPoints(PlaneControlPoints);
+            this->BezierPlane->Update();
             this->BezierPlane->GetOutput()->GetPointData()->AddArray(this->p);
         }
     }
@@ -536,8 +554,6 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferVascularSegmentsTe
     cast->SetInputData(imageData);
     cast->SetOutputScalarTypeToFloat();
     cast->Update();
-    cast->GetOutput()->Print(std::cout);
-
     auto dimensions = imageData->GetDimensions();
 
     this->VascularSegmentsTexture->SetWrapS(vtkTextureObject::ClampToBorder);
@@ -602,4 +618,106 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateControlPolygonDisplay(vtkMRML
             controlPoints->Actor->SetVisibility(displayNode->GetWidgetVisibility());
         }
     }
+}
+
+//----------------------------------------------------------------------
+//void vtkSlicerBezierSurfaceRepresentation3D::CreateCurvatures2DTexture(){
+//    auto cc = vtkSmartPointer<vtkCurvatures>::New();
+//    cc->SetInputData(this->BezierSurfaceSource->GetOutput());
+//    cc->SetCurvatureTypeToGaussian();
+//    cc->Update();
+//    cc->GetOutput()->GetPointData()->SetActiveScalars("Gauss_Curvature");
+//    auto scalarRangeCurvatures = cc->GetOutput()
+//            ->GetPointData()
+//            ->GetScalars("Gauss_Curvature")
+//            ->GetRange();
+//    auto scalarRangeElevation =
+//            cc->GetOutput()->GetPointData()->GetScalars("Elevation")->GetRange();
+//}
+
+//void vtkSlicerBezierSurfaceRepresentation3D::GeneratePlanarSurface(){
+//    using CoordType = double;
+//    using MeshType = itk::QuadEdgeMesh<CoordType, 3>;
+//    auto mesh = MeshType::New();
+//    using PointsContainer = MeshType::PointsContainer;
+//    using PointsContainerPointer = MeshType::PointsContainerPointer;
+//    using BorderTransformType = itk::BorderQuadEdgeMeshFilter<MeshType, MeshType>;
+//    using SolverTraits = VNLIterativeSparseSolverTraits<CoordType>;
+//    using ParametrizationType = itk::ParameterizationQuadEdgeMeshFilter<MeshType, MeshType, SolverTraits>;
+//
+//    PointsContainerPointer points = PointsContainer::New();
+//    points->Reserve(400);
+//    using PointType = MeshType::PointType;
+//    PointType p;
+//    p[3] = 0.;
+//
+//    using PointIdentifier = MeshType::PointIdentifier;
+//    PointIdentifier k = 0;
+//
+//    for(int i = 0;i<this->BezierSurfaceSource->GetOutput()->GetNumberOfPoints();i++){
+//        k = i;
+//        p[0]= this->p->GetTuple3(i)[0];
+//        p[1]= this->p->GetTuple3(i)[1];
+//        p[2]= this->p->GetTuple3(i)[2];
+//        points->SetElement(k, p);
+//    }
+//
+//    mesh->SetPoints(points);
+//    auto cells = this->BezierSurfaceSource->GetOutput()->GetPolys();
+//    for(int i = 0;i<this->BezierSurfaceSource->GetOutput()->GetNumberOfPolys();i++){
+//        k = i;
+//        auto ids = vtkSmartPointer<vtkIdList>::New();
+//        cells->GetCellAtId(i,ids);
+//        mesh->AddFaceTriangle(ids->GetId(0),ids->GetId(1),ids->GetId(2));
+//    }
+//
+//    auto border_transform = BorderTransformType::New();
+//    border_transform->SetInput(mesh);
+//    border_transform->SetTransformType(itk::BorderQuadEdgeMeshFilterEnums::BorderTransform::SQUARE_BORDER_TRANSFORM);
+//    itk::ConformalMatrixCoefficients<MeshType> coeff;
+//
+//    auto param = ParametrizationType::New();
+//    param->SetInput(mesh);
+//    param->SetBorderTransform(border_transform);
+//    param->SetCoefficientsMethod(&coeff);
+//    auto newmesh = param->GetOutput();
+//
+//    for(int i = 0;i<this->BezierSurfaceSource->GetOutput()->GetNumberOfPoints();i++){
+//        k = i;
+//        auto p = newmesh->GetPoint(k);
+//        this->p->SetTuple3(i, p[0],p[1],p[2]);
+//    }
+//}
+
+
+vtkSmartPointer<vtkPoints> vtkSlicerBezierSurfaceRepresentation3D::Ratio(){
+    double disU = 0, disV = 0;
+    std::vector<double> p0u = {this->p->GetTuple3(0)[0],this->p->GetTuple3(0)[1],this->p->GetTuple3(0)[2]};
+    std::vector<double> p0v = {this->p->GetTuple3(0)[0],this->p->GetTuple3(0)[1],this->p->GetTuple3(0)[2]};
+
+    for(int i = 1; i<20; i++){
+        std::vector<double> p1 = {this->p->GetTuple3(i)[0],this->p->GetTuple3(i)[1],this->p->GetTuple3(i)[2]};
+        std::vector<double> p2 = {this->p->GetTuple3(20*i)[0],this->p->GetTuple3(20*i)[1],this->p->GetTuple3(20*i)[2]};
+
+        auto d01 = sqrt(pow(p0u[0]-p1[0],2.0)+pow(p0u[1]-p1[1],2.0)+pow(p0u[2]-p1[2],2.0));
+        disU = disU + d01;
+        auto d02 = sqrt(pow(p0v[0]-p2[0],2.0)+pow(p0v[1]-p2[1],2.0)+pow(p0v[2]-p2[2],2.0));
+        disV  = disV + d02;
+        p0u = p1;
+        p0v = p2;
+    }
+
+    std::cout<<"disU"<<disU<<endl;
+    std::cout<<"disV"<<disV<<endl;
+    double ratio = disU/disV;
+
+    auto PlaneControlPoints = vtkSmartPointer<vtkPoints>::New();
+
+    for(int i=0;i<4;i++){
+        PlaneControlPoints->InsertNextPoint(-120,(i*30),0);
+        PlaneControlPoints->InsertNextPoint(-120+(30*ratio)*2,(i*30),0);
+        PlaneControlPoints->InsertNextPoint(-120+(30*ratio)*3,(i*30),0);
+        PlaneControlPoints->InsertNextPoint(-120+(30*ratio)*3,(i*30),0);
+    }
+    return PlaneControlPoints;
 }
