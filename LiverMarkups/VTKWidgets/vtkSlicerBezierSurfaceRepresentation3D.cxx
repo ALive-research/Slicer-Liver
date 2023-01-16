@@ -428,17 +428,12 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceGeometry(vtkMRML
         this->BezierSurfaceSource->Update();
         this->p = this->BezierSurfaceSource->GetOutput()->GetPoints()->GetData();
         this->p->SetName("BSPoints");
-//        this->GeneratePlanarSurface();
-        auto PlaneControlPoints = Ratio();
-        PlaneControlPoints->Print(std::cout);
+
+        Ratio();
         if(this->BezierPlane->GetOutput()->GetPointData()->GetArray("BSPoints")){
-            this->BezierPlane->SetControlPoints(PlaneControlPoints);
-            this->BezierPlane->Update();
             this->BezierPlane->GetOutput()->GetPointData()->RemoveArray("BSPoints");
             this->BezierPlane->GetOutput()->GetPointData()->AddArray(this->p);
         }else{
-            this->BezierPlane->SetControlPoints(PlaneControlPoints);
-            this->BezierPlane->Update();
             this->BezierPlane->GetOutput()->GetPointData()->AddArray(this->p);
         }
     }
@@ -620,77 +615,37 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateControlPolygonDisplay(vtkMRML
     }
 }
 
+//
+////----------------------------------------------------------------------
+//void vtkSlicerBezierSurfaceRepresentation3D::ComputePlanningVolumetry(){
+//    vtkNew<vtkBezierSurfaceSource> bezierHR;
+//    bezierHR->SetResolution(300,300);
+//    bezierHR->SetNumberOfControlPoints(4,4);
+//}
+
+
 //----------------------------------------------------------------------
 //void vtkSlicerBezierSurfaceRepresentation3D::CreateCurvatures2DTexture(){
 //    auto cc = vtkSmartPointer<vtkCurvatures>::New();
 //    cc->SetInputData(this->BezierSurfaceSource->GetOutput());
 //    cc->SetCurvatureTypeToGaussian();
 //    cc->Update();
-//    cc->GetOutput()->GetPointData()->SetActiveScalars("Gauss_Curvature");
+//    cc->GetOutput()->GetPointData()->SetActiveScalars("Maximum_Curvature");
 //    auto scalarRangeCurvatures = cc->GetOutput()
 //            ->GetPointData()
 //            ->GetScalars("Gauss_Curvature")
 //            ->GetRange();
 //    auto scalarRangeElevation =
 //            cc->GetOutput()->GetPointData()->GetScalars("Elevation")->GetRange();
-//}
-
-//void vtkSlicerBezierSurfaceRepresentation3D::GeneratePlanarSurface(){
-//    using CoordType = double;
-//    using MeshType = itk::QuadEdgeMesh<CoordType, 3>;
-//    auto mesh = MeshType::New();
-//    using PointsContainer = MeshType::PointsContainer;
-//    using PointsContainerPointer = MeshType::PointsContainerPointer;
-//    using BorderTransformType = itk::BorderQuadEdgeMeshFilter<MeshType, MeshType>;
-//    using SolverTraits = VNLIterativeSparseSolverTraits<CoordType>;
-//    using ParametrizationType = itk::ParameterizationQuadEdgeMeshFilter<MeshType, MeshType, SolverTraits>;
 //
-//    PointsContainerPointer points = PointsContainer::New();
-//    points->Reserve(400);
-//    using PointType = MeshType::PointType;
-//    PointType p;
-//    p[3] = 0.;
 //
-//    using PointIdentifier = MeshType::PointIdentifier;
-//    PointIdentifier k = 0;
 //
-//    for(int i = 0;i<this->BezierSurfaceSource->GetOutput()->GetNumberOfPoints();i++){
-//        k = i;
-//        p[0]= this->p->GetTuple3(i)[0];
-//        p[1]= this->p->GetTuple3(i)[1];
-//        p[2]= this->p->GetTuple3(i)[2];
-//        points->SetElement(k, p);
-//    }
-//
-//    mesh->SetPoints(points);
-//    auto cells = this->BezierSurfaceSource->GetOutput()->GetPolys();
-//    for(int i = 0;i<this->BezierSurfaceSource->GetOutput()->GetNumberOfPolys();i++){
-//        k = i;
-//        auto ids = vtkSmartPointer<vtkIdList>::New();
-//        cells->GetCellAtId(i,ids);
-//        mesh->AddFaceTriangle(ids->GetId(0),ids->GetId(1),ids->GetId(2));
-//    }
-//
-//    auto border_transform = BorderTransformType::New();
-//    border_transform->SetInput(mesh);
-//    border_transform->SetTransformType(itk::BorderQuadEdgeMeshFilterEnums::BorderTransform::SQUARE_BORDER_TRANSFORM);
-//    itk::ConformalMatrixCoefficients<MeshType> coeff;
-//
-//    auto param = ParametrizationType::New();
-//    param->SetInput(mesh);
-//    param->SetBorderTransform(border_transform);
-//    param->SetCoefficientsMethod(&coeff);
-//    auto newmesh = param->GetOutput();
-//
-//    for(int i = 0;i<this->BezierSurfaceSource->GetOutput()->GetNumberOfPoints();i++){
-//        k = i;
-//        auto p = newmesh->GetPoint(k);
-//        this->p->SetTuple3(i, p[0],p[1],p[2]);
-//    }
 //}
 
 
-vtkSmartPointer<vtkPoints> vtkSlicerBezierSurfaceRepresentation3D::Ratio(){
+
+
+void vtkSlicerBezierSurfaceRepresentation3D::Ratio(){
     double disU = 0, disV = 0;
     std::vector<double> p0u = {this->p->GetTuple3(0)[0],this->p->GetTuple3(0)[1],this->p->GetTuple3(0)[2]};
     std::vector<double> p0v = {this->p->GetTuple3(0)[0],this->p->GetTuple3(0)[1],this->p->GetTuple3(0)[2]};
@@ -709,15 +664,14 @@ vtkSmartPointer<vtkPoints> vtkSlicerBezierSurfaceRepresentation3D::Ratio(){
 
     std::cout<<"disU"<<disU<<endl;
     std::cout<<"disV"<<disV<<endl;
-    double ratio = disU/disV;
-
-    auto PlaneControlPoints = vtkSmartPointer<vtkPoints>::New();
-
-    for(int i=0;i<4;i++){
-        PlaneControlPoints->InsertNextPoint(-120,(i*30),0);
-        PlaneControlPoints->InsertNextPoint(-120+(30*ratio)*2,(i*30),0);
-        PlaneControlPoints->InsertNextPoint(-120+(30*ratio)*3,(i*30),0);
-        PlaneControlPoints->InsertNextPoint(-120+(30*ratio)*3,(i*30),0);
+    float matR[2];
+    if(disU>=disV){
+        matR[0] = 1;
+        matR[1] = disV/disU;
+    }else{
+        matR[0] = disU/disV;
+        matR[1] = 1;
     }
-    return PlaneControlPoints;
+
+    this->BezierSurfaceResectionMapper2D->SetMatRatio(matR);
 }

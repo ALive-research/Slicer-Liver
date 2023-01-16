@@ -140,6 +140,10 @@ vtkTypeMacro(vtkOpenGLResection2DPolyDataMapper, vtkOpenGLPolyDataMapper);
     int GetTextureNumComps() const;
     void SetTextureNumComps(int numComps);
 
+    // Get and Set Ratio
+    void SetMatRatio(float matR[2]);
+    float const*  GetMatRatio() const;
+
 protected:
     vtkOpenGLResection2DPolyDataMapper();
     ~vtkOpenGLResection2DPolyDataMapper();

@@ -110,7 +110,8 @@ protected:
     void CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode *node, int numComps);
     void CreateAndTransferVascularSegmentsTexture(vtkMRMLScalarVolumeNode *node);
     void CreateAndTransferMarkerStyleTexture(vtkMRMLScalarVolumeNode *node);
-    vtkSmartPointer<vtkPoints> Ratio();
+    void ComputePlanningVolumetry();
+    void Ratio();
 //    void CreateCurvatures2DTexture();
 //    void GeneratePlanarSurface();
 protected:

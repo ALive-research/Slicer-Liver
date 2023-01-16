@@ -66,6 +66,7 @@ public:
     float PortalContourColor[3];
     float HepaticContourColor[3];
     int TextureNumComps;
+    float MatRatio[2];
 };
 
 //------------------------------------------------------------------------------
@@ -127,6 +128,7 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
             "uniform mat4 uShiftScale;\n"
             "uniform mat4 uRasToIjk;\n"
             "uniform mat4 uIjkToTexture;\n"
+            "uniform vec2 uMatRatio;\n"
             "in vec4 vertexMCBS;\n"
             "out vec4 vertexMCVSOutputBS;\n"
             "out vec4 vertexWCVSOutputBS;\n");
@@ -141,6 +143,8 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
             "vertexWCVSOutputBS = uIjkToTexture*uRasToIjk*uShiftScaleBS*vertexMCBS;\n"
             "mat4 m = mat4(1.0);\n"
             "m[2][2] = 0.0;\n"
+            "m[0][0] = uMatRatio[0];\n"
+            "m[1][1] = uMatRatio[1];\n"
             "gl_Position = m * MCDCMatrix * vertexMC;\n");
 
     vtkShaderProgram::Substitute(
@@ -174,7 +178,8 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
             "uniform vec3 uHepaticContourColor;\n"
             "uniform int uTextureNumComps;\n"
             "uniform float uPortalContourSize;\n"
-            "uniform float uHepaticContourSize;\n");
+            "uniform float uHepaticContourSize;\n"
+    );
 
     vtkShaderProgram::Substitute(
             FSSource, "//VTK::Color::Impl",
@@ -271,8 +276,6 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
             "  ambientColor = vec3(marker.r,marker.g,marker.b);\n"
             "  diffuseColor = vec3(0.0);\n"
             "}\n"
-
-
 
             );
     vtkShaderProgram::Substitute(
@@ -443,6 +446,11 @@ void vtkOpenGLResection2DPolyDataMapper::SetMapperShaderParameters(
     if (cellBO.Program->IsUniformUsed("uHepaticContourSize"))
     {
         cellBO.Program->SetUniformf("uHepaticContourSize", this->Impl->HepaticContourSize);
+    }
+
+    if (cellBO.Program->IsUniformUsed("uMatRatio"))
+    {
+        cellBO.Program->SetUniform2f("uMatRatio", this->Impl->MatRatio);
     }
 
     Superclass::SetMapperShaderParameters(cellBO, ren, actor);
@@ -828,5 +836,20 @@ int vtkOpenGLResection2DPolyDataMapper::GetTextureNumComps() const
 void vtkOpenGLResection2DPolyDataMapper::SetTextureNumComps(int numComps)
 {
     this->Impl->TextureNumComps = numComps;
+    this->Modified();
+}
+
+
+//------------------------------------------------------------------------------
+float const* vtkOpenGLResection2DPolyDataMapper::GetMatRatio() const
+{
+    return this->Impl->MatRatio;
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLResection2DPolyDataMapper::SetMatRatio(float matR[2])
+{
+    this->Impl->MatRatio[0] = matR[0];
+    this->Impl->MatRatio[1] = matR[1];
     this->Modified();
 }
