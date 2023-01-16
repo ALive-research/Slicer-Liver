@@ -341,24 +341,31 @@ vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLLiverResectionNode *re
         return nullptr;
     }
 
-    // Computing the position of the initial points
-    const double *bounds = resectionNode->GetTargetOrganModelNode()->GetPolyData()->GetBounds();
 
-    auto p1 = vtkVector3d(bounds[0], (bounds[3] - bounds[2]) / 2.0, (bounds[5] - bounds[4]) / 2.0);
-    auto p2 = vtkVector3d((bounds[1] - bounds[0]) / 2.0, (bounds[3] - bounds[2]) / 2.0, (bounds[5] - bounds[4]) / 2.0);
+  // Computing the position of the initial points
+  const double *bounds = resectionNode->GetTargetOrganModelNode()->GetPolyData()->GetBounds();
+  auto p1 = vtkVector3d(bounds[0],(bounds[3]-bounds[2])/2.0, (bounds[5]-bounds[4])/2.0);
+  auto p2 = vtkVector3d((bounds[1]-bounds[0])/2.0,(bounds[3]-bounds[2])/2.0, (bounds[5]-bounds[4])/2.0);
 
-    auto distanceContourNode = vtkSmartPointer<vtkMRMLMarkupsDistanceContourNode>::New();
-    distanceContourNode->AddControlPoint(p1);
-    distanceContourNode->AddControlPoint(p2);
-    distanceContourNode->SetTarget(resectionNode->GetTargetOrganModelNode());
+  auto distanceContourNode = vtkMRMLMarkupsDistanceContourNode::SafeDownCast(mrmlScene->AddNewNodeByClass("vtkMRMLMarkupsDistanceContourNode"));
+  if (!distanceContourNode)
+    {
+      vtkErrorMacro("Error in AddResectionPlane: Error creating vtkMRMLMarkupsDistanceContourNode.");
+      return nullptr;
+    }
 
-    auto distanceContourDisplayNode = vtkSmartPointer<vtkMRMLMarkupsDisplayNode>::New();
-    distanceContourDisplayNode->PropertiesLabelVisibilityOff();
-    distanceContourDisplayNode->SetSnapMode(vtkMRMLMarkupsDisplayNode::SnapModeUnconstrained);
+  distanceContourNode->CreateDefaultDisplayNodes();
+  distanceContourNode->AddControlPoint(p1);
+  distanceContourNode->AddControlPoint(p2);
+  distanceContourNode->SetTarget(resectionNode->GetTargetOrganModelNode());
 
-    mrmlScene->AddNode(distanceContourDisplayNode);
-    distanceContourNode->SetAndObserveDisplayNodeID(distanceContourDisplayNode->GetID());
-    mrmlScene->AddNode(distanceContourNode);
+  // auto distanceContourDisplayNode = vtkSmartPointer<vtkMRMLMarkupsDisplayNode>::New();
+  // distanceContourDisplayNode->PropertiesLabelVisibilityOff();
+  // distanceContourDisplayNode->SetSnapMode(vtkMRMLMarkupsDisplayNode::SnapModeUnconstrained);
+
+  // mrmlScene->AddNode(distanceContourDisplayNode);
+  // distanceContourNode->SetAndObserveDisplayNodeID(distanceContourDisplayNode->GetID());
+  // mrmlScene->AddNode(distanceContourNode);
 
     return distanceContourNode;
 }
@@ -788,14 +795,16 @@ vtkMRMLMarkupsNode *
 vtkSlicerLiverResectionsLogic::AddInitializationMarkupsNode(vtkMRMLLiverResectionNode *resectionNode) const {
     vtkMRMLMarkupsNode *initializationMarkupsNode = nullptr;
 
-    switch (resectionNode->GetInitMode()) {
-        case vtkMRMLLiverResectionNode::Flat:
-            initializationMarkupsNode = this->AddResectionPlane(resectionNode);
-            break;
 
-        case vtkMRMLLiverResectionNode::Curved:
-            initializationMarkupsNode = this->AddResectionContour(resectionNode);
-            break;
+  switch(resectionNode->GetInitMode())
+    {
+    case vtkMRMLLiverResectionNode::Curved:
+      initializationMarkupsNode = this->AddResectionContour(resectionNode);
+      break;
+
+    case vtkMRMLLiverResectionNode::Flat:
+      initializationMarkupsNode = this->AddResectionPlane(resectionNode);
+      break;
     }
 
     if (!initializationMarkupsNode) {

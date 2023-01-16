@@ -45,6 +45,8 @@
 #include "vtkMRMLMarkupsSlicingContourNode.h"
 #include "vtkMRMLMarkupsSlicingContourDisplayNode.h"
 #include "vtkMRMLMarkupsDistanceContourNode.h"
+#include "vtkMRMLMarkupsDistanceContourDisplayNode.h"
+#include "vtkMRMLMarkupsDistanceContourNode.h"
 
 // MRML includes
 #include <vtkMRMLModelNode.h>
@@ -92,6 +94,7 @@ void vtkSlicerLiverMarkupsLogic::RegisterNodes()
   // Markups nodes are registerd by vtkSlicerMarkupsLogic::RegisterMarkupsNode
   // called in the module class
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsSlicingContourDisplayNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsDistanceContourDisplayNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceDisplayNode>::New());
 }
 

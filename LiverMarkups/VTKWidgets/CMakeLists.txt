@@ -14,6 +14,10 @@ set(${KIT}_INCLUDE_DIRECTORIES
 set(${KIT}_SRCS
         vtkSlicerSlicingContourWidget.h
         vtkSlicerSlicingContourWidget.cxx
+        vtkOpenGLSlicingContourPolyDataMapper.h
+        vtkOpenGLSlicingContourPolyDataMapper.cxx
+        vtkOpenGLDistanceContourPolyDataMapper.h
+        vtkOpenGLDistanceContourPolyDataMapper.cxx
         vtkSlicerSlicingContourRepresentation3D.h
         vtkSlicerSlicingContourRepresentation3D.cxx
         vtkSlicerSlicingContourRepresentation2D.h

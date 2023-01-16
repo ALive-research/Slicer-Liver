@@ -37,47 +37,26 @@
 
 ==============================================================================*/
 
-#include "vtkMRMLMarkupsDistanceContourNode.h"
 #include "vtkMRMLMarkupsDistanceContourDisplayNode.h"
-
-// MRML includes
-#include <vtkMRMLScene.h>
 
 // VTK includes
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
 
-//--------------------------------------------------------------------------------
-vtkMRMLNodeNewMacro(vtkMRMLMarkupsDistanceContourNode);
+//----------------------------------------------------------------------------
+vtkMRMLNodeNewMacro(vtkMRMLMarkupsDistanceContourDisplayNode);
 
-//--------------------------------------------------------------------------------
-vtkMRMLMarkupsDistanceContourNode::vtkMRMLMarkupsDistanceContourNode()
-  :Superclass(), Target(nullptr)
+//----------------------------------------------------------------------------
+vtkMRMLMarkupsDistanceContourDisplayNode::vtkMRMLMarkupsDistanceContourDisplayNode()
+  :Superclass()
 {
 }
 
 //----------------------------------------------------------------------------
-void vtkMRMLMarkupsDistanceContourNode::PrintSelf(ostream& os, vtkIndent indent)
+vtkMRMLMarkupsDistanceContourDisplayNode::~vtkMRMLMarkupsDistanceContourDisplayNode()=default;
+
+//----------------------------------------------------------------------------
+void vtkMRMLMarkupsDistanceContourDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
 {
   Superclass::PrintSelf(os,indent);
-}
-
-void vtkMRMLMarkupsDistanceContourNode::CreateDefaultDisplayNodes()
-{
-  if (vtkMRMLMarkupsDistanceContourDisplayNode::SafeDownCast(this->GetDisplayNode()))
-    {
-    // display node already exists
-    return;
-    }
-
-  auto scene = this->GetScene();
-  if (!scene)
-    {
-    vtkErrorMacro("vtkMRMLMarkupsDistanceContourNode::CreateDefaultDisplayNodes failed: scene is invalid");
-    return;
-    }
-
-  auto dispNode = scene->AddNewNodeByClass("vtkMRMLMarkupsDistanceContourDisplayNode");
-
-  this->SetAndObserveDisplayNodeID(dispNode->GetID());
 }

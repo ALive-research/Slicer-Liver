@@ -37,65 +37,37 @@
 
 ==============================================================================*/
 
-#ifndef __vtkmrmlmarkupsslicingcontournode_h_
-#define __vtkmrmlmarkupsslicingcontournode_h_
+#ifndef __vtkmrmlmarkupsdistancecontourdisplaynode_h_
+#define __vtkmrmlmarkupsdistancecontourdisplaynode_h_
 
 #include "vtkSlicerLiverMarkupsModuleMRMLExport.h"
 
-// MRML includes
-#include <vtkMRMLMarkupsLineNode.h>
-#include <vtkMRMLModelNode.h>
-
-//VTK includes
-#include <vtkWeakPointer.h>
+#include <vtkMRMLMarkupsDisplayNode.h>
 
 //-----------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsSlicingContourNode
-: public vtkMRMLMarkupsLineNode
+class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsDistanceContourDisplayNode
+: public vtkMRMLMarkupsDisplayNode
 {
-public:
-  static vtkMRMLMarkupsSlicingContourNode* New();
-  vtkTypeMacro(vtkMRMLMarkupsSlicingContourNode, vtkMRMLMarkupsLineNode);
+ public:
+  static vtkMRMLMarkupsDistanceContourDisplayNode* New();
+  vtkTypeMacro(vtkMRMLMarkupsDistanceContourDisplayNode, vtkMRMLMarkupsDisplayNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  //--------------------------------------------------------------------------------
+  //--------------------------------------------------------------------------
   // MRMLNode methods
-  //--------------------------------------------------------------------------------
-  const char* GetIcon() override {return ":/Icons/MarkupsGeneric.png";}
-  const char* GetAddIcon() override {return ":/Icons/MarkupsGenericMouseModePlace.png";}
-  const char* GetPlaceAddIcon() override {return ":/Icons/MarkupsGenericMouseModePlaceAdd.png";}
+  //--------------------------------------------------------------------------
 
   vtkMRMLNode* CreateNodeInstance() override;
-  void CreateDefaultDisplayNodes() override;
 
-  /// Get node XML tag name (like Volume, Model)
-  ///
-  const char* GetNodeTagName() override {return "MarkupsSlicingContour";}
-
-  /// Get markup name
-  const char* GetMarkupType() override {return "SlicingContour";}
-
-  /// Get markup short name
-  const char* GetDefaultNodeNamePrefix() override {return "SC";}
-
-  /// \sa vtkMRMLNode::CopyContent
-  vtkMRMLCopyContentDefaultMacro(vtkMRMLMarkupsSlicingContourNode);
-
-  vtkMRMLModelNode* GetTarget() const {return this->Target;}
-  void SetTarget(vtkMRMLModelNode* target) {this->Target = target; this->Modified();}
+  /// Get node XML tag name (like Volume, Markups)
+  const char* GetNodeTagName() override { return "MarkupsDistanceContourDisplay"; };
 
 protected:
-  vtkMRMLMarkupsSlicingContourNode();
-  ~vtkMRMLMarkupsSlicingContourNode() override = default;
-
-private:
- vtkWeakPointer<vtkMRMLModelNode> Target;
-
-private:
- vtkMRMLMarkupsSlicingContourNode(const vtkMRMLMarkupsSlicingContourNode&);
- void operator=(const vtkMRMLMarkupsSlicingContourNode&);
-
-
+  vtkMRMLMarkupsDistanceContourDisplayNode();
+  ~vtkMRMLMarkupsDistanceContourDisplayNode() override;
+  vtkMRMLMarkupsDistanceContourDisplayNode( const vtkMRMLMarkupsDistanceContourDisplayNode& );
+  void operator= ( const vtkMRMLMarkupsDistanceContourDisplayNode& );
 };
 
-#endif //__vtkmrmlmarkupsslicingcontournode_h_
+
+#endif // __vtkmrmlmarkupsdistancecontourdisplaynode_h_
