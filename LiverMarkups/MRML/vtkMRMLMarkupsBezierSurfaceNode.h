@@ -89,6 +89,14 @@ public:
   vtkMRMLScalarVolumeNode* GetDistanceMapVolumeNode() const
   {return this->DistanceMap;}
 
+  /// Set the Vascular Segments
+  void SetVascularSegmentsVolumeNode(vtkMRMLScalarVolumeNode* volumeNode)
+  {this->VascularSegments = volumeNode; this->Modified();}
+
+  /// Get the
+  vtkMRMLScalarVolumeNode* GetVascularSegmentsVolumeNode() const
+  {return this->VascularSegments;}
+
   /// Get the distance map margin
   vtkGetMacro(ResectionMargin, double);
 
@@ -100,6 +108,18 @@ public:
 
   /// Set the distance map margin
   vtkSetMacro(UncertaintyMargin, double);
+
+  /// Get the distance map margin
+  vtkGetMacro(HepaticContourSize, double);
+
+  /// Set the distance map margin
+  vtkSetMacro(HepaticContourSize, double);
+
+  /// Get the distance map margin
+  vtkGetMacro(PortalContourSize, double);
+
+  /// Set the distance map margin
+  vtkSetMacro(PortalContourSize, double);
 
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLMarkupsBezierSurfaceNode);
@@ -113,8 +133,11 @@ protected:
 private:
  vtkWeakPointer<vtkMRMLModelNode> Target;
  vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMap;
+ vtkWeakPointer<vtkMRMLScalarVolumeNode> VascularSegments;
  double ResectionMargin;
  double UncertaintyMargin;
+ double HepaticContourSize;
+ double PortalContourSize;
 
 private:
  vtkMRMLMarkupsBezierSurfaceNode(const vtkMRMLMarkupsBezierSurfaceNode&);
