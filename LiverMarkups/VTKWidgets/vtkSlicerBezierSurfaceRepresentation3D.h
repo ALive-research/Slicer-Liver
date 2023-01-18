@@ -51,7 +51,8 @@
 // VTK includes
 #include <vtkWeakPointer.h>
 #include <vtkSmartPointer.h>
-
+#include "vtkOpenGLPolyDataMapper2D.h"
+#include "vtkActor2D.h"
 //------------------------------------------------------------------------------
 class vtkBezierSurfaceSource;
 class vtkOpenGLActor;
@@ -61,6 +62,7 @@ class vtkPoints;
 class vtkTextureObject;
 class vtkTubeFilter;
 class vtkOpenGLBezierResectionPolyDataMapper;
+class vtkOpenGLResection2DPolyDataMapper;
 
 //------------------------------------------------------------------------------
 class vtkMRMLMarkupsBezierSurfaceNode;
@@ -99,6 +101,10 @@ protected:
   vtkSmartPointer<vtkOpenGLBezierResectionPolyDataMapper> BezierSurfaceResectionMapper;
   vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor;
   vtkSmartPointer<vtkPolyDataNormals> BezierSurfaceNormals;
+  vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor2D;
+  vtkSmartPointer<vtkOpenGLResection2DPolyDataMapper> BezierSurfaceResectionMapper2D;
+  vtkSmartPointer<vtkBezierSurfaceSource> BezierPlane;
+  vtkSmartPointer<vtkDataArray> p;
 
   // Control polygon related elements
   vtkSmartPointer<vtkPolyData> ControlPolygonPolyData;
@@ -112,6 +118,8 @@ protected:
   vtkNew<vtkMatrix4x4> VBOShiftScale;
   vtkNew<vtkTransform> VBOInverseTransform;
   vtkWeakPointer<vtkShaderProperty> ShaderProperty;
+  vtkSmartPointer<vtkRenderer> CoRenderer2D;
+
 
 protected:
   vtkSlicerBezierSurfaceRepresentation3D();
