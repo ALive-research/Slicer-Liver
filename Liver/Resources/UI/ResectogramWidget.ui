@@ -180,7 +180,7 @@
       <item>
        <widget class="ctkCollapsibleGroupBox" name="VsacularSegmentsGroupBox">
         <property name="enabled">
-         <bool>true</bool>
+         <bool>false</bool>
         </property>
         <property name="title">
          <string>Vsacular Segments Choice</string>

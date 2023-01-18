@@ -343,6 +343,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
           renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
           if renderers.GetNumberOfItems() == 5:
             renderers.RemoveItem(4)
+          self.resectogramWidget.Resection2DCheckBox.setCheckState(0)
+          self._currentResectionNode.SetShowResection2D(False)
 
     self._currentResectionNode = activeResectionNode
 
@@ -353,7 +355,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     if self._currentResectionNode is not None:
       distanceMapNode = self.resectionsWidget.DistanceMapNodeComboBox.currentNode()
       self._currentResectionNode.SetTextureNumComps(self.numComps)
-      self._currentResectionNode.SetDistanceMapVolumeNode(self.resectionsWidget.DistanceMapNodeComboBox.currentNode())
+      self._currentResectionNode.SetDistanceMapVolumeNode(distanceMapNode)
       self.resectionsWidget.ResectionMarginGroupBox.setEnabled(distanceMapNode is not None)
       self.resectionsWidget.UncertaintyMarginGroupBox.setEnabled(distanceMapNode is not None)
       self.resectionsWidget.ResectionPreviewGroupBox.setEnabled(distanceMapNode is not None)
@@ -593,6 +595,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       if self.distanceMapsWidget.PortalSegmentSelectorWidget.currentNode():
         self.resectogramWidget.PortalContourGroupBox.setEnabled(
           self.resectogramWidget.Resection2DCheckBox.isChecked())
+      self.resectogramWidget.VsacularSegmentsGroupBox.setEnabled(
+        self.resectogramWidget.Resection2DCheckBox.isChecked())
       renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
       if self.resectogramWidget.Resection2DCheckBox.isChecked() == 0 and renderers.GetNumberOfItems() == 5:
         renderers.RemoveItem(4)
