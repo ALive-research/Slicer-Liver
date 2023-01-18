@@ -479,7 +479,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     # threeDView = threeDWidget.threeDView()
     # threeDView.resetFocalPoint()
 
-    self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, outputVolumeNode)
+    self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode)
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
     slicer.util.showStatusMessage('')
@@ -581,6 +581,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
       if self.resectogramWidget.Resection2DCheckBox.isChecked() == 0 and renderers.GetNumberOfItems() == 5:
         renderers.RemoveItem(4)
+    else:
+      self._currentResectionNode.SetShowResection2D(not self.resectogramWidget.Resection2DCheckBox.isChecked())
 
   def onHepaticContourSizeChanged(self):
     """
@@ -652,7 +654,7 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     """
     ScriptedLoadableModuleLogic.__init__(self)
 
-  def computeDistanceMaps(self, tumorNode, parenchymaNode, outputNode):
+  def computeDistanceMaps(self, tumorNode, parenchymaNode, hepaticNode, portalNode, outputNode):
 
     if outputNode is not None:
       import sitkUtils
