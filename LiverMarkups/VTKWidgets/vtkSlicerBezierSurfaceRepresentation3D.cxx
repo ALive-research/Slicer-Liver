@@ -170,24 +170,24 @@ vtkSlicerBezierSurfaceRepresentation3D::~vtkSlicerBezierSurfaceRepresentation3D(
 //----------------------------------------------------------------------
 void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void *callData /*=nullptr*/)
 {
+  this->Superclass::UpdateFromMRML(caller, event, callData);
 
- this->Superclass::UpdateFromMRML(caller, event, callData);
+  auto liverMarkupsBezierSurfaceNode =
+    vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(this->GetMarkupsNode());
+  if (!liverMarkupsBezierSurfaceNode || !this->IsDisplayable())
+    {
+    this->VisibilityOff();
+    return;
+    }
 
- auto liverMarkupsBezierSurfaceNode =
-   vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(this->GetMarkupsNode());
- if (!liverMarkupsBezierSurfaceNode || !this->IsDisplayable())
-   {
-   this->VisibilityOff();
-   return;
-   }
+  this->UpdateBezierSurfaceGeometry(liverMarkupsBezierSurfaceNode);
+  this->UpdateBezierSurfaceDisplay(liverMarkupsBezierSurfaceNode);
+  this->UpdateControlPolygonGeometry(liverMarkupsBezierSurfaceNode);
+  this->UpdateControlPolygonDisplay(liverMarkupsBezierSurfaceNode);
 
- this->UpdateBezierSurfaceGeometry(liverMarkupsBezierSurfaceNode);
- this->UpdateBezierSurfaceDisplay(liverMarkupsBezierSurfaceNode);
- this->UpdateControlPolygonGeometry(liverMarkupsBezierSurfaceNode);
- this->UpdateControlPolygonDisplay(liverMarkupsBezierSurfaceNode);
-
-  double diameter = ( this->MarkupsDisplayNode->GetCurveLineSizeMode() == vtkMRMLMarkupsDisplayNode::UseLineDiameter ?
-    this->MarkupsDisplayNode->GetLineDiameter() : this->ControlPointSize * this->MarkupsDisplayNode->GetLineThickness() );
+  double diameter = (this->MarkupsDisplayNode->GetCurveLineSizeMode() == vtkMRMLMarkupsDisplayNode::UseLineDiameter ?
+                     this->MarkupsDisplayNode->GetLineDiameter() : this->ControlPointSize
+                       * this->MarkupsDisplayNode->GetLineThickness());
   this->ControlPolygonTubeFilter->SetRadius(diameter * 0.5);
 
   int controlPointType = Active;
@@ -195,15 +195,19 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
     {
     controlPointType = this->GetAllControlPointsSelected() ? Selected : Unselected;
     }
+
   this->ControlPolygonActor->SetProperty(this->GetControlPointsPipeline(controlPointType)->Property);
 
   // Update the distance map as 3D texture (if changed)
   auto distanceMap = liverMarkupsBezierSurfaceNode->GetDistanceMapVolumeNode();
-  auto BezierSurfaceDisplayNode = vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(liverMarkupsBezierSurfaceNode->GetDisplayNode());
-  if ( this->DistanceMapVolumeNode != distanceMap)
+  auto BezierSurfaceDisplayNode =
+    vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(liverMarkupsBezierSurfaceNode->GetDisplayNode());
+  if (this->DistanceMapVolumeNode != distanceMap)
     {
-    std::cout<<"-------------numcomps: "<<BezierSurfaceDisplayNode->GetTextureNumComps()<<std::endl;
-    this->CreateAndTransferDistanceMapTexture(distanceMap);
+    if (this->DistanceMapVolumeNode != distanceMap)
+      {
+      this->CreateAndTransferDistanceMapTexture(distanceMap, BezierSurfaceDisplayNode->GetTextureNumComps());
+      }
 
     // Update transformation matrices
     auto imageData = distanceMap ? distanceMap->GetImageData() : nullptr;
@@ -343,7 +347,7 @@ vtkTypeBool vtkSlicerBezierSurfaceRepresentation3D::HasTranslucentPolygonalGeome
   if (this->BezierSurfaceActor->GetVisibility() && this->BezierSurfaceActor->HasTranslucentPolygonalGeometry()) {
     return true;
     }
-  if (this->BezierSurfaceActor->GetVisibility() && this->BezierSurfaceActor->HasTranslucentPolygonalGeometry())
+  if (this->BezierSurfaceActor2D->GetVisibility() && this->BezierSurfaceActor2D->HasTranslucentPolygonalGeometry())
     {
     return true;
     }
@@ -493,7 +497,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateControlPolygonGeometry(vtkMRM
 }
 
 //----------------------------------------------------------------------
-void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode* node)
+void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode* node, int numComps)
 {
   auto renderWindow = vtkOpenGLRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
   this->DistanceMapTexture = vtkSmartPointer<vtkTextureObject>::New();
@@ -521,7 +525,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture
   this->DistanceMapTexture->SetMinificationFilter(vtkTextureObject::Linear);
   this->DistanceMapTexture->SetMagnificationFilter(vtkTextureObject::Linear);
   this->DistanceMapTexture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
-  this->DistanceMapTexture->Create3DFromRaw(dimensions[0], dimensions[1], dimensions[2], 2, VTK_FLOAT, imageData->GetScalarPointer());
+  this->DistanceMapTexture->Create3DFromRaw(dimensions[0], dimensions[1], dimensions[2], numComps, VTK_FLOAT, imageData->GetScalarPointer());
 }
 
 //----------------------------------------------------------------------
