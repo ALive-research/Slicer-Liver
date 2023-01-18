@@ -79,6 +79,17 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsBezierSurfaceDisp
   void SetClipOut(int value)
   { this->ClipOut = value!=0?1:0; this->Modified();}
 
+  /// Set the Resection2D state variable
+  vtkSetMacro(ShowResection2D, bool);
+  /// Get the Resection2D state variable
+  vtkGetMacro(ShowResection2D, bool);
+  /// Get the Resection2D state variable as integer
+  int GetShowResection2D() const
+  { return static_cast<int>(this->ShowResection2D);}
+  /// set the Resection2D state variable as integer
+  void SetShowResection2D(int value)
+  { this->ShowResection2D = value!=0?1:0; this->Modified();}
+
   /// Set the clipout state variable
   vtkSetMacro(WidgetVisibility, bool);
   /// Get the clipout state variable
@@ -123,7 +134,19 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsBezierSurfaceDisp
   vtkGetMacro(GridThickness, float);
   /// Set the grid thickness
   vtkSetMacro(GridThickness, float);
-
+  /// Get the resection color
+  vtkGetVector3Macro(HepaticContourColor, float);
+  /// Set the resection color
+  vtkSetVector3Macro(HepaticContourColor, float);
+  /// Get the resection color
+  vtkGetVector3Macro(PortalContourColor, float);
+  /// Set the resection color
+  vtkSetVector3Macro(PortalContourColor, float);
+  /// Get the TextureNumComps
+  vtkGetMacro(TextureNumComps, int);
+  /// Set the TextureNumComps
+  vtkSetMacro(TextureNumComps, int);
+  /// Get the resection color
 protected:
   bool ClipOut;
   bool WidgetVisibility;
@@ -135,6 +158,10 @@ protected:
   float ResectionOpacity;
   float GridDivisions;
   float GridThickness;
+  bool ShowResection2D;
+  float HepaticContourColor[3];
+  float PortalContourColor[3];
+  int TextureNumComps;
 
 
 protected:

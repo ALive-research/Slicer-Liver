@@ -175,11 +175,16 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
       bezierSurfaceNode->SetDistanceMapVolumeNode(resectionNode->GetDistanceMapVolumeNode());
       bezierSurfaceNode->SetResectionMargin(resectionNode->GetResectionMargin());
       bezierSurfaceNode->SetUncertaintyMargin(resectionNode->GetUncertaintyMargin());
+      bezierSurfaceNode->SetHepaticContourSize(resectionNode->GetHepaticContourSize());
+      bezierSurfaceNode->SetPortalContourSize(resectionNode->GetPortalContourSize());
+
 
       auto bezierSurfaceDisplayNode =
         vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(bezierSurfaceNode->GetDisplayNode());
       if (bezierSurfaceDisplayNode)
         {
+        bezierSurfaceDisplayNode->SetShowResection2D(resectionNode->GetShowResection2D());
+        bezierSurfaceDisplayNode->SetTextureNumComps(resectionNode->GetTextureNumComps());
         bezierSurfaceDisplayNode->SetClipOut(resectionNode->GetClipOut());
         bezierSurfaceDisplayNode->SetWidgetVisibility(resectionNode->GetWidgetVisibility());
         bezierSurfaceDisplayNode->SetInterpolatedMargins(resectionNode->GetInterpolatedMargins());
@@ -190,6 +195,8 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
         bezierSurfaceDisplayNode->SetResectionOpacity(resectionNode->GetResectionOpacity());
         bezierSurfaceDisplayNode->SetGridDivisions(resectionNode->GetGridDivisions());
         bezierSurfaceDisplayNode->SetGridThickness(resectionNode->GetGridThickness());
+        bezierSurfaceDisplayNode->SetHepaticContourColor(resectionNode->GetHepaticContourColor());
+        bezierSurfaceDisplayNode->SetPortalContourColor(resectionNode->GetPortalContourColor());
         }
       bezierSurfaceNode->SetLocked(!resectionNode->GetWidgetVisibility());
       }

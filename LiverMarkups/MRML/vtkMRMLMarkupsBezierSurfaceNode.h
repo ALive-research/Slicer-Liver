@@ -101,6 +101,18 @@ public:
   /// Set the distance map margin
   vtkSetMacro(UncertaintyMargin, double);
 
+  /// Get the distance map margin
+  vtkGetMacro(HepaticContourSize, double);
+
+  /// Set the distance map margin
+  vtkSetMacro(HepaticContourSize, double);
+
+  /// Get the distance map margin
+  vtkGetMacro(PortalContourSize, double);
+
+  /// Set the distance map margin
+  vtkSetMacro(PortalContourSize, double);
+
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLMarkupsBezierSurfaceNode);
 
@@ -115,6 +127,8 @@ private:
  vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMap;
  double ResectionMargin;
  double UncertaintyMargin;
+ double HepaticContourSize;
+ double PortalContourSize;
 
 private:
  vtkMRMLMarkupsBezierSurfaceNode(const vtkMRMLMarkupsBezierSurfaceNode&);

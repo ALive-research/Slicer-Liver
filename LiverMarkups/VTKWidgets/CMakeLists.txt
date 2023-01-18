@@ -40,6 +40,8 @@ set(${KIT}_SRCS
   vtkSlicerShaderHelper.cxx
   vtkOpenGLBezierResectionPolyDataMapper.h
   vtkOpenGLBezierResectionPolyDataMapper.cxx
+  vtkOpenGLResection2DPolyDataMapper.cpp
+  vtkOpenGLResection2DPolyDataMapper.h
   )
 
 set(${KIT}_TARGET_LIBRARIES
