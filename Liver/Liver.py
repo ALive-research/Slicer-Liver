@@ -32,8 +32,8 @@
 #   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 #   This file was originally developed by Rafael Palomar (Oslo University
-#   Hospital and NTNU) and was supported by The Research Council of Norway
-#   through the ALive project (grant nr. 311393).
+#   Hospital and NTNU) and Ruoyan Meng (NTNU), and was supported by The
+#   Research Council of Norway through the ALive project (grant nr. 311393).
 #
 # ==============================================================================
 
@@ -214,9 +214,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.UncertaintyMarginComboBox.connect('currentIndexChanged(int)', self.onUncertaintyMaginComboBoxChanged)
     self.resectionsWidget.InterpolatedMarginsCheckBox.connect('stateChanged(int)', self.onInterpolatedMarginsChanged)
     self.resectogramWidget.Resection2DCheckBox.connect('stateChanged(int)', self.onResection2DChanged)
-    self.resectogramWidget.HepaticContourSizeSpinBox.connect('valueChanged(double)', self.onHepaticContourSizeChanged)
+    self.resectogramWidget.HepaticContourThicknessSpinBox.connect('valueChanged(double)', self.onHepaticContourThicknessChanged)
     self.resectogramWidget.HepaticContourColorPickerButton.connect('colorChanged(QColor)', self.onHepaticContourColorChanged)
-    self.resectogramWidget.PortalContourSizeSpinBox.connect('valueChanged(double)', self.onPortalContourSizeChanged)
+    self.resectogramWidget.PortalContourThicknessSpinBox.connect('valueChanged(double)', self.onPortalContourThicknessChanged)
     self.resectogramWidget.PortalContourColorPickerButton.connect('colorChanged(QColor)', self.onPortalContourColorChanged)
 
 
@@ -256,6 +256,16 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectionsWidget.DistanceMapNodeComboBox.blockSignals(True)
         self.resectionsWidget.DistanceMapNodeComboBox.setCurrentNode(activeResectionNode.GetDistanceMapVolumeNode())
         self.resectionsWidget.DistanceMapNodeComboBox.blockSignals(False)
+
+        self.resectogramWidget.HepaticContourColorPickerButton.blockSignals(True)
+        color = activeResectionNode.GetHepaticContourColor()
+        self.resectogramWidget.HepaticContourColorPickerButton.setColor(qt.QColor.fromRgbF(color[0], color[1], color[2]))
+        self.resectogramWidget.HepaticContourColorPickerButton.blockSignals(False)
+
+        self.resectogramWidget.PortalContourColorPickerButton.blockSignals(True)
+        color = activeResectionNode.GetPortalContourColor()
+        self.resectogramWidget.PortalContourColorPickerButton.setColor(qt.QColor.fromRgbF(color[0], color[1], color[2]))
+        self.resectogramWidget.PortalContourColorPickerButton.blockSignals(False)
 
         self.resectionsWidget.ResectionColorPickerButton.blockSignals(True)
         color = activeResectionNode.GetResectionColor()
@@ -328,6 +338,11 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       else:
           lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
           lvLogic.HideInitializationMarkupFromResection(self._currentResectionNode)
+          renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
+          if renderers.GetNumberOfItems() == 5:
+            renderers.RemoveItem(4)
+          self.resectogramWidget.Resection2DCheckBox.setCheckState(0)
+          self._currentResectionNode.SetShowResection2D(False)
 
     self._currentResectionNode = activeResectionNode
 
@@ -338,7 +353,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     if self._currentResectionNode is not None:
       distanceMapNode = self.resectionsWidget.DistanceMapNodeComboBox.currentNode()
       self._currentResectionNode.SetTextureNumComps(self.numComps)
-      self._currentResectionNode.SetDistanceMapVolumeNode(self.resectionsWidget.DistanceMapNodeComboBox.currentNode())
+      self._currentResectionNode.SetDistanceMapVolumeNode(distanceMapNode)
       self.resectionsWidget.ResectionMarginGroupBox.setEnabled(distanceMapNode is not None)
       self.resectionsWidget.UncertaintyMarginGroupBox.setEnabled(distanceMapNode is not None)
       self.resectionsWidget.ResectionPreviewGroupBox.setEnabled(distanceMapNode is not None)
@@ -581,22 +596,26 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
       if self.resectogramWidget.Resection2DCheckBox.isChecked() == 0 and renderers.GetNumberOfItems() == 5:
         renderers.RemoveItem(4)
+      # elif self.resectogramWidget.Resection2DCheckBox.isChecked() == 1 and renderers.GetNumberOfItems() == 5:
+      #   for renderer in renderers:
+      #     renderer.SetUseFXAA(enable)
+      #     slicer.util.forceRenderAllViews()
     else:
       self._currentResectionNode.SetShowResection2D(not self.resectogramWidget.Resection2DCheckBox.isChecked())
 
-  def onHepaticContourSizeChanged(self):
+  def onHepaticContourThicknessChanged(self):
     """
     This function is called when the resection margin spinbox changes.
     """
     if self._currentResectionNode is not None:
-      self._currentResectionNode.SetHepaticContourSize(self.resectogramWidget.HepaticContourSizeSpinBox.value)
+      self._currentResectionNode.SetHepaticContourThickness(self.resectogramWidget.HepaticContourThicknessSpinBox.value)
 
-  def onPortalContourSizeChanged(self):
+  def onPortalContourThicknessChanged(self):
     """
     This function is called when the resection margin spinbox changes.
     """
     if self._currentResectionNode is not None:
-      self._currentResectionNode.SetPortalContourSize(self.resectogramWidget.PortalContourSizeSpinBox.value)
+      self._currentResectionNode.SetPortalContourThickness(self.resectogramWidget.PortalContourThicknessSpinBox.value)
 
   def onHepaticContourColorChanged(self):
     """

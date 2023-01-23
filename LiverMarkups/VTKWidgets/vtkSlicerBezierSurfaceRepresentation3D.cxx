@@ -32,8 +32,8 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
   This file was originally developed by Rafael Palomar (Oslo University
-  Hospital and NTNU) and was supported by The Research Council of Norway
-  through the ALive project (grant nr. 311393).
+  Hospital and NTNU) and Ruoyan Meng (NTNU), and was supported by The
+  Research Council of Norway through the ALive project (grant nr. 311393).
 
   ==============================================================================*/
 
@@ -114,7 +114,6 @@ vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
     PlaneControlPoints->InsertNextPoint(-20,(i*40),0);
     PlaneControlPoints->InsertNextPoint(20,(i*40),0);
     PlaneControlPoints->InsertNextPoint(60,(i*40),0);
-
     }
 
   this->BezierPlane->SetControlPoints(PlaneControlPoints);
@@ -123,7 +122,6 @@ vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
   auto BezierPlanePoints = BezierPlane->GetOutput()->GetPoints()->GetData();
   BezierPlanePoints->SetName("BSPlanePoints");
   this->BezierSurfaceNormals->GetOutput()->GetPointData()->AddArray(BezierPlanePoints);
-
 
   this->BezierSurfaceControlPoints = vtkSmartPointer<vtkPoints>::New();
   this->BezierSurfaceControlPoints->SetNumberOfPoints(16);
@@ -238,12 +236,10 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
   auto renderWindow1 = vtkRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
   auto renderers = renderWindow1->GetRenderers();
 
-
   if(BezierSurfaceDisplayNode->GetShowResection2D())
     {
     if(renderers->GetNumberOfItems()!=5)
       {
-      std::cout<<"-------------------add new renderer------------------"<<endl;
       double yViewport[4] = {0, 0.6, 0.3, 1.0};
 
       if (renderWindow1->GetNumberOfLayers() < RENDERER_LAYER+1)
@@ -538,8 +534,8 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceDisplay(vtkMRMLM
 
   this->BezierSurfaceResectionMapper2D->SetResectionMargin(node->GetResectionMargin());
   this->BezierSurfaceResectionMapper2D->SetUncertaintyMargin(node->GetUncertaintyMargin());
-  this->BezierSurfaceResectionMapper2D->SetHepaticContourSize(node->GetHepaticContourSize());
-  this->BezierSurfaceResectionMapper2D->SetPortalContourSize(node->GetPortalContourSize());
+  this->BezierSurfaceResectionMapper2D->SetHepaticContourThickness(node->GetHepaticContourThickness());
+  this->BezierSurfaceResectionMapper2D->SetPortalContourThickness(node->GetPortalContourThickness());
 
   if (displayNode)
     {

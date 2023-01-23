@@ -257,17 +257,17 @@ public:
     // Set the ShowResection2D state variable
     vtkSetMacro(ShowResection2D, int);
 
-    // Get HepaticContourSize margin
-    vtkGetMacro(HepaticContourSize, double);
+    // Get HepaticContourThickness margin
+    vtkGetMacro(HepaticContourThickness, double);
 
-    // Set HepaticContourSize margin
-    vtkSetClampMacro(HepaticContourSize, double, 0.0, VTK_DOUBLE_MAX);
+    // Set HepaticContourThickness margin
+    vtkSetClampMacro(HepaticContourThickness, double, 0.0, VTK_DOUBLE_MAX);
 
-    // Get PortalContourSize margin
-    vtkGetMacro(PortalContourSize, double);
+    // Get PortalContourThickness margin
+    vtkGetMacro(PortalContourThickness, double);
 
-    // Set PortalContourSize margin
-    vtkSetClampMacro(PortalContourSize, double, 0.0, VTK_DOUBLE_MAX);
+    // Set PortalContourThickness margin
+    vtkSetClampMacro(PortalContourThickness, double, 0.0, VTK_DOUBLE_MAX);
 
     // Set HepaticContourColor
     vtkSetVector3Macro(HepaticContourColor, float);
@@ -327,8 +327,8 @@ private:
   float GridDivisions;
   float GridThickness;
   bool ShowResection2D;
-  double HepaticContourSize; //Resection margin in mm
-  double PortalContourSize; //Uncertainty margin in mm
+  double HepaticContourThickness; //Resection margin in mm
+  double PortalContourThickness; //Uncertainty margin in mm
   float HepaticContourColor[3];
   float PortalContourColor[3];
   int TextureNumComps;
