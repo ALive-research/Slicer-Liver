@@ -2,64 +2,74 @@
 #include <QApplication>
 #include <QDebug>
 #include <QTimer>
+#include <vtkSlicerApplicationLogic.h>
 
+// Slicer includes
 #include "qSlicerLiverMarkupsModule.h"
+#include <qSlicerApplication.h>
 
 // MRML includes
 #include <vtkMRMLScene.h>
+
+// VTK includes
+#include "qMRMLWidget.h"
+#include <vtkTestingOutputWindow.h>
 
 class markupsModuleTest: public qSlicerLiverMarkupsModule
 {
 public:
 
 	void setup()
-	{
-		qSlicerLiverMarkupsModule::setup();
+    {
+        qSlicerLiverMarkupsModule::setup();
 	}
 };
 
 //-----------------------------------------------------------------------------
 int qSlicerLiverMarkupsModuleTest(int argc, char * argv[] )
 {
+    //Using code example from qSlicerModelsModuleWidgetTest1
+
+    qMRMLWidget::preInitializeApplication();
+//    QApplication app(argc, argv);
+    qSlicerApplication app(argc, argv);
+    qMRMLWidget::postInitializeApplication();
+
 	markupsModuleTest markupsModule = markupsModuleTest();
 
 	if(!markupsModule.isHidden())
 		return 1;
 
-	vtkSmartPointer<vtkMRMLScene> scene = vtkSmartPointer<vtkMRMLScene>::New();
+    vtkSmartPointer<vtkMRMLScene> scene = vtkSmartPointer<vtkMRMLScene>::New();
 
-	markupsModule.setup();
+//    markupsModule.setup();// Use initialize instead
 
+//    vtkNew<vtkSlicerApplicationLogic> appLogic;
+    vtkSlicerApplicationLogic* appLogic = app.applicationLogic();
 
-	return 0;
+    qDebug() << "initialize start";
+//    TESTING_OUTPUT_ASSERT_WARNINGS_BEGIN();
+    // Set path just to avoid a runtime warning at module initialization
+    markupsModule.setPath(app.slicerHome() + '/' + app.slicerSharePath() + "/qt-loadable-modules/LiverMarkups");
+    markupsModule.initialize(appLogic);
+//    markupsModule.initialize(nullptr);
+//    TESTING_OUTPUT_ASSERT_WARNINGS_END(); // warning due to using 0 as application logic
 
-	//Copied from qMRMLAnnotationROIWidgetTest1.cxx
+    vtkMRMLAbstractLogic* logic = markupsModule.logic();
+    if(!logic) {
+        qCritical() << "No logic";
+        return 1;
+    }
+    qDebug() << "initialize finished";
 
-//  qMRMLWidget::preInitializeApplication();
-//  QApplication app(argc, argv);
-//  qMRMLWidget::postInitializeApplication();
+    qDebug() <<"setMRMLScene start";
+    markupsModule.setMRMLScene(scene.GetPointer());
+    qDebug() << "setMRMLScene finish";
 
-//  vtkSmartPointer<vtkMRMLScene> scene =
-//	vtkSmartPointer<vtkMRMLScene>::New();
-//  vtkSmartPointer<vtkMRMLAnnotationROINode> roi =
-//	vtkSmartPointer<vtkMRMLAnnotationROINode>::New();
-//  scene->AddNode(roi);
-
-//  qMRMLAnnotationROIWidget widget;
-//  widget.setMRMLAnnotationROINode(roi);
-
-//  qDebug() << "start edit";
-
-//  roi->SetXYZ(1, 1, 1);
-
-//  qDebug() << "end edit";
-
-//  widget.show();
-
-//  if (argc < 2 || QString(argv[1]) != "-I")
-//	{
-//	QTimer::singleShot(100, &app, SLOT(quit()));
-//	}
-
-//  return app.exec();
+    if (argc < 2 || QString(argv[1]) != "-I")
+    {
+        QTimer::singleShot(100, &app, SLOT(quit()));
+    }
+    return app.exec();
+//	return 0;
 }
