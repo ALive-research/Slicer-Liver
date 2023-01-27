@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>563</width>
-    <height>231</height>
+    <height>213</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -57,18 +57,18 @@
               </widget>
              </item>
              <item row="0" column="1">
-              <widget class="qMRMLSpinBox" name="HepaticContourSizeSpinBox">
+              <widget class="qMRMLSpinBox" name="HepaticContourThicknessSpinBox">
                <property name="decimalsOption">
                 <set>ctkDoubleSpinBox::DecimalsByShortcuts|ctkDoubleSpinBox::InsertDecimals</set>
                </property>
                <property name="maximum">
-                <double>1.000000000000000</double>
+                <double>1</double>
                </property>
                <property name="singleStep">
-                <double>0.100000000000000</double>
+                <double>0.1</double>
                </property>
                <property name="value">
-                <double>0.300000000000000</double>
+                <double>0.3</double>
                </property>
                <property name="invertedControls">
                 <bool>false</bool>
@@ -122,14 +122,14 @@
            <item>
             <layout class="QFormLayout" name="formLayout_8">
              <item row="0" column="0">
-              <widget class="QLabel" name="PortalContourSizeLabel">
+              <widget class="QLabel" name="PortalContourThicknessLabel">
                <property name="text">
                 <string>Portal resection contour size (in mm):</string>
                </property>
               </widget>
              </item>
              <item row="0" column="1">
-              <widget class="qMRMLSpinBox" name="PortalContourSizeSpinBox">
+              <widget class="qMRMLSpinBox" name="PortalContourThicknessSpinBox">
                <property name="decimalsOption">
                 <set>ctkDoubleSpinBox::DecimalsByShortcuts|ctkDoubleSpinBox::InsertDecimals</set>
                </property>
@@ -281,9 +281,9 @@
  <resources/>
  <connections>
   <connection>
-   <sender>HepaticContourSizeSpinBox</sender>
+   <sender>HepaticContourThicknessSpinBox</sender>
    <signal>valueChanged(double)</signal>
-   <receiver>HepaticContourSizeSpinBox</receiver>
+   <receiver>HepaticContourThicknessSpinBox</receiver>
    <slot>setValue(double)</slot>
    <hints>
     <hint type="sourcelabel">
@@ -297,9 +297,9 @@
    </hints>
   </connection>
   <connection>
-   <sender>PortalContourSizeSpinBox</sender>
+   <sender>PortalContourThicknessSpinBox</sender>
    <signal>valueChanged(double)</signal>
-   <receiver>PortalContourSizeSpinBox</receiver>
+   <receiver>PortalContourThicknessSpinBox</receiver>
    <slot>setValue(double)</slot>
    <hints>
     <hint type="sourcelabel">

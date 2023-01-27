@@ -326,6 +326,9 @@
                  <property name="orientation">
                   <enum>Qt::Horizontal</enum>
                  </property>
+                 <property name="maximum">
+                  <double>30.000000000000000</double>
+                 </property>
                 </widget>
                </item>
                <item>
@@ -348,6 +351,9 @@
                </item>
                <item>
                 <widget class="ctkDoubleSlider" name="GridThicknessDoubleSlider">
+                 <property name="minimum">
+                  <double>5.000000000000000</double>
+                 </property>
                  <property name="value">
                   <double>5.000000000000000</double>
                  </property>

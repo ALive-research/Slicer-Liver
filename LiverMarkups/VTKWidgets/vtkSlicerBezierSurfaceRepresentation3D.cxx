@@ -32,8 +32,8 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
   This file was originally developed by Rafael Palomar (Oslo University
-  Hospital and NTNU) and was supported by The Research Council of Norway
-  through the ALive project (grant nr. 311393).
+  Hospital and NTNU) and Ruoyan Meng (NTNU), and was supported by The
+  Research Council of Norway through the ALive project (grant nr. 311393).
 
   ==============================================================================*/
 
@@ -177,23 +177,24 @@ vtkSlicerBezierSurfaceRepresentation3D::~vtkSlicerBezierSurfaceRepresentation3D(
 void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void *callData /*=nullptr*/)
 {
 
- this->Superclass::UpdateFromMRML(caller, event, callData);
+  this->Superclass::UpdateFromMRML(caller, event, callData);
 
- auto liverMarkupsBezierSurfaceNode =
-   vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(this->GetMarkupsNode());
- if (!liverMarkupsBezierSurfaceNode || !this->IsDisplayable())
-   {
-   this->VisibilityOff();
-   return;
-   }
+  auto liverMarkupsBezierSurfaceNode =
+    vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(this->GetMarkupsNode());
+  if (!liverMarkupsBezierSurfaceNode || !this->IsDisplayable())
+    {
+    this->VisibilityOff();
+    return;
+    }
 
- this->UpdateBezierSurfaceGeometry(liverMarkupsBezierSurfaceNode);
- this->UpdateBezierSurfaceDisplay(liverMarkupsBezierSurfaceNode);
- this->UpdateControlPolygonGeometry(liverMarkupsBezierSurfaceNode);
- this->UpdateControlPolygonDisplay(liverMarkupsBezierSurfaceNode);
+  this->UpdateBezierSurfaceGeometry(liverMarkupsBezierSurfaceNode);
+  this->UpdateBezierSurfaceDisplay(liverMarkupsBezierSurfaceNode);
+  this->UpdateControlPolygonGeometry(liverMarkupsBezierSurfaceNode);
+  this->UpdateControlPolygonDisplay(liverMarkupsBezierSurfaceNode);
 
-  double diameter = ( this->MarkupsDisplayNode->GetCurveLineSizeMode() == vtkMRMLMarkupsDisplayNode::UseLineDiameter ?
-    this->MarkupsDisplayNode->GetLineDiameter() : this->ControlPointSize * this->MarkupsDisplayNode->GetLineThickness() );
+  double diameter = (this->MarkupsDisplayNode->GetCurveLineSizeMode() == vtkMRMLMarkupsDisplayNode::UseLineDiameter ?
+                     this->MarkupsDisplayNode->GetLineDiameter() : this->ControlPointSize
+                       * this->MarkupsDisplayNode->GetLineThickness());
   this->ControlPolygonTubeFilter->SetRadius(diameter * 0.5);
 
   int controlPointType = Active;
@@ -201,6 +202,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
     {
     controlPointType = this->GetAllControlPointsSelected() ? Selected : Unselected;
     }
+
   this->ControlPolygonActor->SetProperty(this->GetControlPointsPipeline(controlPointType)->Property);
 
   // Update the Vascular Segments as 3D texture (if changed)
@@ -213,10 +215,14 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
 
   // Update the distance map as 3D texture (if changed)
   auto distanceMap = liverMarkupsBezierSurfaceNode->GetDistanceMapVolumeNode();
-  auto BezierSurfaceDisplayNode = vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(liverMarkupsBezierSurfaceNode->GetDisplayNode());
+  auto BezierSurfaceDisplayNode =
+    vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(liverMarkupsBezierSurfaceNode->GetDisplayNode());
   if (this->DistanceMapVolumeNode != distanceMap)
     {
-    this->CreateAndTransferDistanceMapTexture(distanceMap, BezierSurfaceDisplayNode->GetTextureNumComps());
+    if (this->DistanceMapVolumeNode != distanceMap)
+      {
+      this->CreateAndTransferDistanceMapTexture(distanceMap, BezierSurfaceDisplayNode->GetTextureNumComps());
+      }
 
     // Update transformation matrices
     auto imageData = distanceMap ? distanceMap->GetImageData() : nullptr;
@@ -484,7 +490,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateControlPolygonGeometry(vtkMRM
     {
     //Generate topology;
     vtkSmartPointer<vtkCellArray> planeCells =
-      vtkSmartPointer<vtkCellArray>::New();
+        vtkSmartPointer<vtkCellArray>::New();
     for(int i=0; i<3; ++i)
       {
       for(int j=0; j<3; ++j)
@@ -584,8 +590,8 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceDisplay(vtkMRMLM
 
   this->BezierSurfaceResectionMapper2D->SetResectionMargin(node->GetResectionMargin());
   this->BezierSurfaceResectionMapper2D->SetUncertaintyMargin(node->GetUncertaintyMargin());
-  this->BezierSurfaceResectionMapper2D->SetHepaticContourSize(node->GetHepaticContourSize());
-  this->BezierSurfaceResectionMapper2D->SetPortalContourSize(node->GetPortalContourSize());
+  this->BezierSurfaceResectionMapper2D->SetHepaticContourThickness(node->GetHepaticContourThickness());
+  this->BezierSurfaceResectionMapper2D->SetPortalContourThickness(node->GetPortalContourThickness());
 
   if (displayNode)
     {
