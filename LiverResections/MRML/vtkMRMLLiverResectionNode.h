@@ -60,27 +60,27 @@
 
 //-----------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
-: public vtkMRMLStorableNode
+  : public vtkMRMLStorableNode
 {
-public:
+ public:
   static vtkMRMLLiverResectionNode* New();
-  vtkTypeMacro(vtkMRMLLiverResectionNode, vtkMRMLStorableNode);
+ vtkTypeMacro(vtkMRMLLiverResectionNode, vtkMRMLStorableNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   // Possible resection states
   enum ResectionState
-    {
-      Initialization=0,
-      Deformation,
-      Completed
-    };
+  {
+    Initialization=0,
+    Deformation,
+    Completed
+  };
 
   // Possible initialization modes
   enum InitializationMode
-    {
-      Flat=0,
-      Curved,
-    };
+  {
+    Flat=0,
+    Curved,
+  };
 
   //--------------------------------------------------------------------------------
   // MRMLNode methods
@@ -148,13 +148,28 @@ public:
   void SetDistanceMapVolumeNode(vtkMRMLScalarVolumeNode* distanceMapVolumeNode)
   {this->DistanceMapVolumeNode = distanceMapVolumeNode; this->Modified();}
 
+  // Get Vascular Segments Volume
+  vtkMRMLScalarVolumeNode *GetVascularSegmentsVolumeNode() const
+  { return this->VascularSegmentsVolumeNode; }
+
+  // Set Vascular Segments Volume
+  void SetVascularSegmentsVolumeNode(vtkMRMLScalarVolumeNode *vascularSegmentsVolumeNode)
+  {this->VascularSegmentsVolumeNode = vascularSegmentsVolumeNode; this->Modified();}
+
+  // Get Marker Style Volume
+  vtkMRMLScalarVolumeNode *GetMarkerStyleVolumeNode() const
+  { return this->MarkerStyleVolumeNode; }
+
+  // Set Marker Style Volume
+  void SetMarkerStyleVolumeNode(vtkMRMLScalarVolumeNode *markerStyleVolumeNode)
+  {this->MarkerStyleVolumeNode = markerStyleVolumeNode; this->Modified();}
   /// This is a function to set the initialization control points as vtkPoints.
   /// Since the expected number of points for the initialization is two, the
   /// function requires at least two points in the vtkPoints provided; if more
   /// points are provided, the points from 2nd onwards will be ignored. The
   /// function returns true if thw points were set correctly, otherwise, it
   /// returns false.
-  bool SetInitializationControlPoints(vtkPoints* controlPoints);
+  bool SetInitializationControlPoints(vtkPoints *controlPoints);
 
   // Get initialization control points
   vtkPoints const* GetInitializationPoints() const
@@ -248,65 +263,76 @@ public:
   // Set the widget visibility variable
   vtkSetMacro(GridThickness, float);
 
-    // Set the ShowResection2D state variable
-    vtkSetMacro(ShowResection2D, bool);
+  // Set the ShowResection2D state variable
+  vtkSetMacro(ShowResection2D, bool);
 
-    // Get the ShowResection2D state variable
-    vtkGetMacro(ShowResection2D, bool);
+  // Get the ShowResection2D state variable
+  vtkGetMacro(ShowResection2D, bool);
 
-    // Set the ShowResection2D state variable
-    vtkSetMacro(ShowResection2D, int);
+  // Set the ShowResection2D state variable
+  vtkSetMacro(ShowResection2D, int);
 
-    // Get HepaticContourSize margin
-    vtkGetMacro(HepaticContourSize, double);
+  // Set the EnableFlexibleBoundary state variable
+  vtkSetMacro(EnableFlexibleBoundary, bool);
 
-    // Set HepaticContourSize margin
-    vtkSetClampMacro(HepaticContourSize, double, 0.0, VTK_DOUBLE_MAX);
+  // Get the EnableFlexibleBoundary state variable
+  vtkGetMacro(EnableFlexibleBoundary, bool);
 
-    // Get PortalContourSize margin
-    vtkGetMacro(PortalContourSize, double);
+  // Set the EnableFlexibleBoundary state variable
+  vtkSetMacro(EnableFlexibleBoundary, int);
 
-    // Set PortalContourSize margin
-    vtkSetClampMacro(PortalContourSize, double, 0.0, VTK_DOUBLE_MAX);
+  // Get HepaticContourThickness margin
+  vtkGetMacro(HepaticContourThickness, double);
 
-    // Set HepaticContourColor
-    vtkSetVector3Macro(HepaticContourColor, float);
+  // Set HepaticContourThickness margin
+  vtkSetClampMacro(HepaticContourThickness, double, 0.0, VTK_DOUBLE_MAX);
 
-    // Get HepaticContourColor
-    vtkGetVector3Macro(HepaticContourColor, float);
+  // Get PortalContourThickness margin
+  vtkGetMacro(PortalContourThickness, double);
 
-    // Set PortalContourColor
-    vtkSetVector3Macro(PortalContourColor, float);
+  // Set PortalContourThickness margin
+  vtkSetClampMacro(PortalContourThickness, double, 0.0, VTK_DOUBLE_MAX);
 
-    // Get PortalContourColor
-    vtkGetVector3Macro(PortalContourColor, float);
+  // Set HepaticContourColor
+  vtkSetVector3Macro(HepaticContourColor, float);
 
-    // Get the TextureNumComps state variable
-    vtkGetMacro(TextureNumComps, int);
+  // Get HepaticContourColor
+  vtkGetVector3Macro(HepaticContourColor, float);
 
-    // Set the TextureNumComps state variable
-    vtkSetMacro(TextureNumComps, int);
+  // Set PortalContourColor
+  vtkSetVector3Macro(PortalContourColor, float);
 
-    // Get bezier surface
-    vtkMRMLMarkupsBezierSurfaceNode *GetBezierSurfaceNode() const
-    { return this->BezierSurfaceNode; }
+  // Get PortalContourColor
+  vtkGetVector3Macro(PortalContourColor, float);
+
+  // Get the TextureNumComps state variable
+  vtkGetMacro(TextureNumComps, int);
+
+  // Set the TextureNumComps state variable
+  vtkSetMacro(TextureNumComps, int);
+
+  // Get bezier surface
+  vtkMRMLMarkupsBezierSurfaceNode *GetBezierSurfaceNode() const
+  { return this->BezierSurfaceNode; }
 
   // Set bezier surface
   void SetBezierSurfaceNode(vtkMRMLMarkupsBezierSurfaceNode *node)
   {this->BezierSurfaceNode = node; this->Modified();}
 
 
-protected:
+ protected:
   vtkMRMLLiverResectionNode();
   ~vtkMRMLLiverResectionNode() override;
 
-private:
+ private:
 
   // TODO: Review the need of this further down the road
   // std::set<vtkMRMLModelNode*> TargetTumors;
   // vtkWeakPointer<vtkMRMLSegmentationNode> SegmentationNode;
   vtkWeakPointer<vtkMRMLModelNode> TargetOrganModelNode;
   vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolumeNode;
+  vtkWeakPointer<vtkMRMLScalarVolumeNode> VascularSegmentsVolumeNode;
+  vtkWeakPointer<vtkMRMLScalarVolumeNode> MarkerStyleVolumeNode;
   vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode> BezierSurfaceNode;
   ResectionState State;
   InitializationMode InitMode;
@@ -327,15 +353,16 @@ private:
   float GridDivisions;
   float GridThickness;
   bool ShowResection2D;
-  double HepaticContourSize; //Resection margin in mm
-  double PortalContourSize; //Uncertainty margin in mm
+  bool EnableFlexibleBoundary;
+  double HepaticContourThickness; //Resection margin in mm
+  double PortalContourThickness; //Uncertainty margin in mm
   float HepaticContourColor[3];
   float PortalContourColor[3];
   int TextureNumComps;
 
-private:
- vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);
- void operator=(const vtkMRMLLiverResectionNode&);
+ private:
+  vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);
+  void operator=(const vtkMRMLLiverResectionNode&);
 };
 
 #endif //__vtkmrmlliverresectionnode_h_

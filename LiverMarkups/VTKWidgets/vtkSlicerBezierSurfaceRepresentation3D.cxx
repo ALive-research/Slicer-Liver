@@ -32,8 +32,8 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
   This file was originally developed by Rafael Palomar (Oslo University
-  Hospital and NTNU) and was supported by The Research Council of Norway
-  through the ALive project (grant nr. 311393).
+  Hospital and NTNU) and Ruoyan Meng (NTNU), and was supported by The
+  Research Council of Norway through the ALive project (grant nr. 311393).
 
   ==============================================================================*/
 
@@ -46,7 +46,9 @@
 #include "vtkSlicerMarkupsWidgetRepresentation.h"
 #include "vtkOpenGLBezierResectionPolyDataMapper.h"
 #include "vtkOpenGLResection2DPolyDataMapper.h"
-#include "vtkRenderer.h"
+#include "vtkMultiTextureObjectHelper.h"
+#include "vtkMRMLMarkupsSlicingContourNode.h"
+#include "vtkMRMLMarkupsSlicingContourDisplayNode.h"
 
 // MRML includes
 #include <qMRMLThreeDWidget.h>
@@ -86,6 +88,9 @@
 #include <vtkMatrix3x3.h>
 #include "vtkRendererCollection.h"
 #include <vtkNamedColors.h>
+#include <vtkTypeFloat32Array.h>
+#include <vtkImageCast.h>
+#include <vtkRenderWindowInteractor.h>
 
 //------------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerBezierSurfaceRepresentation3D);
@@ -198,16 +203,22 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
 
   this->ControlPolygonActor->SetProperty(this->GetControlPointsPipeline(controlPointType)->Property);
 
+  // Update the Vascular Segments as 3D texture (if changed)
+  auto VascularSegments = liverMarkupsBezierSurfaceNode->GetVascularSegmentsVolumeNode();
+  if (this->VascularSegmentsVolumeNode != VascularSegments)
+    {
+    this->CreateAndTransferVascularSegmentsTexture(VascularSegments);
+    this->VascularSegmentsVolumeNode = VascularSegments;
+    }
+
   // Update the distance map as 3D texture (if changed)
   auto distanceMap = liverMarkupsBezierSurfaceNode->GetDistanceMapVolumeNode();
-  auto BezierSurfaceDisplayNode =
-    vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(liverMarkupsBezierSurfaceNode->GetDisplayNode());
+  auto markerStyle = liverMarkupsBezierSurfaceNode->GetMarkerStyleVolumeNode();
+  auto BezierSurfaceDisplayNode = vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(liverMarkupsBezierSurfaceNode->GetDisplayNode());
+
   if (this->DistanceMapVolumeNode != distanceMap)
     {
-    if (this->DistanceMapVolumeNode != distanceMap)
-      {
-      this->CreateAndTransferDistanceMapTexture(distanceMap, BezierSurfaceDisplayNode->GetTextureNumComps());
-      }
+    this->CreateAndTransferDistanceMapTexture(distanceMap, BezierSurfaceDisplayNode->GetTextureNumComps());
 
     // Update transformation matrices
     auto imageData = distanceMap ? distanceMap->GetImageData() : nullptr;
@@ -233,14 +244,15 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
 
     this->DistanceMapVolumeNode = distanceMap;
     }
-
+  if (this->MarkerStyleVolumeNode != markerStyle) {
+    this->CreateAndTransferMarkerStyleTexture(markerStyle);
+    this->MarkerStyleVolumeNode = markerStyle;
+    }
   //------------------- add new renderer here ----------------------//
-  auto renderWindow1 = vtkRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
-  auto renderers = renderWindow1->GetRenderers();
-
-
   if(BezierSurfaceDisplayNode->GetShowResection2D())
     {
+    auto renderWindow1 = vtkRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
+    auto renderers = renderWindow1->GetRenderers();
     if(renderers->GetNumberOfItems()!=5)
       {
       std::cout<<"-------------------add new renderer------------------"<<endl;
@@ -363,8 +375,8 @@ double *vtkSlicerBezierSurfaceRepresentation3D::GetBounds()
 {
   vtkBoundingBox boundingBox;
   const std::vector<vtkProp*> actors({
-      this->BezierSurfaceActor,
-      this->ControlPolygonActor });
+                                       this->BezierSurfaceActor,
+                                       this->ControlPolygonActor });
   this->AddActorsBounds(boundingBox, actors, Superclass::GetBounds());
   boundingBox.GetBounds(this->Bounds);
   return this->Bounds;
@@ -459,6 +471,11 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceGeometry(vtkMRML
     this->BezierSurfaceSource->Update();
     this->p = this->BezierSurfaceSource->GetOutput()->GetPoints()->GetData();
     this->p->SetName("BSPoints");
+    auto BezierSurfaceDisplayNode = vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(node->GetDisplayNode());
+
+    Ratio(BezierSurfaceDisplayNode->GetEnableFlexibleBoundary());
+
+
     if(this->BezierPlane->GetOutput()->GetPointData()->GetArray("BSPoints")){
       this->BezierPlane->GetOutput()->GetPointData()->RemoveArray("BSPoints");
       this->BezierPlane->GetOutput()->GetPointData()->AddArray(this->p);
@@ -500,7 +517,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateControlPolygonGeometry(vtkMRM
 void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode* node, int numComps)
 {
   auto renderWindow = vtkOpenGLRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
-  this->DistanceMapTexture = vtkSmartPointer<vtkTextureObject>::New();
+  this->DistanceMapTexture = vtkSmartPointer<vtkMultiTextureObjectHelper>::New();
   this->DistanceMapTexture->SetContext(renderWindow);
 
   if (!node)
@@ -525,7 +542,74 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture
   this->DistanceMapTexture->SetMinificationFilter(vtkTextureObject::Linear);
   this->DistanceMapTexture->SetMagnificationFilter(vtkTextureObject::Linear);
   this->DistanceMapTexture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
-  this->DistanceMapTexture->Create3DFromRaw(dimensions[0], dimensions[1], dimensions[2], numComps, VTK_FLOAT, imageData->GetScalarPointer());
+  this->DistanceMapTexture->CreateSeq3DFromRaw(dimensions[0], dimensions[1], dimensions[2], numComps, VTK_FLOAT, imageData->GetScalarPointer(), 0);
+}
+
+//----------------------------------------------------------------------
+void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferMarkerStyleTexture(vtkMRMLScalarVolumeNode *node) {
+
+  auto renderWindow = vtkOpenGLRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
+  this->MarkerStyleTexture = vtkSmartPointer<vtkMultiTextureObjectHelper>::New();
+  this->MarkerStyleTexture->SetContext(renderWindow);
+
+  if (!node) {
+    vtkWarningMacro("vtkSlicerBezierSurfaceRepresentation::CreateAndTransferDistanceMap:"
+                    "There is no distance map node associated. Texture won't be generated.");
+    return;
+    }
+
+  auto imageData = node->GetImageData();
+  if (!imageData) {
+    vtkWarningMacro("vtkSlicerBezierSurfaceRepresentation::CreateAndTransferDistanceMap:"
+                    "There is no image data in the specified scalar volume node.");
+    return;
+    }
+  auto dimensions = imageData->GetDimensions();
+
+  this->MarkerStyleTexture->SetWrapS(vtkMultiTextureObjectHelper::ClampToBorder);
+  this->MarkerStyleTexture->SetWrapT(vtkMultiTextureObjectHelper::ClampToBorder);
+  this->MarkerStyleTexture->SetMinificationFilter(vtkMultiTextureObjectHelper::Linear);
+  this->MarkerStyleTexture->SetMagnificationFilter(vtkMultiTextureObjectHelper::Linear);
+  this->MarkerStyleTexture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
+  this->MarkerStyleTexture->CreateSeq2DFromRaw(dimensions[0], dimensions[1], 4, VTK_UNSIGNED_CHAR,
+                                               imageData->GetScalarPointer(),15);
+}
+
+//----------------------------------------------------------------------
+void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferVascularSegmentsTexture(vtkMRMLScalarVolumeNode *node) {
+
+  auto renderWindow = vtkOpenGLRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
+  this->VascularSegmentsTexture = vtkSmartPointer<vtkMultiTextureObjectHelper>::New();
+  this->VascularSegmentsTexture->SetContext(renderWindow);
+
+  if (!node) {
+    vtkWarningMacro("vtkSlicerBezierSurfaceRepresentation::CreateAndTransferDistanceMap:"
+                    "There is no distance map node associated. Texture won't be generated.");
+    return;
+    }
+
+  auto imageData = node->GetImageData();
+  if (!imageData) {
+    vtkWarningMacro("vtkSlicerBezierSurfaceRepresentation::CreateAndTransferDistanceMap:"
+                    "There is no image data in the specified scalar volume node.");
+    return;
+    }
+
+  vtkNew<vtkImageCast> cast;
+  cast->SetInputData(imageData);
+  cast->SetOutputScalarTypeToFloat();
+  cast->Update();
+
+  auto dimensions = imageData->GetDimensions();
+
+  this->VascularSegmentsTexture->SetWrapS(vtkTextureObject::ClampToBorder);
+  this->VascularSegmentsTexture->SetWrapT(vtkTextureObject::ClampToBorder);
+  this->VascularSegmentsTexture->SetWrapR(vtkTextureObject::ClampToBorder);
+  this->VascularSegmentsTexture->SetMinificationFilter(vtkTextureObject::Linear);
+  this->VascularSegmentsTexture->SetMagnificationFilter(vtkTextureObject::Linear);
+  this->VascularSegmentsTexture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
+  this->VascularSegmentsTexture->CreateSeq3DFromRaw(dimensions[0], dimensions[1], dimensions[2], 1, VTK_FLOAT,
+                                                    cast->GetOutput()->GetScalarPointer(), 1);
 }
 
 //----------------------------------------------------------------------
@@ -538,11 +622,19 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceDisplay(vtkMRMLM
 
   this->BezierSurfaceResectionMapper2D->SetResectionMargin(node->GetResectionMargin());
   this->BezierSurfaceResectionMapper2D->SetUncertaintyMargin(node->GetUncertaintyMargin());
-  this->BezierSurfaceResectionMapper2D->SetHepaticContourSize(node->GetHepaticContourSize());
-  this->BezierSurfaceResectionMapper2D->SetPortalContourSize(node->GetPortalContourSize());
+  this->BezierSurfaceResectionMapper2D->SetHepaticContourThickness(node->GetHepaticContourThickness());
+  this->BezierSurfaceResectionMapper2D->SetPortalContourThickness(node->GetPortalContourThickness());
 
   if (displayNode)
     {
+    if (!this->MarkerStyleVolumeNode){
+      this->BezierSurfaceResectionMapper->SetMarkerStyleAvailable(0);
+      this->BezierSurfaceResectionMapper2D->SetMarkerStyleAvailable(0);
+      }
+    else{
+      this->BezierSurfaceResectionMapper->SetMarkerStyleAvailable(1);
+      this->BezierSurfaceResectionMapper2D->SetMarkerStyleAvailable(1);
+      }
     this->BezierSurfaceResectionMapper->SetResectionColor(displayNode->GetResectionColor());
     this->BezierSurfaceResectionMapper->SetResectionGridColor(displayNode->GetResectionGridColor());
     this->BezierSurfaceResectionMapper->SetResectionMarginColor(displayNode->GetResectionMarginColor());
@@ -583,4 +675,42 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateControlPolygonDisplay(vtkMRML
       controlPoints->Actor->SetVisibility(displayNode->GetWidgetVisibility());
       }
     }
+}
+
+//----------------------------------------------------------------------
+void vtkSlicerBezierSurfaceRepresentation3D::Ratio(bool flexibleBoundery){
+
+  float matR[2];
+  if (flexibleBoundery)
+    {
+    double disU = 0, disV = 0;
+    std::vector<double> p0u = {this->p->GetTuple3(0)[0],this->p->GetTuple3(0)[1],this->p->GetTuple3(0)[2]};
+    std::vector<double> p0v = {this->p->GetTuple3(0)[0],this->p->GetTuple3(0)[1],this->p->GetTuple3(0)[2]};
+
+    for(int i = 1; i<20; i++){
+      std::vector<double> p1 = {this->p->GetTuple3(i)[0],this->p->GetTuple3(i)[1],this->p->GetTuple3(i)[2]};
+      std::vector<double> p2 = {this->p->GetTuple3(20*i)[0],this->p->GetTuple3(20*i)[1],this->p->GetTuple3(20*i)[2]};
+
+      auto d01 = sqrt(pow(p0u[0]-p1[0],2.0)+pow(p0u[1]-p1[1],2.0)+pow(p0u[2]-p1[2],2.0));
+      disU = disU + d01;
+      auto d02 = sqrt(pow(p0v[0]-p2[0],2.0)+pow(p0v[1]-p2[1],2.0)+pow(p0v[2]-p2[2],2.0));
+      disV  = disV + d02;
+      p0u = p1;
+      p0v = p2;
+      }
+
+    if(disU>=disV){
+      matR[0] = 1;
+      matR[1] = disV/disU;
+      }else{
+      matR[0] = disU/disV;
+      matR[1] = 1;
+      }
+    }
+  else
+    {
+    matR[0] = 1;
+    matR[1] = 1;
+    }
+  this->BezierSurfaceResectionMapper2D->SetMatRatio(matR);
 }
