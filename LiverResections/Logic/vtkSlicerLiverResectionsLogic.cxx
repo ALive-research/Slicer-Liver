@@ -173,17 +173,19 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
     if (bezierSurfaceNode)
       {
       bezierSurfaceNode->SetDistanceMapVolumeNode(resectionNode->GetDistanceMapVolumeNode());
+      bezierSurfaceNode->SetVascularSegmentsVolumeNode(resectionNode->GetVascularSegmentsVolumeNode());
+      bezierSurfaceNode->SetMarkerStyleVolumeNode(resectionNode->GetMarkerStyleVolumeNode());
       bezierSurfaceNode->SetResectionMargin(resectionNode->GetResectionMargin());
       bezierSurfaceNode->SetUncertaintyMargin(resectionNode->GetUncertaintyMargin());
-      bezierSurfaceNode->SetHepaticContourSize(resectionNode->GetHepaticContourSize());
-      bezierSurfaceNode->SetPortalContourSize(resectionNode->GetPortalContourSize());
-
+      bezierSurfaceNode->SetHepaticContourThickness(resectionNode->GetHepaticContourThickness());
+      bezierSurfaceNode->SetPortalContourThickness(resectionNode->GetPortalContourThickness());
 
       auto bezierSurfaceDisplayNode =
         vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(bezierSurfaceNode->GetDisplayNode());
       if (bezierSurfaceDisplayNode)
         {
         bezierSurfaceDisplayNode->SetShowResection2D(resectionNode->GetShowResection2D());
+        bezierSurfaceDisplayNode->SetEnableFlexibleBoundary(resectionNode->GetEnableFlexibleBoundary());
         bezierSurfaceDisplayNode->SetTextureNumComps(resectionNode->GetTextureNumComps());
         bezierSurfaceDisplayNode->SetClipOut(resectionNode->GetClipOut());
         bezierSurfaceDisplayNode->SetWidgetVisibility(resectionNode->GetWidgetVisibility());

@@ -136,6 +136,41 @@
           </layout>
          </item>
          <item>
+          <layout class="QFormLayout" name="formLayout_2">
+           <item row="0" column="0">
+            <widget class="QLabel" name="MarkerStyleLabel">
+             <property name="text">
+              <string>Marker Style:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="qMRMLNodeComboBox" name="MarkerStyleNodeComboBox">
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+             <property name="nodeTypes">
+              <stringlist>
+               <string>vtkMRMLVectorVolumeNode</string>
+              </stringlist>
+             </property>
+             <property name="noneEnabled">
+              <bool>true</bool>
+             </property>
+             <property name="addEnabled">
+              <bool>false</bool>
+             </property>
+             <property name="removeEnabled">
+              <bool>false</bool>
+             </property>
+             <property name="selectNodeUponCreation">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
           <widget class="QGroupBox" name="ResectionVisualizationGroupBox">
            <property name="enabled">
             <bool>false</bool>
@@ -326,6 +361,9 @@
                  <property name="orientation">
                   <enum>Qt::Horizontal</enum>
                  </property>
+                 <property name="maximum">
+                  <double>30.000000000000000</double>
+                 </property>
                 </widget>
                </item>
                <item>
@@ -348,6 +386,9 @@
                </item>
                <item>
                 <widget class="ctkDoubleSlider" name="GridThicknessDoubleSlider">
+                 <property name="minimum">
+                  <double>5.000000000000000</double>
+                 </property>
                  <property name="value">
                   <double>5.000000000000000</double>
                  </property>
@@ -677,6 +718,22 @@
    <sender>ResectionWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>DistanceMapNodeComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>293</x>
+     <y>365</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>376</x>
+     <y>167</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>MarkerStyleNodeComboBox</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
     <hint type="sourcelabel">

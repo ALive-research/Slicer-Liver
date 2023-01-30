@@ -93,6 +93,7 @@ public:
   bool  ResectionClipOut;
   unsigned int GridDivisions;
   float GridThicknessFactor;
+  unsigned int MarkerStyleAvailable;
 };
 
 //------------------------------------------------------------------------------
@@ -158,6 +159,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
     "//VTK::PositionVC::Dec\n"
     "#define M_PI 3.1415926535897932384626433832795\n"
     "uniform sampler3D distanceTexture;\n"
+    "uniform sampler2D posMarker;\n"
     "//vec4 fragPositionMC = vertexWCVSOutput;\n");
 
   vtkShaderProgram::Substitute(
@@ -173,6 +175,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
     "uniform int uResectionClipOut;\n"
     "uniform int uInterpolatedMargins;\n"
     "uniform int uGridDivisions;\n"
+    "uniform int uMarkerStyleAvailable;\n"
     "uniform float uGridThickness;\n"
     "in vec4 vertexWCVSOutput;\n"
     "in vec2 uvCoordsOutput;\n"
@@ -181,12 +184,14 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
   vtkShaderProgram::Substitute(
     FSSource, "//VTK::Color::Impl",
     "//VTK::Color::Impl\n"
+    "vec4 marker = texture(posMarker, uvCoordsOutput);\n"
     "vec4 dist = texture(distanceTexture, fragPositionMC.xyz);\n"
     "float lowMargin = uResectionMargin - uUncertaintyMargin;\n"
     "float highMargin = uResectionMargin + uUncertaintyMargin;\n"
     "if(uResectionClipOut == 1 && dist[1] > 2.0){\n"
     "  discard;\n"
     "}\n"
+
     "if(tan(uvCoordsOutput.x*M_PI*uGridDivisions)>10.0-uGridThickness || tan(uvCoordsOutput.y*M_PI*uGridDivisions)>10.0-uGridThickness){\n"
     "   ambientColor = uResectionGridColor;\n"
     "   diffuseColor = vec3(0.0);\n"
@@ -212,11 +217,17 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
     "   ambientColor = vec3(0.0);\n"
     "   diffuseColor = vec3(0.0);\n"
     "  }\n"
+    "  else if(uMarkerStyleAvailable == 1 && marker.a != 0){\n"
+    "    ambientColor = vec3(marker.r,marker.g,marker.b);\n"
+    "    diffuseColor = vec3(0.0);\n"
+    "  }\n"
     "  else{\n"
     "    ambientColor = uResectionColor;\n"
     "    diffuseColor = vec3(0.6);\n"
     "  }\n"
-    "}\n");
+    "}\n"
+
+    );
 
    vtkShaderProgram::Substitute(
     FSSource, "//VTK::Light::Impl",
@@ -260,7 +271,17 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetCameraShaderParameters(
 void vtkOpenGLBezierResectionPolyDataMapper::SetMapperShaderParameters(
   vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor)
 {
-  if (cellBO.Program->IsUniformUsed("uRasToIjk"))
+    if (cellBO.Program->IsUniformUsed("distanceTexture"))
+    {
+        cellBO.Program->SetUniformi("distanceTexture", 0);
+    }
+
+    if (cellBO.Program->IsUniformUsed("posMarker"))
+    {
+        cellBO.Program->SetUniformi("posMarker", 15);
+    }
+
+    if (cellBO.Program->IsUniformUsed("uRasToIjk"))
     {
     cellBO.Program->SetUniformMatrix("uRasToIjk", this->Impl->RasToIjkMatrixT);
     }
@@ -323,6 +344,11 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetMapperShaderParameters(
   if (cellBO.Program->IsUniformUsed("uGridThickness"))
     {
     cellBO.Program->SetUniformf("uGridThickness", this->Impl->GridThicknessFactor);
+    }
+
+  if (cellBO.Program->IsUniformUsed("uMarkerStyleAvailable"))
+    {
+    cellBO.Program->SetUniformi("uMarkerStyleAvailable", this->Impl->MarkerStyleAvailable);
     }
 
   Superclass::SetMapperShaderParameters(cellBO, ren, actor);
@@ -484,6 +510,19 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetUncertaintyMarginColor(float red
   this->Impl->UncertaintyMarginColor[0] = red;
   this->Impl->UncertaintyMarginColor[1] = green;
   this->Impl->UncertaintyMarginColor[2] = blue;
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+//unsigned int const* vtkOpenGLBezierResectionPolyDataMapper::GetMarkerStyleAvailable() const
+//{
+//  return this->Impl->MarkerStyleAvailable;
+//}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::SetMarkerStyleAvailable(unsigned int status)
+{
+  this->Impl->MarkerStyleAvailable = status;
   this->Modified();
 }
 

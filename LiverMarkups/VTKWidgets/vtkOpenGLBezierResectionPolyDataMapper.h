@@ -143,6 +143,9 @@ public:
   /// Set the thickness factor for the grid
   void SetGridThicknessFactor(float thicknessFactor);
 
+//  unsigned int GetMarkerStyleAvailable() const;
+  void SetMarkerStyleAvailable(unsigned int status);
+
 protected:
   vtkOpenGLBezierResectionPolyDataMapper();
   ~vtkOpenGLBezierResectionPolyDataMapper();
