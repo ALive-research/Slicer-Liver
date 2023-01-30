@@ -13,9 +13,13 @@
 
 //Module includes
 #include <vtkSlicerLiverMarkupsLogic.h>
+#include <vtkMRMLMarkupsBezierSurfaceNode.h>
+#include <vtkMRMLMarkupsDistanceContourNode.h>
+#include <vtkMRMLMarkupsSlicingContourNode.h>
 
 // MRML includes
 #include <vtkMRMLScene.h>
+#include <vtkMRMLMarkupsNode.h>
 
 // VTK includes
 #include "qMRMLWidget.h"
@@ -91,7 +95,32 @@ public:
         }
         if(!markupsLogic->IsMarkupsNodeRegistered("vtkMRMLMarkupsBezierSurfaceNode"))
         {
-            qCritical() << Q_FUNC_INFO<< "vtkMRMLMarkupsBezierSurfaceNode isn't registered";
+            qCritical() << Q_FUNC_INFO << "vtkMRMLMarkupsBezierSurfaceNode isn't registered";
+            return 1;
+        }
+        return 0;
+    }
+
+    int checkDisplayNodes()
+    {
+        auto bezierSurfaceNode = vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>::New();
+        auto distanceContourNode = vtkSmartPointer<vtkMRMLMarkupsDistanceContourNode>::New();
+        auto slicingContourNode = vtkSmartPointer<vtkMRMLMarkupsSlicingContourNode>::New();
+
+        int retval = 0;
+        retval = retval || checkDisplayNode(bezierSurfaceNode, "vtkMRMLMarkupsBezierSurfaceDisplayNode");
+        retval = retval || checkDisplayNode(distanceContourNode, "vtkMRMLMarkupsDistanceContourDisplayNode");
+        retval = retval || checkDisplayNode(slicingContourNode, "vtkMRMLMarkupsSlicingContourDisplayNode");
+        return retval;
+    }
+
+    int checkDisplayNode(vtkMRMLMarkupsNode* markupsNode, const char* displayClassName)
+    {
+        markupsNode->SetScene(app.mrmlScene());
+        markupsNode->CreateDefaultDisplayNodes();
+        if(!app.mrmlScene()->GetFirstNodeByClass(displayClassName))
+        {
+            qCritical() << Q_FUNC_INFO << displayClassName << " isn't added";
             return 1;
         }
         return 0;
@@ -107,12 +136,12 @@ int qSlicerLiverMarkupsModuleTest(int argc, char * argv[] )
 	if(!markupsModule.isHidden())
 		return 1;
 
-    vtkSmartPointer<vtkMRMLScene> scene = vtkSmartPointer<vtkMRMLScene>::New();
+    vtkSmartPointer<vtkMRMLScene> scene = markupsModule.app.mrmlScene();
     vtkSlicerApplicationLogic* appLogic = markupsModule.app.applicationLogic();
 
     markupsModule.loadModules();
 
-    qDebug() << "initialize start";
+    qDebug() << "initialize qSlicerLiverMarkupsModule";
 //    TESTING_OUTPUT_ASSERT_WARNINGS_BEGIN();
     // Set path just to avoid a runtime warning at module initialization
     markupsModule.setPath(markupsModule.app.slicerHome() + '/' + markupsModule.app.slicerSharePath() + "/qt-loadable-modules/LiverMarkups");
@@ -125,13 +154,15 @@ int qSlicerLiverMarkupsModuleTest(int argc, char * argv[] )
         qCritical() << "No logic";
         return 1;
     }
-    qDebug() << "initialize finished";
 
     qDebug() <<"setMRMLScene start";
     markupsModule.setMRMLScene(scene.GetPointer());
-    qDebug() << "setMRMLScene finish";
 
+    qDebug() <<"Check Markup Nodes";
     int retval = markupsModule.checkMarkupNodes();
+    qDebug() <<"Check Markup Display Nodes";
+    retval = retval || markupsModule.checkDisplayNodes();
+
     if(retval != 0)
         return retval;
 
