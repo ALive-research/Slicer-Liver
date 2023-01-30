@@ -29,13 +29,11 @@ public:
         app(argc, argv)
     {}
 
-    void startApp(int argc, char * argv[] )
+    void startApp()
     {
         //Using code example from qSlicerModelsModuleWidgetTest1
 
         qMRMLWidget::preInitializeApplication();
-    //    QApplication app(argc, argv);
-//        app = qSlicerApplication(argc, argv);
         qMRMLWidget::postInitializeApplication();
     }
     int runApp(int argc, char * argv[])
@@ -77,9 +75,26 @@ public:
           }
     }
 
-    vtkMRMLAbstractLogic* createLogic()
+    int checkMarkupNodes()
     {
-        return qSlicerLiverMarkupsModule::createLogic();
+        vtkSlicerApplicationLogic* appLogic = app.applicationLogic();
+        vtkSlicerMarkupsLogic* markupsLogic = vtkSlicerMarkupsLogic::SafeDownCast(appLogic->GetModuleLogic("Markups"));
+        if(!markupsLogic->IsMarkupsNodeRegistered("vtkMRMLMarkupsSlicingContourNode"))
+        {
+            qCritical() << Q_FUNC_INFO<< "vtkMRMLMarkupsSlicingContourNode isn't registered";
+            return 1;
+        }
+        if(!markupsLogic->IsMarkupsNodeRegistered("vtkMRMLMarkupsDistanceContourNode"))
+        {
+            qCritical() << Q_FUNC_INFO<< "vtkMRMLMarkupsDistanceContourNode isn't registered";
+            return 1;
+        }
+        if(!markupsLogic->IsMarkupsNodeRegistered("vtkMRMLMarkupsBezierSurfaceNode"))
+        {
+            qCritical() << Q_FUNC_INFO<< "vtkMRMLMarkupsBezierSurfaceNode isn't registered";
+            return 1;
+        }
+        return 0;
     }
 };
 
@@ -87,16 +102,12 @@ public:
 int qSlicerLiverMarkupsModuleTest(int argc, char * argv[] )
 {
     markupsModuleTest markupsModule = markupsModuleTest(argc, argv);
-    markupsModule.startApp(argc, argv);
+    markupsModule.startApp();
 
 	if(!markupsModule.isHidden())
 		return 1;
 
     vtkSmartPointer<vtkMRMLScene> scene = vtkSmartPointer<vtkMRMLScene>::New();
-
-//    markupsModule.setup();// Use initialize instead
-
-//    vtkNew<vtkSlicerApplicationLogic> appLogic;
     vtkSlicerApplicationLogic* appLogic = markupsModule.app.applicationLogic();
 
     markupsModule.loadModules();
@@ -109,7 +120,6 @@ int qSlicerLiverMarkupsModuleTest(int argc, char * argv[] )
 //    markupsModule.initialize(nullptr);
 //    TESTING_OUTPUT_ASSERT_WARNINGS_END(); // warning due to using 0 as application logic
 
-    //vtkMRMLAbstractLogic* logic = markupsModule.logic();
     vtkSlicerLiverMarkupsLogic* logic = vtkSlicerLiverMarkupsLogic::SafeDownCast(markupsModule.logic());
     if(!logic) {
         qCritical() << "No logic";
@@ -118,10 +128,12 @@ int qSlicerLiverMarkupsModuleTest(int argc, char * argv[] )
     qDebug() << "initialize finished";
 
     qDebug() <<"setMRMLScene start";
-
     markupsModule.setMRMLScene(scene.GetPointer());
-    //qDebug() << "GetSelectionNodeID: " << logic->GetSelectionNodeID().c_str();
     qDebug() << "setMRMLScene finish";
+
+    int retval = markupsModule.checkMarkupNodes();
+    if(retval != 0)
+        return retval;
 
     return markupsModule.runApp(argc, argv);
 
