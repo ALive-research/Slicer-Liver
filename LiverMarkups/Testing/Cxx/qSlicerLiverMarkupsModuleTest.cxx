@@ -132,7 +132,7 @@ public:
 //-----------------------------------------------------------------------------
 int qSlicerLiverMarkupsModuleTest(int argc, char * argv[] )
 {
-    markupsModuleTest markupsModule = markupsModuleTest(argc, argv);
+    markupsModuleTest markupsModule(argc, argv);
     markupsModule.startApp();
 
 	if(!markupsModule.isHidden())
