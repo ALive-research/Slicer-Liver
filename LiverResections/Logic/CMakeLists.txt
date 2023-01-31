@@ -12,12 +12,15 @@ set(${KIT}_INCLUDE_DIRECTORIES
 set(${KIT}_SRCS
   vtkSlicer${MODULE_NAME}Logic.cxx
   vtkSlicer${MODULE_NAME}Logic.h
+  vtkLabelMapHelper.cpp
+  vtkLabelMapHelper.h
   )
 
 set(${KIT}_TARGET_LIBRARIES
   vtkSlicerLiverMarkupsModuleMRML
   vtkSlicerLiverResectionsModuleMRML
   vtkSlicerMarkupsModuleLogic
+  vtkSlicerLiverMarkupsModuleVTKWidgets
   )
 
 #-----------------------------------------------------------------------------

@@ -49,6 +49,8 @@
 #include <vtkWeakPointer.h>
 #include <vtkSmartPointer.h>
 #include <vtkMRMLMessageCollection.h>
+#include <vtkPolyData.h>
+#include <vtkMRMLScalarVolumeNode.h>
 
 // STD include
 #include <map>
@@ -94,6 +96,7 @@ public:
   void HideBezierSurfaceMarkup(vtkMRMLMarkupsNode* markupsInitializationNode) const;
   void ShowInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const;
   void HideInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const;
+  void ComputePlanningVolumetry(vtkMRMLLiverResectionNode* resectionNode, vtkMRMLScalarVolumeNode *parenchymaLabelMap, vtkPolyData *tumorModel);
 
   char* LoadLiverResection(const std::string& fileName,
                            const std::string& nodeName/*=nullptr*/,

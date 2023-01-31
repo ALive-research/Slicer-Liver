@@ -70,8 +70,11 @@
 #include <vtkPCAStatistics.h>
 #include <vtkPlaneSource.h>
 #include <vtkTable.h>
+#include <vtkImageData.h>
 
 #include <vtkMRMLGlyphableVolumeDisplayNode.h>
+#include "vtkLabelMapHelper.h"
+#include "vtkBezierSurfaceSource.h"
 
 //----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerLiverResectionsLogic);
@@ -1035,3 +1038,116 @@ char *vtkSlicerLiverResectionsLogic::LoadLiverResectionFromFcsv(const std::strin
 
     return nodeID;
   }
+
+//----------------------------------------------------------------------
+void vtkSlicerLiverResectionsLogic::ComputePlanningVolumetry(
+    vtkMRMLLiverResectionNode* resectionNode,
+    vtkMRMLScalarVolumeNode *parenchymaLabelMap,
+    vtkPolyData *tumorModel){
+
+  auto bezierSurfaceNode = this->GetBezierFromResection(resectionNode);
+  vtkMRMLScene *mrmlScene = this->GetMRMLScene();
+  if (!bezierSurfaceNode)
+    {
+    return;
+    }
+
+  // Create a High-resolution Bézier surface for its sampling and projection
+  auto bezierHR = vtkSmartPointer<vtkBezierSurfaceSource>::New();
+  bezierHR->SetResolution(300,300);
+  bezierHR->SetNumberOfControlPoints(4,4);
+
+  if (bezierSurfaceNode->GetNumberOfControlPoints() == 16)
+    {
+    auto BezierSurfaceControlPoints = vtkSmartPointer<vtkPoints>::New();
+
+    for (int i=0; i<16; i++)
+      {
+      double point[3];
+      bezierSurfaceNode->GetNthControlPointPosition(i,point);
+      BezierSurfaceControlPoints->InsertNextPoint(static_cast<float>(point[0]),
+                                           static_cast<float>(point[1]),
+                                           static_cast<float>(point[2]));
+      }
+    bezierHR->SetControlPoints(BezierSurfaceControlPoints);
+    bezierHR->Update();
+    }
+
+  vtkSmartPointer<vtkImageData> projectedResectionImageData =
+      vtkSmartPointer<vtkImageData>::New();
+  projectedResectionImageData->DeepCopy(parenchymaLabelMap->GetImageData());
+  vtkSmartPointer<vtkMRMLScalarVolumeNode> projectedResectionLabelMap =
+      vtkSmartPointer<vtkMRMLScalarVolumeNode>::New();
+  projectedResectionLabelMap->CopyOrientation(parenchymaLabelMap);
+  projectedResectionLabelMap->SetAndObserveImageData(projectedResectionImageData);
+  vtkLabelMapHelper::LabelMapType::Pointer projectionImage =
+      vtkLabelMapHelper::VolumeNodeToItkImage(projectedResectionLabelMap, true, false);
+
+  vtkLabelMapHelper::ProjectPointsOntoItkImage(projectionImage,
+                                               bezierHR->GetOutput()->GetPoints(),
+                                               7, 1);
+  vtkLabelMapHelper::LabelMapType::IndexType seedIndex;
+  vtkLabelMapHelper::LabelMapType::PointType seedPoint;
+  bool tumorInsideParenchyma = false;
+
+  for(unsigned int j=0; j<tumorModel->GetNumberOfPoints(); ++j)
+    {
+    double coordinates[3];
+    tumorModel->GetPoints()->GetPoint(j,coordinates);
+    seedPoint[0] = coordinates[0];
+    seedPoint[1] = coordinates[1];
+    seedPoint[2] = coordinates[2];
+    projectionImage->TransformPhysicalPointToIndex(seedPoint, seedIndex);
+
+    unsigned short int value = projectionImage->GetPixel(seedIndex);
+    if (value == 1)
+      {
+      tumorInsideParenchyma = true;
+      break;
+      }
+    }
+  if (!tumorInsideParenchyma)
+    {
+    vtkErrorMacro(<< "A tumor is not inside the parenchyma,"
+                      << "its associated resection will not be considered");
+    }
+
+  vtkSmartPointer<vtkLabelMapHelper> labelMapHelper =
+      vtkSmartPointer<vtkLabelMapHelper>::New();
+
+  vtkLabelMapHelper::LabelMapType::Pointer connectedThreshold =
+      labelMapHelper->ConnectedThreshold(projectionImage, 1, 6, 1, seedIndex);
+
+  vtkSmartPointer<vtkMRMLScalarVolumeNode> resectedVolumeNode =
+      vtkLabelMapHelper::ConvertItkImageToVolumeNode(connectedThreshold, false);
+  resectedVolumeNode->SetName("LRPResectedVolume");
+  mrmlScene->AddNode(resectedVolumeNode);
+
+  vtkLabelMapHelper::LabelMapType::Pointer itkParenchyma =
+      vtkLabelMapHelper::VolumeNodeToItkImage(parenchymaLabelMap);
+
+  vtkLabelMapHelper::LabelMapType::RegionType parenchymaROI;
+  parenchymaROI = vtkLabelMapHelper::GetBoundingBox(itkParenchyma);
+
+  unsigned int voxels = vtkLabelMapHelper::CountVoxels(itkParenchyma,
+                                                       parenchymaROI,1);
+  double spacing[3] = {
+      itkParenchyma->GetSpacing()[0],
+      itkParenchyma->GetSpacing()[1],
+      itkParenchyma->GetSpacing()[2]};
+
+  auto ParenchymaVolume = voxels*spacing[0]*spacing[1]*spacing[2]*0.001;
+  voxels = vtkLabelMapHelper::CountVoxels(connectedThreshold,
+                                          parenchymaROI, 1);
+
+  spacing[0] = projectionImage->GetSpacing()[0];
+  spacing[1] = projectionImage->GetSpacing()[1];
+  spacing[2] = projectionImage->GetSpacing()[2];
+
+  double resected = voxels*spacing[0]*spacing[1]*spacing[2]*0.001;
+  double remnant = ParenchymaVolume - resected;
+
+  std::cout << "Parenchyma Volume" << ParenchymaVolume << std::endl;
+  std::cout << "Resected: " << resected << std::endl;
+  std::cout << "Remnant: " << remnant << std::endl;
+}

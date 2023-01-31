@@ -473,11 +473,11 @@
                </item>
                <item>
                 <widget class="ctkDoubleSlider" name="GridDivisionsDoubleSlider">
-                 <property name="orientation">
-                  <enum>Qt::Horizontal</enum>
-                 </property>
                  <property name="maximum">
                   <double>30.000000000000000</double>
+                 </property>
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
                  </property>
                 </widget>
                </item>
@@ -501,9 +501,6 @@
                </item>
                <item>
                 <widget class="ctkDoubleSlider" name="GridThicknessDoubleSlider">
-                 <property name="minimum">
-                  <double>5.000000000000000</double>
-                 </property>
                  <property name="value">
                   <double>5.000000000000000</double>
                  </property>
@@ -512,6 +509,9 @@
                  </property>
                  <property name="pageStep">
                   <double>1.000000000000000</double>
+                 </property>
+                 <property name="minimum">
+                  <double>5.000000000000000</double>
                  </property>
                  <property name="maximum">
                   <double>10.000000000000000</double>
@@ -740,6 +740,111 @@
         </layout>
        </widget>
       </item>
+      <item>
+       <widget class="ctkCollapsibleGroupBox" name="ComputeVolumetryGroupBox">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="title">
+         <string>Volumetry</string>
+        </property>
+        <property name="collapsed">
+         <bool>true</bool>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_9">
+         <item>
+          <widget class="QCheckBox" name="FinishPlanningCheckBox">
+           <property name="enabled">
+            <bool>true</bool>
+           </property>
+           <property name="text">
+            <string>Finish Planning?</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QGroupBox" name="ComputeVolumetryParametersGroupBox">
+           <property name="title">
+            <string>Volumetry Parameters</string>
+           </property>
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_10">
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_10">
+              <item>
+               <widget class="QLabel" name="label_5">
+                <property name="text">
+                 <string>Tumor</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="qMRMLSegmentSelectorWidget" name="TumorSegmentSelectorWidget">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="segmentationNodeSelectorVisible">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_11">
+              <item>
+               <widget class="QLabel" name="label_4">
+                <property name="text">
+                 <string>Liver</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="qMRMLSegmentSelectorWidget" name="ParenchymaSegmentSelectorWidget">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="segmentationNodeSelectorVisible">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_12">
+              <item>
+               <widget class="QPushButton" name="ComputeVolumePushButton">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="text">
+                 <string>Compute Volumes</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
@@ -825,6 +930,70 @@
  </customwidgets>
  <resources/>
  <connections>
+  <connection>
+   <sender>LiverSegmentSelectorWidget</sender>
+   <signal>currentNodeChanged(vtkMRMLNode*)</signal>
+   <receiver>TumorSegmentSelectorWidget</receiver>
+   <slot>setCurrentNode(vtkMRMLNode*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>478</x>
+     <y>182</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>478</x>
+     <y>470</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>TumorSegmentSelectorWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>395</x>
+     <y>350</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>478</x>
+     <y>399</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>LiverSegmentSelectorWidget</sender>
+   <signal>currentNodeChanged(vtkMRMLNode*)</signal>
+   <receiver>ParenchymaSegmentSelectorWidget</receiver>
+   <slot>setCurrentNode(vtkMRMLNode*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>478</x>
+     <y>182</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>478</x>
+     <y>470</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>ParenchymaSegmentSelectorWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>395</x>
+     <y>350</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>478</x>
+     <y>399</y>
+    </hint>
+   </hints>
+  </connection>
   <connection>
    <sender>ResectionWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
