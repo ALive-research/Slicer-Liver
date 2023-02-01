@@ -42,13 +42,13 @@ public:
     }
     int runApp(int argc, char * argv[])
     {
-        if (argc < 2 || QString(argv[1]) != "-I")
-        {
-            QTimer::singleShot(100, app, SLOT(quit()));
-        }
-        int retval = app->exec();
+//        if (argc < 2 || QString(argv[1]) != "-I")
+//        {
+//            QTimer::singleShot(100, app, SLOT(quit()));
+//        }
+//        int retval = app->exec();
         delete app;
-        return retval;
+        return 0;
     }
 	void setup()
     {
