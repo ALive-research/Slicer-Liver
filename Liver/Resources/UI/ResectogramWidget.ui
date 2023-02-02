@@ -207,7 +207,7 @@
            <item row="0" column="0">
             <widget class="QLabel" name="DistanceMapLabel_10">
              <property name="text">
-              <string>Vsacular Segments Volumn</string>
+              <string>Vsacular Segments Volume</string>
              </property>
             </widget>
            </item>

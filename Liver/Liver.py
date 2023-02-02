@@ -296,7 +296,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     This function is triggered whenever any parameter of the distance maps are changed
     """
-
     node1 = self.distanceMapsWidget.TumorSegmentSelectorWidget.currentNode()
     node2 = self.distanceMapsWidget.ParenchymaSegmentSelectorWidget.currentNode()
     node3 = self.distanceMapsWidget.HepaticSegmentSelectorWidget.currentNode()
@@ -304,6 +303,12 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     node5 = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
     self.numComps = 4 - [node1, node2, node3, node4, node5].count(None)
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.setEnabled(None not in [node1, node2, node5])
+
+  def onDownSampleCheckBoxChanged(self):
+    """
+    This function is triggered when downsampling is enabled
+    """
+    self.distanceMapsWidget.DownsamplingRateGroupBox.setEnabled(self.distanceMapsWidget.DownSampleCheckBox.isChecked())
 
   def onResectionNodeChanged(self):
     """
@@ -435,13 +440,13 @@ class LiverWidget(ScriptedLoadableModuleWidget):
           lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
           lvLogic.ShowBezierSurfaceMarkupFromResection(activeResectionNode)
       else:
-          lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
-          lvLogic.HideInitializationMarkupFromResection(self._currentResectionNode)
-          renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
-          if renderers.GetNumberOfItems() == 5:
-            renderers.RemoveItem(4)
-          self.resectogramWidget.Resection2DCheckBox.setCheckState(0)
-          self._currentResectionNode.SetShowResection2D(False)
+        lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
+        lvLogic.HideInitializationMarkupFromResection(self._currentResectionNode)
+        renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
+        if renderers.GetNumberOfItems() == 5:
+          renderers.RemoveItem(4)
+        self.resectogramWidget.Resection2DCheckBox.setCheckState(0)
+        self._currentResectionNode.SetShowResection2D(False)
 
     self._currentResectionNode = activeResectionNode
 
@@ -556,7 +561,7 @@ This function is called when the resection liver model node changes
       tumorLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "TumorLabelMap")
     parenchymaLabelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("ParenchymaLabelMap")
     if not parenchymaLabelmapVolumeNode:
-        parenchymaLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "ParenchymaLabelMap")
+      parenchymaLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "ParenchymaLabelMap")
     hepaticLabelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("HepaticLabelMap")
     if not hepaticLabelmapVolumeNode:
       hepaticLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "HepaticLabelMap")
@@ -576,12 +581,12 @@ This function is called when the resection liver model node changes
     segmentationIds.Initialize()
     segmentationIds.InsertNextValue(hepaticSegmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
-        hepaticLabelmapVolumeNode, refVolumeNode)
+                                                                      hepaticLabelmapVolumeNode, refVolumeNode)
 
     segmentationIds.Initialize()
     segmentationIds.InsertNextValue(portalSegmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
-        portalLabelmapVolumeNode, refVolumeNode)
+                                                                      portalLabelmapVolumeNode, refVolumeNode)
 
     """
     Export model nodes for the selected segmentations
@@ -608,7 +613,12 @@ This function is called when the resection liver model node changes
     # threeDView = threeDWidget.threeDView()
     # threeDView.resetFocalPoint()
 
-    self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode)
+    enableDownsampling = self.distanceMapsWidget.DownSampleCheckBox.isChecked()
+    if enableDownsampling:
+      downSamplingRate = self.distanceMapsWidget.DownsamplingRateSpinBox.value
+
+
+    self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode, enableDownsampling, downSamplingRate)
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
     slicer.util.showStatusMessage('')
@@ -804,7 +814,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     """
     ScriptedLoadableModuleLogic.__init__(self)
 
-  def computeDistanceMaps(self, tumorNode, parenchymaNode, hepaticNode, portalNode, outputNode):
+  def computeDistanceMaps(self, tumorNode, parenchymaNode, hepaticNode, portalNode, outputNode, enableDownsampling=0, downSamplingRate=1):
 
     if outputNode is not None:
       import sitkUtils
