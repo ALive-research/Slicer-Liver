@@ -21,9 +21,6 @@
 #include <vtkMRMLScene.h>
 #include <vtkMRMLMarkupsNode.h>
 
-// VTK includes
-#include "qMRMLWidget.h"
-#include <vtkTestingOutputWindow.h>
 
 class markupsModuleTest: public qSlicerLiverMarkupsModule
 {
@@ -33,23 +30,6 @@ public:
         app(new qSlicerApplication(argc, argv))
     {}
 
-    void startApp()
-    {
-        //Using code example from qSlicerModelsModuleWidgetTest1
-
-        qMRMLWidget::preInitializeApplication();
-        qMRMLWidget::postInitializeApplication();
-    }
-    int runApp(int argc, char * argv[])
-    {
-//        if (argc < 2 || QString(argv[1]) != "-I")
-//        {
-//            QTimer::singleShot(100, app, SLOT(quit()));
-//        }
-//        int retval = app->exec();
-        delete app;
-        return 0;
-    }
 	void setup()
     {
         qSlicerLiverMarkupsModule::setup();
@@ -133,7 +113,6 @@ public:
 int qSlicerLiverMarkupsModuleTest(int argc, char * argv[] )
 {
     markupsModuleTest markupsModule(argc, argv);
-    markupsModule.startApp();
 
 	if(!markupsModule.isHidden())
 		return 1;
@@ -148,7 +127,6 @@ int qSlicerLiverMarkupsModuleTest(int argc, char * argv[] )
     // Set path just to avoid a runtime warning at module initialization
     markupsModule.setPath(markupsModule.app->slicerHome() + '/' + markupsModule.app->slicerSharePath() + "/qt-loadable-modules/LiverMarkups");
     markupsModule.initialize(appLogic);
-//    markupsModule.initialize(nullptr);
 //    TESTING_OUTPUT_ASSERT_WARNINGS_END(); // warning due to using 0 as application logic
 
     vtkSlicerLiverMarkupsLogic* logic = vtkSlicerLiverMarkupsLogic::SafeDownCast(markupsModule.logic());
@@ -165,10 +143,6 @@ int qSlicerLiverMarkupsModuleTest(int argc, char * argv[] )
     qDebug() <<"Check Markup Display Nodes";
     retval = retval || markupsModule.checkDisplayNodes();
 
-    if(retval != 0)
-        return retval;
-
-    return markupsModule.runApp(argc, argv);
-
-//	return 0;
+    delete markupsModule.app;
+    return retval;
 }
