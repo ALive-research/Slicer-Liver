@@ -248,9 +248,48 @@ public:
   // Set the widget visibility variable
   vtkSetMacro(GridThickness, float);
 
-  // Get bezier surface
-  vtkMRMLMarkupsBezierSurfaceNode* GetBezierSurfaceNode() const
-  {return this->BezierSurfaceNode;}
+    // Set the ShowResection2D state variable
+    vtkSetMacro(ShowResection2D, bool);
+
+    // Get the ShowResection2D state variable
+    vtkGetMacro(ShowResection2D, bool);
+
+    // Set the ShowResection2D state variable
+    vtkSetMacro(ShowResection2D, int);
+
+    // Get HepaticContourThickness margin
+    vtkGetMacro(HepaticContourThickness, double);
+
+    // Set HepaticContourThickness margin
+    vtkSetClampMacro(HepaticContourThickness, double, 0.0, VTK_DOUBLE_MAX);
+
+    // Get PortalContourThickness margin
+    vtkGetMacro(PortalContourThickness, double);
+
+    // Set PortalContourThickness margin
+    vtkSetClampMacro(PortalContourThickness, double, 0.0, VTK_DOUBLE_MAX);
+
+    // Set HepaticContourColor
+    vtkSetVector3Macro(HepaticContourColor, float);
+
+    // Get HepaticContourColor
+    vtkGetVector3Macro(HepaticContourColor, float);
+
+    // Set PortalContourColor
+    vtkSetVector3Macro(PortalContourColor, float);
+
+    // Get PortalContourColor
+    vtkGetVector3Macro(PortalContourColor, float);
+
+    // Get the TextureNumComps state variable
+    vtkGetMacro(TextureNumComps, int);
+
+    // Set the TextureNumComps state variable
+    vtkSetMacro(TextureNumComps, int);
+
+    // Get bezier surface
+    vtkMRMLMarkupsBezierSurfaceNode *GetBezierSurfaceNode() const
+    { return this->BezierSurfaceNode; }
 
   // Set bezier surface
   void SetBezierSurfaceNode(vtkMRMLMarkupsBezierSurfaceNode *node)
@@ -287,6 +326,12 @@ private:
   bool GridVisibility;
   float GridDivisions;
   float GridThickness;
+  bool ShowResection2D;
+  double HepaticContourThickness; //Resection margin in mm
+  double PortalContourThickness; //Uncertainty margin in mm
+  float HepaticContourColor[3];
+  float PortalContourColor[3];
+  int TextureNumComps;
 
 private:
  vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);

@@ -50,7 +50,8 @@ vtkMRMLNodeNewMacro(vtkMRMLMarkupsBezierSurfaceDisplayNode);
 vtkMRMLMarkupsBezierSurfaceDisplayNode::vtkMRMLMarkupsBezierSurfaceDisplayNode()
   :ClipOut(false), WidgetVisibility(true),
    ResectionMarginColor{0.0f, 0.0f, 0.0f}, UncertaintyMarginColor{0.0f, 0.0f, 0.0f},
-   ResectionOpacity(1.0f), GridDivisions(0.0f), GridThickness(0.0f)
+   ResectionOpacity(1.0f), GridDivisions(0.0f), GridThickness(0.0f), ShowResection2D(false),
+   HepaticContourColor{0.0f, 151.0/255.0f, 206.0/255.0f}, PortalContourColor{216.0/255.0f, 101.0/255.0f, 79.0/255.0f}, TextureNumComps(0)
 {
 }
 
