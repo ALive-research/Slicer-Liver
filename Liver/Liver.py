@@ -193,6 +193,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.distanceMapsWidget.SegmentationSelectorComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.distanceMapsWidget.OutputDistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
     self.distanceMapsWidget.OutputDistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
+    self.distanceMapsWidget.DownSampleCheckBox.connect('stateChanged(int)', self.onDownSampleCheckBoxChanged)
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.connect('clicked(bool)', self.onComputeDistanceMapButtonClicked)
     self.resectionsWidget.ResectionNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionDistanceMapNodeChanged)
@@ -229,7 +230,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     This function is triggered whenever any parameter of the distance maps are changed
     """
-
     node1 = self.distanceMapsWidget.TumorSegmentSelectorWidget.currentNode()
     node2 = self.distanceMapsWidget.ParenchymaSegmentSelectorWidget.currentNode()
     node3 = self.distanceMapsWidget.HepaticSegmentSelectorWidget.currentNode()
@@ -237,6 +237,12 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     node5 = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
     self.numComps = 4 - [node1, node2, node3, node4, node5].count(None)
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.setEnabled(None not in [node1, node2, node5])
+
+  def onDownSampleCheckBoxChanged(self):
+    """
+    This function is triggered when downsampling is enabled
+    """
+    self.distanceMapsWidget.DownsamplingRateGroupBox.setEnabled(self.distanceMapsWidget.DownSampleCheckBox.isChecked())
 
   def onResectionNodeChanged(self):
     """
@@ -363,13 +369,13 @@ class LiverWidget(ScriptedLoadableModuleWidget):
           lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
           lvLogic.ShowBezierSurfaceMarkupFromResection(activeResectionNode)
       else:
-          lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
-          lvLogic.HideInitializationMarkupFromResection(self._currentResectionNode)
-          renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
-          if renderers.GetNumberOfItems() == 5:
-            renderers.RemoveItem(4)
-          self.resectogramWidget.Resection2DCheckBox.setCheckState(0)
-          self._currentResectionNode.SetShowResection2D(False)
+        lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
+        lvLogic.HideInitializationMarkupFromResection(self._currentResectionNode)
+        renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
+        if renderers.GetNumberOfItems() == 5:
+          renderers.RemoveItem(4)
+        self.resectogramWidget.Resection2DCheckBox.setCheckState(0)
+        self._currentResectionNode.SetShowResection2D(False)
 
     self._currentResectionNode = activeResectionNode
 
@@ -473,10 +479,10 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     tumorLabelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("TumorLabelMap")
     if not tumorLabelmapVolumeNode:
-        tumorLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "TumorLabelMap")
+      tumorLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "TumorLabelMap")
     parenchymaLabelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("ParenchymaLabelMap")
     if not parenchymaLabelmapVolumeNode:
-        parenchymaLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "ParenchymaLabelMap")
+      parenchymaLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "ParenchymaLabelMap")
     hepaticLabelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("HepaticLabelMap")
     if not hepaticLabelmapVolumeNode:
       hepaticLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "HepaticLabelMap")
@@ -487,22 +493,22 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     segmentationIds.Initialize()
     segmentationIds.InsertNextValue(tumorSegmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
-        tumorLabelmapVolumeNode, refVolumeNode)
+                                                                      tumorLabelmapVolumeNode, refVolumeNode)
 
     segmentationIds.Initialize()
     segmentationIds.InsertNextValue(parenchymaSegmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
-        parenchymaLabelmapVolumeNode, refVolumeNode)
+                                                                      parenchymaLabelmapVolumeNode, refVolumeNode)
 
     segmentationIds.Initialize()
     segmentationIds.InsertNextValue(hepaticSegmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
-        hepaticLabelmapVolumeNode, refVolumeNode)
+                                                                      hepaticLabelmapVolumeNode, refVolumeNode)
 
     segmentationIds.Initialize()
     segmentationIds.InsertNextValue(portalSegmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
-        portalLabelmapVolumeNode, refVolumeNode)
+                                                                      portalLabelmapVolumeNode, refVolumeNode)
 
     """
     Export model nodes for the selected segmentations
@@ -529,7 +535,12 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     # threeDView = threeDWidget.threeDView()
     # threeDView.resetFocalPoint()
 
-    self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode)
+    enableDownsampling = self.distanceMapsWidget.DownSampleCheckBox.isChecked()
+    if enableDownsampling:
+      downSamplingRate = self.distanceMapsWidget.DownsamplingRateSpinBox.value
+
+
+    self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode, enableDownsampling, downSamplingRate)
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
     slicer.util.showStatusMessage('')
@@ -723,7 +734,7 @@ class LiverLogic(ScriptedLoadableModuleLogic):
     """
     ScriptedLoadableModuleLogic.__init__(self)
 
-  def computeDistanceMaps(self, tumorNode, parenchymaNode, hepaticNode, portalNode, outputNode):
+  def computeDistanceMaps(self, tumorNode, parenchymaNode, hepaticNode, portalNode, outputNode, enableDownsampling=0, downSamplingRate=1):
 
     if outputNode is not None:
       import sitkUtils
@@ -734,37 +745,47 @@ class LiverLogic(ScriptedLoadableModuleLogic):
       hepaticDistanceImage = None
       portalDistanceImage = None
 
-    # Compute tumor distance map
-    if tumorNode != None:
-      tumorImage = sitkUtils.PullVolumeFromSlicer(tumorNode)
-      tumorDistanceImage = sitk.SignedMaurerDistanceMap(tumorImage, False, False, True)
-      logging.debug("Computing Tumor Distance Map...")
-      # tumorDistanceImageDown =  self.imageResample( tumorDistanceImage, [150,150,150], "linear")
+      # Compute tumor distance map
+      if tumorNode != None:
+        tumorImage = sitkUtils.PullVolumeFromSlicer(tumorNode)
+        tumorDistanceImage = sitk.SignedMaurerDistanceMap(tumorImage, False, False, True)
+        logging.debug("Computing Tumor Distance Map...")
+        # tumorDistanceImageDown =  self.imageResample( tumorDistanceImage, [150,150,150], "linear")
 
-    # Compute parenchyma distance map
-    if parenchymaNode != None:
-      parenchymaImage = sitkUtils.PullVolumeFromSlicer(parenchymaNode)
-      parenchymaDistanceImage = sitk.SignedMaurerDistanceMap(parenchymaImage, False, False, True)
-      logging.debug("Computing Parenchyma Distance Map...")
-      # parenchymaDistanceImageDown = self.imageResample( parenchymaDistanceImage, [150,150,150], "linear")
+      # Compute parenchyma distance map
+      if parenchymaNode != None:
+        parenchymaImage = sitkUtils.PullVolumeFromSlicer(parenchymaNode)
+        parenchymaDistanceImage = sitk.SignedMaurerDistanceMap(parenchymaImage, False, False, True)
+        logging.debug("Computing Parenchyma Distance Map...")
+        # parenchymaDistanceImageDown = self.imageResample( parenchymaDistanceImage, [150,150,150], "linear")
 
-    # Compute hepatic distance map
-    if hepaticNode != None:
-      hepaticImage = sitkUtils.PullVolumeFromSlicer(hepaticNode)
-      hepaticDistanceImage = sitk.SignedMaurerDistanceMap(hepaticImage, False, False, True)
-      logging.debug("Computing Hepatic Distance Map...")
+      # Compute hepatic distance map
+      if hepaticNode != None:
+        hepaticImage = sitkUtils.PullVolumeFromSlicer(hepaticNode)
+        hepaticDistanceImage = sitk.SignedMaurerDistanceMap(hepaticImage, False, False, True)
+        logging.debug("Computing Hepatic Distance Map...")
 
-    # Compute portal distance map
-    if portalNode != None:
-      portalImage = sitkUtils.PullVolumeFromSlicer(portalNode)
-      portalDistanceImage = sitk.SignedMaurerDistanceMap(portalImage, False, False, True)
-      logging.debug("Computing Portal Distance Map...")
+      # Compute portal distance map
+      if portalNode != None:
+        portalImage = sitkUtils.PullVolumeFromSlicer(portalNode)
+        portalDistanceImage = sitk.SignedMaurerDistanceMap(portalImage, False, False, True)
+        logging.debug("Computing Portal Distance Map...")
 
-    #Combine distance maps
-    compositeDistanceMap = sitk.Compose(*[i for i in [tumorDistanceImage, parenchymaDistanceImage, hepaticDistanceImage, portalDistanceImage] if i])
-    sitkUtils.PushVolumeToSlicer(compositeDistanceMap, targetNode = outputNode, className='vtkMRMLVectorVolumeNode')
-    outputNode.SetAttribute('DistanceMap', "True");
-    outputNode.SetAttribute('Computed', "True");
+      #Combine distance maps
+      if enableDownsampling:
+        imageSize = tumorImage.GetSize()
+        newSize = [round(i/downSamplingRate) for i in imageSize]
+        tumorDistanceImageDown =  self.imageResample( tumorDistanceImage, [newSize[0],newSize[1],newSize[2]], "linear")
+        parenchymaDistanceImageDown = self.imageResample( parenchymaDistanceImage, [newSize[0],newSize[1],newSize[2]], "linear")
+        hepaticDistanceImageDown = self.imageResample( hepaticDistanceImage, [newSize[0],newSize[1],newSize[2]], "linear")
+        portalDistanceImageDown = self.imageResample( portalDistanceImage, [newSize[0],newSize[1],newSize[2]], "linear")
+        compositeDistanceMap = sitk.Compose(*[i for i in [tumorDistanceImageDown, parenchymaDistanceImageDown, hepaticDistanceImageDown, portalDistanceImageDown] if i])
+      else:
+        compositeDistanceMap = sitk.Compose(*[i for i in [tumorDistanceImage, parenchymaDistanceImage, hepaticDistanceImage, portalDistanceImage] if i])
+
+      sitkUtils.PushVolumeToSlicer(compositeDistanceMap, targetNode = outputNode, className='vtkMRMLVectorVolumeNode')
+      outputNode.SetAttribute('DistanceMap', "True");
+      outputNode.SetAttribute('Computed', "True");
 
   def imageResample(self, inputImage, resampledSize, interpolatorType):
     """
