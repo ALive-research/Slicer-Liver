@@ -126,7 +126,7 @@ QStringList qSlicerLiverResectionsModule::categories() const
 //-----------------------------------------------------------------------------
 QStringList qSlicerLiverResectionsModule::dependencies() const
 {
-  return QStringList() << "LiverMarkups";
+  return QStringList() << "LiverMarkups" << "Markups";
 }
 
 //-----------------------------------------------------------------------------
