@@ -16,14 +16,17 @@
 #include "qSlicerLiverResectionsReader.h"
 #include <vtkSlicerLiverResectionsLogic.h>
 #include <vtkSlicerMarkupsLogic.h>
-//#include <qSlicerLiverMarkupsModule.h>//Cannot find this include
+#include <qSlicerLiverMarkupsModule.h>//Needed to include qSlicerLiverMarkupsModule_INCLUDE_DIRS to find the files from the LiverMarkupsModule
 
-#include <vtkMRMLMarkupsSlicingContourNode.h>
+#include <vtkMRMLMarkupsBezierSurfaceNode.h>
+#include <vtkMRMLMarkupsBezierSurfaceDisplayNode.h>
 
 // MRML includes
 #include <vtkMRMLScene.h>
 #include <vtkMRMLMarkupsNode.h>
 #include <vtkSlicerSlicingContourWidget.h>
+#include <vtkMRMLMarkupsSlicingContourNode.h>
+#include <vtkMRMLMarkupsSlicingContourDisplayNode.h>
 
 // VTK includes
 #include "qMRMLWidget.h"
@@ -124,7 +127,7 @@ int qSlicerLiverResectionsModuleIntegrationTest(int argc, char * argv[] )
     // Set path just to avoid a runtime warning at module initialization
     module.setPath(module.app->slicerHome() + '/' + module.app->slicerSharePath() + "/qt-loadable-modules/LiverResections");
 
-    module.loadModules(); // adding "Markups" to qSlicerLiverResectionsModule::dependencies() fixes the next line - Not sure why this is nee
+    module.loadModules(); // adding "Markups" to qSlicerLiverResectionsModule::dependencies() fixes the next line - Not sure why this is needed
     module.initialize(appLogic);
     module.setMRMLScene(scene);
 
@@ -144,32 +147,34 @@ int qSlicerLiverResectionsModuleIntegrationTest(int argc, char * argv[] )
     Q_ASSERT(markupsLogic);
     vtkNew<vtkMRMLMarkupsSlicingContourNode> slicingContourNode;
     Q_ASSERT(slicingContourNode);
+    slicingContourNode->SetScene(scene);
 
-    //All commented out code below is testing that don't yet work
-    //***********************************************************
-
-    //Don't work - Needs to be registered, and it seems like the LiverMarkups module isn't available from this module
-//    vtkNew<vtkSlicerSlicingContourWidget> slicingContourWidget;
-//    markupsLogic->RegisterMarkupsNode(slicingContourNode, slicingContourWidget);
-    //Including qSlicerLiverMarkupsModule fails
-//    qSlicerLiverMarkupsModule* markupsModule = new qSlicerLiverMarkupsModule();
-//    markupsModule.initialize(appLogic);
+    vtkNew<vtkSlicerSlicingContourWidget> slicingContourWidget;
+    Q_ASSERT(slicingContourWidget);
+    markupsLogic->RegisterMarkupsNode(slicingContourNode, slicingContourWidget);
+    qSlicerLiverMarkupsModule* markupsModule = new qSlicerLiverMarkupsModule();
+    Q_ASSERT(markupsModule);
+//    markupsModule->initialize(appLogic);
+    delete markupsModule;
 
     vtkNew<vtkMRMLModelNode> targetOrgan;
     vtkNew<vtkSphereSource> source;
     targetOrgan->SetPolyDataConnection(source->GetOutputPort());
 
-    //Needs to register vtkMRMLMarkupsSlicingContourNode, vtkMRMLMarkupsBezierSurfceNode, vtkMRMLMarkupsBezierSurfaceNode before this line:
-//    liverResectionNode->SetTargetOrganModelNode(targetOrgan);
-//    liverResectionsLogic->AddResectionPlane(liverResectionNode);
-
+    scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsSlicingContourDisplayNode>::New());
+    scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceDisplayNode>::New());
+    scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>::New());
+    liverResectionNode->SetTargetOrganModelNode(targetOrgan);
+    liverResectionsLogic->AddResectionPlane(liverResectionNode);
 
     //Cannot get these back from qSlicerIOManager with public functions?
 //    qSlicerLiverResectionsReader *markupsReader;
 //    qSlicerLiverResectionsWriter *markupsWriter;
 
-//    EXERCISE_ALL_BASIC_MRML_METHODS(slicingContourNode.GetPointer());
 
+    //Also test the MRML methods in the nodes
+    EXERCISE_ALL_BASIC_MRML_METHODS(slicingContourNode.GetPointer());
+    EXERCISE_ALL_BASIC_MRML_METHODS(liverResectionNode);
 
 //    return module.runApp(argc, argv);//fails - just delete app instead
     delete module.app;
