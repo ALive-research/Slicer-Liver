@@ -616,9 +616,12 @@ This function is called when the resection liver model node changes
     enableDownsampling = self.distanceMapsWidget.DownSampleCheckBox.isChecked()
     if enableDownsampling:
       downSamplingRate = self.distanceMapsWidget.DownsamplingRateSpinBox.value
+      self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode, enableDownsampling, downSamplingRate)
+    else:
+      self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode, enableDownsampling)
 
 
-    self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode, enableDownsampling, downSamplingRate)
+
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
     slicer.util.showStatusMessage('')
