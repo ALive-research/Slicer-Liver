@@ -16,13 +16,13 @@
   <property name="layoutDirection">
    <enum>Qt::LeftToRight</enum>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout">
+  <layout class="QVBoxLayout" name="verticalLayout_7">
    <item>
     <widget class="qMRMLCollapsibleButton" name="ResectionsCollapsibleButton_2">
      <property name="text">
       <string>Resectogram</string>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout_2">
+     <layout class="QVBoxLayout" name="verticalLayout_9">
       <item>
        <widget class="QCheckBox" name="Resection2DCheckBox">
         <property name="enabled">
@@ -134,13 +134,13 @@
                 <set>ctkDoubleSpinBox::DecimalsByShortcuts|ctkDoubleSpinBox::InsertDecimals</set>
                </property>
                <property name="maximum">
-                <double>1.000000000000000</double>
+                <double>1</double>
                </property>
                <property name="singleStep">
-                <double>0.100000000000000</double>
+                <double>0.1</double>
                </property>
                <property name="value">
-                <double>0.300000000000000</double>
+                <double>0.3</double>
                </property>
                <property name="invertedControls">
                 <bool>false</bool>

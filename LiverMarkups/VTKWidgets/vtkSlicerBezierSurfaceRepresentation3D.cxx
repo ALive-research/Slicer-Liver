@@ -50,7 +50,6 @@
 #include "vtkMRMLMarkupsSlicingContourNode.h"
 #include "vtkMRMLMarkupsSlicingContourDisplayNode.h"
 
-
 // MRML includes
 #include <qMRMLThreeDWidget.h>
 #include <vtkMRMLDisplayableManagerGroup.h>
@@ -120,7 +119,6 @@ vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
     PlaneControlPoints->InsertNextPoint(-20,(i*40),0);
     PlaneControlPoints->InsertNextPoint(20,(i*40),0);
     PlaneControlPoints->InsertNextPoint(60,(i*40),0);
-
     }
 
   this->BezierPlane->SetControlPoints(PlaneControlPoints);
@@ -129,7 +127,6 @@ vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
   auto BezierPlanePoints = BezierPlane->GetOutput()->GetPoints()->GetData();
   BezierPlanePoints->SetName("BSPlanePoints");
   this->BezierSurfaceNormals->GetOutput()->GetPointData()->AddArray(BezierPlanePoints);
-
 
   this->BezierSurfaceControlPoints = vtkSmartPointer<vtkPoints>::New();
   this->BezierSurfaceControlPoints->SetNumberOfPoints(16);
@@ -176,6 +173,7 @@ vtkSlicerBezierSurfaceRepresentation3D::~vtkSlicerBezierSurfaceRepresentation3D(
 //----------------------------------------------------------------------
 void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void *callData /*=nullptr*/)
 {
+  this->Superclass::UpdateFromMRML(caller, event, callData);
 
   this->Superclass::UpdateFromMRML(caller, event, callData);
 
@@ -253,12 +251,10 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
   auto renderWindow1 = vtkRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
   auto renderers = renderWindow1->GetRenderers();
 
-
   if(BezierSurfaceDisplayNode->GetShowResection2D())
     {
     if(renderers->GetNumberOfItems()!=5)
       {
-      std::cout<<"-------------------add new renderer------------------"<<endl;
       double yViewport[4] = {0, 0.6, 0.3, 1.0};
 
       if (renderWindow1->GetNumberOfLayers() < RENDERER_LAYER+1)

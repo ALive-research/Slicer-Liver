@@ -305,7 +305,6 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
     "//VTK::Light::Impl\n"
     "fragOutput0 = vec4(ambientColor+vec3(uvCoordsOutput,0.0)*0.00001 + diffuse + specular, uResectionOpacity);\n");
 
-
   shaders[vtkShader::Vertex]->SetSource(VSSource);
   shaders[vtkShader::Fragment]->SetSource(FSSource);
   Superclass::ReplaceShaderValues(shaders, ren, actor);

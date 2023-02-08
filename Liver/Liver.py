@@ -221,6 +221,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectogramWidget.VascularSegmentsNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onVascularSegmentsNodeChanged)
 
 
+
   def onDistanceMapParameterChanged(self):
     """
     This function is triggered whenever any parameter of the distance maps are changed
@@ -603,6 +604,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
           self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.VsacularSegmentsGroupBox.setEnabled(
         self.resectogramWidget.Resection2DCheckBox.isChecked())
+
       renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
       if self.resectogramWidget.Resection2DCheckBox.isChecked() == 0 and renderers.GetNumberOfItems() == 5:
         renderers.RemoveItem(4)
