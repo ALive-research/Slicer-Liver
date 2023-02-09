@@ -13,7 +13,7 @@
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_7">
+  <layout class="QHBoxLayout" name="horizontalLayout_10">
    <item>
     <widget class="qMRMLCollapsibleButton" name="ResectionsCollapsibleButton">
      <property name="text">
@@ -53,6 +53,27 @@
        </layout>
       </item>
       <item>
+       <layout class="QFormLayout" name="formLayout_4">
+        <item row="0" column="1">
+         <widget class="qMRMLSegmentSelectorWidget" name="LiverSegmentSelectorWidget">
+          <property name="noneEnabled">
+           <bool>true</bool>
+          </property>
+          <property name="selectNodeUponCreation">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="0">
+         <widget class="QLabel" name="LiverModelLabel">
+          <property name="text">
+           <string>Liver Segmentation:</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
        <widget class="QGroupBox" name="ResectionParametersGroupBox">
         <property name="enabled">
          <bool>false</bool>
@@ -80,21 +101,25 @@
           <number>0</number>
          </property>
          <item>
-          <layout class="QFormLayout" name="formLayout_4">
-           <item row="0" column="0">
-            <widget class="QLabel" name="LiverModelLabel">
+          <layout class="QHBoxLayout" name="horizontalLayout_11">
+           <item>
+            <widget class="QLabel" name="ContourLabel">
              <property name="text">
-              <string>Liver Segmentation:</string>
+              <string>Contour:</string>
              </property>
             </widget>
            </item>
-           <item row="0" column="1">
-            <widget class="qMRMLSegmentSelectorWidget" name="LiverSegmentSelectorWidget">
-             <property name="noneEnabled">
-              <bool>true</bool>
+           <item>
+            <widget class="QRadioButton" name="FlatRadioButton">
+             <property name="text">
+              <string>Flat</string>
              </property>
-             <property name="selectNodeUponCreation">
-              <bool>false</bool>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="CurvedRadioButton">
+             <property name="text">
+              <string>Curved</string>
              </property>
             </widget>
            </item>
