@@ -260,6 +260,11 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetCameraShaderParameters(
 void vtkOpenGLBezierResectionPolyDataMapper::SetMapperShaderParameters(
   vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor)
 {
+  if (cellBO.Program->IsUniformUsed("distanceTexture"))
+    {
+        cellBO.Program->SetUniformi("distanceTexture", 0);
+    }
+
   if (cellBO.Program->IsUniformUsed("uRasToIjk"))
     {
     cellBO.Program->SetUniformMatrix("uRasToIjk", this->Impl->RasToIjkMatrixT);

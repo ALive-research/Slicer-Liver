@@ -42,6 +42,8 @@ set(${KIT}_SRCS
   vtkOpenGLBezierResectionPolyDataMapper.cxx
   vtkOpenGLResection2DPolyDataMapper.cpp
   vtkOpenGLResection2DPolyDataMapper.h
+  vtkMultiTextureObjectHelper.cpp
+  vtkMultiTextureObjectHelper.h
   )
 
 set(${KIT}_TARGET_LIBRARIES

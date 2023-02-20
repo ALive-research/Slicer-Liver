@@ -46,7 +46,9 @@
 #include "vtkSlicerMarkupsWidgetRepresentation.h"
 #include "vtkOpenGLBezierResectionPolyDataMapper.h"
 #include "vtkOpenGLResection2DPolyDataMapper.h"
-#include "vtkRenderer.h"
+#include "vtkMultiTextureObjectHelper.h"
+#include "vtkMRMLMarkupsSlicingContourNode.h"
+#include "vtkMRMLMarkupsSlicingContourDisplayNode.h"
 
 // MRML includes
 #include <qMRMLThreeDWidget.h>
@@ -86,6 +88,9 @@
 #include <vtkMatrix3x3.h>
 #include "vtkRendererCollection.h"
 #include <vtkNamedColors.h>
+#include <vtkTypeFloat32Array.h>
+#include <vtkImageCast.h>
+#include <vtkRenderWindowInteractor.h>
 
 //------------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerBezierSurfaceRepresentation3D);
@@ -170,6 +175,8 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
 {
   this->Superclass::UpdateFromMRML(caller, event, callData);
 
+  this->Superclass::UpdateFromMRML(caller, event, callData);
+
   auto liverMarkupsBezierSurfaceNode =
     vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(this->GetMarkupsNode());
   if (!liverMarkupsBezierSurfaceNode || !this->IsDisplayable())
@@ -195,6 +202,14 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
     }
 
   this->ControlPolygonActor->SetProperty(this->GetControlPointsPipeline(controlPointType)->Property);
+
+  // Update the Vascular Segments as 3D texture (if changed)
+  auto VascularSegments = liverMarkupsBezierSurfaceNode->GetVascularSegmentsVolumeNode();
+  if (this->VascularSegmentsVolumeNode != VascularSegments)
+    {
+    this->CreateAndTransferVascularSegmentsTexture(VascularSegments);
+    this->VascularSegmentsVolumeNode = VascularSegments;
+    }
 
   // Update the distance map as 3D texture (if changed)
   auto distanceMap = liverMarkupsBezierSurfaceNode->GetDistanceMapVolumeNode();
@@ -471,7 +486,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateControlPolygonGeometry(vtkMRM
     {
     //Generate topology;
     vtkSmartPointer<vtkCellArray> planeCells =
-      vtkSmartPointer<vtkCellArray>::New();
+        vtkSmartPointer<vtkCellArray>::New();
     for(int i=0; i<3; ++i)
       {
       for(int j=0; j<3; ++j)
@@ -496,7 +511,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateControlPolygonGeometry(vtkMRM
 void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode* node, int numComps)
 {
   auto renderWindow = vtkOpenGLRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
-  this->DistanceMapTexture = vtkSmartPointer<vtkTextureObject>::New();
+  this->DistanceMapTexture = vtkSmartPointer<vtkMultiTextureObjectHelper>::New();
   this->DistanceMapTexture->SetContext(renderWindow);
 
   if (!node)
@@ -521,7 +536,44 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture
   this->DistanceMapTexture->SetMinificationFilter(vtkTextureObject::Linear);
   this->DistanceMapTexture->SetMagnificationFilter(vtkTextureObject::Linear);
   this->DistanceMapTexture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
-  this->DistanceMapTexture->Create3DFromRaw(dimensions[0], dimensions[1], dimensions[2], numComps, VTK_FLOAT, imageData->GetScalarPointer());
+  this->DistanceMapTexture->CreateSeq3DFromRaw(dimensions[0], dimensions[1], dimensions[2], numComps, VTK_FLOAT, imageData->GetScalarPointer(), 0);
+}
+
+//----------------------------------------------------------------------
+void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferVascularSegmentsTexture(vtkMRMLScalarVolumeNode *node) {
+
+  auto renderWindow = vtkOpenGLRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
+  this->VascularSegmentsTexture = vtkSmartPointer<vtkMultiTextureObjectHelper>::New();
+  this->VascularSegmentsTexture->SetContext(renderWindow);
+
+  if (!node) {
+    vtkWarningMacro("vtkSlicerBezierSurfaceRepresentation::CreateAndTransferDistanceMap:"
+                    "There is no distance map node associated. Texture won't be generated.");
+    return;
+    }
+
+  auto imageData = node->GetImageData();
+  if (!imageData) {
+    vtkWarningMacro("vtkSlicerBezierSurfaceRepresentation::CreateAndTransferDistanceMap:"
+                    "There is no image data in the specified scalar volume node.");
+    return;
+    }
+
+  vtkNew<vtkImageCast> cast;
+  cast->SetInputData(imageData);
+  cast->SetOutputScalarTypeToFloat();
+  cast->Update();
+
+  auto dimensions = imageData->GetDimensions();
+
+  this->VascularSegmentsTexture->SetWrapS(vtkTextureObject::ClampToBorder);
+  this->VascularSegmentsTexture->SetWrapT(vtkTextureObject::ClampToBorder);
+  this->VascularSegmentsTexture->SetWrapR(vtkTextureObject::ClampToBorder);
+  this->VascularSegmentsTexture->SetMinificationFilter(vtkTextureObject::Linear);
+  this->VascularSegmentsTexture->SetMagnificationFilter(vtkTextureObject::Linear);
+  this->VascularSegmentsTexture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
+  this->VascularSegmentsTexture->CreateSeq3DFromRaw(dimensions[0], dimensions[1], dimensions[2], 1, VTK_FLOAT,
+                                                    cast->GetOutput()->GetScalarPointer(), 1);
 }
 
 //----------------------------------------------------------------------

@@ -218,6 +218,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectogramWidget.HepaticContourColorPickerButton.connect('colorChanged(QColor)', self.onHepaticContourColorChanged)
     self.resectogramWidget.PortalContourThicknessSpinBox.connect('valueChanged(double)', self.onPortalContourThicknessChanged)
     self.resectogramWidget.PortalContourColorPickerButton.connect('colorChanged(QColor)', self.onPortalContourColorChanged)
+    self.resectogramWidget.VascularSegmentsNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onVascularSegmentsNodeChanged)
+
 
 
   def onDistanceMapParameterChanged(self):
@@ -301,6 +303,13 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         else:
           self.resectionsWidget.ResectionLockCheckBox.setCheckState(2)
         self.resectionsWidget.ResectionLockCheckBox.blockSignals(False)
+
+        self.resectogramWidget.Resection2DCheckBox.blockSignals(True)
+        if (activeResectionNode.GetWidgetVisibility()):
+          self.resectogramWidget.Resection2DCheckBox.setCheckState(0)
+        else:
+          self.resectogramWidget.Resection2DCheckBox.setCheckState(2)
+        self.resectogramWidget.Resection2DCheckBox.blockSignals(False)
 
         self.resectionsWidget.UncertaintyMarginSpinBox.blockSignals(True)
         self.resectionsWidget.UncertaintyMarginSpinBox.setValue(activeResectionNode.GetUncertaintyMargin())
@@ -593,6 +602,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       if self.distanceMapsWidget.PortalSegmentSelectorWidget.currentNode():
         self.resectogramWidget.PortalContourGroupBox.setEnabled(
           self.resectogramWidget.Resection2DCheckBox.isChecked())
+      self.resectogramWidget.VsacularSegmentsGroupBox.setEnabled(
+        self.resectogramWidget.Resection2DCheckBox.isChecked())
+
       renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
       if self.resectogramWidget.Resection2DCheckBox.isChecked() == 0 and renderers.GetNumberOfItems() == 5:
         renderers.RemoveItem(4)
@@ -634,6 +646,14 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       color = self.resectogramWidget.PortalContourColorPickerButton.color
       rgbF = [color.redF(), color.greenF(), color.blueF()]
       self._currentResectionNode.SetPortalContourColor(rgbF)
+
+  def onVascularSegmentsNodeChanged(self):
+    """
+    This function is called when the resection distance map selector changes
+    """
+    if self._currentResectionNode is not None:
+      VascularSegmentsNode = self.resectogramWidget.VascularSegmentsNodeComboBox.currentNode()
+      self._currentResectionNode.SetVascularSegmentsVolumeNode(VascularSegmentsNode)
 
   def cleanup(self):
     """

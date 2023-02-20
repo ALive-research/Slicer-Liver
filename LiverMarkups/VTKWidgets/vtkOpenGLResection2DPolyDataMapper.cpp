@@ -83,6 +83,7 @@ class vtkOpenGLResection2DPolyDataMapper::vtkInternal
 
   vtkWeakPointer<vtkOpenGLResection2DPolyDataMapper> Parent;
   vtkSmartPointer<vtkTextureObject> DistanceMapTextureObject;
+  vtkSmartPointer<vtkTextureObject> VascularSegmentsTextureObject;
   vtkSmartPointer<vtkMatrix4x4> RasToIjkMatrixT;
   vtkSmartPointer<vtkMatrix4x4> IjkToTextureMatrixT;
   float ResectionMargin;
@@ -184,6 +185,7 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
     "//VTK::PositionVC::Dec\n"
     "#define M_PI 3.1415926535897932384626433832795\n"
     "uniform sampler3D distanceTexture;\n"
+    "uniform sampler3D vesselSegTexture;\n"
     "//vec4 fragPositionMC = vertexWCVSOutput;\n");
 
   vtkShaderProgram::Substitute(
@@ -213,6 +215,7 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
     FSSource, "//VTK::Color::Impl",
     "//VTK::Color::Impl\n"
     "vec4 dist = texture(distanceTexture, fragPositionMCBS.xyz);\n"
+    "vec4 vesselBg = texture(vesselSegTexture, fragPositionMCBS.xyz);\n"
     "float lowMargin = uResectionMargin - uUncertaintyMargin;\n"
     "float highMargin = uResectionMargin + uUncertaintyMargin;\n"
     "if(uResectionClipOut == 1 && dist[1] > 2.0){\n"
@@ -221,22 +224,61 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
     "ambientColor = uResectionColor;\n"
     "diffuseColor = vec3(0.6);\n"
 
-    "  if(dist[0] < lowMargin){\n"
-    "   ambientColor = uResectionMarginColor;\n"
-    "   diffuseColor = vec3(0.0);\n"
-    "  }\n"
-    "  else if(dist[0] < highMargin-(highMargin-lowMargin)*0.1){\n"
-    "    if(uInterpolatedMargins == 0){\n"
+    //hardcode 8 labels color
+    "if(vesselBg[0] == 0){\n"
+    "  ambientColor = vec3(1.0);\n"
+    "  diffuseColor = vec3(0.0);\n"
+    "}\n"
+    "else if(vesselBg[0] == 1){\n"
+    "  ambientColor = vec3(0.2, 0.5, 0.8);\n"
+    "  diffuseColor = vec3(0.0);\n"
+    "}\n"
+    "else if(vesselBg[0] == 2){\n"
+    "  ambientColor = vec3(1.0, 0.8, 0.7);\n"
+    "  diffuseColor = vec3(0.0);\n"
+    "}\n"
+    "else if(vesselBg[0] == 3){\n"
+    "  ambientColor = vec3(1.0, 1.0, 1.0);\n"
+    "  diffuseColor = vec3(0.0);\n"
+    "}\n"
+    "else if(vesselBg[0] == 4){\n"
+    "  ambientColor = vec3(0.4, 0.7, 1.0);\n"
+    "  diffuseColor = vec3(0.0);\n"
+    "}\n"
+    "else if(vesselBg[0] == 5){\n"
+    "  ambientColor = vec3(0.9, 0.5, 0.5);\n"
+    "  diffuseColor = vec3(0.0);\n"
+    "}\n"
+    "else if(vesselBg[0] == 6){\n"
+    "  ambientColor = vec3(0.5, 0.9, 0.5);\n"
+    "  diffuseColor = vec3(0.0);\n"
+    "}\n"
+    "else if(vesselBg[0] == 7){\n"
+    "  ambientColor = vec3(0.5, 0.9, 0.9);\n"
+    "  diffuseColor = vec3(0.0);\n"
+    "}\n"
+    "else if(vesselBg[0] == 8){\n"
+    "  ambientColor = vec3(0.9, 0.9, 0.5);\n"
+    "  diffuseColor = vec3(0.0);\n"
+    "}\n"
+
+
+    "if(dist[0] < lowMargin){\n"
+    "  ambientColor = uResectionMarginColor;\n"
+    "  diffuseColor = vec3(0.0);\n"
+    "}\n"
+    "else if(dist[0] < highMargin-(highMargin-lowMargin)*0.1){\n"
+    "  if(uInterpolatedMargins == 0){\n"
     "     ambientColor = uUncertaintyMarginColor;\n"
     "     diffuseColor = vec3(0.0);\n"
-    "    }\n"
-    "    else{\n"
-    "     ambientColor = mix(uResectionMarginColor, uUncertaintyMarginColor, "
-    "     (dist[0]-lowMargin)/(highMargin-lowMargin));\n"
-    "     ambientColor = ambientColor;\n"
-    "     diffuseColor = vec3(0.0);\n"
-    "    }\n"
     "  }\n"
+    "  else{\n"
+    "    ambientColor = mix(uResectionMarginColor, uUncertaintyMarginColor, "
+    "    (dist[0]-lowMargin)/(highMargin-lowMargin));\n"
+    "    ambientColor = ambientColor;\n"
+    "    diffuseColor = vec3(0.0);\n"
+    "  }\n"
+    "}\n"
 
     "if(tan(uvCoordsOutput.x*M_PI*uGridDivisions)>10.0-uGridThickness || tan(uvCoordsOutput.y*M_PI*uGridDivisions)>10.0-uGridThickness){\n"
     "   ambientColor = uResectionGridColor;\n"
@@ -261,8 +303,7 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
   vtkShaderProgram::Substitute(
     FSSource, "//VTK::Light::Impl",
     "//VTK::Light::Impl\n"
-    "fragOutput0 = vec4(ambientColor+vec3(uvCoordsOutput,0.0)*0.00001  + diffuse + specular, uResectionOpacity);\n");
-
+    "fragOutput0 = vec4(ambientColor+vec3(uvCoordsOutput,0.0)*0.00001 + diffuse + specular, uResectionOpacity);\n");
 
   shaders[vtkShader::Vertex]->SetSource(VSSource);
   shaders[vtkShader::Fragment]->SetSource(FSSource);
@@ -323,7 +364,15 @@ void vtkOpenGLResection2DPolyDataMapper::SetCameraShaderParameters(
 void vtkOpenGLResection2DPolyDataMapper::SetMapperShaderParameters(
   vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor)
 {
+  if (cellBO.Program->IsUniformUsed("distanceTexture"))
+    {
+    cellBO.Program->SetUniformi("distanceTexture", 0);
+    }
 
+  if (cellBO.Program->IsUniformUsed("vesselSegTexture"))
+    {
+    cellBO.Program->SetUniformi("vesselSegTexture", 1);
+    }
 
   if (cellBO.Program->IsUniformUsed("uRasToIjk"))
     {
@@ -433,6 +482,29 @@ void vtkOpenGLResection2DPolyDataMapper::SetDistanceMapTextureObject(vtkTextureO
     }
 
   this->Impl->DistanceMapTextureObject = object;
+  if (object)
+    {
+    object->Register(this);
+    }
+
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+vtkTextureObject* vtkOpenGLResection2DPolyDataMapper::GetVascularSegmentsTextureObject() const
+{
+  return this->Impl->VascularSegmentsTextureObject;
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLResection2DPolyDataMapper::SetVascularSegmentsTextureObject(vtkTextureObject* object)
+{
+  if (this->Impl->VascularSegmentsTextureObject == object)
+    {
+    return;
+    }
+
+  this->Impl->VascularSegmentsTextureObject = object;
   if (object)
     {
     object->Register(this);

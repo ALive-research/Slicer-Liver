@@ -44,7 +44,7 @@
 
 // Markups VTKWidgets includes
 #include "vtkSlicerMarkupsWidgetRepresentation3D.h"
-
+#include "vtkMultiTextureObjectHelper.h"
 // MRML includes
 #include <vtkMRMLModelNode.h>
 
@@ -93,6 +93,7 @@ public:
 protected:
   /// TransferDistanceMap
   void CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode* node, int numComps);
+  void CreateAndTransferVascularSegmentsTexture(vtkMRMLScalarVolumeNode *node);
 
 protected:
   //k Bezier surface releated elements
@@ -113,13 +114,16 @@ protected:
   vtkSmartPointer<vtkActor> ControlPolygonActor;
 
   // Distance mapping related elements
-  vtkSmartPointer<vtkTextureObject> DistanceMapTexture;
+  vtkSmartPointer<vtkMultiTextureObjectHelper> DistanceMapTexture;
   vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolumeNode;
   vtkNew<vtkMatrix4x4> VBOShiftScale;
   vtkNew<vtkTransform> VBOInverseTransform;
   vtkWeakPointer<vtkShaderProperty> ShaderProperty;
   vtkSmartPointer<vtkRenderer> CoRenderer2D;
 
+  // Vascular Segments related elements
+  vtkSmartPointer<vtkMultiTextureObjectHelper> VascularSegmentsTexture;
+  vtkWeakPointer<vtkMRMLScalarVolumeNode> VascularSegmentsVolumeNode;
 
 protected:
   vtkSlicerBezierSurfaceRepresentation3D();

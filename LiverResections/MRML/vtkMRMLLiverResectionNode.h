@@ -148,6 +148,16 @@ public:
   void SetDistanceMapVolumeNode(vtkMRMLScalarVolumeNode* distanceMapVolumeNode)
   {this->DistanceMapVolumeNode = distanceMapVolumeNode; this->Modified();}
 
+  // Get Vascular Segments Volume
+  vtkMRMLScalarVolumeNode *GetVascularSegmentsVolumeNode() const
+  { return this->VascularSegmentsVolumeNode; }
+
+  // Set Vascular Segments Volume
+  void SetVascularSegmentsVolumeNode(vtkMRMLScalarVolumeNode *vascularSegmentsVolumeNode)
+  {
+    this->VascularSegmentsVolumeNode = vascularSegmentsVolumeNode;
+    this->Modified();
+  }
   /// This is a function to set the initialization control points as vtkPoints.
   /// Since the expected number of points for the initialization is two, the
   /// function requires at least two points in the vtkPoints provided; if more
@@ -307,6 +317,7 @@ private:
   // vtkWeakPointer<vtkMRMLSegmentationNode> SegmentationNode;
   vtkWeakPointer<vtkMRMLModelNode> TargetOrganModelNode;
   vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolumeNode;
+  vtkWeakPointer<vtkMRMLScalarVolumeNode> VascularSegmentsVolumeNode;
   vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode> BezierSurfaceNode;
   ResectionState State;
   InitializationMode InitMode;

@@ -54,7 +54,7 @@ vtkMRMLNodeNewMacro(vtkMRMLLiverResectionNode);
 
 //--------------------------------------------------------------------------------
 vtkMRMLLiverResectionNode::vtkMRMLLiverResectionNode()
-  :TargetOrganModelNode(nullptr), DistanceMapVolumeNode(nullptr),
+  :TargetOrganModelNode(nullptr), DistanceMapVolumeNode(nullptr), VascularSegmentsVolumeNode(nullptr),
    State(ResectionState::Initialization), InitMode(InitializationMode::Flat),
    ResectionMargin(0.0), UncertaintyMargin(0.0), ClipOut(false), WidgetVisibility(true),
    InterpolatedMargins(false), ResectionColor{1.0f, 1.0f, 1.0f},
