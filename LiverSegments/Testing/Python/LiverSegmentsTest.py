@@ -1,14 +1,27 @@
 
-import unittest
+import logging
 import vtk, slicer
+from slicer.ScriptedLoadableModule import *
+#from slicer.util import TESTING_DATA_URL
 import LiverSegments
 from LiverSegments import LiverSegmentsLogic
 from LiverSegments import LiverSegmentsWidget
 
-#Example (RVesselX): https://github.com/R-Vessel-X/SlicerRVXLiverSegmentation/blob/main/RVXLiverSegmentation/RVXLiverSegmentationTest/ExtractVesselStrategyTestCase.py
-class LiverSegmentsTestCase(unittest.TestCase):
+class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
 
-  def testLogicFunctionsWithEmptyParameters(self):
+  def setUp(self):
+    """ Do whatever is needed to reset the state - typically a scene clear will be enough.
+    """
+    slicer.mrmlScene.Clear(0)
+
+  def runTest(self):
+    """Run as few or as many tests as needed here.
+    """
+    self.setUp()
+    self.logicFunctionsWithEmptyParameters()
+    self.downloadData()
+
+  def logicFunctionsWithEmptyParameters(self):
     logic = LiverSegmentsLogic()
 
     logic.__init__()
@@ -42,4 +55,20 @@ class LiverSegmentsTestCase(unittest.TestCase):
     emptyNode = slicer.mrmlScene.CreateNodeByClass("vtkMRMLSegmentationNode")
     emptyNode.UnRegister(None) #Prevent memory leaks
     return emptyNode
+
+  #Use AtlasTests.py as example
+  def downloadData(self):
+    aliveDataURL ='https://github.com/alive-research/aliveresearchtestingdata/releases/download/'
+    downloads = {
+        'fileNames': '3D-IRCADb-01_08.nrrd',
+        'loadFiles': True,
+        #'uris': TESTING_DATA_URL + 'SHA256/2e25b8ce2c70cc2e1acd9b3356d0b1291b770274c16fcd0e2a5b69a4587fbf74',
+        'uris': aliveDataURL + 'SHA256/2e25b8ce2c70cc2e1acd9b3356d0b1291b770274c16fcd0e2a5b69a4587fbf74',
+        'checksums': 'SHA256:2e25b8ce2c70cc2e1acd9b3356d0b1291b770274c16fcd0e2a5b69a4587fbf74',
+    }
+    #logging.info(downloads)
+    import SampleData
+    SampleData.downloadFromURL(**downloads)
+
+#    volumeNode = slicer.util.getNode(pattern='Segment_1')
 

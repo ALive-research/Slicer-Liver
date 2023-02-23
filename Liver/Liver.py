@@ -41,8 +41,10 @@ import os
 import unittest
 import logging
 import vtk, qt, ctk, slicer
+from vtk.util.numpy_support import vtk_to_numpy, numpy_to_vtk
 from slicer.ScriptedLoadableModule import *
 import numpy as np
+from numpy import size
 import LiverSegments
 
 #
@@ -98,7 +100,7 @@ def registerSampleData():
   import SampleData
   iconsPath = os.path.join(os.path.dirname(__file__), 'Resources/Icons')
 
-  aliveDataURL ='https://github.com/alive-research/aliveresearchtestingdata/releases/download/'
+  aliveDataURL = 'https://github.com/alive-research/aliveresearchtestingdata/releases/download/'
 
   # Liver dataset
   SampleData.SampleDataLogic.registerCustomSampleDataSource(
@@ -120,6 +122,18 @@ def registerSampleData():
     fileNames ='LiverSegmentation000.seg.nrrd',
     checksums = 'SHA256:56aa9ee4658904dfae5cca514f594fa6c5b490376514358137234e22d57452a4',
     nodeNames ='LiverSegmentation000',
+    loadFileType = 'SegmentationFile'
+  )
+
+  #if developerMode is True:
+  SampleData.SampleDataLogic.registerCustomSampleDataSource(
+    category ='Development',
+    sampleName ='3D-IRCADb-01_08',
+    thumbnailFileName = os.path.join(iconsPath, 'LiverSegmentation000.png'),
+    uris = aliveDataURL+'SHA256/2e25b8ce2c70cc2e1acd9b3356d0b1291b770274c16fcd0e2a5b69a4587fbf74',
+    fileNames ='3D-IRCADb-01_08.nrrd',
+    checksums = 'SHA256:2e25b8ce2c70cc2e1acd9b3356d0b1291b770274c16fcd0e2a5b69a4587fbf74',
+    nodeNames ='3D-IRCADb-01_08',
     loadFileType = 'SegmentationFile'
   )
 
@@ -148,9 +162,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
 
     distanceMapsUI = slicer.util.loadUI(self.resourcePath('UI/DistanceMapsWidget.ui'))
     distanceMapsUI.setMRMLScene(slicer.mrmlScene)
-    resectionsUI= slicer.util.loadUI(self.resourcePath('UI/ResectionsWidget.ui'))
+    resectionsUI = slicer.util.loadUI(self.resourcePath('UI/ResectionsWidget.ui'))
     resectionsUI.setMRMLScene(slicer.mrmlScene)
-    resectogramUI= slicer.util.loadUI(self.resourcePath('UI/ResectogramWidget.ui'))
+    resectogramUI = slicer.util.loadUI(self.resourcePath('UI/ResectogramWidget.ui'))
     resectogramUI.setMRMLScene(slicer.mrmlScene)
 
     self.layout.addWidget(distanceMapsUI)
@@ -195,6 +209,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.distanceMapsWidget.OutputDistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.distanceMapsWidget.DownSampleCheckBox.connect('stateChanged(int)', self.onDownSampleCheckBoxChanged)
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.connect('clicked(bool)', self.onComputeDistanceMapButtonClicked)
+    self.resectionsWidget.CurvedRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.CurvedRadioButton))
+    self.resectionsWidget.FlatRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.FlatRadioButton))
     self.resectionsWidget.ResectionNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionDistanceMapNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
@@ -225,6 +241,39 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectogramWidget.PortalContourColorPickerButton.connect('colorChanged(QColor)', self.onPortalContourColorChanged)
     self.resectogramWidget.VascularSegmentsNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onVascularSegmentsNodeChanged)
 
+  def onRadioButtonState(self, rdbutton):
+
+    activeResectionNode = self.resectionsWidget.ResectionNodeComboBox.currentNode()
+    segmentationNode = self.resectionsWidget.LiverSegmentSelectorWidget.currentNode()
+    parenchymaSegmentId = self.resectionsWidget.LiverSegmentSelectorWidget.currentSegmentID()
+    liverNode = segmentationNode.GetClosedSurfaceInternalRepresentation(parenchymaSegmentId)
+    lvLogic = slicer.modules.liverresections.logic()
+    if liverNode is None:
+      segmentationNode.CreateClosedSurfaceRepresentation()
+      liverNode = segmentationNode.GetClosedSurfaceInternalRepresentation(parenchymaSegmentId)
+
+    # liverNode = self.logic.preprocessing(segmentationNode, parenchymaSegmentId)
+    if rdbutton.isChecked():
+      if rdbutton.text == "Curved":
+        lvLogic.HideInitializationMarkupFromResection(activeResectionNode)
+        liverNode = activeResectionNode.GetTargetOrganModelNode()
+        activeResectionNode.SetInitMode(activeResectionNode.Curved)
+        activeResectionNode.SetTargetOrganModelNode(liverNode)
+        lvLogic.AddResectionContour(activeResectionNode)
+        # TODO: needed a better way to get the distance contour node
+        distanceContourNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLMarkupsDistanceContourNode")
+        liverPolyData = liverNode.GetPolyData()
+        preprocessedliverNode = self.logic.preprocessing(liverPolyData)
+        distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointEndInteractionEvent,
+                                        lambda x, y: self.logic.runSurfacefromEFD(activeResectionNode,
+                                                                                  distanceContourNode,
+                                                                                  preprocessedliverNode))
+        distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
+                                        self.onDistanceContourStartInteraction)
+        # self.logic.runSurfacefromEFD(distanceContourNode, preprocessedliverNode)
+
+      else:
+        return
 
   def onDistanceMapParameterChanged(self):
     """
@@ -358,7 +407,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
           self.resectionsWidget.InterpolatedMarginsCheckBox.setCheckState(0) # Unchecked
         self.resectionsWidget.InterpolatedMarginsCheckBox.blockSignals(False)
 
-        if activeResectionNode.GetState()  == activeResectionNode.Initialization: # Show initialization
+        if activeResectionNode.GetState() == activeResectionNode.Initialization: # Show initialization
           lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
           lvLogic.HideInitializationMarkupFromResection(self._currentResectionNode)
           lvLogic.ShowInitializationMarkupFromResection(activeResectionNode)
@@ -430,6 +479,17 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       self.resectionsWidget.ResectionVisualizationGroupBox.setEnabled(modelNode is not None)
       self.resectionsWidget.GridGroupBox.setEnabled(modelNode is not None)
 
+  def onDistanceContourStartInteraction(self, caller, event):
+    """
+    This function is called when distance contour start interaction.
+    """
+    lvLogic = slicer.modules.liverresections.logic()
+    lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
+    # self.observedBezierNode.GetDisplayNode().VisibilityOff()
+    # node = slicer.util.getNode("MarkupsBezierSurface")
+    # node.GetDisplayNode().VisibilityOff()
+    # print(" Also This function is ok")
+
   def onResectionMarginChanged(self):
     """
     This function is called when the resection margin spinbox changes.
@@ -450,7 +510,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
   def updateTotalMargin(self):
     uncertainty = self._currentResectionNode.GetUncertaintyMargin()
     resection = self._currentResectionNode.GetResectionMargin()
-    self.resectionsWidget.TotalMarginLabel.setText('{:.2f} mm'.format(resection+uncertainty))
+    self.resectionsWidget.TotalMarginLabel.setText('{:.2f} mm'.format(resection + uncertainty))
 
   def onResectionLockChanged(self):
     """
@@ -542,8 +602,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     else:
       self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode, enableDownsampling)
 
-
-
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
     slicer.util.showStatusMessage('')
@@ -579,7 +637,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     if self._currentResectionNode is not None:
       color = self.resectionsWidget.ResectionColorPickerButton.color
-      rgbF = [color.redF(),color.greenF(),color.blueF()]
+      rgbF = [color.redF(), color.greenF(), color.blueF()]
       self._currentResectionNode.SetResectionColor(rgbF)
 
   def onResectionGridColorChanged(self):
@@ -588,7 +646,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     if self._currentResectionNode is not None:
       color = self.resectionsWidget.ResectionGridColorPickerButton.color
-      rgbF = [color.redF(),color.greenF(),color.blueF()]
+      rgbF = [color.redF(), color.greenF(), color.blueF()]
       self._currentResectionNode.SetResectionGridColor(rgbF)
 
   def onResectionOpacityChanged(self):
@@ -604,7 +662,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     if self._currentResectionNode is not None:
       color = self.resectionsWidget.ResectionMarginColorPickerButton.color
-      rgbF = [color.redF(),color.greenF(),color.blueF()]
+      rgbF = [color.redF(), color.greenF(), color.blueF()]
       self._currentResectionNode.SetResectionMarginColor(rgbF)
 
   def onUncertaintyMarginColorChanged(self):
@@ -613,7 +671,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     if self._currentResectionNode is not None:
       color = self.resectionsWidget.UncertaintyMarginColorPickerButton.color
-      rgbF = [color.redF(),color.greenF(),color.blueF()]
+      rgbF = [color.redF(), color.greenF(), color.blueF()]
       self._currentResectionNode.SetUncertaintyMarginColor(rgbF)
 
   def onGridDivisionsChanged(self):
@@ -844,12 +902,14 @@ class LiverTest(ScriptedLoadableModuleTest):
   """
 
   def setUp(self):
-    """ Do whatever is needed to reset the state - typically a scene clear will be enough.
+    """
+    Do whatever is needed to reset the state - typically a scene clear will be enough.
     """
     slicer.mrmlScene.Clear()
 
   def runTest(self):
-    """Run as few or as many tests as needed here.
+    """
+    Run as few or as many tests as needed here.
     """
     self.setUp()
     self.test_Liver1()
@@ -918,5 +978,5 @@ class LiverTest(ScriptedLoadableModuleTest):
     import SampleData
     registerSampleData()
     inputSegmentation = SampleData.downloadSample('LiverSegmentation000')
-    inputVolume= SampleData.downloadSample('LiverVolume000')
+    inputVolume = SampleData.downloadSample('LiverVolume000')
     self.delayDisplay('Loaded test data set')

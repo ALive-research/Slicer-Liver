@@ -225,9 +225,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
     "    ambientColor = uResectionColor;\n"
     "    diffuseColor = vec3(0.6);\n"
     "  }\n"
-    "}\n"
-
-    );
+    "}\n");
 
    vtkShaderProgram::Substitute(
     FSSource, "//VTK::Light::Impl",

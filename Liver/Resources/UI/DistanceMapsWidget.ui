@@ -39,57 +39,10 @@
         </property>
        </widget>
       </item>
-      <item row="9" column="3">
-       <widget class="qMRMLNodeComboBox" name="OutputDistanceMapNodeComboBox">
-        <property name="enabled">
-         <bool>true</bool>
-        </property>
-        <property name="nodeTypes">
-         <stringlist>
-          <string>vtkMRMLVectorVolumeNode</string>
-         </stringlist>
-        </property>
-        <property name="baseName">
-         <string/>
-        </property>
-        <property name="editEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="renameEnabled">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="9" column="0" colspan="3">
-       <widget class="QLabel" name="OutputDistanceMapLabel">
+      <item row="1" column="0">
+       <widget class="QLabel" name="SegmentationNodeLabel">
         <property name="text">
-         <string>Output Distance Map: </string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="3">
-       <widget class="qMRMLSegmentSelectorWidget" name="TumorSegmentSelectorWidget">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="segmentationNodeSelectorVisible">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="8" column="3">
-       <widget class="qMRMLSegmentSelectorWidget" name="PortalSegmentSelectorWidget">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="segmentationNodeSelectorVisible">
-         <bool>false</bool>
+         <string>Segmentation:</string>
         </property>
        </widget>
       </item>
@@ -120,10 +73,30 @@
         </property>
        </widget>
       </item>
-      <item row="1" column="0">
-       <widget class="QLabel" name="SegmentationNodeLabel">
+      <item row="2" column="0">
+       <widget class="QLabel" name="label_2">
         <property name="text">
-         <string>Segmentation:</string>
+         <string>Tumor</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="3">
+       <widget class="qMRMLSegmentSelectorWidget" name="TumorSegmentSelectorWidget">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="segmentationNodeSelectorVisible">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="0">
+       <widget class="QLabel" name="label_3">
+        <property name="text">
+         <string>Liver</string>
         </property>
        </widget>
       </item>
@@ -140,10 +113,71 @@
         </property>
        </widget>
       </item>
-      <item row="2" column="0">
-       <widget class="QLabel" name="label_2">
+      <item row="6" column="0">
+       <widget class="QLabel" name="label_4">
         <property name="text">
-         <string>Tumor</string>
+         <string>Hepatic</string>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="3">
+       <widget class="qMRMLSegmentSelectorWidget" name="HepaticSegmentSelectorWidget">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="segmentationNodeSelectorVisible">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="8" column="0">
+       <widget class="QLabel" name="label_5">
+        <property name="text">
+         <string>Portal</string>
+        </property>
+       </widget>
+      </item>
+      <item row="8" column="3">
+       <widget class="qMRMLSegmentSelectorWidget" name="PortalSegmentSelectorWidget">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="segmentationNodeSelectorVisible">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="9" column="0" colspan="3">
+       <widget class="QLabel" name="OutputDistanceMapLabel">
+        <property name="text">
+         <string>Output Distance Map: </string>
+        </property>
+       </widget>
+      </item>
+      <item row="9" column="3">
+       <widget class="qMRMLNodeComboBox" name="OutputDistanceMapNodeComboBox">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="nodeTypes">
+         <stringlist>
+          <string>vtkMRMLVectorVolumeNode</string>
+         </stringlist>
+        </property>
+        <property name="baseName">
+         <string/>
+        </property>
+        <property name="editEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="renameEnabled">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -229,40 +263,6 @@
         </property>
         <property name="text">
          <string>Compute Distance Maps</string>
-        </property>
-       </widget>
-      </item>
-      <item row="6" column="3">
-       <widget class="qMRMLSegmentSelectorWidget" name="HepaticSegmentSelectorWidget">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="segmentationNodeSelectorVisible">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="6" column="0">
-       <widget class="QLabel" name="label_4">
-        <property name="text">
-         <string>Hepatic</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="0">
-       <widget class="QLabel" name="label_3">
-        <property name="text">
-         <string>Liver</string>
-        </property>
-       </widget>
-      </item>
-      <item row="8" column="0">
-       <widget class="QLabel" name="label_5">
-        <property name="text">
-         <string>Portal</string>
         </property>
        </widget>
       </item>

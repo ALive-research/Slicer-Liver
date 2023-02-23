@@ -45,6 +45,7 @@
 // Markups VTKWidgets includes
 #include "vtkSlicerMarkupsWidgetRepresentation3D.h"
 #include "vtkMultiTextureObjectHelper.h"
+
 // MRML includes
 #include <vtkMRMLModelNode.h>
 
@@ -53,6 +54,7 @@
 #include <vtkSmartPointer.h>
 #include "vtkOpenGLPolyDataMapper2D.h"
 #include "vtkActor2D.h"
+
 //------------------------------------------------------------------------------
 class vtkBezierSurfaceSource;
 class vtkOpenGLActor;
