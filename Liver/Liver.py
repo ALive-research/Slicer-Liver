@@ -234,6 +234,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.UncertaintyMarginComboBox.connect('currentIndexChanged(int)', self.onUncertaintyMaginComboBoxChanged)
     self.resectionsWidget.InterpolatedMarginsCheckBox.connect('stateChanged(int)', self.onInterpolatedMarginsChanged)
     self.resectogramWidget.Resection2DCheckBox.connect('stateChanged(int)', self.onResection2DChanged)
+    self.resectogramWidget.MirrorDisplayCheckBox.connect('stateChanged(int)', self.onMirrorDisplayCheckBoxChanged)
     self.resectogramWidget.FlexibleBoundaryCheckBox.connect('stateChanged(int)', self.onFlexibleBoundaryCheckBoxChanged)
     self.resectogramWidget.HepaticContourThicknessSpinBox.connect('valueChanged(double)', self.onHepaticContourThicknessChanged)
     self.resectogramWidget.HepaticContourColorPickerButton.connect('colorChanged(QColor)', self.onHepaticContourColorChanged)
@@ -695,20 +696,32 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     if self._currentResectionNode is not None:
       self._currentResectionNode.SetShowResection2D(self.resectogramWidget.Resection2DCheckBox.isChecked())
       if self.distanceMapsWidget.HepaticSegmentSelectorWidget.currentNode():
-        self.resectogramWidget.HepaticContourGroupBox.setEnabled(
-          self.resectogramWidget.Resection2DCheckBox.isChecked())
+        self.resectogramWidget.HepaticContourGroupBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       if self.distanceMapsWidget.PortalSegmentSelectorWidget.currentNode():
-        self.resectogramWidget.PortalContourGroupBox.setEnabled(
-          self.resectogramWidget.Resection2DCheckBox.isChecked())
-      self.resectogramWidget.VsacularSegmentsGroupBox.setEnabled(
-        self.resectogramWidget.Resection2DCheckBox.isChecked())
-      self.resectogramWidget.FlexibleBoundaryCheckBox.setEnabled(
-        self.resectogramWidget.Resection2DCheckBox.isChecked())
+        self.resectogramWidget.PortalContourGroupBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
+      self.resectogramWidget.VsacularSegmentsGroupBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
+      self.resectogramWidget.FlexibleBoundaryCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
+      self.resectogramWidget.MirrorDisplayCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
       if self.resectogramWidget.Resection2DCheckBox.isChecked() == 0 and renderers.GetNumberOfItems() == 5:
         renderers.RemoveItem(4)
     else:
       self._currentResectionNode.SetShowResection2D(not self.resectogramWidget.Resection2DCheckBox.isChecked())
+
+  def onMirrorDisplayCheckBoxChanged(self):
+    """
+    This function is called when the MirrorDisplay changes.
+    """
+    if self._currentResectionNode:
+      self._currentResectionNode.SetMirrorDisplay(self.resectogramWidget.MirrorDisplayCheckBox.isChecked())
+      # renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
+      # if renderers.GetNumberOfItems() == 5:
+      #   renderer2D = renderers.GetItemAsObject(4)
+      #   camera2D = renderer2D.GetActiveCamera()
+      #   position2D = camera2D.GetPosition();
+      #   focalPoint2D = camera2D.GetFocalPoint()
+      #   camera2D.SetPosition(position2D[0], position2D[1], -position2D[2])
+      #   camera2D.SetFocalPoint(focalPoint2D[0], focalPoint2D[1], -focalPoint2D[2])
 
   def onFlexibleBoundaryCheckBoxChanged(self):
     """

@@ -70,6 +70,7 @@
 #include <vtkNew.h>
 #include <vtkOpenGLActor.h>
 #include <vtkOpenGLRenderWindow.h>
+#include <vtkOpenGLPolyDataMapper.h>
 #include <vtkOpenGLVertexBufferObjectGroup.h>
 #include <vtkOpenGLVertexBufferObject.h>
 #include <vtkPlaneSource.h>
@@ -78,6 +79,7 @@
 #include <vtkPolyDataNormals.h>
 #include <vtkPolyLine.h>
 #include <vtkProperty.h>
+#include <vtkRenderer.h>
 #include <vtkRenderWindow.h>
 #include <vtkSetGet.h>
 #include <vtkShaderProperty.h>
@@ -124,6 +126,9 @@ vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
 
   this->BezierPlane->SetControlPoints(PlaneControlPoints);
   this->BezierPlane->Update();
+
+  this->ResectogramCamera = vtkSmartPointer<vtkCamera>::New();
+  ResectogramPlaneCenter(true);
 
   auto BezierPlanePoints = BezierPlane->GetOutput()->GetPoints()->GetData();
   BezierPlanePoints->SetName("BSPlanePoints");
@@ -265,12 +270,19 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
       auto CoRenderer2D = vtkSmartPointer<vtkRenderer>::New();
       CoRenderer2D->SetLayer(RENDERER_LAYER);
       CoRenderer2D->InteractiveOff();
+      CoRenderer2D->SetActiveCamera(this->ResectogramCamera);
       CoRenderer2D->AddActor(this->BezierSurfaceActor2D);
       CoRenderer2D->SetViewport(yViewport);
       renderWindow1->AddRenderer(CoRenderer2D);
       renderWindow1->Render();
       }
     }
+
+  if(BezierSurfaceDisplayNode->GetMirrorDisplay()){
+    ResectogramPlaneCenter(true);
+    } else {
+    ResectogramPlaneCenter(false);
+    };
 
   this->NeedToRenderOn();
 }
@@ -375,8 +387,8 @@ double *vtkSlicerBezierSurfaceRepresentation3D::GetBounds()
 {
   vtkBoundingBox boundingBox;
   const std::vector<vtkProp*> actors({
-                                       this->BezierSurfaceActor,
-                                       this->ControlPolygonActor });
+      this->BezierSurfaceActor,
+      this->ControlPolygonActor });
   this->AddActorsBounds(boundingBox, actors, Superclass::GetBounds());
   boundingBox.GetBounds(this->Bounds);
   return this->Bounds;
@@ -469,8 +481,8 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceGeometry(vtkMRML
 
     this->BezierSurfaceSource->SetControlPoints(this->BezierSurfaceControlPoints);
     this->BezierSurfaceSource->Update();
-    this->p = this->BezierSurfaceSource->GetOutput()->GetPoints()->GetData();
-    this->p->SetName("BSPoints");
+    this->BezierSurfaceSourcePoints = this->BezierSurfaceSource->GetOutput()->GetPoints()->GetData();
+    this->BezierSurfaceSourcePoints->SetName("BSPoints");
     auto BezierSurfaceDisplayNode = vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(node->GetDisplayNode());
 
     Ratio(BezierSurfaceDisplayNode->GetEnableFlexibleBoundary());
@@ -478,9 +490,9 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceGeometry(vtkMRML
 
     if(this->BezierPlane->GetOutput()->GetPointData()->GetArray("BSPoints")){
       this->BezierPlane->GetOutput()->GetPointData()->RemoveArray("BSPoints");
-      this->BezierPlane->GetOutput()->GetPointData()->AddArray(this->p);
+      this->BezierPlane->GetOutput()->GetPointData()->AddArray(this->BezierSurfaceSourcePoints);
       }else{
-      this->BezierPlane->GetOutput()->GetPointData()->AddArray(this->p);
+      this->BezierPlane->GetOutput()->GetPointData()->AddArray(this->BezierSurfaceSourcePoints);
       }
     }
 }
@@ -684,12 +696,12 @@ void vtkSlicerBezierSurfaceRepresentation3D::Ratio(bool flexibleBoundery){
   if (flexibleBoundery)
     {
     double disU = 0, disV = 0;
-    std::vector<double> p0u = {this->p->GetTuple3(0)[0],this->p->GetTuple3(0)[1],this->p->GetTuple3(0)[2]};
-    std::vector<double> p0v = {this->p->GetTuple3(0)[0],this->p->GetTuple3(0)[1],this->p->GetTuple3(0)[2]};
+    std::vector<double> p0u = {this->BezierSurfaceSourcePoints->GetTuple3(0)[0],this->BezierSurfaceSourcePoints->GetTuple3(0)[1],this->BezierSurfaceSourcePoints->GetTuple3(0)[2]};
+    std::vector<double> p0v = {this->BezierSurfaceSourcePoints->GetTuple3(0)[0],this->BezierSurfaceSourcePoints->GetTuple3(0)[1],this->BezierSurfaceSourcePoints->GetTuple3(0)[2]};
 
     for(int i = 1; i<20; i++){
-      std::vector<double> p1 = {this->p->GetTuple3(i)[0],this->p->GetTuple3(i)[1],this->p->GetTuple3(i)[2]};
-      std::vector<double> p2 = {this->p->GetTuple3(20*i)[0],this->p->GetTuple3(20*i)[1],this->p->GetTuple3(20*i)[2]};
+      std::vector<double> p1 = {this->BezierSurfaceSourcePoints->GetTuple3(i)[0],this->BezierSurfaceSourcePoints->GetTuple3(i)[1],this->BezierSurfaceSourcePoints->GetTuple3(i)[2]};
+      std::vector<double> p2 = {this->BezierSurfaceSourcePoints->GetTuple3(20*i)[0],this->BezierSurfaceSourcePoints->GetTuple3(20*i)[1],this->BezierSurfaceSourcePoints->GetTuple3(20*i)[2]};
 
       auto d01 = sqrt(pow(p0u[0]-p1[0],2.0)+pow(p0u[1]-p1[1],2.0)+pow(p0u[2]-p1[2],2.0));
       disU = disU + d01;
@@ -713,4 +725,18 @@ void vtkSlicerBezierSurfaceRepresentation3D::Ratio(bool flexibleBoundery){
     matR[1] = 1;
     }
   this->BezierSurfaceResectionMapper2D->SetMatRatio(matR);
+}
+
+void vtkSlicerBezierSurfaceRepresentation3D::ResectogramPlaneCenter(bool mirror){
+  int z = 1;
+  if(mirror){
+    z = 1;
+    }else{
+    z = -1;
+    }
+  double bounds[6];
+  this->BezierPlane->GetOutput()->GetBounds(bounds);
+  double center[3] = {(bounds[0]+bounds[1])/2, (bounds[2]+bounds[3])/2, z*100.0};
+  this->ResectogramCamera->SetPosition(center[0], center[1], center[2] * 3);
+  this->ResectogramCamera->SetFocalPoint(center[0], center[1], center[2]);
 }
