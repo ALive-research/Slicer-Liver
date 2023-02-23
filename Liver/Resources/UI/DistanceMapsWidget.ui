@@ -111,6 +111,21 @@
         <property name="segmentationNodeSelectorVisible">
          <bool>false</bool>
         </property>
+        <property name="showChildNodeTypes">
+         <bool>false</bool>
+        </property>
+        <property name="addEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="removeEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="editEnabled">
+         <bool>true</bool>
+        </property>
+        <property name="selectNodeUponCreation">
+         <bool>true</bool>
+        </property>
        </widget>
       </item>
       <item row="6" column="0">
@@ -156,29 +171,73 @@
       <item row="9" column="0" colspan="3">
        <widget class="QLabel" name="OutputDistanceMapLabel">
         <property name="text">
-         <string>Output Distance Map: </string>
+         <string>Enable Downsampling to Distance Map</string>
         </property>
        </widget>
       </item>
       <item row="9" column="3">
        <widget class="qMRMLNodeComboBox" name="OutputDistanceMapNodeComboBox">
         <property name="enabled">
-         <bool>true</bool>
-        </property>
-        <property name="nodeTypes">
-         <stringlist>
-          <string>vtkMRMLVectorVolumeNode</string>
-         </stringlist>
-        </property>
-        <property name="baseName">
-         <string/>
-        </property>
-        <property name="editEnabled">
          <bool>false</bool>
         </property>
-        <property name="renameEnabled">
+        <property name="title">
+         <string>Downsampling Rate Choice: </string>
+        </property>
+        <property name="collapsed">
          <bool>true</bool>
         </property>
+        <layout class="QVBoxLayout" name="verticalLayout_11">
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_11">
+           <item>
+            <layout class="QFormLayout" name="formLayout_8">
+             <item row="0" column="0">
+              <widget class="QLabel" name="DownsamplingRateLabel">
+               <property name="text">
+                <string>Downsampling Rate:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="qMRMLSpinBox" name="DownsamplingRateSpinBox">
+               <property name="decimalsOption">
+                <set>ctkDoubleSpinBox::DecimalsByShortcuts|ctkDoubleSpinBox::InsertDecimals</set>
+               </property>
+               <property name="maximum">
+                <double>2</double>
+               </property>
+               <property name="minimum">
+                <double>1</double>
+               </property>
+               <property name="singleStep">
+                <double>0.1</double>
+               </property>
+               <property name="value">
+                <double>1.5</double>
+               </property>
+               <property name="invertedControls">
+                <bool>false</bool>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_4">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>13</width>
+               <height>15</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+        </layout>
        </widget>
       </item>
       <item row="10" column="0" colspan="4">

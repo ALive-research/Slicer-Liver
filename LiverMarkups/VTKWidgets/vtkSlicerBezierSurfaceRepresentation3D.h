@@ -56,7 +56,6 @@
 #include <vtkActor2D.h>
 #include <vtkCamera.h>
 
-
 //------------------------------------------------------------------------------
 class vtkBezierSurfaceSource;
 class vtkOpenGLActor;

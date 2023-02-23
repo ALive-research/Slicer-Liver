@@ -70,7 +70,6 @@
 #include <vtkNew.h>
 #include <vtkOpenGLActor.h>
 #include <vtkOpenGLRenderWindow.h>
-#include <vtkOpenGLPolyDataMapper.h>
 #include <vtkOpenGLVertexBufferObjectGroup.h>
 #include <vtkOpenGLVertexBufferObject.h>
 #include <vtkPlaneSource.h>
@@ -79,7 +78,6 @@
 #include <vtkPolyDataNormals.h>
 #include <vtkPolyLine.h>
 #include <vtkProperty.h>
-#include <vtkRenderer.h>
 #include <vtkRenderWindow.h>
 #include <vtkSetGet.h>
 #include <vtkShaderProperty.h>
@@ -387,8 +385,8 @@ double *vtkSlicerBezierSurfaceRepresentation3D::GetBounds()
 {
   vtkBoundingBox boundingBox;
   const std::vector<vtkProp*> actors({
-      this->BezierSurfaceActor,
-      this->ControlPolygonActor });
+                                       this->BezierSurfaceActor,
+                                       this->ControlPolygonActor });
   this->AddActorsBounds(boundingBox, actors, Superclass::GetBounds());
   boundingBox.GetBounds(this->Bounds);
   return this->Bounds;
@@ -484,7 +482,6 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceGeometry(vtkMRML
     this->BezierSurfaceSourcePoints = this->BezierSurfaceSource->GetOutput()->GetPoints()->GetData();
     this->BezierSurfaceSourcePoints->SetName("BSPoints");
     auto BezierSurfaceDisplayNode = vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(node->GetDisplayNode());
-
     Ratio(BezierSurfaceDisplayNode->GetEnableFlexibleBoundary());
 
 

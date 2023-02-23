@@ -60,27 +60,27 @@
 
 //-----------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
-: public vtkMRMLStorableNode
+  : public vtkMRMLStorableNode
 {
-public:
+ public:
   static vtkMRMLLiverResectionNode* New();
-  vtkTypeMacro(vtkMRMLLiverResectionNode, vtkMRMLStorableNode);
+ vtkTypeMacro(vtkMRMLLiverResectionNode, vtkMRMLStorableNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   // Possible resection states
   enum ResectionState
-    {
-      Initialization=0,
-      Deformation,
-      Completed
-    };
+  {
+    Initialization=0,
+    Deformation,
+    Completed
+  };
 
   // Possible initialization modes
   enum InitializationMode
-    {
-      Flat=0,
-      Curved,
-    };
+  {
+    Flat=0,
+    Curved,
+  };
 
   //--------------------------------------------------------------------------------
   // MRMLNode methods
@@ -169,7 +169,7 @@ public:
   /// points are provided, the points from 2nd onwards will be ignored. The
   /// function returns true if thw points were set correctly, otherwise, it
   /// returns false.
-  bool SetInitializationControlPoints(vtkPoints* controlPoints);
+  bool SetInitializationControlPoints(vtkPoints *controlPoints);
 
   // Get initialization control points
   vtkPoints const* GetInitializationPoints() const
