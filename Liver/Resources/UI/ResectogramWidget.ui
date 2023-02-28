@@ -34,6 +34,16 @@
        </widget>
       </item>
       <item>
+       <widget class="QCheckBox" name="MirrorDisplayCheckBox">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="text">
+         <string>Mirror Resectogram Display</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QCheckBox" name="FlexibleBoundaryCheckBox">
         <property name="enabled">
          <bool>false</bool>

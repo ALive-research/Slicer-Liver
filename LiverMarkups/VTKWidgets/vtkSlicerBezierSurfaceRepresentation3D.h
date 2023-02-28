@@ -45,6 +45,7 @@
 // Markups VTKWidgets includes
 #include "vtkSlicerMarkupsWidgetRepresentation3D.h"
 #include "vtkMultiTextureObjectHelper.h"
+
 // MRML includes
 #include <vtkMRMLModelNode.h>
 
@@ -52,7 +53,9 @@
 #include <vtkWeakPointer.h>
 #include <vtkSmartPointer.h>
 #include "vtkOpenGLPolyDataMapper2D.h"
-#include "vtkActor2D.h"
+#include <vtkActor2D.h>
+#include <vtkCamera.h>
+
 //------------------------------------------------------------------------------
 class vtkBezierSurfaceSource;
 class vtkOpenGLActor;
@@ -96,6 +99,7 @@ protected:
   void CreateAndTransferVascularSegmentsTexture(vtkMRMLScalarVolumeNode *node);
   void CreateAndTransferMarkerStyleTexture(vtkMRMLScalarVolumeNode *node);
   void Ratio(bool flexibleBoundery);
+  void ResectogramPlaneCenter(bool mirror);
 
  protected:
   //k Bezier surface releated elements
@@ -107,7 +111,9 @@ protected:
   vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor2D;
   vtkSmartPointer<vtkOpenGLResection2DPolyDataMapper> BezierSurfaceResectionMapper2D;
   vtkSmartPointer<vtkBezierSurfaceSource> BezierPlane;
-  vtkSmartPointer<vtkDataArray> p;
+  vtkSmartPointer<vtkDataArray> BezierSurfaceSourcePoints;
+  vtkSmartPointer<vtkCamera> ResectogramCamera;
+
 
   // Control polygon related elements
   vtkSmartPointer<vtkPolyData> ControlPolygonPolyData;

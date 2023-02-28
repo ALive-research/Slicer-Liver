@@ -272,6 +272,15 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   // Set the ShowResection2D state variable
   vtkSetMacro(ShowResection2D, int);
 
+  // Set the MirrorDisplay state variable
+  vtkSetMacro(MirrorDisplay, bool);
+
+  // Get the MirrorDisplay state variable
+  vtkGetMacro(MirrorDisplay, bool);
+
+  // Set the MirrorDisplay state variable
+  vtkSetMacro(MirrorDisplay, int);
+
   // Set the EnableFlexibleBoundary state variable
   vtkSetMacro(EnableFlexibleBoundary, bool);
 
@@ -359,6 +368,7 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   float HepaticContourColor[3];
   float PortalContourColor[3];
   int TextureNumComps;
+  bool MirrorDisplay;
 
  private:
   vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);
