@@ -74,6 +74,156 @@
        </layout>
       </item>
       <item>
+       <layout class="QVBoxLayout" name="verticalLayout_9">
+        <item>
+         <widget class="QFrame" name="frame">
+          <property name="frameShape">
+           <enum>QFrame::NoFrame</enum>
+          </property>
+          <property name="frameShadow">
+           <enum>QFrame::Raised</enum>
+          </property>
+          <property name="lineWidth">
+           <number>0</number>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_10">
+           <item>
+            <widget class="QGroupBox" name="groupBox">
+             <property name="title">
+              <string>Contour Initialization:</string>
+             </property>
+             <layout class="QHBoxLayout" name="horizontalLayout_11">
+              <item>
+               <widget class="QRadioButton" name="FlatRadioButton">
+                <property name="text">
+                 <string>Flat(Default)</string>
+                </property>
+                <property name="checked">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QRadioButton" name="CurvedRadioButton">
+                <property name="text">
+                 <string>Curved</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QRadioButton" name="ClosedCurveButton">
+                <property name="enabled">
+                 <bool>true</bool>
+                </property>
+                <property name="text">
+                 <string>MarkupClosedCurve</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="qMRMLNodeComboBox" name="DistanceContourComboBox">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="toolTip">
+              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Select the Distance Contour&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+             </property>
+             <property name="nodeTypes">
+              <stringlist notr="true">
+               <string>vtkMRMLMarkupsDistanceContourNode</string>
+              </stringlist>
+             </property>
+             <property name="hideChildNodeTypes">
+              <stringlist notr="true"/>
+             </property>
+             <property name="renameEnabled">
+              <bool>true</bool>
+             </property>
+             <property name="interactionNodeSingletonTag">
+              <string notr="true"/>
+             </property>
+             <property name="selectNodeUponCreation">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QFrame" name="frame_2">
+          <property name="frameShape">
+           <enum>QFrame::NoFrame</enum>
+          </property>
+          <property name="frameShadow">
+           <enum>QFrame::Raised</enum>
+          </property>
+          <property name="lineWidth">
+           <number>0</number>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_7">
+           <item>
+            <widget class="qMRMLNodeComboBox" name="MarkupClosedCurveNodeComboBox">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="nodeTypes">
+              <stringlist notr="true">
+               <string>vtkMRMLMarkupsClosedCurveNode</string>
+              </stringlist>
+             </property>
+             <property name="showHidden">
+              <bool>true</bool>
+             </property>
+             <property name="hideChildNodeTypes">
+              <stringlist notr="true"/>
+             </property>
+             <property name="editEnabled">
+              <bool>true</bool>
+             </property>
+             <property name="renameEnabled">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QFrame" name="frame_3">
+             <property name="frameShape">
+              <enum>QFrame::NoFrame</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Raised</enum>
+             </property>
+             <property name="lineWidth">
+              <number>0</number>
+             </property>
+             <layout class="QHBoxLayout" name="horizontalLayout_10">
+              <item>
+               <widget class="qSlicerMarkupsPlaceWidget" name="curvePlaceWidget">
+                <property name="currentNodeActive">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="MarkupsResectionCheckBox">
+                <property name="text">
+                 <string>Update Resection</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
        <widget class="QGroupBox" name="ResectionParametersGroupBox">
         <property name="enabled">
          <bool>false</bool>
@@ -100,31 +250,6 @@
          <property name="bottomMargin">
           <number>0</number>
          </property>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_11">
-           <item>
-            <widget class="QLabel" name="ContourLabel">
-             <property name="text">
-              <string>Contour:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QRadioButton" name="FlatRadioButton">
-             <property name="text">
-              <string>Flat</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QRadioButton" name="CurvedRadioButton">
-             <property name="text">
-              <string>Curved</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
          <item>
           <layout class="QFormLayout" name="formLayout_2">
            <item row="0" column="0">
@@ -666,6 +791,7 @@
    <class>qMRMLNodeComboBox</class>
    <extends>QWidget</extends>
    <header>qMRMLNodeComboBox.h</header>
+   <container>1</container>
   </customwidget>
   <customwidget>
    <class>qMRMLSpinBox</class>
@@ -677,6 +803,17 @@
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qSlicerWidget</class>
+   <extends>QWidget</extends>
+   <header>qSlicerWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qSlicerMarkupsPlaceWidget</class>
+   <extends>qSlicerWidget</extends>
+   <header>qSlicerMarkupsPlaceWidget.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLSegmentSelectorWidget</class>
@@ -944,6 +1081,166 @@
     <hint type="destinationlabel">
      <x>426</x>
      <y>380</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ClosedCurveButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>MarkupClosedCurveNodeComboBox</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>502</x>
+     <y>452</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>671</x>
+     <y>374</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>MarkupClosedCurveNodeComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>382</x>
+     <y>580</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>662</x>
+     <y>529</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>MarkupClosedCurveNodeComboBox</receiver>
+   <slot>hide()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>385</x>
+     <y>580</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>671</x>
+     <y>374</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>DistanceContourComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>487</x>
+     <y>608</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>414</x>
+     <y>374</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>DistanceContourComboBox</receiver>
+   <slot>hide()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>411</x>
+     <y>608</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>411</x>
+     <y>515</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>CurvedRadioButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>DistanceContourComboBox</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>414</x>
+     <y>313</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>414</x>
+     <y>374</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>MarkupClosedCurveNodeComboBox</sender>
+   <signal>currentNodeChanged(vtkMRMLNode*)</signal>
+   <receiver>curvePlaceWidget</receiver>
+   <slot>setCurrentNode(vtkMRMLNode*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>366</x>
+     <y>527</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>593</x>
+     <y>515</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ClosedCurveButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>frame_3</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>133</x>
+     <y>520</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>643</x>
+     <y>515</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>frame_3</receiver>
+   <slot>hide()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>411</x>
+     <y>608</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>644</x>
+     <y>516</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>curvePlaceWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>411</x>
+     <y>608</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>594</x>
+     <y>516</y>
     </hint>
    </hints>
   </connection>

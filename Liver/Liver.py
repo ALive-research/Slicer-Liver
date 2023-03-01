@@ -167,6 +167,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self._uiLoader = loader = qt.QUiLoader()
     self._currentResectionNode = None
     self.numComps = 0
+    self._distanceContourNode = None
+    self._preprocessedLiverNode = None
 
   def setup(self):
     """
@@ -226,6 +228,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.connect('clicked(bool)', self.onComputeDistanceMapButtonClicked)
     self.resectionsWidget.CurvedRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.CurvedRadioButton))
     self.resectionsWidget.FlatRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.FlatRadioButton))
+    self.resectionsWidget.MarkupsResectionCheckBox.toggled.connect(lambda: self.onMarkupsResectionCheckBoxChecked(self.resectionsWidget.MarkupsResectionCheckBox))
     self.resectionsWidget.ResectionNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionDistanceMapNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
@@ -258,10 +261,14 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectogramWidget.VascularSegmentsNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onVascularSegmentsNodeChanged)
 
   def onRadioButtonState(self, rdbutton):
-
+    """
+    This function is triggered whenever the state of Radio Button changes
+    """
     activeResectionNode = self.resectionsWidget.ResectionNodeComboBox.currentNode()
+    self._distanceContourNode = self.resectionsWidget.DistanceContourComboBox.currentNode()
     segmentationNode = self.resectionsWidget.LiverSegmentSelectorWidget.currentNode()
     parenchymaSegmentId = self.resectionsWidget.LiverSegmentSelectorWidget.currentSegmentID()
+
     liverNode = segmentationNode.GetClosedSurfaceInternalRepresentation(parenchymaSegmentId)
     lvLogic = slicer.modules.liverresections.logic()
     if liverNode is None:
@@ -272,24 +279,59 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     if rdbutton.isChecked():
       if rdbutton.text == "Curved":
         lvLogic.HideInitializationMarkupFromResection(activeResectionNode)
+        lvLogic.HideBezierSurfaceMarkupFromResection(activeResectionNode)
         liverNode = activeResectionNode.GetTargetOrganModelNode()
-        activeResectionNode.SetInitMode(activeResectionNode.Curved)
-        activeResectionNode.SetTargetOrganModelNode(liverNode)
-        lvLogic.AddResectionContour(activeResectionNode)
-        # TODO: needed a better way to get the distance contour node
-        distanceContourNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLMarkupsDistanceContourNode")
-        liverPolyData = liverNode.GetPolyData()
-        preprocessedliverNode = self.logic.preprocessing(liverPolyData)
-        distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointEndInteractionEvent,
-                                        lambda x, y: self.logic.runSurfacefromEFD(activeResectionNode,
-                                                                                  distanceContourNode,
-                                                                                  preprocessedliverNode))
-        distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
-                                        self.onDistanceContourStartInteraction)
-        # self.logic.runSurfacefromEFD(distanceContourNode, preprocessedliverNode)
+        if self._distanceContourNode is not None:
+          self._distanceContourNode.SetDisplayVisibility(True)
+          liverPolyData = liverNode.GetPolyData()
+          self._preprocessedLiverNode = self.logic.preprocessing(liverPolyData)
+          self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointEndInteractionEvent,
+                                               lambda x, y: self.logic.runSurfacefromEFD(activeResectionNode,
+                                                                                         self._distanceContourNode,
+                                                                                         self._preprocessedLiverNode))
+          self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
+                                          self.onDistanceContourStartInteraction)
+        else:
+          activeResectionNode.SetInitMode(activeResectionNode.Curved)
+          activeResectionNode.SetTargetOrganModelNode(liverNode)
+          lvLogic.AddResectionContour(activeResectionNode)
+          liverPolyData = liverNode.GetPolyData()
+          self._preprocessedLiverNode = self.logic.preprocessing(liverPolyData)
+          node = slicer.util.getNodesByClass("vtkMRMLMarkupsDistanceContourNode")[-1]
+          self.resectionsWidget.DistanceContourComboBox.setCurrentNode(node)
+          # self._distanceContourNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLMarkupsDistanceContourNode")
+          self._distanceContourNode = self.resectionsWidget.DistanceContourComboBox.currentNode()
 
-      else:
+          self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointEndInteractionEvent,
+                                        lambda x, y: self.logic.runSurfacefromEFD(activeResectionNode,
+                                                                                  self._distanceContourNode,
+                                                                                  self._preprocessedLiverNode))
+          self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
+                                        self.onDistanceContourStartInteraction)
+      elif rdbutton.text == "MarkupClosedCurve":
+        if self._distanceContourNode is not None:
+          self._distanceContourNode.SetDisplayVisibility(False)
+        lvLogic.HideInitializationMarkupFromResection(activeResectionNode)
+        lvLogic.HideBezierSurfaceMarkupFromResection(activeResectionNode)
+      elif rdbutton.text == "Flat(Default)":
+        lvLogic.ShowInitializationMarkupFromResection(activeResectionNode)
+        lvLogic.HideBezierSurfaceMarkupFromResection(activeResectionNode)
+        if self._distanceContourNode is not None:
+          self._distanceContourNode.SetDisplayVisibility(False)
         return
+
+  def onMarkupsResectionCheckBoxChecked(self, checkbox):
+    activeMarkupClosedCurveNode = self.resectionsWidget.MarkupClosedCurveNodeComboBox.currentNode()
+    activeResectionNode = self.resectionsWidget.ResectionNodeComboBox.currentNode()
+    liverNode = activeResectionNode.GetTargetOrganModelNode()
+    # self.logic.setInputCurveNode(activeMarkupClosedCurveNode)
+    if checkbox.isChecked():
+      activeMarkupClosedCurveNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointEndInteractionEvent,
+                                              lambda x, y: self.logic.runSurfacefromCurve(activeResectionNode,
+                                                                                          activeMarkupClosedCurveNode,
+                                                                                          liverNode))
+      activeMarkupClosedCurveNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
+                                              self.onDistanceContourStartInteraction)
 
   def onDistanceMapParameterChanged(self):
     """
@@ -477,8 +519,8 @@ This function is called when the resection distance map selector changes
 
   def onResectionLiverModelNodeChanged(self):
     """
-This function is called when the resection liver model node changes
-"""
+    This function is called when the resection liver model node changes
+    """
     if self._currentResectionNode is not None:
       parenchymaSegmentId = self.resectionsWidget.LiverSegmentSelectorWidget.currentSegmentID()
       if parenchymaSegmentId == '':
@@ -506,10 +548,6 @@ This function is called when the resection liver model node changes
     """
     lvLogic = slicer.modules.liverresections.logic()
     lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
-    # self.observedBezierNode.GetDisplayNode().VisibilityOff()
-    # node = slicer.util.getNode("MarkupsBezierSurface")
-    # node.GetDisplayNode().VisibilityOff()
-    # print(" Also This function is ok")
 
   def onResectionMarginChanged(self):
     """
@@ -1429,14 +1467,6 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
 
     appendFilter.Update()
 
-    # masks = vtk.vtkMaskPoints()
-    # masks.SetInputData(splineInterp)
-    # masks.SingleVertexPerCellOn()
-    # masks.GenerateVerticesOn()
-    # masks.SetOnRatio(2)
-    # masks.SetMaximumNumberOfPoints(splineInterp.GetNumberOfPoints())
-    # masks.Update()
-
     spline_lines = appendFilter.GetOutput()
     points = spline_lines.GetPoints().GetData()
     points_array = vtk_to_numpy(points)
@@ -1553,43 +1583,153 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
 
     return line1
 
-  def chord_length(self, points):
+  def spline_line_fromClosedCurve(self, curveNode, liverModelNode):
     """
-    Returns the chord length parametrization for the data
+    Computes spline lines from a ClosedMarkupCurve
+    :param curve: close curve node, curve = slicer.util.getNode("CC")
+    :param liverModelNode: liver 3D Model,  liver = slicer.util.getNode("liver")
+    :return: points array of the spline lines and the polydata
     """
-    u = np.zeros(points.shape[0])
+    global newpoints
+    curveNode.SetAndObserveSurfaceConstraintNode(liverModelNode)
 
-    for i in range(1, len(u)):
-      u[i] = u[i - 1] + np.linalg.norm(points[i, :] - points[i - 1, :], ord=2)
+    # Step 1: Resample curve
+    resampleNumber = 100
+    currentPoints = curveNode.GetCurvePointsWorld()
+    newPoints = vtk.vtkPoints()
+    sampleDist = curveNode.GetCurveLengthWorld() / (resampleNumber - 1)
 
-    u = u.reshape([len(u), 1])
+    closedCurveOption = 1
+    curveNode.ResamplePoints(currentPoints, newPoints, sampleDist, closedCurveOption)
 
-    for i, _ in enumerate(u):
-      u[i] = u[i] / u[-1]
+    vector = vtk.vtkVector3d()
+    pt = [0, 0, 0]
+    resampledCurve = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsClosedCurveNode", "resampledCurveOrig")
+    for controlPoint in range(0, newPoints.GetNumberOfPoints()):
+      newPoints.GetPoint(controlPoint, pt)
+      vector[0] = pt[0]
+      vector[1] = pt[1]
+      vector[2] = pt[2]
+      resampledCurve.AddControlPoint(vector)
 
-    return u
+    resampledCurve.SetDisplayVisibility(False)
+    curveNode.SetDisplayVisibility(True)
+    # Step 2: REORDER THE RESAMPLED POINTS ID AND CREATE A POLYDATA.
+    # This step will split the points IDS in 2 parts in order to correctly apply the knitting algorithm.
+    # get the numpy array in order to split the curve id in two section
+    markupsPositions = slicer.util.arrayFromMarkupsControlPoints(resampledCurve)
+    # markupsPositions = slicer.util.arrayFromMarkupsCurvePoints(resampledCurve)
+    N = len(markupsPositions)
+    listpoints = []
 
-  def centripetal(self, points):
-    """
-    Returns the chord length parametrization for the data
-    """
+    if N % 2 == 0:
+      for x in range(int(N / 2) + 1):
+        listpoints.append(markupsPositions[x])
+        listpoints.append(markupsPositions[-x])
+        newpoints = np.asarray([listpoints[1:-1]]).squeeze()
+    else:
+      for x in range(int(N / 2) + 1):
+        listpoints.append(markupsPositions[x])
+        listpoints.append(markupsPositions[-x])
+        newpoints = np.asarray([listpoints[1:]]).squeeze()
+
+    # Step 3: PIECEWISE SPLINE INTERPOLATION
+    xSpline = vtk.vtkKochanekSpline()
+    ySpline = vtk.vtkKochanekSpline()
+    zSpline = vtk.vtkKochanekSpline()
+
+    pointCloud_list = list()
+    final_parametric_spline_list = list()
+    parametric_spline_list = list()
+    source_spline_list = list()
+    final_source_spline_list = list()
+
+    for i in range(N):
+      if i % 2 == 0:
+        pointCloud_list.append(
+          self.CreatePolyDataFromCoords(newpoints[i:i + 2, :]))
+
+        # parametric_spline_list.append(spline)
+        parametric_spline_list.append(vtk.vtkParametricSpline())
+        source_spline_list.append(vtk.vtkParametricFunctionSource())
+
+    for i in range(len(pointCloud_list)):
+      parametric_spline_list[i].SetXSpline(xSpline)
+      parametric_spline_list[i].SetYSpline(ySpline)
+      parametric_spline_list[i].SetZSpline(zSpline)
+      parametric_spline_list[i].SetPoints(pointCloud_list[i].GetPoints())
+      # print(i)
+      final_parametric_spline_list.append(parametric_spline_list[i])
+
+      source_spline_list[i].SetParametricFunction(final_parametric_spline_list[i])
+      source_spline_list[i].SetUResolution(20)
+      source_spline_list[i].SetVResolution(20)
+      source_spline_list[i].SetWResolution(20)
+      source_spline_list[i].SetScalarModeToDistance()
+      final_source_spline_list.append(source_spline_list[i])
+      final_source_spline_list[i].Update()
+
+    appendFilter = vtk.vtkAppendPolyData()
+    for i in range(len(pointCloud_list)):
+      appendFilter.AddInputData(final_source_spline_list[i].GetOutput())
+
+    appendFilter.Update()
+
+    spline_lines = appendFilter.GetOutput()
+    points = spline_lines.GetPoints().GetData()
+    points_array = vtk_to_numpy(points)
+    print("Number of points in the mask: {}".format(spline_lines.GetNumberOfPoints()))
+
+    return points_array, spline_lines
+
+  def compute_parametrization(self, points, centripetal=True):
+    # Length of the points array
+    num_points = len(points)
+
     # Calculate chord lengths
-    u = np.zeros(points.shape[0])
-    cds = np.zeros(points.shape[0] + 1)
+    cds = np.zeros([num_points + 1, 1])
+    # cds = [0.0 for _ in range(num_points + 1)]
     cds[-1] = 1.0
+    for i in range(1, num_points):
+      distance = np.linalg.norm(points[i, :] - points[i - 1, :], ord=2)
+      # distance = linalg.point_distance(points[i], points[i - 1])
+      cds[i] = np.sqrt(distance) if centripetal else distance
 
-    for i in range(1, len(u)):
-      u[i] = u[i - 1] + np.linalg.norm(points[i, :] - points[i - 1, :], ord=2)
-      cds[i] = np.sqrt(u[i])
-
+    # Find the total chord length
     d = sum(cds[1:-1])
-    u = u.reshape([len(u), 1])
 
-    for i, _ in enumerate(u):
-      # u[i] = u[i] / u[-1]
-      u[i] = sum(cds[0:i + 1]) / d
+    # Divide individual chord lengths by the total chord length
+    uk = np.zeros([num_points, 1])
+    for i in range(num_points):
+      uk[i] = sum(cds[0:i + 1]) / d
 
-    return u
+    return uk
+
+  def compute_averaging_params_surface(self, points, size_u, size_v):
+    """
+    Compute knot averaging as recommended in The NURBS Book (2nd Edition), pp.366-367
+    :param points: surface point arranged in a grid NxNx3
+    :param size_u: number of points on the u-direction
+    :param size_v: number of points on the v-direction
+    :return:
+    """
+    # finding params in v direction
+    size_u, size_v = points.shape[0:2]
+    params_v = []
+    for u in range(size_u):
+      temp = self.compute_parametrization(points[u]).reshape((1, size_v))
+      params_v.append(temp)
+    params_v = np.concatenate(params_v, 0)
+    # finding params in u direction
+    params_v = np.mean(params_v, 0)
+    params_u = []
+    for v in range(size_v):
+      temp = self.compute_parametrization(points[:, v]).reshape((size_u, 1))
+      params_u.append(temp)
+    params_u = np.concatenate(params_u, 1)
+
+    params_u = np.mean(params_u, 1)
+    return params_u, params_v
 
   def evaluate_basis_bezier(self, t, degree):
     """
@@ -1659,6 +1799,87 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
 
     return cntrl_points
 
+  def runSurfacefromCurve(self, resectionNode, curveNode, liverModelNode):
+
+    points_array = self.spline_line_fromClosedCurve(curveNode, liverModelNode)
+
+    # create the extent with pca
+    splines_poly = points_array[1]
+    first_eigen = self.compute_simple_pca(splines_poly)
+    extent_pca = 4 * np.sqrt(first_eigen[1])
+
+    sub_pca = [self.compute_pca(points_array[1], extent_pca / 2, start=21 * i, stop=21 * (i + 1)) for i in
+               range(50)]
+
+    # convert a list of dictionaries into a dict of list
+    sub_pca_dict = {}
+    for k, v in [(key, d[key]) for d in sub_pca for key in d]:
+      if k not in sub_pca_dict:
+        sub_pca_dict[k] = [v]
+      else:
+        sub_pca_dict[k].append(v)
+
+    eigen_average_center = np.average(np.vstack(sub_pca_dict['eigen_vector'][4:46]), axis=0)
+
+    # TODo: the slops of the superior and inferior part of the point cloud could affect bezier Surface
+    # eigen_average_start = np.average(np.vstack(sub_pca_dict['eigen_vector'][:4]), axis=0)
+    # eigen_average_end = np.average(np.vstack(sub_pca_dict['eigen_vector'][46:50]), axis=0)
+
+    # ToDO: Review the need for this: maybe check if there is a resampling function for vtk Spline
+    center = sub_pca_dict['center']
+
+    organized_data = np.vstack(
+      np.array(
+        [self.line3D_afterSlopeAverage(center[i], eigen_average_center, extent_pca / 2) for i in
+         range(len(center))]))
+
+    points_grid = organized_data.reshape(50, 50, 3)
+
+    bezier_list_u = list()
+    bezier_list_v = list()
+
+    # u = self.compute_parametrization(points_grid[:, 0, 0].reshape(len(points_grid[:, 0, 0]), 1))
+    # v = self.compute_parametrization(points_grid[0, :, 0].reshape(len(points_grid[0, :, 0]), 1))
+
+    param_surface = self.compute_averaging_params_surface(points_grid, 50, 50)
+    u = param_surface[0].reshape(-1, 1)
+    v = param_surface[1].reshape(-1, 1)
+
+    # for u direction
+
+    for i in range(u.shape[0]):
+      bezier_basis = self.evaluate_basis_bezier(u[i], 3)
+      bezier_list_u.append(bezier_basis)
+
+    bezier_basis_u = np.array(bezier_list_u)
+
+    # for v direction
+
+    for i in range(v.shape[0]):
+      bezier_basis = self.evaluate_basis_bezier(v[i], 3)
+      bezier_list_v.append(bezier_basis)
+
+    bezier_basis_v = np.array(bezier_list_v)
+
+    ctrl_points = self.fit_bezier_surface(points_grid, bezier_basis_u, bezier_basis_v)
+
+    control_points = ctrl_points.reshape(-1, 3)
+
+    points = vtk.vtkPoints()
+    #
+    for i in range(0, len(control_points)):
+      points.InsertNextPoint(control_points[i])
+
+    # BezierNode = slicer.mrmlScene.GetNthNodeByClass(0, "vtkMRMLMarkupsBezierSurfaceNode")
+    # Transfer the control points to the resection node
+    BezierNode = resectionNode.GetBezierSurfaceNode()
+    BezierNode.RemoveAllControlPoints()
+    BezierNode.SetControlPointPositionsWorld(points)
+    BezierDisplay = BezierNode.GetDisplayNode()
+    BezierDisplay.SetGlyphScale(0.0)
+    BezierDisplay.VisibilityOn()
+    # BezierDisplay.SetClipOut(True)
+
   def runSurfacefromEFD(self, resectionNode, distanceNode, liverNode):
 
     point1 = distanceNode.GetNthControlPointPosition(1)
@@ -1676,7 +1897,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     # print("distances", distances)
 
     for i in range(len(distances)):
-      if distances[i] > 20:
+      if distances[i] > 30:
         max_id = np.argmax(distances)
         sorted1 = sorted1[0:max_id]
 
@@ -1770,8 +1991,12 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     bezier_list_u = list()
     bezier_list_v = list()
 
-    u = self.chord_length(points_grid[:, 0, 0].reshape(len(points_grid[:, 0, 0]), 1))
-    v = self.chord_length(points_grid[0, :, 0].reshape(len(points_grid[0, :, 0]), 1))
+    # u = self.compute_parametrization(points_grid[:, 0, 0].reshape(len(points_grid[:, 0, 0]), 1))
+    # v = self.compute_parametrization(points_grid[0, :, 0].reshape(len(points_grid[0, :, 0]), 1))
+
+    param_surface = self.compute_averaging_params_surface(points_grid, 50, 50)
+    u = param_surface[0].reshape(-1, 1)
+    v = param_surface[1].reshape(-1, 1)
 
     # for u direction
 
@@ -1833,8 +2058,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     BezierNode.SetControlPointPositionsWorld(points)
     BezierDisplay = BezierNode.GetDisplayNode()
     BezierDisplay.VisibilityOn()
-    BezierDisplay.SetClipOut(True)
-
+    # BezierDisplay.SetClipOut(True)
 
 #
 # LiverTest
