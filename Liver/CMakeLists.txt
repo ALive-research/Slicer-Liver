@@ -13,6 +13,7 @@ set(MODULE_PYTHON_RESOURCES
   Resources/Icons/DistanceMap000.png
   Resources/UI/ResectionsWidget.ui
   Resources/UI/DistanceMapsWidget.ui
+  Resources/UI/ResectogramWidget.ui
   )
 
 #-----------------------------------------------------------------------------

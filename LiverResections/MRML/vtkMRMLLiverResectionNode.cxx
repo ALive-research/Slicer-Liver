@@ -54,12 +54,14 @@ vtkMRMLNodeNewMacro(vtkMRMLLiverResectionNode);
 
 //--------------------------------------------------------------------------------
 vtkMRMLLiverResectionNode::vtkMRMLLiverResectionNode()
-  :TargetOrganModelNode(nullptr), DistanceMapVolumeNode(nullptr),
+  :TargetOrganModelNode(nullptr), DistanceMapVolumeNode(nullptr), VascularSegmentsVolumeNode(nullptr),
    State(ResectionState::Initialization), InitMode(InitializationMode::Flat),
    ResectionMargin(0.0), UncertaintyMargin(0.0), ClipOut(false), WidgetVisibility(true),
    InterpolatedMargins(false), ResectionColor{1.0f, 1.0f, 1.0f},
    ResectionMarginColor{1.0f, 0.0f, 0.0f}, UncertaintyMarginColor{1.0f, 1.0f, 0.0f},
-   ResectionOpacity(1.0f), GridVisibility(false), GridThickness(0.0f)
+   ResectionOpacity(1.0f), GridVisibility(false), GridThickness(0.0f), ShowResection2D(false), HepaticContourThickness(0.0), PortalContourThickness(0.0),
+   HepaticContourColor{0.0f, 151.0/255.0f, 206.0/255.0f}, PortalContourColor{216.0/255.0f, 101.0/255.0f, 79.0/255.0f},
+   TextureNumComps(0), EnableFlexibleBoundary(false), MirrorDisplay(false)
 {
 }
 

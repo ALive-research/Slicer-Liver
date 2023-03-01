@@ -173,13 +173,21 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
     if (bezierSurfaceNode)
       {
       bezierSurfaceNode->SetDistanceMapVolumeNode(resectionNode->GetDistanceMapVolumeNode());
+      bezierSurfaceNode->SetVascularSegmentsVolumeNode(resectionNode->GetVascularSegmentsVolumeNode());
+      bezierSurfaceNode->SetMarkerStyleVolumeNode(resectionNode->GetMarkerStyleVolumeNode());
       bezierSurfaceNode->SetResectionMargin(resectionNode->GetResectionMargin());
       bezierSurfaceNode->SetUncertaintyMargin(resectionNode->GetUncertaintyMargin());
+      bezierSurfaceNode->SetHepaticContourThickness(resectionNode->GetHepaticContourThickness());
+      bezierSurfaceNode->SetPortalContourThickness(resectionNode->GetPortalContourThickness());
 
       auto bezierSurfaceDisplayNode =
         vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(bezierSurfaceNode->GetDisplayNode());
       if (bezierSurfaceDisplayNode)
         {
+        bezierSurfaceDisplayNode->SetShowResection2D(resectionNode->GetShowResection2D());
+        bezierSurfaceDisplayNode->SetMirrorDisplay(resectionNode->GetMirrorDisplay());
+        bezierSurfaceDisplayNode->SetEnableFlexibleBoundary(resectionNode->GetEnableFlexibleBoundary());
+        bezierSurfaceDisplayNode->SetTextureNumComps(resectionNode->GetTextureNumComps());
         bezierSurfaceDisplayNode->SetClipOut(resectionNode->GetClipOut());
         bezierSurfaceDisplayNode->SetWidgetVisibility(resectionNode->GetWidgetVisibility());
         bezierSurfaceDisplayNode->SetInterpolatedMargins(resectionNode->GetInterpolatedMargins());
@@ -190,6 +198,8 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
         bezierSurfaceDisplayNode->SetResectionOpacity(resectionNode->GetResectionOpacity());
         bezierSurfaceDisplayNode->SetGridDivisions(resectionNode->GetGridDivisions());
         bezierSurfaceDisplayNode->SetGridThickness(resectionNode->GetGridThickness());
+        bezierSurfaceDisplayNode->SetHepaticContourColor(resectionNode->GetHepaticContourColor());
+        bezierSurfaceDisplayNode->SetPortalContourColor(resectionNode->GetPortalContourColor());
         }
       bezierSurfaceNode->SetLocked(!resectionNode->GetWidgetVisibility());
       }

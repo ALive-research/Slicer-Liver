@@ -31,16 +31,15 @@
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  This file was originally developed by Rafael Palomar (Oslo University
-  Hospital and NTNU) and was supported by The Research Council of Norway
-  through the ALive project (grant nr. 311393).
+  This file was originally developed by Ruoyan Meng (NTNU) and Rafael
+  Palomar (Oslo University Hospital and NTNU) and was supported by The
+  Research Council of Norway through the ALive project (grant nr. 311393).
 
-==============================================================================*/
+  ==============================================================================*/
 
-#ifndef vtkopenglresectionbezierpolydatamapper_h_
-#define vtkopenglresectionbezierpolydatamapper_h_
+#ifndef SLICERLIVER_VTKOPENGLRESECTION2DPOLYDATAMAPPER_H
+#define SLICERLIVER_VTKOPENGLRESECTION2DPOLYDATAMAPPER_H
 
-#include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
 
 // VTK includes
 #include <vtkOpenGLPolyDataMapper.h>
@@ -53,11 +52,11 @@
 class vtkTextureObject;
 
 //-------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLBezierResectionPolyDataMapper : public vtkOpenGLPolyDataMapper
+class VTKRENDERINGOPENGL2_EXPORT vtkOpenGLResection2DPolyDataMapper : public vtkOpenGLPolyDataMapper
 {
-public:
-  static vtkOpenGLBezierResectionPolyDataMapper *New();
-  vtkTypeMacro(vtkOpenGLBezierResectionPolyDataMapper, vtkOpenGLPolyDataMapper);
+ public:
+  static vtkOpenGLResection2DPolyDataMapper *New();
+ vtkTypeMacro(vtkOpenGLResection2DPolyDataMapper, vtkOpenGLPolyDataMapper);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   /// Get distance map
@@ -65,6 +64,11 @@ public:
 
   /// Set distance map
   void SetDistanceMapTextureObject(vtkTextureObject* node);
+
+  /// Get Vascular Segments
+  vtkTextureObject* GetVascularSegmentsTextureObject() const;
+  /// Set Vascular Segments
+  void SetVascularSegmentsTextureObject(vtkTextureObject* object);
 
   /// Set RAS - IKJ matrix
   void SetRasToIjkMatrix(const vtkMatrix4x4*);
@@ -143,12 +147,44 @@ public:
   /// Set the thickness factor for the grid
   void SetGridThicknessFactor(float thicknessFactor);
 
-  /// unsigned int GetMarkerStyleAvailable() const;
+  /// Get the hepatic contour margin
+  float GetHepaticContourThickness() const;
+  /// Set the resection margin
+  void SetHepaticContourThickness(float margin);
+
+  /// Get the uncertainty margin
+  float GetPortalContourThickness() const;
+  /// Set the resection margin
+  void SetPortalContourThickness(float margin);
+
+  /// Get the portal contour color
+  float const* GetPortalContourColor() const;
+  /// Set the portal contour color
+  void SetPortalContourColor(float color[3]);
+  /// Set the portal contour color
+  void SetPortalContourColor(float red, float green, float blue);
+
+  /// Get the hepatic contour color
+  float const* GetHepaticContourColor() const;
+  /// Set the hepatic contour color
+  void SetHepaticContourColor(float color[3]);
+  /// Set the hepatic contour color
+  void SetHepaticContourColor(float red, float green, float blue);
+
+  // Get and Set TextureNumComps
+  int GetTextureNumComps() const;
+  void SetTextureNumComps(int numComps);
+
+  //  unsigned int GetMarkerStyleAvailable() const;
   void SetMarkerStyleAvailable(unsigned int status);
 
-protected:
-  vtkOpenGLBezierResectionPolyDataMapper();
-  ~vtkOpenGLBezierResectionPolyDataMapper();
+  // Get and Set Ratio
+  void SetMatRatio(float matR[2]);
+  float const*  GetMatRatio() const;
+
+ protected:
+  vtkOpenGLResection2DPolyDataMapper();
+  ~vtkOpenGLResection2DPolyDataMapper();
 
   void BuildBufferObjects(vtkRenderer* ren, vtkActor* act) override;
 
@@ -165,13 +201,15 @@ protected:
   void SetCameraShaderParameters(vtkOpenGLHelper& cellBO,
                                  vtkRenderer* ren,
                                  vtkActor* actor) override;
-private:
+ private:
   class vtkInternal;
   std::unique_ptr<vtkInternal> Impl;
 
-private:
-  vtkOpenGLBezierResectionPolyDataMapper(const vtkOpenGLBezierResectionPolyDataMapper&) = delete;
-  void operator=(const vtkOpenGLBezierResectionPolyDataMapper&) = delete;
+ private:
+  vtkOpenGLResection2DPolyDataMapper(const vtkOpenGLResection2DPolyDataMapper&) = delete;
+  void operator=(const vtkOpenGLResection2DPolyDataMapper&) = delete;
 };
 
-#endif // vtkopenglresectionsurfacepolydatamapper_h_
+
+
+#endif //SLICERLIVER_VTKOPENGLRESECTION2DPOLYDATAMAPPER_H

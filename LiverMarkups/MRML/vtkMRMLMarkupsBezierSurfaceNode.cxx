@@ -52,7 +52,7 @@ vtkMRMLNodeNewMacro(vtkMRMLMarkupsBezierSurfaceNode);
 
 //--------------------------------------------------------------------------------
 vtkMRMLMarkupsBezierSurfaceNode::vtkMRMLMarkupsBezierSurfaceNode()
-  :Target(nullptr), DistanceMap(nullptr), ResectionMargin(0.0), UncertaintyMargin(0.0)
+  :Target(nullptr), DistanceMap(nullptr), VascularSegments(nullptr), ResectionMargin(0.0), UncertaintyMargin(0.0), HepaticContourThickness(0.0), PortalContourThickness(0.0)
 {
   this->MaximumNumberOfControlPoints = 16;
   this->RequiredNumberOfControlPoints = 16;

@@ -32,8 +32,8 @@
 #   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 #   This file was originally developed by Rafael Palomar (Oslo University
-#   Hospital and NTNU) and was supported by The Research Council of Norway
-#   through the ALive project (grant nr. 311393).
+#   Hospital and NTNU) and Ruoyan Meng (NTNU), and was supported by The
+#   Research Council of Norway through the ALive project (grant nr. 311393).
 #
 # ==============================================================================
 
@@ -139,6 +139,18 @@ def registerSampleData():
     loadFileType = 'SegmentationFile'
   )
 
+  #if developerMode is True:
+  SampleData.SampleDataLogic.registerCustomSampleDataSource(
+    category ='Development',
+    sampleName ='3D-IRCADb-01_08',
+    thumbnailFileName = os.path.join(iconsPath, 'LiverSegmentation000.png'),
+    uris = aliveDataURL+'SHA256/2e25b8ce2c70cc2e1acd9b3356d0b1291b770274c16fcd0e2a5b69a4587fbf74',
+    fileNames ='3D-IRCADb-01_08.nrrd',
+    checksums = 'SHA256:2e25b8ce2c70cc2e1acd9b3356d0b1291b770274c16fcd0e2a5b69a4587fbf74',
+    nodeNames ='3D-IRCADb-01_08',
+    loadFileType = 'SegmentationFile'
+  )
+
 #
 # LiverWidget
 #
@@ -154,6 +166,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.logic = None
     self._uiLoader = loader = qt.QUiLoader()
     self._currentResectionNode = None
+    self.numComps = 0
+    self._distanceContourNode = None
+    self._preprocessedLiverNode = None
 
   def setup(self):
     """
@@ -165,12 +180,16 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     distanceMapsUI.setMRMLScene(slicer.mrmlScene)
     resectionsUI = slicer.util.loadUI(self.resourcePath('UI/ResectionsWidget.ui'))
     resectionsUI.setMRMLScene(slicer.mrmlScene)
+    resectogramUI = slicer.util.loadUI(self.resourcePath('UI/ResectogramWidget.ui'))
+    resectogramUI.setMRMLScene(slicer.mrmlScene)
 
     self.layout.addWidget(distanceMapsUI)
     self.layout.addWidget(resectionsUI)
+    self.layout.addWidget(resectogramUI)
 
     self.distanceMapsWidget = slicer.util.childWidgetVariables(distanceMapsUI)
     self.resectionsWidget = slicer.util.childWidgetVariables(resectionsUI)
+    self.resectogramWidget = slicer.util.childWidgetVariables(resectogramUI)
 
     # Add LiverSegmentsWidget
     wrapperWidget = slicer.qMRMLWidget()
@@ -198,58 +217,58 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.UncertaintyMarginComboBox.addItems(['Custom', 'Max. Spacing', 'RMS Spacing'])
 
     # Connections
-    self.distanceMapsWidget.TumorSegmentSelectorWidget.connect('currentSegmentChanged(QString)',
-                                                               self.onDistanceMapParameterChanged)
-    self.distanceMapsWidget.ParenchymaSegmentSelectorWidget.connect('currentSegmentChanged(QString)',
-                                                                    self.onDistanceMapParameterChanged)
-    self.distanceMapsWidget.SegmentationSelectorComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap',
-                                                                      'True')
-    self.distanceMapsWidget.OutputDistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)',
-                                                                  self.onDistanceMapParameterChanged)
-    self.distanceMapsWidget.OutputDistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap',
-                                                                       'True')
-    self.distanceMapsWidget.ComputeDistanceMapsPushButton.connect('clicked(bool)',
-                                                                  self.onComputeDistanceMapButtonClicked)
-    self.resectionsWidget.CurvedRadioButton.toggled.connect(
-      lambda: self.onRadioButtonState(self.resectionsWidget.CurvedRadioButton))
-    self.resectionsWidget.FlatRadioButton.toggled.connect(
-      lambda: self.onRadioButtonState(self.resectionsWidget.FlatRadioButton))
-    self.resectionsWidget.ResectionNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)',
-                                                        self.onResectionNodeChanged)
-    self.resectionsWidget.DistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)',
-                                                          self.onResectionDistanceMapNodeChanged)
+    self.distanceMapsWidget.TumorSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onDistanceMapParameterChanged)
+    self.distanceMapsWidget.ParenchymaSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onDistanceMapParameterChanged)
+    self.distanceMapsWidget.HepaticSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onDistanceMapParameterChanged)
+    self.distanceMapsWidget.PortalSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onDistanceMapParameterChanged)
+    self.distanceMapsWidget.SegmentationSelectorComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
+    self.distanceMapsWidget.OutputDistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
+    self.distanceMapsWidget.OutputDistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
+    self.distanceMapsWidget.DownSampleCheckBox.connect('stateChanged(int)', self.onDownSampleCheckBoxChanged)
+    self.distanceMapsWidget.ComputeDistanceMapsPushButton.connect('clicked(bool)', self.onComputeDistanceMapButtonClicked)
+    self.resectionsWidget.CurvedRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.CurvedRadioButton))
+    self.resectionsWidget.FlatRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.FlatRadioButton))
+    self.resectionsWidget.MarkupsResectionCheckBox.toggled.connect(lambda: self.onMarkupsResectionCheckBoxChecked(self.resectionsWidget.MarkupsResectionCheckBox))
+    self.resectionsWidget.ResectionNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionNodeChanged)
+    self.resectionsWidget.DistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionDistanceMapNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'Computed', 'True')
-    self.resectionsWidget.LiverSegmentSelectorWidget.connect('currentSegmentChanged(QString)',
-                                                             self.onResectionLiverModelNodeChanged)
-    self.resectionsWidget.LiverSegmentSelectorWidget.connect('currentNodeChanged(vtkMRMLNode*)',
-                                                             self.onResectionLiverSegmentationNodeChanged)
+    self.resectionsWidget.MarkerStyleNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onMarkerStyleNodeChanged)
+    self.resectionsWidget.MarkerStyleNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
+    self.resectionsWidget.MarkerStyleNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'Computed', 'True')
+    self.resectionsWidget.LiverSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onResectionLiverModelNodeChanged)
+    self.resectionsWidget.LiverSegmentSelectorWidget.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionLiverSegmentationNodeChanged)
     self.resectionsWidget.ResectionColorPickerButton.connect('colorChanged(QColor)', self.onResectionColorChanged)
-    self.resectionsWidget.ResectionOpacityDoubleSlider.connect('valueChanged(double)',
-                                                               self.onResectionOpacityChanged)
-    self.resectionsWidget.ResectionOpacityDoubleSpinBox.connect('valueChanged(double)',
-                                                                self.onResectionOpacityChanged)
+    self.resectionsWidget.ResectionOpacityDoubleSlider.connect('valueChanged(double)', self.onResectionOpacityChanged)
+    self.resectionsWidget.ResectionOpacityDoubleSpinBox.connect('valueChanged(double)', self.onResectionOpacityChanged)
     self.resectionsWidget.ResectionMarginSpinBox.connect('valueChanged(double)', self.onResectionMarginChanged)
-    self.resectionsWidget.ResectionMarginColorPickerButton.connect('colorChanged(QColor)',
-                                                                   self.onResectionMarginColorChanged)
-    self.resectionsWidget.ResectionGridColorPickerButton.connect('colorChanged(QColor)',
-                                                                 self.onResectionGridColorChanged)
+    self.resectionsWidget.ResectionMarginColorPickerButton.connect('colorChanged(QColor)', self.onResectionMarginColorChanged)
+    self.resectionsWidget.ResectionGridColorPickerButton.connect('colorChanged(QColor)', self.onResectionGridColorChanged)
     self.resectionsWidget.GridDivisionsDoubleSlider.connect('valueChanged(double)', self.onGridDivisionsChanged)
     self.resectionsWidget.GridThicknessDoubleSlider.connect('valueChanged(double)', self.onGridThicknessChanged)
     self.resectionsWidget.ResectionLockCheckBox.connect('stateChanged(int)', self.onResectionLockChanged)
     self.resectionsWidget.UncertaintyMarginSpinBox.connect('valueChanged(double)', self.onUncertaintyMarginChanged)
-    self.resectionsWidget.UncertaintyMarginColorPickerButton.connect('colorChanged(QColor)',
-                                                                     self.onUncertaintyMarginColorChanged)
-    self.resectionsWidget.UncertaintyMarginComboBox.connect('currentIndexChanged(int)',
-                                                            self.onUncertaintyMaginComboBoxChanged)
-    self.resectionsWidget.InterpolatedMarginsCheckBox.connect('stateChanged(int)',
-                                                              self.onInterpolatedMarginsChanged)
+    self.resectionsWidget.UncertaintyMarginColorPickerButton.connect('colorChanged(QColor)', self.onUncertaintyMarginColorChanged)
+    self.resectionsWidget.UncertaintyMarginComboBox.connect('currentIndexChanged(int)', self.onUncertaintyMaginComboBoxChanged)
+    self.resectionsWidget.InterpolatedMarginsCheckBox.connect('stateChanged(int)', self.onInterpolatedMarginsChanged)
+    self.resectogramWidget.Resection2DCheckBox.connect('stateChanged(int)', self.onResection2DChanged)
+    self.resectogramWidget.MirrorDisplayCheckBox.connect('stateChanged(int)', self.onMirrorDisplayCheckBoxChanged)
+    self.resectogramWidget.FlexibleBoundaryCheckBox.connect('stateChanged(int)', self.onFlexibleBoundaryCheckBoxChanged)
+    self.resectogramWidget.HepaticContourThicknessSpinBox.connect('valueChanged(double)', self.onHepaticContourThicknessChanged)
+    self.resectogramWidget.HepaticContourColorPickerButton.connect('colorChanged(QColor)', self.onHepaticContourColorChanged)
+    self.resectogramWidget.PortalContourThicknessSpinBox.connect('valueChanged(double)', self.onPortalContourThicknessChanged)
+    self.resectogramWidget.PortalContourColorPickerButton.connect('colorChanged(QColor)', self.onPortalContourColorChanged)
+    self.resectogramWidget.VascularSegmentsNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onVascularSegmentsNodeChanged)
 
   def onRadioButtonState(self, rdbutton):
-
+    """
+    This function is triggered whenever the state of Radio Button changes
+    """
     activeResectionNode = self.resectionsWidget.ResectionNodeComboBox.currentNode()
+    self._distanceContourNode = self.resectionsWidget.DistanceContourComboBox.currentNode()
     segmentationNode = self.resectionsWidget.LiverSegmentSelectorWidget.currentNode()
     parenchymaSegmentId = self.resectionsWidget.LiverSegmentSelectorWidget.currentSegmentID()
+
     liverNode = segmentationNode.GetClosedSurfaceInternalRepresentation(parenchymaSegmentId)
     lvLogic = slicer.modules.liverresections.logic()
     if liverNode is None:
@@ -258,37 +277,79 @@ class LiverWidget(ScriptedLoadableModuleWidget):
 
     # liverNode = self.logic.preprocessing(segmentationNode, parenchymaSegmentId)
     if rdbutton.isChecked():
-      print(rdbutton.text)
       if rdbutton.text == "Curved":
         lvLogic.HideInitializationMarkupFromResection(activeResectionNode)
+        lvLogic.HideBezierSurfaceMarkupFromResection(activeResectionNode)
         liverNode = activeResectionNode.GetTargetOrganModelNode()
-        activeResectionNode.SetInitMode(activeResectionNode.Curved)
-        activeResectionNode.SetTargetOrganModelNode(liverNode)
-        lvLogic.AddResectionContour(activeResectionNode)
-        # TODO: needed a better way to get the distance contour node
-        distanceContourNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLMarkupsDistanceContourNode")
-        liverPolyData = liverNode.GetPolyData()
-        preprocessedliverNode = self.logic.preprocessing(liverPolyData)
-        distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointEndInteractionEvent,
-                                        lambda x, y: self.logic.runSurfacefromEFD(activeResectionNode,
-                                                                                  distanceContourNode,
-                                                                                  preprocessedliverNode))
-        distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
-                                        self.onDistanceContourStartInteraction)
-        # self.logic.runSurfacefromEFD(distanceContourNode, preprocessedliverNode)
+        if self._distanceContourNode is not None:
+          self._distanceContourNode.SetDisplayVisibility(True)
+          liverPolyData = liverNode.GetPolyData()
+          self._preprocessedLiverNode = self.logic.preprocessing(liverPolyData)
+          self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointEndInteractionEvent,
+                                               lambda x, y: self.logic.runSurfacefromEFD(activeResectionNode,
+                                                                                         self._distanceContourNode,
+                                                                                         self._preprocessedLiverNode))
+          self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
+                                          self.onDistanceContourStartInteraction)
+        else:
+          activeResectionNode.SetInitMode(activeResectionNode.Curved)
+          activeResectionNode.SetTargetOrganModelNode(liverNode)
+          lvLogic.AddResectionContour(activeResectionNode)
+          liverPolyData = liverNode.GetPolyData()
+          self._preprocessedLiverNode = self.logic.preprocessing(liverPolyData)
+          node = slicer.util.getNodesByClass("vtkMRMLMarkupsDistanceContourNode")[-1]
+          self.resectionsWidget.DistanceContourComboBox.setCurrentNode(node)
+          # self._distanceContourNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLMarkupsDistanceContourNode")
+          self._distanceContourNode = self.resectionsWidget.DistanceContourComboBox.currentNode()
 
-      else:
+          self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointEndInteractionEvent,
+                                        lambda x, y: self.logic.runSurfacefromEFD(activeResectionNode,
+                                                                                  self._distanceContourNode,
+                                                                                  self._preprocessedLiverNode))
+          self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
+                                        self.onDistanceContourStartInteraction)
+      elif rdbutton.text == "MarkupClosedCurve":
+        if self._distanceContourNode is not None:
+          self._distanceContourNode.SetDisplayVisibility(False)
+        lvLogic.HideInitializationMarkupFromResection(activeResectionNode)
+        lvLogic.HideBezierSurfaceMarkupFromResection(activeResectionNode)
+      elif rdbutton.text == "Flat(Default)":
+        lvLogic.ShowInitializationMarkupFromResection(activeResectionNode)
+        lvLogic.HideBezierSurfaceMarkupFromResection(activeResectionNode)
+        if self._distanceContourNode is not None:
+          self._distanceContourNode.SetDisplayVisibility(False)
         return
+
+  def onMarkupsResectionCheckBoxChecked(self, checkbox):
+    activeMarkupClosedCurveNode = self.resectionsWidget.MarkupClosedCurveNodeComboBox.currentNode()
+    activeResectionNode = self.resectionsWidget.ResectionNodeComboBox.currentNode()
+    liverNode = activeResectionNode.GetTargetOrganModelNode()
+    # self.logic.setInputCurveNode(activeMarkupClosedCurveNode)
+    if checkbox.isChecked():
+      activeMarkupClosedCurveNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointEndInteractionEvent,
+                                              lambda x, y: self.logic.runSurfacefromCurve(activeResectionNode,
+                                                                                          activeMarkupClosedCurveNode,
+                                                                                          liverNode))
+      activeMarkupClosedCurveNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
+                                              self.onDistanceContourStartInteraction)
 
   def onDistanceMapParameterChanged(self):
     """
     This function is triggered whenever any parameter of the distance maps are changed
     """
-
     node1 = self.distanceMapsWidget.TumorSegmentSelectorWidget.currentNode()
     node2 = self.distanceMapsWidget.ParenchymaSegmentSelectorWidget.currentNode()
-    node3 = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
-    self.distanceMapsWidget.ComputeDistanceMapsPushButton.setEnabled(None not in [node1, node2, node3])
+    node3 = self.distanceMapsWidget.HepaticSegmentSelectorWidget.currentNode()
+    node4 = self.distanceMapsWidget.PortalSegmentSelectorWidget.currentNode()
+    node5 = self.distanceMapsWidget.OutputDistanceMapNodeComboBox.currentNode()
+    self.numComps = 4 - [node1, node2, node3, node4, node5].count(None)
+    self.distanceMapsWidget.ComputeDistanceMapsPushButton.setEnabled(None not in [node1, node2, node5])
+
+  def onDownSampleCheckBoxChanged(self):
+    """
+    This function is triggered when downsampling is enabled
+    """
+    self.distanceMapsWidget.DownsamplingRateGroupBox.setEnabled(self.distanceMapsWidget.DownSampleCheckBox.isChecked())
 
   def onResectionNodeChanged(self):
     """
@@ -314,6 +375,24 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectionsWidget.DistanceMapNodeComboBox.setCurrentNode(
           activeResectionNode.GetDistanceMapVolumeNode())
         self.resectionsWidget.DistanceMapNodeComboBox.blockSignals(False)
+
+        self.resectionsWidget.MarkerStyleNodeComboBox.blockSignals(True)
+        self.resectionsWidget.MarkerStyleNodeComboBox.setCurrentNode(activeResectionNode.GetMarkerStyleVolumeNode())
+        self.resectionsWidget.MarkerStyleNodeComboBox.blockSignals(False)
+
+        self.resectogramWidget.VascularSegmentsNodeComboBox.blockSignals(True)
+        self.resectogramWidget.VascularSegmentsNodeComboBox.setCurrentNode(activeResectionNode.GetDistanceMapVolumeNode())
+        self.resectogramWidget.VascularSegmentsNodeComboBox.blockSignals(False)
+
+        self.resectogramWidget.HepaticContourColorPickerButton.blockSignals(True)
+        color = activeResectionNode.GetHepaticContourColor()
+        self.resectogramWidget.HepaticContourColorPickerButton.setColor(qt.QColor.fromRgbF(color[0], color[1], color[2]))
+        self.resectogramWidget.HepaticContourColorPickerButton.blockSignals(False)
+
+        self.resectogramWidget.PortalContourColorPickerButton.blockSignals(True)
+        color = activeResectionNode.GetPortalContourColor()
+        self.resectogramWidget.PortalContourColorPickerButton.setColor(qt.QColor.fromRgbF(color[0], color[1], color[2]))
+        self.resectogramWidget.PortalContourColorPickerButton.blockSignals(False)
 
         self.resectionsWidget.ResectionColorPickerButton.blockSignals(True)
         color = activeResectionNode.GetResectionColor()
@@ -353,6 +432,20 @@ class LiverWidget(ScriptedLoadableModuleWidget):
           self.resectionsWidget.ResectionLockCheckBox.setCheckState(2)
         self.resectionsWidget.ResectionLockCheckBox.blockSignals(False)
 
+        self.resectogramWidget.Resection2DCheckBox.blockSignals(True)
+        if (activeResectionNode.GetWidgetVisibility()):
+          self.resectogramWidget.Resection2DCheckBox.setCheckState(0)
+        else:
+          self.resectogramWidget.Resection2DCheckBox.setCheckState(2)
+        self.resectogramWidget.Resection2DCheckBox.blockSignals(False)
+
+        self.resectogramWidget.FlexibleBoundaryCheckBox.blockSignals(True)
+        if (activeResectionNode.GetWidgetVisibility()):
+          self.resectogramWidget.FlexibleBoundaryCheckBox.setCheckState(0)
+        else:
+          self.resectogramWidget.FlexibleBoundaryCheckBox.setCheckState(2)
+        self.resectogramWidget.FlexibleBoundaryCheckBox.blockSignals(False)
+
         self.resectionsWidget.UncertaintyMarginSpinBox.blockSignals(True)
         self.resectionsWidget.UncertaintyMarginSpinBox.setValue(activeResectionNode.GetUncertaintyMargin())
         self.resectionsWidget.UncertaintyMarginSpinBox.blockSignals(False)
@@ -377,7 +470,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
           self.resectionsWidget.InterpolatedMarginsCheckBox.setCheckState(0)  # Unchecked
         self.resectionsWidget.InterpolatedMarginsCheckBox.blockSignals(False)
 
-        if activeResectionNode.GetState() == activeResectionNode.Initialization:  # Show initialization
+        if activeResectionNode.GetState() == activeResectionNode.Initialization: # Show initialization
           lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
           lvLogic.HideInitializationMarkupFromResection(self._currentResectionNode)
           lvLogic.ShowInitializationMarkupFromResection(activeResectionNode)
@@ -390,6 +483,11 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       else:
         lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
         lvLogic.HideInitializationMarkupFromResection(self._currentResectionNode)
+        renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
+        if renderers.GetNumberOfItems() == 5:
+          renderers.RemoveItem(4)
+        self.resectogramWidget.Resection2DCheckBox.setCheckState(0)
+        self._currentResectionNode.SetShowResection2D(False)
 
     self._currentResectionNode = activeResectionNode
 
@@ -399,11 +497,20 @@ This function is called when the resection distance map selector changes
 """
     if self._currentResectionNode is not None:
       distanceMapNode = self.resectionsWidget.DistanceMapNodeComboBox.currentNode()
-      self._currentResectionNode.SetDistanceMapVolumeNode(
-        self.resectionsWidget.DistanceMapNodeComboBox.currentNode())
+      self._currentResectionNode.SetTextureNumComps(self.numComps)
+      self._currentResectionNode.SetDistanceMapVolumeNode(distanceMapNode)
       self.resectionsWidget.ResectionMarginGroupBox.setEnabled(distanceMapNode is not None)
       self.resectionsWidget.UncertaintyMarginGroupBox.setEnabled(distanceMapNode is not None)
       self.resectionsWidget.ResectionPreviewGroupBox.setEnabled(distanceMapNode is not None)
+      self.resectogramWidget.Resection2DCheckBox.setEnabled(distanceMapNode is not None)
+
+  def onMarkerStyleNodeChanged(self):
+    """
+    This function is called when the Marker Style selector changes
+    """
+    if self._currentResectionNode is not None:
+      MarkerStyleNode = self.resectionsWidget.MarkerStyleNodeComboBox.currentNode()
+      self._currentResectionNode.SetMarkerStyleVolumeNode(MarkerStyleNode)
 
   def onResectionLiverSegmentationNodeChanged(self):
     self.resectionsWidget.LiverSegmentSelectorWidget.blockSignals(True)
@@ -412,8 +519,8 @@ This function is called when the resection distance map selector changes
 
   def onResectionLiverModelNodeChanged(self):
     """
-This function is called when the resection liver model node changes
-"""
+    This function is called when the resection liver model node changes
+    """
     if self._currentResectionNode is not None:
       parenchymaSegmentId = self.resectionsWidget.LiverSegmentSelectorWidget.currentSegmentID()
       if parenchymaSegmentId == '':
@@ -436,12 +543,11 @@ This function is called when the resection liver model node changes
       self.resectionsWidget.GridGroupBox.setEnabled(modelNode is not None)
 
   def onDistanceContourStartInteraction(self, caller, event):
+    """
+    This function is called when distance contour start interaction.
+    """
     lvLogic = slicer.modules.liverresections.logic()
     lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
-    # self.observedBezierNode.GetDisplayNode().VisibilityOff()
-    # node = slicer.util.getNode("MarkupsBezierSurface")
-    # node.GetDisplayNode().VisibilityOff()
-    # print(" Also This function is ok")
 
   def onResectionMarginChanged(self):
     """
@@ -483,6 +589,8 @@ This function is called when the resection liver model node changes
     refVolumeNode = self.distanceMapsWidget.ReferenceVolumeSelector.currentNode()
     tumorSegmentId = self.distanceMapsWidget.TumorSegmentSelectorWidget.currentSegmentID()
     parenchymaSegmentId = self.distanceMapsWidget.ParenchymaSegmentSelectorWidget.currentSegmentID()
+    hepaticSegmentId = self.distanceMapsWidget.HepaticSegmentSelectorWidget.currentSegmentID()
+    portalSegmentId = self.distanceMapsWidget.PortalSegmentSelectorWidget.currentSegmentID()
     segmentationIds = vtk.vtkStringArray()
 
     """
@@ -493,17 +601,33 @@ This function is called when the resection liver model node changes
       tumorLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "TumorLabelMap")
     parenchymaLabelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("ParenchymaLabelMap")
     if not parenchymaLabelmapVolumeNode:
-      parenchymaLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode",
-                                                                        "ParenchymaLabelMap")
+      parenchymaLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "ParenchymaLabelMap")
+    hepaticLabelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("HepaticLabelMap")
+    if not hepaticLabelmapVolumeNode:
+      hepaticLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "HepaticLabelMap")
+    portalLabelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("PortalLabelMap")
+    if not portalLabelmapVolumeNode:
+      portalLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "PortalLabelMap")
 
     segmentationIds.Initialize()
     segmentationIds.InsertNextValue(tumorSegmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
                                                                       tumorLabelmapVolumeNode, refVolumeNode)
+    
     segmentationIds.Initialize()
     segmentationIds.InsertNextValue(parenchymaSegmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
                                                                       parenchymaLabelmapVolumeNode, refVolumeNode)
+
+    segmentationIds.Initialize()
+    segmentationIds.InsertNextValue(hepaticSegmentId)
+    slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
+                                                                      hepaticLabelmapVolumeNode, refVolumeNode)
+
+    segmentationIds.Initialize()
+    segmentationIds.InsertNextValue(portalSegmentId)
+    slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
+                                                                      portalLabelmapVolumeNode, refVolumeNode)
 
     """
     Export model nodes for the selected segmentations
@@ -530,7 +654,13 @@ This function is called when the resection liver model node changes
     # threeDView = threeDWidget.threeDView()
     # threeDView.resetFocalPoint()
 
-    self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, outputVolumeNode)
+    enableDownsampling = self.distanceMapsWidget.DownSampleCheckBox.isChecked()
+    if enableDownsampling:
+      downSamplingRate = self.distanceMapsWidget.DownsamplingRateSpinBox.value
+      self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode, enableDownsampling, downSamplingRate)
+    else:
+      self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode, enableDownsampling)
+
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
     slicer.util.showStatusMessage('')
@@ -618,6 +748,87 @@ This function is called when the resection liver model node changes
     if self._currentResectionNode is not None:
       self._currentResectionNode.SetGridThickness(self.resectionsWidget.GridThicknessDoubleSlider.value)
 
+  def onResection2DChanged(self):
+    """
+    This function is called when the resection2D checkbox changes.
+    """
+    if self._currentResectionNode is not None:
+      self._currentResectionNode.SetShowResection2D(self.resectogramWidget.Resection2DCheckBox.isChecked())
+      if self.distanceMapsWidget.HepaticSegmentSelectorWidget.currentNode():
+        self.resectogramWidget.HepaticContourGroupBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
+      if self.distanceMapsWidget.PortalSegmentSelectorWidget.currentNode():
+        self.resectogramWidget.PortalContourGroupBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
+      self.resectogramWidget.VsacularSegmentsGroupBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
+      self.resectogramWidget.FlexibleBoundaryCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
+      self.resectogramWidget.MirrorDisplayCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
+      renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
+      if self.resectogramWidget.Resection2DCheckBox.isChecked() == 0 and renderers.GetNumberOfItems() == 5:
+        renderers.RemoveItem(4)
+    else:
+      self._currentResectionNode.SetShowResection2D(not self.resectogramWidget.Resection2DCheckBox.isChecked())
+
+  def onMirrorDisplayCheckBoxChanged(self):
+    """
+    This function is called when the MirrorDisplay changes.
+    """
+    if self._currentResectionNode:
+      self._currentResectionNode.SetMirrorDisplay(self.resectogramWidget.MirrorDisplayCheckBox.isChecked())
+      # renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
+      # if renderers.GetNumberOfItems() == 5:
+      #   renderer2D = renderers.GetItemAsObject(4)
+      #   camera2D = renderer2D.GetActiveCamera()
+      #   position2D = camera2D.GetPosition();
+      #   focalPoint2D = camera2D.GetFocalPoint()
+      #   camera2D.SetPosition(position2D[0], position2D[1], -position2D[2])
+      #   camera2D.SetFocalPoint(focalPoint2D[0], focalPoint2D[1], -focalPoint2D[2])
+
+  def onFlexibleBoundaryCheckBoxChanged(self):
+    """
+    This function is called when the resection2D checkbox changes.
+    """
+    if self._currentResectionNode:
+      self._currentResectionNode.SetEnableFlexibleBoundary(self.resectogramWidget.FlexibleBoundaryCheckBox.isChecked())
+
+  def onHepaticContourThicknessChanged(self):
+    """
+    This function is called when the resection margin spinbox changes.
+    """
+    if self._currentResectionNode is not None:
+      self._currentResectionNode.SetHepaticContourThickness(self.resectogramWidget.HepaticContourThicknessSpinBox.value)
+
+  def onPortalContourThicknessChanged(self):
+    """
+    This function is called when the resection margin spinbox changes.
+    """
+    if self._currentResectionNode is not None:
+      self._currentResectionNode.SetPortalContourThickness(self.resectogramWidget.PortalContourThicknessSpinBox.value)
+
+  def onHepaticContourColorChanged(self):
+    """
+    This function is called whenever the resection margin color has changed
+    """
+    if self._currentResectionNode is not None:
+      color = self.resectogramWidget.HepaticContourColorPickerButton.color
+      rgbF = [color.redF(), color.greenF(), color.blueF()]
+      self._currentResectionNode.SetHepaticContourColor(rgbF)
+
+  def onPortalContourColorChanged(self):
+    """
+    This function is called whenever the resection margin color has changed
+    """
+    if self._currentResectionNode is not None:
+      color = self.resectogramWidget.PortalContourColorPickerButton.color
+      rgbF = [color.redF(), color.greenF(), color.blueF()]
+      self._currentResectionNode.SetPortalContourColor(rgbF)
+
+  def onVascularSegmentsNodeChanged(self):
+    """
+    This function is called when the resection distance map selector changes
+    """
+    if self._currentResectionNode is not None:
+      VascularSegmentsNode = self.resectogramWidget.VascularSegmentsNodeComboBox.currentNode()
+      self._currentResectionNode.SetVascularSegmentsVolumeNode(VascularSegmentsNode)
+
   def cleanup(self):
     """
     Called when the application closes and the module widget is destroyed.
@@ -657,28 +868,102 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     """
     ScriptedLoadableModuleLogic.__init__(self)
 
-  def computeDistanceMaps(self, tumorNode, parenchymaNode, outputNode):
+  def computeDistanceMaps(self, tumorNode, parenchymaNode, hepaticNode, portalNode, outputNode, enableDownsampling=0, downSamplingRate=1):
+
     if outputNode is not None:
       import sitkUtils
       import SimpleITK as sitk
 
-      # Compute tumor distance map
-      tumorImage = sitkUtils.PullVolumeFromSlicer(tumorNode)
-      tumorDistanceImage = sitk.SignedMaurerDistanceMap(tumorImage, False, False, True)
-      logging.debug("Computing Tumor Distance Map...")
+      tumorDistanceImage = None
+      parenchymaDistanceImage = None
+      hepaticDistanceImage = None
+      portalDistanceImage = None
 
       # Compute tumor distance map
-      parenchymaImage = sitkUtils.PullVolumeFromSlicer(parenchymaNode)
-      parenchymaDistanceImage = sitk.SignedMaurerDistanceMap(parenchymaImage, False, False, True)
-      logging.debug("Computing Parenchyma Distance Map...")
+      if tumorNode != None:
+        tumorImage = sitkUtils.PullVolumeFromSlicer(tumorNode)
+        tumorDistanceImage = sitk.SignedMaurerDistanceMap(tumorImage, False, False, True)
+        logging.debug("Computing Tumor Distance Map...")
+        # tumorDistanceImageDown =  self.imageResample( tumorDistanceImage, [150,150,150], "linear")
 
-      # Combine distance maps
-      compositeDistanceMap = sitk.Compose(tumorDistanceImage, parenchymaDistanceImage)
-      sitkUtils.PushVolumeToSlicer(compositeDistanceMap, targetNode=outputNode,
-                                   className='vtkMRMLVectorVolumeNode')
+      # Compute parenchyma distance map
+      if parenchymaNode != None:
+        parenchymaImage = sitkUtils.PullVolumeFromSlicer(parenchymaNode)
+        parenchymaDistanceImage = sitk.SignedMaurerDistanceMap(parenchymaImage, False, False, True)
+        logging.debug("Computing Parenchyma Distance Map...")
+        # parenchymaDistanceImageDown = self.imageResample( parenchymaDistanceImage, [150,150,150], "linear")
+
+      # Compute hepatic distance map
+      if hepaticNode != None:
+        hepaticImage = sitkUtils.PullVolumeFromSlicer(hepaticNode)
+        hepaticDistanceImage = sitk.SignedMaurerDistanceMap(hepaticImage, False, False, True)
+        logging.debug("Computing Hepatic Distance Map...")
+
+      # Compute portal distance map
+      if portalNode != None:
+        portalImage = sitkUtils.PullVolumeFromSlicer(portalNode)
+        portalDistanceImage = sitk.SignedMaurerDistanceMap(portalImage, False, False, True)
+        logging.debug("Computing Portal Distance Map...")
+
+      #Combine distance maps
+      if enableDownsampling:
+        imageSize = tumorImage.GetSize()
+        newSize = [round(i/downSamplingRate) for i in imageSize]
+        tumorDistanceImageDown =  self.imageResample( tumorDistanceImage, [newSize[0],newSize[1],newSize[2]], "linear")
+        parenchymaDistanceImageDown = self.imageResample( parenchymaDistanceImage, [newSize[0],newSize[1],newSize[2]], "linear")
+        hepaticDistanceImageDown = self.imageResample( hepaticDistanceImage, [newSize[0],newSize[1],newSize[2]], "linear")
+        portalDistanceImageDown = self.imageResample( portalDistanceImage, [newSize[0],newSize[1],newSize[2]], "linear")
+        compositeDistanceMap = sitk.Compose(*[i for i in [tumorDistanceImageDown, parenchymaDistanceImageDown, hepaticDistanceImageDown, portalDistanceImageDown] if i])
+      else:
+        compositeDistanceMap = sitk.Compose(*[i for i in [tumorDistanceImage, parenchymaDistanceImage, hepaticDistanceImage, portalDistanceImage] if i])
+
+      sitkUtils.PushVolumeToSlicer(compositeDistanceMap, targetNode = outputNode, className='vtkMRMLVectorVolumeNode')
       outputNode.SetAttribute('DistanceMap', "True");
       outputNode.SetAttribute('Computed', "True");
 
+  def imageResample(self, inputImage, resampledSize, interpolatorType):
+    """
+    Resampling the Maurer distance map
+    """
+    if inputImage is not None:
+      import SimpleITK as sitk
+
+    outputOrigin = inputImage.GetOrigin()
+    outputDirection = inputImage.GetDirection()
+    inputSizePixels = inputImage.GetSize()
+    inputSpacing = inputImage.GetSpacing()
+    inputSize = [inputSpacing[0] * inputSizePixels[0],
+                 inputSpacing[1] * inputSizePixels[1],
+                 inputSpacing[2] * inputSizePixels[2]]
+
+    outputSpacing = [0.0, 0.0, 0.0]
+    outputSpacing[0] = inputSize[0] / float(resampledSize[0])
+    outputSpacing[1] = inputSize[1] / float(resampledSize[1])
+    outputSpacing[2] = inputSize[2] / float(resampledSize[2])
+
+    NewOutputOrigin = [0.0, 0.0, 0.0]
+    NewOutputOrigin[0] = outputOrigin[0] + (outputSpacing[0] / 2.0 - inputSpacing[0] / 2.0) * outputDirection[0];
+    NewOutputOrigin[1] = outputOrigin[1] + (outputSpacing[1] / 2.0 - inputSpacing[1] / 2.0) * outputDirection[4];
+    NewOutputOrigin[2] = outputOrigin[2] + (outputSpacing[2] / 2.0 - inputSpacing[2] / 2.0) * outputDirection[8];
+
+    if interpolatorType == "linear":
+      interpolator = sitk.sitkLinear
+    elif interpolatorType == "b-spline":
+      interpolator = sitk.sitkBSpline
+    elif interpolatorType == "nearest neighbor":
+      interpolator = sitk.sitkNearestNeighbor
+
+    imageResampleFilter = sitk.ResampleImageFilter()
+    imageResampleFilter.SetInterpolator(interpolator)
+    imageResampleFilter.SetOutputOrigin(NewOutputOrigin)
+    imageResampleFilter.SetOutputSpacing(outputSpacing)
+    imageResampleFilter.SetOutputDirection(outputDirection)
+    imageResampleFilter.SetSize(resampledSize)
+
+    resampledImage = imageResampleFilter.Execute(inputImage)
+
+    return resampledImage
+  
   def preprocessing(self, modelPolyData, subdivide=True):
 
     modelPolyDataCopy = vtk.vtkPolyData()
@@ -1182,14 +1467,6 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
 
     appendFilter.Update()
 
-    # masks = vtk.vtkMaskPoints()
-    # masks.SetInputData(splineInterp)
-    # masks.SingleVertexPerCellOn()
-    # masks.GenerateVerticesOn()
-    # masks.SetOnRatio(2)
-    # masks.SetMaximumNumberOfPoints(splineInterp.GetNumberOfPoints())
-    # masks.Update()
-
     spline_lines = appendFilter.GetOutput()
     points = spline_lines.GetPoints().GetData()
     points_array = vtk_to_numpy(points)
@@ -1306,43 +1583,153 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
 
     return line1
 
-  def chord_length(self, points):
+  def spline_line_fromClosedCurve(self, curveNode, liverModelNode):
     """
-    Returns the chord length parametrization for the data
+    Computes spline lines from a ClosedMarkupCurve
+    :param curve: close curve node, curve = slicer.util.getNode("CC")
+    :param liverModelNode: liver 3D Model,  liver = slicer.util.getNode("liver")
+    :return: points array of the spline lines and the polydata
     """
-    u = np.zeros(points.shape[0])
+    global newpoints
+    curveNode.SetAndObserveSurfaceConstraintNode(liverModelNode)
 
-    for i in range(1, len(u)):
-      u[i] = u[i - 1] + np.linalg.norm(points[i, :] - points[i - 1, :], ord=2)
+    # Step 1: Resample curve
+    resampleNumber = 100
+    currentPoints = curveNode.GetCurvePointsWorld()
+    newPoints = vtk.vtkPoints()
+    sampleDist = curveNode.GetCurveLengthWorld() / (resampleNumber - 1)
 
-    u = u.reshape([len(u), 1])
+    closedCurveOption = 1
+    curveNode.ResamplePoints(currentPoints, newPoints, sampleDist, closedCurveOption)
 
-    for i, _ in enumerate(u):
-      u[i] = u[i] / u[-1]
+    vector = vtk.vtkVector3d()
+    pt = [0, 0, 0]
+    resampledCurve = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsClosedCurveNode", "resampledCurveOrig")
+    for controlPoint in range(0, newPoints.GetNumberOfPoints()):
+      newPoints.GetPoint(controlPoint, pt)
+      vector[0] = pt[0]
+      vector[1] = pt[1]
+      vector[2] = pt[2]
+      resampledCurve.AddControlPoint(vector)
 
-    return u
+    resampledCurve.SetDisplayVisibility(False)
+    curveNode.SetDisplayVisibility(True)
+    # Step 2: REORDER THE RESAMPLED POINTS ID AND CREATE A POLYDATA.
+    # This step will split the points IDS in 2 parts in order to correctly apply the knitting algorithm.
+    # get the numpy array in order to split the curve id in two section
+    markupsPositions = slicer.util.arrayFromMarkupsControlPoints(resampledCurve)
+    # markupsPositions = slicer.util.arrayFromMarkupsCurvePoints(resampledCurve)
+    N = len(markupsPositions)
+    listpoints = []
 
-  def centripetal(self, points):
-    """
-    Returns the chord length parametrization for the data
-    """
+    if N % 2 == 0:
+      for x in range(int(N / 2) + 1):
+        listpoints.append(markupsPositions[x])
+        listpoints.append(markupsPositions[-x])
+        newpoints = np.asarray([listpoints[1:-1]]).squeeze()
+    else:
+      for x in range(int(N / 2) + 1):
+        listpoints.append(markupsPositions[x])
+        listpoints.append(markupsPositions[-x])
+        newpoints = np.asarray([listpoints[1:]]).squeeze()
+
+    # Step 3: PIECEWISE SPLINE INTERPOLATION
+    xSpline = vtk.vtkKochanekSpline()
+    ySpline = vtk.vtkKochanekSpline()
+    zSpline = vtk.vtkKochanekSpline()
+
+    pointCloud_list = list()
+    final_parametric_spline_list = list()
+    parametric_spline_list = list()
+    source_spline_list = list()
+    final_source_spline_list = list()
+
+    for i in range(N):
+      if i % 2 == 0:
+        pointCloud_list.append(
+          self.CreatePolyDataFromCoords(newpoints[i:i + 2, :]))
+
+        # parametric_spline_list.append(spline)
+        parametric_spline_list.append(vtk.vtkParametricSpline())
+        source_spline_list.append(vtk.vtkParametricFunctionSource())
+
+    for i in range(len(pointCloud_list)):
+      parametric_spline_list[i].SetXSpline(xSpline)
+      parametric_spline_list[i].SetYSpline(ySpline)
+      parametric_spline_list[i].SetZSpline(zSpline)
+      parametric_spline_list[i].SetPoints(pointCloud_list[i].GetPoints())
+      # print(i)
+      final_parametric_spline_list.append(parametric_spline_list[i])
+
+      source_spline_list[i].SetParametricFunction(final_parametric_spline_list[i])
+      source_spline_list[i].SetUResolution(20)
+      source_spline_list[i].SetVResolution(20)
+      source_spline_list[i].SetWResolution(20)
+      source_spline_list[i].SetScalarModeToDistance()
+      final_source_spline_list.append(source_spline_list[i])
+      final_source_spline_list[i].Update()
+
+    appendFilter = vtk.vtkAppendPolyData()
+    for i in range(len(pointCloud_list)):
+      appendFilter.AddInputData(final_source_spline_list[i].GetOutput())
+
+    appendFilter.Update()
+
+    spline_lines = appendFilter.GetOutput()
+    points = spline_lines.GetPoints().GetData()
+    points_array = vtk_to_numpy(points)
+    print("Number of points in the mask: {}".format(spline_lines.GetNumberOfPoints()))
+
+    return points_array, spline_lines
+
+  def compute_parametrization(self, points, centripetal=True):
+    # Length of the points array
+    num_points = len(points)
+
     # Calculate chord lengths
-    u = np.zeros(points.shape[0])
-    cds = np.zeros(points.shape[0] + 1)
+    cds = np.zeros([num_points + 1, 1])
+    # cds = [0.0 for _ in range(num_points + 1)]
     cds[-1] = 1.0
+    for i in range(1, num_points):
+      distance = np.linalg.norm(points[i, :] - points[i - 1, :], ord=2)
+      # distance = linalg.point_distance(points[i], points[i - 1])
+      cds[i] = np.sqrt(distance) if centripetal else distance
 
-    for i in range(1, len(u)):
-      u[i] = u[i - 1] + np.linalg.norm(points[i, :] - points[i - 1, :], ord=2)
-      cds[i] = np.sqrt(u[i])
-
+    # Find the total chord length
     d = sum(cds[1:-1])
-    u = u.reshape([len(u), 1])
 
-    for i, _ in enumerate(u):
-      # u[i] = u[i] / u[-1]
-      u[i] = sum(cds[0:i + 1]) / d
+    # Divide individual chord lengths by the total chord length
+    uk = np.zeros([num_points, 1])
+    for i in range(num_points):
+      uk[i] = sum(cds[0:i + 1]) / d
 
-    return u
+    return uk
+
+  def compute_averaging_params_surface(self, points, size_u, size_v):
+    """
+    Compute knot averaging as recommended in The NURBS Book (2nd Edition), pp.366-367
+    :param points: surface point arranged in a grid NxNx3
+    :param size_u: number of points on the u-direction
+    :param size_v: number of points on the v-direction
+    :return:
+    """
+    # finding params in v direction
+    size_u, size_v = points.shape[0:2]
+    params_v = []
+    for u in range(size_u):
+      temp = self.compute_parametrization(points[u]).reshape((1, size_v))
+      params_v.append(temp)
+    params_v = np.concatenate(params_v, 0)
+    # finding params in u direction
+    params_v = np.mean(params_v, 0)
+    params_u = []
+    for v in range(size_v):
+      temp = self.compute_parametrization(points[:, v]).reshape((size_u, 1))
+      params_u.append(temp)
+    params_u = np.concatenate(params_u, 1)
+
+    params_u = np.mean(params_u, 1)
+    return params_u, params_v
 
   def evaluate_basis_bezier(self, t, degree):
     """
@@ -1412,6 +1799,87 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
 
     return cntrl_points
 
+  def runSurfacefromCurve(self, resectionNode, curveNode, liverModelNode):
+
+    points_array = self.spline_line_fromClosedCurve(curveNode, liverModelNode)
+
+    # create the extent with pca
+    splines_poly = points_array[1]
+    first_eigen = self.compute_simple_pca(splines_poly)
+    extent_pca = 4 * np.sqrt(first_eigen[1])
+
+    sub_pca = [self.compute_pca(points_array[1], extent_pca / 2, start=21 * i, stop=21 * (i + 1)) for i in
+               range(50)]
+
+    # convert a list of dictionaries into a dict of list
+    sub_pca_dict = {}
+    for k, v in [(key, d[key]) for d in sub_pca for key in d]:
+      if k not in sub_pca_dict:
+        sub_pca_dict[k] = [v]
+      else:
+        sub_pca_dict[k].append(v)
+
+    eigen_average_center = np.average(np.vstack(sub_pca_dict['eigen_vector'][4:46]), axis=0)
+
+    # TODo: the slops of the superior and inferior part of the point cloud could affect bezier Surface
+    # eigen_average_start = np.average(np.vstack(sub_pca_dict['eigen_vector'][:4]), axis=0)
+    # eigen_average_end = np.average(np.vstack(sub_pca_dict['eigen_vector'][46:50]), axis=0)
+
+    # ToDO: Review the need for this: maybe check if there is a resampling function for vtk Spline
+    center = sub_pca_dict['center']
+
+    organized_data = np.vstack(
+      np.array(
+        [self.line3D_afterSlopeAverage(center[i], eigen_average_center, extent_pca / 2) for i in
+         range(len(center))]))
+
+    points_grid = organized_data.reshape(50, 50, 3)
+
+    bezier_list_u = list()
+    bezier_list_v = list()
+
+    # u = self.compute_parametrization(points_grid[:, 0, 0].reshape(len(points_grid[:, 0, 0]), 1))
+    # v = self.compute_parametrization(points_grid[0, :, 0].reshape(len(points_grid[0, :, 0]), 1))
+
+    param_surface = self.compute_averaging_params_surface(points_grid, 50, 50)
+    u = param_surface[0].reshape(-1, 1)
+    v = param_surface[1].reshape(-1, 1)
+
+    # for u direction
+
+    for i in range(u.shape[0]):
+      bezier_basis = self.evaluate_basis_bezier(u[i], 3)
+      bezier_list_u.append(bezier_basis)
+
+    bezier_basis_u = np.array(bezier_list_u)
+
+    # for v direction
+
+    for i in range(v.shape[0]):
+      bezier_basis = self.evaluate_basis_bezier(v[i], 3)
+      bezier_list_v.append(bezier_basis)
+
+    bezier_basis_v = np.array(bezier_list_v)
+
+    ctrl_points = self.fit_bezier_surface(points_grid, bezier_basis_u, bezier_basis_v)
+
+    control_points = ctrl_points.reshape(-1, 3)
+
+    points = vtk.vtkPoints()
+    #
+    for i in range(0, len(control_points)):
+      points.InsertNextPoint(control_points[i])
+
+    # BezierNode = slicer.mrmlScene.GetNthNodeByClass(0, "vtkMRMLMarkupsBezierSurfaceNode")
+    # Transfer the control points to the resection node
+    BezierNode = resectionNode.GetBezierSurfaceNode()
+    BezierNode.RemoveAllControlPoints()
+    BezierNode.SetControlPointPositionsWorld(points)
+    BezierDisplay = BezierNode.GetDisplayNode()
+    BezierDisplay.SetGlyphScale(0.0)
+    BezierDisplay.VisibilityOn()
+    # BezierDisplay.SetClipOut(True)
+
   def runSurfacefromEFD(self, resectionNode, distanceNode, liverNode):
 
     point1 = distanceNode.GetNthControlPointPosition(1)
@@ -1429,7 +1897,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     # print("distances", distances)
 
     for i in range(len(distances)):
-      if distances[i] > 20:
+      if distances[i] > 30:
         max_id = np.argmax(distances)
         sorted1 = sorted1[0:max_id]
 
@@ -1523,8 +1991,12 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     bezier_list_u = list()
     bezier_list_v = list()
 
-    u = self.chord_length(points_grid[:, 0, 0].reshape(len(points_grid[:, 0, 0]), 1))
-    v = self.chord_length(points_grid[0, :, 0].reshape(len(points_grid[0, :, 0]), 1))
+    # u = self.compute_parametrization(points_grid[:, 0, 0].reshape(len(points_grid[:, 0, 0]), 1))
+    # v = self.compute_parametrization(points_grid[0, :, 0].reshape(len(points_grid[0, :, 0]), 1))
+
+    param_surface = self.compute_averaging_params_surface(points_grid, 50, 50)
+    u = param_surface[0].reshape(-1, 1)
+    v = param_surface[1].reshape(-1, 1)
 
     # for u direction
 
@@ -1586,8 +2058,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     BezierNode.SetControlPointPositionsWorld(points)
     BezierDisplay = BezierNode.GetDisplayNode()
     BezierDisplay.VisibilityOn()
-    BezierDisplay.SetClipOut(True)
-
+    # BezierDisplay.SetClipOut(True)
 
 #
 # LiverTest
