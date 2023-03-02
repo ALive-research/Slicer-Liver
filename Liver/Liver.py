@@ -224,7 +224,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.distanceMapsWidget.SegmentationSelectorComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.distanceMapsWidget.OutputDistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
     self.distanceMapsWidget.OutputDistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
-    self.distanceMapsWidget.DownSampleCheckBox.connect('stateChanged(int)', self.onDownSampleCheckBoxChanged)
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.connect('clicked(bool)', self.onComputeDistanceMapButtonClicked)
     self.resectionsWidget.CurvedRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.CurvedRadioButton))
     self.resectionsWidget.FlatRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.FlatRadioButton))
@@ -345,11 +344,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.numComps = 4 - [node1, node2, node3, node4, node5].count(None)
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.setEnabled(None not in [node1, node2, node5])
 
-  def onDownSampleCheckBoxChanged(self):
-    """
-    This function is triggered when downsampling is enabled
-    """
-    self.distanceMapsWidget.DownsamplingRateGroupBox.setEnabled(self.distanceMapsWidget.DownSampleCheckBox.isChecked())
 
   def onResectionNodeChanged(self):
     """
@@ -381,7 +375,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectionsWidget.MarkerStyleNodeComboBox.blockSignals(False)
 
         self.resectogramWidget.VascularSegmentsNodeComboBox.blockSignals(True)
-        self.resectogramWidget.VascularSegmentsNodeComboBox.setCurrentNode(activeResectionNode.GetDistanceMapVolumeNode())
+        self.resectogramWidget.VascularSegmentsNodeComboBox.setCurrentNode(activeResectionNode.GetVascularSegmentsVolumeNode())
         self.resectogramWidget.VascularSegmentsNodeComboBox.blockSignals(False)
 
         self.resectogramWidget.HepaticContourColorPickerButton.blockSignals(True)
@@ -654,12 +648,9 @@ This function is called when the resection distance map selector changes
     # threeDView = threeDWidget.threeDView()
     # threeDView.resetFocalPoint()
 
-    enableDownsampling = self.distanceMapsWidget.DownSampleCheckBox.isChecked()
-    if enableDownsampling:
-      downSamplingRate = self.distanceMapsWidget.DownsamplingRateSpinBox.value
-      self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode, enableDownsampling, downSamplingRate)
-    else:
-      self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode, enableDownsampling)
+    downSamplingRate = self.distanceMapsWidget.DownsamplingRateSpinBox.value
+    self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode, downSamplingRate)
+
 
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
@@ -868,7 +859,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     """
     ScriptedLoadableModuleLogic.__init__(self)
 
-  def computeDistanceMaps(self, tumorNode, parenchymaNode, hepaticNode, portalNode, outputNode, enableDownsampling=0, downSamplingRate=1):
+  def computeDistanceMaps(self, tumorNode, parenchymaNode, hepaticNode, portalNode, outputNode, downSamplingRate=1):
 
     if outputNode is not None:
       import sitkUtils
@@ -906,7 +897,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
         logging.debug("Computing Portal Distance Map...")
 
       #Combine distance maps
-      if enableDownsampling:
+      if downSamplingRate != 1:
         imageSize = tumorImage.GetSize()
         newSize = [round(i/downSamplingRate) for i in imageSize]
         tumorDistanceImageDown =  self.imageResample( tumorDistanceImage, [newSize[0],newSize[1],newSize[2]], "linear")

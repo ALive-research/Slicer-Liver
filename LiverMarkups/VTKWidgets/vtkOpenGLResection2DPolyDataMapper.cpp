@@ -69,8 +69,7 @@ class vtkOpenGLResection2DPolyDataMapper::vtkInternal
       UncertaintyMarginColor{1.0f, 1.0f, 0.0f},
       ResectionColor{1.0f,1.0f, 1.0f},
       ResectionGridColor{0.0f,0.0f, 0.0f},
-      ResectionOpacity(1.0f),
-      InterpolatedMargins(false), ResectionClipOut(false), ShowResection2D(false),
+      InterpolatedMargins(false), ShowResection2D(false),
       PortalContourThickness(0.3f), HepaticContourThickness(0.3f),
       PortalContourColor{216.0/255.0f, 101.0/255.0f, 79.0/255.0f},
       HepaticContourColor{0.0f, 151.0/255.0f, 206.0/255.0f},
@@ -91,9 +90,7 @@ class vtkOpenGLResection2DPolyDataMapper::vtkInternal
   float UncertaintyMarginColor[3];
   float ResectionColor[3];
   float ResectionGridColor[3];
-  float ResectionOpacity;
   bool  InterpolatedMargins;
-  bool  ResectionClipOut;
   unsigned int GridDivisions;
   float GridThicknessFactor;
   bool ShowResection2D;
@@ -198,14 +195,10 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
     "uniform vec4 colorChart[8];\n"
     "uniform float uResectionMargin;\n"
     "uniform float uUncertaintyMargin;\n"
-    "uniform float uResectionOpacity;\n"
     "uniform vec3 uResectionMarginColor;\n"
     "uniform vec3 uUncertaintyMarginColor;\n"
     "uniform vec3 uResectionColor;\n"
-    "uniform vec3 uResectionGridColor;\n"
-    "uniform int uResectionClipOut;\n"
     "uniform int uInterpolatedMargins;\n"
-    "uniform int uGridDivisions;\n"
     "uniform int uMarkerStyleAvailable;\n"
     "uniform float uGridThickness;\n"
     "in vec2 uvCoordsOutput;\n"
@@ -225,10 +218,6 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
     "vec4 vesselBg = texture(vesselSegTexture, fragPositionMCBS.xyz);\n"
     "float lowMargin = uResectionMargin - uUncertaintyMargin;\n"
     "float highMargin = uResectionMargin + uUncertaintyMargin;\n"
-    "if(uResectionClipOut == 1 && dist[1] > 2.0){\n"
-    "  discard;\n"
-    "}\n"
-
 
     //hardcode 8 labels color
     "if(vesselBg[0] == 0){\n"
@@ -289,26 +278,22 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
     "  }\n"
     "}\n"
 
-    "if(tan(uvCoordsOutput.x*M_PI*uGridDivisions)>10.0-uGridThickness || tan(uvCoordsOutput.y*M_PI*uGridDivisions)>10.0-uGridThickness){\n"
-    "   ambientColor = uResectionGridColor;\n"
-    "   diffuseColor = vec3(0.0);\n"
-    "}\n"
-    "else{\n"
-    "  if(uTextureNumComps > 2){\n"
-    "    if( abs(dist[1])<0.5 ){\n"
-    "      ambientColor = vec3(0.0,0.0,0.0);\n"
-    "      diffuseColor = vec3(0.0);\n"
-    "    }\n"
-    "    else if( abs(dist[2])<uHepaticContourThickness && dist[1]<10){\n"
-    "      ambientColor = uHepaticContourColor;\n"
-    "      diffuseColor = vec3(0.0);\n"
-    "    }\n"
-    "    else if( abs(dist[3])<uPortalContourThickness && dist[1]<10){\n"
-    "      ambientColor = uPortalContourColor;\n"
-    "      diffuseColor = vec3(0.0);\n"
-    "    }\n"
+
+    "if(uTextureNumComps > 2){\n"
+    "  if( abs(dist[1])<0.5 ){\n"
+    "    ambientColor = vec3(0.0,0.0,0.0);\n"
+    "    diffuseColor = vec3(0.0);\n"
+    "  }\n"
+    "  else if( abs(dist[2])<uHepaticContourThickness && dist[1]<10){\n"
+    "    ambientColor = uHepaticContourColor;\n"
+    "    diffuseColor = vec3(0.0);\n"
+    "  }\n"
+    "  else if( abs(dist[3])<uPortalContourThickness && dist[1]<10){\n"
+    "    ambientColor = uPortalContourColor;\n"
+    "    diffuseColor = vec3(0.0);\n"
     "  }\n"
     "}\n"
+
 
     "if(uMarkerStyleAvailable == 1 && marker.a != 0){\n"
     "  ambientColor = vec3(marker.r,marker.g,marker.b);\n"
@@ -318,7 +303,7 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
   vtkShaderProgram::Substitute(
     FSSource, "//VTK::Light::Impl",
     "//VTK::Light::Impl\n"
-    "fragOutput0 = vec4(ambientColor+vec3(uvCoordsOutput,0.0)*0.00001 + diffuse + specular, uResectionOpacity);\n");
+    "fragOutput0 = vec4(ambientColor+vec3(uvCoordsOutput,0.0)*0.00001 + diffuse + specular, 1.0);\n");
 
 
   shaders[vtkShader::Vertex]->SetSource(VSSource);
@@ -438,16 +423,6 @@ void vtkOpenGLResection2DPolyDataMapper::SetMapperShaderParameters(
   if (cellBO.Program->IsUniformUsed("uResectionGridColor"))
     {
     cellBO.Program->SetUniform3f("uResectionGridColor", this->Impl->ResectionGridColor);
-    }
-
-  if (cellBO.Program->IsUniformUsed("uResectionOpacity"))
-    {
-    cellBO.Program->SetUniformf("uResectionOpacity", this->Impl->ResectionOpacity);
-    }
-
-  if (cellBO.Program->IsUniformUsed("uResectionClipOut"))
-    {
-    cellBO.Program->SetUniformi("uResectionClipOut", this->Impl->ResectionClipOut);
     }
 
   if (cellBO.Program->IsUniformUsed("uGridDivisions"))
@@ -725,33 +700,6 @@ void vtkOpenGLResection2DPolyDataMapper::SetResectionGridColor(float red, float 
   this->Impl->ResectionGridColor[0] = red;
   this->Impl->ResectionGridColor[1] = green;
   this->Impl->ResectionGridColor[2] = blue;
-  this->Modified();
-}
-
-
-//------------------------------------------------------------------------------
-float vtkOpenGLResection2DPolyDataMapper::GetResectionOpacity() const
-{
-  return this->Impl->ResectionOpacity;
-}
-
-//------------------------------------------------------------------------------
-void vtkOpenGLResection2DPolyDataMapper::SetResectionOpacity(float margin)
-{
-  this->Impl->ResectionOpacity = margin;
-  this->Modified();
-}
-
-//------------------------------------------------------------------------------
-bool vtkOpenGLResection2DPolyDataMapper::GetResectionClipOut() const
-{
-  return this->Impl->ResectionClipOut;
-}
-
-//------------------------------------------------------------------------------
-void vtkOpenGLResection2DPolyDataMapper::SetResectionClipOut(bool clipOut)
-{
-  this->Impl->ResectionClipOut = clipOut;
   this->Modified();
 }
 
