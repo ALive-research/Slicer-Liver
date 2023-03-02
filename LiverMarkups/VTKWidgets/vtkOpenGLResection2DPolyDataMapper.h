@@ -122,16 +122,6 @@ class VTKRENDERINGOPENGL2_EXPORT vtkOpenGLResection2DPolyDataMapper : public vtk
   /// Set the resection grid color
   void SetResectionGridColor(float red, float green, float blue);
 
-  /// Get the uncertainty margin
-  float GetResectionOpacity() const;
-  /// Set the resection margin
-  void SetResectionOpacity(float margin);
-
-  /// Get the interpolated margin
-  bool GetResectionClipOut() const;
-  /// Set the resection margin
-  void SetResectionClipOut(bool interpolated);
-
   /// Get the interpolated margin
   bool GetInterpolatedMargins() const;
   /// Set the resection margin
