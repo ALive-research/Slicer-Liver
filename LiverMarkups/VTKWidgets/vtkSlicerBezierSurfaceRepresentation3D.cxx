@@ -618,11 +618,16 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceDisplay(vtkMRMLM
     this->BezierSurfaceResectionMapper2D->SetResectionMarginColor(displayNode->GetResectionMarginColor());
     this->BezierSurfaceResectionMapper2D->SetUncertaintyMarginColor(displayNode->GetUncertaintyMarginColor());
     this->BezierSurfaceResectionMapper2D->SetInterpolatedMargins(displayNode->GetInterpolatedMargins());
-    this->BezierSurfaceResectionMapper2D->SetGridDivisions(displayNode->GetGridDivisions());
-    this->BezierSurfaceResectionMapper2D->SetGridThicknessFactor(displayNode->GetGridThickness());
     this->BezierSurfaceResectionMapper2D->SetHepaticContourColor(displayNode->GetHepaticContourColor());
     this->BezierSurfaceResectionMapper2D->SetPortalContourColor(displayNode->GetPortalContourColor());
     this->BezierSurfaceResectionMapper2D->SetTextureNumComps(displayNode->GetTextureNumComps());
+    if (displayNode->GetEnableGrid()){
+      this->BezierSurfaceResectionMapper2D->SetGridDivisions(displayNode->GetGridDivisions());
+      this->BezierSurfaceResectionMapper2D->SetGridThicknessFactor(displayNode->GetGridThickness());
+    } else {
+      this->BezierSurfaceResectionMapper2D->SetGridDivisions(0.0);
+      this->BezierSurfaceResectionMapper2D->SetGridThicknessFactor(0.0);
+    }
     }
 }
 

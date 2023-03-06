@@ -102,6 +102,17 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsBezierSurfaceDisp
   { this->EnableFlexibleBoundary = value!=0?1:0; this->Modified();}
 
   /// Set the Resection2D state variable
+  vtkSetMacro(EnableGrid, bool);
+  /// Get the Resection2D state variable
+  vtkGetMacro(EnableGrid, bool);
+  /// Get the Resection2D state variable as integer
+  int GetEnableGrid() const
+  { return static_cast<int>(this->EnableGrid);}
+  /// set the Resection2D state variable as integer
+  void SetEnableGrid(int value)
+  { this->EnableGrid = value!=0?1:0; this->Modified();}
+
+  /// Set the Resection2D state variable
   vtkSetMacro(MirrorDisplay, bool);
   /// Get the Resection2D state variable
   vtkGetMacro(MirrorDisplay, bool);
@@ -185,6 +196,7 @@ protected:
   float PortalContourColor[3];
   int TextureNumComps;
   bool EnableFlexibleBoundary;
+  bool EnableGrid;
   bool MirrorDisplay;
 
 protected:

@@ -250,6 +250,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectogramWidget.Resection2DCheckBox.connect('stateChanged(int)', self.onResection2DChanged)
     self.resectogramWidget.MirrorDisplayCheckBox.connect('stateChanged(int)', self.onMirrorDisplayCheckBoxChanged)
     self.resectogramWidget.FlexibleBoundaryCheckBox.connect('stateChanged(int)', self.onFlexibleBoundaryCheckBoxChanged)
+    self.resectogramWidget.EnableGridCheckBox.connect('stateChanged(int)', self.onEnableGridCheckBoxChanged)
     self.resectogramWidget.HepaticContourThicknessSpinBox.connect('valueChanged(double)', self.onHepaticContourThicknessChanged)
     self.resectogramWidget.HepaticContourColorPickerButton.connect('colorChanged(QColor)', self.onHepaticContourColorChanged)
     self.resectogramWidget.PortalContourThicknessSpinBox.connect('valueChanged(double)', self.onPortalContourThicknessChanged)
@@ -735,6 +736,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectogramWidget.PortalContourGroupBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.VsacularSegmentsGroupBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.FlexibleBoundaryCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
+      self.resectogramWidget.EnableGridCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.MirrorDisplayCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
       if self.resectogramWidget.Resection2DCheckBox.isChecked() == 0 and renderers.GetNumberOfItems() == 5:
@@ -759,10 +761,17 @@ class LiverWidget(ScriptedLoadableModuleWidget):
 
   def onFlexibleBoundaryCheckBoxChanged(self):
     """
-    This function is called when the resection2D checkbox changes.
+    This function is called when the EnableFlexibleBoundary checkbox changes.
     """
     if self._currentResectionNode:
       self._currentResectionNode.SetEnableFlexibleBoundary(self.resectogramWidget.FlexibleBoundaryCheckBox.isChecked())
+
+  def onEnableGridCheckBoxChanged(self):
+    """
+    This function is called when the EnableGrid checkbox changes.
+    """
+    if self._currentResectionNode:
+      self._currentResectionNode.SetEnableGrid(self.resectogramWidget.EnableGridCheckBox.isChecked())
 
   def onHepaticContourThicknessChanged(self):
     """
