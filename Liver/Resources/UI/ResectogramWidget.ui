@@ -43,15 +43,29 @@
         </property>
        </widget>
       </item>
-      <item>
-       <widget class="QCheckBox" name="FlexibleBoundaryCheckBox">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-        <property name="text">
-         <string>Enable Flexible Boundary</string>
-        </property>
-       </widget>
+      <item >
+       <layout class="QHBoxLayout" name="horizontalLayout_4">
+        <item>
+         <widget class="QCheckBox" name="FlexibleBoundaryCheckBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>Enable Flexible Boundary</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="EnableGridCheckBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>Enable Grid</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
       <item>
        <widget class="ctkCollapsibleGroupBox" name="HepaticContourGroupBox">

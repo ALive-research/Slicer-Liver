@@ -283,6 +283,15 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   // Set the EnableFlexibleBoundary state variable
   vtkSetMacro(EnableFlexibleBoundary, int);
 
+  // Set the EnableGrid state variable
+  vtkSetMacro(EnableGrid, bool);
+
+  // Get the EnableGrid state variable
+  vtkGetMacro(EnableGrid, bool);
+
+  // Set the EnableGrid state variable
+  vtkSetMacro(EnableGrid, int);
+
   // Get HepaticContourThickness margin
   vtkGetMacro(HepaticContourThickness, double);
 
@@ -355,6 +364,7 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   float GridThickness;
   bool ShowResection2D;
   bool EnableFlexibleBoundary;
+  bool EnableGrid;
   double HepaticContourThickness; //Resection margin in mm
   double PortalContourThickness; //Uncertainty margin in mm
   float HepaticContourColor[3];
