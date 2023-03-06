@@ -174,7 +174,6 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
       {
       bezierSurfaceNode->SetDistanceMapVolumeNode(resectionNode->GetDistanceMapVolumeNode());
       bezierSurfaceNode->SetVascularSegmentsVolumeNode(resectionNode->GetVascularSegmentsVolumeNode());
-      bezierSurfaceNode->SetMarkerStyleVolumeNode(resectionNode->GetMarkerStyleVolumeNode());
       bezierSurfaceNode->SetResectionMargin(resectionNode->GetResectionMargin());
       bezierSurfaceNode->SetUncertaintyMargin(resectionNode->GetUncertaintyMargin());
       bezierSurfaceNode->SetHepaticContourThickness(resectionNode->GetHepaticContourThickness());

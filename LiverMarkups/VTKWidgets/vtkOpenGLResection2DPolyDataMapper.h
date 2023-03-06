@@ -166,9 +166,6 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLResection2DPolyD
   int GetTextureNumComps() const;
   void SetTextureNumComps(int numComps);
 
-  //  unsigned int GetMarkerStyleAvailable() const;
-  void SetMarkerStyleAvailable(unsigned int status);
-
   // Get and Set Ratio
   void SetMatRatio(float matR[2]);
   float const*  GetMatRatio() const;
