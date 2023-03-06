@@ -97,7 +97,6 @@ protected:
   /// TransferDistanceMap
   void CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode* node, int numComps);
   void CreateAndTransferVascularSegmentsTexture(vtkMRMLScalarVolumeNode *node);
-  void CreateAndTransferMarkerStyleTexture(vtkMRMLScalarVolumeNode *node);
   void Ratio(bool flexibleBoundery);
   void ResectogramPlaneCenter(bool mirror);
 
@@ -133,9 +132,6 @@ protected:
   vtkSmartPointer<vtkMultiTextureObjectHelper> VascularSegmentsTexture;
   vtkWeakPointer<vtkMRMLScalarVolumeNode> VascularSegmentsVolumeNode;
 
-  // Maker style related elements
-  vtkSmartPointer<vtkMultiTextureObjectHelper> MarkerStyleTexture;
-  vtkSmartPointer<vtkMRMLScalarVolumeNode> MarkerStyleVolumeNode;
 
 protected:
   vtkSlicerBezierSurfaceRepresentation3D();

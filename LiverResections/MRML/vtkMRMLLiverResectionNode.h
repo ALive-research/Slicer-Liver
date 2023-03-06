@@ -156,13 +156,6 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   void SetVascularSegmentsVolumeNode(vtkMRMLScalarVolumeNode *vascularSegmentsVolumeNode)
   {this->VascularSegmentsVolumeNode = vascularSegmentsVolumeNode; this->Modified();}
 
-  // Get Marker Style Volume
-  vtkMRMLScalarVolumeNode *GetMarkerStyleVolumeNode() const
-  { return this->MarkerStyleVolumeNode; }
-
-  // Set Marker Style Volume
-  void SetMarkerStyleVolumeNode(vtkMRMLScalarVolumeNode *markerStyleVolumeNode)
-  {this->MarkerStyleVolumeNode = markerStyleVolumeNode; this->Modified();}
   /// This is a function to set the initialization control points as vtkPoints.
   /// Since the expected number of points for the initialization is two, the
   /// function requires at least two points in the vtkPoints provided; if more
@@ -341,7 +334,6 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   vtkWeakPointer<vtkMRMLModelNode> TargetOrganModelNode;
   vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolumeNode;
   vtkWeakPointer<vtkMRMLScalarVolumeNode> VascularSegmentsVolumeNode;
-  vtkWeakPointer<vtkMRMLScalarVolumeNode> MarkerStyleVolumeNode;
   vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode> BezierSurfaceNode;
   ResectionState State;
   InitializationMode InitMode;

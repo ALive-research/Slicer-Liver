@@ -232,9 +232,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.DistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionDistanceMapNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'Computed', 'True')
-    self.resectionsWidget.MarkerStyleNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onMarkerStyleNodeChanged)
-    self.resectionsWidget.MarkerStyleNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
-    self.resectionsWidget.MarkerStyleNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'Computed', 'True')
     self.resectionsWidget.LiverSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onResectionLiverModelNodeChanged)
     self.resectionsWidget.LiverSegmentSelectorWidget.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionLiverSegmentationNodeChanged)
     self.resectionsWidget.ResectionColorPickerButton.connect('colorChanged(QColor)', self.onResectionColorChanged)
@@ -366,13 +363,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectionsWidget.LiverSegmentSelectorWidget.blockSignals(False)
 
         self.resectionsWidget.DistanceMapNodeComboBox.blockSignals(True)
-        self.resectionsWidget.DistanceMapNodeComboBox.setCurrentNode(
-          activeResectionNode.GetDistanceMapVolumeNode())
+        self.resectionsWidget.DistanceMapNodeComboBox.setCurrentNode(activeResectionNode.GetDistanceMapVolumeNode())
         self.resectionsWidget.DistanceMapNodeComboBox.blockSignals(False)
-
-        self.resectionsWidget.MarkerStyleNodeComboBox.blockSignals(True)
-        self.resectionsWidget.MarkerStyleNodeComboBox.setCurrentNode(activeResectionNode.GetMarkerStyleVolumeNode())
-        self.resectionsWidget.MarkerStyleNodeComboBox.blockSignals(False)
 
         self.resectogramWidget.VascularSegmentsNodeComboBox.blockSignals(True)
         self.resectogramWidget.VascularSegmentsNodeComboBox.setCurrentNode(activeResectionNode.GetVascularSegmentsVolumeNode())
@@ -487,8 +479,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
 
   def onResectionDistanceMapNodeChanged(self):
     """
-This function is called when the resection distance map selector changes
-"""
+    This function is called when the resection distance map selector changes
+    """
     if self._currentResectionNode is not None:
       distanceMapNode = self.resectionsWidget.DistanceMapNodeComboBox.currentNode()
       self._currentResectionNode.SetTextureNumComps(self.numComps)
@@ -497,14 +489,6 @@ This function is called when the resection distance map selector changes
       self.resectionsWidget.UncertaintyMarginGroupBox.setEnabled(distanceMapNode is not None)
       self.resectionsWidget.ResectionPreviewGroupBox.setEnabled(distanceMapNode is not None)
       self.resectogramWidget.Resection2DCheckBox.setEnabled(distanceMapNode is not None)
-
-  def onMarkerStyleNodeChanged(self):
-    """
-    This function is called when the Marker Style selector changes
-    """
-    if self._currentResectionNode is not None:
-      MarkerStyleNode = self.resectionsWidget.MarkerStyleNodeComboBox.currentNode()
-      self._currentResectionNode.SetMarkerStyleVolumeNode(MarkerStyleNode)
 
   def onResectionLiverSegmentationNodeChanged(self):
     self.resectionsWidget.LiverSegmentSelectorWidget.blockSignals(True)
