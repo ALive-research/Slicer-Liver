@@ -73,6 +73,7 @@
 #include <vtkImageData.h>
 
 #include <vtkMRMLGlyphableVolumeDisplayNode.h>
+#include <vtkMRMLTableNode.h>
 #include "vtkLabelMapHelper.h"
 #include "vtkBezierSurfaceSource.h"
 
@@ -1150,4 +1151,42 @@ void vtkSlicerLiverResectionsLogic::ComputePlanningVolumetry(
   std::cout << "Parenchyma Volume" << ParenchymaVolume << std::endl;
   std::cout << "Resected: " << resected << std::endl;
   std::cout << "Remnant: " << remnant << std::endl;
+
+  auto tableNode = vtkMRMLTableNode::SafeDownCast(
+    this->GetMRMLScene()->GetFirstNodeByClass("vtkMRMLTableNode"));
+  if( !tableNode){
+    this->VolumeTableNode = vtkMRMLTableNode::SafeDownCast(
+      this->GetMRMLScene()->AddNewNodeByClass(
+        "vtkMRMLTableNode", "Liver Resection Volumetric Analysis"));
+
+    auto LabelCol = vtkSmartPointer<vtkStringArray>::New();
+    LabelCol->SetName("Properties");
+    LabelCol->InsertNextValue("Parenchyma Volume");
+    LabelCol->InsertNextValue("Resected Volume");
+    LabelCol->InsertNextValue("Remnant Volume");
+    auto ResectionVolumeCol = vtkSmartPointer<vtkDoubleArray>::New();
+    ResectionVolumeCol->SetName("Volume");
+    ResectionVolumeCol->InsertNextValue(ParenchymaVolume);
+    ResectionVolumeCol->InsertNextValue(resected);
+    ResectionVolumeCol->InsertNextValue(remnant);
+    auto VolumePercentageCol = vtkSmartPointer<vtkStringArray>::New();
+    VolumePercentageCol->SetName("Percentage");
+    VolumePercentageCol->InsertNextValue("100%");
+    VolumePercentageCol->InsertNextValue(std::to_string(resected/ParenchymaVolume * 100)+"%");
+    VolumePercentageCol->InsertNextValue(std::to_string(remnant/ParenchymaVolume * 100)+"%");
+
+    this->VolumeTable = vtkSmartPointer<vtkTable>::New();
+    this->VolumeTable->AddColumn(LabelCol);
+    this->VolumeTable->AddColumn(ResectionVolumeCol);
+    this->VolumeTable->AddColumn(VolumePercentageCol);
+    this->VolumeTableNode->SetAndObserveTable(this->VolumeTable);
+    } else {
+    this->VolumeTable->GetColumn(1)->SetVariantValue(0, ParenchymaVolume);
+    this->VolumeTable->GetColumn(1)->SetVariantValue(1, resected);
+    this->VolumeTable->GetColumn(1)->SetVariantValue(2, remnant);
+    this->VolumeTable->GetColumn(2)->SetVariantValue(1, resected/ParenchymaVolume * 100);
+    this->VolumeTable->GetColumn(2)->SetVariantValue(2, remnant/ParenchymaVolume * 100);
+    this->VolumeTableNode->Modified();
+  }
+
 }

@@ -54,6 +54,7 @@
 
 // STD include
 #include <map>
+#include <vtkMRMLTableNode.h>
 
 //j------------------------------------------------------------------------------
 class vtkMRMLLiverResectionNode;
@@ -161,6 +162,9 @@ protected:
 
   std::map<vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode>,
            vtkWeakPointer<vtkMRMLMarkupsNode>> BezierToInitializationMap;
+
+  vtkMRMLTableNode* VolumeTableNode;
+  vtkSmartPointer<vtkTable> VolumeTable;
 
 private:
   vtkSlicerLiverResectionsLogic(const vtkSlicerLiverResectionsLogic &) = delete;
