@@ -581,8 +581,8 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferVascularSegmentsTe
   this->VascularSegmentsTexture->SetWrapS(vtkTextureObject::ClampToBorder);
   this->VascularSegmentsTexture->SetWrapT(vtkTextureObject::ClampToBorder);
   this->VascularSegmentsTexture->SetWrapR(vtkTextureObject::ClampToBorder);
-  this->VascularSegmentsTexture->SetMinificationFilter(vtkTextureObject::Linear);
-  this->VascularSegmentsTexture->SetMagnificationFilter(vtkTextureObject::Linear);
+  this->VascularSegmentsTexture->SetMinificationFilter(vtkTextureObject::Nearest);
+  this->VascularSegmentsTexture->SetMagnificationFilter(vtkTextureObject::Nearest);
   this->VascularSegmentsTexture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
   this->VascularSegmentsTexture->CreateSeq3DFromRaw(dimensions[0], dimensions[1], dimensions[2], 1, VTK_FLOAT,
                                                     cast->GetOutput()->GetScalarPointer(), 1);
