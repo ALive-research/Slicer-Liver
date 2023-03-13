@@ -249,6 +249,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.InterpolatedMarginsCheckBox.connect('stateChanged(int)', self.onInterpolatedMarginsChanged)
     self.resectionsWidget.ParenchymaSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onComputeVolumeParameterChanged)
     self.resectionsWidget.TumorSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onComputeVolumeParameterChanged)
+    self.resectionsWidget.VascularSegmentsSelectorWidget.connect('currentSegmentChanged(QString)', self.onComputeVolumeParameterChanged)
     self.resectionsWidget.FinishPlanningCheckBox.connect('stateChanged(int)', self.onFinishPlanningCheckBoxChanged)
     self.resectionsWidget.ComputeVolumePushButton.connect('clicked(bool)', self.onComputeVolumeButtonClicked)
     self.resectogramWidget.Resection2DCheckBox.connect('stateChanged(int)', self.onResection2DChanged)
@@ -268,6 +269,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     node1 = self.resectionsWidget.TumorSegmentSelectorWidget.currentNode()
     node2 = self.resectionsWidget.ParenchymaSegmentSelectorWidget.currentNode()
+    node3 = self.resectionsWidget.VascularSegmentsSelectorWidget.currentNode()
     self.resectionsWidget.ComputeVolumePushButton.setEnabled(None not in [node1, node2])
 
   def onFinishPlanningCheckBoxChanged(self):
@@ -296,7 +298,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
                                                                           parenchymaLabelmapVolumeNode, refVolumeNode)
 
       lvLogic = slicer.modules.liverresections.logic()
-      lvLogic.ComputePlanningVolumetry(self._currentResectionNode, parenchymaLabelmapVolumeNode, tumorModel)
+      VascularSegmentsLabelmapVolumeNode = self.resectionsWidget.VascularSegmentsSelectorWidget.currentNode()
+      lvLogic.ComputePlanningVolumetry(self._currentResectionNode, parenchymaLabelmapVolumeNode, tumorModel, VascularSegmentsLabelmapVolumeNode)
 
   def onRadioButtonState(self, rdbutton):
     """

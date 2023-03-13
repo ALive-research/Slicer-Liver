@@ -55,6 +55,7 @@
 // STD include
 #include <map>
 #include <vtkMRMLTableNode.h>
+#include <vtkMRMLLabelMapVolumeNode.h>
 
 //j------------------------------------------------------------------------------
 class vtkMRMLLiverResectionNode;
@@ -97,7 +98,7 @@ public:
   void HideBezierSurfaceMarkup(vtkMRMLMarkupsNode* markupsInitializationNode) const;
   void ShowInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const;
   void HideInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const;
-  void ComputePlanningVolumetry(vtkMRMLLiverResectionNode* resectionNode, vtkMRMLScalarVolumeNode *parenchymaLabelMap, vtkPolyData *tumorModel);
+  void ComputePlanningVolumetry(vtkMRMLLiverResectionNode* resectionNode, vtkMRMLScalarVolumeNode *parenchymaLabelMap, vtkPolyData *tumorModel, vtkMRMLLabelMapVolumeNode *VascularSegments = nullptr);
 
   char* LoadLiverResection(const std::string& fileName,
                            const std::string& nodeName/*=nullptr*/,

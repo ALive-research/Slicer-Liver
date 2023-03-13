@@ -820,6 +820,38 @@
              </layout>
             </item>
             <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_10">
+              <item>
+               <widget class="QLabel" name="label_5">
+                <property name="text">
+                 <string>Vascular Segments</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="qMRMLNodeComboBox" name="VascularSegmentsSelectorWidget">
+                <property name="nodeTypes">
+                 <stringlist>
+                  <string>vtkMRMLLabelMapVolumeNode</string>
+                 </stringlist>
+                </property>
+                <property name="noneEnabled">
+                 <bool>true</bool>
+                </property>
+                <property name="addEnabled">
+                 <bool>false</bool>
+                </property>
+                <property name="removeEnabled">
+                 <bool>false</bool>
+                </property>
+                <property name="selectNodeUponCreation">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
              <layout class="QHBoxLayout" name="horizontalLayout_12">
               <item>
                <widget class="QPushButton" name="ComputeVolumePushButton">
@@ -982,6 +1014,22 @@
    <sender>ResectionWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>ParenchymaSegmentSelectorWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>395</x>
+     <y>350</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>478</x>
+     <y>399</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>VascularSegmentsSelectorWidget</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
     <hint type="sourcelabel">

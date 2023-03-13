@@ -441,10 +441,12 @@ CountVoxels(vtkLabelMapHelper::LabelMapType::Pointer inItkImage,
   inItkImage->SetRequestedRegion(region);
   typedef itk::ImageRegionConstIterator<itk::Image<short,3> >IteratorType;
   IteratorType iterator(inItkImage, inItkImage->GetRequestedRegion());
+
   while(!iterator.IsAtEnd())
     {
     if (iterator.Get() == label)
       {
+      iterator.GetIndex();
       ++counter;
       }
     ++iterator;
