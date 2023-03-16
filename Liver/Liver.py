@@ -190,6 +190,10 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.distanceMapsWidget = slicer.util.childWidgetVariables(distanceMapsUI)
     self.resectionsWidget = slicer.util.childWidgetVariables(resectionsUI)
     self.resectogramWidget = slicer.util.childWidgetVariables(resectogramUI)
+    iconsPath = os.path.join(os.path.dirname(__file__), 'Resources/Icons')
+    iconStyle = "QCheckBox::indicator:unchecked {{ image: url({0}/SlicerInvisible.png);}}\n QCheckBox::indicator:checked {{ image: url({1}/SlicerVisible.png);}}".format(iconsPath,iconsPath)
+    self.resectogramWidget.Grid2DVisibility.setStyleSheet(iconStyle)
+    self.resectionsWidget.Grid3DVisibility.setStyleSheet(iconStyle)
 
     # Add LiverSegmentsWidget
     wrapperWidget = slicer.qMRMLWidget()
@@ -242,6 +246,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.ResectionGridColorPickerButton.connect('colorChanged(QColor)', self.onResectionGridColorChanged)
     self.resectionsWidget.GridDivisionsDoubleSlider.connect('valueChanged(double)', self.onGridDivisionsChanged)
     self.resectionsWidget.GridThicknessDoubleSlider.connect('valueChanged(double)', self.onGridThicknessChanged)
+    self.resectionsWidget.Grid3DVisibility.connect('stateChanged(int)', self.onGrid3DVisibilityChanged)
     self.resectionsWidget.ResectionLockCheckBox.connect('stateChanged(int)', self.onResectionLockChanged)
     self.resectionsWidget.UncertaintyMarginSpinBox.connect('valueChanged(double)', self.onUncertaintyMarginChanged)
     self.resectionsWidget.UncertaintyMarginColorPickerButton.connect('colorChanged(QColor)', self.onUncertaintyMarginColorChanged)
@@ -250,7 +255,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectogramWidget.Resection2DCheckBox.connect('stateChanged(int)', self.onResection2DChanged)
     self.resectogramWidget.MirrorDisplayCheckBox.connect('stateChanged(int)', self.onMirrorDisplayCheckBoxChanged)
     self.resectogramWidget.FlexibleBoundaryCheckBox.connect('stateChanged(int)', self.onFlexibleBoundaryCheckBoxChanged)
-    self.resectogramWidget.EnableGridCheckBox.connect('stateChanged(int)', self.onEnableGridCheckBoxChanged)
+    self.resectogramWidget.Grid2DVisibility.connect('stateChanged(int)', self.onGrid2DVisibilityChanged)
     self.resectogramWidget.HepaticContourThicknessSpinBox.connect('valueChanged(double)', self.onHepaticContourThicknessChanged)
     self.resectogramWidget.HepaticContourColorPickerButton.connect('colorChanged(QColor)', self.onHepaticContourColorChanged)
     self.resectogramWidget.PortalContourThicknessSpinBox.connect('valueChanged(double)', self.onPortalContourThicknessChanged)
@@ -474,6 +479,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         if renderers.GetNumberOfItems() == 5:
           renderers.RemoveItem(4)
         self.resectogramWidget.Resection2DCheckBox.setCheckState(0)
+        self.resectogramWidget.Resection2DCheckBox.setEnabled(0)
         self._currentResectionNode.SetShowResection2D(False)
 
     self._currentResectionNode = activeResectionNode
@@ -724,6 +730,13 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     if self._currentResectionNode is not None:
       self._currentResectionNode.SetGridThickness(self.resectionsWidget.GridThicknessDoubleSlider.value)
 
+  def onGrid3DVisibilityChanged(self):
+    """
+    This function is called when the EnableGrid checkbox changes.
+    """
+    if self._currentResectionNode:
+      self._currentResectionNode.SetGrid3DVisibility(self.resectionsWidget.Grid3DVisibility.isChecked())
+
   def onResection2DChanged(self):
     """
     This function is called when the resection2D checkbox changes.
@@ -736,7 +749,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectogramWidget.PortalContourGroupBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.VsacularSegmentsGroupBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.FlexibleBoundaryCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
-      self.resectogramWidget.EnableGridCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
+      self.resectogramWidget.Grid2DVisibility.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.MirrorDisplayCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
       if self.resectogramWidget.Resection2DCheckBox.isChecked() == 0 and renderers.GetNumberOfItems() == 5:
@@ -766,12 +779,12 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     if self._currentResectionNode:
       self._currentResectionNode.SetEnableFlexibleBoundary(self.resectogramWidget.FlexibleBoundaryCheckBox.isChecked())
 
-  def onEnableGridCheckBoxChanged(self):
+  def onGrid2DVisibilityChanged(self):
     """
     This function is called when the EnableGrid checkbox changes.
     """
     if self._currentResectionNode:
-      self._currentResectionNode.SetEnableGrid(self.resectogramWidget.EnableGridCheckBox.isChecked())
+      self._currentResectionNode.SetGrid2DVisibility(self.resectogramWidget.Grid2DVisibility.isChecked())
 
   def onHepaticContourThicknessChanged(self):
     """
