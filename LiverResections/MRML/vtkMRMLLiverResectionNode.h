@@ -256,6 +256,15 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   // Set the widget visibility variable
   vtkSetMacro(GridThickness, float);
 
+  // Set the Grid3DVisibility state variable
+  vtkSetMacro(Grid3DVisibility, bool);
+
+  // Get the Grid3DVisibility state variable
+  vtkGetMacro(Grid3DVisibility, bool);
+
+  // Set the Grid3DVisibility state variable
+  vtkSetMacro(Grid3DVisibility, int);
+
   // Set the ShowResection2D state variable
   vtkSetMacro(ShowResection2D, bool);
 
@@ -283,14 +292,14 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   // Set the EnableFlexibleBoundary state variable
   vtkSetMacro(EnableFlexibleBoundary, int);
 
-  // Set the EnableGrid state variable
-  vtkSetMacro(EnableGrid, bool);
+  // Set the Grid2DVisibility state variable
+  vtkSetMacro(Grid2DVisibility, bool);
 
-  // Get the EnableGrid state variable
-  vtkGetMacro(EnableGrid, bool);
+  // Get the Grid2DVisibility state variable
+  vtkGetMacro(Grid2DVisibility, bool);
 
-  // Set the EnableGrid state variable
-  vtkSetMacro(EnableGrid, int);
+  // Set the Grid2DVisibility state variable
+  vtkSetMacro(Grid2DVisibility, int);
 
   // Get HepaticContourThickness margin
   vtkGetMacro(HepaticContourThickness, double);
@@ -362,9 +371,10 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   bool GridVisibility;
   float GridDivisions;
   float GridThickness;
+  bool Grid3DVisibility;
   bool ShowResection2D;
   bool EnableFlexibleBoundary;
-  bool EnableGrid;
+  bool Grid2DVisibility;
   double HepaticContourThickness; //Resection margin in mm
   double PortalContourThickness; //Uncertainty margin in mm
   float HepaticContourColor[3];

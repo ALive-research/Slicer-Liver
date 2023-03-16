@@ -610,8 +610,13 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceDisplay(vtkMRMLM
     this->BezierSurfaceResectionMapper->SetResectionOpacity(displayNode->GetResectionOpacity());
     this->BezierSurfaceResectionMapper->SetResectionClipOut(displayNode->GetClipOut());
     this->BezierSurfaceResectionMapper->SetInterpolatedMargins(displayNode->GetInterpolatedMargins());
-    this->BezierSurfaceResectionMapper->SetGridDivisions(displayNode->GetGridDivisions());
-    this->BezierSurfaceResectionMapper->SetGridThicknessFactor(displayNode->GetGridThickness());
+    if (displayNode->GetGrid3DVisibility()){
+      this->BezierSurfaceResectionMapper->SetGridDivisions(displayNode->GetGridDivisions());
+      this->BezierSurfaceResectionMapper->SetGridThicknessFactor(displayNode->GetGridThickness());
+      } else {
+      this->BezierSurfaceResectionMapper->SetGridDivisions(0.0);
+      this->BezierSurfaceResectionMapper->SetGridThicknessFactor(0.0);
+      }
 
     this->BezierSurfaceResectionMapper2D->SetResectionColor(displayNode->GetResectionColor());
     this->BezierSurfaceResectionMapper2D->SetResectionGridColor(displayNode->GetResectionGridColor());
@@ -621,7 +626,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceDisplay(vtkMRMLM
     this->BezierSurfaceResectionMapper2D->SetHepaticContourColor(displayNode->GetHepaticContourColor());
     this->BezierSurfaceResectionMapper2D->SetPortalContourColor(displayNode->GetPortalContourColor());
     this->BezierSurfaceResectionMapper2D->SetTextureNumComps(displayNode->GetTextureNumComps());
-    if (displayNode->GetEnableGrid()){
+    if (displayNode->GetGrid2DVisibility()){
       this->BezierSurfaceResectionMapper2D->SetGridDivisions(displayNode->GetGridDivisions());
       this->BezierSurfaceResectionMapper2D->SetGridThicknessFactor(displayNode->GetGridThickness());
     } else {
