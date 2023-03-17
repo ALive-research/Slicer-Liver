@@ -230,16 +230,15 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return None
 
   def createColorMap(self):
-    self.colormap = slicer.vtkMRMLColorNode()
-    # Using example code from https://slicer.readthedocs.io/en/latest/developer_guide/script_repository.html
-    # and code from qSlicerColorsModuleWidget::copyCurrentColorNode()
-    self.colormap = slicer.mrmlScene.CreateNodeByClass("vtkMRMLProceduralColorNode")
-    self.colormap.UnRegister(None)  # to prevent memory leaks
-    self.colormap.SetName(slicer.mrmlScene.GenerateUniqueName("SlicerLiverColorMap"))
-    self.colormap.SetHideFromEditors(False)
-    self.colormap = slicer.app.applicationLogic().GetColorLogic().CopyNode(slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels'), "SlicerLiverColorMap")
-    self.colormap.UnRegister(None)  # to prevent memory leaks
-    slicer.mrmlScene.AddNode(self.colormap) # Creates the ID
+#    colorTableNodes = slicer.util.getNodes("SlicerLiverColorMap*")
+#    if len(colorTableNodes) == 0:
+    logging.info('Load color map from file')
+    # Load the node from disk
+    p = os.path.join(os.path.dirname(os.path.realpath(__file__)), "Resources/SlicerLiverColorMap.ctbl")
+    self.colormap = slicer.modules.colors.logic().LoadColorFile(p)
+#      slicer.mrmlScene.AddNode(self.colormap) # Creates the ID #Needed?
+#    else:
+#      self.colormap = list(colorTableNodes.values())[0] #else not needed?
 
   def cleanup(self):
     """
@@ -411,7 +410,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def getCurrentColor(self):
     color = [1, 1, 1, 1]
     index = self.ui.vascularTerritoryId.currentIndex
-    self.colormap.GetColor(index, color)
+    self.colormap.GetColor(index+49, color) # Vascular territory labels start on label 50
     del color[3:]
     return color
 
