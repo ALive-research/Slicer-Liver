@@ -40,6 +40,7 @@
 #ifndef SLICERLIVER_VTKOPENGLRESECTION2DPOLYDATAMAPPER_H
 #define SLICERLIVER_VTKOPENGLRESECTION2DPOLYDATAMAPPER_H
 
+#include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
 
 // VTK includes
 #include <vtkOpenGLPolyDataMapper.h>
@@ -52,7 +53,7 @@
 class vtkTextureObject;
 
 //-------------------------------------------------------------------------------
-class VTKRENDERINGOPENGL2_EXPORT vtkOpenGLResection2DPolyDataMapper : public vtkOpenGLPolyDataMapper
+class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLResection2DPolyDataMapper : public vtkOpenGLPolyDataMapper
 {
  public:
   static vtkOpenGLResection2DPolyDataMapper *New();
