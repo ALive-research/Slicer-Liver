@@ -410,7 +410,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def getCurrentColor(self):
     color = [1, 1, 1, 1]
     index = self.ui.vascularTerritoryId.currentIndex
-    self.colormap.GetColor(index+49, color) # Vascular territory labels start on label 50
+    self.colormap.GetColor(index+53, color) # Vascular territory labels start on label 54
     del color[3:]
     return color
 
