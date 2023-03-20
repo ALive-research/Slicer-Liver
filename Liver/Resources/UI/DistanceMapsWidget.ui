@@ -181,51 +181,34 @@
         </property>
        </widget>
       </item>
-      <item row="10" column="0" colspan="4">
-       <layout class="QFormLayout" name="formLayout_8">
-        <item row="0" column="0">
-         <widget class="QLabel" name="DownsamplingRateLabel">
-          <property name="text">
-           <string>Downsampling Rate:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="1">
-         <widget class="qMRMLSpinBox" name="DownsamplingRateSpinBox">
-          <property name="decimalsOption">
-           <set>ctkDoubleSpinBox::DecimalsByShortcuts|ctkDoubleSpinBox::InsertDecimals</set>
-          </property>
-          <property name="maximum">
-           <double>2</double>
-          </property>
-          <property name="minimum">
-           <double>1</double>
-          </property>
-          <property name="singleStep">
-           <double>0.1</double>
-          </property>
-          <property name="value">
-           <double>1.0</double>
-          </property>
-          <property name="invertedControls">
-           <bool>false</bool>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <spacer name="horizontalSpacer_4">
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>13</width>
-            <height>15</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-       </layout>
+      <item row="10" column="0">
+       <widget class="QLabel" name="DownsamplingRateLabel">
+        <property name="text">
+         <string>Downsampling Rate:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="10" column="3">
+       <widget class="qMRMLSpinBox" name="DownsamplingRateSpinBox">
+        <property name="decimalsOption">
+         <set>ctkDoubleSpinBox::DecimalsByShortcuts|ctkDoubleSpinBox::InsertDecimals</set>
+        </property>
+        <property name="maximum">
+         <double>2</double>
+        </property>
+        <property name="minimum">
+         <double>1</double>
+        </property>
+        <property name="singleStep">
+         <double>0.1</double>
+        </property>
+        <property name="value">
+         <double>1.0</double>
+        </property>
+        <property name="invertedControls">
+         <bool>false</bool>
+        </property>
+       </widget>
       </item>
       <item row="12" column="0" colspan="4">
        <widget class="QPushButton" name="ComputeDistanceMapsPushButton">
