@@ -228,7 +228,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.connect('clicked(bool)', self.onComputeDistanceMapButtonClicked)
     self.resectionsWidget.CurvedRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.CurvedRadioButton))
     self.resectionsWidget.FlatRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.FlatRadioButton))
+    self.resectionsWidget.ClosedCurveButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.ClosedCurveButton))
     self.resectionsWidget.MarkupsResectionCheckBox.toggled.connect(lambda: self.onMarkupsResectionCheckBoxChecked(self.resectionsWidget.MarkupsResectionCheckBox))
+    self.resectionsWidget.InitialContourPositionButton.connect('clicked(bool)', self.onDefiningStartingCountourPosition)
     self.resectionsWidget.ResectionNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionDistanceMapNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
@@ -280,6 +282,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       if rdbutton.text == "Curved":
         lvLogic.HideInitializationMarkupFromResection(activeResectionNode)
         lvLogic.HideBezierSurfaceMarkupFromResection(activeResectionNode)
+        BezierNode = activeResectionNode.GetBezierSurfaceNode()
+        BezierDisplay = BezierNode.GetDisplayNode()
+        BezierDisplay.SetGlyphScale(3.0)
         liverNode = activeResectionNode.GetTargetOrganModelNode()
         if self._distanceContourNode is not None:
           self._distanceContourNode.SetDisplayVisibility(True)
@@ -308,14 +313,22 @@ class LiverWidget(ScriptedLoadableModuleWidget):
                                                                                   self._preprocessedLiverNode))
           self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
                                         self.onDistanceContourStartInteraction)
+          BezierNode = activeResectionNode.GetBezierSurfaceNode()
+          BezierNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointStartInteractionEvent,
+                                 lambda x, y: self.BezierSurfaceModified(self._distanceContourNode))
+
       elif rdbutton.text == "MarkupClosedCurve":
+        self._distanceContourNode = self.resectionsWidget.DistanceContourComboBox.currentNode()
         if self._distanceContourNode is not None:
           self._distanceContourNode.SetDisplayVisibility(False)
         lvLogic.HideInitializationMarkupFromResection(activeResectionNode)
         lvLogic.HideBezierSurfaceMarkupFromResection(activeResectionNode)
-      elif rdbutton.text == "Flat(Default)":
+      elif rdbutton.text == "Flat":
         lvLogic.ShowInitializationMarkupFromResection(activeResectionNode)
         lvLogic.HideBezierSurfaceMarkupFromResection(activeResectionNode)
+        BezierNode = activeResectionNode.GetBezierSurfaceNode()
+        BezierDisplay = BezierNode.GetDisplayNode()
+        BezierDisplay.SetGlyphScale(3.0)
         if self._distanceContourNode is not None:
           self._distanceContourNode.SetDisplayVisibility(False)
         return
@@ -548,6 +561,9 @@ This function is called when the resection distance map selector changes
     """
     lvLogic = slicer.modules.liverresections.logic()
     lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
+
+  def BezierSurfaceModified(self, distanceNode):
+    distanceNode.SetDisplayVisibility(False)
 
   def onResectionMarginChanged(self):
     """
@@ -2058,6 +2074,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     BezierNode.SetControlPointPositionsWorld(points)
     BezierDisplay = BezierNode.GetDisplayNode()
     BezierDisplay.VisibilityOn()
+
     # BezierDisplay.SetClipOut(True)
 
 #
