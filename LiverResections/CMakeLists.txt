@@ -8,6 +8,7 @@ string(TOUPPER ${MODULE_NAME} MODULE_NAME_UPPER)
 #-----------------------------------------------------------------------------
 add_subdirectory(MRML)
 add_subdirectory(Logic)
+add_subdirectory(MRMLDM)
 
 #-----------------------------------------------------------------------------
 set(MODULE_EXPORT_DIRECTIVE "Q_SLICER_QTMODULES_${MODULE_NAME_UPPER}_EXPORT")
@@ -34,7 +35,9 @@ set(MODULE_MOC_SRCS
   )
 
 set(MODULE_TARGET_LIBRARIES
+  vtkSlicer${MODULE_NAME}ModuleMRML
   vtkSlicer${MODULE_NAME}ModuleLogic
+  vtkSlicer${MODULE_NAME}ModuleMRMLDisplayableManager
   )
 
 set(MODULE_RESOURCES

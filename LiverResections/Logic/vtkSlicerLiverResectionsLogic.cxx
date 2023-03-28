@@ -435,6 +435,13 @@ vtkSlicerLiverResectionsLogic::AddBezierSurface(vtkMRMLLiverResectionNode *resec
 
   markupsBezierSurfaceNode->SetScene(mrmlScene);
 
+  auto markupsBezierSurfaceDisplayNode = vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(markupsBezierSurfaceNode->GetDisplayNode());
+  if (markupsBezierSurfaceDisplayNode)
+    {
+    markupsBezierSurfaceDisplayNode->SetVisibility(false); // Initially hidden
+    markupsBezierSurfaceDisplayNode->SetSnapMode(vtkMRMLMarkupsDisplayNode::SnapModeUnconstrained);
+    }
+
   for (int i = 0; i<4; ++i)
     {
     for (int j = 0; j<4; ++j)
@@ -445,12 +452,7 @@ vtkSlicerLiverResectionsLogic::AddBezierSurface(vtkMRMLLiverResectionNode *resec
 
   markupsBezierSurfaceNode->SetHideFromEditors(false);
 
-  auto markupsBezierSurfaceDisplayNode = vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(markupsBezierSurfaceNode->GetDisplayNode());
-  if (markupsBezierSurfaceDisplayNode)
-    {
-    markupsBezierSurfaceDisplayNode->SetVisibility(false); // Initially hidden
-    markupsBezierSurfaceDisplayNode->SetSnapMode(vtkMRMLMarkupsDisplayNode::SnapModeUnconstrained);
-    }
+
 
   resectionNode->SetBezierSurfaceNode(markupsBezierSurfaceNode);
 
