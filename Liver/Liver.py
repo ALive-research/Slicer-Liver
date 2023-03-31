@@ -247,11 +247,13 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.UncertaintyMarginColorPickerButton.connect('colorChanged(QColor)', self.onUncertaintyMarginColorChanged)
     self.resectionsWidget.UncertaintyMarginComboBox.connect('currentIndexChanged(int)', self.onUncertaintyMaginComboBoxChanged)
     self.resectionsWidget.InterpolatedMarginsCheckBox.connect('stateChanged(int)', self.onInterpolatedMarginsChanged)
-    self.resectionsWidget.ParenchymaSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onComputeVolumeParameterChanged)
-    self.resectionsWidget.TumorSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onComputeVolumeParameterChanged)
-    self.resectionsWidget.VascularSegmentsSelectorWidget.connect('currentSegmentChanged(QString)', self.onComputeVolumeParameterChanged)
     self.resectionsWidget.FinishPlanningCheckBox.connect('stateChanged(int)', self.onFinishPlanningCheckBoxChanged)
+    self.resectionsWidget.ParenchymaSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onComputeVolumeParameterChanged)
+    self.resectionsWidget.TumorMarkerSelectorWidget.connect('nodeAddedByUser(vtkMRMLNode*)', self.onComputeVolumeParameterChanged)
+    self.resectionsWidget.VascularSegmentsSelectorWidget.connect('currentNodeChanged(vtkMRMLNode*)', self.onAdvancedVolumeParameterChanged)
+    self.resectionsWidget.ROIMarkersListSelectorWidget.connect('nodeAddedByUser(vtkMRMLNode*)', self.onAdvancedVolumeParameterChanged)
     self.resectionsWidget.ComputeVolumePushButton.connect('clicked(bool)', self.onComputeVolumeButtonClicked)
+
     self.resectogramWidget.Resection2DCheckBox.connect('stateChanged(int)', self.onResection2DChanged)
     self.resectogramWidget.MirrorDisplayCheckBox.connect('stateChanged(int)', self.onMirrorDisplayCheckBoxChanged)
     self.resectogramWidget.FlexibleBoundaryCheckBox.connect('stateChanged(int)', self.onFlexibleBoundaryCheckBoxChanged)
@@ -262,14 +264,19 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectogramWidget.PortalContourColorPickerButton.connect('colorChanged(QColor)', self.onPortalContourColorChanged)
     self.resectogramWidget.VascularSegmentsNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onVascularSegmentsNodeChanged)
 
+  def onAdvancedVolumeParameterChanged(self):
+    """
+    This function is triggered whenever AdvancedVolumeParameter changes
+    """
+    node1 = self.resectionsWidget.VascularSegmentsSelectorWidget.currentNode()
+    self.resectionsWidget.ROIVolumeWidget.setEnabled(node1 != None)
 
   def onComputeVolumeParameterChanged(self):
     """
     This function is triggered whenever VolumeParameter changes
     """
-    node1 = self.resectionsWidget.TumorSegmentSelectorWidget.currentNode()
+    node1 = self.resectionsWidget.TumorMarkerSelectorWidget.currentNode()
     node2 = self.resectionsWidget.ParenchymaSegmentSelectorWidget.currentNode()
-    node3 = self.resectionsWidget.VascularSegmentsSelectorWidget.currentNode()
     self.resectionsWidget.ComputeVolumePushButton.setEnabled(None not in [node1, node2])
 
   def onFinishPlanningCheckBoxChanged(self):
@@ -278,17 +285,16 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     if self._currentResectionNode is not None:
       self.resectionsWidget.ComputeVolumetryParametersGroupBox.setEnabled(self.resectionsWidget.FinishPlanningCheckBox.isChecked())
+      self.resectionsWidget.OutPutGroupBox.setEnabled(self.resectionsWidget.FinishPlanningCheckBox.isChecked())
 
   def onComputeVolumeButtonClicked(self):
     if self._currentResectionNode is not None:
-      tumorSegmentID = self.resectionsWidget.TumorSegmentSelectorWidget.currentSegmentID()
-      tumorSegmentationNode = self.resectionsWidget.TumorSegmentSelectorWidget.currentNode()
-      tumorModel = tumorSegmentationNode.GetClosedSurfaceInternalRepresentation(tumorSegmentID)
+      tumorMarkerNode = self.resectionsWidget.TumorMarkerSelectorWidget.currentNode()
 
       parenchymaLabelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("ParenchymaLabelMap")
       if not parenchymaLabelmapVolumeNode:
         parenchymaLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "ParenchymaLabelMap")
-        segmentationNode = self.distanceMapsWidget.SegmentationSelectorComboBox.currentNode()
+        segmentationNode = self.resectionsWidget.ParenchymaSegmentSelectorWidget.currentNode()
         refVolumeNode = self.distanceMapsWidget.ReferenceVolumeSelector.currentNode()
         parenchymaSegmentId = self.resectionsWidget.ParenchymaSegmentSelectorWidget.currentSegmentID()
         segmentationIds = vtk.vtkStringArray()
@@ -296,10 +302,24 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         segmentationIds.InsertNextValue(parenchymaSegmentId)
         slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
                                                                           parenchymaLabelmapVolumeNode, refVolumeNode)
-
       lvLogic = slicer.modules.liverresections.logic()
       VascularSegmentsLabelmapVolumeNode = self.resectionsWidget.VascularSegmentsSelectorWidget.currentNode()
-      lvLogic.ComputePlanningVolumetry(self._currentResectionNode, parenchymaLabelmapVolumeNode, tumorModel, VascularSegmentsLabelmapVolumeNode)
+      ROIMarkersList = self.resectionsWidget.ROIMarkersListSelectorWidget.currentNode()
+
+      outputTable = self.resectionsWidget.VolumeTableSelectorWidget.currentNode()
+
+      lvLogic.ComputePlanningVolumetry(self._currentResectionNode, parenchymaLabelmapVolumeNode, tumorMarkerNode, outputTable, VascularSegmentsLabelmapVolumeNode, ROIMarkersList)
+      self.showTable(outputTable)
+
+  def showTable(self, table):
+    """
+    Switch to a layout where tables are visible and show the selected table
+    """
+    currentLayout = slicer.app.layoutManager().layout
+    layoutWithTable = slicer.modules.tables.logic().GetLayoutWithTable(currentLayout)
+    slicer.app.layoutManager().setLayout(layoutWithTable)
+    slicer.app.applicationLogic().GetSelectionNode().SetActiveTableID(table.GetID())
+    slicer.app.applicationLogic().PropagateTableSelection()
 
   def onRadioButtonState(self, rdbutton):
     """
@@ -402,9 +422,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       lvLogic = slicer.modules.liverresections.logic()
 
       if activeResectionNode is not None:
-        self.resectionsWidget.ComputeVolumetryGroupBox.setEnabled(activeResectionNode is not None)
-
-
         self.resectionsWidget.LiverSegmentSelectorWidget.blockSignals(True)
         self.resectionsWidget.LiverSegmentSelectorWidget.setCurrentNode(None)
         self.resectionsWidget.LiverSegmentSelectorWidget.blockSignals(False)
@@ -536,7 +553,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       self.resectionsWidget.UncertaintyMarginGroupBox.setEnabled(distanceMapNode is not None)
       self.resectionsWidget.ResectionPreviewGroupBox.setEnabled(distanceMapNode is not None)
       self.resectogramWidget.Resection2DCheckBox.setEnabled(distanceMapNode is not None)
-      # self.resectionsWidget.ComputeVolumetryGroupBox.setEnabled(distanceMapNode is not None)
 
   def onResectionLiverSegmentationNodeChanged(self):
     self.resectionsWidget.LiverSegmentSelectorWidget.blockSignals(True)
@@ -567,6 +583,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       self._currentResectionNode.SetTargetOrganModelNode(modelNode)
       self.resectionsWidget.ResectionVisualizationGroupBox.setEnabled(modelNode is not None)
       self.resectionsWidget.GridGroupBox.setEnabled(modelNode is not None)
+      self.resectionsWidget.ComputeVolumetryGroupBox.setEnabled(modelNode is not None)
 
   def onDistanceContourStartInteraction(self, caller, event):
     """

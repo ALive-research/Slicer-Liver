@@ -57,12 +57,17 @@
 #include <vtkMRMLTableNode.h>
 #include <vtkMRMLLabelMapVolumeNode.h>
 
+#include <itkImage.h>
+#include <itkSmartPointer.h>
+
 //j------------------------------------------------------------------------------
 class vtkMRMLLiverResectionNode;
 class vtkMRMLMarkupsNode;
 class vtkMRMLMarkupsDistanceContourNode;
 class vtkMRMLMarkupsSlicingContourNode;
 class vtkMRMLMarkupsBezierSurfaceNode;
+class vtkMRMLMarkupsFiducialNode;
+class vtkBezierSurfaceSource;
 
 //------------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_LOGIC_EXPORT vtkSlicerLiverResectionsLogic:
@@ -98,7 +103,9 @@ public:
   void HideBezierSurfaceMarkup(vtkMRMLMarkupsNode* markupsInitializationNode) const;
   void ShowInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const;
   void HideInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const;
-  void ComputePlanningVolumetry(vtkMRMLLiverResectionNode* resectionNode, vtkMRMLScalarVolumeNode *parenchymaLabelMap, vtkPolyData *tumorModel, vtkMRMLLabelMapVolumeNode *VascularSegments = nullptr);
+  void ComputePlanningVolumetry(vtkMRMLLiverResectionNode* resectionNode,
+                                vtkMRMLScalarVolumeNode* parenchymaLabelMap, vtkMRMLMarkupsFiducialNode* tumorMarkerNode, vtkMRMLTableNode* OutputTableNode,
+                                vtkMRMLLabelMapVolumeNode* VascularSegments = nullptr, vtkMRMLMarkupsFiducialNode* ROIMarkersList = nullptr);
 
   char* LoadLiverResection(const std::string& fileName,
                            const std::string& nodeName/*=nullptr*/,
@@ -163,10 +170,17 @@ protected:
 
   std::map<vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode>,
            vtkWeakPointer<vtkMRMLMarkupsNode>> BezierToInitializationMap;
+  std::map<std::string , std::vector<int>> VascularSegmentsVoxelsCount;
 
-  vtkMRMLTableNode* VolumeTableNode;
-  vtkSmartPointer<vtkTable> VolumeTable;
-
+  vtkSmartPointer<vtkMRMLLabelMapVolumeNode> VascularSegments;
+  vtkSmartPointer<vtkMRMLLiverResectionNode> resectionNode;
+  vtkSmartPointer<vtkMRMLScalarVolumeNode> parenchymaLabelMap;
+  vtkSmartPointer<vtkMRMLTableNode>  OutputTableNode;
+  vtkMRMLMarkupsFiducialNode* tumorMarkerNode;
+  vtkSmartPointer<vtkBezierSurfaceSource> bezierHR;
+  itk::SmartPointer<itk::Image<short,3>> connectedThreshold;
+  itk::SmartPointer<itk::Image<short,3>> projectionImage;
+  itk::SmartPointer<itk::Image<short,3>> itkVascularSegments;
 private:
   vtkSlicerLiverResectionsLogic(const vtkSlicerLiverResectionsLogic &) = delete;
   void operator=(const vtkSlicerLiverResectionsLogic&) = delete;
