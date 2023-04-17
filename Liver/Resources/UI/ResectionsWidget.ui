@@ -492,7 +492,6 @@
         <property name="collapsed">
          <bool>true</bool>
         </property>
-<<<<<<< variant A
          <layout class="QGridLayout" name="gridLayout_2">
           <item row="0" column="0">
            <widget class="QLabel" name="GridDivisionsLabel">
@@ -581,117 +580,6 @@
            </widget>
           </item>
          </layout>
->>>>>>> variant B
-        <layout class="QVBoxLayout" name="verticalLayout_8">
-         <property name="spacing">
-          <number>0</number>
-         </property>
-         <property name="leftMargin">
-          <number>0</number>
-         </property>
-         <property name="topMargin">
-          <number>0</number>
-         </property>
-         <property name="rightMargin">
-          <number>0</number>
-         </property>
-         <property name="bottomMargin">
-          <number>0</number>
-         </property>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_6">
-           <item>
-            <layout class="QVBoxLayout" name="verticalLayout_6">
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_8">
-               <item>
-                <widget class="QLabel" name="GridDivisionsLabel">
-                 <property name="text">
-                  <string>Divisions:</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="ctkDoubleSlider" name="GridDivisionsDoubleSlider">
-                 <property name="maximum">
-                  <double>30.000000000000000</double>
-                 </property>
-                 <property name="orientation">
-                  <enum>Qt::Horizontal</enum>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="ctkDoubleSpinBox" name="GridDivisionsDoubleSpinBox">
-                 <property name="decimals">
-                  <number>0</number>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_9">
-               <item>
-                <widget class="QLabel" name="GridThicknessLabel">
-                 <property name="text">
-                  <string>Thickness:</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="ctkDoubleSlider" name="GridThicknessDoubleSlider">
-                 <property name="value">
-                  <double>5.000000000000000</double>
-                 </property>
-                 <property name="singleStep">
-                  <double>0.100000000000000</double>
-                 </property>
-                 <property name="pageStep">
-                  <double>1.000000000000000</double>
-                 </property>
-                 <property name="minimum">
-                  <double>5.000000000000000</double>
-                 </property>
-                 <property name="maximum">
-                  <double>10.000000000000000</double>
-                 </property>
-                 <property name="orientation">
-                  <enum>Qt::Horizontal</enum>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="ctkDoubleSpinBox" name="GridThicknessDoubleSpinBox">
-                 <property name="decimals">
-                  <number>2</number>
-                 </property>
-                 <property name="maximum">
-                  <double>10.000000000000000</double>
-                 </property>
-                 <property name="singleStep">
-                  <double>0.500000000000000</double>
-                 </property>
-                 <property name="value">
-                  <double>5.000000000000000</double>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </item>
-            </layout>
-           </item>
-           <item>
-            <widget class="ctkColorPickerButton" name="ResectionGridColorPickerButton">
-             <property name="displayColorName">
-              <bool>false</bool>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-        </layout>
-======= end
        </widget>
       </item>
       <item>
@@ -1255,68 +1143,67 @@
    </hints>
   </connection>
   <connection>
-<<<<<<< variant A
    <sender>GridThicknessDoubleSlider</sender>
    <signal>valueChanged(double)</signal>
    <receiver>GridThicknessDoubleSpinBox</receiver>
    <slot>setValue(double)</slot>
->>>>>>> variant B
+   <hints>
+   <hint type="sourcelabel">
+   <x>282</x>
+   <y>449</y>
+   </hint>
+   <hint type="destinationlabel">
+   <x>477</x>
+   <y>449</y>
+   </hint>
+   </hints>
+  </connection>
+  <connection>
    <sender>ResectionWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>TumorSegmentSelectorWidget</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
-======= end
    <hints>
     <hint type="sourcelabel">
-<<<<<<< variant A
-     <x>282</x>
-     <y>449</y>
->>>>>>> variant B
      <x>481</x>
      <y>606</y>
-======= end
     </hint>
     <hint type="destinationlabel">
-<<<<<<< variant A
-     <x>477</x>
-     <y>449</y>
->>>>>>> variant B
      <x>301</x>
      <y>416</y>
-======= end
     </hint>
    </hints>
   </connection>
   <connection>
-<<<<<<< variant A
-   <sender>GridDivisionsDoubleSpinBox</sender>
-   <signal>valueChanged(double)</signal>
-   <receiver>GridDivisionsDoubleSlider</receiver>
-   <slot>setValue(double)</slot>
->>>>>>> variant B
    <sender>ResectionWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>frame_4</receiver>
    <slot>hide()</slot>
-======= end
+   ======= end
    <hints>
     <hint type="sourcelabel">
-<<<<<<< variant A
-     <x>485</x>
-     <y>407</y>
->>>>>>> variant B
      <x>481</x>
      <y>606</y>
-======= end
     </hint>
     <hint type="destinationlabel">
-<<<<<<< variant A
-     <x>285</x>
-     <y>407</y>
->>>>>>> variant B
      <x>224</x>
      <y>398</y>
-======= end
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>GridDivisionsDoubleSpinBox</sender>
+   <signal>valueChanged(double)</signal>
+   <receiver>GridDivisionsDoubleSlider</receiver>
+   <slot>setValue(double)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>485</x>
+     <y>407</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>285</x>
+     <y>407</y>
     </hint>
    </hints>
   </connection>
