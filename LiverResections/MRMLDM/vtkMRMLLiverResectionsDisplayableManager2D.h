@@ -111,10 +111,7 @@ vtkMRMLLiverResectionsDisplayableManager2D
 
 // Description:
 // Map relating resection nodes with helpers
-  std::map<vtkMRMLMarkupsBezierSurfaceNode*,
-           vtkSmartPointer<vtkMRMLLiverResectionsDisplayableManagerHelper2D> >
-    ResectionNodeHelperMap;
-
+  std::map<char*, vtkSmartPointer<vtkMRMLLiverResectionsDisplayableManagerHelper2D>> ResectionNodeHelperMap;
 // Description:
 // Deferred nodes
   vtkNew<vtkCollection> DeferredNodes;

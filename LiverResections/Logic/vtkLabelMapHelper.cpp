@@ -1,17 +1,42 @@
-/*===============================================================================
+/*==============================================================================
 
-  Project: Slicer-LiverResectionPlannig
-  Module: vtkLabelMapHelper.cxx
+ Distributed under the OSI-approved BSD 3-Clause License.
 
-  Contributors:
-  - Rafael Palomar <rafael.palomar@rr-research.no>
+  Copyright (c) Oslo University Hospital. All rights reserved.
 
-  Copyright (c) 2016, The Intervention Centre - Oslo University Hospital
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions
+  are met:
 
-  All rights reserved. This is propietary software. In no event shall
-  the author be liable for any claim or damages.
+  * Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
 
-  =============================================================================*/
+  * Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+
+  * Neither the name of Oslo University Hospital nor the names
+    of Contributors may be used to endorse or promote products derived
+    from this software without specific prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+  HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+  This file was originally developed by Rafael Palomar (Oslo University
+  Hospital and NTNU) and Ruoyan Meng (NTNU), and was supported by The
+  Research Council of Norway through the ALive project (grant nr. 311393).
+
+  ==============================================================================*/
+
 #include "vtkLabelMapHelper.h"
 
 // MRML includes
@@ -89,7 +114,7 @@ ProjectPointsOntoItkImage(vtkLabelMapHelper::LabelMapType::Pointer itkImage,
               << std::endl;
     return 0;
     }
-  if (points == NULL)
+  if (points == nullptr)
     {
     std::cerr << "ProjectPointsOntoItkImage: vtkPoints null pointer"
               << std::endl;
@@ -143,7 +168,7 @@ vtkLabelMapHelper::VolumeNodeToItkImage(vtkMRMLScalarVolumeNode *inVolumeNode,
                                         bool applyRasToLps)
 {
   // Check for null pointer
-  if (inVolumeNode == NULL)
+  if (inVolumeNode == nullptr)
     {
     std::cerr
         << "VolumeNodetoItkImage: Pointer to vtkMRMLScalarVolumeNode is NULL"
@@ -163,14 +188,14 @@ vtkLabelMapHelper::VolumeNodeToItkImage(vtkMRMLScalarVolumeNode *inVolumeNode,
     {
     rasToWorldTransformMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
     vtkMRMLTransformNode *inTransformNode = inVolumeNode->GetParentTransformNode();
-    if (inTransformNode != NULL)
+    if (inTransformNode != nullptr)
       {
       if (!inTransformNode->IsTransformToWorldLinear())
         {
         std::cerr
             <<  "VolumeNodeToItkImage: world transform is not linear"
             << std::endl;
-        throw NULL;
+        throw nullptr;
         }
       inTransformNode->GetMatrixTransformToWorld(rasToWorldTransformMatrix);
       }
@@ -204,12 +229,12 @@ vtkLabelMapHelper::vtkImageDataToItkImage(vtkImageData *inImageData,
                                           vtkMatrix4x4 *rasToLpsMatrix)
 {
   // Check for null pointer
-  if (inImageData == NULL)
+  if (inImageData == nullptr)
     {
     std::cerr
         << "vtkImageDataToItkImage: Pointer to vtkImageData is NULL"
         << std::endl;
-    throw NULL;
+    throw nullptr;
     }
 
   // Check for datatype
@@ -218,7 +243,7 @@ vtkLabelMapHelper::vtkImageDataToItkImage(vtkImageData *inImageData,
     std::cerr
         << "vtkImageDataToItkImage: input datatype is not VTK_SHORT"
         << std::endl;;
-    throw NULL;
+    throw nullptr;
     }
 
   typedef itk::ImportImageFilter<short, 3> ImportFilterType;
@@ -231,15 +256,15 @@ vtkLabelMapHelper::vtkImageDataToItkImage(vtkImageData *inImageData,
   coordinatesTransform->PostMultiply();
 
   // Check for transforms
-  if (inToRasMatrix != NULL)
+  if (inToRasMatrix != nullptr)
     {
     coordinatesTransform->Concatenate(inToRasMatrix);
     }
-  if (rasToWorldMatrix != NULL)
+  if (rasToWorldMatrix != nullptr)
     {
     coordinatesTransform->Concatenate(rasToWorldMatrix);
     }
-  if (rasToLpsMatrix != NULL)
+  if (rasToLpsMatrix != nullptr)
     {
     coordinatesTransform->Concatenate(rasToLpsMatrix);
     }
@@ -247,7 +272,7 @@ vtkLabelMapHelper::vtkImageDataToItkImage(vtkImageData *inImageData,
   // Set image spacing
   double spacing[3]={0.0};
   coordinatesTransform->GetScale(spacing);
-  if (rasToLpsMatrix != NULL)
+  if (rasToLpsMatrix != nullptr)
     {
     spacing[0] = spacing[0] < 0 ? -spacing[0] : spacing[0];
     spacing[1] = spacing[1] < 0 ? -spacing[1] : spacing[1];
@@ -319,10 +344,10 @@ vtkLabelMapHelper::ConvertItkImageToVtkImageData(vtkLabelMapHelper::LabelMapType
       itkImage->GetBufferedRegion();
   vtkLabelMapHelper::LabelMapType::SizeType imageSize =
       region.GetSize();
-  vtkLabelMapHelper::LabelMapType::SpacingType imageSpacing =
-      itkImage->GetSpacing();
-  vtkLabelMapHelper::LabelMapType::PointType origin =
-      itkImage->GetOrigin();
+//  vtkLabelMapHelper::LabelMapType::SpacingType imageSpacing =
+//      itkImage->GetSpacing();
+//  vtkLabelMapHelper::LabelMapType::PointType origin =
+//      itkImage->GetOrigin();
 
   int extent[6]={0, (int) imageSize[0]-1,
                  0, (int) imageSize[1]-1,
@@ -356,7 +381,7 @@ ConvertItkImageToVolumeNode(vtkLabelMapHelper::LabelMapType::Pointer itkImage,
     {
     std::cerr << "ConvertItkImageToVolumeNode: itkImage empty pointer"
               << std::endl;
-    return NULL;
+    return nullptr;
     }
 
   vtkSmartPointer<vtkMRMLScalarVolumeNode> outVolumeNode =
@@ -377,7 +402,7 @@ ConvertItkImageToVolumeNode(vtkLabelMapHelper::LabelMapType::Pointer itkImage,
 
   if (!outImageData)
     {
-    return NULL;
+    return nullptr;
     }
 
 

@@ -73,7 +73,7 @@ vtkStandardNewMacro (vtkMRMLLiverResectionsDisplayableManagerHelper2D);
 vtkMRMLLiverResectionsDisplayableManagerHelper2D::
 vtkMRMLLiverResectionsDisplayableManagerHelper2D()
 {
-  SliceNode = 0;
+  SliceNode = nullptr;
 }
 
 //---------------------------------------------------------------------------
@@ -170,6 +170,7 @@ void vtkMRMLLiverResectionsDisplayableManagerHelper2D
   this->ContourActor->GetProperty()->SetLineWidth(3);
   //actor->GetProperty()->SetLineWidth(2.0);
   renderer->AddActor2D(this->ContourActor.GetPointer());
+  std::cout<<"Add actor: "<<this->ContourActor.GetPointer()<<endl;
 
   this->UpdateCommand = vtkSmartPointer<vtkCallbackCommand>::New();
   this->UpdateCommand->SetCallback(vtkMRMLLiverResectionsDisplayableManagerHelper2D::UpdateSurfaceContour);
@@ -198,11 +199,11 @@ void vtkMRMLLiverResectionsDisplayableManagerHelper2D
     return;
     }
 
-  if (this->SliceNode != NULL)
+  if (this->SliceNode != nullptr)
     {
-    this->Cutter->SetInputData(NULL);
+    this->Cutter->SetInputData(nullptr);
     this->SliceNode->RemoveObserver(this->UpdateCommand.GetPointer());
-    renderer->RemoveActor(ContourActor.GetPointer());
+    renderer->RemoveActor(this->ContourActor.GetPointer());
     }
 }
 
@@ -251,12 +252,14 @@ void vtkMRMLLiverResectionsDisplayableManagerHelper2D
     this->UpdateCommand->SetCallback(vtkMRMLLiverResectionsDisplayableManagerHelper2D::UpdateSurfaceContour);
     this->UpdateCommand->SetClientData(this);
     this->SliceNode->AddObserver(vtkCommand::ModifiedEvent, this->UpdateCommand.GetPointer());
-    renderer->AddActor(ContourActor.GetPointer());
+    renderer->AddActor(this->ContourActor.GetPointer());
     }
   else
     {
     this->SliceNode->RemoveObserver(this->UpdateCommand.GetPointer());
-    renderer->RemoveActor(ContourActor.GetPointer());
+    renderer->RemoveActor(this->ContourActor.GetPointer());
+    std::cout<<node->GetID()<<endl;
+    std::cout<<"remove actor: "<<this->ContourActor.GetPointer()<<endl;
     }
 
 }

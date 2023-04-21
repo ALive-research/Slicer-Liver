@@ -15,9 +15,9 @@
     notice, this list of conditions and the following disclaimer in the
     documentation and/or other materials provided with the distribution.
 
-  * Neither the name of Oslo University Hospital nor the names of Contributors
-    may be used to endorse or promote products derived from this
-    software without specific prior written permission.
+  * Neither the name of Oslo University Hospital nor the names
+    of Contributors may be used to endorse or promote products derived
+    from this software without specific prior written permission.
 
   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
@@ -31,11 +31,11 @@
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  This file was originally developed by Rafael Palomar (Oslo University,
-  Hospital and NTNU) and was supported by The Research Council of Norway
-  through the ALive project (grant nr. 311393).
+  This file was originally developed by Rafael Palomar (Oslo University
+  Hospital and NTNU) and Ruoyan Meng (NTNU), and was supported by The
+  Research Council of Norway through the ALive project (grant nr. 311393).
 
-==============================================================================*/
+  ==============================================================================*/
 
 //NOTE: Some of the functions of this file are inspired in vtkSlicerMarkupsLogic
 
