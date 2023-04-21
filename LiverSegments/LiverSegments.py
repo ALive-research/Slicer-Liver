@@ -410,7 +410,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def getCurrentColor(self):
     color = [1, 1, 1, 1]
     index = self.ui.vascularTerritoryId.currentIndex
-    self.colormap.GetColor(index+53, color) # Vascular territory labels start on label 54
+    self.colormap.GetColor(index, color)
     del color[3:]
     return color
 
@@ -433,7 +433,9 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.vascularTerritoryId.addItem(idString)
       self.ui.vascularTerritoryId.setCurrentIndex(numItems)
     #Update color in selector
-    self.ui.ColorPickerButton.setColor(self.getCurrentColorQt());
+    self.ui.ColorPickerButton.setColor(self.getCurrentColorQt())
+    if(index !=0):
+      self.colormap.SetColorName(index, self.ui.vascularTerritoryId.currentText)
     self.onSegmentChanged()#Also generate new vessel segment point lists when changing territory id
 
   def onColorChanged(self):
