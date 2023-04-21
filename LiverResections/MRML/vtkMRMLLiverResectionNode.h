@@ -156,13 +156,6 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   void SetVascularSegmentsVolumeNode(vtkMRMLScalarVolumeNode *vascularSegmentsVolumeNode)
   {this->VascularSegmentsVolumeNode = vascularSegmentsVolumeNode; this->Modified();}
 
-  // Get Marker Style Volume
-  vtkMRMLScalarVolumeNode *GetMarkerStyleVolumeNode() const
-  { return this->MarkerStyleVolumeNode; }
-
-  // Set Marker Style Volume
-  void SetMarkerStyleVolumeNode(vtkMRMLScalarVolumeNode *markerStyleVolumeNode)
-  {this->MarkerStyleVolumeNode = markerStyleVolumeNode; this->Modified();}
   /// This is a function to set the initialization control points as vtkPoints.
   /// Since the expected number of points for the initialization is two, the
   /// function requires at least two points in the vtkPoints provided; if more
@@ -263,6 +256,15 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   // Set the widget visibility variable
   vtkSetMacro(GridThickness, float);
 
+  // Set the Grid3DVisibility state variable
+  vtkSetMacro(Grid3DVisibility, bool);
+
+  // Get the Grid3DVisibility state variable
+  vtkGetMacro(Grid3DVisibility, bool);
+
+  // Set the Grid3DVisibility state variable
+  vtkSetMacro(Grid3DVisibility, int);
+
   // Set the ShowResection2D state variable
   vtkSetMacro(ShowResection2D, bool);
 
@@ -289,6 +291,15 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
 
   // Set the EnableFlexibleBoundary state variable
   vtkSetMacro(EnableFlexibleBoundary, int);
+
+  // Set the Grid2DVisibility state variable
+  vtkSetMacro(Grid2DVisibility, bool);
+
+  // Get the Grid2DVisibility state variable
+  vtkGetMacro(Grid2DVisibility, bool);
+
+  // Set the Grid2DVisibility state variable
+  vtkSetMacro(Grid2DVisibility, int);
 
   // Get HepaticContourThickness margin
   vtkGetMacro(HepaticContourThickness, double);
@@ -341,7 +352,6 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   vtkWeakPointer<vtkMRMLModelNode> TargetOrganModelNode;
   vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolumeNode;
   vtkWeakPointer<vtkMRMLScalarVolumeNode> VascularSegmentsVolumeNode;
-  vtkWeakPointer<vtkMRMLScalarVolumeNode> MarkerStyleVolumeNode;
   vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode> BezierSurfaceNode;
   ResectionState State;
   InitializationMode InitMode;
@@ -361,8 +371,10 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   bool GridVisibility;
   float GridDivisions;
   float GridThickness;
+  bool Grid3DVisibility;
   bool ShowResection2D;
   bool EnableFlexibleBoundary;
+  bool Grid2DVisibility;
   double HepaticContourThickness; //Resection margin in mm
   double PortalContourThickness; //Uncertainty margin in mm
   float HepaticContourColor[3];

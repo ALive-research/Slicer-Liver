@@ -93,7 +93,6 @@ public:
   bool  ResectionClipOut;
   unsigned int GridDivisions;
   float GridThicknessFactor;
-  unsigned int MarkerStyleAvailable;
 };
 
 //------------------------------------------------------------------------------
@@ -175,7 +174,6 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
     "uniform int uResectionClipOut;\n"
     "uniform int uInterpolatedMargins;\n"
     "uniform int uGridDivisions;\n"
-    "uniform int uMarkerStyleAvailable;\n"
     "uniform float uGridThickness;\n"
     "in vec4 vertexWCVSOutput;\n"
     "in vec2 uvCoordsOutput;\n"
@@ -217,17 +215,30 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
     "   ambientColor = vec3(0.0);\n"
     "   diffuseColor = vec3(0.0);\n"
     "  }\n"
-    "  else if(uMarkerStyleAvailable == 1 && marker.a != 0){\n"
-    "    ambientColor = vec3(marker.r,marker.g,marker.b);\n"
-    "    diffuseColor = vec3(0.0);\n"
-    "  }\n"
     "  else{\n"
     "    ambientColor = uResectionColor;\n"
     "    diffuseColor = vec3(0.6);\n"
     "  }\n"
-    "}\n"
 
-    );
+    "  vec3 topLeftColor = vec3(0.0, 1.0, 0.067);\n"
+    "  vec3 topRightColor = vec3(1.0, 0.48, 0.0);\n"
+    "  vec3 bottomLeftColor = vec3(0.66666666667, 0.00392156863, 1.0);\n"
+    "  vec3 bottomRightColor = vec3(0.34117647058, 0.78039215686, 0.79607843137);\n"
+    "  float borderSize = 0.025;\n"
+    "  if ( (uvCoordsOutput.y > 0.5 && uvCoordsOutput.x < borderSize) || (uvCoordsOutput.y > 1.0 - borderSize && uvCoordsOutput.x < 0.5) ) {\n"
+    "    ambientColor = bottomLeftColor;\n"
+    "    diffuseColor = vec3(0.0);\n"
+    "  } else if ( (uvCoordsOutput.x < 0.5 && uvCoordsOutput.y < borderSize) || (uvCoordsOutput.x < borderSize && uvCoordsOutput.y < 0.5) ) {\n"
+    "    ambientColor = topLeftColor;\n"
+    "    diffuseColor = vec3(0.0);\n"
+    "  } else if ( (uvCoordsOutput.y > 0.5 && uvCoordsOutput.x > 1.0 - borderSize) || (uvCoordsOutput.y > 1.0 - borderSize && uvCoordsOutput.x > 0.5) ) {\n"
+    "    ambientColor = bottomRightColor;\n"
+    "    diffuseColor = vec3(0.0);\n"
+    "  } else if ((uvCoordsOutput.x > 0.5 && uvCoordsOutput.y < borderSize) || (uvCoordsOutput.x > 1.0 - borderSize && uvCoordsOutput.y < 0.5) ) {\n"
+    "    ambientColor = topRightColor;\n"
+    "    diffuseColor = vec3(0.0);\n"
+    "  }\n"
+    "}\n");
 
    vtkShaderProgram::Substitute(
     FSSource, "//VTK::Light::Impl",
@@ -344,11 +355,6 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetMapperShaderParameters(
   if (cellBO.Program->IsUniformUsed("uGridThickness"))
     {
     cellBO.Program->SetUniformf("uGridThickness", this->Impl->GridThicknessFactor);
-    }
-
-  if (cellBO.Program->IsUniformUsed("uMarkerStyleAvailable"))
-    {
-    cellBO.Program->SetUniformi("uMarkerStyleAvailable", this->Impl->MarkerStyleAvailable);
     }
 
   Superclass::SetMapperShaderParameters(cellBO, ren, actor);
@@ -510,19 +516,6 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetUncertaintyMarginColor(float red
   this->Impl->UncertaintyMarginColor[0] = red;
   this->Impl->UncertaintyMarginColor[1] = green;
   this->Impl->UncertaintyMarginColor[2] = blue;
-  this->Modified();
-}
-
-//------------------------------------------------------------------------------
-//unsigned int const* vtkOpenGLBezierResectionPolyDataMapper::GetMarkerStyleAvailable() const
-//{
-//  return this->Impl->MarkerStyleAvailable;
-//}
-
-//------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetMarkerStyleAvailable(unsigned int status)
-{
-  this->Impl->MarkerStyleAvailable = status;
   this->Modified();
 }
 

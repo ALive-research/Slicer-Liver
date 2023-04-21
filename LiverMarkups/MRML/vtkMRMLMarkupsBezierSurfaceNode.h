@@ -97,14 +97,6 @@ public:
   vtkMRMLScalarVolumeNode* GetVascularSegmentsVolumeNode() const
   {return this->VascularSegments;}
 
-  /// Set the Marker Style
-  void SetMarkerStyleVolumeNode(vtkMRMLScalarVolumeNode* volumeNode)
-  {this->MarkerStyle = volumeNode; this->Modified();}
-
-  /// Get the Marker Style
-  vtkMRMLScalarVolumeNode* GetMarkerStyleVolumeNode() const
-  {return this->MarkerStyle;}
-
   /// Get the distance map margin
   vtkGetMacro(ResectionMargin, double);
 
@@ -142,7 +134,6 @@ private:
  vtkWeakPointer<vtkMRMLModelNode> Target;
  vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMap;
  vtkWeakPointer<vtkMRMLScalarVolumeNode> VascularSegments;
- vtkWeakPointer<vtkMRMLScalarVolumeNode> MarkerStyle;
  double ResectionMargin;
  double UncertaintyMargin;
  double HepaticContourThickness;

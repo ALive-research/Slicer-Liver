@@ -190,6 +190,10 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.distanceMapsWidget = slicer.util.childWidgetVariables(distanceMapsUI)
     self.resectionsWidget = slicer.util.childWidgetVariables(resectionsUI)
     self.resectogramWidget = slicer.util.childWidgetVariables(resectogramUI)
+    iconsPath = os.path.join(os.path.dirname(__file__), 'Resources/Icons')
+    iconStyle = "QCheckBox::indicator:unchecked {{ image: url({0}/SlicerInvisible.png);}}\n QCheckBox::indicator:checked {{ image: url({1}/SlicerVisible.png);}}".format(iconsPath,iconsPath)
+    self.resectogramWidget.Grid2DVisibility.setStyleSheet(iconStyle)
+    self.resectionsWidget.Grid3DVisibility.setStyleSheet(iconStyle)
 
     # Add LiverSegmentsWidget
     wrapperWidget = slicer.qMRMLWidget()
@@ -224,7 +228,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.distanceMapsWidget.SegmentationSelectorComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.distanceMapsWidget.OutputDistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onDistanceMapParameterChanged)
     self.distanceMapsWidget.OutputDistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
-    self.distanceMapsWidget.DownSampleCheckBox.connect('stateChanged(int)', self.onDownSampleCheckBoxChanged)
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.connect('clicked(bool)', self.onComputeDistanceMapButtonClicked)
     self.resectionsWidget.CurvedRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.CurvedRadioButton))
     self.resectionsWidget.FlatRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.FlatRadioButton))
@@ -235,9 +238,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.DistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionDistanceMapNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'Computed', 'True')
-    self.resectionsWidget.MarkerStyleNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onMarkerStyleNodeChanged)
-    self.resectionsWidget.MarkerStyleNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
-    self.resectionsWidget.MarkerStyleNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'Computed', 'True')
     self.resectionsWidget.LiverSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onResectionLiverModelNodeChanged)
     self.resectionsWidget.LiverSegmentSelectorWidget.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionLiverSegmentationNodeChanged)
     self.resectionsWidget.ResectionColorPickerButton.connect('colorChanged(QColor)', self.onResectionColorChanged)
@@ -248,6 +248,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.ResectionGridColorPickerButton.connect('colorChanged(QColor)', self.onResectionGridColorChanged)
     self.resectionsWidget.GridDivisionsDoubleSlider.connect('valueChanged(double)', self.onGridDivisionsChanged)
     self.resectionsWidget.GridThicknessDoubleSlider.connect('valueChanged(double)', self.onGridThicknessChanged)
+    self.resectionsWidget.Grid3DVisibility.connect('stateChanged(int)', self.onGrid3DVisibilityChanged)
     self.resectionsWidget.ResectionLockCheckBox.connect('stateChanged(int)', self.onResectionLockChanged)
     self.resectionsWidget.UncertaintyMarginSpinBox.connect('valueChanged(double)', self.onUncertaintyMarginChanged)
     self.resectionsWidget.UncertaintyMarginColorPickerButton.connect('colorChanged(QColor)', self.onUncertaintyMarginColorChanged)
@@ -256,6 +257,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectogramWidget.Resection2DCheckBox.connect('stateChanged(int)', self.onResection2DChanged)
     self.resectogramWidget.MirrorDisplayCheckBox.connect('stateChanged(int)', self.onMirrorDisplayCheckBoxChanged)
     self.resectogramWidget.FlexibleBoundaryCheckBox.connect('stateChanged(int)', self.onFlexibleBoundaryCheckBoxChanged)
+    self.resectogramWidget.Grid2DVisibility.connect('stateChanged(int)', self.onGrid2DVisibilityChanged)
     self.resectogramWidget.HepaticContourThicknessSpinBox.connect('valueChanged(double)', self.onHepaticContourThicknessChanged)
     self.resectogramWidget.HepaticContourColorPickerButton.connect('colorChanged(QColor)', self.onHepaticContourColorChanged)
     self.resectogramWidget.PortalContourThicknessSpinBox.connect('valueChanged(double)', self.onPortalContourThicknessChanged)
@@ -411,11 +413,6 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.numComps = 4 - [node1, node2, node3, node4, node5].count(None)
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.setEnabled(None not in [node1, node2, node5])
 
-  def onDownSampleCheckBoxChanged(self):
-    """
-    This function is triggered when downsampling is enabled
-    """
-    self.distanceMapsWidget.DownsamplingRateGroupBox.setEnabled(self.distanceMapsWidget.DownSampleCheckBox.isChecked())
 
   def onResectionNodeChanged(self):
     """
@@ -438,16 +435,11 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectionsWidget.LiverSegmentSelectorWidget.blockSignals(False)
 
         self.resectionsWidget.DistanceMapNodeComboBox.blockSignals(True)
-        self.resectionsWidget.DistanceMapNodeComboBox.setCurrentNode(
-          activeResectionNode.GetDistanceMapVolumeNode())
+        self.resectionsWidget.DistanceMapNodeComboBox.setCurrentNode(activeResectionNode.GetDistanceMapVolumeNode())
         self.resectionsWidget.DistanceMapNodeComboBox.blockSignals(False)
 
-        self.resectionsWidget.MarkerStyleNodeComboBox.blockSignals(True)
-        self.resectionsWidget.MarkerStyleNodeComboBox.setCurrentNode(activeResectionNode.GetMarkerStyleVolumeNode())
-        self.resectionsWidget.MarkerStyleNodeComboBox.blockSignals(False)
-
         self.resectogramWidget.VascularSegmentsNodeComboBox.blockSignals(True)
-        self.resectogramWidget.VascularSegmentsNodeComboBox.setCurrentNode(activeResectionNode.GetDistanceMapVolumeNode())
+        self.resectogramWidget.VascularSegmentsNodeComboBox.setCurrentNode(activeResectionNode.GetVascularSegmentsVolumeNode())
         self.resectogramWidget.VascularSegmentsNodeComboBox.blockSignals(False)
 
         self.resectogramWidget.HepaticContourColorPickerButton.blockSignals(True)
@@ -553,14 +545,15 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         if renderers.GetNumberOfItems() == 5:
           renderers.RemoveItem(4)
         self.resectogramWidget.Resection2DCheckBox.setCheckState(0)
+        self.resectogramWidget.Resection2DCheckBox.setEnabled(0)
         self._currentResectionNode.SetShowResection2D(False)
 
     self._currentResectionNode = activeResectionNode
 
   def onResectionDistanceMapNodeChanged(self):
     """
-This function is called when the resection distance map selector changes
-"""
+    This function is called when the resection distance map selector changes
+    """
     if self._currentResectionNode is not None:
       distanceMapNode = self.resectionsWidget.DistanceMapNodeComboBox.currentNode()
       self._currentResectionNode.SetTextureNumComps(self.numComps)
@@ -569,14 +562,6 @@ This function is called when the resection distance map selector changes
       self.resectionsWidget.UncertaintyMarginGroupBox.setEnabled(distanceMapNode is not None)
       self.resectionsWidget.ResectionPreviewGroupBox.setEnabled(distanceMapNode is not None)
       self.resectogramWidget.Resection2DCheckBox.setEnabled(distanceMapNode is not None)
-
-  def onMarkerStyleNodeChanged(self):
-    """
-    This function is called when the Marker Style selector changes
-    """
-    if self._currentResectionNode is not None:
-      MarkerStyleNode = self.resectionsWidget.MarkerStyleNodeComboBox.currentNode()
-      self._currentResectionNode.SetMarkerStyleVolumeNode(MarkerStyleNode)
 
   def onResectionLiverSegmentationNodeChanged(self):
     self.resectionsWidget.LiverSegmentSelectorWidget.blockSignals(True)
@@ -723,12 +708,9 @@ This function is called when the resection distance map selector changes
     # threeDView = threeDWidget.threeDView()
     # threeDView.resetFocalPoint()
 
-    enableDownsampling = self.distanceMapsWidget.DownSampleCheckBox.isChecked()
-    if enableDownsampling:
-      downSamplingRate = self.distanceMapsWidget.DownsamplingRateSpinBox.value
-      self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode, enableDownsampling, downSamplingRate)
-    else:
-      self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode, enableDownsampling)
+    downSamplingRate = self.distanceMapsWidget.DownsamplingRateSpinBox.value
+    self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode, downSamplingRate)
+
 
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
@@ -817,6 +799,13 @@ This function is called when the resection distance map selector changes
     if self._currentResectionNode is not None:
       self._currentResectionNode.SetGridThickness(self.resectionsWidget.GridThicknessDoubleSlider.value)
 
+  def onGrid3DVisibilityChanged(self):
+    """
+    This function is called when the EnableGrid checkbox changes.
+    """
+    if self._currentResectionNode:
+      self._currentResectionNode.SetGrid3DVisibility(self.resectionsWidget.Grid3DVisibility.isChecked())
+
   def onResection2DChanged(self):
     """
     This function is called when the resection2D checkbox changes.
@@ -829,6 +818,7 @@ This function is called when the resection distance map selector changes
         self.resectogramWidget.PortalContourGroupBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.VsacularSegmentsGroupBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.FlexibleBoundaryCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
+      self.resectogramWidget.Grid2DVisibility.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.MirrorDisplayCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
       if self.resectogramWidget.Resection2DCheckBox.isChecked() == 0 and renderers.GetNumberOfItems() == 5:
@@ -853,10 +843,17 @@ This function is called when the resection distance map selector changes
 
   def onFlexibleBoundaryCheckBoxChanged(self):
     """
-    This function is called when the resection2D checkbox changes.
+    This function is called when the EnableFlexibleBoundary checkbox changes.
     """
     if self._currentResectionNode:
       self._currentResectionNode.SetEnableFlexibleBoundary(self.resectogramWidget.FlexibleBoundaryCheckBox.isChecked())
+
+  def onGrid2DVisibilityChanged(self):
+    """
+    This function is called when the EnableGrid checkbox changes.
+    """
+    if self._currentResectionNode:
+      self._currentResectionNode.SetGrid2DVisibility(self.resectogramWidget.Grid2DVisibility.isChecked())
 
   def onHepaticContourThicknessChanged(self):
     """
@@ -937,7 +934,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     """
     ScriptedLoadableModuleLogic.__init__(self)
 
-  def computeDistanceMaps(self, tumorNode, parenchymaNode, hepaticNode, portalNode, outputNode, enableDownsampling=0, downSamplingRate=1):
+  def computeDistanceMaps(self, tumorNode, parenchymaNode, hepaticNode, portalNode, outputNode, downSamplingRate=1):
 
     if outputNode is not None:
       import sitkUtils
@@ -975,7 +972,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
         logging.debug("Computing Portal Distance Map...")
 
       #Combine distance maps
-      if enableDownsampling:
+      if downSamplingRate != 1:
         imageSize = tumorImage.GetSize()
         newSize = [round(i/downSamplingRate) for i in imageSize]
         tumorDistanceImageDown =  self.imageResample( tumorDistanceImage, [newSize[0],newSize[1],newSize[2]], "linear")

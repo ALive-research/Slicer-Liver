@@ -59,9 +59,9 @@ vtkMRMLLiverResectionNode::vtkMRMLLiverResectionNode()
    ResectionMargin(0.0), UncertaintyMargin(0.0), ClipOut(false), WidgetVisibility(true),
    InterpolatedMargins(false), ResectionColor{1.0f, 1.0f, 1.0f},
    ResectionMarginColor{1.0f, 0.0f, 0.0f}, UncertaintyMarginColor{1.0f, 1.0f, 0.0f},
-   ResectionOpacity(1.0f), GridVisibility(false), GridThickness(0.0f), ShowResection2D(false), HepaticContourThickness(0.0), PortalContourThickness(0.0),
+   ResectionOpacity(1.0f), GridVisibility(false), GridThickness(0.0f), ShowResection2D(false), HepaticContourThickness(0.3f), PortalContourThickness(0.3f),
    HepaticContourColor{0.0f, 151.0/255.0f, 206.0/255.0f}, PortalContourColor{216.0/255.0f, 101.0/255.0f, 79.0/255.0f},
-   TextureNumComps(0), EnableFlexibleBoundary(false), MirrorDisplay(false)
+   TextureNumComps(0), EnableFlexibleBoundary(false), MirrorDisplay(false), Grid3DVisibility(true), Grid2DVisibility(false)
 {
 }
 

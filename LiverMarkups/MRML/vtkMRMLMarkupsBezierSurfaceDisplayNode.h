@@ -79,6 +79,17 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsBezierSurfaceDisp
   void SetClipOut(int value)
   { this->ClipOut = value!=0?1:0; this->Modified();}
 
+  /// Set the Grid3DVisibility state variable
+  vtkSetMacro(Grid3DVisibility, bool);
+  /// Get the Grid2DVisibility state variable
+  vtkGetMacro(Grid3DVisibility, bool);
+  /// Get the Grid2DVisibility state variable as integer
+  int GetGrid3DVisibility() const
+  { return static_cast<int>(this->Grid3DVisibility);}
+  /// set the Grid2DVisibility state variable as integer
+  void SetGrid3DVisibility(int value)
+  { this->Grid3DVisibility = value!=0?1:0; this->Modified();}
+
   /// Set the Resection2D state variable
   vtkSetMacro(ShowResection2D, bool);
   /// Get the Resection2D state variable
@@ -90,25 +101,36 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsBezierSurfaceDisp
   void SetShowResection2D(int value)
   { this->ShowResection2D = value!=0?1:0; this->Modified();}
 
-  /// Set the Resection2D state variable
+  /// Set the EnableFlexibleBoundary state variable
   vtkSetMacro(EnableFlexibleBoundary, bool);
-  /// Get the Resection2D state variable
+  /// Get the EnableFlexibleBoundary state variable
   vtkGetMacro(EnableFlexibleBoundary, bool);
-  /// Get the Resection2D state variable as integer
+  /// Get the EnableFlexibleBoundary state variable as integer
   int GetEnableFlexibleBoundary() const
   { return static_cast<int>(this->EnableFlexibleBoundary);}
-  /// set the Resection2D state variable as integer
+  /// set the EnableFlexibleBoundary state variable as integer
   void SetEnableFlexibleBoundary(int value)
   { this->EnableFlexibleBoundary = value!=0?1:0; this->Modified();}
 
-  /// Set the Resection2D state variable
+  /// Set the Grid2DVisibility state variable
+  vtkSetMacro(Grid2DVisibility, bool);
+  /// Get the Grid2DVisibility state variable
+  vtkGetMacro(Grid2DVisibility, bool);
+  /// Get the Grid2DVisibility state variable as integer
+  int GetGrid2DVisibility() const
+  { return static_cast<int>(this->Grid2DVisibility);}
+  /// set the Grid2DVisibility state variable as integer
+  void SetGrid2DVisibility(int value)
+  { this->Grid2DVisibility = value!=0?1:0; this->Modified();}
+
+  /// Set the MirrorDisplay state variable
   vtkSetMacro(MirrorDisplay, bool);
-  /// Get the Resection2D state variable
+  /// Get the MirrorDisplay state variable
   vtkGetMacro(MirrorDisplay, bool);
-  /// Get the Resection2D state variable as integer
+  /// Get the MirrorDisplay state variable as integer
   int GetMirrorDisplay() const
   { return static_cast<int>(this->MirrorDisplay);}
-  /// set the Resection2D state variable as integer
+  /// set the MirrorDisplay state variable as integer
   void SetMirrorDisplay(int value)
   { this->MirrorDisplay = value!=0?1:0; this->Modified();}
 
@@ -180,11 +202,13 @@ protected:
   float ResectionOpacity;
   float GridDivisions;
   float GridThickness;
+  bool Grid3DVisibility;
   bool ShowResection2D;
   float HepaticContourColor[3];
   float PortalContourColor[3];
   int TextureNumComps;
   bool EnableFlexibleBoundary;
+  bool Grid2DVisibility;
   bool MirrorDisplay;
 
 protected:
