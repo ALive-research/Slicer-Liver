@@ -40,6 +40,9 @@
           <property name="currentIndex">
            <number>0</number>
           </property>
+          <property name="insertPolicy">
+           <enum>QComboBox::InsertAtCurrent</enum>
+          </property>
           <item>
            <property name="text">
             <string>Create new territory ID</string>
