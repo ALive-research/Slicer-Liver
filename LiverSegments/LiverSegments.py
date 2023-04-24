@@ -149,7 +149,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #        self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
 
     # Buttons
-    self.ui.addSegmentButton.connect('clicked(bool)', self.onAddSegmentButton)
+    self.ui.addSegmentButton.connect('clicked(bool)', self.onAddCenterlineButton)
+    self.ui.addSegmentationButton.connect('clicked(bool)', self.onAddSegmentationButton)
     self.ui.calculateSegmentsButton.connect('clicked(bool)', self.onCalculateSegmentButton)
     self.ui.ColorPickerButton.connect('colorChanged(QColor)', self.onColorChanged)
     self.ui.showHideButton.connect('clicked(bool)', self.onShowHideButton)
@@ -451,7 +452,12 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     color = self.ui.ColorPickerButton.color
     self.colormap.SetColor(colorIndex, color.redF(), color.greenF(), color.blueF()) #Update index color in colormap.
 
-  def onAddSegmentButton(self):
+  def onAddCenterlineButton(self):
+    self.onAddCenterline()
+  def onAddSegmentationButton(self):
+    self.onAddCenterline(addSegmentationInsteadOfLine = True)
+
+  def onAddCenterline(self, addSegmentationInsteadOfLine = False):
     endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
     self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
     endPointsMarkupsNode.SetAttribute("SegmentIndex", str(self.ui.vascularTerritoryId.currentIndex))
@@ -473,19 +479,22 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         logging.error("Error: Failed to generate centerline model")
 
     try:
+      if(addSegmentationInsteadOfLine):
+        mergedLines = self.mergePolydata(centerlineModelNode.GetMesh(), preprocessedPolyData)
+      else:
         centerlineProcessingLogic = self.logic.getCenterlineLogic()
         centerlinePolyData, voronoiDiagramPolyData = centerlineProcessingLogic.extractCenterline(preprocessedPolyData, endPointsMarkupsNode)
-
         decimatedCenterlinePolyData = self.logic.decimateLine(centerlinePolyData)
         mergedLines = self.mergePolydata(centerlineModelNode.GetMesh(), decimatedCenterlinePolyData)
-        centerlineModelNode.SetAndObserveMesh(mergedLines)
 
-        centerlineModelNode.CreateDefaultDisplayNodes()
-        self.useColorFromSelector(centerlineModelNode)
-        centerlineModelNode.GetDisplayNode().SetLineWidth(3)
-        endPointsMarkupsNode.SetDisplayVisibility(False)
+      centerlineModelNode.SetAndObserveMesh(mergedLines)
+
+      centerlineModelNode.CreateDefaultDisplayNodes()
+      self.useColorFromSelector(centerlineModelNode)
+      centerlineModelNode.GetDisplayNode().SetLineWidth(3)
+      endPointsMarkupsNode.SetDisplayVisibility(False)
     except ValueError:
-        logging.error("Error: Failed to extract centerline")
+      logging.error("Error: Failed to extract centerline")
 
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
