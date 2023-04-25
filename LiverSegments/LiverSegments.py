@@ -181,6 +181,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if endPointsMarkupsNode is None:
       endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.addNode()
       self.ui.endPointsMarkupsSelector.setCurrentNode(endPointsMarkupsNode)
+    self.ui.endPointsMarkupsSelector.baseName = self.getVesselSegmentName()
     logging.info('currentNode: ' + self.ui.endPointsMarkupsSelector.currentNode().GetName())
     self.refreshShowHideButton()
     endPointsMarkupsNode.SetDisplayVisibility(True)#Show current markup points
@@ -398,9 +399,15 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return name
 
   def newEndpointsListCreated(self):
-    endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
-    endPointsMarkupsNode.SetName(self.getVesselSegmentName())
+    #Set baseName, and use this to create new unique names if endPointsMarkupsNode with this name already exist
+    newName = self.getVesselSegmentName()
     self.updateSelectorColor()
+    if(self.ui.endPointsMarkupsSelector.baseName == newName):
+      return
+    self.ui.endPointsMarkupsSelector.baseName = newName
+
+    endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
+    endPointsMarkupsNode.SetName(newName)
     self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(True)
 
   def updateSelectorColor(self):
