@@ -447,7 +447,10 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       idString = "Vascular Territory Map ID " + str(numItems)
       self.ui.selectedVascularTerritoryMapId.addItem(idString)
       self.ui.selectedVascularTerritoryMapId.setCurrentIndex(numItems)
-
+    else:
+      idString = "Vascular_Territory_Map_" + str(index)
+      labelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName(idString)
+      slicer.util.setSliceViewerLayers(label=labelmapVolumeNode)
 
   def onColorChanged(self):
     colorIndex = self.ui.vascularTerritoryId.currentIndex
