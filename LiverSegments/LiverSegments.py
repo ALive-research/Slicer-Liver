@@ -138,8 +138,10 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #self.ui.endPointsMarkupsSelector.connect('nodeAdded(vtkMRMLNode*)', self.newEndpointsListCreated)
     self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.segmentationNodeSelected)
     self.ui.vascularTerritoryId.connect('currentIndexChanged(int)', self.onVascularTerritoryIdChanged)
+    self.ui.selectedVascularTerritoryMapId.connect('currentIndexChanged(int)', self.onselectedVascularTerritoryMapIdChanged)
 
     self.onVascularTerritoryIdChanged()
+    self.onselectedVascularTerritoryMapIdChanged()
     #self.ui.endPointsMarkupsSelector.setEnabled(False)#Disable selector for now, as the lists are automatically managed
 
     #TODO: Store all GUI settings
@@ -149,7 +151,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Buttons
     self.ui.addSegmentButton.connect('clicked(bool)', self.onAddSegmentButton)
-    self.ui.calculateSegmentsButton.connect('clicked(bool)', self.onCalculateSegmentButton)
+    self.ui.calculateVascularTerritoryMapButton.connect('clicked(bool)', self.onCalculateVascularTerritoryMapButton)
     self.ui.ColorPickerButton.connect('colorChanged(QColor)', self.onColorChanged)
     self.ui.showHideButton.connect('clicked(bool)', self.onShowHideButton)
 
@@ -437,6 +439,16 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.ColorPickerButton.setColor(self.getCurrentColorQt());
     self.onSegmentChanged()#Also generate new vessel segment point lists when changing territory id
 
+  def onselectedVascularTerritoryMapIdChanged(self):
+    index = self.ui.selectedVascularTerritoryMapId.currentIndex
+    #Add new label Map ID
+    if(index == 0):
+      numItems = self.ui.selectedVascularTerritoryMapId.count
+      idString = "Vascular Territory Map ID " + str(numItems)
+      self.ui.selectedVascularTerritoryMapId.addItem(idString)
+      self.ui.selectedVascularTerritoryMapId.setCurrentIndex(numItems)
+
+
   def onColorChanged(self):
     colorIndex = self.ui.vascularTerritoryId.currentIndex
     color = self.ui.ColorPickerButton.color
@@ -488,7 +500,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     combinedPolyData.Update()
     return combinedPolyData.GetOutput()
 
-  def onCalculateSegmentButton(self):
+  def onCalculateVascularTerritoryMapButton(self):
     if self.developerMode is True:
       import time
       startTime = time.time()
@@ -503,7 +515,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
 
     try:
-        self.logic.calculateVascularSegments(refVolumeNode, segmentationNode, centerlineModel, self.colormap)
+        index = self.ui.vascularTerritoryId.currentIndex - 1
+        self.logic.calculateVascularTerritoryMap(index, refVolumeNode, segmentationNode, centerlineModel, self.colormap)
     except ValueError:
         logging.error("Error: Failing when calculating vascular segments")
 
@@ -581,11 +594,12 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     self.scl.InitializeCenterlineSearchModel(centerlineModel)
     return centerlineModel
 
-  def calculateVascularSegments(self, refVolume, segmentation, centerlineModel, colormap):
+  def calculateVascularTerritoryMap(self, index, refVolume, segmentation, centerlineModel, colormap):
     segmentationIds = vtk.vtkStringArray()
-    labelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("VascularSegments")
+    idString = "Vascular_Territory_Map_" + str(index)
+    labelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName(idString)
     if not labelmapVolumeNode:
-        labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "VascularSegments")
+        labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", idString)
     else:
       labelmapVolumeNode.Reset(None)#Existing color table will be overwritten by ExportSegmentsToLabelmapNode
 
