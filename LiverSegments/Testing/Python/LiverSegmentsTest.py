@@ -35,7 +35,8 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
 
     refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
     segmentation = self.createEmptyvtkMRMLSegmentationNode()
-    logic.calculateVascularSegments(refVolumeNode, segmentation, centerlineModel, colormap)
+    index = 1
+    logic.calculateVascularTerritoryMap(index, refVolumeNode, segmentation, centerlineModel, colormap)
 
     node1, node2 = self.create2EmptyMarkupsFiducialNodes()
     logic.copyIndex(node1, node2)
