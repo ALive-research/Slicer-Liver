@@ -120,7 +120,6 @@ ProjectPointsOntoItkImage(vtkLabelMapHelper::LabelMapType::Pointer itkImage,
               << std::endl;
     return 0;
     }
-
   vtkLabelMapHelper::LabelMapType::IndexType index;
   vtkLabelMapHelper::LabelMapType::PointType point;
   vtkLabelMapHelper::LabelMapType::SizeType _radius = {1,1,1};
@@ -130,7 +129,6 @@ ProjectPointsOntoItkImage(vtkLabelMapHelper::LabelMapType::Pointer itkImage,
   NeighborhoodIterator neighborhoodIterator(_radius,
                                             itkImage,
                                             itkImage->GetRequestedRegion());
-
   unsigned int projectedPoints = 0;
   for(unsigned int i=0; i<points->GetNumberOfPoints(); ++i)
     {
@@ -157,7 +155,6 @@ ProjectPointsOntoItkImage(vtkLabelMapHelper::LabelMapType::Pointer itkImage,
         }
       }
     }
-
   return projectedPoints;
 }
 
@@ -496,6 +493,5 @@ vtkLabelMapHelper::GetBoundingBox(vtkLabelMapHelper::LabelMapType::Pointer itkIm
   ImageMaskSpatialObjectType::Pointer imageMaskSpatialObject =
       ImageMaskSpatialObjectType::New();
   imageMaskSpatialObject->SetImage(castFilter->GetOutput());
-
   return imageMaskSpatialObject->GetAxisAlignedBoundingBoxRegion();
 }

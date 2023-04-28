@@ -1045,15 +1045,9 @@ char *vtkSlicerLiverResectionsLogic::LoadLiverResectionFromFcsv(const std::strin
   return nodeID;
 }
 
-//----------------------------------------------------------------------
-void vtkSlicerLiverResectionsLogic::ComputePlanningVolumetry(vtkMRMLLiverResectionNode* resectionNode,
-                                                             vtkMRMLScalarVolumeNode* parenchymaLabelMap, vtkMRMLMarkupsFiducialNode* tumorMarkerNode, vtkMRMLTableNode* OutputTableNode,
-                                                             vtkMRMLLabelMapVolumeNode* VascularSegments, vtkMRMLMarkupsFiducialNode* ROIMarkersList){
-
-  vtkSmartPointer<vtkImageData> projectedResectionImageData = vtkSmartPointer<vtkImageData>::New();
-  vtkSmartPointer<vtkMRMLScalarVolumeNode> projectedResectionLabelMap = vtkSmartPointer<vtkMRMLScalarVolumeNode>::New();
-  vtkSmartPointer<vtkLabelMapHelper> labelMapHelper = vtkSmartPointer<vtkLabelMapHelper>::New();
-  vtkLabelMapHelper::LabelMapType::RegionType parenchymaROI;
+void vtkSlicerLiverResectionsLogic::ComputeAdvancedPlanningVolumetry(vtkCollection* resectionNodes, vtkMRMLScalarVolumeNode* TargetSegmentLabelMap, vtkMRMLTableNode* OutputTableNode, vtkMRMLMarkupsFiducialNode* ROIMarkersList, vtkMRMLLabelMapVolumeNode* VascularSegments)
+{
+  vtkLabelMapHelper::LabelMapType::RegionType TargetSegmentBoundingBox;
   double spacing[3];
   auto VolumeTable = vtkSmartPointer<vtkTable>::New();
 
@@ -1064,7 +1058,429 @@ void vtkSlicerLiverResectionsLogic::ComputePlanningVolumetry(vtkMRMLLiverResecti
                     << "create and choose a table node first");
     return;
     }
-  else if(this->OutputTableNode != OutputTableNode)
+
+  if(this->OutputTableNode != OutputTableNode)
+    {
+    OutputTableNodeChanged = true;
+    this->OutputTableNode = vtkSmartPointer<vtkMRMLTableNode>::New();
+    this->OutputTableNode = OutputTableNode;
+    }
+
+  VolumeTable = this->OutputTableNode->GetTable();
+
+  // Project segment from vtkImage to itkImage
+  bool TargetSegmentLabelMapChanged = false;
+  if(this->TargetSegmentLabelMap != TargetSegmentLabelMap){
+    this->TargetSegmentLabelMap = TargetSegmentLabelMap;
+    TargetSegmentLabelMapChanged = true;
+    this->ProjectedTargetSegmentImage = vtkLabelMapHelper::VolumeNodeToItkImage(this->TargetSegmentLabelMap , true, false);
+    }
+
+
+  bool resectionNodeChanged = false;
+  auto BezierHR = vtkSmartPointer<vtkBezierSurfaceSource>::New();
+
+  if (resectionNodes->GetNumberOfItems() == 1)
+    {
+    auto resectionNode =  vtkMRMLLiverResectionNode::SafeDownCast(resectionNodes->GetNextItemAsObject());
+    if(this->resectionNode != resectionNode){
+      this->resectionNode = vtkSmartPointer<vtkMRMLLiverResectionNode>::New();
+      this->resectionNode = resectionNode;
+      resectionNodeChanged = true;
+      BezierHR = GenerateBezierSurface(300, this->resectionNode);
+      this->ProjectedTargetSegmentImage = vtkLabelMapHelper::VolumeNodeToItkImage(this->TargetSegmentLabelMap , true, false);
+      vtkLabelMapHelper::ProjectPointsOntoItkImage(this->ProjectedTargetSegmentImage,BezierHR->GetOutput()->GetPoints(),7, 1);
+      }
+    }
+  else
+    {
+    this->ProjectedTargetSegmentImage = vtkLabelMapHelper::VolumeNodeToItkImage(this->TargetSegmentLabelMap , true, false);
+    for (int i = 0; i < resectionNodes->GetNumberOfItems(); i++){
+      BezierHR = GenerateBezierSurface(300, this->resectionNode);
+      vtkLabelMapHelper::ProjectPointsOntoItkImage(this->ProjectedTargetSegmentImage,BezierHR->GetOutput()->GetPoints(),7, 1);
+      }
+    }
+
+  vtkLabelMapHelper::LabelMapType::Pointer TargetSegmentITKImage = vtkLabelMapHelper::VolumeNodeToItkImage(this->TargetSegmentLabelMap);
+  TargetSegmentBoundingBox = vtkLabelMapHelper::GetBoundingBox(TargetSegmentITKImage);
+  unsigned int TargetSegmentVoxels = vtkLabelMapHelper::CountVoxels(TargetSegmentITKImage,TargetSegmentBoundingBox,1);
+  spacing[0] = TargetSegmentITKImage->GetSpacing()[0];
+  spacing[1] = TargetSegmentITKImage->GetSpacing()[1];
+  spacing[2] = TargetSegmentITKImage->GetSpacing()[2];
+
+  if (ROIMarkersList)
+    {
+    if(resectionNodes->GetNumberOfItems() > 1){
+      this->connectedThreshold = nullptr;
+      int ReplaceValue = 100;
+      std::vector<int> CountValues;
+      auto num = ROIMarkersList->GetNumberOfControlPoints();
+      for (int i = 0; i < num; i++)
+        {
+        auto point = ROIMarkersList->GetNthControlPointPosition(i);
+        int Re = GetITKRGSeedIndex( point, ReplaceValue);
+        if (Re != ReplaceValue){
+          CountValues.push_back(vtkLabelMapHelper::CountVoxels(this->connectedThreshold,TargetSegmentBoundingBox, ReplaceValue));
+          ReplaceValue = Re;
+          }
+        }
+
+      auto ROIVoxels = std::reduce(CountValues.begin(), CountValues.end());
+
+      auto TargetSegmentVolume = TargetSegmentVoxels*spacing[0]*spacing[1]*spacing[2]*0.001;
+      auto ROIVolume = ROIVoxels*spacing[0]*spacing[1]*spacing[2]*0.001;
+      auto RemnantVolume = TargetSegmentVolume - ROIVolume;
+      VolumetryTable("ROIs", TargetSegmentVolume, ROIVolume, VolumeTable);
+      }
+    }
+
+  if (VascularSegments)
+    {
+    if (this->VascularSegments != VascularSegments)
+      {
+      this->VascularSegments = vtkSmartPointer<vtkMRMLLabelMapVolumeNode>::New();
+      this->VascularSegments = VascularSegments;
+      this->itkVascularSegments = nullptr;
+      this->itkVascularSegments = vtkLabelMapHelper::VolumeNodeToItkImage(this->VascularSegments);
+      this->itkVascularSegments->SetRequestedRegion(TargetSegmentBoundingBox);
+      typedef itk::ImageRegionConstIterator<itk::Image<short, 3> > IteratorType;
+      IteratorType iterator(this->itkVascularSegments, this->itkVascularSegments->GetRequestedRegion());
+      using LabelImageToLabelMapFilterType = itk::LabelImageToLabelMapFilter<itk::Image<short, 3>>;
+      auto labelImageToLabelMapFilter = LabelImageToLabelMapFilterType::New();
+      labelImageToLabelMapFilter->SetInput(this->itkVascularSegments);
+      labelImageToLabelMapFilter->Update();
+      auto labels = labelImageToLabelMapFilter->GetOutput()->GetLabels();
+      this->VascularSegmentsVoxelsCount = {};
+      std::vector<short>::iterator ptr;
+      for (ptr = labels.begin() + 1; ptr < labels.end(); ptr++)
+        {
+        this->VascularSegmentsVoxelsCount[std::to_string(*ptr)] = {0, 0};
+        }
+      while (!iterator.IsAtEnd())
+        {
+        auto index = iterator.GetIndex();
+        if (iterator.Get() != 0)
+          {
+          if (this->connectedThreshold->GetPixel(index) >= 100)
+            {
+            this->VascularSegmentsVoxelsCount[std::to_string(iterator.Get())][1]++;
+            }
+          else
+            {
+            this->VascularSegmentsVoxelsCount[std::to_string(iterator.Get())][0]++;
+            }
+          }
+        ++iterator;
+        }
+      std::cout << "vessel segments volume calculation done" << endl;
+      }
+    }
+}
+
+//----------------------------------------------------------------------
+//void vtkSlicerLiverResectionsLogic::ComputePlanningVolumetry(std::string resectionNodeIDs,
+//                                                             vtkMRMLScalarVolumeNode* TargetSegmentLabelMap, std::string tumorMarkerNodes, vtkMRMLTableNode* OutputTableNode,
+//                                                             vtkMRMLLabelMapVolumeNode* VascularSegments, vtkMRMLMarkupsFiducialNode* ROIMarkersList){
+//
+//  vtkSmartPointer<vtkImageData> projectedResectionImageData = vtkSmartPointer<vtkImageData>::New();
+//  vtkSmartPointer<vtkMRMLScalarVolumeNode> projectedResectionLabelMap = vtkSmartPointer<vtkMRMLScalarVolumeNode>::New();
+//  vtkSmartPointer<vtkLabelMapHelper> labelMapHelper = vtkSmartPointer<vtkLabelMapHelper>::New();
+//  vtkLabelMapHelper::LabelMapType::RegionType parenchymaROI;
+//  double spacing[3];
+//  auto VolumeTable = vtkSmartPointer<vtkTable>::New();
+//
+//  bool OutputTableNodeChanged = false;
+//  if(!OutputTableNode)
+//    {
+//    vtkErrorMacro(<< "No output table node is assigned,"
+//                    << "create and choose a table node first");
+//    return;
+//    }
+//
+//
+//
+//  if(this->OutputTableNode != OutputTableNode)
+//    {
+//    OutputTableNodeChanged = true;
+//    this->OutputTableNode = vtkSmartPointer<vtkMRMLTableNode>::New();
+//    this->OutputTableNode = OutputTableNode;
+//    }
+//
+//  VolumeTable = this->OutputTableNode->GetTable();
+//
+//  std::istringstream iss(resectionNodeIDs);
+//  std::vector<std::string> vResectionNodeIDs;
+//  std::vector<int> iResectionNodeIDs;
+//  copy(std::istream_iterator<std::string>(iss),
+//       std::istream_iterator<std::string>(),
+//       std::back_inserter(vResectionNodeIDs));
+//  std::transform(vResectionNodeIDs.begin(), vResectionNodeIDs.end(), std::back_inserter(iResectionNodeIDs),
+//                 [&](std::string s) {
+//                   return stoi(s);
+//                 });
+//  std::set<int> ResectionNodeIDs(iResectionNodeIDs.begin(), iResectionNodeIDs.end());
+//  bool resectionNodeChanged = false;
+//  if(this->resectionNodeIDs != ResectionNodeIDs){
+//    this->resectionNodeIDs = ResectionNodeIDs;
+//    this->bezierHR = std::vector<vtkSmartPointer<vtkBezierSurfaceSource>>(resectionNodeIDs.size());
+//    for (auto itr = this->resectionNodeIDs.begin(); itr != this->resectionNodeIDs.end(); itr++){
+//      int index = std::distance(this->resectionNodeIDs.begin(), itr);
+//      std::string resectionNodeID = "vtkMRMLLiverResectionNode" + std::to_string(*itr);
+//      auto resectionNode = vtkMRMLLiverResectionNode::SafeDownCast(this->GetMRMLScene()->GetNodeByID(resectionNodeID));
+//      auto bezierSurfaceNode = this->GetBezierFromResection(resectionNode);
+//      if (!bezierSurfaceNode)
+//        {
+//        return;
+//        }
+//
+//      // Create a High-resolution Bézier surface for its sampling and projection
+//      this->bezierHR[index] = vtkSmartPointer<vtkBezierSurfaceSource>::New();
+//      this->bezierHR[index]->SetResolution(300,300);
+//      this->bezierHR[index]->SetNumberOfControlPoints(4,4);
+//      if (bezierSurfaceNode->GetNumberOfControlPoints() == 16)
+//        {
+//        auto BezierSurfaceControlPoints = vtkSmartPointer<vtkPoints>::New();
+//        for (int i=0; i<16; i++)
+//          {
+//          double point[3];
+//          bezierSurfaceNode->GetNthControlPointPosition(i,point);
+//          BezierSurfaceControlPoints->InsertNextPoint(static_cast<float>(point[0]),
+//                                                      static_cast<float>(point[1]),
+//                                                      static_cast<float>(point[2]));
+//          }
+//        this->bezierHR[index]->SetControlPoints(BezierSurfaceControlPoints);
+//        this->bezierHR[index]->Update();
+//        }
+//    }
+//    resectionNodeChanged = true;
+//    }
+//
+//  bool TargetSegmentLabelMapChanged = false;
+//  if(this->TargetSegmentLabelMap != TargetSegmentLabelMap){
+//    this->TargetSegmentLabelMap = vtkSmartPointer<vtkMRMLScalarVolumeNode>::New();
+//    this->TargetSegmentLabelMap = TargetSegmentLabelMap;
+//    TargetSegmentLabelMapChanged = true;
+//    projectedResectionImageData->DeepCopy(this->TargetSegmentLabelMap->GetImageData());
+//    projectedResectionLabelMap->CopyOrientation(this->TargetSegmentLabelMap);
+//    projectedResectionLabelMap->SetAndObserveImageData(projectedResectionImageData);
+//    this->TargetSegmentITKImage = nullptr;
+//    this->TargetSegmentITKImage = vtkLabelMapHelper::VolumeNodeToItkImage(projectedResectionLabelMap, true, false);
+//    }
+//
+//  if(resectionNodeChanged || TargetSegmentLabelMapChanged){
+//    for (auto itr = this->resectionNodeIDs.begin(); itr != this->resectionNodeIDs.end(); itr++){
+//      int index = std::distance(this->resectionNodeIDs.begin(), itr);
+//      vtkLabelMapHelper::ProjectPointsOntoItkImage(this->TargetSegmentITKImage,this->bezierHR[index]->GetOutput()->GetPoints(),7, 1);
+//      }
+//    }
+//
+//  std::istringstream issM(tumorMarkerNodes);
+//  std::vector<std::string> vTumorMarkerNodes;
+//  std::vector<int> iTumorMarkerNodes;
+//  copy(std::istream_iterator<std::string>(issM),
+//       std::istream_iterator<std::string>(),
+//       std::back_inserter(vTumorMarkerNodes));
+//  std::transform(vTumorMarkerNodes.begin(), vTumorMarkerNodes.end(), std::back_inserter(iTumorMarkerNodes),
+//                 [&](std::string s) {
+//                   return stoi(s);
+//                 });
+//  std::set<int> TumorMarkerNodes(iTumorMarkerNodes.begin(), iTumorMarkerNodes.end());
+//  bool tumorSeedPointChanged = false;
+//  this->tumorMarkerNodes = TumorMarkerNodes;
+////  if(this->tumorMarkerNodes != tumorMarkerNodes){
+//  for(auto itr = this->tumorMarkerNodes.begin(); itr != this->tumorMarkerNodes.end(); itr++){
+//    int index = std::distance(this->tumorMarkerNodes.begin(), itr);
+//    std::string MarkerNodeID = "vtkMRMLMarkupsFiducialNode" + std::to_string(*itr);
+//    auto MarkerNode = vtkMRMLMarkupsFiducialNode::SafeDownCast(this->GetMRMLScene()->GetNodeByID(MarkerNodeID));
+//    auto tumorSeedPoint = MarkerNode->GetNthControlPointPosition(0);
+//
+//    vtkLabelMapHelper::LabelMapType::IndexType seedIndex;
+//    vtkLabelMapHelper::LabelMapType::PointType seedPoint;
+//
+//    seedPoint[0] = tumorSeedPoint[0];
+//    seedPoint[1] = tumorSeedPoint[1];
+//    seedPoint[2] = tumorSeedPoint[2];
+//    this->TargetSegmentITKImage->TransformPhysicalPointToIndex(seedPoint, seedIndex);
+//
+//    unsigned short int value = this->TargetSegmentITKImage->GetPixel(seedIndex);
+//    if (value != 1)
+//      {
+//      vtkErrorMacro(<< "A tumor is not inside the parenchyma,"
+//                      << "its associated resection will not be considered");
+//      return;
+//      }
+//    this->connectedThreshold[index] = nullptr;
+//    this->connectedThreshold[index] = labelMapHelper->ConnectedThreshold(this->TargetSegmentITKImage, 1, 6, 100, seedIndex);
+//  }
+//
+//
+//
+//  if(resectionNodeChanged || TargetSegmentLabelMapChanged || tumorSeedPointChanged || OutputTableNodeChanged)
+//    {
+//    vtkLabelMapHelper::LabelMapType::Pointer itkParenchyma = vtkLabelMapHelper::VolumeNodeToItkImage(this->TargetSegmentLabelMap);
+//    parenchymaROI = vtkLabelMapHelper::GetBoundingBox(itkParenchyma);
+//
+//    unsigned int voxels = vtkLabelMapHelper::CountVoxels(itkParenchyma,parenchymaROI,1);
+//
+//    spacing[0] = itkParenchyma->GetSpacing()[0];
+//    spacing[1] = itkParenchyma->GetSpacing()[1];
+//    spacing[2] = itkParenchyma->GetSpacing()[2];
+//
+//    auto ParenchymaVolume = voxels*spacing[0]*spacing[1]*spacing[2]*0.001;
+//
+//
+//    spacing[0] = this->TargetSegmentITKImage->GetSpacing()[0];
+//    spacing[1] = this->TargetSegmentITKImage->GetSpacing()[1];
+//    spacing[2] = this->TargetSegmentITKImage->GetSpacing()[2];
+//
+//    int line = 0;
+//    for(int i=0; i<ResectionNodeIDs.size();i++){
+//      voxels = vtkLabelMapHelper::CountVoxels(this->connectedThreshold[i],parenchymaROI, 100);
+//      double resected = voxels*spacing[0]*spacing[1]*spacing[2]*0.001;
+//      double remnant = ParenchymaVolume - resected;
+//
+//
+//      std::cout << "Parenchyma Volume" << ParenchymaVolume << std::endl;
+//      std::cout << "Resected: " << resected << std::endl;
+//      std::cout << "Remnant: " << remnant << std::endl;
+//
+//      if(OutputTableNode->GetNumberOfColumns() == 0 ){
+//        auto LabelCol = vtkSmartPointer<vtkStringArray>::New();
+//        LabelCol->SetName("Properties");
+//        LabelCol->InsertNextValue("Parenchyma Volume");
+//        auto VolumeCol = vtkSmartPointer<vtkDoubleArray>::New();
+//        VolumeCol->SetName("Volume");
+//        VolumeCol->InsertNextValue(ParenchymaVolume);
+//        auto ResectionVolumeCol = vtkSmartPointer<vtkDoubleArray>::New();
+//        ResectionVolumeCol->SetName("Resected Volume");
+//        ResectionVolumeCol->InsertNextValue(resected);
+//        auto RemnantVolumeCol = vtkSmartPointer<vtkDoubleArray>::New();
+//        RemnantVolumeCol->SetName("Remnant Volume");
+//        RemnantVolumeCol->InsertNextValue(remnant);
+//        auto VolumePercentageCol = vtkSmartPointer<vtkStringArray>::New();
+//        VolumePercentageCol->SetName("Remnant Percentage");
+//        VolumePercentageCol->InsertNextValue(std::to_string(remnant/ParenchymaVolume * 100)+"%");
+//
+//        VolumeTable->AddColumn(LabelCol);
+//        VolumeTable->AddColumn(VolumeCol);
+//        VolumeTable->AddColumn(ResectionVolumeCol);
+//        VolumeTable->AddColumn(RemnantVolumeCol);
+//        VolumeTable->AddColumn(VolumePercentageCol);
+//        OutputTableNode->SetAndObserveTable(VolumeTable);
+//        }
+//      else
+//        {
+//        VolumeTable->GetColumn(1)->SetVariantValue(line, ParenchymaVolume);
+//        VolumeTable->GetColumn(2)->SetVariantValue(line, resected);
+//        VolumeTable->GetColumn(3)->SetVariantValue(line, remnant);
+//        VolumeTable->GetColumn(4)->SetVariantValue(line, remnant/ParenchymaVolume * 100);
+//        OutputTableNode->Modified();
+//        line ++;
+//        }
+//    }
+//
+//
+//    }
+//  // vessel segments:
+//  int line = 1;
+//  if (VascularSegments){
+//    if(this->VascularSegments != VascularSegments){
+//      this->VascularSegments = vtkSmartPointer<vtkMRMLLabelMapVolumeNode>::New();
+//      this->VascularSegments = VascularSegments;
+//      this->itkVascularSegments  = nullptr;
+//      this->itkVascularSegments  = vtkLabelMapHelper::VolumeNodeToItkImage(this->VascularSegments);
+//      this->itkVascularSegments->SetRequestedRegion(parenchymaROI);
+//      typedef itk::ImageRegionConstIterator<itk::Image<short,3> >IteratorType;
+//      IteratorType iterator(this->itkVascularSegments , this->itkVascularSegments->GetRequestedRegion());
+//      using LabelImageToLabelMapFilterType = itk::LabelImageToLabelMapFilter<itk::Image<short,3>>;
+//      auto labelImageToLabelMapFilter = LabelImageToLabelMapFilterType::New();
+//      labelImageToLabelMapFilter->SetInput(this->itkVascularSegments);
+//      labelImageToLabelMapFilter->Update();
+//      auto labels = labelImageToLabelMapFilter->GetOutput()->GetLabels();
+//      this->VascularSegmentsVoxelsCount = {};
+//      std::vector<short>::iterator ptr;
+//      for(ptr = labels.begin() + 1; ptr < labels.end(); ptr++){
+//        this->VascularSegmentsVoxelsCount[std::to_string(*ptr)] = {0,0};
+//        }
+//      while(!iterator.IsAtEnd()){
+//        auto index = iterator.GetIndex();
+//        if (iterator.Get() != 0){
+//          if(this->connectedThreshold->GetPixel(index) == 100){
+//            this->VascularSegmentsVoxelsCount[std::to_string(iterator.Get())][1]++;
+//            }else{
+//            this->VascularSegmentsVoxelsCount[std::to_string(iterator.Get())][0]++;
+//            }
+//          }
+//        ++iterator;
+//        }
+//      std::cout << "vessel segments volume calculation done"<<endl;
+//      }
+//
+//    if(OutputTableNodeChanged){
+//      for (const auto & it : this->VascularSegmentsVoxelsCount)
+//        {
+//        VolumeTable->InsertRow(line);
+//        VolumeTable->GetColumn(0)->SetVariantValue(line, static_cast<vtkStdString>(it.first));
+//        VolumeTable->GetColumn(1)->SetVariantValue(line, (it.second[0]+it.second[1])*spacing[0]*spacing[1]*spacing[2]*0.001);
+//        VolumeTable->GetColumn(2)->SetVariantValue(line, it.second[1]*spacing[0]*spacing[1]*spacing[2]*0.001);
+//        VolumeTable->GetColumn(3)->SetVariantValue(line, it.second[0]*spacing[0]*spacing[1]*spacing[2]*0.001);
+//        VolumeTable->GetColumn(4)->SetVariantValue(line,static_cast<vtkStdString>(std::to_string((double)it.second[0] / (double)(it.second[0]+it.second[1]) * 100)+"%"));
+//        OutputTableNode->Modified();
+//        line++;
+//        }
+//      }
+//
+//    if (ROIMarkersList){
+//      auto num = ROIMarkersList->GetNumberOfControlPoints();
+//      int ROItotal = 0, ROIresected= 0, ROIremnant = 0;
+//      for(int i = 0; i< num; i++){
+//        vtkLabelMapHelper::LabelMapType::IndexType seedIndex;
+//        vtkLabelMapHelper::LabelMapType::PointType seedPoint;
+//        auto point = ROIMarkersList->GetNthControlPointPosition(i);
+//        seedPoint[0] = point[0];
+//        seedPoint[1] = point[1];
+//        seedPoint[2] = point[2];
+//        this->TargetSegmentITKImage->TransformPhysicalPointToIndex(seedPoint, seedIndex);
+//        if(this->connectedThreshold->GetPixel(seedIndex) == 100){
+//          auto re = this->VascularSegmentsVoxelsCount[std::to_string(this->itkVascularSegments->GetPixel(seedIndex))][1];
+//          ROIresected = ROIresected + re;
+//          ROItotal = ROItotal + re;
+//          }else{
+//          auto re = this->VascularSegmentsVoxelsCount[std::to_string(this->itkVascularSegments->GetPixel(seedIndex))][0];
+//          ROItotal = ROItotal + re;
+//          ROIremnant = ROIremnant + re;
+//          }
+//        }
+//      spacing[0] = this->TargetSegmentITKImage->GetSpacing()[0];
+//      spacing[1] = this->TargetSegmentITKImage->GetSpacing()[1];
+//      spacing[2] = this->TargetSegmentITKImage->GetSpacing()[2];
+//      VolumeTable->InsertRow(line);
+//      VolumeTable->GetColumn(0)->SetVariantValue(line, "ROI");
+//      VolumeTable->GetColumn(1)->SetVariantValue(line, ROItotal*spacing[0]*spacing[1]*spacing[2]*0.001);
+//      VolumeTable->GetColumn(2)->SetVariantValue(line, ROIresected*spacing[0]*spacing[1]*spacing[2]*0.001);
+//      VolumeTable->GetColumn(3)->SetVariantValue(line, ROIremnant*spacing[0]*spacing[1]*spacing[2]*0.001);
+//      VolumeTable->GetColumn(4)->SetVariantValue(line,static_cast<vtkStdString>(std::to_string((double)ROIremnant / (double)ROItotal * 100)+"%"));
+//      OutputTableNode->Modified();
+//      }
+//    }
+//}
+
+
+void vtkSlicerLiverResectionsLogic::ComputePlanningEssentialVolumetry(vtkMRMLLiverResectionNode* resectionNode, vtkMRMLScalarVolumeNode* TargetSegmentLabelMap, vtkMRMLMarkupsFiducialNode* ROIMarkerNode, vtkMRMLTableNode* OutputTableNode){
+
+  vtkLabelMapHelper::LabelMapType::RegionType TargetSegmentBoundingBox;
+  double spacing[3];
+  auto VolumeTable = vtkSmartPointer<vtkTable>::New();
+
+  bool OutputTableNodeChanged = false;
+  if(!OutputTableNode)
+    {
+    vtkErrorMacro(<< "No output table node is assigned,"
+                    << "create and choose a table node first");
+    return;
+    }
+
+  if(this->OutputTableNode != OutputTableNode)
     {
     OutputTableNodeChanged = true;
     this->OutputTableNode = vtkSmartPointer<vtkMRMLTableNode>::New();
@@ -1074,219 +1490,130 @@ void vtkSlicerLiverResectionsLogic::ComputePlanningVolumetry(vtkMRMLLiverResecti
   VolumeTable = this->OutputTableNode->GetTable();
 
   bool resectionNodeChanged = false;
+  auto BezierHR = vtkSmartPointer<vtkBezierSurfaceSource>::New();
   if(this->resectionNode != resectionNode){
     this->resectionNode = vtkSmartPointer<vtkMRMLLiverResectionNode>::New();
     this->resectionNode = resectionNode;
-    auto bezierSurfaceNode = this->GetBezierFromResection(this->resectionNode);
-    if (!bezierSurfaceNode)
-      {
-      return;
-      }
 
     // Create a High-resolution Bézier surface for its sampling and projection
-    this->bezierHR = vtkSmartPointer<vtkBezierSurfaceSource>::New();
-    this->bezierHR->SetResolution(300,300);
-    this->bezierHR->SetNumberOfControlPoints(4,4);
-
-    if (bezierSurfaceNode->GetNumberOfControlPoints() == 16)
-      {
-      auto BezierSurfaceControlPoints = vtkSmartPointer<vtkPoints>::New();
-      for (int i=0; i<16; i++)
-        {
-        double point[3];
-        bezierSurfaceNode->GetNthControlPointPosition(i,point);
-        BezierSurfaceControlPoints->InsertNextPoint(static_cast<float>(point[0]),
-                                                    static_cast<float>(point[1]),
-                                                    static_cast<float>(point[2]));
-        }
-      this->bezierHR->SetControlPoints(BezierSurfaceControlPoints);
-      this->bezierHR->Update();
-      }
+    BezierHR = GenerateBezierSurface(300, this->resectionNode);
     resectionNodeChanged = true;
     }
 
-  bool parenchymaLabelMapChanged = false;
-  if(this->parenchymaLabelMap != parenchymaLabelMap){
-    this->parenchymaLabelMap = vtkSmartPointer<vtkMRMLScalarVolumeNode>::New();
-    this->parenchymaLabelMap = parenchymaLabelMap;
-    parenchymaLabelMapChanged = true;
-    projectedResectionImageData->DeepCopy(this->parenchymaLabelMap->GetImageData());
-    projectedResectionLabelMap->CopyOrientation(this->parenchymaLabelMap);
-    projectedResectionLabelMap->SetAndObserveImageData(projectedResectionImageData);
-    this->projectionImage = nullptr;
-    this->projectionImage = vtkLabelMapHelper::VolumeNodeToItkImage(projectedResectionLabelMap, true, false);
+  // Project segment from vtkImage to itkImage
+  bool TargetSegmentLabelMapChanged = false;
+  if(this->TargetSegmentLabelMap != TargetSegmentLabelMap){
+    this->TargetSegmentLabelMap = TargetSegmentLabelMap;
+    TargetSegmentLabelMapChanged = true;
     }
 
-  if(resectionNodeChanged || parenchymaLabelMapChanged){
-    vtkLabelMapHelper::ProjectPointsOntoItkImage(this->projectionImage,this->bezierHR->GetOutput()->GetPoints(),7, 1);
-    }
-
-  bool tumorSeedPointChanged = false;
-  if(this->tumorMarkerNode != tumorMarkerNode){
-    tumorSeedPointChanged = true;
-    this->tumorMarkerNode = tumorMarkerNode;
-    auto tumorSeedPoint = this->tumorMarkerNode->GetNthControlPointPosition(0);
-
-
-    vtkLabelMapHelper::LabelMapType::IndexType seedIndex;
-    vtkLabelMapHelper::LabelMapType::PointType seedPoint;
-
-    seedPoint[0] = tumorSeedPoint[0];
-    seedPoint[1] = tumorSeedPoint[1];
-    seedPoint[2] = tumorSeedPoint[2];
-    this->projectionImage->TransformPhysicalPointToIndex(seedPoint, seedIndex);
-
-    unsigned short int value = this->projectionImage->GetPixel(seedIndex);
-    if (value != 1)
-      {
-      vtkErrorMacro(<< "A tumor is not inside the parenchyma,"
-                      << "its associated resection will not be considered");
-      return;
-      }
+  if(resectionNodeChanged || TargetSegmentLabelMapChanged){
+    this->ProjectedTargetSegmentImage = vtkLabelMapHelper::VolumeNodeToItkImage(this->TargetSegmentLabelMap , true, false);
+    vtkLabelMapHelper::ProjectPointsOntoItkImage(this->ProjectedTargetSegmentImage,BezierHR->GetOutput()->GetPoints(),7, 1);
+    bool ROISeedPointChanged = true;
+    auto ROISeedPoint = ROIMarkerNode->GetNthControlPointPosition(0);
     this->connectedThreshold = nullptr;
-    this->connectedThreshold = labelMapHelper->ConnectedThreshold(this->projectionImage, 1, 6, 100, seedIndex);
+    auto re = GetITKRGSeedIndex(ROISeedPoint, 99);
     }
 
+  vtkLabelMapHelper::LabelMapType::Pointer TargetSegmentITKImage = vtkLabelMapHelper::VolumeNodeToItkImage(this->TargetSegmentLabelMap);
+  TargetSegmentBoundingBox = vtkLabelMapHelper::GetBoundingBox(TargetSegmentITKImage);
 
-  if(resectionNodeChanged || parenchymaLabelMapChanged || tumorSeedPointChanged || OutputTableNodeChanged)
+  spacing[0] = TargetSegmentITKImage->GetSpacing()[0];
+  spacing[1] = TargetSegmentITKImage->GetSpacing()[1];
+  spacing[2] = TargetSegmentITKImage->GetSpacing()[2];
+
+  unsigned int TargetSegmentVoxels = vtkLabelMapHelper::CountVoxels(TargetSegmentITKImage,TargetSegmentBoundingBox,1);
+  unsigned int ROIVoxels = vtkLabelMapHelper::CountVoxels(this->connectedThreshold,TargetSegmentBoundingBox, 99);
+  auto TargetSegmentVolume = TargetSegmentVoxels*spacing[0]*spacing[1]*spacing[2]*0.001;
+  auto ROIVolume = ROIVoxels*spacing[0]*spacing[1]*spacing[2]*0.001;
+  auto RemnantVolume = TargetSegmentVolume - ROIVolume;
+  VolumetryTable("test", TargetSegmentVolume, ROIVolume, VolumeTable);
+}
+
+vtkSmartPointer<vtkBezierSurfaceSource> vtkSlicerLiverResectionsLogic::GenerateBezierSurface(int Res, vtkMRMLLiverResectionNode* ResectionNode){
+  auto bezierSurfaceNode = this->GetBezierFromResection(ResectionNode);
+  if (!bezierSurfaceNode)
     {
-    vtkLabelMapHelper::LabelMapType::Pointer itkParenchyma = vtkLabelMapHelper::VolumeNodeToItkImage(this->parenchymaLabelMap);
-    parenchymaROI = vtkLabelMapHelper::GetBoundingBox(itkParenchyma);
-
-    unsigned int voxels = vtkLabelMapHelper::CountVoxels(itkParenchyma,parenchymaROI,1);
-
-    spacing[0] = itkParenchyma->GetSpacing()[0];
-    spacing[1] = itkParenchyma->GetSpacing()[1];
-    spacing[2] = itkParenchyma->GetSpacing()[2];
-
-    auto ParenchymaVolume = voxels*spacing[0]*spacing[1]*spacing[2]*0.001;
-    voxels = vtkLabelMapHelper::CountVoxels(this->connectedThreshold,parenchymaROI, 100);
-
-    spacing[0] = this->projectionImage->GetSpacing()[0];
-    spacing[1] = this->projectionImage->GetSpacing()[1];
-    spacing[2] = this->projectionImage->GetSpacing()[2];
-
-    double resected = voxels*spacing[0]*spacing[1]*spacing[2]*0.001;
-    double remnant = ParenchymaVolume - resected;
-
-
-    std::cout << "Parenchyma Volume" << ParenchymaVolume << std::endl;
-    std::cout << "Resected: " << resected << std::endl;
-    std::cout << "Remnant: " << remnant << std::endl;
-
-    if(OutputTableNode->GetNumberOfColumns() == 0 ){
-      auto LabelCol = vtkSmartPointer<vtkStringArray>::New();
-      LabelCol->SetName("Properties");
-      LabelCol->InsertNextValue("Parenchyma Volume");
-      auto VolumeCol = vtkSmartPointer<vtkDoubleArray>::New();
-      VolumeCol->SetName("Volume");
-      VolumeCol->InsertNextValue(ParenchymaVolume);
-      auto ResectionVolumeCol = vtkSmartPointer<vtkDoubleArray>::New();
-      ResectionVolumeCol->SetName("Resected Volume");
-      ResectionVolumeCol->InsertNextValue(resected);
-      auto RemnantVolumeCol = vtkSmartPointer<vtkDoubleArray>::New();
-      RemnantVolumeCol->SetName("Remnant Volume");
-      RemnantVolumeCol->InsertNextValue(remnant);
-      auto VolumePercentageCol = vtkSmartPointer<vtkStringArray>::New();
-      VolumePercentageCol->SetName("Remnant Percentage");
-      VolumePercentageCol->InsertNextValue(std::to_string(remnant/ParenchymaVolume * 100)+"%");
-
-      VolumeTable->AddColumn(LabelCol);
-      VolumeTable->AddColumn(VolumeCol);
-      VolumeTable->AddColumn(ResectionVolumeCol);
-      VolumeTable->AddColumn(RemnantVolumeCol);
-      VolumeTable->AddColumn(VolumePercentageCol);
-      OutputTableNode->SetAndObserveTable(VolumeTable);
-      }
-    else
-      {
-      VolumeTable->GetColumn(1)->SetVariantValue(0, ParenchymaVolume);
-      VolumeTable->GetColumn(2)->SetVariantValue(0, resected);
-      VolumeTable->GetColumn(3)->SetVariantValue(0, remnant);
-      VolumeTable->GetColumn(4)->SetVariantValue(0, remnant/ParenchymaVolume * 100);
-      OutputTableNode->Modified();
-      }
+    return nullptr;
     }
-  // vessel segments:
-  int line = 1;
-  if (VascularSegments){
-    if(this->VascularSegments != VascularSegments){
-      this->VascularSegments = vtkSmartPointer<vtkMRMLLabelMapVolumeNode>::New();
-      this->VascularSegments = VascularSegments;
-      this->itkVascularSegments  = nullptr;
-      this->itkVascularSegments  = vtkLabelMapHelper::VolumeNodeToItkImage(this->VascularSegments);
-      this->itkVascularSegments->SetRequestedRegion(parenchymaROI);
-      typedef itk::ImageRegionConstIterator<itk::Image<short,3> >IteratorType;
-      IteratorType iterator(this->itkVascularSegments , this->itkVascularSegments->GetRequestedRegion());
-      using LabelImageToLabelMapFilterType = itk::LabelImageToLabelMapFilter<itk::Image<short,3>>;
-      auto labelImageToLabelMapFilter = LabelImageToLabelMapFilterType::New();
-      labelImageToLabelMapFilter->SetInput(this->itkVascularSegments);
-      labelImageToLabelMapFilter->Update();
-      auto labels = labelImageToLabelMapFilter->GetOutput()->GetLabels();
-      this->VascularSegmentsVoxelsCount = {};
-      std::vector<short>::iterator ptr;
-      for(ptr = labels.begin() + 1; ptr < labels.end(); ptr++){
-        this->VascularSegmentsVoxelsCount[std::to_string(*ptr)] = {0,0};
-        }
-      while(!iterator.IsAtEnd()){
-        auto index = iterator.GetIndex();
-        if (iterator.Get() != 0){
-          if(this->connectedThreshold->GetPixel(index) == 100){
-            this->VascularSegmentsVoxelsCount[std::to_string(iterator.Get())][1]++;
-            }else{
-            this->VascularSegmentsVoxelsCount[std::to_string(iterator.Get())][0]++;
-            }
-          }
-        ++iterator;
-        }
-      std::cout << "vessel segments volume calculation done"<<endl;
+  auto Bezier = vtkSmartPointer<vtkBezierSurfaceSource>::New();
+  Bezier->SetResolution(Res,Res);
+  Bezier->SetNumberOfControlPoints(4,4);
+  if (bezierSurfaceNode->GetNumberOfControlPoints() == 16)
+    {
+    auto BezierSurfaceControlPoints = vtkSmartPointer<vtkPoints>::New();
+    for (int i=0; i<16; i++)
+      {
+      double point[3];
+      bezierSurfaceNode->GetNthControlPointPosition(i,point);
+      BezierSurfaceControlPoints->InsertNextPoint(static_cast<float>(point[0]),
+                                                  static_cast<float>(point[1]),
+                                                  static_cast<float>(point[2]));
       }
+    Bezier->SetControlPoints(BezierSurfaceControlPoints);
+    Bezier->Update();
+    }
+  return Bezier;
+}
 
-    if(OutputTableNodeChanged){
-      for (const auto & it : this->VascularSegmentsVoxelsCount)
-        {
-        VolumeTable->InsertRow(line);
-        VolumeTable->GetColumn(0)->SetVariantValue(line, static_cast<vtkStdString>(it.first));
-        VolumeTable->GetColumn(1)->SetVariantValue(line, (it.second[0]+it.second[1])*spacing[0]*spacing[1]*spacing[2]*0.001);
-        VolumeTable->GetColumn(2)->SetVariantValue(line, it.second[1]*spacing[0]*spacing[1]*spacing[2]*0.001);
-        VolumeTable->GetColumn(3)->SetVariantValue(line, it.second[0]*spacing[0]*spacing[1]*spacing[2]*0.001);
-        VolumeTable->GetColumn(4)->SetVariantValue(line,static_cast<vtkStdString>(std::to_string((double)it.second[0] / (double)(it.second[0]+it.second[1]) * 100)+"%"));
-        OutputTableNode->Modified();
-        line++;
-        }
+//get itkImage region growing seed index
+int vtkSlicerLiverResectionsLogic::GetITKRGSeedIndex(double* ROISeedPoint, int ReplaceValue){
+  vtkSmartPointer<vtkLabelMapHelper> labelMapHelper = vtkSmartPointer<vtkLabelMapHelper>::New();
+  vtkLabelMapHelper::LabelMapType::IndexType seedIndex;
+  vtkLabelMapHelper::LabelMapType::PointType seedPoint;
+  seedPoint[0] = ROISeedPoint[0];
+  seedPoint[1] = ROISeedPoint[1];
+  seedPoint[2] = ROISeedPoint[2];
+  this->ProjectedTargetSegmentImage->TransformPhysicalPointToIndex(seedPoint, seedIndex);
+  if(this->connectedThreshold){
+    if(this->connectedThreshold->GetPixel(seedIndex)<100){
+      this->connectedThreshold = labelMapHelper->ConnectedThreshold(this->ProjectedTargetSegmentImage, 1, 6, ReplaceValue, seedIndex);
+      ReplaceValue++;
+      std::cout<<"ReplaceValue: "<<ReplaceValue<<endl;
       }
+    }else{
+    this->connectedThreshold = labelMapHelper->ConnectedThreshold(this->ProjectedTargetSegmentImage, 1, 6, ReplaceValue, seedIndex);
+    ReplaceValue++;
+    std::cout<<"ReplaceValue if no connectedThreshold: "<<ReplaceValue<<endl;
+    }
+  return ReplaceValue;
+}
 
-    if (ROIMarkersList){
-      auto num = ROIMarkersList->GetNumberOfControlPoints();
-      int ROItotal = 0, ROIresected= 0, ROIremnant = 0;
-      for(int i = 0; i< num; i++){
-        vtkLabelMapHelper::LabelMapType::IndexType seedIndex;
-        vtkLabelMapHelper::LabelMapType::PointType seedPoint;
-        auto point = ROIMarkersList->GetNthControlPointPosition(i);
-        seedPoint[0] = point[0];
-        seedPoint[1] = point[1];
-        seedPoint[2] = point[2];
-        this->projectionImage->TransformPhysicalPointToIndex(seedPoint, seedIndex);
-        if(this->connectedThreshold->GetPixel(seedIndex) == 100){
-          auto re = this->VascularSegmentsVoxelsCount[std::to_string(this->itkVascularSegments->GetPixel(seedIndex))][1];
-          ROIresected = ROIresected + re;
-          ROItotal = ROItotal + re;
-          }else{
-          auto re = this->VascularSegmentsVoxelsCount[std::to_string(this->itkVascularSegments->GetPixel(seedIndex))][0];
-          ROItotal = ROItotal + re;
-          ROIremnant = ROIremnant + re;
-          }
-        }
-      spacing[0] = this->projectionImage->GetSpacing()[0];
-      spacing[1] = this->projectionImage->GetSpacing()[1];
-      spacing[2] = this->projectionImage->GetSpacing()[2];
-      VolumeTable->InsertRow(line);
-      VolumeTable->GetColumn(0)->SetVariantValue(line, "ROI");
-      VolumeTable->GetColumn(1)->SetVariantValue(line, ROItotal*spacing[0]*spacing[1]*spacing[2]*0.001);
-      VolumeTable->GetColumn(2)->SetVariantValue(line, ROIresected*spacing[0]*spacing[1]*spacing[2]*0.001);
-      VolumeTable->GetColumn(3)->SetVariantValue(line, ROIremnant*spacing[0]*spacing[1]*spacing[2]*0.001);
-      VolumeTable->GetColumn(4)->SetVariantValue(line,static_cast<vtkStdString>(std::to_string((double)ROIremnant / (double)ROItotal * 100)+"%"));
-      OutputTableNode->Modified();
-      }
+void vtkSlicerLiverResectionsLogic::VolumetryTable(std::string Properties, double TargetSegmentVolume, double ROIVolume, vtkTable *VolumeTable, int line){
+  if(this->OutputTableNode->GetNumberOfColumns() == 0 ){
+    auto LabelCol = vtkSmartPointer<vtkStringArray>::New();
+    LabelCol->SetName("Properties");
+    auto TargetSegmentVolumeCol = vtkSmartPointer<vtkDoubleArray>::New();
+    TargetSegmentVolumeCol->SetName("Volume");
+    auto ROIVolumeCol = vtkSmartPointer<vtkDoubleArray>::New();
+    ROIVolumeCol->SetName("ROI Volume");
+    auto RemnantVolumeCol = vtkSmartPointer<vtkDoubleArray>::New();
+    RemnantVolumeCol->SetName("Remnant Volume");
+    auto RemnantPercentageCol = vtkSmartPointer<vtkStringArray>::New();
+    RemnantPercentageCol->SetName("Remnant Percentage");
+
+    LabelCol->InsertNextValue(Properties);
+    TargetSegmentVolumeCol->InsertNextValue(TargetSegmentVolume);
+    ROIVolumeCol->InsertNextValue(ROIVolume);
+    auto remnant = TargetSegmentVolume - ROIVolume;
+    RemnantVolumeCol->InsertNextValue(remnant);
+    RemnantPercentageCol->InsertNextValue(std::to_string(remnant/TargetSegmentVolume * 100)+"%");
+
+    VolumeTable->AddColumn(LabelCol);
+    VolumeTable->AddColumn(TargetSegmentVolumeCol);
+    VolumeTable->AddColumn(ROIVolumeCol);
+    VolumeTable->AddColumn(RemnantVolumeCol);
+    VolumeTable->AddColumn(RemnantPercentageCol);
+    }else{
+    line = this->OutputTableNode->GetNumberOfRows();
+    VolumeTable->InsertRow(line);
+    VolumeTable->GetColumn(0)->SetVariantValue(line, static_cast<vtkStdString>(Properties));
+    VolumeTable->GetColumn(1)->SetVariantValue(line,TargetSegmentVolume);
+    VolumeTable->GetColumn(2)->SetVariantValue(line,ROIVolume);
+    auto remnant = TargetSegmentVolume - ROIVolume;
+    VolumeTable->GetColumn(3)->SetVariantValue(line,remnant);
+    VolumeTable->GetColumn(4)->SetVariantValue(line,static_cast<vtkStdString>(std::to_string(remnant/TargetSegmentVolume * 100)+"%"));
+    this->OutputTableNode->Modified();
     }
 }

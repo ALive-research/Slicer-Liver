@@ -1,0 +1,592 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ResectionVolumetryWidget</class>
+ <widget class="qMRMLWidget" name="ResectionVolumetryWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>563</width>
+    <height>580</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <property name="layoutDirection">
+   <enum>Qt::LeftToRight</enum>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="qMRMLCollapsibleButton" name="ResectionVolumetryGroupWidget">
+     <property name="text">
+      <string>Resection Volumetry</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_9">
+      <item>
+       <widget class="QCheckBox" name="FinishPlanningCheckBox">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="text">
+         <string>Finish Planning?</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="OutPutGroupBox">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="title">
+         <string>Output</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_13">
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_15">
+           <item>
+            <widget class="QLabel" name="label_6">
+             <property name="maximumSize">
+              <size>
+               <width>16777215</width>
+               <height>16777215</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>OutPut Table:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="qMRMLNodeComboBox" name="VolumeTableSelectorWidget">
+             <property name="nodeTypes">
+              <stringlist>
+               <string>vtkMRMLTableNode</string>
+              </stringlist>
+             </property>
+             <property name="showChildNodeTypes">
+              <bool>false</bool>
+             </property>
+             <property name="baseName">
+              <string>LiverResectionVolumetry</string>
+             </property>
+             <property name="noneEnabled">
+              <bool>true</bool>
+             </property>
+             <property name="editEnabled">
+              <bool>true</bool>
+             </property>
+             <property name="renameEnabled">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="ComputeVolumetryParametersGroupBox">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="title">
+         <string>Volumetry Parameters</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_12">
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_11">
+           <item>
+            <widget class="QLabel" name="label_4">
+             <property name="text">
+              <string>Liver</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="qMRMLSegmentSelectorWidget" name="ParenchymaSegmentSelectorWidget">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="segmentationNodeSelectorVisible">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QGroupBox" name="EssentialResectionVolumetry">
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>16777215</height>
+            </size>
+           </property>
+           <property name="title">
+            <string>Essential Resection Volumetry</string>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_2">
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_5">
+              <item>
+               <widget class="QLabel" name="ResectionLabel">
+                <property name="text">
+                 <string>Resection:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="qMRMLNodeComboBox" name="ResectionTargetNodeComboBox">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+                <property name="nodeTypes">
+                 <stringlist>
+                  <string>vtkMRMLLiverResectionNode</string>
+                 </stringlist>
+                </property>
+                <property name="noneEnabled">
+                 <bool>true</bool>
+                </property>
+                <property name="renameEnabled">
+                 <bool>true</bool>
+                </property>
+                <property name="selectNodeUponCreation">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_14">
+              <item>
+               <widget class="QLabel" name="label">
+                <property name="text">
+                 <string>ROI Marker</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="qMRMLNodeComboBox" name="ROIMarkerSelectorWidget">
+                <property name="nodeTypes">
+                 <stringlist>
+                  <string>vtkMRMLMarkupsFiducialNode</string>
+                 </stringlist>
+                </property>
+                <property name="showChildNodeTypes">
+                 <bool>false</bool>
+                </property>
+                <property name="baseName">
+                 <string>TumorMarker</string>
+                </property>
+                <property name="noneEnabled">
+                 <bool>true</bool>
+                </property>
+                <property name="editEnabled">
+                 <bool>true</bool>
+                </property>
+                <property name="renameEnabled">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="qSlicerMarkupsPlaceWidget" name="ROIMarkersPlaceWidget">
+                <property name="maximumSize">
+                 <size>
+                  <width>15000</width>
+                  <height>40</height>
+                 </size>
+                </property>
+                <property name="placeMultipleMarkups">
+                 <enum>qSlicerMarkupsPlaceWidget::ForcePlaceSingleMarkup</enum>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <widget class="QPushButton" name="CalculateEssentialResectionVolume">
+              <property name="text">
+               <string>Calculate Current Resection's Essential Volume Info</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="ctkCollapsibleGroupBox" name="CollapsibleGroupBox">
+           <property name="title">
+            <string>Advanced Options:</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+           <property name="collapsed">
+            <bool>false</bool>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_11">
+            <item>
+             <widget class="QCheckBox" name="UseAllCheckBox">
+              <property name="text">
+               <string>Use All Resections</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_7">
+              <property name="text">
+               <string>*Checked means all resections will count for Volumetry calculation </string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_10">
+              <item>
+               <widget class="QLabel" name="label_5">
+                <property name="text">
+                 <string>Vascular Segments</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="qMRMLNodeComboBox" name="VascularSegmentsSelectorWidget">
+                <property name="nodeTypes">
+                 <stringlist>
+                  <string>vtkMRMLLabelMapVolumeNode</string>
+                 </stringlist>
+                </property>
+                <property name="noneEnabled">
+                 <bool>true</bool>
+                </property>
+                <property name="addEnabled">
+                 <bool>false</bool>
+                </property>
+                <property name="removeEnabled">
+                 <bool>false</bool>
+                </property>
+                <property name="selectNodeUponCreation">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_2">
+              <property name="text">
+               <string>Mark ROIs and calculate the total volume of these areas:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QWidget" name="ROIVolumeWidget" native="true">
+              <property name="enabled">
+               <bool>true</bool>
+              </property>
+              <layout class="QHBoxLayout" name="horizontalLayout_12">
+               <item>
+                <widget class="QLabel" name="label_3">
+                 <property name="text">
+                  <string>ROI Markers List:</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="qMRMLNodeComboBox" name="ROIMarkersListSelectorWidget">
+                 <property name="maximumSize">
+                  <size>
+                   <width>300</width>
+                   <height>16777215</height>
+                  </size>
+                 </property>
+                 <property name="nodeTypes">
+                  <stringlist>
+                   <string>vtkMRMLMarkupsFiducialNode</string>
+                  </stringlist>
+                 </property>
+                 <property name="showChildNodeTypes">
+                  <bool>false</bool>
+                 </property>
+                 <property name="baseName">
+                  <string>ROIMarkersList</string>
+                 </property>
+                 <property name="noneEnabled">
+                  <bool>true</bool>
+                 </property>
+                 <property name="editEnabled">
+                  <bool>true</bool>
+                 </property>
+                 <property name="renameEnabled">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="qSlicerMarkupsPlaceWidget" name="ROIMarkersListPlaceWidget">
+                 <property name="maximumSize">
+                  <size>
+                   <width>15000</width>
+                   <height>40</height>
+                  </size>
+                 </property>
+                 <property name="placeMultipleMarkups">
+                  <enum>qSlicerMarkupsPlaceWidget::ShowPlaceMultipleMarkupsOption</enum>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="ComputeVolumePushButton">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="text">
+               <string>Compute Advanced Resection Volumes</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>qMRMLCollapsibleButton</class>
+   <extends>ctkCollapsibleButton</extends>
+   <header>qMRMLCollapsibleButton.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLNodeComboBox</class>
+   <extends>QWidget</extends>
+   <header>qMRMLNodeComboBox.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qSlicerWidget</class>
+   <extends>QWidget</extends>
+   <header>qSlicerWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qSlicerMarkupsPlaceWidget</class>
+   <extends>qSlicerWidget</extends>
+   <header>qSlicerMarkupsPlaceWidget.h</header>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLSegmentSelectorWidget</class>
+   <extends>qMRMLWidget</extends>
+   <header>qMRMLSegmentSelectorWidget.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ctkCollapsibleButton</class>
+   <extends>QWidget</extends>
+   <header>ctkCollapsibleButton.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkCollapsibleGroupBox</class>
+   <extends>QGroupBox</extends>
+   <header>ctkCollapsibleGroupBox.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>ResectionVolumetryWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>ROIMarkersPlaceWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>235</x>
+     <y>158</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>235</x>
+     <y>155</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionVolumetryWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>ROIMarkerSelectorWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>235</x>
+     <y>158</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>235</x>
+     <y>55</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ROIMarkerSelectorWidget</sender>
+   <signal>currentNodeChanged(vtkMRMLNode*)</signal>
+   <receiver>ROIMarkersPlaceWidget</receiver>
+   <slot>setCurrentNode(vtkMRMLNode*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>163</x>
+     <y>110</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>382</x>
+     <y>110</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionVolumetryWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>ROIMarkersListSelectorWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>235</x>
+     <y>158</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>235</x>
+     <y>55</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionVolumetryWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>ROIMarkersListPlaceWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>235</x>
+     <y>158</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>235</x>
+     <y>155</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ROIMarkersListSelectorWidget</sender>
+   <signal>currentNodeChanged(vtkMRMLNode*)</signal>
+   <receiver>ROIMarkersListPlaceWidget</receiver>
+   <slot>setCurrentNode(vtkMRMLNode*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>163</x>
+     <y>110</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>382</x>
+     <y>110</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionVolumetryWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>VolumeTableSelectorWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>235</x>
+     <y>158</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>235</x>
+     <y>55</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionVolumetryWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>ParenchymaSegmentSelectorWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>395</x>
+     <y>350</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>478</x>
+     <y>399</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionVolumetryWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>VascularSegmentsSelectorWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>395</x>
+     <y>350</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>478</x>
+     <y>399</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionVolumetryWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>ResectionTargetNodeComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>293</x>
+     <y>365</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>336</x>
+     <y>60</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+</ui>

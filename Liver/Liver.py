@@ -183,13 +183,18 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     resectogramUI = slicer.util.loadUI(self.resourcePath('UI/ResectogramWidget.ui'))
     resectogramUI.setMRMLScene(slicer.mrmlScene)
 
+    resectionVolumetryUI = slicer.util.loadUI(self.resourcePath('UI/ResectionVolumetryWidget.ui'))
+    resectionVolumetryUI.setMRMLScene(slicer.mrmlScene)
+
     self.layout.addWidget(distanceMapsUI)
     self.layout.addWidget(resectionsUI)
     self.layout.addWidget(resectogramUI)
+    self.layout.addWidget(resectionVolumetryUI)
 
     self.distanceMapsWidget = slicer.util.childWidgetVariables(distanceMapsUI)
     self.resectionsWidget = slicer.util.childWidgetVariables(resectionsUI)
     self.resectogramWidget = slicer.util.childWidgetVariables(resectogramUI)
+    self.resectionVolumetryWidget = slicer.util.childWidgetVariables(resectionVolumetryUI)
 
     # Add LiverSegmentsWidget
     wrapperWidget = slicer.qMRMLWidget()
@@ -247,12 +252,15 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.UncertaintyMarginColorPickerButton.connect('colorChanged(QColor)', self.onUncertaintyMarginColorChanged)
     self.resectionsWidget.UncertaintyMarginComboBox.connect('currentIndexChanged(int)', self.onUncertaintyMaginComboBoxChanged)
     self.resectionsWidget.InterpolatedMarginsCheckBox.connect('stateChanged(int)', self.onInterpolatedMarginsChanged)
-    self.resectionsWidget.FinishPlanningCheckBox.connect('stateChanged(int)', self.onFinishPlanningCheckBoxChanged)
-    self.resectionsWidget.ParenchymaSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onComputeVolumeParameterChanged)
-    self.resectionsWidget.TumorMarkerSelectorWidget.connect('nodeAddedByUser(vtkMRMLNode*)', self.onComputeVolumeParameterChanged)
-    self.resectionsWidget.VascularSegmentsSelectorWidget.connect('currentNodeChanged(vtkMRMLNode*)', self.onAdvancedVolumeParameterChanged)
-    self.resectionsWidget.ROIMarkersListSelectorWidget.connect('nodeAddedByUser(vtkMRMLNode*)', self.onAdvancedVolumeParameterChanged)
-    self.resectionsWidget.ComputeVolumePushButton.connect('clicked(bool)', self.onComputeVolumeButtonClicked)
+
+    self.resectionVolumetryWidget.FinishPlanningCheckBox.connect('stateChanged(int)', self.onFinishPlanningCheckBoxChanged)
+    self.resectionVolumetryWidget.ParenchymaSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onComputeVolumeParameterChanged)
+    self.resectionVolumetryWidget.ROIMarkerSelectorWidget.connect('nodeAddedByUser(vtkMRMLNode*)', self.onComputeVolumeParameterChanged)
+    self.resectionVolumetryWidget.ResectionTargetNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionVolumetryTargetNodeChanged)
+    # self.resectionVolumetryWidget.VascularSegmentsSelectorWidget.connect('currentNodeChanged(vtkMRMLNode*)', self.onAdvancedVolumeParameterChanged)
+    # self.resectionVolumetryWidget.ROIMarkersListSelectorWidget.connect('nodeAddedByUser(vtkMRMLNode*)', self.onAdvancedVolumeParameterChanged)
+    self.resectionVolumetryWidget.ComputeVolumePushButton.connect('clicked(bool)', self.onComputeAdvancedVolumeButtonClicked)
+    self.resectionVolumetryWidget.CalculateEssentialResectionVolume.connect('clicked(bool)', self.onComputeEssentialVolumeButtonClicked)
 
     self.resectogramWidget.Resection2DCheckBox.connect('stateChanged(int)', self.onResection2DChanged)
     self.resectogramWidget.MirrorDisplayCheckBox.connect('stateChanged(int)', self.onMirrorDisplayCheckBoxChanged)
@@ -264,51 +272,119 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectogramWidget.PortalContourColorPickerButton.connect('colorChanged(QColor)', self.onPortalContourColorChanged)
     self.resectogramWidget.VascularSegmentsNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onVascularSegmentsNodeChanged)
 
-  def onAdvancedVolumeParameterChanged(self):
-    """
-    This function is triggered whenever AdvancedVolumeParameter changes
-    """
-    node1 = self.resectionsWidget.VascularSegmentsSelectorWidget.currentNode()
-    self.resectionsWidget.ROIVolumeWidget.setEnabled(node1 != None)
 
-  def onComputeVolumeParameterChanged(self):
-    """
-    This function is triggered whenever VolumeParameter changes
-    """
-    node1 = self.resectionsWidget.TumorMarkerSelectorWidget.currentNode()
-    node2 = self.resectionsWidget.ParenchymaSegmentSelectorWidget.currentNode()
-    self.resectionsWidget.ComputeVolumePushButton.setEnabled(None not in [node1, node2])
+
+
+  #--------------------- Liver Resection Volumetry Funs------------------------#
 
   def onFinishPlanningCheckBoxChanged(self):
     """
     This function is called when the FinishPlanning checkbox changes.
     """
     if self._currentResectionNode is not None:
-      self.resectionsWidget.ComputeVolumetryParametersGroupBox.setEnabled(self.resectionsWidget.FinishPlanningCheckBox.isChecked())
-      self.resectionsWidget.OutPutGroupBox.setEnabled(self.resectionsWidget.FinishPlanningCheckBox.isChecked())
+      self.resectionVolumetryWidget.ComputeVolumetryParametersGroupBox.setEnabled(self.resectionVolumetryWidget.FinishPlanningCheckBox.isChecked())
+      self.resectionVolumetryWidget.OutPutGroupBox.setEnabled(self.resectionVolumetryWidget.FinishPlanningCheckBox.isChecked())
 
-  def onComputeVolumeButtonClicked(self):
-    if self._currentResectionNode is not None:
-      tumorMarkerNode = self.resectionsWidget.TumorMarkerSelectorWidget.currentNode()
+  def onResectionVolumetryTargetNodeChanged(self):
+    """
+    This function is called when the Resection Target Node changes.
+    """
+    if self.resectionVolumetryWidget.ResectionTargetNodeComboBox.currentNode() is None:
+      return
+    currentNodeIndex = self.resectionVolumetryWidget.ResectionTargetNodeComboBox.currentNode().GetID()[-1:]
+    targetMarkerNode = self.resectionVolumetryWidget.ROIMarkerSelectorWidget.currentNode()
+    if targetMarkerNode is not None:
+      targetMarkerNode.SetDisplayVisibility(False)#Hide previous markup points
+
+    targetMarkerNode = self.getResectionTargetMarkerNode()
+    if targetMarkerNode is None:
+      targetMarkerNode = self.resectionVolumetryWidget.ROIMarkerSelectorWidget.addNode()
+      targetMarkerNode.SetName(self.getTargetMarkerNodeName())
+      self.resectionVolumetryWidget.ROIMarkerSelectorWidget.setCurrentNode(targetMarkerNode)
+    logging.info('currentNode: ' + self.resectionVolumetryWidget.ROIMarkerSelectorWidget.currentNode().GetName())
+    targetMarkerNode.SetDisplayVisibility(True)#Show current markup points
+
+  def getResectionTargetMarkerNode(self):
+    """
+    This function is used to get TargetMarkerNode
+    """
+    targetMarkerName = self.getTargetMarkerNodeName()
+    for i in range(self.resectionVolumetryWidget.ROIMarkerSelectorWidget.nodeCount()):
+      node = self.resectionVolumetryWidget.ROIMarkerSelectorWidget.nodeFromIndex(i)
+      if targetMarkerName == node.GetName():
+        self.resectionVolumetryWidget.ROIMarkerSelectorWidget.setCurrentNode(node)
+        return self.resectionVolumetryWidget.ROIMarkerSelectorWidget.currentNode()
+    logging.info('Found no node called: ' + targetMarkerName)
+    return None
+
+  def getTargetMarkerNodeName(self):
+    """
+    This function is used to get TargetMarkerNode name
+    """
+    return "TargetMarker" + self.resectionVolumetryWidget.ResectionTargetNodeComboBox.currentNode().GetName()
+
+  
+  def onComputeEssentialVolumeButtonClicked(self):
+    ROIMarkerNode = self.resectionVolumetryWidget.ROIMarkerSelectorWidget.currentNode()
+    resectionNode = self.resectionVolumetryWidget.ResectionTargetNodeComboBox.currentNode()
+    parenchymaLabelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("ParenchymaLabelMap")
+
+    if not parenchymaLabelmapVolumeNode:
+      parenchymaLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "ParenchymaLabelMap")
+      segmentationNode = self.resectionVolumetryWidget.ParenchymaSegmentSelectorWidget.currentNode()
+      refVolumeNode = self.distanceMapsWidget.ReferenceVolumeSelector.currentNode()
+      parenchymaSegmentId = self.resectionVolumetryWidget.ParenchymaSegmentSelectorWidget.currentSegmentID()
+      segmentationIds = vtk.vtkStringArray()
+      segmentationIds.Initialize()
+      segmentationIds.InsertNextValue(parenchymaSegmentId)
+      slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
+                                                                        parenchymaLabelmapVolumeNode, refVolumeNode)
+    lvLogic = slicer.modules.liverresections.logic()
+    outputTable = self.resectionVolumetryWidget.VolumeTableSelectorWidget.currentNode()
+
+    lvLogic.ComputePlanningEssentialVolumetry(resectionNode, parenchymaLabelmapVolumeNode, ROIMarkerNode, outputTable)
+    self.showTable(outputTable)
+
+  def onAdvancedVolumeParameterChanged(self):
+    """
+    This function is triggered whenever AdvancedVolumeParameter changes
+    """
+    node1 = self.resectionVolumetryWidget.VascularSegmentsSelectorWidget.currentNode()
+    # self.resectionVolumetryWidget.ROIVolumeWidget.setEnabled(node1 != None)
+
+  def onComputeVolumeParameterChanged(self):
+    """
+    This function is triggered whenever VolumeParameter changes
+    """
+    node1 = self.resectionVolumetryWidget.ROIMarkerSelectorWidget.currentNode()
+    node2 = self.resectionVolumetryWidget.ParenchymaSegmentSelectorWidget.currentNode()
+    self.resectionVolumetryWidget.ComputeVolumePushButton.setEnabled(None not in [node1, node2])
+
+  def onComputeAdvancedVolumeButtonClicked(self):
+
+      resectionNodes = vtk.vtkCollection()
+      for i in range(self.resectionVolumetryWidget.ResectionTargetNodeComboBox.nodeCount()):
+        node = self.resectionVolumetryWidget.ResectionTargetNodeComboBox.nodeFromIndex(i)
+        resectionNodes.AddItem(node)
 
       parenchymaLabelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("ParenchymaLabelMap")
       if not parenchymaLabelmapVolumeNode:
         parenchymaLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "ParenchymaLabelMap")
-        segmentationNode = self.resectionsWidget.ParenchymaSegmentSelectorWidget.currentNode()
+        segmentationNode = self.resectionVolumetryWidget.ParenchymaSegmentSelectorWidget.currentNode()
         refVolumeNode = self.distanceMapsWidget.ReferenceVolumeSelector.currentNode()
-        parenchymaSegmentId = self.resectionsWidget.ParenchymaSegmentSelectorWidget.currentSegmentID()
+        parenchymaSegmentId = self.resectionVolumetryWidget.ParenchymaSegmentSelectorWidget.currentSegmentID()
         segmentationIds = vtk.vtkStringArray()
         segmentationIds.Initialize()
         segmentationIds.InsertNextValue(parenchymaSegmentId)
         slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
                                                                           parenchymaLabelmapVolumeNode, refVolumeNode)
       lvLogic = slicer.modules.liverresections.logic()
-      VascularSegmentsLabelmapVolumeNode = self.resectionsWidget.VascularSegmentsSelectorWidget.currentNode()
-      ROIMarkersList = self.resectionsWidget.ROIMarkersListSelectorWidget.currentNode()
+      VascularSegmentsLabelmapVolumeNode = self.resectionVolumetryWidget.VascularSegmentsSelectorWidget.currentNode()
+      ROIMarkersList = self.resectionVolumetryWidget.ROIMarkersListSelectorWidget.currentNode()
 
-      outputTable = self.resectionsWidget.VolumeTableSelectorWidget.currentNode()
+      outputTable = self.resectionVolumetryWidget.VolumeTableSelectorWidget.currentNode()
 
-      lvLogic.ComputePlanningVolumetry(self._currentResectionNode, parenchymaLabelmapVolumeNode, tumorMarkerNode, outputTable, VascularSegmentsLabelmapVolumeNode, ROIMarkersList)
+      lvLogic.ComputeAdvancedPlanningVolumetry(resectionNodes, parenchymaLabelmapVolumeNode, outputTable, ROIMarkersList, VascularSegmentsLabelmapVolumeNode)
       self.showTable(outputTable)
 
   def showTable(self, table):
@@ -583,7 +659,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       self._currentResectionNode.SetTargetOrganModelNode(modelNode)
       self.resectionsWidget.ResectionVisualizationGroupBox.setEnabled(modelNode is not None)
       self.resectionsWidget.GridGroupBox.setEnabled(modelNode is not None)
-      self.resectionsWidget.ComputeVolumetryGroupBox.setEnabled(modelNode is not None)
+      self.resectionVolumetryWidget.ResectionVolumetryGroupWidget.setEnabled(modelNode is not None)
 
   def onDistanceContourStartInteraction(self, caller, event):
     """
