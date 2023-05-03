@@ -196,6 +196,11 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectogramWidget = slicer.util.childWidgetVariables(resectogramUI)
     self.resectionVolumetryWidget = slicer.util.childWidgetVariables(resectionVolumetryUI)
 
+    iconsPath = os.path.join(os.path.dirname(__file__), 'Resources/Icons')
+    iconStyle = "QCheckBox::indicator:unchecked {{ image: url({0}/SlicerInvisible.png);}}\n QCheckBox::indicator:checked {{ image: url({1}/SlicerVisible.png);}}".format(iconsPath,iconsPath)
+    self.resectogramWidget.Grid2DVisibility.setStyleSheet(iconStyle)
+    self.resectionsWidget.Grid3DVisibility.setStyleSheet(iconStyle)
+
     # Add LiverSegmentsWidget
     wrapperWidget = slicer.qMRMLWidget()
     wrapperWidget.setLayout(qt.QVBoxLayout())
@@ -232,7 +237,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.connect('clicked(bool)', self.onComputeDistanceMapButtonClicked)
     self.resectionsWidget.CurvedRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.CurvedRadioButton))
     self.resectionsWidget.FlatRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.FlatRadioButton))
+    self.resectionsWidget.ClosedCurveButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.ClosedCurveButton))
     self.resectionsWidget.MarkupsResectionCheckBox.toggled.connect(lambda: self.onMarkupsResectionCheckBoxChecked(self.resectionsWidget.MarkupsResectionCheckBox))
+    self.resectionsWidget.InitialContourPositionButton.connect('clicked(bool)', self.onDefiningStartingCountourPosition)
     self.resectionsWidget.ResectionNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionDistanceMapNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
@@ -247,6 +254,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.ResectionGridColorPickerButton.connect('colorChanged(QColor)', self.onResectionGridColorChanged)
     self.resectionsWidget.GridDivisionsDoubleSlider.connect('valueChanged(double)', self.onGridDivisionsChanged)
     self.resectionsWidget.GridThicknessDoubleSlider.connect('valueChanged(double)', self.onGridThicknessChanged)
+    self.resectionsWidget.Grid3DVisibility.connect('stateChanged(int)', self.onGrid3DVisibilityChanged)
     self.resectionsWidget.ResectionLockCheckBox.connect('stateChanged(int)', self.onResectionLockChanged)
     self.resectionsWidget.UncertaintyMarginSpinBox.connect('valueChanged(double)', self.onUncertaintyMarginChanged)
     self.resectionsWidget.UncertaintyMarginColorPickerButton.connect('colorChanged(QColor)', self.onUncertaintyMarginColorChanged)
@@ -255,24 +263,19 @@ class LiverWidget(ScriptedLoadableModuleWidget):
 
     self.resectionVolumetryWidget.FinishPlanningCheckBox.connect('stateChanged(int)', self.onFinishPlanningCheckBoxChanged)
     self.resectionVolumetryWidget.ParenchymaSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onComputeVolumeParameterChanged)
-    self.resectionVolumetryWidget.ROIMarkerSelectorWidget.connect('nodeAddedByUser(vtkMRMLNode*)', self.onComputeVolumeParameterChanged)
+    self.resectionVolumetryWidget.ROIMarkersListSelectorWidget.connect('nodeAddedByUser(vtkMRMLNode*)', self.onComputeVolumeParameterChanged)
     self.resectionVolumetryWidget.ResectionTargetNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionVolumetryTargetNodeChanged)
-    # self.resectionVolumetryWidget.VascularSegmentsSelectorWidget.connect('currentNodeChanged(vtkMRMLNode*)', self.onAdvancedVolumeParameterChanged)
-    # self.resectionVolumetryWidget.ROIMarkersListSelectorWidget.connect('nodeAddedByUser(vtkMRMLNode*)', self.onAdvancedVolumeParameterChanged)
     self.resectionVolumetryWidget.ComputeVolumePushButton.connect('clicked(bool)', self.onComputeAdvancedVolumeButtonClicked)
-    self.resectionVolumetryWidget.CalculateEssentialResectionVolume.connect('clicked(bool)', self.onComputeEssentialVolumeButtonClicked)
 
     self.resectogramWidget.Resection2DCheckBox.connect('stateChanged(int)', self.onResection2DChanged)
     self.resectogramWidget.MirrorDisplayCheckBox.connect('stateChanged(int)', self.onMirrorDisplayCheckBoxChanged)
     self.resectogramWidget.FlexibleBoundaryCheckBox.connect('stateChanged(int)', self.onFlexibleBoundaryCheckBoxChanged)
-    self.resectogramWidget.EnableGridCheckBox.connect('stateChanged(int)', self.onEnableGridCheckBoxChanged)
+    self.resectogramWidget.Grid2DVisibility.connect('stateChanged(int)', self.onGrid2DVisibilityChanged)
     self.resectogramWidget.HepaticContourThicknessSpinBox.connect('valueChanged(double)', self.onHepaticContourThicknessChanged)
     self.resectogramWidget.HepaticContourColorPickerButton.connect('colorChanged(QColor)', self.onHepaticContourColorChanged)
     self.resectogramWidget.PortalContourThicknessSpinBox.connect('valueChanged(double)', self.onPortalContourThicknessChanged)
     self.resectogramWidget.PortalContourColorPickerButton.connect('colorChanged(QColor)', self.onPortalContourColorChanged)
     self.resectogramWidget.VascularSegmentsNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onVascularSegmentsNodeChanged)
-
-
 
 
   #--------------------- Liver Resection Volumetry Funs------------------------#
@@ -291,17 +294,16 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     if self.resectionVolumetryWidget.ResectionTargetNodeComboBox.currentNode() is None:
       return
-    currentNodeIndex = self.resectionVolumetryWidget.ResectionTargetNodeComboBox.currentNode().GetID()[-1:]
-    targetMarkerNode = self.resectionVolumetryWidget.ROIMarkerSelectorWidget.currentNode()
+    targetMarkerNode = self.resectionVolumetryWidget.ROIMarkersListSelectorWidget.currentNode()
     if targetMarkerNode is not None:
       targetMarkerNode.SetDisplayVisibility(False)#Hide previous markup points
 
     targetMarkerNode = self.getResectionTargetMarkerNode()
     if targetMarkerNode is None:
-      targetMarkerNode = self.resectionVolumetryWidget.ROIMarkerSelectorWidget.addNode()
+      targetMarkerNode = self.resectionVolumetryWidget.ROIMarkersListSelectorWidget.addNode()
       targetMarkerNode.SetName(self.getTargetMarkerNodeName())
-      self.resectionVolumetryWidget.ROIMarkerSelectorWidget.setCurrentNode(targetMarkerNode)
-    logging.info('currentNode: ' + self.resectionVolumetryWidget.ROIMarkerSelectorWidget.currentNode().GetName())
+      self.resectionVolumetryWidget.ROIMarkersListSelectorWidget.setCurrentNode(targetMarkerNode)
+    logging.info('currentNode: ' + self.resectionVolumetryWidget.ROIMarkersListSelectorWidget.currentNode().GetName())
     targetMarkerNode.SetDisplayVisibility(True)#Show current markup points
 
   def getResectionTargetMarkerNode(self):
@@ -309,11 +311,11 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     This function is used to get TargetMarkerNode
     """
     targetMarkerName = self.getTargetMarkerNodeName()
-    for i in range(self.resectionVolumetryWidget.ROIMarkerSelectorWidget.nodeCount()):
-      node = self.resectionVolumetryWidget.ROIMarkerSelectorWidget.nodeFromIndex(i)
+    for i in range(self.resectionVolumetryWidget.ROIMarkersListSelectorWidget.nodeCount()):
+      node = self.resectionVolumetryWidget.ROIMarkersListSelectorWidget.nodeFromIndex(i)
       if targetMarkerName == node.GetName():
-        self.resectionVolumetryWidget.ROIMarkerSelectorWidget.setCurrentNode(node)
-        return self.resectionVolumetryWidget.ROIMarkerSelectorWidget.currentNode()
+        self.resectionVolumetryWidget.ROIMarkersListSelectorWidget.setCurrentNode(node)
+        return self.resectionVolumetryWidget.ROIMarkersListSelectorWidget.currentNode()
     logging.info('Found no node called: ' + targetMarkerName)
     return None
 
@@ -321,14 +323,32 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     This function is used to get TargetMarkerNode name
     """
-    return "TargetMarker" + self.resectionVolumetryWidget.ResectionTargetNodeComboBox.currentNode().GetName()
+    return "ROIMarkerList-" + self.resectionVolumetryWidget.ResectionTargetNodeComboBox.currentNode().GetName()
 
-  
-  def onComputeEssentialVolumeButtonClicked(self):
-    ROIMarkerNode = self.resectionVolumetryWidget.ROIMarkerSelectorWidget.currentNode()
-    resectionNode = self.resectionVolumetryWidget.ResectionTargetNodeComboBox.currentNode()
+  def onComputeVolumeParameterChanged(self):
+    """
+    This function is triggered whenever VolumeParameter changes
+    """
+    node1 = self.resectionVolumetryWidget.ROIMarkersListSelectorWidget.currentNode()
+    node2 = self.resectionVolumetryWidget.ParenchymaSegmentSelectorWidget.currentNode()
+    self.resectionVolumetryWidget.ComputeVolumePushButton.setEnabled(None not in [node1, node2])
+
+  def onComputeAdvancedVolumeButtonClicked(self):
+    """
+    This function is for compute volume
+    """
+    resectionNodes = vtk.vtkCollection()
+    if self.resectionVolumetryWidget.UseAllCheckBox.isChecked():
+      for i in range(self.resectionVolumetryWidget.ResectionTargetNodeComboBox.nodeCount()):
+        node = self.resectionVolumetryWidget.ResectionTargetNodeComboBox.nodeFromIndex(i)
+        resectionNodes.AddItem(node)
+    else:
+      if self.resectionVolumetryWidget.ResectionTargetNodeComboBox.currentNode():
+        resectionNodes.AddItem(self.resectionVolumetryWidget.ResectionTargetNodeComboBox.currentNode())
+      else:
+        resectionNodes = None
+
     parenchymaLabelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("ParenchymaLabelMap")
-
     if not parenchymaLabelmapVolumeNode:
       parenchymaLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "ParenchymaLabelMap")
       segmentationNode = self.resectionVolumetryWidget.ParenchymaSegmentSelectorWidget.currentNode()
@@ -339,53 +359,14 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       segmentationIds.InsertNextValue(parenchymaSegmentId)
       slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
                                                                         parenchymaLabelmapVolumeNode, refVolumeNode)
-    lvLogic = slicer.modules.liverresections.logic()
+
+    VascularSegmentsLabelmapVolumeNode = self.resectionVolumetryWidget.VascularSegmentsSelectorWidget.currentNode()
+    ROIMarkersList = self.resectionVolumetryWidget.ROIMarkersListSelectorWidget.currentNode()
     outputTable = self.resectionVolumetryWidget.VolumeTableSelectorWidget.currentNode()
 
-    lvLogic.ComputePlanningEssentialVolumetry(resectionNode, parenchymaLabelmapVolumeNode, ROIMarkerNode, outputTable)
+    lvLogic = slicer.modules.liverresections.logic()
+    lvLogic.ComputeAdvancedPlanningVolumetry(resectionNodes, parenchymaLabelmapVolumeNode, outputTable, ROIMarkersList, VascularSegmentsLabelmapVolumeNode)
     self.showTable(outputTable)
-
-  def onAdvancedVolumeParameterChanged(self):
-    """
-    This function is triggered whenever AdvancedVolumeParameter changes
-    """
-    node1 = self.resectionVolumetryWidget.VascularSegmentsSelectorWidget.currentNode()
-    # self.resectionVolumetryWidget.ROIVolumeWidget.setEnabled(node1 != None)
-
-  def onComputeVolumeParameterChanged(self):
-    """
-    This function is triggered whenever VolumeParameter changes
-    """
-    node1 = self.resectionVolumetryWidget.ROIMarkerSelectorWidget.currentNode()
-    node2 = self.resectionVolumetryWidget.ParenchymaSegmentSelectorWidget.currentNode()
-    self.resectionVolumetryWidget.ComputeVolumePushButton.setEnabled(None not in [node1, node2])
-
-  def onComputeAdvancedVolumeButtonClicked(self):
-
-      resectionNodes = vtk.vtkCollection()
-      for i in range(self.resectionVolumetryWidget.ResectionTargetNodeComboBox.nodeCount()):
-        node = self.resectionVolumetryWidget.ResectionTargetNodeComboBox.nodeFromIndex(i)
-        resectionNodes.AddItem(node)
-
-      parenchymaLabelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName("ParenchymaLabelMap")
-      if not parenchymaLabelmapVolumeNode:
-        parenchymaLabelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "ParenchymaLabelMap")
-        segmentationNode = self.resectionVolumetryWidget.ParenchymaSegmentSelectorWidget.currentNode()
-        refVolumeNode = self.distanceMapsWidget.ReferenceVolumeSelector.currentNode()
-        parenchymaSegmentId = self.resectionVolumetryWidget.ParenchymaSegmentSelectorWidget.currentSegmentID()
-        segmentationIds = vtk.vtkStringArray()
-        segmentationIds.Initialize()
-        segmentationIds.InsertNextValue(parenchymaSegmentId)
-        slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
-                                                                          parenchymaLabelmapVolumeNode, refVolumeNode)
-      lvLogic = slicer.modules.liverresections.logic()
-      VascularSegmentsLabelmapVolumeNode = self.resectionVolumetryWidget.VascularSegmentsSelectorWidget.currentNode()
-      ROIMarkersList = self.resectionVolumetryWidget.ROIMarkersListSelectorWidget.currentNode()
-
-      outputTable = self.resectionVolumetryWidget.VolumeTableSelectorWidget.currentNode()
-
-      lvLogic.ComputeAdvancedPlanningVolumetry(resectionNodes, parenchymaLabelmapVolumeNode, outputTable, ROIMarkersList, VascularSegmentsLabelmapVolumeNode)
-      self.showTable(outputTable)
 
   def showTable(self, table):
     """
@@ -417,6 +398,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       if rdbutton.text == "Curved":
         lvLogic.HideInitializationMarkupFromResection(activeResectionNode)
         lvLogic.HideBezierSurfaceMarkupFromResection(activeResectionNode)
+        BezierNode = activeResectionNode.GetBezierSurfaceNode()
+        BezierDisplay = BezierNode.GetDisplayNode()
+        BezierDisplay.SetGlyphScale(3.0)
         liverNode = activeResectionNode.GetTargetOrganModelNode()
         if self._distanceContourNode is not None:
           self._distanceContourNode.SetDisplayVisibility(True)
@@ -445,17 +429,78 @@ class LiverWidget(ScriptedLoadableModuleWidget):
                                                                                   self._preprocessedLiverNode))
           self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
                                         self.onDistanceContourStartInteraction)
+          BezierNode = activeResectionNode.GetBezierSurfaceNode()
+          BezierNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointStartInteractionEvent,
+                                 lambda x, y: self.BezierSurfaceModified(self._distanceContourNode))
+
       elif rdbutton.text == "MarkupClosedCurve":
+        self._distanceContourNode = self.resectionsWidget.DistanceContourComboBox.currentNode()
         if self._distanceContourNode is not None:
           self._distanceContourNode.SetDisplayVisibility(False)
         lvLogic.HideInitializationMarkupFromResection(activeResectionNode)
         lvLogic.HideBezierSurfaceMarkupFromResection(activeResectionNode)
-      elif rdbutton.text == "Flat(Default)":
+      elif rdbutton.text == "Flat":
         lvLogic.ShowInitializationMarkupFromResection(activeResectionNode)
         lvLogic.HideBezierSurfaceMarkupFromResection(activeResectionNode)
+        BezierNode = activeResectionNode.GetBezierSurfaceNode()
+        BezierDisplay = BezierNode.GetDisplayNode()
+        BezierDisplay.SetGlyphScale(3.0)
         if self._distanceContourNode is not None:
           self._distanceContourNode.SetDisplayVisibility(False)
         return
+
+  def onDefiningStartingCountourPosition(self):
+    segmentationNode = self.resectionsWidget.LiverSegmentSelectorWidget.currentNode()
+    parenchymaSegmentId = self.resectionsWidget.LiverSegmentSelectorWidget.currentSegmentID()
+    liverPolyData = segmentationNode.GetClosedSurfaceInternalRepresentation(parenchymaSegmentId)
+
+    tumourSegmentationNode = self.resectionsWidget.TumorSegmentSelectorWidget.currentNode()
+    tumorSegmentId = self.resectionsWidget.TumorSegmentSelectorWidget.currentSegmentID()
+    tumourPolyData = tumourSegmentationNode.GetClosedSurfaceInternalRepresentation(tumorSegmentId)
+
+    activeDistanceContour = self.resectionsWidget.DistanceContourComboBox.currentNode()
+
+    com_tumor = vtk.vtkCenterOfMass()
+    com_tumor.SetInputData(tumourPolyData)
+    com_tumor.SetUseScalarsAsWeights(False)
+    com_tumor.Update()
+    center_tumor = np.array(com_tumor.GetCenter()).reshape(-1, 3)
+
+    com_liver = vtk.vtkCenterOfMass()
+    com_liver.SetInputData(liverPolyData)
+    com_liver.SetUseScalarsAsWeights(False)
+    com_liver.Update()
+    center_liver = np.array(com_liver.GetCenter()).reshape(-1, 3)
+    vector_1 = self.logic.findVectorBetweenTwo3DPoints(center_liver, center_tumor)
+    vector_1 = vector_1.reshape(-1, 3)
+    centers_array = np.array([center_liver, center_tumor])
+    median_point = np.median(centers_array, axis=0)
+    print("median_point", median_point.shape)
+
+    # get camera views
+    threedView = slicer.app.layoutManager().threeDWidget(0).threeDView()
+    renderWindow = threedView.renderWindow()
+    renderer = renderWindow.GetRenderers().GetFirstRenderer()
+    camera = renderer.GetActiveCamera()
+
+    view_up = camera.GetViewUp()
+    view_normal = camera.GetViewPlaneNormal()
+    cross_view = np.cross(view_up, view_normal)
+
+    bounds = liverPolyData.GetBounds()
+    extent = (bounds[3] - bounds[2]) / 2
+
+    product_vectors = np.dot(vector_1, cross_view)
+    mag_vector1 = np.linalg.norm(vector_1)
+    mag_vector2 = np.linalg.norm(cross_view)
+    alpha = np.arccos([product_vectors / (mag_vector1 * mag_vector2)])
+    if alpha >= np.pi / 2:
+      point = center_tumor + extent * ((-1) * cross_view)
+    else:
+      point = center_tumor + extent * cross_view
+
+    activeDistanceContour.SetNthControlPointPosition(0, tuple(median_point.reshape(1, -1)[0]))
+    activeDistanceContour.SetNthControlPointPosition(1, tuple(point.reshape(1, -1)[0]))
 
   def onMarkupsResectionCheckBoxChecked(self, checkbox):
     activeMarkupClosedCurveNode = self.resectionsWidget.MarkupClosedCurveNodeComboBox.currentNode()
@@ -498,6 +543,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       lvLogic = slicer.modules.liverresections.logic()
 
       if activeResectionNode is not None:
+
         self.resectionsWidget.LiverSegmentSelectorWidget.blockSignals(True)
         self.resectionsWidget.LiverSegmentSelectorWidget.setCurrentNode(None)
         self.resectionsWidget.LiverSegmentSelectorWidget.blockSignals(False)
@@ -613,6 +659,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         if renderers.GetNumberOfItems() == 5:
           renderers.RemoveItem(4)
         self.resectogramWidget.Resection2DCheckBox.setCheckState(0)
+        self.resectogramWidget.Resection2DCheckBox.setEnabled(0)
         self._currentResectionNode.SetShowResection2D(False)
 
     self._currentResectionNode = activeResectionNode
@@ -667,6 +714,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     lvLogic = slicer.modules.liverresections.logic()
     lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
+
+  def BezierSurfaceModified(self, distanceNode):
+    distanceNode.SetDisplayVisibility(False)
 
   def onResectionMarginChanged(self):
     """
@@ -732,7 +782,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     segmentationIds.InsertNextValue(tumorSegmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
                                                                       tumorLabelmapVolumeNode, refVolumeNode)
-    
+
     segmentationIds.Initialize()
     segmentationIds.InsertNextValue(parenchymaSegmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
@@ -864,6 +914,13 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     if self._currentResectionNode is not None:
       self._currentResectionNode.SetGridThickness(self.resectionsWidget.GridThicknessDoubleSlider.value)
 
+  def onGrid3DVisibilityChanged(self):
+    """
+    This function is called when the EnableGrid checkbox changes.
+    """
+    if self._currentResectionNode:
+      self._currentResectionNode.SetGrid3DVisibility(self.resectionsWidget.Grid3DVisibility.isChecked())
+
   def onResection2DChanged(self):
     """
     This function is called when the resection2D checkbox changes.
@@ -876,7 +933,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
         self.resectogramWidget.PortalContourGroupBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.VsacularSegmentsGroupBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.FlexibleBoundaryCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
-      self.resectogramWidget.EnableGridCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
+      self.resectogramWidget.Grid2DVisibility.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.MirrorDisplayCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
       if self.resectogramWidget.Resection2DCheckBox.isChecked() == 0 and renderers.GetNumberOfItems() == 5:
@@ -906,12 +963,12 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     if self._currentResectionNode:
       self._currentResectionNode.SetEnableFlexibleBoundary(self.resectogramWidget.FlexibleBoundaryCheckBox.isChecked())
 
-  def onEnableGridCheckBoxChanged(self):
+  def onGrid2DVisibilityChanged(self):
     """
     This function is called when the EnableGrid checkbox changes.
     """
     if self._currentResectionNode:
-      self._currentResectionNode.SetEnableGrid(self.resectogramWidget.EnableGridCheckBox.isChecked())
+      self._currentResectionNode.SetGrid2DVisibility(self.resectogramWidget.Grid2DVisibility.isChecked())
 
   def onHepaticContourThicknessChanged(self):
     """
@@ -1087,32 +1144,69 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     resampledImage = imageResampleFilter.Execute(inputImage)
 
     return resampledImage
-  
-  def preprocessing(self, modelPolyData, subdivide=True):
 
-    modelPolyDataCopy = vtk.vtkPolyData()
-    modelPolyDataCopy.DeepCopy(modelPolyData)
-    modelNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode')
-    modelNode.CreateDefaultDisplayNodes()
-    modelDisplayNode = modelNode.GetDisplayNode()
-    modelDisplayNode.SetOpacity(0.2)
-    modelDisplayNode.Visibility3DOff()
-    modelNode.SetAndObservePolyData(modelPolyDataCopy)
-    # print(modelNode)
-
-    # subdivision filter
-    # new steps for preparation to avoid problems because of connectivity
-    if subdivide:
-      smooth_loop = vtk.vtkLoopSubdivisionFilter()
-      smooth_loop.SetNumberOfSubdivisions(1)
-      smooth_loop.SetInputData(modelNode.GetPolyData())
-      smooth_loop.Update()
-      # liverModelNode.RemoveAllObservers()
-      modelNode.SetAndObservePolyData(smooth_loop.GetOutput())
-      if smooth_loop.GetOutput().GetNumberOfPoints() == 0:
+  def preprocessing(self, surfacePolyData, targetNumberOfPoints=700000, decimationAggressiveness=2):
+    numberOfInputPoints = surfacePolyData.GetNumberOfPoints()
+    if numberOfInputPoints == 0:
+      raise ("Input surface model is empty")
+      # new steps for preparation to avoid problems because of slim models (f.e. at stenosis)
+    elif numberOfInputPoints <= 400000:
+      subdiv = vtk.vtkLinearSubdivisionFilter()
+      subdiv.SetInputData(surfacePolyData)
+      subdiv.SetNumberOfSubdivisions(1)
+      subdiv.Update()
+      subPolyData = subdiv.GetOutput()
+      if subPolyData.GetNumberOfPoints() == 0:
         logging.warning("Mesh subdivision failed. Skip subdivision step.")
-        subdivide = False
-    return modelNode
+      numberOfPoints = subPolyData.GetNumberOfPoints()
+      reductionFactor = (numberOfPoints - targetNumberOfPoints) / numberOfPoints
+      if reductionFactor > 0.0:
+        parameters = {}
+        inputSurfaceModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "tempInputSurfaceModel")
+        inputSurfaceModelNode.SetAndObserveMesh(subPolyData)
+        parameters["inputModel"] = inputSurfaceModelNode
+        outputSurfaceModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "tempDecimatedSurfaceModel")
+        parameters["outputModel"] = outputSurfaceModelNode
+        parameters["reductionFactor"] = reductionFactor
+        parameters["method"] = "FastQuadric"
+        parameters["aggressiveness"] = decimationAggressiveness
+        decimation = slicer.modules.decimation
+        cliNode = slicer.cli.runSync(decimation, None, parameters)
+        subPolyData = outputSurfaceModelNode.GetPolyData()
+        slicer.mrmlScene.RemoveNode(inputSurfaceModelNode)
+        slicer.mrmlScene.RemoveNode(outputSurfaceModelNode)
+        slicer.mrmlScene.RemoveNode(cliNode)
+
+      surfaceCleaner = vtk.vtkCleanPolyData()
+      surfaceCleaner.SetInputData(subPolyData)
+      surfaceCleaner.Update()
+
+      surfaceTriangulator = vtk.vtkTriangleFilter()
+      surfaceTriangulator.SetInputData(surfaceCleaner.GetOutput())
+      surfaceTriangulator.PassLinesOff()
+      surfaceTriangulator.PassVertsOff()
+      surfaceTriangulator.Update()
+
+      normals = vtk.vtkPolyDataNormals()
+      normals.SetInputData(surfaceTriangulator.GetOutput())
+      normals.SetAutoOrientNormals(1)
+      normals.SetFlipNormals(0)
+      normals.SetConsistency(1)
+      normals.SplittingOff()
+      normals.Update()
+
+      modelPolyDataCopy = vtk.vtkPolyData()
+      modelPolyDataCopy.DeepCopy(normals.GetOutput())
+      modelNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode')
+      modelNode.SetName("PreprocessedLiver")
+      modelNode.CreateDefaultDisplayNodes()
+      modelDisplayNode = modelNode.GetDisplayNode()
+      modelDisplayNode.SetOpacity(0.2)
+      modelDisplayNode.Visibility3DOff()
+      modelNode.SetAndObservePolyData(modelPolyDataCopy)
+      return modelNode
+    else:
+      return surfacePolyData
 
   def CreatePolyDataFromCoords(self, coordinates):
     """

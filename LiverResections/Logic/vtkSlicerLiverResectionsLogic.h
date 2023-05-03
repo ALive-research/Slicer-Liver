@@ -56,9 +56,7 @@
 #include <map>
 #include <vtkMRMLTableNode.h>
 #include <vtkMRMLLabelMapVolumeNode.h>
-
 #include <itkImage.h>
-#include <itkSmartPointer.h>
 
 //------------------------------------------------------------------------------
 class vtkMRMLLiverResectionNode;
@@ -103,18 +101,11 @@ public:
   void HideBezierSurfaceMarkup(vtkMRMLMarkupsNode* markupsInitializationNode) const;
   void ShowInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const;
   void HideInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const;
-//  void ComputePlanningVolumetry(std::set<int> resectionNodeIDs,
-//                                vtkMRMLScalarVolumeNode* parenchymaLabelMap, std::set<int> tumorMarkerNodes, vtkMRMLTableNode* OutputTableNode,
-//                                vtkMRMLLabelMapVolumeNode* VascularSegments = nullptr, vtkMRMLMarkupsFiducialNode* ROIMarkersList = nullptr);
-//  void ComputePlanningVolumetry(std::string resectionNodeIDs,
-//                                vtkMRMLScalarVolumeNode* TargetSegmentLabelMap, std::string tumorMarkerNodes, vtkMRMLTableNode* OutputTableNode,
-//                                vtkMRMLLabelMapVolumeNode* VascularSegments = nullptr, vtkMRMLMarkupsFiducialNode* ROIMarkersList = nullptr);
+
   void ComputeAdvancedPlanningVolumetry(vtkCollection* resectionNodes, vtkMRMLScalarVolumeNode* TargetSegmentLabelMap, vtkMRMLTableNode* OutputTableNode, vtkMRMLMarkupsFiducialNode* ROIMarkersList, vtkMRMLLabelMapVolumeNode* VascularSegments = nullptr);
 
-  void ComputePlanningEssentialVolumetry(vtkMRMLLiverResectionNode* resectionNode, vtkMRMLScalarVolumeNode* TargetSegmentLabelMap, vtkMRMLMarkupsFiducialNode* ROIMarkerNode, vtkMRMLTableNode* OutputTableNode);
-
   vtkSmartPointer<vtkBezierSurfaceSource> GenerateBezierSurface(int Res, vtkMRMLLiverResectionNode* ResectionNode);
-  int GetITKRGSeedIndex(double* ROISeedPoint, int ReplaceValue);
+  itk::Index<3> GetITKRGSeedIndex(double* ROISeedPoint, itk::SmartPointer<itk::Image<short,3>> SourceImage);
   void VolumetryTable(std::string Properties, double TargetSegmentVolume, double ROIVolume, vtkTable *VolumeTable, int line = 0);
 
   char* LoadLiverResection(const std::string& fileName,
@@ -183,15 +174,13 @@ protected:
   std::map<std::string , std::vector<int>> VascularSegmentsVoxelsCount;
 
   vtkSmartPointer<vtkMRMLLabelMapVolumeNode> VascularSegments;
-  std::set<int> resectionNodeIDs;
-  vtkSmartPointer<vtkMRMLScalarVolumeNode> TargetSegmentLabelMap;
   vtkSmartPointer<vtkMRMLTableNode>  OutputTableNode;
   std::set<int> tumorMarkerNodes;
   std::vector<vtkSmartPointer<vtkBezierSurfaceSource>> bezierHRs;
   itk::SmartPointer<itk::Image<short,3>> ProjectedTargetSegmentImage;
   itk::SmartPointer<itk::Image<short,3>> connectedThreshold;
   itk::SmartPointer<itk::Image<short,3>> itkVascularSegments;
-  vtkSmartPointer<vtkMRMLLiverResectionNode> resectionNode;
+  vtkSmartPointer<vtkCollection> resectionNodes;
 //  vtkSmartPointer<vtkBezierSurfaceSource> bezierHR;
 private:
   vtkSlicerLiverResectionsLogic(const vtkSlicerLiverResectionsLogic &) = delete;
