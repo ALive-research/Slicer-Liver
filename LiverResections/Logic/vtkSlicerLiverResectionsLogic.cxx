@@ -1126,18 +1126,21 @@ void vtkSlicerLiverResectionsLogic::ComputeAdvancedPlanningVolumetry(vtkCollecti
       {
       auto point = ROIMarkersList->GetNthControlPointPosition(i);
       auto pointLabel = ROIMarkersList->GetNthControlPointLabel(i);
+
       this->connectedThreshold = nullptr;
+      if(resectionNodes != nullptr)
+        {
+        auto seedIndex = GetITKRGSeedIndex(point, this->ProjectedTargetSegmentImage);
+        this->connectedThreshold = labelMapHelper->ConnectedThreshold(this->ProjectedTargetSegmentImage, 1, 6, ReplaceValue, seedIndex);
+        }
 
       if(!VascularSegments){
         int CountValues;
         if(resectionNodes != nullptr){
-          auto seedIndex = GetITKRGSeedIndex(point, this->ProjectedTargetSegmentImage);
-          this->connectedThreshold = labelMapHelper->ConnectedThreshold(this->ProjectedTargetSegmentImage, 1, 6, ReplaceValue, seedIndex);
           CountValues = vtkLabelMapHelper::CountVoxels(this->connectedThreshold,TargetSegmentBoundingBox, ReplaceValue);
           }
-          else{
+        else{
           CountValues = TargetSegmentVoxels;
-          pointLabel = pointLabel+" TargetSegmentVolume";
           }
         auto ROIVolume = CountValues*spacing[0]*spacing[1]*spacing[2]*0.001;
         VolumetryTable(pointLabel, TargetSegmentVolume, ROIVolume, VolumeTable);
