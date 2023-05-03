@@ -481,7 +481,7 @@
       <item>
        <widget class="ctkCollapsibleGroupBox" name="GridGroupBox">
         <property name="enabled">
-         <bool>false</bool>
+         <bool>true</bool>
         </property>
         <property name="title">
          <string>Resection grid</string>
@@ -935,70 +935,6 @@
    </hints>
   </connection>
   <connection>
-   <sender>GridDivisionsDoubleSlider</sender>
-   <signal>valueChanged(double)</signal>
-   <receiver>GridDivisionsDoubleSpinBox</receiver>
-   <slot>setValue(double)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>285</x>
-     <y>407</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>485</x>
-     <y>407</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>GridDivisionsDoubleSpinBox</sender>
-   <signal>valueChanged(double)</signal>
-   <receiver>GridDivisionsDoubleSlider</receiver>
-   <slot>setValue(double)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>485</x>
-     <y>407</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>285</x>
-     <y>407</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>GridThicknessDoubleSlider</sender>
-   <signal>valueChanged(double)</signal>
-   <receiver>GridThicknessDoubleSpinBox</receiver>
-   <slot>setValue(double)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>282</x>
-     <y>449</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>477</x>
-     <y>449</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>GridThicknessDoubleSpinBox</sender>
-   <signal>valueChanged(double)</signal>
-   <receiver>GridThicknessDoubleSlider</receiver>
-   <slot>setValue(double)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>477</x>
-     <y>449</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>282</x>
-     <y>449</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
    <sender>ResectionWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>LiverSegmentSelectorWidget</receiver>
@@ -1075,22 +1011,6 @@
     <hint type="destinationlabel">
      <x>426</x>
      <y>380</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>ClosedCurveButton</sender>
-   <signal>toggled(bool)</signal>
-   <receiver>MarkupClosedCurveNodeComboBox</receiver>
-   <slot>setVisible(bool)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>502</x>
-     <y>452</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>671</x>
-     <y>374</y>
     </hint>
    </hints>
   </connection>
