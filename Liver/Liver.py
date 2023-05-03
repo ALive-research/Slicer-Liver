@@ -2276,6 +2276,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     BezierNode.SetControlPointPositionsWorld(points)
     BezierDisplay = BezierNode.GetDisplayNode()
     BezierDisplay.VisibilityOn()
+
     # BezierDisplay.SetClipOut(True)
 
 #
