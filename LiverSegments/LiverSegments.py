@@ -394,7 +394,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return centerlineModelNode
 
   def getVesselSegmentName(self):
-    name = 'Territory_' + str(self.ui.vascularTerritoryId.currentIndex) + '_segment_' + self.ui.inputSegmentSelectorWidget.currentSegmentID()
+    name = 'Territory_' + str(self.ui.vascularTerritoryId.currentIndex) + '_segment_' + self.ui.inputSegmentSelectorWidget.currentNode().GetName()
     return name
 
   def newEndpointsListCreated(self):
