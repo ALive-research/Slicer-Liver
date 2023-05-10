@@ -599,12 +599,8 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
 
   def calculateVascularTerritoryMap(self, index, refVolume, segmentation, centerlineModel, colormap):
     segmentationIds = vtk.vtkStringArray()
-    idString = "Vascular_Territory_Map_" + str(index)
-    labelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName(idString)
-    if not labelmapVolumeNode:
-        labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", idString)
-    else:
-      labelmapVolumeNode.Reset(None)#Existing color table will be overwritten by ExportSegmentsToLabelmapNode
+    idString = "Vascular_Territories_" + str(index)
+    labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", idString)
 
     # Get voxels tagged as liver
     segmentId = segmentation.GetSegmentation().GetSegmentIdBySegmentName('liver')
@@ -627,8 +623,12 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     labelmapVolumeNode.GetDisplayNode().SetAndObserveColorNodeID(colormap.GetID())
     slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
 
-    #Show label map volume
-    slicer.util.setSliceViewerLayers(label=labelmapVolumeNode)
+    #Create segmentation from labelmap volume
+    segmentationNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", idString)
+    segmentationNode.CreateDefaultDisplayNodes() # only needed for display
+    slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(labelmapVolumeNode, segmentationNode)
+    segmentationNode.CreateClosedSurfaceRepresentation()
+    slicer.mrmlScene.RemoveNode(labelmapVolumeNode)
 
   def copyIndex(self, endPointsMarkupsNode, centerlineModelNode):
     centerlineModelNode.SetAttribute("SegmentIndex", endPointsMarkupsNode.GetAttribute("SegmentIndex"))
