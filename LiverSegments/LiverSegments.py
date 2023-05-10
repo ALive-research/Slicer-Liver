@@ -447,10 +447,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       idString = "Vascular Territory Map ID " + str(numItems)
       self.ui.selectedVascularTerritoryMapId.addItem(idString)
       self.ui.selectedVascularTerritoryMapId.setCurrentIndex(numItems)
-    else:
-      idString = "Vascular_Territory_Map_" + str(index)
-      labelmapVolumeNode = slicer.mrmlScene.GetFirstNodeByName(idString)
-      slicer.util.setSliceViewerLayers(label=labelmapVolumeNode)
 
   def onColorChanged(self):
     colorIndex = self.ui.vascularTerritoryId.currentIndex
@@ -518,7 +514,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
 
     try:
-        index = self.ui.vascularTerritoryId.currentIndex - 1
+        index = self.ui.selectedVascularTerritoryMapId.currentIndex - 1
         self.logic.calculateVascularTerritoryMap(index, refVolumeNode, segmentationNode, centerlineModel, self.colormap)
     except ValueError:
         logging.error("Error: Failing when calculating vascular segments")
@@ -599,8 +595,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
 
   def calculateVascularTerritoryMap(self, index, refVolume, segmentation, centerlineModel, colormap):
     segmentationIds = vtk.vtkStringArray()
-    idString = "Vascular_Territories_" + str(index)
-    labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", idString)
+    labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
 
     # Get voxels tagged as liver
     segmentId = segmentation.GetSegmentation().GetSegmentIdBySegmentName('liver')
@@ -623,8 +618,14 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     labelmapVolumeNode.GetDisplayNode().SetAndObserveColorNodeID(colormap.GetID())
     slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
 
+    idString = "Vascular_Territories_" + str(index)
+    segmentationNode = slicer.mrmlScene.GetFirstNodeByName(idString)
+    if not segmentationNode:
+      segmentationNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", idString)
+    else:
+      segmentationNode.Reset(None)#Existing node will be overwritten
+
     #Create segmentation from labelmap volume
-    segmentationNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", idString)
     segmentationNode.CreateDefaultDisplayNodes() # only needed for display
     slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(labelmapVolumeNode, segmentationNode)
     segmentationNode.CreateClosedSurfaceRepresentation()
