@@ -6,14 +6,14 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>811</width>
-    <height>354</height>
+    <width>513</width>
+    <height>404</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <layout class="QGridLayout" name="gridLayout">
+  <layout class="QGridLayout" name="gridLayout_2">
    <item row="0" column="0">
     <widget class="qMRMLCollapsibleButton" name="segmentsCollapsibleButton">
      <property name="text">
@@ -22,37 +22,22 @@
      <property name="collapsed">
       <bool>false</bool>
      </property>
-     <layout class="QGridLayout" name="gridLayout_2">
-      <item row="0" column="0">
+     <layout class="QGridLayout" name="gridLayout">
+      <item row="0" column="0" colspan="3">
        <widget class="QLabel" name="label_4">
         <property name="text">
-         <string>Vascular Territory Map:</string>
+         <string>Vascular Territory Segmentation:</string>
         </property>
        </widget>
       </item>
-      <item row="0" column="1" colspan="3">
-       <widget class="ctkComboBox" name="selectedVascularTerritoryMapId">
-        <property name="editable">
-         <bool>false</bool>
-        </property>
-        <property name="currentText">
-         <string>Create new Vascular Territory Map</string>
-        </property>
-        <item>
-         <property name="text">
-          <string>Create new Vascular Territory Map</string>
-         </property>
-        </item>
-       </widget>
-      </item>
-      <item row="1" column="0">
+      <item row="2" column="0">
        <widget class="QLabel" name="label_2">
         <property name="text">
          <string>Vascular Territory:</string>
         </property>
        </widget>
       </item>
-      <item row="1" column="1">
+      <item row="2" column="1" colspan="2">
        <widget class="ctkComboBox" name="vascularTerritoryId">
         <property name="editable">
          <bool>false</bool>
@@ -67,34 +52,14 @@
         </item>
        </widget>
       </item>
-      <item row="1" column="2">
-       <widget class="ctkColorPickerButton" name="ColorPickerButton">
-        <property name="displayColorName">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="3">
-       <spacer name="horizontalSpacer">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>281</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-      <item row="2" column="0">
+      <item row="3" column="0">
        <widget class="QLabel" name="label">
         <property name="text">
          <string>Segmentation:</string>
         </property>
        </widget>
       </item>
-      <item row="2" column="1">
+      <item row="3" column="1" colspan="2">
        <widget class="qMRMLNodeComboBox" name="inputSurfaceSelector">
         <property name="nodeTypes">
          <stringlist>
@@ -115,10 +80,14 @@
         </property>
        </widget>
       </item>
-      <item row="2" column="2" colspan="2">
-       <widget class="qMRMLSegmentationShow3DButton" name="SegmentationShow3DButton"/>
+      <item row="3" column="3">
+       <widget class="ctkColorPickerButton" name="ColorPickerButton">
+        <property name="displayColorName">
+         <bool>false</bool>
+        </property>
+       </widget>
       </item>
-      <item row="3" column="1">
+      <item row="4" column="2">
        <widget class="qMRMLSegmentSelectorWidget" name="inputSegmentSelectorWidget">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
@@ -131,7 +100,10 @@
         </property>
        </widget>
       </item>
-      <item row="3" column="2" colspan="2">
+      <item row="4" column="3">
+       <widget class="qMRMLSegmentationShow3DButton" name="SegmentationShow3DButton"/>
+      </item>
+      <item row="5" column="3">
        <widget class="QPushButton" name="showHideButton">
         <property name="text">
          <string>Show/Hide</string>
@@ -147,14 +119,14 @@
         </property>
        </widget>
       </item>
-      <item row="4" column="0">
+      <item row="6" column="0">
        <widget class="QLabel" name="label_3">
         <property name="text">
          <string>Vessel points:</string>
         </property>
        </widget>
       </item>
-      <item row="4" column="1">
+      <item row="6" column="1" colspan="2">
        <widget class="qMRMLNodeComboBox" name="endPointsMarkupsSelector">
         <property name="nodeTypes">
          <stringlist>
@@ -178,7 +150,7 @@
         </property>
        </widget>
       </item>
-      <item row="4" column="2" colspan="2">
+      <item row="6" column="3">
        <widget class="qSlicerMarkupsPlaceWidget" name="endPointsMarkupsPlaceWidget">
         <property name="maximumSize">
          <size>
@@ -191,17 +163,32 @@
         </property>
        </widget>
       </item>
-      <item row="5" column="0" colspan="2">
+      <item row="1" column="0" colspan="4">
+       <widget class="ctkComboBox" name="selectedVascularTerritoryMapId">
+        <property name="editable">
+         <bool>false</bool>
+        </property>
+        <property name="currentText">
+         <string>Create new Vascular Territory Segmentation</string>
+        </property>
+        <item>
+         <property name="text">
+          <string>Create new Vascular Territory Segmentation</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item row="7" column="0" colspan="3">
        <widget class="QPushButton" name="addSegmentButton">
         <property name="text">
          <string>Add Vessel Centerline </string>
         </property>
        </widget>
       </item>
-      <item row="5" column="2" colspan="2">
+      <item row="8" column="0" colspan="3">
        <widget class="QPushButton" name="calculateVascularTerritoryMapButton">
         <property name="text">
-         <string>Calculate Vascular Territory Map</string>
+         <string>Calculate Vascular Territory Segmentation</string>
         </property>
        </widget>
       </item>

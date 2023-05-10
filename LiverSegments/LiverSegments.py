@@ -444,7 +444,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #Add new label Map ID
     if(index == 0):
       numItems = self.ui.selectedVascularTerritoryMapId.count
-      idString = "Vascular Territory Map ID " + str(numItems)
+      idString = "Vascular Territory Segmentation ID " + str(numItems)
       self.ui.selectedVascularTerritoryMapId.addItem(idString)
       self.ui.selectedVascularTerritoryMapId.setCurrentIndex(numItems)
     else:
