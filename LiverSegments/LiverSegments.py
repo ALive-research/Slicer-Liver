@@ -441,7 +441,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onselectedVascularTerritoryMapIdChanged(self):
     index = self.ui.selectedVascularTerritoryMapId.currentIndex
-    #Add new label Map ID
+    #Add new Vascular Territory Segmentation
     if(index == 0):
       numItems = self.ui.selectedVascularTerritoryMapId.count
       idString = "Vascular Territory Segmentation ID " + str(numItems)
@@ -514,7 +514,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
 
     try:
-        index = self.ui.selectedVascularTerritoryMapId.currentIndex - 1
+        index = self.ui.selectedVascularTerritoryMapId.currentIndex
         self.logic.calculateVascularTerritoryMap(index, refVolumeNode, segmentationNode, centerlineModel, self.colormap)
     except ValueError:
         logging.error("Error: Failing when calculating vascular segments")
@@ -618,7 +618,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     labelmapVolumeNode.GetDisplayNode().SetAndObserveColorNodeID(colormap.GetID())
     slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
 
-    idString = "Vascular_Territories_" + str(index)
+    idString = "Vascular_Territory_Segmentation" + str(index)
     segmentationNode = slicer.mrmlScene.GetFirstNodeByName(idString)
     if not segmentationNode:
       segmentationNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", idString)
