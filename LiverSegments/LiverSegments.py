@@ -166,7 +166,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       logging.warning('No segmentationNode')
       return
     displayNode = segmentationNode.GetDisplayNode()
-    displayNode.SetOpacity(0.3)
+    displayNode.SetOpacity3D(0.3)
     self.updateShowHideButtonText()
 
   #Auto create if name/id don't exist. Auto switch it it exists
