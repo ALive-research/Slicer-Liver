@@ -79,6 +79,7 @@
 #include <itkLabelImageToLabelMapFilter.h>
 #include <vtkLabelMapHelper.h>
 #include <vtkBezierSurfaceSource.h>
+#include <vtkPath.h>
 
 //----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerLiverResectionsLogic);
@@ -1091,7 +1092,9 @@ void vtkSlicerLiverResectionsLogic::ComputeAdvancedPlanningVolumetry(vtkCollecti
     for (int i = 0; i < resectionNodes->GetNumberOfItems(); i++)
       {
       auto resectionNode = vtkMRMLLiverResectionNode::SafeDownCast(resectionNodes->GetItemAsObject(i));
-      BezierHR = GenerateBezierSurface(300, resectionNode);
+      auto bezierSurfaceNode = this->GetBezierFromResection(resectionNode);
+      auto Res =  GetRes(bezierSurfaceNode, spacing, 300);
+      BezierHR = GenerateBezierSurface(Res, bezierSurfaceNode);
       if(i == 0){
         this->ProjectedTargetSegmentImage =
           vtkLabelMapHelper::VolumeNodeToItkImage(TargetSegmentLabelMapCopy, true, false);
@@ -1182,8 +1185,7 @@ void vtkSlicerLiverResectionsLogic::ComputeAdvancedPlanningVolumetry(vtkCollecti
     }
 }
 
-vtkSmartPointer<vtkBezierSurfaceSource> vtkSlicerLiverResectionsLogic::GenerateBezierSurface(int Res, vtkMRMLLiverResectionNode* ResectionNode){
-  auto bezierSurfaceNode = this->GetBezierFromResection(ResectionNode);
+vtkSmartPointer<vtkBezierSurfaceSource> vtkSlicerLiverResectionsLogic::GenerateBezierSurface(int Res, vtkMRMLMarkupsBezierSurfaceNode* bezierSurfaceNode){
   if (!bezierSurfaceNode)
     {
     return nullptr;
@@ -1258,4 +1260,56 @@ void vtkSlicerLiverResectionsLogic::VolumetryTable(std::string Properties, doubl
     VolumeTable->GetColumn(3)->SetVariantValue(line,static_cast<vtkStdString>(std::to_string(ROIVolume/TargetSegmentVolume * 100)+"%"));
     this->OutputTableNode->Modified();
     }
+}
+
+int vtkSlicerLiverResectionsLogic::GetRes(vtkMRMLMarkupsBezierSurfaceNode* bezierSurfaceNode, double space[3], int Steps){
+//BezierCurve computation inspired from https://medium.com/geekculture/2d-and-3d-b%C3%A9zier-curves-in-c-499093ef45a9
+
+  std::vector<std::vector<int>> ControlPointsIndexs{{3,6,9,12},{0,5,10,15}};
+  double ArcLength[2];
+
+  for (int l = 0; l < 2; l++){
+    auto DataArray = vtkSmartPointer<vtkDoubleArray>::New();
+    DataArray->SetNumberOfComponents(3);
+    DataArray->SetNumberOfTuples(Steps);
+    ArcLength[l] = 0.0;
+    std::vector<double> bezierCurveX;
+    std::vector<double> bezierCurveY;
+    std::vector<double> bezierCurveZ;
+    std::vector<double> ControlPointsX;
+    std::vector<double> ControlPointsY;
+    std::vector<double> ControlPointsZ;
+
+    for (int p = 0; p<ControlPointsIndexs[l].size();p++){
+      double point[3];
+      bezierSurfaceNode->GetNthControlPointPosition(ControlPointsIndexs[l][p],point);
+      ControlPointsX.push_back(point[0]);
+      ControlPointsY.push_back(point[1]);
+      ControlPointsZ.push_back(point[2]);
+      }
+
+    for (int i=0; i<Steps; i++){
+      double t, point[3];
+      t = i / static_cast<double>(Steps - 1);
+      point[0] = std::pow((1 - t), 3) * ControlPointsX[0] + 3 * std::pow((1 - t), 2) * t * ControlPointsX[1] + 3 * std::pow((1 - t), 1) * std::pow(t, 2) * ControlPointsX[2] + std::pow(t, 3) * ControlPointsX[3];
+      point[1] = std::pow((1 - t), 3) * ControlPointsY[0] + 3 * std::pow((1 - t), 2) * t * ControlPointsY[1] + 3 * std::pow((1 - t), 1) * std::pow(t, 2) * ControlPointsY[2] + std::pow(t, 3) * ControlPointsY[3];
+      point[2] = std::pow((1 - t), 3) * ControlPointsZ[0] + 3 * std::pow((1 - t), 2) * t * ControlPointsZ[1] + 3 * std::pow((1 - t), 1) * std::pow(t, 2) * ControlPointsZ[2] + std::pow(t, 3) * ControlPointsZ[3];
+      DataArray->SetTuple(i, point);
+      }
+
+    for (int i=1; i<Steps; i++){
+      double point0[3], point1[3];
+      DataArray->GetTuple(i, point1);
+      DataArray->GetTuple(i-1, point0);
+      double len = sqrt(pow(point0[0]-point1[0], 2.0) + pow(point0[1]-point1[1], 2.0) + pow(point0[2]-point1[2], 2.0));
+      ArcLength[l] = ArcLength[l] + len;
+      }
+    }
+
+  double len = (ArcLength[0]>ArcLength[1]) ? ArcLength[0]:ArcLength[1];
+  double min = std::min(space[0], space[1]);
+  min = std::min(min, space[2]);
+  int res = len/min;
+
+  return res;
 }

@@ -104,10 +104,10 @@ public:
 
   void ComputeAdvancedPlanningVolumetry(vtkCollection* resectionNodes, vtkMRMLScalarVolumeNode* TargetSegmentLabelMap, vtkMRMLTableNode* OutputTableNode, vtkMRMLMarkupsFiducialNode* ROIMarkersList, vtkMRMLLabelMapVolumeNode* VascularSegments = nullptr);
 
-  vtkSmartPointer<vtkBezierSurfaceSource> GenerateBezierSurface(int Res, vtkMRMLLiverResectionNode* ResectionNode);
+  vtkSmartPointer<vtkBezierSurfaceSource> GenerateBezierSurface(int Res, vtkMRMLMarkupsBezierSurfaceNode* bezierSurfaceNode);
   itk::Index<3> GetITKRGSeedIndex(double* ROISeedPoint, itk::SmartPointer<itk::Image<short,3>> SourceImage);
   void VolumetryTable(std::string Properties, double TargetSegmentVolume, double ROIVolume, vtkTable *VolumeTable, int line = 0);
-
+  int GetRes(vtkMRMLMarkupsBezierSurfaceNode* bezierSurfaceNode, double space[3], int Steps);
   char* LoadLiverResection(const std::string& fileName,
                            const std::string& nodeName/*=nullptr*/,
                            vtkMRMLMessageCollection* userMessages/*=nullptr*/);

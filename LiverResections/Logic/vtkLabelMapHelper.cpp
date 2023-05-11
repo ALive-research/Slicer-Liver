@@ -142,17 +142,17 @@ ProjectPointsOntoItkImage(vtkLabelMapHelper::LabelMapType::Pointer itkImage,
       {
       ++projectedPoints;
       itkImage->SetPixel(index, projectionValue);
-      neighborhoodIterator.SetLocation(index);
-
-      for(unsigned int i =0; i<27; i++)
-        {
-        bool isInBounds;
-        neighborhoodIterator.GetPixel(i, isInBounds);
-        if (isInBounds)
-          {
-          neighborhoodIterator.SetPixel(i, projectionValue);
-          }
-        }
+//      neighborhoodIterator.SetLocation(index);
+//
+//      for(unsigned int i =0; i<27; i++)
+//        {
+//        bool isInBounds;
+//        neighborhoodIterator.GetPixel(i, isInBounds);
+//        if (isInBounds)
+//          {
+//          neighborhoodIterator.SetPixel(i, projectionValue);
+//          }
+//        }
       }
     }
   return projectedPoints;
