@@ -185,7 +185,7 @@
           </property>
          </widget>
         </item>
-        <item row="1" column="0">
+        <item row="1" column="3">
          <widget class="QPushButton" name="addSegmentationButton">
           <property name="text">
            <string>Add whole segment</string>
