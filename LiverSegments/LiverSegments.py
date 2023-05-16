@@ -179,7 +179,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if not self.ui.inputSegmentSelectorWidget.currentSegmentID():
       return
 
-    endPointsMarkupsNode = self.getVesselSemgentfromName()
+    endPointsMarkupsNode = self.getVesselSegmentfromName()
     if endPointsMarkupsNode is None:
       endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.addNode()
       self.ui.endPointsMarkupsSelector.setCurrentNode(endPointsMarkupsNode)
@@ -221,7 +221,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.showHideButton.setText('Show')
       self.ui.showHideButton.setIcon(qt.QIcon("Icons/VisibleOff.png"))
 
-  def getVesselSemgentfromName(self):
+  def getVesselSegmentfromName(self):
     segmentName = self.getVesselSegmentName()
     for i in range(self.ui.endPointsMarkupsSelector.nodeCount()):
       node = self.ui.endPointsMarkupsSelector.nodeFromIndex(i)
