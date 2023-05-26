@@ -43,6 +43,7 @@
 // ITK includes
 #include <itkImage.h>
 #include <itkConnectedThresholdImageFilter.h>
+#include <itkNeighborhoodConnectedImageFilter.h>
 
 // VTK includes
 #include <vtkObject.h>
@@ -66,8 +67,8 @@ class vtkLabelMapHelper: public vtkObject
 
   //Type definitions
   typedef itk::Image<short, 3> LabelMapType;
-  typedef itk::ConnectedThresholdImageFilter<LabelMapType,LabelMapType>
-      ConnectedThresholdType;
+  typedef itk::ConnectedThresholdImageFilter<LabelMapType,LabelMapType> ConnectedThresholdType;
+  typedef itk::NeighborhoodConnectedImageFilter<LabelMapType, LabelMapType> NeighborhoodConnectedThresholdType;
 
   //Description:
   // This function applies a connected threshold algorithm on the specified
@@ -75,6 +76,12 @@ class vtkLabelMapHelper: public vtkObject
   // the data as long as the object is alive, this means that potentially no
   // external copy of the data is needed.
   LabelMapType::Pointer ConnectedThreshold(LabelMapType::Pointer itkImage,
+                                           unsigned short lowerBound,
+                                           unsigned short upperBound,
+                                           unsigned short replacementValue,
+                                           LabelMapType::IndexType seedIndex);
+
+  LabelMapType::Pointer NeighborhoodConnectedThreshold(LabelMapType::Pointer itkImage,
                                            unsigned short lowerBound,
                                            unsigned short upperBound,
                                            unsigned short replacementValue,
@@ -149,6 +156,8 @@ class vtkLabelMapHelper: public vtkObject
 
  private:
   ConnectedThresholdType::Pointer ConnectedThresholdFilter;
+  NeighborhoodConnectedThresholdType::Pointer  NeighborhoodConnectedThresholdFilter;
+
 };
 
 #endif //SLICERLIVER_LIVERRESECTIONS_LOGIC_VTKLABELMAPHELPER_H_

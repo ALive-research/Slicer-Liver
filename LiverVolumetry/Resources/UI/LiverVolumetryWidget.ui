@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>ResectionVolumetryWidget</class>
- <widget class="qMRMLWidget" name="ResectionVolumetryWidget">
+ <class>LiverVolumetryWidget</class>
+ <widget class="qMRMLWidget" name="LiverVolumetryWidget">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>563</width>
-    <height>603</height>
+    <width>857</width>
+    <height>982</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -24,19 +24,9 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_9">
       <item>
-       <widget class="QCheckBox" name="FinishPlanningCheckBox">
-        <property name="enabled">
-         <bool>true</bool>
-        </property>
-        <property name="text">
-         <string>Finish Planning?</string>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QGroupBox" name="OutPutGroupBox">
         <property name="enabled">
-         <bool>false</bool>
+         <bool>true</bool>
         </property>
         <property name="title">
          <string>Output</string>
@@ -89,23 +79,53 @@
       <item>
        <widget class="QGroupBox" name="ComputeVolumetryParametersGroupBox">
         <property name="enabled">
-         <bool>false</bool>
+         <bool>true</bool>
         </property>
         <property name="title">
          <string>Volumetry Parameters</string>
         </property>
-        <layout class="QVBoxLayout" name="verticalLayout_12">
+        <layout class="QVBoxLayout" name="verticalLayout_2">
          <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_11">
-           <item>
-            <widget class="QLabel" name="label_4">
-             <property name="text">
-              <string>Liver</string>
+          <layout class="QGridLayout" name="gridLayout">
+           <item row="3" column="1">
+            <widget class="qMRMLNodeComboBox" name="ROIMarkersListSelector">
+             <property name="nodeTypes">
+              <stringlist>
+               <string>vtkMRMLMarkupsFiducialNode</string>
+              </stringlist>
+             </property>
+             <property name="showChildNodeTypes">
+              <bool>false</bool>
+             </property>
+             <property name="baseName">
+              <string>ROIMarkersList</string>
+             </property>
+             <property name="noneEnabled">
+              <bool>true</bool>
+             </property>
+             <property name="editEnabled">
+              <bool>true</bool>
+             </property>
+             <property name="renameEnabled">
+              <bool>true</bool>
              </property>
             </widget>
            </item>
-           <item>
-            <widget class="qMRMLSegmentSelectorWidget" name="ParenchymaSegmentSelectorWidget">
+           <item row="3" column="2">
+            <widget class="qSlicerMarkupsPlaceWidget" name="ROIMarkersListPlaceWidget">
+             <property name="maximumSize">
+              <size>
+               <width>15000</width>
+               <height>40</height>
+              </size>
+             </property>
+             <property name="placeMultipleMarkups">
+              <enum>qSlicerMarkupsPlaceWidget::ForcePlaceMultipleMarkups</enum>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="qMRMLSegmentSelectorWidget" name="InputSegmentSelectorWidget">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                <horstretch>0</horstretch>
@@ -115,110 +135,75 @@
              <property name="segmentationNodeSelectorVisible">
               <bool>false</bool>
              </property>
+             <property name="multiSelection">
+              <bool>true</bool>
+             </property>
             </widget>
            </item>
-          </layout>
-         </item>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_5">
-           <item>
-            <widget class="QLabel" name="ResectionLabel">
+           <item row="1" column="2">
+            <widget class="qMRMLSegmentationShow3DButton" name="SegmentationShow3DButton"/>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="label_4">
              <property name="text">
-              <string>Resection:</string>
+              <string>ROI Markers List:</string>
              </property>
             </widget>
            </item>
-           <item>
-            <widget class="qMRMLNodeComboBox" name="ResectionTargetNodeComboBox">
-             <property name="enabled">
-              <bool>false</bool>
-             </property>
+           <item row="1" column="1">
+            <widget class="qMRMLNodeComboBox" name="InputSegmentationSelector">
              <property name="nodeTypes">
               <stringlist>
-               <string>vtkMRMLLiverResectionNode</string>
+               <string>vtkMRMLSegmentationNode</string>
               </stringlist>
              </property>
-             <property name="noneEnabled">
-              <bool>true</bool>
+             <property name="showChildNodeTypes">
+              <bool>false</bool>
              </property>
-             <property name="renameEnabled">
-              <bool>true</bool>
+             <property name="addEnabled">
+              <bool>false</bool>
              </property>
-             <property name="selectNodeUponCreation">
-              <bool>true</bool>
+             <property name="removeEnabled">
+              <bool>false</bool>
+             </property>
+             <property name="editEnabled">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="0">
+            <widget class="QLabel" name="label">
+             <property name="text">
+              <string>Reference Volume:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="label">
+             <property name="text">
+              <string>Segmentation:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="qMRMLNodeComboBox" name="ReferenceVolumeSelector">
+             <property name="nodeTypes">
+              <stringlist>
+               <string>vtkMRMLScalarVolumeNode</string>
+              </stringlist>
+             </property>
+             <property name="addEnabled">
+              <bool>false</bool>
+             </property>
+             <property name="removeEnabled">
+              <bool>false</bool>
+             </property>
+             <property name="editEnabled">
+              <bool>false</bool>
              </property>
             </widget>
            </item>
           </layout>
-         </item>
-         <item>
-          <widget class="QLabel" name="label_2">
-           <property name="text">
-            <string>Mark ROIs and calculate the total volume of these areas:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QWidget" name="ROIVolumeWidget" native="true">
-           <property name="enabled">
-            <bool>true</bool>
-           </property>
-           <layout class="QHBoxLayout" name="horizontalLayout_12">
-            <item>
-             <widget class="QLabel" name="label_3">
-              <property name="text">
-               <string>ROI Markers List:</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="qMRMLNodeComboBox" name="ROIMarkersListSelectorWidget">
-              <property name="maximumSize">
-               <size>
-                <width>300</width>
-                <height>16777215</height>
-               </size>
-              </property>
-              <property name="nodeTypes">
-               <stringlist>
-                <string>vtkMRMLMarkupsFiducialNode</string>
-               </stringlist>
-              </property>
-              <property name="showChildNodeTypes">
-               <bool>false</bool>
-              </property>
-              <property name="baseName">
-               <string>ROIMarkersList</string>
-              </property>
-              <property name="noneEnabled">
-               <bool>true</bool>
-              </property>
-              <property name="editEnabled">
-               <bool>true</bool>
-              </property>
-              <property name="renameEnabled">
-               <bool>true</bool>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="qSlicerMarkupsPlaceWidget" name="ROIMarkersListPlaceWidget">
-              <property name="maximumSize">
-               <size>
-                <width>15000</width>
-                <height>40</height>
-               </size>
-              </property>
-              <property name="placeMultipleMarkups">
-               <enum>qSlicerMarkupsPlaceWidget::ShowPlaceMultipleMarkupsOption</enum>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </widget>
          </item>
          <item>
           <widget class="ctkCollapsibleGroupBox" name="CollapsibleGroupBox">
@@ -236,6 +221,37 @@
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_11">
             <item>
+             <widget class="QLabel" name="ResectionLabel">
+              <property name="text">
+               <string>Resection:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="qMRMLNodeComboBox" name="ResectionTargetNodeComboBox">
+              <property name="enabled">
+               <bool>true</bool>
+              </property>
+              <property name="nodeTypes">
+               <stringlist>
+                <string>vtkMRMLLiverResectionNode</string>
+               </stringlist>
+              </property>
+              <property name="noneEnabled">
+               <bool>true</bool>
+              </property>
+              <property name="addEnabled">
+               <bool>false</bool>
+              </property>
+              <property name="removeEnabled">
+               <bool>false</bool>
+              </property>
+              <property name="editEnabled">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
              <widget class="QCheckBox" name="UseAllCheckBox">
               <property name="text">
                <string>Use All Resections</string>
@@ -249,45 +265,13 @@
               </property>
              </widget>
             </item>
-            <item>
-             <layout class="QHBoxLayout" name="horizontalLayout_10">
-              <item>
-               <widget class="QLabel" name="label_5">
-                <property name="text">
-                 <string>Vascular Segments</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="qMRMLNodeComboBox" name="VascularSegmentsSelectorWidget">
-                <property name="nodeTypes">
-                 <stringlist>
-                  <string>vtkMRMLLabelMapVolumeNode</string>
-                 </stringlist>
-                </property>
-                <property name="noneEnabled">
-                 <bool>true</bool>
-                </property>
-                <property name="addEnabled">
-                 <bool>false</bool>
-                </property>
-                <property name="removeEnabled">
-                 <bool>false</bool>
-                </property>
-                <property name="selectNodeUponCreation">
-                 <bool>false</bool>
-                </property>
-               </widget>
-              </item>
-             </layout>
-            </item>
            </layout>
           </widget>
          </item>
          <item>
           <widget class="QPushButton" name="ComputeVolumePushButton">
            <property name="enabled">
-            <bool>false</bool>
+            <bool>true</bool>
            </property>
            <property name="sizePolicy">
             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
@@ -344,6 +328,11 @@
    <header>qMRMLSegmentSelectorWidget.h</header>
   </customwidget>
   <customwidget>
+   <class>qMRMLSegmentationShow3DButton</class>
+   <extends>ctkMenuButton</extends>
+   <header>qMRMLSegmentationShow3DButton.h</header>
+  </customwidget>
+  <customwidget>
    <class>ctkCollapsibleButton</class>
    <extends>QWidget</extends>
    <header>ctkCollapsibleButton.h</header>
@@ -355,59 +344,16 @@
    <header>ctkCollapsibleGroupBox.h</header>
    <container>1</container>
   </customwidget>
+  <customwidget>
+   <class>ctkMenuButton</class>
+   <extends>QPushButton</extends>
+   <header>ctkMenuButton.h</header>
+  </customwidget>
  </customwidgets>
  <resources/>
  <connections>
   <connection>
-   <sender>ResectionVolumetryWidget</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>ROIMarkersListSelectorWidget</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>235</x>
-     <y>158</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>235</x>
-     <y>55</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>ResectionVolumetryWidget</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>ROIMarkersListPlaceWidget</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>235</x>
-     <y>158</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>235</x>
-     <y>155</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>ROIMarkersListSelectorWidget</sender>
-   <signal>currentNodeChanged(vtkMRMLNode*)</signal>
-   <receiver>ROIMarkersListPlaceWidget</receiver>
-   <slot>setCurrentNode(vtkMRMLNode*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>163</x>
-     <y>110</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>382</x>
-     <y>110</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>ResectionVolumetryWidget</sender>
+   <sender>LiverVolumetryWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>VolumeTableSelectorWidget</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
@@ -423,39 +369,7 @@
    </hints>
   </connection>
   <connection>
-   <sender>ResectionVolumetryWidget</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>ParenchymaSegmentSelectorWidget</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>395</x>
-     <y>350</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>478</x>
-     <y>399</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>ResectionVolumetryWidget</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>VascularSegmentsSelectorWidget</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>395</x>
-     <y>350</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>478</x>
-     <y>399</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>ResectionVolumetryWidget</sender>
+   <sender>LiverVolumetryWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>ResectionTargetNodeComboBox</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
@@ -467,6 +381,118 @@
     <hint type="destinationlabel">
      <x>336</x>
      <y>60</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>InputSegmentationSelector</sender>
+   <signal>currentNodeChanged(vtkMRMLNode*)</signal>
+   <receiver>InputSegmentSelectorWidget</receiver>
+   <slot>setCurrentNode(vtkMRMLNode*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>422</x>
+     <y>576</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>422</x>
+     <y>631</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ROIMarkersListSelector</sender>
+   <signal>currentNodeChanged(vtkMRMLNode*)</signal>
+   <receiver>ROIMarkersListPlaceWidget</receiver>
+   <slot>setCurrentNode(vtkMRMLNode*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>422</x>
+     <y>686</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>762</x>
+     <y>686</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>LiverVolumetryWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>ROIMarkersListSelector</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>428</x>
+     <y>490</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>422</x>
+     <y>686</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>LiverVolumetryWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>InputSegmentSelectorWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>428</x>
+     <y>490</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>422</x>
+     <y>631</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>LiverVolumetryWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>ROIMarkersListPlaceWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>428</x>
+     <y>490</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>762</x>
+     <y>686</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>LiverVolumetryWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>InputSegmentationSelector</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>428</x>
+     <y>490</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>422</x>
+     <y>576</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>LiverVolumetryWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>ReferenceVolumeSelector</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>395</x>
+     <y>289</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>468</x>
+     <y>104</y>
     </hint>
    </hints>
   </connection>

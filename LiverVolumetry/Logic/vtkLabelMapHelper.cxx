@@ -65,6 +65,7 @@ vtkStandardNewMacro(vtkLabelMapHelper);
 vtkLabelMapHelper::vtkLabelMapHelper()
 {
   this->ConnectedThresholdFilter = ConnectedThresholdType::New();
+  this->NeighborhoodConnectedThresholdFilter = NeighborhoodConnectedThresholdType::New();
 }
 
 //------------------------------------------------------------------------------
@@ -95,6 +96,30 @@ ConnectedThreshold(vtkLabelMapHelper::LabelMapType::Pointer itkImage,
   this->ConnectedThresholdFilter->SetSeed(seedIndex);
   this->ConnectedThresholdFilter->SetConnectivity(ConnectedThresholdType::FaceConnectivity);
   this->ConnectedThresholdFilter->Update();
+
+  return this->ConnectedThresholdFilter->GetOutput();
+}
+
+//------------------------------------------------------------------------------
+vtkLabelMapHelper::LabelMapType::Pointer
+vtkLabelMapHelper::
+NeighborhoodConnectedThreshold(vtkLabelMapHelper::LabelMapType::Pointer itkImage,
+                   unsigned short lowerBound,
+                   unsigned short upperBound,
+                   unsigned short replacementValue,
+                   vtkLabelMapHelper::LabelMapType::IndexType seedIndex)
+{
+  LabelMapType::SizeType radius;
+  radius[0]=1;
+  radius[1]=1;
+  radius[2]=1;
+  this->NeighborhoodConnectedThresholdFilter->SetInput(itkImage);
+  this->NeighborhoodConnectedThresholdFilter->SetLower(lowerBound);
+  this->NeighborhoodConnectedThresholdFilter->SetUpper(upperBound);
+  this->NeighborhoodConnectedThresholdFilter->SetReplaceValue(replacementValue);
+  this->NeighborhoodConnectedThresholdFilter->SetSeed(seedIndex);
+  this->NeighborhoodConnectedThresholdFilter->SetRadius(radius);
+  this->NeighborhoodConnectedThresholdFilter->Update();
 
   return this->ConnectedThresholdFilter->GetOutput();
 }

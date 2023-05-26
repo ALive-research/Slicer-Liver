@@ -18,7 +18,6 @@ set(MODULE_PYTHON_RESOURCES
   Resources/UI/ResectionsWidget.ui
   Resources/UI/DistanceMapsWidget.ui
   Resources/UI/ResectogramWidget.ui
-  Resources/UI/ResectionVolumetryWidget.ui
   )
 
 #-----------------------------------------------------------------------------

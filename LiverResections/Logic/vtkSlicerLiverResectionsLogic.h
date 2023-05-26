@@ -102,12 +102,7 @@ public:
   void ShowInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const;
   void HideInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const;
 
-  void ComputeAdvancedPlanningVolumetry(vtkCollection* resectionNodes, vtkMRMLScalarVolumeNode* TargetSegmentLabelMap, vtkMRMLTableNode* OutputTableNode, vtkMRMLMarkupsFiducialNode* ROIMarkersList, vtkMRMLLabelMapVolumeNode* VascularSegments = nullptr);
 
-  vtkSmartPointer<vtkBezierSurfaceSource> GenerateBezierSurface(int Res, vtkMRMLMarkupsBezierSurfaceNode* bezierSurfaceNode);
-  itk::Index<3> GetITKRGSeedIndex(double* ROISeedPoint, itk::SmartPointer<itk::Image<short,3>> SourceImage);
-  void VolumetryTable(std::string Properties, double TargetSegmentVolume, double ROIVolume, vtkTable *VolumeTable, int line = 0);
-  int GetRes(vtkMRMLMarkupsBezierSurfaceNode* bezierSurfaceNode, double space[3], int Steps);
   char* LoadLiverResection(const std::string& fileName,
                            const std::string& nodeName/*=nullptr*/,
                            vtkMRMLMessageCollection* userMessages/*=nullptr*/);
@@ -115,6 +110,9 @@ public:
   char* LoadLiverResectionFromFcsv(const std::string& fileName,
                                    const std::string& nodeName/*=nullptr*/,
                                    vtkMRMLMessageCollection* userMessages/*=nullptr*/);
+  /// This function returns a bezier surface node from a provided resection node
+  vtkMRMLMarkupsBezierSurfaceNode* GetBezierFromResection(vtkMRMLLiverResectionNode* resectionNode) const;
+
 protected:
   vtkSlicerLiverResectionsLogic();
   ~vtkSlicerLiverResectionsLogic() override;
@@ -132,8 +130,8 @@ protected:
   /// This function returns a initialization surface node from a provided resection node
   vtkMRMLLiverResectionNode* GetResectionFromInitialization(vtkMRMLMarkupsNode* resectionNode) const;
 
-  /// This function returns a bezier surface node from a provided resection node
-  vtkMRMLMarkupsBezierSurfaceNode* GetBezierFromResection(vtkMRMLLiverResectionNode* resectionNode) const;
+//  /// This function returns a bezier surface node from a provided resection node
+//  vtkMRMLMarkupsBezierSurfaceNode* GetBezierFromResection(vtkMRMLLiverResectionNode* resectionNode) const;
 
   /// This function returns an initialization node from a provided resection node
   vtkMRMLMarkupsNode* GetInitializationFromResection(vtkMRMLLiverResectionNode* resectionNode) const;
@@ -171,17 +169,7 @@ protected:
 
   std::map<vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode>,
            vtkWeakPointer<vtkMRMLMarkupsNode>> BezierToInitializationMap;
-  std::map<std::string , std::vector<int>> VascularSegmentsVoxelsCount;
 
-  vtkSmartPointer<vtkMRMLLabelMapVolumeNode> VascularSegments;
-  vtkSmartPointer<vtkMRMLTableNode>  OutputTableNode;
-  std::set<int> tumorMarkerNodes;
-  std::vector<vtkSmartPointer<vtkBezierSurfaceSource>> bezierHRs;
-  itk::SmartPointer<itk::Image<short,3>> ProjectedTargetSegmentImage;
-  itk::SmartPointer<itk::Image<short,3>> connectedThreshold;
-  itk::SmartPointer<itk::Image<short,3>> itkVascularSegments;
-  vtkSmartPointer<vtkCollection> resectionNodes;
-//  vtkSmartPointer<vtkBezierSurfaceSource> bezierHR;
 private:
   vtkSlicerLiverResectionsLogic(const vtkSlicerLiverResectionsLogic &) = delete;
   void operator=(const vtkSlicerLiverResectionsLogic&) = delete;
