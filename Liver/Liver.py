@@ -231,7 +231,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.distanceMapsWidget.ComputeDistanceMapsPushButton.connect('clicked(bool)', self.onComputeDistanceMapButtonClicked)
     self.resectionsWidget.CurvedRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.CurvedRadioButton))
     self.resectionsWidget.FlatRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.FlatRadioButton))
+    self.resectionsWidget.ClosedCurveButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.ClosedCurveButton))
     self.resectionsWidget.MarkupsResectionCheckBox.toggled.connect(lambda: self.onMarkupsResectionCheckBoxChecked(self.resectionsWidget.MarkupsResectionCheckBox))
+    self.resectionsWidget.InitialContourPositionButton.connect('clicked(bool)', self.onDefiningStartingCountourPosition)
     self.resectionsWidget.ResectionNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionDistanceMapNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
@@ -282,6 +284,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       if rdbutton.text == "Curved":
         lvLogic.HideInitializationMarkupFromResection(activeResectionNode)
         lvLogic.HideBezierSurfaceMarkupFromResection(activeResectionNode)
+        BezierNode = activeResectionNode.GetBezierSurfaceNode()
+        BezierDisplay = BezierNode.GetDisplayNode()
+        BezierDisplay.SetGlyphScale(3.0)
         liverNode = activeResectionNode.GetTargetOrganModelNode()
         if self._distanceContourNode is not None:
           self._distanceContourNode.SetDisplayVisibility(True)
@@ -310,17 +315,78 @@ class LiverWidget(ScriptedLoadableModuleWidget):
                                                                                   self._preprocessedLiverNode))
           self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
                                         self.onDistanceContourStartInteraction)
+          BezierNode = activeResectionNode.GetBezierSurfaceNode()
+          BezierNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointStartInteractionEvent,
+                                 lambda x, y: self.BezierSurfaceModified(self._distanceContourNode))
+
       elif rdbutton.text == "MarkupClosedCurve":
+        self._distanceContourNode = self.resectionsWidget.DistanceContourComboBox.currentNode()
         if self._distanceContourNode is not None:
           self._distanceContourNode.SetDisplayVisibility(False)
         lvLogic.HideInitializationMarkupFromResection(activeResectionNode)
         lvLogic.HideBezierSurfaceMarkupFromResection(activeResectionNode)
-      elif rdbutton.text == "Flat(Default)":
+      elif rdbutton.text == "Flat":
         lvLogic.ShowInitializationMarkupFromResection(activeResectionNode)
         lvLogic.HideBezierSurfaceMarkupFromResection(activeResectionNode)
+        BezierNode = activeResectionNode.GetBezierSurfaceNode()
+        BezierDisplay = BezierNode.GetDisplayNode()
+        BezierDisplay.SetGlyphScale(3.0)
         if self._distanceContourNode is not None:
           self._distanceContourNode.SetDisplayVisibility(False)
         return
+
+  def onDefiningStartingCountourPosition(self):
+    segmentationNode = self.resectionsWidget.LiverSegmentSelectorWidget.currentNode()
+    parenchymaSegmentId = self.resectionsWidget.LiverSegmentSelectorWidget.currentSegmentID()
+    liverPolyData = segmentationNode.GetClosedSurfaceInternalRepresentation(parenchymaSegmentId)
+
+    tumourSegmentationNode = self.resectionsWidget.TumorSegmentSelectorWidget.currentNode()
+    tumorSegmentId = self.resectionsWidget.TumorSegmentSelectorWidget.currentSegmentID()
+    tumourPolyData = tumourSegmentationNode.GetClosedSurfaceInternalRepresentation(tumorSegmentId)
+
+    activeDistanceContour = self.resectionsWidget.DistanceContourComboBox.currentNode()
+
+    com_tumor = vtk.vtkCenterOfMass()
+    com_tumor.SetInputData(tumourPolyData)
+    com_tumor.SetUseScalarsAsWeights(False)
+    com_tumor.Update()
+    center_tumor = np.array(com_tumor.GetCenter()).reshape(-1, 3)
+
+    com_liver = vtk.vtkCenterOfMass()
+    com_liver.SetInputData(liverPolyData)
+    com_liver.SetUseScalarsAsWeights(False)
+    com_liver.Update()
+    center_liver = np.array(com_liver.GetCenter()).reshape(-1, 3)
+    vector_1 = self.logic.findVectorBetweenTwo3DPoints(center_liver, center_tumor)
+    vector_1 = vector_1.reshape(-1, 3)
+    centers_array = np.array([center_liver, center_tumor])
+    median_point = np.median(centers_array, axis=0)
+    print("median_point", median_point.shape)
+
+    # get camera views
+    threedView = slicer.app.layoutManager().threeDWidget(0).threeDView()
+    renderWindow = threedView.renderWindow()
+    renderer = renderWindow.GetRenderers().GetFirstRenderer()
+    camera = renderer.GetActiveCamera()
+
+    view_up = camera.GetViewUp()
+    view_normal = camera.GetViewPlaneNormal()
+    cross_view = np.cross(view_up, view_normal)
+
+    bounds = liverPolyData.GetBounds()
+    extent = (bounds[3] - bounds[2]) / 2
+
+    product_vectors = np.dot(vector_1, cross_view)
+    mag_vector1 = np.linalg.norm(vector_1)
+    mag_vector2 = np.linalg.norm(cross_view)
+    alpha = np.arccos([product_vectors / (mag_vector1 * mag_vector2)])
+    if alpha >= np.pi / 2:
+      point = center_tumor + extent * ((-1) * cross_view)
+    else:
+      point = center_tumor + extent * cross_view
+
+    activeDistanceContour.SetNthControlPointPosition(0, tuple(median_point.reshape(1, -1)[0]))
+    activeDistanceContour.SetNthControlPointPosition(1, tuple(point.reshape(1, -1)[0]))
 
   def onMarkupsResectionCheckBoxChecked(self, checkbox):
     activeMarkupClosedCurveNode = self.resectionsWidget.MarkupClosedCurveNodeComboBox.currentNode()
@@ -533,6 +599,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     lvLogic = slicer.modules.liverresections.logic()
     lvLogic.HideBezierSurfaceMarkupFromResection(self._currentResectionNode)
+
+  def BezierSurfaceModified(self, distanceNode):
+    distanceNode.SetDisplayVisibility(False)
 
   def onResectionMarginChanged(self):
     """
@@ -960,32 +1029,69 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     resampledImage = imageResampleFilter.Execute(inputImage)
 
     return resampledImage
-  
-  def preprocessing(self, modelPolyData, subdivide=True):
 
-    modelPolyDataCopy = vtk.vtkPolyData()
-    modelPolyDataCopy.DeepCopy(modelPolyData)
-    modelNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode')
-    modelNode.CreateDefaultDisplayNodes()
-    modelDisplayNode = modelNode.GetDisplayNode()
-    modelDisplayNode.SetOpacity(0.2)
-    modelDisplayNode.Visibility3DOff()
-    modelNode.SetAndObservePolyData(modelPolyDataCopy)
-    # print(modelNode)
-
-    # subdivision filter
-    # new steps for preparation to avoid problems because of connectivity
-    if subdivide:
-      smooth_loop = vtk.vtkLoopSubdivisionFilter()
-      smooth_loop.SetNumberOfSubdivisions(1)
-      smooth_loop.SetInputData(modelNode.GetPolyData())
-      smooth_loop.Update()
-      # liverModelNode.RemoveAllObservers()
-      modelNode.SetAndObservePolyData(smooth_loop.GetOutput())
-      if smooth_loop.GetOutput().GetNumberOfPoints() == 0:
+  def preprocessing(self, surfacePolyData, targetNumberOfPoints=700000, decimationAggressiveness=2):
+    numberOfInputPoints = surfacePolyData.GetNumberOfPoints()
+    if numberOfInputPoints == 0:
+      raise ("Input surface model is empty")
+      # new steps for preparation to avoid problems because of slim models (f.e. at stenosis)
+    elif numberOfInputPoints <= 400000:
+      subdiv = vtk.vtkLinearSubdivisionFilter()
+      subdiv.SetInputData(surfacePolyData)
+      subdiv.SetNumberOfSubdivisions(1)
+      subdiv.Update()
+      subPolyData = subdiv.GetOutput()
+      if subPolyData.GetNumberOfPoints() == 0:
         logging.warning("Mesh subdivision failed. Skip subdivision step.")
-        subdivide = False
-    return modelNode
+      numberOfPoints = subPolyData.GetNumberOfPoints()
+      reductionFactor = (numberOfPoints - targetNumberOfPoints) / numberOfPoints
+      if reductionFactor > 0.0:
+        parameters = {}
+        inputSurfaceModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "tempInputSurfaceModel")
+        inputSurfaceModelNode.SetAndObserveMesh(subPolyData)
+        parameters["inputModel"] = inputSurfaceModelNode
+        outputSurfaceModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "tempDecimatedSurfaceModel")
+        parameters["outputModel"] = outputSurfaceModelNode
+        parameters["reductionFactor"] = reductionFactor
+        parameters["method"] = "FastQuadric"
+        parameters["aggressiveness"] = decimationAggressiveness
+        decimation = slicer.modules.decimation
+        cliNode = slicer.cli.runSync(decimation, None, parameters)
+        subPolyData = outputSurfaceModelNode.GetPolyData()
+        slicer.mrmlScene.RemoveNode(inputSurfaceModelNode)
+        slicer.mrmlScene.RemoveNode(outputSurfaceModelNode)
+        slicer.mrmlScene.RemoveNode(cliNode)
+
+      surfaceCleaner = vtk.vtkCleanPolyData()
+      surfaceCleaner.SetInputData(subPolyData)
+      surfaceCleaner.Update()
+
+      surfaceTriangulator = vtk.vtkTriangleFilter()
+      surfaceTriangulator.SetInputData(surfaceCleaner.GetOutput())
+      surfaceTriangulator.PassLinesOff()
+      surfaceTriangulator.PassVertsOff()
+      surfaceTriangulator.Update()
+
+      normals = vtk.vtkPolyDataNormals()
+      normals.SetInputData(surfaceTriangulator.GetOutput())
+      normals.SetAutoOrientNormals(1)
+      normals.SetFlipNormals(0)
+      normals.SetConsistency(1)
+      normals.SplittingOff()
+      normals.Update()
+
+      modelPolyDataCopy = vtk.vtkPolyData()
+      modelPolyDataCopy.DeepCopy(normals.GetOutput())
+      modelNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode')
+      modelNode.SetName("PreprocessedLiver")
+      modelNode.CreateDefaultDisplayNodes()
+      modelDisplayNode = modelNode.GetDisplayNode()
+      modelDisplayNode.SetOpacity(0.2)
+      modelDisplayNode.Visibility3DOff()
+      modelNode.SetAndObservePolyData(modelPolyDataCopy)
+      return modelNode
+    else:
+      return surfacePolyData
 
   def CreatePolyDataFromCoords(self, coordinates):
     """
@@ -2055,6 +2161,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     BezierNode.SetControlPointPositionsWorld(points)
     BezierDisplay = BezierNode.GetDisplayNode()
     BezierDisplay.VisibilityOn()
+
     # BezierDisplay.SetClipOut(True)
 
 #

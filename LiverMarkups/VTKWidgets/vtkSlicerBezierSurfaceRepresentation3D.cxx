@@ -254,7 +254,6 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
     auto renderers = renderWindow1->GetRenderers();
     if(renderers->GetNumberOfItems()!=5)
       {
-      std::cout<<"-------------------add new renderer------------------"<<endl;
       double yViewport[4] = {0, 0.6, 0.3, 1.0};
 
       if (renderWindow1->GetNumberOfLayers() < RENDERER_LAYER+1)

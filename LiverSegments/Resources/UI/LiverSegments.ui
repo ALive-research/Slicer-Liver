@@ -163,6 +163,15 @@
           <property name="text">
            <string>Add Vessel Centerline </string>
           </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+          <property name="flat">
+           <bool>false</bool>
+          </property>
          </widget>
         </item>
         <item row="0" column="0" colspan="2">

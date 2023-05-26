@@ -6,20 +6,20 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>734</width>
-    <height>1117</height>
+    <width>968</width>
+    <height>1213</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <layout class="QHBoxLayout" name="horizontalLayout_10">
+  <layout class="QVBoxLayout" name="verticalLayout_5">
    <item>
     <widget class="qMRMLCollapsibleButton" name="ResectionsCollapsibleButton">
      <property name="text">
       <string>Resections</string>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout_5">
+     <layout class="QVBoxLayout" name="verticalLayout_7">
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_5">
         <item>
@@ -96,7 +96,7 @@
               <item>
                <widget class="QRadioButton" name="FlatRadioButton">
                 <property name="text">
-                 <string>Flat(Default)</string>
+                 <string>Flat</string>
                 </property>
                 <property name="checked">
                  <bool>true</bool>
@@ -124,30 +124,73 @@
             </widget>
            </item>
            <item>
-            <widget class="qMRMLNodeComboBox" name="DistanceContourComboBox">
-             <property name="enabled">
-              <bool>true</bool>
+            <widget class="QFrame" name="frame_4">
+             <property name="frameShape">
+              <enum>QFrame::NoFrame</enum>
              </property>
-             <property name="toolTip">
-              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Select the Distance Contour&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+             <property name="frameShadow">
+              <enum>QFrame::Plain</enum>
              </property>
-             <property name="nodeTypes">
-              <stringlist notr="true">
-               <string>vtkMRMLMarkupsDistanceContourNode</string>
-              </stringlist>
+             <property name="lineWidth">
+              <number>0</number>
              </property>
-             <property name="hideChildNodeTypes">
-              <stringlist notr="true"/>
-             </property>
-             <property name="renameEnabled">
-              <bool>true</bool>
-             </property>
-             <property name="interactionNodeSingletonTag">
-              <string notr="true"/>
-             </property>
-             <property name="selectNodeUponCreation">
-              <bool>false</bool>
-             </property>
+             <layout class="QFormLayout" name="formLayout_5">
+              <item row="0" column="0">
+               <widget class="QLabel" name="DistanceContourLabel">
+                <property name="text">
+                 <string>Distance Contour:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="qMRMLNodeComboBox" name="DistanceContourComboBox">
+                <property name="enabled">
+                 <bool>true</bool>
+                </property>
+                <property name="toolTip">
+                 <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Select the Distance Contour&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                </property>
+                <property name="nodeTypes">
+                 <stringlist notr="true">
+                  <string>vtkMRMLMarkupsDistanceContourNode</string>
+                 </stringlist>
+                </property>
+                <property name="hideChildNodeTypes">
+                 <stringlist notr="true"/>
+                </property>
+                <property name="renameEnabled">
+                 <bool>true</bool>
+                </property>
+                <property name="interactionNodeSingletonTag">
+                 <string notr="true"/>
+                </property>
+                <property name="selectNodeUponCreation">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="TumorLabel">
+                <property name="text">
+                 <string>Tumor:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="qMRMLSegmentSelectorWidget" name="TumorSegmentSelectorWidget">
+                <property name="segmentationNodeSelectorVisible">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0" colspan="2">
+               <widget class="QPushButton" name="InitialContourPositionButton">
+                <property name="text">
+                 <string>Initial Contour Position</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
             </widget>
            </item>
           </layout>
@@ -164,8 +207,44 @@
           <property name="lineWidth">
            <number>0</number>
           </property>
-          <layout class="QVBoxLayout" name="verticalLayout_7">
-           <item>
+          <layout class="QGridLayout" name="gridLayout_3">
+           <item row="2" column="1">
+            <widget class="QFrame" name="frame_3">
+             <property name="frameShape">
+              <enum>QFrame::NoFrame</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Raised</enum>
+             </property>
+             <property name="lineWidth">
+              <number>0</number>
+             </property>
+             <layout class="QFormLayout" name="formLayout">
+              <item row="0" column="0">
+               <widget class="qSlicerMarkupsPlaceWidget" name="curvePlaceWidget">
+                <property name="currentNodeActive">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QCheckBox" name="MarkupsResectionCheckBox">
+                <property name="text">
+                 <string>Update Resection</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item row="0" column="0">
+            <widget class="QLabel" name="MarkupClosedCurveLabel">
+             <property name="text">
+              <string>Markup Curve: </string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
             <widget class="qMRMLNodeComboBox" name="MarkupClosedCurveNodeComboBox">
              <property name="enabled">
               <bool>true</bool>
@@ -187,35 +266,6 @@
              <property name="renameEnabled">
               <bool>true</bool>
              </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QFrame" name="frame_3">
-             <property name="frameShape">
-              <enum>QFrame::NoFrame</enum>
-             </property>
-             <property name="frameShadow">
-              <enum>QFrame::Raised</enum>
-             </property>
-             <property name="lineWidth">
-              <number>0</number>
-             </property>
-             <layout class="QHBoxLayout" name="horizontalLayout_10">
-              <item>
-               <widget class="qSlicerMarkupsPlaceWidget" name="curvePlaceWidget">
-                <property name="currentNodeActive">
-                 <bool>false</bool>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QCheckBox" name="MarkupsResectionCheckBox">
-                <property name="text">
-                 <string>Update Resection</string>
-                </property>
-               </widget>
-              </item>
-             </layout>
             </widget>
            </item>
           </layout>
@@ -949,22 +999,6 @@
    </hints>
   </connection>
   <connection>
-   <sender>ClosedCurveButton</sender>
-   <signal>toggled(bool)</signal>
-   <receiver>MarkupClosedCurveNodeComboBox</receiver>
-   <slot>setVisible(bool)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>502</x>
-     <y>452</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>671</x>
-     <y>374</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
    <sender>ResectionWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>MarkupClosedCurveNodeComboBox</receiver>
@@ -1031,7 +1065,7 @@
   <connection>
    <sender>CurvedRadioButton</sender>
    <signal>toggled(bool)</signal>
-   <receiver>DistanceContourComboBox</receiver>
+   <receiver>frame_4</receiver>
    <slot>setVisible(bool)</slot>
    <hints>
     <hint type="sourcelabel">
@@ -1039,8 +1073,8 @@
      <y>313</y>
     </hint>
     <hint type="destinationlabel">
-     <x>414</x>
-     <y>374</y>
+     <x>481</x>
+     <y>541</y>
     </hint>
    </hints>
   </connection>
@@ -1071,8 +1105,8 @@
      <y>520</y>
     </hint>
     <hint type="destinationlabel">
-     <x>643</x>
-     <y>515</y>
+     <x>481</x>
+     <y>687</y>
     </hint>
    </hints>
   </connection>
@@ -1114,13 +1148,46 @@
    <receiver>GridThicknessDoubleSpinBox</receiver>
    <slot>setValue(double)</slot>
    <hints>
+   <hint type="sourcelabel">
+   <x>282</x>
+   <y>449</y>
+   </hint>
+   <hint type="destinationlabel">
+   <x>477</x>
+   <y>449</y>
+   </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>TumorSegmentSelectorWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
     <hint type="sourcelabel">
-     <x>282</x>
-     <y>449</y>
+     <x>481</x>
+     <y>606</y>
     </hint>
     <hint type="destinationlabel">
-     <x>477</x>
-     <y>449</y>
+     <x>301</x>
+     <y>416</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>frame_4</receiver>
+   <slot>hide()</slot>
+   ======= end
+   <hints>
+    <hint type="sourcelabel">
+     <x>481</x>
+     <y>606</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>224</x>
+     <y>398</y>
     </hint>
    </hints>
   </connection>
@@ -1145,14 +1212,18 @@
    <signal>valueChanged(double)</signal>
    <receiver>GridDivisionsDoubleSpinBox</receiver>
    <slot>setValue(double)</slot>
+   <sender>ClosedCurveButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>frame_2</receiver>
+   <slot>setVisible(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>285</x>
-     <y>407</y>
+     <x>417</x>
+     <y>364</y>
     </hint>
     <hint type="destinationlabel">
-     <x>485</x>
-     <y>407</y>
+     <x>280</x>
+     <y>582</y>
     </hint>
    </hints>
   </connection>
@@ -1161,14 +1232,50 @@
    <signal>valueChanged(double)</signal>
    <receiver>GridThicknessDoubleSlider</receiver>
    <slot>setValue(double)</slot>
+   <sender>ClosedCurveButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>MarkupClosedCurveNodeComboBox</receiver>
+   <slot>setVisible(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>477</x>
-     <y>449</y>
+     <x>776</x>
+     <y>451</y>
     </hint>
     <hint type="destinationlabel">
-     <x>282</x>
-     <y>449</y>
+     <x>548</x>
+     <y>641</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>CurvedRadioButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>DistanceContourComboBox</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>483</x>
+     <y>451</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>560</x>
+     <y>512</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>frame_2</receiver>
+   <slot>hide()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>483</x>
+     <y>606</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>483</x>
+     <y>669</y>
     </hint>
    </hints>
   </connection>
