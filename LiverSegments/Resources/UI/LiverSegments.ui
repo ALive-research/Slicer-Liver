@@ -35,10 +35,13 @@
         <item>
          <widget class="ctkComboBox" name="vascularTerritoryId">
           <property name="editable">
-           <bool>false</bool>
+           <bool>true</bool>
           </property>
           <property name="currentIndex">
            <number>0</number>
+          </property>
+          <property name="insertPolicy">
+           <enum>QComboBox::InsertAtCurrent</enum>
           </property>
           <item>
            <property name="text">
@@ -71,37 +74,6 @@
       </item>
       <item>
        <layout class="QGridLayout" name="gridLayout">
-        <item row="0" column="0">
-         <widget class="QLabel" name="label">
-          <property name="text">
-           <string>Segmentation:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="1">
-         <widget class="qMRMLNodeComboBox" name="inputSurfaceSelector">
-          <property name="nodeTypes">
-           <stringlist>
-            <string>vtkMRMLSegmentationNode</string>
-           </stringlist>
-          </property>
-          <property name="showChildNodeTypes">
-           <bool>false</bool>
-          </property>
-          <property name="addEnabled">
-           <bool>false</bool>
-          </property>
-          <property name="removeEnabled">
-           <bool>false</bool>
-          </property>
-          <property name="editEnabled">
-           <bool>true</bool>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="2">
-         <widget class="qMRMLSegmentationShow3DButton" name="SegmentationShow3DButton"/>
-        </item>
         <item row="1" column="1">
          <widget class="qMRMLSegmentSelectorWidget" name="inputSegmentSelectorWidget">
           <property name="sizePolicy">
@@ -115,26 +87,10 @@
           </property>
          </widget>
         </item>
-        <item row="1" column="2">
-         <widget class="QPushButton" name="showHideButton">
+        <item row="2" column="3">
+         <widget class="QPushButton" name="addSegmentButton">
           <property name="text">
-           <string>Show/Hide</string>
-          </property>
-          <property name="checkable">
-           <bool>true</bool>
-          </property>
-          <property name="checked">
-           <bool>true</bool>
-          </property>
-          <property name="flat">
-           <bool>false</bool>
-          </property>
-         </widget>
-        </item>
-        <item row="2" column="0">
-         <widget class="QLabel" name="label_3">
-          <property name="text">
-           <string>Vessel points:</string>
+           <string>Add Vessel Centerline </string>
           </property>
          </widget>
         </item>
@@ -162,6 +118,44 @@
           </property>
          </widget>
         </item>
+        <item row="0" column="2">
+         <widget class="qMRMLSegmentationShow3DButton" name="SegmentationShow3DButton"/>
+        </item>
+        <item row="0" column="1">
+         <widget class="qMRMLNodeComboBox" name="inputSurfaceSelector">
+          <property name="nodeTypes">
+           <stringlist>
+            <string>vtkMRMLSegmentationNode</string>
+           </stringlist>
+          </property>
+          <property name="showChildNodeTypes">
+           <bool>false</bool>
+          </property>
+          <property name="addEnabled">
+           <bool>false</bool>
+          </property>
+          <property name="removeEnabled">
+           <bool>false</bool>
+          </property>
+          <property name="editEnabled">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="0">
+         <widget class="QLabel" name="label">
+          <property name="text">
+           <string>Segmentation:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="label_3">
+          <property name="text">
+           <string>Vessel points:</string>
+          </property>
+         </widget>
+        </item>
         <item row="2" column="2">
          <widget class="qSlicerMarkupsPlaceWidget" name="endPointsMarkupsPlaceWidget">
           <property name="maximumSize">
@@ -175,25 +169,28 @@
           </property>
          </widget>
         </item>
-        <item row="2" column="3">
-         <widget class="QPushButton" name="addSegmentButton">
+        <item row="1" column="2">
+         <widget class="QPushButton" name="showHideButton">
           <property name="text">
-           <string>Add Vessel Centerline </string>
+           <string>Show/Hide</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+          <property name="flat">
+           <bool>false</bool>
           </property>
          </widget>
         </item>
         <item row="1" column="3">
-         <spacer name="horizontalSpacer">
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
+         <widget class="QPushButton" name="addSegmentationButton">
+          <property name="text">
+           <string>Add whole segment</string>
           </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>40</width>
-            <height>20</height>
-           </size>
-          </property>
-         </spacer>
+         </widget>
         </item>
        </layout>
       </item>
