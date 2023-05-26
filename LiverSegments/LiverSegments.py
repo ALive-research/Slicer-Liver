@@ -138,6 +138,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #self.ui.endPointsMarkupsSelector.connect('nodeAdded(vtkMRMLNode*)', self.newEndpointsListCreated)
     self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.segmentationNodeSelected)
     self.ui.vascularTerritoryId.connect('currentIndexChanged(int)', self.onVascularTerritoryIdChanged)
+    self.ui.vascularTerritoryId.connect('currentTextChanged(QString)', self.onVascularTerritoryIdChanged)
 
     self.onVascularTerritoryIdChanged()
     #self.ui.endPointsMarkupsSelector.setEnabled(False)#Disable selector for now, as the lists are automatically managed
@@ -148,7 +149,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #        self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
 
     # Buttons
-    self.ui.addSegmentButton.connect('clicked(bool)', self.onAddSegmentButton)
+    self.ui.addSegmentButton.connect('clicked(bool)', self.onAddCenterlineButton)
+    self.ui.addSegmentationButton.connect('clicked(bool)', self.onAddSegmentationButton)
     self.ui.calculateSegmentsButton.connect('clicked(bool)', self.onCalculateSegmentButton)
     self.ui.ColorPickerButton.connect('colorChanged(QColor)', self.onColorChanged)
     self.ui.showHideButton.connect('clicked(bool)', self.onShowHideButton)
@@ -181,6 +183,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if endPointsMarkupsNode is None:
       endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.addNode()
       self.ui.endPointsMarkupsSelector.setCurrentNode(endPointsMarkupsNode)
+    self.ui.endPointsMarkupsSelector.baseName = self.getVesselSegmentName()
     logging.info('currentNode: ' + self.ui.endPointsMarkupsSelector.currentNode().GetName())
     self.refreshShowHideButton()
     endPointsMarkupsNode.SetDisplayVisibility(True)#Show current markup points
@@ -230,16 +233,15 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return None
 
   def createColorMap(self):
-    self.colormap = slicer.vtkMRMLColorNode()
-    # Using example code from https://slicer.readthedocs.io/en/latest/developer_guide/script_repository.html
-    # and code from qSlicerColorsModuleWidget::copyCurrentColorNode()
-    self.colormap = slicer.mrmlScene.CreateNodeByClass("vtkMRMLProceduralColorNode")
-    self.colormap.UnRegister(None)  # to prevent memory leaks
-    self.colormap.SetName(slicer.mrmlScene.GenerateUniqueName("SlicerLiverColorMap"))
-    self.colormap.SetHideFromEditors(False)
-    self.colormap = slicer.app.applicationLogic().GetColorLogic().CopyNode(slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels'), "SlicerLiverColorMap")
-    self.colormap.UnRegister(None)  # to prevent memory leaks
-    slicer.mrmlScene.AddNode(self.colormap) # Creates the ID
+#    colorTableNodes = slicer.util.getNodes("SlicerLiverColorMap*")
+#    if len(colorTableNodes) == 0:
+    logging.info('Load color map from file')
+    # Load the node from disk
+    p = os.path.join(os.path.dirname(os.path.realpath(__file__)), "Resources/SlicerLiverColorMap.ctbl")
+    self.colormap = slicer.modules.colors.logic().LoadColorFile(p)
+#      slicer.mrmlScene.AddNode(self.colormap) # Creates the ID #Needed?
+#    else:
+#      self.colormap = list(colorTableNodes.values())[0] #else not needed?
 
   def cleanup(self):
     """
@@ -398,9 +400,15 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return name
 
   def newEndpointsListCreated(self):
-    endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
-    endPointsMarkupsNode.SetName(self.getVesselSegmentName())
+    #Set baseName, and use this to create new unique names if endPointsMarkupsNode with this name already exist
+    newName = self.getVesselSegmentName()
     self.updateSelectorColor()
+    if(self.ui.endPointsMarkupsSelector.baseName == newName):
+      return
+    self.ui.endPointsMarkupsSelector.baseName = newName
+
+    endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
+    endPointsMarkupsNode.SetName(newName)
     self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(True)
 
   def updateSelectorColor(self):
@@ -434,7 +442,9 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.vascularTerritoryId.addItem(idString)
       self.ui.vascularTerritoryId.setCurrentIndex(numItems)
     #Update color in selector
-    self.ui.ColorPickerButton.setColor(self.getCurrentColorQt());
+    self.ui.ColorPickerButton.setColor(self.getCurrentColorQt())
+    if(index !=0):
+      self.colormap.SetColorName(index, self.ui.vascularTerritoryId.currentText)
     self.onSegmentChanged()#Also generate new vessel segment point lists when changing territory id
 
   def onColorChanged(self):
@@ -442,12 +452,17 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     color = self.ui.ColorPickerButton.color
     self.colormap.SetColor(colorIndex, color.redF(), color.greenF(), color.blueF()) #Update index color in colormap.
 
-  def onAddSegmentButton(self):
+  def onAddCenterlineButton(self):
+    self.onAddCenterline()
+
+  def onAddSegmentationButton(self):
+    self.onAddCenterline(addSegmentationInsteadOfLine = True)
+
+  def onAddCenterline(self, addSegmentationInsteadOfLine = False):
     if not (self.logic.check_module_Extract_Centerline_installed()):
       self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
       slicer.util.errorDisplay("SlicerVMTK Extension not installed")
       return
-
     endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
     self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
     endPointsMarkupsNode.SetAttribute("SegmentIndex", str(self.ui.vascularTerritoryId.currentIndex))
@@ -469,19 +484,22 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         logging.error("Error: Failed to generate centerline model")
 
     try:
+      if(addSegmentationInsteadOfLine):
+        mergedLines = self.mergePolydata(centerlineModelNode.GetMesh(), preprocessedPolyData)
+      else:
         centerlineProcessingLogic = self.logic.getCenterlineLogic()
         centerlinePolyData, voronoiDiagramPolyData = centerlineProcessingLogic.extractCenterline(preprocessedPolyData, endPointsMarkupsNode)
-
         decimatedCenterlinePolyData = self.logic.decimateLine(centerlinePolyData)
         mergedLines = self.mergePolydata(centerlineModelNode.GetMesh(), decimatedCenterlinePolyData)
-        centerlineModelNode.SetAndObserveMesh(mergedLines)
 
-        centerlineModelNode.CreateDefaultDisplayNodes()
-        self.useColorFromSelector(centerlineModelNode)
-        centerlineModelNode.GetDisplayNode().SetLineWidth(3)
-        endPointsMarkupsNode.SetDisplayVisibility(False)
+      centerlineModelNode.SetAndObserveMesh(mergedLines)
+
+      centerlineModelNode.CreateDefaultDisplayNodes()
+      self.useColorFromSelector(centerlineModelNode)
+      centerlineModelNode.GetDisplayNode().SetLineWidth(3)
+      endPointsMarkupsNode.SetDisplayVisibility(False)
     except ValueError:
-        logging.error("Error: Failed to extract centerline")
+      logging.error("Error: Failed to extract centerline")
 
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
