@@ -464,10 +464,15 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onAddCenterlineButton(self):
     self.onAddCenterline()
+
   def onAddSegmentationButton(self):
     self.onAddCenterline(addSegmentationInsteadOfLine = True)
 
   def onAddCenterline(self, addSegmentationInsteadOfLine = False):
+    if not (self.logic.check_module_Extract_Centerline_installed()):
+      self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
+      slicer.util.errorDisplay("SlicerVMTK Extension not installed")
+      return
     endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
     self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
     endPointsMarkupsNode.SetAttribute("SegmentIndex", str(self.ui.vascularTerritoryId.currentIndex))
@@ -561,6 +566,10 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     from vtkSlicerLiverSegmentsModuleLogicPython import vtkLiverSegmentsLogic
     # Create the segmentsclassification logic
     self.scl = vtkLiverSegmentsLogic()
+
+  def check_module_Extract_Centerline_installed(self):
+    module_name = 'ExtractCenterline'
+    return module_name in slicer.util.moduleNames()
 
   def getCenterlineLogic(self):
     """
