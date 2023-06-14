@@ -146,20 +146,14 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     This function is for compute volume
     """
     resectionNodes = vtk.vtkCollection()
-    if self.ui.UseAllCheckBox.isChecked():
+    if not self.ui.ResectionTargetNodeComboBox.noneChecked():
       lvLogic = slicer.modules.liverresections.logic()
-      for i in range(self.ui.ResectionTargetNodeComboBox.nodeCount()):
-        node = self.ui.ResectionTargetNodeComboBox.nodeFromIndex(i)
-        bs = lvLogic.GetBezierFromResection(node)
+      checkedNodes = self.ui.ResectionTargetNodeComboBox.checkedNodes()
+      for i in checkedNodes:
+        bs = lvLogic.GetBezierFromResection(i)
         resectionNodes.AddItem(bs)
     else:
-      if self.ui.ResectionTargetNodeComboBox.currentNode():
-        lvLogic = slicer.modules.liverresections.logic()
-        node = self.ui.ResectionTargetNodeComboBox.currentNode()
-        bs = lvLogic.GetBezierFromResection(node)
-        resectionNodes.AddItem(bs)
-      else:
-        resectionNodes = None
+      resectionNodes = None
 
     segmentsVolumeNode = slicer.mrmlScene.GetFirstNodeByName("segmentVolumeNode")
     if not segmentsVolumeNode:
