@@ -145,7 +145,9 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Initialize Vascular Territory Segmentation button at widget start-up
     nodeNameID = 'Vascular_Territory_Segmentation'
-    vasc_terr_segm_node = slicer.mrmlScene.AddNewNodeByClassWithID('vtkMRMLSegmentationNode', nodeNameID, nodeNameID)
+    vasc_terr_segm_node = slicer.mrmlScene.GetNodeByID(nodeNameID)
+    if not vasc_terr_segm_node:
+      vasc_terr_segm_node = slicer.mrmlScene.AddNewNodeByClassWithID('vtkMRMLSegmentationNode', nodeNameID, nodeNameID)
     self.ui.selectedVascularTerritorySegmId.setCurrentNodeID(nodeNameID)
 
     #TODO: Store all GUI settings
@@ -248,28 +250,31 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.updateVascTerrList(vasc_terr_ID_combox, vasc_terr_segmentationNode)
     displayNode = vasc_terr_segmentationNode.GetDisplayNode()
-    displayNode.SetOpacity3D(0.3)
+    if displayNode:
+      displayNode.SetOpacity3D(0.3)
     self.updateShowHideButtonText()
 
   def updateVascTerrList(self, vasc_terr_ID_list, vascular_territory_segm_node):
     segments = vascular_territory_segm_node.GetSegmentation().GetSegmentIDs()
     print(segments)
+    vasc_terr_ID_list.clear()
+    initString = 'Create new territory ID'
+    vasc_terr_ID_list.addItem(initString)
     firstSegmentID = 'Vascular Territory ID 1'
     if firstSegmentID not in segments:
       # No vascular territory segmentations
       return
     #Start populating Vascular Territory list
-    vasc_terr_ID_list.clear()
-    index = 0
-    initString = 'Create new territory ID'
-    vasc_terr_ID_list.addItem(initString)
 
+    vasc_terr_ID_list.blockSignals(True)
+    index = 0
     for idString in segments:
-      vasc_terr_ID_list.addItem(idString)
       index = index+1
-      vasc_terr_ID_list.setCurrentIndex(index)
+      vasc_terr_ID_list.addItem(idString)
       self.colormap.SetColorName(index, vasc_terr_ID_list.currentText)
       self.onSegmentChanged()
+    vasc_terr_ID_list.setCurrentIndex(1)
+    vasc_terr_ID_list.blockSignals(False)
 
   def getVesselSegmentfromName(self):
     segmentName = self.getVesselSegmentName()
