@@ -87,7 +87,14 @@
         <layout class="QVBoxLayout" name="verticalLayout_2">
          <item>
           <layout class="QGridLayout" name="gridLayout">
-           <item row="3" column="1">
+           <item row="4" column="0">
+            <widget class="QLabel" name="label_4">
+             <property name="text">
+              <string>ROI Markers List:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
             <widget class="qMRMLNodeComboBox" name="ROIMarkersListSelector">
              <property name="nodeTypes">
               <stringlist>
@@ -111,7 +118,7 @@
              </property>
             </widget>
            </item>
-           <item row="3" column="2">
+           <item row="4" column="2">
             <widget class="qSlicerMarkupsPlaceWidget" name="ROIMarkersListPlaceWidget">
              <property name="maximumSize">
               <size>
@@ -121,6 +128,29 @@
              </property>
              <property name="placeMultipleMarkups">
               <enum>qSlicerMarkupsPlaceWidget::ForcePlaceMultipleMarkups</enum>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="label_2">
+             <property name="text">
+              <string>Target Segmentation:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="qMRMLSegmentSelectorWidget" name="TargetSegmentationSelectorWidget">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="segmentationNodeSelectorVisible">
+              <bool>false</bool>
+             </property>
+             <property name="multiSelection">
+              <bool>true</bool>
              </property>
             </widget>
            </item>
@@ -140,13 +170,10 @@
              </property>
             </widget>
            </item>
-           <item row="1" column="2">
-            <widget class="qMRMLSegmentationShow3DButton" name="SegmentationShow3DButton"/>
-           </item>
-           <item row="3" column="0">
-            <widget class="QLabel" name="label_4">
+           <item row="1" column="0">
+            <widget class="QLabel" name="label">
              <property name="text">
-              <string>ROI Markers List:</string>
+              <string>Segmentation:</string>
              </property>
             </widget>
            </item>
@@ -171,17 +198,13 @@
              </property>
             </widget>
            </item>
+           <item row="1" column="2">
+            <widget class="qMRMLSegmentationShow3DButton" name="SegmentationShow3DButton"/>
+           </item>
            <item row="0" column="0">
             <widget class="QLabel" name="label">
              <property name="text">
               <string>Reference Volume:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="0">
-            <widget class="QLabel" name="label">
-             <property name="text">
-              <string>Segmentation:</string>
              </property>
             </widget>
            </item>
@@ -479,6 +502,38 @@
     <hint type="destinationlabel">
      <x>468</x>
      <y>104</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>InputSegmentationSelector</sender>
+   <signal>currentNodeChanged(vtkMRMLNode*)</signal>
+   <receiver>TargetSegmentationSelectorWidget</receiver>
+   <slot>setCurrentNode(vtkMRMLNode*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>422</x>
+     <y>576</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>422</x>
+     <y>631</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>LiverVolumetryWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>TargetSegmentationSelectorWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>395</x>
+     <y>289</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>468</x>
+     <y>181</y>
     </hint>
    </hints>
   </connection>

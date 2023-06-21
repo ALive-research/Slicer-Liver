@@ -31,9 +31,8 @@
 #   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 #   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-#   This file was originally developed by Ruoyan Meng (NTNU), Ole V. Solberg,
-#   Geir A. Tangen, Javier Perez-de-Frutos (SINTEF, Norway) and Rafael Palomar
-#   (Oslo University Hospital) through the ALive project (grant nr. 311393).
+#   This file was originally developed by Ruoyan Meng (NTNU) through the
+#   ALive project (grant nr. 311393).
 #
 # ==============================================================================
 
@@ -131,11 +130,9 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.InputSegmentationSelector.connect('currentNodeChanged(bool)', self.segmentationNodeSelected)
     self.ui.InputSegmentSelectorWidget.connect('segmentSelectionChanged(QStringList)', self.updateParameterNodeFromGUI)
     self.ui.InputSegmentSelectorWidget.connect('segmentSelectionChanged(QStringList)', self.onSegmentChanged)
+    self.ui.TargetSegmentationSelectorWidget.connect('segmentSelectionChanged(QStringList)', self.updateParameterNodeFromGUI)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
-    # self.ui.ROIMarkersListSelector.connect('nodeAddedByUser(vtkMRMLNode*)', self.newROIMarkersListCreated)
-
-    # self.ui.ResectionTargetNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionVolumetryTargetNodeChanged)
     self.ui.ComputeVolumePushButton.connect('clicked(bool)', self.onComputeAdvancedVolumeButtonClicked)
 
     self.initializeParameterNode()
@@ -163,12 +160,20 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       segmentationIds = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
       slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
                                                                         segmentsVolumeNode, refVolumeNode)
+    #target segments volume node for percentage calculation
+    targetSegmentVolumeNode = slicer.mrmlScene.GetFirstNodeByName("targetSegmentVolumeNode")
+    if not targetSegmentVolumeNode:
+      targetSegmentVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "targetSegmentVolumeNode")
+      segmentationNode = self.ui.InputSegmentationSelector.currentNode()
+      refVolumeNode = self.ui.ReferenceVolumeSelector.currentNode()
+      segmentationIds = self.ui.TargetSegmentationSelectorWidget.selectedSegmentIDs()
+      slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
+                                                                        targetSegmentVolumeNode, refVolumeNode)
 
-    # VascularSegmentsLabelmapVolumeNode = self.ui.VascularSegmentsSelectorWidget.currentNode()
     ROIMarkersList = self.ui.ROIMarkersListSelector.currentNode()
     outputTable = self.ui.VolumeTableSelectorWidget.currentNode()
 
-    self.logic.computeVolume(segmentsVolumeNode, self.ui.InputSegmentationSelector.currentNode(), outputTable, ROIMarkersList, resectionNodes)
+    self.logic.computeVolume(segmentsVolumeNode, targetSegmentVolumeNode, self.ui.InputSegmentationSelector.currentNode(), outputTable, ROIMarkersList, resectionNodes)
     self.showTable(outputTable)
     slicer.mrmlScene.RemoveNode(segmentsVolumeNode)
 
@@ -190,7 +195,6 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       logging.warning('No segmentationNode')
       return
     displayNode = segmentationNode.GetDisplayNode()
-    displayNode.SetOpacity(0.5)
 
     visibleSegmentIds = vtk.vtkStringArray()
     displayNode.GetVisibleSegmentIDs(visibleSegmentIds)
@@ -336,6 +340,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     inputSegmentation = self._parameterNode.GetNodeReference("inputSegmentation")
     self.ui.InputSegmentSelectorWidget.setVisible(inputSegmentation and inputSegmentation.IsA("vtkMRMLSegmentationNode"))
+    self.ui.TargetSegmentationSelectorWidget.setVisible(inputSegmentation and inputSegmentation.IsA("vtkMRMLSegmentationNode"))
 
 
 # LiverSegmentsLogic
@@ -356,10 +361,18 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
     Initialize parameter node with default settings.
     """
 
-  def computeVolume(self, segmentsVolumeNode, segmentationNode, outputTable, ROIMarkersList, resectionNodes):
+  def computeVolume(self, segmentsVolumeNode, targetSegmentVolumeNode, segmentationNode, outputTable, ROIMarkersList, resectionNodes):
     statistics = {}
     if outputTable is None:
       raise ValueError("Missing outputTable")
+
+    targetSegmentVolume = 0.0
+    if targetSegmentVolumeNode:
+      import vtk, numpy
+      scalars = vtk.util.numpy_support.vtk_to_numpy(targetSegmentVolumeNode.GetImageData().GetPointData().GetScalars())
+      spacing = targetSegmentVolumeNode.GetSpacing()
+      voxel_count = numpy.count_nonzero(scalars)
+      targetSegmentVolume = voxel_count*spacing[0]*spacing[1]*spacing[2]*0.001
 
     if resectionNodes is None:
       if ROIMarkersList is None:
@@ -373,20 +386,20 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
           volume_cm3 = stats[segmentId,"LabelmapSegmentStatisticsPlugin.volume_cm3"]
           segmentName = segmentationNode.GetSegmentation().GetSegment(segmentId).GetName()
           statistics[segmentId] = [segmentName, voxel_count, volume_cm3]
-          self.scl.VolumetryTable(segmentName, 0.0, voxel_count, volume_cm3,outputTable)
+          self.scl.VolumetryTable(segmentName, targetSegmentVolume, voxel_count, volume_cm3,outputTable)
       else:
         import vtk, numpy
         ROIvalues = self.scl.GetROIPointsLabelValue(segmentsVolumeNode, ROIMarkersList)
         scalars = vtk.util.numpy_support.vtk_to_numpy(segmentsVolumeNode.GetImageData().GetPointData().GetScalars())
         spacing = segmentsVolumeNode.GetSpacing()
         for i, values in enumerate(ROIvalues):
-          voxel_count = numpy.sum(scalars == values)
+          voxel_count = numpy.count_nonzero(scalars == values)
           volume_cm3 = voxel_count*spacing[0]*spacing[1]*spacing[2]*0.001
           pointLabel = ROIMarkersList.GetNthControlPointLabel(i)
           statistics[pointLabel] = [pointLabel, voxel_count, volume_cm3]
-          self.scl.VolumetryTable(pointLabel, 0.0, voxel_count, volume_cm3,outputTable)
+          self.scl.VolumetryTable(pointLabel, targetSegmentVolume, voxel_count, volume_cm3, outputTable)
     else:
-      self.scl.ComputeAdvancedPlanningVolumetry(segmentsVolumeNode,outputTable, ROIMarkersList, resectionNodes)
+      self.scl.ComputeAdvancedPlanningVolumetry(segmentsVolumeNode, outputTable, ROIMarkersList, resectionNodes, targetSegmentVolume)
 
 
 

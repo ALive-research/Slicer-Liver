@@ -1,6 +1,42 @@
-//
-// Created by ruoyan on 22.05.23.
-//
+/*==============================================================================
+
+ Distributed under the OSI-approved BSD 3-Clause License.
+
+  Copyright (c) Oslo University Hospital. All rights reserved.
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions
+  are met:
+
+  * Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+
+  * Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+
+  * Neither the name of Oslo University Hospital nor the names
+    of Contributors may be used to endorse or promote products derived
+    from this software without specific prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+  HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+  This file was originally developed by Ruoyan Meng (NTNU), and was
+  supported by The Research Council of Norway through the ALive project
+  (grant nr. 311393).
+
+  ==============================================================================*/
+
 
 #include "vtkLiverVolumetryLogic.h"
 #include "vtkLabelMapHelper.h"
@@ -45,12 +81,12 @@ void vtkLiverVolumetryLogic::PrintSelf(ostream &os, vtkIndent indent)
   Superclass::PrintSelf(os, indent);
 }
 
-void vtkLiverVolumetryLogic::ComputeAdvancedPlanningVolumetry(vtkMRMLLabelMapVolumeNode* TargetSegmentsLabelMap, vtkMRMLTableNode* OutputTableNode, vtkMRMLMarkupsFiducialNode* ROIMarkersList, vtkCollection* ResectionNodes){
+void vtkLiverVolumetryLogic::ComputeAdvancedPlanningVolumetry(vtkMRMLLabelMapVolumeNode* SelectedSegmentsLabelMap, vtkMRMLTableNode* OutputTableNode, vtkMRMLMarkupsFiducialNode* ROIMarkersList, vtkCollection* ResectionNodes, double TargetSegmentationVolume){
   vtkLabelMapHelper::LabelMapType::RegionType TargetSegmentsBoundingBox;
   vtkLabelMapHelper::LabelMapType::Pointer TargetSegmentsITKImage;
   int baseValue = 7;
   double spacing[3];
-  TargetSegmentsLabelMap->GetSpacing(spacing);
+  SelectedSegmentsLabelMap->GetSpacing(spacing);
 
   if (!OutputTableNode)
     {
@@ -61,15 +97,15 @@ void vtkLiverVolumetryLogic::ComputeAdvancedPlanningVolumetry(vtkMRMLLabelMapVol
 
 
   if (ResectionNodes){
-    // Project TargetSegmentsLabelMap from vtkImage to itkImage
+    // Project SelectedSegmentsLabelMap from vtkImage to itkImage
     // need deep copy the label map
     auto TargetSegmentImageDataCopy = vtkSmartPointer<vtkImageData>::New();
-    TargetSegmentImageDataCopy->DeepCopy(TargetSegmentsLabelMap->GetImageData());
+    TargetSegmentImageDataCopy->DeepCopy(SelectedSegmentsLabelMap->GetImageData());
     auto TargetSegmentLabelMapCopy = vtkSmartPointer<vtkMRMLLabelMapVolumeNode>::New();
-    TargetSegmentLabelMapCopy->CopyOrientation(TargetSegmentsLabelMap);
+    TargetSegmentLabelMapCopy->CopyOrientation(SelectedSegmentsLabelMap);
     TargetSegmentLabelMapCopy->SetAndObserveImageData(TargetSegmentImageDataCopy);
 
-    auto LabelRetrievingOnly = vtkLabelMapHelper::VolumeNodeToItkImage(TargetSegmentsLabelMap, true, false);
+    auto LabelRetrievingOnly = vtkLabelMapHelper::VolumeNodeToItkImage(SelectedSegmentsLabelMap, true, false);
     TargetSegmentsBoundingBox = vtkLabelMapHelper::GetBoundingBox(LabelRetrievingOnly);
 
     auto BezierHR = vtkSmartPointer<vtkBezierSurfaceSource>::New();
@@ -122,12 +158,12 @@ void vtkLiverVolumetryLogic::ComputeAdvancedPlanningVolumetry(vtkMRMLLabelMapVol
             ++iterator;
             }
           auto ROIVolume = CountValues*spacing[0]*spacing[1]*spacing[2]*0.001;
-          VolumetryTable(pointLabel, 0.0,CountValues, ROIVolume, OutputTableNode);
+          VolumetryTable(pointLabel, TargetSegmentationVolume,CountValues, ROIVolume, OutputTableNode);
           TotalCount = TotalCount+CountValues;
           }
         }
       auto TotalROIVolume = TotalCount*spacing[0]*spacing[1]*spacing[2]*0.001;
-      VolumetryTable("TotalVolume of List "+ std::string(ROIMarkersList->GetName()), 0.0,TotalCount, TotalROIVolume, OutputTableNode);
+      VolumetryTable("TotalVolume of List "+ std::string(ROIMarkersList->GetName()), TargetSegmentationVolume,TotalCount, TotalROIVolume, OutputTableNode);
       }
     }
 }
@@ -294,15 +330,15 @@ int vtkLiverVolumetryLogic::GetSegmentVoxels(vtkOrientedImageData *TargetSegment
 
 
 
-std::vector<int> vtkLiverVolumetryLogic::GetROIPointsLabelValue(vtkMRMLLabelMapVolumeNode* TargetSegmentsLabelMap, vtkMRMLMarkupsFiducialNode* ROIMarkersList){
+std::vector<int> vtkLiverVolumetryLogic::GetROIPointsLabelValue(vtkMRMLLabelMapVolumeNode* SelectedSegmentsLabelMap, vtkMRMLMarkupsFiducialNode* ROIMarkersList){
   std::vector<int> re;
   vtkLabelMapHelper::LabelMapType::Pointer TargetSegmentsITKImage;
-  // Project TargetSegmentsLabelMap from vtkImage to itkImage
+  // Project SelectedSegmentsLabelMap from vtkImage to itkImage
   // need deep copy the label map
   auto TargetSegmentImageDataCopy = vtkSmartPointer<vtkImageData>::New();
-  TargetSegmentImageDataCopy->DeepCopy(TargetSegmentsLabelMap->GetImageData());
+  TargetSegmentImageDataCopy->DeepCopy(SelectedSegmentsLabelMap->GetImageData());
   auto TargetSegmentLabelMapCopy = vtkSmartPointer<vtkMRMLLabelMapVolumeNode>::New();
-  TargetSegmentLabelMapCopy->CopyOrientation(TargetSegmentsLabelMap);
+  TargetSegmentLabelMapCopy->CopyOrientation(SelectedSegmentsLabelMap);
   TargetSegmentLabelMapCopy->SetAndObserveImageData(TargetSegmentImageDataCopy);
   TargetSegmentsITKImage = vtkLabelMapHelper::VolumeNodeToItkImage(TargetSegmentLabelMapCopy, true, false);
 
