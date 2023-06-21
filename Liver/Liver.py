@@ -272,6 +272,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectogramWidget.PortalContourThicknessSpinBox.connect('valueChanged(double)', self.onPortalContourThicknessChanged)
     self.resectogramWidget.PortalContourColorPickerButton.connect('colorChanged(QColor)', self.onPortalContourColorChanged)
     self.resectogramWidget.VascularSegmentsNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onVascularSegmentsNodeChanged)
+    self.resectogramWidget.ResectogramSizeSliderWidget.connect('valueChanged(double)', self.onResectogramSizeSliderChanged)
 
 
   def onRadioButtonState(self, rdbutton):
@@ -831,6 +832,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       self.resectogramWidget.FlexibleBoundaryCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.Grid2DVisibility.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.MirrorDisplayCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
+      self.resectogramWidget.ResectogramSizeSliderGroupBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
       if self.resectogramWidget.Resection2DCheckBox.isChecked() == 0 and renderers.GetNumberOfItems() == 5:
         renderers.RemoveItem(4)
@@ -865,6 +867,19 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     if self._currentResectionNode:
       self._currentResectionNode.SetGrid2DVisibility(self.resectogramWidget.Grid2DVisibility.isChecked())
+
+  def onResectogramSizeSliderChanged(self):
+    """
+    This function is called when the Resectogram Size Slider changes.
+    """
+    if self._currentResectionNode:
+      if self.resectogramWidget.Resection2DCheckBox.isChecked():
+        ymin = self.resectogramWidget.ResectogramSizeSliderWidget.value
+        view = slicer.app.layoutManager().threeDWidget(0).threeDView()
+        renderers = view.renderWindow().GetRenderers()
+        renderer2D = renderers.GetItemAsObject(4)
+        renderer2D.SetViewport([0.0, ymin, 0.3, 1.0])
+        view.forceRender()
 
   def onHepaticContourThicknessChanged(self):
     """
