@@ -1061,7 +1061,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     if numberOfInputPoints == 0:
       raise ("Input surface model is empty")
       # new steps for preparation to avoid problems because of slim models (f.e. at stenosis)
-    elif numberOfInputPoints <= 400000:
+    elif numberOfInputPoints <= 4000000:
       subdiv = vtk.vtkLinearSubdivisionFilter()
       subdiv.SetInputData(surfacePolyData)
       subdiv.SetNumberOfSubdivisions(1)
