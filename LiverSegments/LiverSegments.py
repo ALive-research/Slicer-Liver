@@ -143,6 +143,11 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.onVascularTerritoryIdChanged()
     #self.ui.endPointsMarkupsSelector.setEnabled(False)#Disable selector for now, as the lists are automatically managed
 
+    # Initialize Vascular Territory Segmentation button at widget start-up
+    nodeNameID = 'Vascular_Territory_Segmentation'
+    vasc_terr_segm_node = slicer.mrmlScene.AddNewNodeByClassWithID('vtkMRMLSegmentationNode', nodeNameID, nodeNameID)
+    self.ui.selectedVascularTerritorySegmId.setCurrentNodeID(nodeNameID)
+
     #TODO: Store all GUI settings
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
     # (in the selected parameter node).
