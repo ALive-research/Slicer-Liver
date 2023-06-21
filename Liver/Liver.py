@@ -1064,7 +1064,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     elif numberOfInputPoints <= 4000000:
       subdiv = vtk.vtkLinearSubdivisionFilter()
       subdiv.SetInputData(surfacePolyData)
-      subdiv.SetNumberOfSubdivisions(1)
+      subdiv.SetNumberOfSubdivisions(0)
       subdiv.Update()
       subPolyData = subdiv.GetOutput()
       if subPolyData.GetNumberOfPoints() == 0:
