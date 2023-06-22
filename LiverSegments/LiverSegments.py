@@ -256,7 +256,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def updateVascTerrList(self, vasc_terr_ID_list, vascular_territory_segm_node):
     segments = vascular_territory_segm_node.GetSegmentation().GetSegmentIDs()
-    print(segments)
     vasc_terr_ID_list.clear()
     initString = 'Create new territory ID'
     vasc_terr_ID_list.addItem(initString)
