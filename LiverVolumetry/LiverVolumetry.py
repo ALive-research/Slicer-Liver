@@ -126,17 +126,29 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.setParameterNode(self.logic.getParameterNode())
 
     # Connections
+    self.ui.VolumeTableSelectorWidget.connect('currentNodeChanged(vtkMRMLNode*)', self.onVolumetryParameterChanged)
+    self.ui.ReferenceVolumeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.onVolumetryParameterChanged)
+    self.ui.InputSegmentationSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.onVolumetryParameterChanged)
     self.ui.InputSegmentationSelector.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
     self.ui.InputSegmentationSelector.connect('currentNodeChanged(bool)', self.segmentationNodeSelected)
     self.ui.InputSegmentSelectorWidget.connect('segmentSelectionChanged(QStringList)', self.updateParameterNodeFromGUI)
     self.ui.InputSegmentSelectorWidget.connect('segmentSelectionChanged(QStringList)', self.onSegmentChanged)
+    self.ui.InputSegmentSelectorWidget.connect('segmentSelectionChanged(QStringList)', self.onVolumetryParameterChanged)
     self.ui.TargetSegmentationSelectorWidget.connect('segmentSelectionChanged(QStringList)', self.updateParameterNodeFromGUI)
+    self.ui.ComputeVolumePushButton.connect('clicked(bool)', self.onComputeAdvancedVolumeButtonClicked)
+
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
-    self.ui.ComputeVolumePushButton.connect('clicked(bool)', self.onComputeAdvancedVolumeButtonClicked)
 
     self.initializeParameterNode()
 
+  def onVolumetryParameterChanged(self):
+    node1 = self.ui.VolumeTableSelectorWidget.currentNode()
+    node2 = self.ui.ReferenceVolumeSelector.currentNode()
+    node3 = self.ui.InputSegmentationSelector.currentNode()
+    node4 = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
+    if len(self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()) == 0: node4 = None
+    self.ui.ComputeVolumePushButton.setEnabled(None not in [node1, node2, node3, node4])
 
   def onComputeAdvancedVolumeButtonClicked(self):
     """
@@ -176,6 +188,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic.computeVolume(segmentsVolumeNode, targetSegmentVolumeNode, self.ui.InputSegmentationSelector.currentNode(), outputTable, ROIMarkersList, resectionNodes)
     self.showTable(outputTable)
     slicer.mrmlScene.RemoveNode(segmentsVolumeNode)
+    slicer.mrmlScene.RemoveNode(targetSegmentVolumeNode)
 
   def showTable(self, table):
     """
@@ -190,12 +203,13 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def segmentationNodeSelected(self):
     self.ui.SegmentationShow3DButton.setEnabled(True)
     segmentationNode = self.ui.InputSegmentationSelector.currentNode()
-    self.ui.SegmentationShow3DButton.setSegmentationNode(segmentationNode)
+
     if segmentationNode is None:
       logging.warning('No segmentationNode')
       return
-    displayNode = segmentationNode.GetDisplayNode()
 
+    self.ui.SegmentationShow3DButton.setSegmentationNode(segmentationNode)
+    displayNode = segmentationNode.GetDisplayNode()
     visibleSegmentIds = vtk.vtkStringArray()
     displayNode.GetVisibleSegmentIDs(visibleSegmentIds)
     for segmentIdIndex in range(visibleSegmentIds.GetNumberOfValues()):
@@ -216,16 +230,6 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       displayNode.SetSegmentVisibility(id, True)
     for id in unselectedIDs:
       displayNode.SetSegmentVisibility(id, False)
-
-  def getDisplayNodeAndSegmentId(self):
-    segmentation = self.ui.InputSegmentationSelector.currentNode()
-    if segmentation is None:
-      return None, None
-    displayNode = segmentation.GetDisplayNode()
-    if displayNode is None:
-      return None, None
-    return displayNode, self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
-
 
   def cleanup(self):
     """
@@ -319,9 +323,10 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Update node selectors and sliders
     for nodeSelector, roleName in self.nodeSelectors:
       nodeSelector.setCurrentNode(self._parameterNode.GetNodeReference(roleName))
-    inputSurfaceNode = self._parameterNode.GetNodeReference("inputSegmentation")
-    if inputSurfaceNode and inputSurfaceNode.IsA("vtkMRMLSegmentationNode"):
+    inputSegmentationNode = self._parameterNode.GetNodeReference("inputSegmentation")
+    if inputSegmentationNode and inputSegmentationNode.IsA("vtkMRMLSegmentationNode"):
       self.ui.InputSegmentSelectorWidget.setCurrentSegmentIDs(self._parameterNode.GetParameter("InputSegmentID"))
+      self.ui.TargetSegmentationSelectorWidget.setCurrentSegmentIDs(self._parameterNode.GetParameter("InputSegmentID"))
 
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
@@ -367,7 +372,7 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
       raise ValueError("Missing outputTable")
 
     targetSegmentVolume = 0.0
-    if targetSegmentVolumeNode:
+    if targetSegmentVolumeNode != None:
       import vtk, numpy
       scalars = vtk.util.numpy_support.vtk_to_numpy(targetSegmentVolumeNode.GetImageData().GetPointData().GetScalars())
       spacing = targetSegmentVolumeNode.GetSpacing()

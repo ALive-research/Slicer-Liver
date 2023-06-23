@@ -154,6 +154,13 @@
              </property>
             </widget>
            </item>
+           <item row="3" column="2">
+            <widget class="QLabel" name="label_2">
+             <property name="text">
+              <string>* If None is selected, then the total volume of unselected segments will apply</string>
+             </property>
+            </widget>
+           </item>
            <item row="2" column="1">
             <widget class="qMRMLSegmentSelectorWidget" name="InputSegmentSelectorWidget">
              <property name="sizePolicy">
@@ -195,6 +202,9 @@
              </property>
              <property name="editEnabled">
               <bool>false</bool>
+             </property>
+             <property name="noneEnabled">
+              <bool>true</bool>
              </property>
             </widget>
            </item>
@@ -280,7 +290,7 @@
          <item>
           <widget class="QPushButton" name="ComputeVolumePushButton">
            <property name="enabled">
-            <bool>true</bool>
+            <bool>false</bool>
            </property>
            <property name="sizePolicy">
             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
