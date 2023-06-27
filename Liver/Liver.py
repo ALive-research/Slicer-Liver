@@ -46,7 +46,7 @@ from slicer.ScriptedLoadableModule import *
 import numpy as np
 from numpy import size
 import LiverSegments
-
+import LiverVolumetry
 
 #
 # Liver
@@ -190,6 +190,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.distanceMapsWidget = slicer.util.childWidgetVariables(distanceMapsUI)
     self.resectionsWidget = slicer.util.childWidgetVariables(resectionsUI)
     self.resectogramWidget = slicer.util.childWidgetVariables(resectogramUI)
+
     iconsPath = os.path.join(os.path.dirname(__file__), 'Resources/Icons')
     iconStyle = "QCheckBox::indicator:unchecked {{ image: url({0}/SlicerInvisible.png);}}\n QCheckBox::indicator:checked {{ image: url({1}/SlicerVisible.png);}}".format(iconsPath,iconsPath)
     self.resectogramWidget.Grid2DVisibility.setStyleSheet(iconStyle)
@@ -201,6 +202,13 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     wrapperWidget.setMRMLScene(slicer.mrmlScene)
     segemtsWidget = LiverSegments.LiverSegmentsWidget(wrapperWidget)
     segemtsWidget.setup()
+    self.layout.addWidget(wrapperWidget)
+
+    wrapperWidget = slicer.qMRMLWidget()
+    wrapperWidget.setLayout(qt.QVBoxLayout())
+    wrapperWidget.setMRMLScene(slicer.mrmlScene)
+    volumetryWidget = LiverVolumetry.LiverVolumetryWidget(wrapperWidget)
+    volumetryWidget.setup()
     self.layout.addWidget(wrapperWidget)
 
     # Add a spacer at the botton to keep the UI flowing from top to bottom
@@ -254,6 +262,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.UncertaintyMarginColorPickerButton.connect('colorChanged(QColor)', self.onUncertaintyMarginColorChanged)
     self.resectionsWidget.UncertaintyMarginComboBox.connect('currentIndexChanged(int)', self.onUncertaintyMaginComboBoxChanged)
     self.resectionsWidget.InterpolatedMarginsCheckBox.connect('stateChanged(int)', self.onInterpolatedMarginsChanged)
+
     self.resectogramWidget.Resection2DCheckBox.connect('stateChanged(int)', self.onResection2DChanged)
     self.resectogramWidget.MirrorDisplayCheckBox.connect('stateChanged(int)', self.onMirrorDisplayCheckBoxChanged)
     self.resectogramWidget.FlexibleBoundaryCheckBox.connect('stateChanged(int)', self.onFlexibleBoundaryCheckBoxChanged)
@@ -263,6 +272,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectogramWidget.PortalContourThicknessSpinBox.connect('valueChanged(double)', self.onPortalContourThicknessChanged)
     self.resectogramWidget.PortalContourColorPickerButton.connect('colorChanged(QColor)', self.onPortalContourColorChanged)
     self.resectogramWidget.VascularSegmentsNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onVascularSegmentsNodeChanged)
+    self.resectogramWidget.ResectogramSizeSliderWidget.connect('valueChanged(double)', self.onResectogramSizeSliderChanged)
+
 
   def onRadioButtonState(self, rdbutton):
     """
@@ -592,6 +603,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       self._currentResectionNode.SetTargetOrganModelNode(modelNode)
       self.resectionsWidget.ResectionVisualizationGroupBox.setEnabled(modelNode is not None)
       self.resectionsWidget.GridGroupBox.setEnabled(modelNode is not None)
+      # self.resectionVolumetryWidget.ResectionVolumetryGroupWidget.setEnabled(modelNode is not None)
 
   def onDistanceContourStartInteraction(self, caller, event):
     """
@@ -667,7 +679,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     segmentationIds.InsertNextValue(tumorSegmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
                                                                       tumorLabelmapVolumeNode, refVolumeNode)
-    
+
     segmentationIds.Initialize()
     segmentationIds.InsertNextValue(parenchymaSegmentId)
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
@@ -820,6 +832,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
       self.resectogramWidget.FlexibleBoundaryCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.Grid2DVisibility.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       self.resectogramWidget.MirrorDisplayCheckBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
+      self.resectogramWidget.ResectogramSizeSliderGroupBox.setEnabled(self.resectogramWidget.Resection2DCheckBox.isChecked())
       renderers = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers()
       if self.resectogramWidget.Resection2DCheckBox.isChecked() == 0 and renderers.GetNumberOfItems() == 5:
         renderers.RemoveItem(4)
@@ -854,6 +867,19 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     """
     if self._currentResectionNode:
       self._currentResectionNode.SetGrid2DVisibility(self.resectogramWidget.Grid2DVisibility.isChecked())
+
+  def onResectogramSizeSliderChanged(self):
+    """
+    This function is called when the Resectogram Size Slider changes.
+    """
+    if self._currentResectionNode:
+      if self.resectogramWidget.Resection2DCheckBox.isChecked():
+        ymin = self.resectogramWidget.ResectogramSizeSliderWidget.value
+        view = slicer.app.layoutManager().threeDWidget(0).threeDView()
+        renderers = view.renderWindow().GetRenderers()
+        renderer2D = renderers.GetItemAsObject(4)
+        renderer2D.SetViewport([0.0, ymin, 0.3, 1.0])
+        view.forceRender()
 
   def onHepaticContourThicknessChanged(self):
     """
@@ -1035,10 +1061,10 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     if numberOfInputPoints == 0:
       raise ("Input surface model is empty")
       # new steps for preparation to avoid problems because of slim models (f.e. at stenosis)
-    elif numberOfInputPoints <= 400000:
+    elif numberOfInputPoints <= 4000000:
       subdiv = vtk.vtkLinearSubdivisionFilter()
       subdiv.SetInputData(surfacePolyData)
-      subdiv.SetNumberOfSubdivisions(1)
+      subdiv.SetNumberOfSubdivisions(0)
       subdiv.Update()
       subPolyData = subdiv.GetOutput()
       if subPolyData.GetNumberOfPoints() == 0:

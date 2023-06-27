@@ -47,6 +47,7 @@
 
 class qSlicerLiverResectionsModulePrivate;
 class vtkMRMLScene;
+class vtkMRMLResectionSurfaceDisplayableManager2D;
 
 class Q_SLICER_QTMODULES_LIVERRESECTIONS_EXPORT
 qSlicerLiverResectionsModule

@@ -26,6 +26,7 @@ include(${Slicer_USE_FILE})
 add_subdirectory(LiverMarkups)
 add_subdirectory(LiverResections)
 add_subdirectory(LiverSegments)
+add_subdirectory(LiverVolumetry)
 add_subdirectory(Liver)
 
 #-----------------------------------------------------------------------------
