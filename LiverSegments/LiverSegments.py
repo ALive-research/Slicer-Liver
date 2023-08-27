@@ -162,6 +162,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.ColorPickerButton.connect('colorChanged(QColor)', self.onColorChanged)
     self.ui.showHideButton.connect('clicked(bool)', self.onShowHideButton)
 
+    self.enableWidgetButtons(False)
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
 
@@ -169,8 +170,13 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.addSegmentationButton.setEnabled(state)
     self.ui.addSegmentButton.setEnabled(state)
     self.ui.calculateVascularTerritoryMapButton.setEnabled(state)
+    self.ui.inputSurfaceSelector.setEnabled(state)
+    self.ui.vascularTerritoryId.setEnabled(state)
+    self.ui.endPointsMarkupsSelector.setEnabled(state)
+    self.ui.showHideButton.setEnabled(state)
 
   def segmentationNodeSelected(self):
+    print('segmentationNodeSelected()')
     self.ui.SegmentationShow3DButton.setEnabled(True)
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
     self.ui.SegmentationShow3DButton.setSegmentationNode(segmentationNode)
@@ -235,6 +241,14 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.showHideButton.setIcon(qt.QIcon("Icons/VisibleOff.png"))
 
   def vascular_territory_segmentationNodeSelected(self):
+    Idno = self.ui.selectedVascularTerritorySegmId.nodeCount()
+    print('vascular_territory_segmentationNodeSelected(',Idno,')')
+    if Idno <= 0:
+      self.enableWidgetButtons(False)
+      return
+    else:
+      self.enableWidgetButtons(True)
+
     vasc_terr_segmentationNode = self.ui.selectedVascularTerritorySegmId.currentNode()
     segmentationNodeName = vasc_terr_segmentationNode.GetName()
     vasc_terr_ID_combox = self.ui.vascularTerritoryId

@@ -63,7 +63,7 @@
            <string>Vascular_Territory_Segmentation</string>
           </property>
           <property name="editEnabled">
-           <bool>true</bool>
+           <bool>false</bool>
           </property>
           <property name="renameEnabled">
            <bool>false</bool>
@@ -189,6 +189,9 @@
         </item>
         <item row="1" column="1" colspan="3">
          <widget class="ctkComboBox" name="vascularTerritoryId">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
           <property name="editable">
            <bool>false</bool>
           </property>
