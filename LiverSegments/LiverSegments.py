@@ -463,10 +463,16 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return centerlineModelNode
 
   def getVesselSegmentName(self):
-    name = 'Territory_' + str(self.ui.vascularTerritoryId.currentIndex) + '_segment_' + self.ui.inputSegmentSelectorWidget.currentSegmentID()
+    print('getVesselSegmentName()')
+    segmentation = self.ui.inputSegmentSelectorWidget.currentNode().GetSegmentation()
+    segmId = self.ui.inputSegmentSelectorWidget.currentSegmentID()
+    segment = segmentation.GetSegment(segmId)
+    name = 'Segment_' + self.ui.selectedVascularTerritorySegmId.currentNode().GetAttribute("LiverSegments.SegmentationId") \
+      + '_Territory_' + str(self.ui.vascularTerritoryId.currentIndex) + '_' + segment.GetName()
     return name
 
   def newEndpointsListCreated(self):
+    print('newEndpointsListCreated()')
     #Set baseName, and use this to create new unique names if endPointsMarkupsNode with this name already exist
     newName = self.getVesselSegmentName()
     self.updateSelectorColor()
