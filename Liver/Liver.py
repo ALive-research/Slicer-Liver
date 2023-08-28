@@ -198,7 +198,11 @@ class LiverWidget(ScriptedLoadableModuleWidget):
 
     # Add LiverSegmentsWidget
     wrapperWidget = slicer.qMRMLWidget()
-    wrapperWidget.setLayout(qt.QVBoxLayout())
+    widgetLayout = qt.QVBoxLayout()
+    margins = qt.QMargins(0,0,0,0)
+    widgetLayout.setContentsMargins(margins)
+    wrapperWidget.setLayout(widgetLayout)
+
     wrapperWidget.setMRMLScene(slicer.mrmlScene)
     segemtsWidget = LiverSegments.LiverSegmentsWidget(wrapperWidget)
     segemtsWidget.setup()
