@@ -142,7 +142,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.ui.selectedVascularTerritorySegmId.setNodeTypeLabel('Vascular Territory Segmentation', 'vtkMRMLSegmentationNode')
     self.ui.selectedVascularTerritorySegmId.addAttribute("vtkMRMLSegmentationNode", "LiverSegments.SegmentationId")
-    self.ui.endPointsMarkupsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.SegmentationId")
 
     #self.onVascularTerritoryIdChanged()
     #self.ui.endPointsMarkupsSelector.setEnabled(False)#Disable selector for now, as the lists are automatically managed
@@ -202,15 +201,17 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return
     Idno = self.ui.selectedVascularTerritorySegmId.nodeCount()
     vesselPointsSelector = self.ui.endPointsMarkupsSelector
-#    vesselPointsSelector.SetAttribute("LiverSegments.SegmentationId",str(Idno))
+    vesselPointsSelector.blockSignals(True)
+    vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.SegmentationId", str(Idno))
+    vesselPointsSelector.blockSignals(False)
 
     endPointsMarkupsNode = self.getVesselSegmentfromName()
     if endPointsMarkupsNode is None:
       endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.addNode()
-      endPointsMarkupsNode.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.SegmentationId",str(Idno))
       self.ui.endPointsMarkupsSelector.setCurrentNode(endPointsMarkupsNode)
-    else:
-      endPointsMarkupsNode.SetAttribute("LiverSegments.SegmentationId",str(Idno))
+#    else:
+    endPointsMarkupsNode.SetAttribute("LiverSegments.SegmentationId",str(Idno))
+#    endPointsMarkupsNode.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.SegmentationId",str(Idno))
 
     self.ui.endPointsMarkupsSelector.baseName = self.getVesselSegmentName()
     logging.info('currentNode: ' + self.ui.endPointsMarkupsSelector.currentNode().GetName())
@@ -252,23 +253,25 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.showHideButton.setIcon(qt.QIcon("Icons/VisibleOff.png"))
 
   def vascular_territory_segmentationNodeSelected(self):
-    Idno = self.ui.selectedVascularTerritorySegmId.nodeCount()
-    print('vascular_territory_segmentationNodeSelected(',Idno,')')
-    if Idno <= 0:
+    count = self.ui.selectedVascularTerritorySegmId.nodeCount()
+    if count <= 0:
       self.enableWidgetButtons(False)
       return
     else:
       self.enableWidgetButtons(True)
 
-    vasc_terr_segmentationNode = self.ui.selectedVascularTerritorySegmId.currentNode()
-    segmentationNodeName = vasc_terr_segmentationNode.GetName()
-    vasc_terr_segmentationNode.SetAttribute("LiverSegments.SegmentationId",str(Idno))
+    segmId = self.ui.selectedVascularTerritorySegmId.currentNode().GetAttribute("LiverSegments.SegmentationId")
 
-    vasc_terr_ID_combox = self.ui.vascularTerritoryId
+    vasc_terr_segmentationNode = self.ui.selectedVascularTerritorySegmId.currentNode()
 
     if vasc_terr_segmentationNode is None:
       logging.warning('No vascular territory segmentationNode')
       return
+    if not segmId:
+      vasc_terr_segmentationNode.SetAttribute("LiverSegments.SegmentationId",str(count))
+
+    segmentationNodeName = vasc_terr_segmentationNode.GetName()
+    vasc_terr_ID_combox = self.ui.vascularTerritoryId
 
     if 'Vascular_Territory_Segmentation' in segmentationNodeName:
       self.enableWidgetButtons(True)
