@@ -49,16 +49,23 @@
 #include <vtkWeakPointer.h>
 #include <vtkSmartPointer.h>
 #include <vtkMRMLMessageCollection.h>
+#include <vtkPolyData.h>
+#include <vtkMRMLScalarVolumeNode.h>
 
 // STD include
 #include <map>
+#include <vtkMRMLTableNode.h>
+#include <vtkMRMLLabelMapVolumeNode.h>
+#include <itkImage.h>
 
-//j------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 class vtkMRMLLiverResectionNode;
 class vtkMRMLMarkupsNode;
 class vtkMRMLMarkupsDistanceContourNode;
 class vtkMRMLMarkupsSlicingContourNode;
 class vtkMRMLMarkupsBezierSurfaceNode;
+class vtkMRMLMarkupsFiducialNode;
+class vtkBezierSurfaceSource;
 
 //------------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_LOGIC_EXPORT vtkSlicerLiverResectionsLogic:
@@ -95,6 +102,7 @@ public:
   void ShowInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const;
   void HideInitializationMarkup(vtkMRMLMarkupsBezierSurfaceNode* markupsBezierNode) const;
 
+
   char* LoadLiverResection(const std::string& fileName,
                            const std::string& nodeName/*=nullptr*/,
                            vtkMRMLMessageCollection* userMessages/*=nullptr*/);
@@ -102,6 +110,9 @@ public:
   char* LoadLiverResectionFromFcsv(const std::string& fileName,
                                    const std::string& nodeName/*=nullptr*/,
                                    vtkMRMLMessageCollection* userMessages/*=nullptr*/);
+  /// This function returns a bezier surface node from a provided resection node
+  vtkMRMLMarkupsBezierSurfaceNode* GetBezierFromResection(vtkMRMLLiverResectionNode* resectionNode) const;
+
 protected:
   vtkSlicerLiverResectionsLogic();
   ~vtkSlicerLiverResectionsLogic() override;
@@ -119,8 +130,8 @@ protected:
   /// This function returns a initialization surface node from a provided resection node
   vtkMRMLLiverResectionNode* GetResectionFromInitialization(vtkMRMLMarkupsNode* resectionNode) const;
 
-  /// This function returns a bezier surface node from a provided resection node
-  vtkMRMLMarkupsBezierSurfaceNode* GetBezierFromResection(vtkMRMLLiverResectionNode* resectionNode) const;
+//  /// This function returns a bezier surface node from a provided resection node
+//  vtkMRMLMarkupsBezierSurfaceNode* GetBezierFromResection(vtkMRMLLiverResectionNode* resectionNode) const;
 
   /// This function returns an initialization node from a provided resection node
   vtkMRMLMarkupsNode* GetInitializationFromResection(vtkMRMLLiverResectionNode* resectionNode) const;

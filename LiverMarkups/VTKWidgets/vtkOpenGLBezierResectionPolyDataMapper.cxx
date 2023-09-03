@@ -158,6 +158,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
     "//VTK::PositionVC::Dec\n"
     "#define M_PI 3.1415926535897932384626433832795\n"
     "uniform sampler3D distanceTexture;\n"
+    "uniform sampler2D posMarker;\n"
     "//vec4 fragPositionMC = vertexWCVSOutput;\n");
 
   vtkShaderProgram::Substitute(
@@ -181,12 +182,14 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
   vtkShaderProgram::Substitute(
     FSSource, "//VTK::Color::Impl",
     "//VTK::Color::Impl\n"
+    "vec4 marker = texture(posMarker, uvCoordsOutput);\n"
     "vec4 dist = texture(distanceTexture, fragPositionMC.xyz);\n"
     "float lowMargin = uResectionMargin - uUncertaintyMargin;\n"
     "float highMargin = uResectionMargin + uUncertaintyMargin;\n"
     "if(uResectionClipOut == 1 && dist[1] > 2.0){\n"
     "  discard;\n"
     "}\n"
+
     "if(tan(uvCoordsOutput.x*M_PI*uGridDivisions)>10.0-uGridThickness || tan(uvCoordsOutput.y*M_PI*uGridDivisions)>10.0-uGridThickness){\n"
     "   ambientColor = uResectionGridColor;\n"
     "   diffuseColor = vec3(0.0);\n"
@@ -215,6 +218,25 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
     "  else{\n"
     "    ambientColor = uResectionColor;\n"
     "    diffuseColor = vec3(0.6);\n"
+    "  }\n"
+
+    "  vec3 topLeftColor = vec3(0.0, 1.0, 0.067);\n"
+    "  vec3 topRightColor = vec3(1.0, 0.48, 0.0);\n"
+    "  vec3 bottomLeftColor = vec3(0.66666666667, 0.00392156863, 1.0);\n"
+    "  vec3 bottomRightColor = vec3(0.34117647058, 0.78039215686, 0.79607843137);\n"
+    "  float borderSize = 0.025;\n"
+    "  if ( (uvCoordsOutput.y > 0.5 && uvCoordsOutput.x < borderSize) || (uvCoordsOutput.y > 1.0 - borderSize && uvCoordsOutput.x < 0.5) ) {\n"
+    "    ambientColor = bottomLeftColor;\n"
+    "    diffuseColor = vec3(0.0);\n"
+    "  } else if ( (uvCoordsOutput.x < 0.5 && uvCoordsOutput.y < borderSize) || (uvCoordsOutput.x < borderSize && uvCoordsOutput.y < 0.5) ) {\n"
+    "    ambientColor = topLeftColor;\n"
+    "    diffuseColor = vec3(0.0);\n"
+    "  } else if ( (uvCoordsOutput.y > 0.5 && uvCoordsOutput.x > 1.0 - borderSize) || (uvCoordsOutput.y > 1.0 - borderSize && uvCoordsOutput.x > 0.5) ) {\n"
+    "    ambientColor = bottomRightColor;\n"
+    "    diffuseColor = vec3(0.0);\n"
+    "  } else if ((uvCoordsOutput.x > 0.5 && uvCoordsOutput.y < borderSize) || (uvCoordsOutput.x > 1.0 - borderSize && uvCoordsOutput.y < 0.5) ) {\n"
+    "    ambientColor = topRightColor;\n"
+    "    diffuseColor = vec3(0.0);\n"
     "  }\n"
     "}\n");
 
@@ -260,7 +282,17 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetCameraShaderParameters(
 void vtkOpenGLBezierResectionPolyDataMapper::SetMapperShaderParameters(
   vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor)
 {
-  if (cellBO.Program->IsUniformUsed("uRasToIjk"))
+    if (cellBO.Program->IsUniformUsed("distanceTexture"))
+    {
+        cellBO.Program->SetUniformi("distanceTexture", 0);
+    }
+
+    if (cellBO.Program->IsUniformUsed("posMarker"))
+    {
+        cellBO.Program->SetUniformi("posMarker", 15);
+    }
+
+    if (cellBO.Program->IsUniformUsed("uRasToIjk"))
     {
     cellBO.Program->SetUniformMatrix("uRasToIjk", this->Impl->RasToIjkMatrixT);
     }

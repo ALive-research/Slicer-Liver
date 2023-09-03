@@ -41,6 +41,8 @@
 
 #include "vtkMRMLMarkupsSlicingContourDisplayNode.h"
 #include "vtkMRMLMarkupsSlicingContourNode.h"
+#include "vtkOpenGLSlicingContourPolyDataMapper.h"
+
 
 // MRML includes
 #include <qMRMLThreeDWidget.h>
@@ -53,6 +55,7 @@
 
 // VTK includes
 #include <vtkCollection.h>
+#include <vtkOpenGLActor.h>
 #include <vtkOpenGLVertexBufferObject.h>
 #include <vtkShaderProperty.h>
 #include <vtkUniforms.h>
@@ -61,121 +64,181 @@
 vtkStandardNewMacro(vtkSlicerSlicingContourRepresentation3D);
 
 //------------------------------------------------------------------------------
-vtkSlicerSlicingContourRepresentation3D::vtkSlicerSlicingContourRepresentation3D()
-  :Superclass(), Target(nullptr)
-{
+vtkSlicerSlicingContourRepresentation3D::
+    vtkSlicerSlicingContourRepresentation3D()
+    : Superclass(), Target(nullptr) {
+  this->SlicingContourMapper =
+      vtkSmartPointer<vtkOpenGLSlicingContourPolyDataMapper>::New();
+  this->SlicingContourActor = vtkSmartPointer<vtkOpenGLActor>::New();
+  this->SlicingContourActor->SetMapper(this->SlicingContourMapper);
 }
 
 //------------------------------------------------------------------------------
-vtkSlicerSlicingContourRepresentation3D::~vtkSlicerSlicingContourRepresentation3D() = default;
+vtkSlicerSlicingContourRepresentation3D::
+    ~vtkSlicerSlicingContourRepresentation3D() = default;
 
 //------------------------------------------------------------------------------
-void vtkSlicerSlicingContourRepresentation3D::PrintSelf(ostream& os, vtkIndent indent)
-{
+void vtkSlicerSlicingContourRepresentation3D::PrintSelf(ostream &os,
+                                                        vtkIndent indent) {
   Superclass::PrintSelf(os, indent);
 }
 
 //----------------------------------------------------------------------
-void vtkSlicerSlicingContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void *callData /*=nullptr*/)
+void vtkSlicerSlicingContourRepresentation3D::UpdateFromMRML(
+    vtkMRMLNode *caller, unsigned long event, void *callData /*=nullptr*/) {
+
+  this->Superclass::UpdateFromMRML(caller, event, callData);
+
+  auto liverMarkupsSlicingContourNode =
+      vtkMRMLMarkupsSlicingContourNode::SafeDownCast(this->GetMarkupsNode());
+  if (!liverMarkupsSlicingContourNode) {
+    vtkWarningMacro("Invalid slicing contour node.");
+    return;
+  }
+
+  auto targetModelNode = liverMarkupsSlicingContourNode->GetTarget();
+
+  // If the target model node has changed -> Reassign the contour shader
+  if (targetModelNode != this->Target) {
+    this->Target = targetModelNode;
+    if (this->Target) {
+      this->SlicingContourMapper->SetInputConnection(this->Target->GetPolyDataConnection());
+    }
+  }
+
+  auto liverMarkupsSlicingContourDisplayNode =
+      vtkMRMLMarkupsSlicingContourDisplayNode::SafeDownCast(
+          liverMarkupsSlicingContourNode->GetDisplayNode());
+
+  if (!liverMarkupsSlicingContourDisplayNode) {
+    vtkWarningMacro("Invalid vtkMRMLMarkupsSlicingContourDisplayNode.");
+    return;
+  }
+
+  if (liverMarkupsSlicingContourNode->GetNumberOfControlPoints() != 2) {
+    return;
+  }
+
+  // Recalculate the middle plane and update the shader parameters
+  double point1Position[3] = {0.0, 0.0, 0.0};
+  double point2Position[3] = {0.0, 0.0, 0.0};
+
+  liverMarkupsSlicingContourNode->GetNthControlPointPosition(0, point1Position);
+  liverMarkupsSlicingContourNode->GetNthControlPointPosition(1, point2Position);
+
+  std::array<float, 4> planePosition = {
+      static_cast<float>(point2Position[0] + point1Position[0]) / 2.0f,
+      static_cast<float>(point2Position[1] + point1Position[1]) / 2.0f,
+      static_cast<float>(point2Position[2] + point1Position[2]) / 2.0f, 1.0f};
+
+  std::array<float, 4> planeNormal = {
+      static_cast<float>(point2Position[0] - point1Position[0]),
+      static_cast<float>(point2Position[1] - point1Position[1]),
+      static_cast<float>(point2Position[2] - point1Position[2]), 1.0f};
+
+  this->SlicingContourMapper->SetPlanePosition(planePosition);
+  this->SlicingContourMapper->SetPlaneNormal(planeNormal);
+  this->SlicingContourMapper->SetContourThickness(2.0f);
+  this->SlicingContourMapper->SetContourVisibility(true);
+
+  this->NeedToRenderOn();
+}
+
+//----------------------------------------------------------------------
+void vtkSlicerSlicingContourRepresentation3D::GetActors(vtkPropCollection *pc) {
+  this->Superclass::GetActors(pc);
+  this->SlicingContourActor->GetActors(pc);
+}
+
+//----------------------------------------------------------------------
+void vtkSlicerSlicingContourRepresentation3D::ReleaseGraphicsResources(
+    vtkWindow *win) {
+  this->Superclass::ReleaseGraphicsResources(win);
+  this->SlicingContourActor->ReleaseGraphicsResources(win);
+}
+
+//----------------------------------------------------------------------
+int vtkSlicerSlicingContourRepresentation3D::RenderOverlay(
+    vtkViewport *viewport) {
+  int count = 0;
+  count = this->Superclass::RenderOverlay(viewport);
+  if (this->SlicingContourActor->GetVisibility()) {
+    count += this->SlicingContourActor->RenderOverlay(viewport);
+  }
+  return count;
+}
+
+//-----------------------------------------------------------------------------
+int vtkSlicerSlicingContourRepresentation3D::RenderOpaqueGeometry(
+    vtkViewport *viewport) {
+  int count = 0;
+  count = this->Superclass::RenderOpaqueGeometry(viewport);
+  if (this->SlicingContourActor->GetVisibility()) {
+    count += this->SlicingContourActor->RenderOpaqueGeometry(viewport);
+  }
+  return count;
+}
+
+//-----------------------------------------------------------------------------
+int vtkSlicerSlicingContourRepresentation3D::RenderTranslucentPolygonalGeometry(
+    vtkViewport *viewport) {
+  int count = 0;
+  count = this->Superclass::RenderTranslucentPolygonalGeometry(viewport);
+  if (this->SlicingContourActor->GetVisibility()) {
+    // The internal actor needs to share property keys.
+    // This ensures the mapper state is consistent and allows depth peeling to
+    // work as expected.
+    this->SlicingContourActor->SetPropertyKeys(this->GetPropertyKeys());
+    count +=
+        this->SlicingContourActor->RenderTranslucentPolygonalGeometry(viewport);
+  }
+  {
+    // The internal actor needs to share property keys.
+    // This ensures the mapper state is consistent and allows depth peeling to
+    // work as expected.
+  }
+  return count;
+}
+
+//-----------------------------------------------------------------------------
+vtkTypeBool
+vtkSlicerSlicingContourRepresentation3D::HasTranslucentPolygonalGeometry() {
+  if (this->Superclass::HasTranslucentPolygonalGeometry()) {
+    return true;
+  }
+  if (this->SlicingContourActor->GetVisibility() &&
+      this->SlicingContourActor->HasTranslucentPolygonalGeometry()) {
+    return true;
+  }
+  { return true; }
+  return false;
+}
+
+//----------------------------------------------------------------------
+double *vtkSlicerSlicingContourRepresentation3D::GetBounds() {
+  vtkBoundingBox boundingBox;
+  const std::vector<vtkProp *> actors({this->SlicingContourActor});
+  this->AddActorsBounds(boundingBox, actors, Superclass::GetBounds());
+  boundingBox.GetBounds(this->Bounds);
+  return this->Bounds;
+}
+
+//-----------------------------------------------------------------------------
+// void vtkSlicerSlicingContourRepresentation3D::UpdateInteractionPipeline()
+// {
+//   if (!this->MarkupsNode ||
+//   this->MarkupsNode->GetNumberOfDefinedControlPoints(true) < 16)
+//     {
+//     this->InteractionPipeline->Actor->SetVisibility(false);
+//     return;
+//     }
+//   // Final visibility handled by superclass in
+//   vtkSlicerMarkupsWidgetRepresentation
+//   Superclass::UpdateInteractionPipeline();
+// }
+
+//----------------------------------------------------------------------
+void vtkSlicerSlicingContourRepresentation3D::UpdateSlicingContourDisplay(vtkMRMLLiverMarkupsSlicingContourNode *node)
 {
 
- this->Superclass::UpdateFromMRML(caller, event, callData);
-
- auto liverMarkupsSlicingContourNode =
-   vtkMRMLMarkupsSlicingContourNode::SafeDownCast(this->GetMarkupsNode());
- if (!liverMarkupsSlicingContourNode)
-   {
-   vtkWarningMacro("Invalid slicing contour node.");
-   return;
-   }
-
- auto targetModelNode = liverMarkupsSlicingContourNode->GetTarget();
-
- // If the target model node has changed -> Reassign the contour shader
- if (targetModelNode != this->Target)
-   {
-   this->ShaderHelper->SetTargetModelNode(targetModelNode);
-   this->ShaderHelper->AttachSlicingContourShader();
-   this->Target = targetModelNode;
-   }
-
- auto liverMarkupsSlicingContourDisplayNode =
-   vtkMRMLMarkupsSlicingContourDisplayNode::SafeDownCast(liverMarkupsSlicingContourNode->GetDisplayNode());
-
- if (!liverMarkupsSlicingContourDisplayNode)
-   {
-   vtkWarningMacro("Invalid vtkMRMLMarkupsSlicingContourDisplayNode.");
-   return;
-   }
-
- if (liverMarkupsSlicingContourNode->GetNumberOfControlPoints() != 2)
-   {
-   return;
-   }
-
- // Recalculate the middle plane and update the shader parameters
- double point1Position[3] = {1.0f};
- double point2Position[3] = {1.0f};
-
- liverMarkupsSlicingContourNode->GetNthControlPointPosition(0, point1Position);
- liverMarkupsSlicingContourNode->GetNthControlPointPosition(1, point2Position);
-
- float middlePointPosition[3] = {
-   static_cast<float>(point2Position[0] + point1Position[0]) / 2.0f,
-   static_cast<float>(point2Position[1] + point1Position[1]) / 2.0f,
-   static_cast<float>(point2Position[2] + point1Position[2]) / 2.0f
- };
-
- float planeNormal[4] = {
-   static_cast<float>(point2Position[0] - point1Position[0]),
-   static_cast<float>(point2Position[1] - point1Position[1]),
-   static_cast<float>(point2Position[2] - point1Position[2]),
-   1.0f
- };
-
- float planeNormalNorm = vtkMath::Normalize(planeNormal);
- planeNormal[0] /= planeNormalNorm;
- planeNormal[1] /= planeNormalNorm;
- planeNormal[2] /= planeNormalNorm;
-
- auto VBOs = this->ShaderHelper->GetTargetModelVertexVBOs();
- // auto actors = this->ShaderHelper->GetTargetActors();
-
- for(int index = 0; index < VBOs->GetNumberOfItems(); ++index)
-   {
-   auto VBO = vtkOpenGLVertexBufferObject::SafeDownCast(VBOs->GetItemAsObject(index));
-   if(!VBO)
-     {
-     vtkErrorMacro("Error: could not retrieve vtkOpenGLVertexBufferObject");
-     return;
-     }
-
-   //VBO->SetCoordShiftAndScaleMethod(vtkOpenGLVertexBufferObject::AUTO_SHIFT_SCALE);
-   auto scale = VBO->GetScale();
-   auto shift = VBO->GetShift();
-
-   if (scale.size() != 3  || shift.size() != 3)
-     {
-     scale.clear();
-     scale.push_back(1.0f);scale.push_back(1.0f);scale.push_back(1.0f);
-     shift.clear();
-     shift.push_back(0.0f);shift.push_back(0.0f);shift.push_back(0.0f);
-     return;
-     }
-
-   float middlePointPositionScaled[4] = {
-     static_cast<float>((middlePointPosition[0] - shift[0]) * scale[0]),
-     static_cast<float>((middlePointPosition[1] - shift[1]) * scale[1]),
-     static_cast<float>((middlePointPosition[2] - shift[2]) * scale[2]),
-     1.0f};
-
-   auto actor = vtkActor::SafeDownCast(this->ShaderHelper->GetTargetActors()->GetItemAsObject(index));
-   auto fragmentUniforms = actor->GetShaderProperty()->GetFragmentCustomUniforms();
-   fragmentUniforms->SetUniform4f("planePositionMC", middlePointPositionScaled);
-   fragmentUniforms->SetUniform4f("planeNormalMC", planeNormal);
-   fragmentUniforms->SetUniformf("contourThickness", 2.0f*(scale[0]+scale[1])/2.0f);
-   fragmentUniforms->SetUniformi("contourVisibility", liverMarkupsSlicingContourDisplayNode->GetVisibility());
-   }
-
- this->NeedToRenderOn();
 }

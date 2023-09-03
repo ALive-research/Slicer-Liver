@@ -45,13 +45,34 @@
 
 // VTKSlicer includes
 #include "vtkSlicerLiverResectionsLogic.h"
+#include <vtkMRMLLiverResectionNode.h>
 
 // VTK includes
 #include <vtkNew.h>
 #include <vtkSmartPointer.h>
+#include <vtkSphereSource.h>
 
 // STD includes
 #include <cstdlib>
+
+namespace
+{
+    void checkAddAndGetNode(vtkSmartPointer<vtkMRMLScene> scene, const char* ClassName)
+    {
+        auto node = scene->GetFirstNodeByClass(ClassName);
+        assert(node == nullptr);
+
+        std::string newNodeName = ClassName;
+        newNodeName.append("_Test");
+        scene->AddNewNodeByClass(ClassName, newNodeName);
+        node = scene->GetFirstNodeByClass(ClassName);
+        assert(node != nullptr);
+
+        auto node2 = scene->GetNodeByID(node->GetID());
+        assert(node2 != nullptr);
+        assert(node == node2);
+    }
+}
 
 int vtkSlicerLiverResectionsLogicTest1(int, char * [])
 {
@@ -59,10 +80,16 @@ int vtkSlicerLiverResectionsLogicTest1(int, char * [])
 
   vtkNew<vtkSlicerLiverResectionsLogic> logic1;
 
-  // Try to add a resection node with a valid scene
   logic1->SetMRMLScene(scene);
 
-  // TODO: This tests need to be completed
+  //Add and get nodes
+  checkAddAndGetNode(scene, "vtkMRMLLiverResectionNode");
+  checkAddAndGetNode(scene, "vtkMRMLLiverResectionCSVStorageNode");
+
+  vtkNew<vtkMRMLModelNode> targetOrgan;
+  vtkNew<vtkSphereSource> source;
+  targetOrgan->SetPolyDataConnection(source->GetOutputPort());
+
 
   return EXIT_SUCCESS;
 }

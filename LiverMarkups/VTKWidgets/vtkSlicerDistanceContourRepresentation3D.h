@@ -51,7 +51,12 @@
 
 // VTK includes
 #include <vtkWeakPointer.h>
+#include <vtkSmartPointer.h>
 
+//------------------------------------------------------------------------------
+class vtkMRMLLiverMarkupsDistanceContourNode;
+class vtkOpenGLActor;
+class vtkOpenGLDistanceContourPolyDataMapper;
 
 //------------------------------------------------------------------------------
 class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerDistanceContourRepresentation3D
@@ -68,9 +73,20 @@ protected:
   vtkSlicerDistanceContourRepresentation3D();
   ~vtkSlicerDistanceContourRepresentation3D() override;
 
+protected:
+    void GetActors(vtkPropCollection *pc) override;
+    void ReleaseGraphicsResources(vtkWindow *win) override;
+    int RenderOverlay(vtkViewport *viewport) override ;
+    int RenderOpaqueGeometry(vtkViewport *viewport) override;
+    int RenderTranslucentPolygonalGeometry(vtkViewport *viewport) override;
+    vtkTypeBool HasTranslucentPolygonalGeometry() override;
+    double *GetBounds() override;
+    void UpdateDistanceContourDisplay(vtkMRMLLiverMarkupsDistanceContourNode *node);
+
 private:
   vtkWeakPointer<vtkMRMLModelNode> Target;
-  vtkNew<vtkSlicerShaderHelper> ShaderHelper;
+  vtkSmartPointer<vtkOpenGLDistanceContourPolyDataMapper> DistanceContourMapper;
+  vtkSmartPointer<vtkOpenGLActor> DistanceContourActor;
 
 private:
   vtkSlicerDistanceContourRepresentation3D(const vtkSlicerDistanceContourRepresentation3D&) = delete;

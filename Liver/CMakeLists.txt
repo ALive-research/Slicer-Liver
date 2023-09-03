@@ -8,11 +8,16 @@ set(MODULE_PYTHON_SCRIPTS
 
 set(MODULE_PYTHON_RESOURCES
   Resources/Icons/${MODULE_NAME}.png
-  Resources/Icons/LiverVolume000.png
-  Resources/Icons/LiverSegmentation000.png
   Resources/Icons/DistanceMap000.png
+  Resources/Icons/Liver.png
+  Resources/Icons/LiverModels000.png
+  Resources/Icons/LiverSegmentation000.png
+  Resources/Icons/LiverVolume000.png
+  Resources/Icons/SlicerInvisible.png
+  Resources/Icons/SlicerVisible.png
   Resources/UI/ResectionsWidget.ui
   Resources/UI/DistanceMapsWidget.ui
+  Resources/UI/ResectogramWidget.ui
   )
 
 #-----------------------------------------------------------------------------

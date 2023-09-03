@@ -31,11 +31,11 @@
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  This file was originally developed by Rafael Palomar (Oslo University,
-  Hospital and NTNU) and was supported by The Research Council of Norway
-  through the ALive project (grant nr. 311393).
+  This file was originally developed by Rafael Palomar (Oslo University
+  Hospital and NTNU) and Ruoyan Meng (NTNU), and was supported by The
+  Research Council of Norway through the ALive project (grant nr. 311393).
 
-==============================================================================*/
+  ==============================================================================*/
 
 //NOTE: Some of the functions of this file are inspired in vtkSlicerMarkupsLogic
 
@@ -70,8 +70,11 @@
 #include <vtkPCAStatistics.h>
 #include <vtkPlaneSource.h>
 #include <vtkTable.h>
+#include <vtkImageData.h>
 
 #include <vtkMRMLGlyphableVolumeDisplayNode.h>
+#include <itkLabelImageToLabelMapFilter.h>
+#include <vtkPath.h>
 
 //----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerLiverResectionsLogic);
@@ -173,13 +176,21 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
     if (bezierSurfaceNode)
       {
       bezierSurfaceNode->SetDistanceMapVolumeNode(resectionNode->GetDistanceMapVolumeNode());
+      bezierSurfaceNode->SetVascularSegmentsVolumeNode(resectionNode->GetVascularSegmentsVolumeNode());
       bezierSurfaceNode->SetResectionMargin(resectionNode->GetResectionMargin());
       bezierSurfaceNode->SetUncertaintyMargin(resectionNode->GetUncertaintyMargin());
+      bezierSurfaceNode->SetHepaticContourThickness(resectionNode->GetHepaticContourThickness());
+      bezierSurfaceNode->SetPortalContourThickness(resectionNode->GetPortalContourThickness());
 
       auto bezierSurfaceDisplayNode =
         vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(bezierSurfaceNode->GetDisplayNode());
       if (bezierSurfaceDisplayNode)
         {
+        bezierSurfaceDisplayNode->SetShowResection2D(resectionNode->GetShowResection2D());
+        bezierSurfaceDisplayNode->SetMirrorDisplay(resectionNode->GetMirrorDisplay());
+        bezierSurfaceDisplayNode->SetEnableFlexibleBoundary(resectionNode->GetEnableFlexibleBoundary());
+        bezierSurfaceDisplayNode->SetGrid2DVisibility(resectionNode->GetGrid2DVisibility());
+        bezierSurfaceDisplayNode->SetTextureNumComps(resectionNode->GetTextureNumComps());
         bezierSurfaceDisplayNode->SetClipOut(resectionNode->GetClipOut());
         bezierSurfaceDisplayNode->SetWidgetVisibility(resectionNode->GetWidgetVisibility());
         bezierSurfaceDisplayNode->SetInterpolatedMargins(resectionNode->GetInterpolatedMargins());
@@ -190,6 +201,9 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject *caller,
         bezierSurfaceDisplayNode->SetResectionOpacity(resectionNode->GetResectionOpacity());
         bezierSurfaceDisplayNode->SetGridDivisions(resectionNode->GetGridDivisions());
         bezierSurfaceDisplayNode->SetGridThickness(resectionNode->GetGridThickness());
+        bezierSurfaceDisplayNode->SetGrid3DVisibility(resectionNode->GetGrid3DVisibility());
+        bezierSurfaceDisplayNode->SetHepaticContourColor(resectionNode->GetHepaticContourColor());
+        bezierSurfaceDisplayNode->SetPortalContourColor(resectionNode->GetPortalContourColor());
         }
       bezierSurfaceNode->SetLocked(!resectionNode->GetWidgetVisibility());
       }
@@ -366,22 +380,28 @@ vtkSlicerLiverResectionsLogic::AddResectionContour(vtkMRMLLiverResectionNode *re
 
   // Computing the position of the initial points
   const double *bounds = resectionNode->GetTargetOrganModelNode()->GetPolyData()->GetBounds();
-
   auto p1 = vtkVector3d(bounds[0],(bounds[3]-bounds[2])/2.0, (bounds[5]-bounds[4])/2.0);
   auto p2 = vtkVector3d((bounds[1]-bounds[0])/2.0,(bounds[3]-bounds[2])/2.0, (bounds[5]-bounds[4])/2.0);
 
-  auto distanceContourNode = vtkSmartPointer<vtkMRMLMarkupsDistanceContourNode>::New();
+  auto distanceContourNode = vtkMRMLMarkupsDistanceContourNode::SafeDownCast(mrmlScene->AddNewNodeByClass("vtkMRMLMarkupsDistanceContourNode"));
+  if (!distanceContourNode)
+    {
+      vtkErrorMacro("Error in AddResectionPlane: Error creating vtkMRMLMarkupsDistanceContourNode.");
+      return nullptr;
+    }
+
+  distanceContourNode->CreateDefaultDisplayNodes();
   distanceContourNode->AddControlPoint(p1);
   distanceContourNode->AddControlPoint(p2);
   distanceContourNode->SetTarget(resectionNode->GetTargetOrganModelNode());
 
-  auto distanceContourDisplayNode = vtkSmartPointer<vtkMRMLMarkupsDisplayNode>::New();
-  distanceContourDisplayNode->PropertiesLabelVisibilityOff();
-  distanceContourDisplayNode->SetSnapMode(vtkMRMLMarkupsDisplayNode::SnapModeUnconstrained);
+  // auto distanceContourDisplayNode = vtkSmartPointer<vtkMRMLMarkupsDisplayNode>::New();
+  // distanceContourDisplayNode->PropertiesLabelVisibilityOff();
+  // distanceContourDisplayNode->SetSnapMode(vtkMRMLMarkupsDisplayNode::SnapModeUnconstrained);
 
-  mrmlScene->AddNode(distanceContourDisplayNode);
-  distanceContourNode->SetAndObserveDisplayNodeID(distanceContourDisplayNode->GetID());
-  mrmlScene->AddNode(distanceContourNode);
+  // mrmlScene->AddNode(distanceContourDisplayNode);
+  // distanceContourNode->SetAndObserveDisplayNodeID(distanceContourDisplayNode->GetID());
+  // mrmlScene->AddNode(distanceContourNode);
 
   return distanceContourNode;
 }
@@ -853,12 +873,12 @@ vtkMRMLMarkupsNode* vtkSlicerLiverResectionsLogic::AddInitializationMarkupsNode(
 
   switch(resectionNode->GetInitMode())
     {
-    case vtkMRMLLiverResectionNode::Flat:
-      initializationMarkupsNode = this->AddResectionPlane(resectionNode);
-      break;
-
     case vtkMRMLLiverResectionNode::Curved:
       initializationMarkupsNode = this->AddResectionContour(resectionNode);
+      break;
+
+    case vtkMRMLLiverResectionNode::Flat:
+      initializationMarkupsNode = this->AddResectionPlane(resectionNode);
       break;
     }
 
@@ -1019,3 +1039,4 @@ char *vtkSlicerLiverResectionsLogic::LoadLiverResectionFromFcsv(const std::strin
 
     return nodeID;
   }
+

@@ -12,6 +12,7 @@ set(MODULE_PYTHON_SCRIPTS
 set(MODULE_PYTHON_RESOURCES
   Resources/Icons/${MODULE_NAME}.png
   Resources/UI/${MODULE_NAME}.ui
+  Resources/SlicerLiverColorMap.ctbl
   )
 
 add_subdirectory(Logic)
@@ -31,5 +32,5 @@ if(BUILD_TESTING)
   #slicer_add_python_unittest(SCRIPT ${MODULE_NAME}.py)
 
   # Additional build-time testing
-  #add_subdirectory(Testing)
+  add_subdirectory(Testing)
 endif()

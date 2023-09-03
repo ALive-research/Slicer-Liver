@@ -53,6 +53,14 @@
 #include <qSlicerCoreApplication.h>
 #include <qSlicerIOManager.h>
 
+//MRMLDisplayableManager includes
+#include <vtkMRMLSliceViewDisplayableManagerFactory.h>
+#include <vtkMRMLThreeDViewDisplayableManagerFactory.h>
+
+// DisplayableManager initialization
+#include <vtkAutoInit.h>
+VTK_MODULE_INIT(vtkSlicerLiverResectionsModuleMRMLDisplayableManager)
+
 //-----------------------------------------------------------------------------
 /// \ingroup Slicer_QtModules_ExtensionTemplate
 class qSlicerLiverResectionsModulePrivate
@@ -126,7 +134,7 @@ QStringList qSlicerLiverResectionsModule::categories() const
 //-----------------------------------------------------------------------------
 QStringList qSlicerLiverResectionsModule::dependencies() const
 {
-  return QStringList() << "LiverMarkups";
+  return QStringList() << "LiverMarkups" << "Markups";
 }
 
 //-----------------------------------------------------------------------------
@@ -140,7 +148,8 @@ void qSlicerLiverResectionsModule::setup()
     qCritical() << Q_FUNC_INFO << ": cannot get Markups logic.";
     return;
     }
-
+  // Register displayable managers (same displayable manager handles both slice and 3D views)
+  vtkMRMLSliceViewDisplayableManagerFactory::GetInstance()->RegisterDisplayableManager("vtkMRMLLiverResectionsDisplayableManager2D");
   // Register IO
   qSlicerIOManager* ioManager = qSlicerApplication::application()->ioManager();
   qSlicerLiverResectionsReader *markupsReader = new qSlicerLiverResectionsReader(logic, this);

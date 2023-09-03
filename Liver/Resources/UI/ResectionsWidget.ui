@@ -6,20 +6,20 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>734</width>
-    <height>1117</height>
+    <width>968</width>
+    <height>1213</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_7">
+  <layout class="QVBoxLayout" name="verticalLayout_5">
    <item>
     <widget class="qMRMLCollapsibleButton" name="ResectionsCollapsibleButton">
      <property name="text">
       <string>Resections</string>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout_5">
+     <layout class="QVBoxLayout" name="verticalLayout_7">
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_5">
         <item>
@@ -53,6 +53,227 @@
        </layout>
       </item>
       <item>
+       <layout class="QFormLayout" name="formLayout_4">
+        <item row="0" column="1">
+         <widget class="qMRMLSegmentSelectorWidget" name="LiverSegmentSelectorWidget">
+          <property name="noneEnabled">
+           <bool>true</bool>
+          </property>
+          <property name="selectNodeUponCreation">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="0">
+         <widget class="QLabel" name="LiverModelLabel">
+          <property name="text">
+           <string>Liver Segmentation:</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout_9">
+        <item>
+         <widget class="QFrame" name="frame">
+          <property name="frameShape">
+           <enum>QFrame::NoFrame</enum>
+          </property>
+          <property name="frameShadow">
+           <enum>QFrame::Raised</enum>
+          </property>
+          <property name="lineWidth">
+           <number>0</number>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_10">
+           <item>
+            <widget class="QGroupBox" name="groupBox">
+             <property name="title">
+              <string>Contour Initialization:</string>
+             </property>
+             <layout class="QHBoxLayout" name="horizontalLayout_11">
+              <item>
+               <widget class="QRadioButton" name="FlatRadioButton">
+                <property name="text">
+                 <string>Flat</string>
+                </property>
+                <property name="checked">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QRadioButton" name="CurvedRadioButton">
+                <property name="text">
+                 <string>Curved</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QRadioButton" name="ClosedCurveButton">
+                <property name="enabled">
+                 <bool>true</bool>
+                </property>
+                <property name="text">
+                 <string>MarkupClosedCurve</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QFrame" name="frame_4">
+             <property name="frameShape">
+              <enum>QFrame::NoFrame</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Plain</enum>
+             </property>
+             <property name="lineWidth">
+              <number>0</number>
+             </property>
+             <layout class="QFormLayout" name="formLayout_5">
+              <item row="0" column="0">
+               <widget class="QLabel" name="DistanceContourLabel">
+                <property name="text">
+                 <string>Distance Contour:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="qMRMLNodeComboBox" name="DistanceContourComboBox">
+                <property name="enabled">
+                 <bool>true</bool>
+                </property>
+                <property name="toolTip">
+                 <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Select the Distance Contour&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                </property>
+                <property name="nodeTypes">
+                 <stringlist notr="true">
+                  <string>vtkMRMLMarkupsDistanceContourNode</string>
+                 </stringlist>
+                </property>
+                <property name="hideChildNodeTypes">
+                 <stringlist notr="true"/>
+                </property>
+                <property name="renameEnabled">
+                 <bool>true</bool>
+                </property>
+                <property name="interactionNodeSingletonTag">
+                 <string notr="true"/>
+                </property>
+                <property name="selectNodeUponCreation">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="TumorLabel">
+                <property name="text">
+                 <string>Tumor:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="qMRMLSegmentSelectorWidget" name="TumorSegmentSelectorWidget">
+                <property name="segmentationNodeSelectorVisible">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0" colspan="2">
+               <widget class="QPushButton" name="InitialContourPositionButton">
+                <property name="text">
+                 <string>Initial Contour Position</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QFrame" name="frame_2">
+          <property name="frameShape">
+           <enum>QFrame::NoFrame</enum>
+          </property>
+          <property name="frameShadow">
+           <enum>QFrame::Raised</enum>
+          </property>
+          <property name="lineWidth">
+           <number>0</number>
+          </property>
+          <layout class="QGridLayout" name="gridLayout_3">
+           <item row="2" column="1">
+            <widget class="QFrame" name="frame_3">
+             <property name="frameShape">
+              <enum>QFrame::NoFrame</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Raised</enum>
+             </property>
+             <property name="lineWidth">
+              <number>0</number>
+             </property>
+             <layout class="QFormLayout" name="formLayout">
+              <item row="0" column="0">
+               <widget class="qSlicerMarkupsPlaceWidget" name="curvePlaceWidget">
+                <property name="currentNodeActive">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QCheckBox" name="MarkupsResectionCheckBox">
+                <property name="text">
+                 <string>Update Resection</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item row="0" column="0">
+            <widget class="QLabel" name="MarkupClosedCurveLabel">
+             <property name="text">
+              <string>Markup Curve: </string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="qMRMLNodeComboBox" name="MarkupClosedCurveNodeComboBox">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="nodeTypes">
+              <stringlist notr="true">
+               <string>vtkMRMLMarkupsClosedCurveNode</string>
+              </stringlist>
+             </property>
+             <property name="showHidden">
+              <bool>true</bool>
+             </property>
+             <property name="hideChildNodeTypes">
+              <stringlist notr="true"/>
+             </property>
+             <property name="editEnabled">
+              <bool>true</bool>
+             </property>
+             <property name="renameEnabled">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
        <widget class="QGroupBox" name="ResectionParametersGroupBox">
         <property name="enabled">
          <bool>false</bool>
@@ -79,27 +300,6 @@
          <property name="bottomMargin">
           <number>0</number>
          </property>
-         <item>
-          <layout class="QFormLayout" name="formLayout_4">
-           <item row="0" column="0">
-            <widget class="QLabel" name="LiverModelLabel">
-             <property name="text">
-              <string>Liver Segmentation:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="1">
-            <widget class="qMRMLSegmentSelectorWidget" name="LiverSegmentSelectorWidget">
-             <property name="noneEnabled">
-              <bool>true</bool>
-             </property>
-             <property name="selectNodeUponCreation">
-              <bool>false</bool>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
          <item>
           <layout class="QFormLayout" name="formLayout_2">
            <item row="0" column="0">
@@ -281,7 +481,7 @@
       <item>
        <widget class="ctkCollapsibleGroupBox" name="GridGroupBox">
         <property name="enabled">
-         <bool>false</bool>
+         <bool>true</bool>
         </property>
         <property name="title">
          <string>Resection grid</string>
@@ -290,109 +490,94 @@
          <bool>true</bool>
         </property>
         <property name="collapsed">
-         <bool>true</bool>
+         <bool>false</bool>
         </property>
-        <layout class="QVBoxLayout" name="verticalLayout_8">
-         <property name="spacing">
-          <number>0</number>
-         </property>
-         <property name="leftMargin">
-          <number>0</number>
-         </property>
-         <property name="topMargin">
-          <number>0</number>
-         </property>
-         <property name="rightMargin">
-          <number>0</number>
-         </property>
-         <property name="bottomMargin">
-          <number>0</number>
-         </property>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_6">
-           <item>
-            <layout class="QVBoxLayout" name="verticalLayout_6">
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_8">
-               <item>
-                <widget class="QLabel" name="GridDivisionsLabel">
-                 <property name="text">
-                  <string>Divisions:</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="ctkDoubleSlider" name="GridDivisionsDoubleSlider">
-                 <property name="orientation">
-                  <enum>Qt::Horizontal</enum>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="ctkDoubleSpinBox" name="GridDivisionsDoubleSpinBox">
-                 <property name="decimals">
-                  <number>0</number>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_9">
-               <item>
-                <widget class="QLabel" name="GridThicknessLabel">
-                 <property name="text">
-                  <string>Thickness:</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="ctkDoubleSlider" name="GridThicknessDoubleSlider">
-                 <property name="value">
-                  <double>5.000000000000000</double>
-                 </property>
-                 <property name="singleStep">
-                  <double>0.100000000000000</double>
-                 </property>
-                 <property name="pageStep">
-                  <double>1.000000000000000</double>
-                 </property>
-                 <property name="maximum">
-                  <double>10.000000000000000</double>
-                 </property>
-                 <property name="orientation">
-                  <enum>Qt::Horizontal</enum>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="ctkDoubleSpinBox" name="GridThicknessDoubleSpinBox">
-                 <property name="decimals">
-                  <number>2</number>
-                 </property>
-                 <property name="maximum">
-                  <double>10.000000000000000</double>
-                 </property>
-                 <property name="singleStep">
-                  <double>0.500000000000000</double>
-                 </property>
-                 <property name="value">
-                  <double>5.000000000000000</double>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </item>
-            </layout>
-           </item>
-           <item>
-            <widget class="ctkColorPickerButton" name="ResectionGridColorPickerButton">
-             <property name="displayColorName">
-              <bool>false</bool>
-             </property>
-            </widget>
-           </item>
-          </layout>
+        <layout class="QGridLayout" name="gridLayout_2">
+         <item row="0" column="0">
+          <widget class="QLabel" name="GridDivisionsLabel">
+           <property name="text">
+            <string>Divisions:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="ctkDoubleSlider" name="GridDivisionsDoubleSlider">
+           <property name="maximum">
+            <double>30.000000000000000</double>
+           </property>
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="2">
+          <widget class="ctkDoubleSpinBox" name="GridDivisionsDoubleSpinBox">
+           <property name="decimals">
+            <number>0</number>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="3" colspan="2">
+          <widget class="ctkColorPickerButton" name="ResectionGridColorPickerButton">
+           <property name="displayColorName">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="GridThicknessLabel">
+           <property name="text">
+            <string>Thickness:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="ctkDoubleSlider" name="GridThicknessDoubleSlider">
+           <property name="value">
+            <double>5.000000000000000</double>
+           </property>
+           <property name="singleStep">
+            <double>0.100000000000000</double>
+           </property>
+           <property name="pageStep">
+            <double>1.000000000000000</double>
+           </property>
+           <property name="minimum">
+            <double>5.000000000000000</double>
+           </property>
+           <property name="maximum">
+            <double>10.000000000000000</double>
+           </property>
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="ctkDoubleSpinBox" name="GridThicknessDoubleSpinBox">
+           <property name="decimals">
+            <number>2</number>
+           </property>
+           <property name="maximum">
+            <double>10.000000000000000</double>
+           </property>
+           <property name="singleStep">
+            <double>0.500000000000000</double>
+           </property>
+           <property name="value">
+            <double>5.000000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="3" colspan="2">
+          <widget class="QCheckBox" name="Grid3DVisibility">
+           <property name="styleSheet">
+            <string notr="true"/>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+          </widget>
          </item>
         </layout>
        </widget>
@@ -600,6 +785,7 @@
    <class>qMRMLNodeComboBox</class>
    <extends>QWidget</extends>
    <header>qMRMLNodeComboBox.h</header>
+   <container>1</container>
   </customwidget>
   <customwidget>
    <class>qMRMLSpinBox</class>
@@ -611,6 +797,17 @@
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qSlicerWidget</class>
+   <extends>QWidget</extends>
+   <header>qSlicerWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qSlicerMarkupsPlaceWidget</class>
+   <extends>qSlicerWidget</extends>
+   <header>qSlicerMarkupsPlaceWidget.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLSegmentSelectorWidget</class>
@@ -722,70 +919,6 @@
    </hints>
   </connection>
   <connection>
-   <sender>GridDivisionsDoubleSlider</sender>
-   <signal>valueChanged(double)</signal>
-   <receiver>GridDivisionsDoubleSpinBox</receiver>
-   <slot>setValue(double)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>285</x>
-     <y>407</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>485</x>
-     <y>407</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>GridDivisionsDoubleSpinBox</sender>
-   <signal>valueChanged(double)</signal>
-   <receiver>GridDivisionsDoubleSlider</receiver>
-   <slot>setValue(double)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>485</x>
-     <y>407</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>285</x>
-     <y>407</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>GridThicknessDoubleSlider</sender>
-   <signal>valueChanged(double)</signal>
-   <receiver>GridThicknessDoubleSpinBox</receiver>
-   <slot>setValue(double)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>282</x>
-     <y>449</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>477</x>
-     <y>449</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>GridThicknessDoubleSpinBox</sender>
-   <signal>valueChanged(double)</signal>
-   <receiver>GridThicknessDoubleSlider</receiver>
-   <slot>setValue(double)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>477</x>
-     <y>449</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>282</x>
-     <y>449</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
    <sender>ResectionWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>LiverSegmentSelectorWidget</receiver>
@@ -862,6 +995,310 @@
     <hint type="destinationlabel">
      <x>426</x>
      <y>380</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>MarkupClosedCurveNodeComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>382</x>
+     <y>580</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>662</x>
+     <y>529</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>MarkupClosedCurveNodeComboBox</receiver>
+   <slot>hide()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>385</x>
+     <y>580</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>671</x>
+     <y>374</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>DistanceContourComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>487</x>
+     <y>608</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>414</x>
+     <y>374</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>DistanceContourComboBox</receiver>
+   <slot>hide()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>411</x>
+     <y>608</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>411</x>
+     <y>515</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>CurvedRadioButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>frame_4</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>414</x>
+     <y>313</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>481</x>
+     <y>541</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>MarkupClosedCurveNodeComboBox</sender>
+   <signal>currentNodeChanged(vtkMRMLNode*)</signal>
+   <receiver>curvePlaceWidget</receiver>
+   <slot>setCurrentNode(vtkMRMLNode*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>366</x>
+     <y>527</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>593</x>
+     <y>515</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ClosedCurveButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>frame_3</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>133</x>
+     <y>520</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>481</x>
+     <y>687</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>frame_3</receiver>
+   <slot>hide()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>411</x>
+     <y>608</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>644</x>
+     <y>516</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>curvePlaceWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>411</x>
+     <y>608</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>594</x>
+     <y>516</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>GridThicknessDoubleSlider</sender>
+   <signal>valueChanged(double)</signal>
+   <receiver>GridThicknessDoubleSpinBox</receiver>
+   <slot>setValue(double)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>282</x>
+     <y>449</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>477</x>
+     <y>449</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>TumorSegmentSelectorWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>481</x>
+     <y>606</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>301</x>
+     <y>416</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>frame_4</receiver>
+   <slot>hide()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>481</x>
+     <y>606</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>224</x>
+     <y>398</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>GridDivisionsDoubleSpinBox</sender>
+   <signal>valueChanged(double)</signal>
+   <receiver>GridDivisionsDoubleSlider</receiver>
+   <slot>setValue(double)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>485</x>
+     <y>407</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>285</x>
+     <y>407</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ClosedCurveButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>frame_2</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>417</x>
+     <y>364</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>280</x>
+     <y>582</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ClosedCurveButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>MarkupClosedCurveNodeComboBox</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>776</x>
+     <y>451</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>548</x>
+     <y>641</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>CurvedRadioButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>DistanceContourComboBox</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>483</x>
+     <y>451</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>560</x>
+     <y>512</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>ResectionWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>frame_2</receiver>
+   <slot>hide()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>483</x>
+     <y>606</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>483</x>
+     <y>669</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>GridDivisionsDoubleSlider</sender>
+   <signal>valueChanged(double)</signal>
+   <receiver>GridDivisionsDoubleSpinBox</receiver>
+   <slot>setValue(double)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>469</x>
+     <y>1030</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>879</x>
+     <y>1030</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>GridThicknessDoubleSpinBox</sender>
+   <signal>valueChanged(double)</signal>
+   <receiver>GridThicknessDoubleSlider</receiver>
+   <slot>setValue(double)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>879</x>
+     <y>1078</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>469</x>
+     <y>1078</y>
     </hint>
    </hints>
   </connection>
