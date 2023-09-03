@@ -245,7 +245,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectionsWidget.FlatRadioButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.FlatRadioButton))
     self.resectionsWidget.ClosedCurveButton.toggled.connect(lambda: self.onRadioButtonState(self.resectionsWidget.ClosedCurveButton))
     self.resectionsWidget.MarkupsResectionCheckBox.toggled.connect(lambda: self.onMarkupsResectionCheckBoxChecked(self.resectionsWidget.MarkupsResectionCheckBox))
-    self.resectionsWidget.InitialContourPositionButton.connect('clicked(bool)', self.onDefiningStartingCountourPosition)
+    self.resectionsWidget.InitialContourPositionButton.connect('clicked(bool)', self.onDefiningStartingContourPosition)
     self.resectionsWidget.ResectionNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onResectionDistanceMapNodeChanged)
     self.resectionsWidget.DistanceMapNodeComboBox.addAttribute('vtkMRMLScalarVolumeNode', 'DistanceMap', 'True')
@@ -350,58 +350,68 @@ class LiverWidget(ScriptedLoadableModuleWidget):
           self._distanceContourNode.SetDisplayVisibility(False)
         return
 
-  def onDefiningStartingCountourPosition(self):
-    segmentationNode = self.resectionsWidget.LiverSegmentSelectorWidget.currentNode()
-    parenchymaSegmentId = self.resectionsWidget.LiverSegmentSelectorWidget.currentSegmentID()
-    liverPolyData = segmentationNode.GetClosedSurfaceInternalRepresentation(parenchymaSegmentId)
+  def onDefiningStartingContourPosition(self):
+    # Get liver segmentation data
+    liverSegmentationNode = self.resectionsWidget.LiverSegmentSelectorWidget.currentNode()
+    liverSegmentId = self.resectionsWidget.LiverSegmentSelectorWidget.currentSegmentID()
+    liverPolyData = liverSegmentationNode.GetClosedSurfaceInternalRepresentation(liverSegmentId)
 
-    tumourSegmentationNode = self.resectionsWidget.TumorSegmentSelectorWidget.currentNode()
+    # Get tumor segmentation data
+    tumorSegmentationNode = self.resectionsWidget.TumorSegmentSelectorWidget.currentNode()
     tumorSegmentId = self.resectionsWidget.TumorSegmentSelectorWidget.currentSegmentID()
-    tumourPolyData = tumourSegmentationNode.GetClosedSurfaceInternalRepresentation(tumorSegmentId)
+    tumorPolyData = tumorSegmentationNode.GetClosedSurfaceInternalRepresentation(tumorSegmentId)
 
+    # Get active distance contour node
     activeDistanceContour = self.resectionsWidget.DistanceContourComboBox.currentNode()
 
+    # Calculate center of mass for tumor and liver
     com_tumor = vtk.vtkCenterOfMass()
-    com_tumor.SetInputData(tumourPolyData)
+    com_tumor.SetInputData(tumorPolyData)
     com_tumor.SetUseScalarsAsWeights(False)
     com_tumor.Update()
-    center_tumor = np.array(com_tumor.GetCenter()).reshape(-1, 3)
+    center_tumor = np.array(com_tumor.GetCenter())
 
     com_liver = vtk.vtkCenterOfMass()
     com_liver.SetInputData(liverPolyData)
     com_liver.SetUseScalarsAsWeights(False)
     com_liver.Update()
-    center_liver = np.array(com_liver.GetCenter()).reshape(-1, 3)
-    vector_1 = self.logic.findVectorBetweenTwo3DPoints(center_liver, center_tumor)
-    vector_1 = vector_1.reshape(-1, 3)
-    centers_array = np.array([center_liver, center_tumor])
-    median_point = np.median(centers_array, axis=0)
-    print("median_point", median_point.shape)
+    center_liver = np.array(com_liver.GetCenter())
 
-    # get camera views
+    # Calculate the vector between tumor and liver centers
+    vector_tumor_to_liver = center_liver - center_tumor
+
+    # Calculate median point between tumor and liver centers
+    median_point = np.median(np.array([center_liver, center_tumor]), axis=0)
+
+    # Get camera information
     threedView = slicer.app.layoutManager().threeDWidget(0).threeDView()
-    renderWindow = threedView.renderWindow()
-    renderer = renderWindow.GetRenderers().GetFirstRenderer()
+    renderer = threedView.renderWindow().GetRenderers().GetFirstRenderer()
     camera = renderer.GetActiveCamera()
 
-    view_up = camera.GetViewUp()
-    view_normal = camera.GetViewPlaneNormal()
+    # Calculate cross view vector
+    view_up = np.array(camera.GetViewUp())
+    view_normal = np.array(camera.GetViewPlaneNormal())
     cross_view = np.cross(view_up, view_normal)
 
+    # Calculate extent and product of vectors
     bounds = liverPolyData.GetBounds()
-    extent = (bounds[3] - bounds[2]) / 2
-
-    product_vectors = np.dot(vector_1, cross_view)
-    mag_vector1 = np.linalg.norm(vector_1)
+    extent = (bounds[3] - bounds[2])/np.sqrt(2)
+    mag_vector1 = np.linalg.norm(vector_tumor_to_liver)
     mag_vector2 = np.linalg.norm(cross_view)
-    alpha = np.arccos([product_vectors / (mag_vector1 * mag_vector2)])
-    if alpha >= np.pi / 2:
-      point = center_tumor + extent * ((-1) * cross_view)
-    else:
-      point = center_tumor + extent * cross_view
+    v1_u = vector_tumor_to_liver/mag_vector1
+    v2_u = cross_view/mag_vector2
+    alpha = np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
+    # print('alpha', alpha)
 
-    activeDistanceContour.SetNthControlPointPosition(0, tuple(median_point.reshape(1, -1)[0]))
-    activeDistanceContour.SetNthControlPointPosition(1, tuple(point.reshape(1, -1)[0]))
+    # Calculate the contour point
+    if alpha >= np.pi / 2:
+      point = center_tumor - extent * v2_u
+    else:
+      point = center_tumor + extent * v2_u
+
+    # Set control point positions for the active distance contour
+    activeDistanceContour.SetNthControlPointPosition(0, tuple(median_point))
+    activeDistanceContour.SetNthControlPointPosition(1, tuple(point))
 
   def onMarkupsResectionCheckBoxChecked(self, checkbox):
     activeMarkupClosedCurveNode = self.resectionsWidget.MarkupClosedCurveNodeComboBox.currentNode()
@@ -1060,68 +1070,77 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
 
     return resampledImage
 
-  def preprocessing(self, surfacePolyData, targetNumberOfPoints=700000, decimationAggressiveness=2):
+  def preprocessing(self, surfacePolyData, targetNumberOfPoints=800000, decimationAggressiveness=2):
     numberOfInputPoints = surfacePolyData.GetNumberOfPoints()
+
     if numberOfInputPoints == 0:
-      raise ("Input surface model is empty")
-      # new steps for preparation to avoid problems because of slim models (f.e. at stenosis)
-    elif numberOfInputPoints <= 4000000:
+      raise ValueError("Input surface model is empty")
+
+    elif numberOfInputPoints <= 400000:
       subdiv = vtk.vtkLinearSubdivisionFilter()
       subdiv.SetInputData(surfacePolyData)
-      subdiv.SetNumberOfSubdivisions(0)
+      subdiv.SetNumberOfSubdivisions(1)
       subdiv.Update()
       subPolyData = subdiv.GetOutput()
+
       if subPolyData.GetNumberOfPoints() == 0:
         logging.warning("Mesh subdivision failed. Skip subdivision step.")
+
       numberOfPoints = subPolyData.GetNumberOfPoints()
       reductionFactor = (numberOfPoints - targetNumberOfPoints) / numberOfPoints
+      print('reduction factor',reductionFactor)
+
       if reductionFactor > 0.0:
-        parameters = {}
-        inputSurfaceModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "tempInputSurfaceModel")
-        inputSurfaceModelNode.SetAndObserveMesh(subPolyData)
-        parameters["inputModel"] = inputSurfaceModelNode
-        outputSurfaceModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "tempDecimatedSurfaceModel")
-        parameters["outputModel"] = outputSurfaceModelNode
-        parameters["reductionFactor"] = reductionFactor
-        parameters["method"] = "FastQuadric"
-        parameters["aggressiveness"] = decimationAggressiveness
-        decimation = slicer.modules.decimation
-        cliNode = slicer.cli.runSync(decimation, None, parameters)
-        subPolyData = outputSurfaceModelNode.GetPolyData()
-        slicer.mrmlScene.RemoveNode(inputSurfaceModelNode)
-        slicer.mrmlScene.RemoveNode(outputSurfaceModelNode)
-        slicer.mrmlScene.RemoveNode(cliNode)
+        surfacePolyData = self.run_decimation(subPolyData, reductionFactor)
+      else:
+        surfacePolyData = vtk.vtkPolyData()  # Create an empty vtkPolyData object
+        surfacePolyData.DeepCopy(subPolyData)
 
-      surfaceCleaner = vtk.vtkCleanPolyData()
-      surfaceCleaner.SetInputData(subPolyData)
-      surfaceCleaner.Update()
+    preprocessedPolyData = self.process_polydata(surfacePolyData)
+    return self.create_model_node(preprocessedPolyData)
 
-      surfaceTriangulator = vtk.vtkTriangleFilter()
-      surfaceTriangulator.SetInputData(surfaceCleaner.GetOutput())
-      surfaceTriangulator.PassLinesOff()
-      surfaceTriangulator.PassVertsOff()
-      surfaceTriangulator.Update()
+  def run_decimation(self, inputPolyData, reductionFactor):
+    decimation = vtk.vtkDecimatePro()
+    decimation.SetInputData(inputPolyData)
+    decimation.SetTargetReduction(reductionFactor)
+    decimation.SetPreserveTopology(True)
+    decimation.SetFeatureAngle(60.0)
+    decimation.SetBoundaryVertexDeletion(False)
+    decimation.SetDegree(20)
+    decimation.SetMaximumError(0.001)
+    decimation.Update()
+    return decimation.GetOutput()
 
-      normals = vtk.vtkPolyDataNormals()
-      normals.SetInputData(surfaceTriangulator.GetOutput())
-      normals.SetAutoOrientNormals(1)
-      normals.SetFlipNormals(0)
-      normals.SetConsistency(1)
-      normals.SplittingOff()
-      normals.Update()
+  def process_polydata(self, inputPolyData):
+    cleaner = vtk.vtkCleanPolyData()
+    cleaner.SetInputData(inputPolyData)
+    cleaner.Update()
 
-      modelPolyDataCopy = vtk.vtkPolyData()
-      modelPolyDataCopy.DeepCopy(normals.GetOutput())
-      modelNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode')
-      modelNode.SetName("PreprocessedLiver")
-      modelNode.CreateDefaultDisplayNodes()
-      modelDisplayNode = modelNode.GetDisplayNode()
-      modelDisplayNode.SetOpacity(0.2)
-      modelDisplayNode.Visibility3DOff()
-      modelNode.SetAndObservePolyData(modelPolyDataCopy)
-      return modelNode
-    else:
-      return surfacePolyData
+    triangulator = vtk.vtkTriangleFilter()
+    triangulator.SetInputData(cleaner.GetOutput())
+    triangulator.PassLinesOff()
+    triangulator.PassVertsOff()
+    triangulator.Update()
+
+    normals = vtk.vtkPolyDataNormals()
+    normals.SetInputData(triangulator.GetOutput())
+    normals.SetAutoOrientNormals(1)
+    normals.SetFlipNormals(0)
+    normals.SetConsistency(1)
+    normals.SplittingOff()
+    normals.Update()
+
+    return normals.GetOutput()
+
+  def create_model_node(self, polyData):
+    modelNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode')
+    modelNode.SetName("PreprocessedLiver")
+    modelNode.CreateDefaultDisplayNodes()
+    modelDisplayNode = modelNode.GetDisplayNode()
+    modelDisplayNode.SetOpacity(0.2)
+    modelDisplayNode.Visibility3DOff()
+    modelNode.SetAndObservePolyData(polyData)
+    return modelNode
 
   def CreatePolyDataFromCoords(self, coordinates):
     """
@@ -1154,21 +1173,6 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     dist = np.linalg.norm(points - point1, axis=1)
     final_points = points[np.abs(dist - refDist) < contourThickness]
     return final_points
-
-  def dist3D(self, firstPoint, secPoint):
-    sumSq = np.sum(np.square(firstPoint - secPoint))
-    return np.sqrt(sumSq)
-
-  def findVectorBetweenTwo3DPoints(self, point1, point2, unitSphere=True):
-    finalVector = point2 - point1
-    if unitSphere:
-      totalDist = self.dist3D(point1, point2)
-      unitVector = np.divide(finalVector, totalDist)
-      return unitVector
-
-    else:
-
-      return finalVector
 
   def distance(self, P1, P2):
     res = ((P1[0] - P2[0]) ** 2 + (P1[1] - P2[1]) ** 2 + (P1[2] - P2[2]) ** 2) ** 0.5
@@ -2150,35 +2154,6 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     ctrl_points = self.fit_bezier_surface(points_grid, bezier_basis_u, bezier_basis_v)
 
     control_points = ctrl_points.reshape(-1, 3)
-
-    # code with global surface approximation
-    # size_u = 50  # number of lines
-    # size_v = 50  # number of points for line
-    # degree_u = 3
-    # degree_v = 3
-    #
-    # # Do global surface approximation
-    # surf = fitting.approximate_surface(points, size_u, size_v, degree_u, degree_v, centripetal=True,
-    #                                    ctrlpts_size_u=4,
-    #                                    ctrlpts_size_v=4)
-    #
-    # # Create a BSpline surface instance (Bezier surface)
-    # surf2 = BSpline.Surface()
-    #
-    # # Set up the Bezier surface
-    # surf2.degree_u = 3
-    # surf2.degree_v = 3
-    # control_points = surf.ctrlpts
-    # surf2.set_ctrlpts(control_points, 4, 4)
-    # #
-    # surf2.knotvector_u = utilities.generate_knot_vector(surf2.degree_u, 4)
-    # surf2.knotvector_v = utilities.generate_knot_vector(surf2.degree_v, 4)
-    # # operations.scale(surf2[0], multiplier=1.1, inplace=True)
-    # surf2.sample_size = 25
-    #
-    # # # Create Bezier Surface
-    # control_points = np.asarray(surf.ctrlpts)
-    # control_points = np.asarray(new_control_points)
     points = vtk.vtkPoints()
     #
     for i in range(0, len(control_points)):
@@ -2282,3 +2257,4 @@ class LiverTest(ScriptedLoadableModuleTest):
     inputSegmentation = SampleData.downloadSample('LiverSegmentation000')
     inputVolume = SampleData.downloadSample('LiverVolume000')
     self.delayDisplay('Loaded test data set')
+
