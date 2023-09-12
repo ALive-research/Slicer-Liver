@@ -109,7 +109,7 @@ void vtkLiverVolumetryLogic::ComputeAdvancedPlanningVolumetry(vtkMRMLLabelMapVol
     TargetSegmentsBoundingBox = vtkLabelMapHelper::GetBoundingBox(LabelRetrievingOnly);
 
     auto BezierHR = vtkSmartPointer<vtkBezierSurfaceSource>::New();
-    if (this->resectionNodes != ResectionNodes and ResectionNodes != nullptr)
+    if (this->resectionNodes != ResectionNodes && ResectionNodes != nullptr)
       {
       this->resectionNodes = ResectionNodes;
       for (int i = 0; i < this->resectionNodes->GetNumberOfItems(); i++)
@@ -150,7 +150,7 @@ void vtkLiverVolumetryLogic::ComputeAdvancedPlanningVolumetry(vtkMRMLLabelMapVol
             auto index = iterator.GetIndex();
             if (iterator.Get() != 0)
               {
-              if (this->connectedThreshold->GetPixel(index) == baseValue+i and LabelRetrievingOnly->GetPixel(index) == LabelValue)
+              if (this->connectedThreshold->GetPixel(index) == baseValue+i && LabelRetrievingOnly->GetPixel(index) == LabelValue)
                 {
                 CountValues++;
                 }

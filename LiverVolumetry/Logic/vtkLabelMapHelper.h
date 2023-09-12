@@ -40,6 +40,8 @@
 #ifndef SLICERLIVER_LIVERRESECTIONS_LOGIC_VTKLABELMAPHELPER_H_
 #define SLICERLIVER_LIVERRESECTIONS_LOGIC_VTKLABELMAPHELPER_H_
 
+#include "vtkSlicerLiverVolumetryModuleLogicExport.h"
+
 // ITK includes
 #include <itkImage.h>
 #include <itkConnectedThresholdImageFilter.h>
@@ -57,7 +59,8 @@ class vtkMatrix4x4;
 class vtkPoints;
 
 //-------------------------------------------------------------------------------
-class vtkLabelMapHelper: public vtkObject
+class VTK_SLICER_LIVERVOLUMETRY_MODULE_LOGIC_EXPORT
+vtkLabelMapHelper: public vtkObject
 {
 
  public:
