@@ -57,6 +57,9 @@
 class vtkMRMLLiverMarkupsDistanceContourNode;
 class vtkOpenGLActor;
 class vtkOpenGLDistanceContourPolyDataMapper;
+class vtkPolyDataMapper;
+class vtkActor;
+class vtkSphereSource;
 
 //------------------------------------------------------------------------------
 class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerDistanceContourRepresentation3D
@@ -87,6 +90,9 @@ private:
   vtkWeakPointer<vtkMRMLModelNode> Target;
   vtkSmartPointer<vtkOpenGLDistanceContourPolyDataMapper> DistanceContourMapper;
   vtkSmartPointer<vtkOpenGLActor> DistanceContourActor;
+  vtkSmartPointer<vtkSphereSource> SphereSource;
+  vtkSmartPointer<vtkPolyDataMapper> SphereMapper;
+  vtkSmartPointer<vtkActor> SphereActor;
 
 private:
   vtkSlicerDistanceContourRepresentation3D(const vtkSlicerDistanceContourRepresentation3D&) = delete;

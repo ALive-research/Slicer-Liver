@@ -53,11 +53,16 @@
 #include <qSlicerLayoutManager.h>
 
 // VTK includes
+#include <vtkActor.h>
 #include <vtkCollection.h>
+#include <vtkMath.h>
 #include <vtkOpenGLActor.h>
+#include <vtkPolyDataMapper.h>
+#include <vtkProperty.h>
 #include <vtkShaderProperty.h>
 #include <vtkUniforms.h>
 
+#include <cmath>
 //------------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerDistanceContourRepresentation3D);
 
@@ -68,6 +73,15 @@ vtkSlicerDistanceContourRepresentation3D::vtkSlicerDistanceContourRepresentation
   this->DistanceContourMapper = vtkSmartPointer<vtkOpenGLDistanceContourPolyDataMapper>::New();
   this->DistanceContourActor = vtkSmartPointer<vtkOpenGLActor>::New();
   this->DistanceContourActor->SetMapper(this->DistanceContourMapper);
+  this->SphereSource = vtkSmartPointer<vtkSphereSource>::New();
+  this->SphereSource->SetThetaResolution(20);
+  this->SphereSource->SetPhiResolution(20);
+  this->SphereSource->SetRadius(30);
+  this->SphereMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+  this->SphereMapper->SetInputConnection(this->SphereSource->GetOutputPort());
+  this->SphereActor = vtkSmartPointer<vtkActor>::New();
+  this->SphereActor->SetMapper(this->SphereMapper);
+  this->SphereActor->GetProperty()->SetOpacity(0.2);
 }
 
 //------------------------------------------------------------------------------
@@ -139,6 +153,14 @@ void vtkSlicerDistanceContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* calle
  this->DistanceContourMapper->SetContourThickness(2.0f);
  this->DistanceContourMapper->SetContourVisibility(true);
 
+ //TODO: Maybe externalPoint and referencePoint should be double to avoid conversions
+ this->SphereSource->SetCenter(referencePoint.data()[0],
+                               referencePoint.data()[1],
+                               referencePoint.data()[2]);
+ this->SphereSource->SetRadius(sqrt(vtkMath::Distance2BetweenPoints(externalPoint.data(),
+                                                                    referencePoint.data())));
+
+
  this->NeedToRenderOn();
 }
 
@@ -146,6 +168,7 @@ void vtkSlicerDistanceContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* calle
 void vtkSlicerDistanceContourRepresentation3D::GetActors(vtkPropCollection *pc) {
   this->Superclass::GetActors(pc);
   this->DistanceContourActor->GetActors(pc);
+  this->SphereActor->GetActors(pc);
 }
 
 //----------------------------------------------------------------------
@@ -153,6 +176,7 @@ void vtkSlicerDistanceContourRepresentation3D::ReleaseGraphicsResources(
     vtkWindow *win) {
   this->Superclass::ReleaseGraphicsResources(win);
   this->DistanceContourActor->ReleaseGraphicsResources(win);
+  this->SphereActor->ReleaseGraphicsResources(win);
 }
 
 //----------------------------------------------------------------------
@@ -162,6 +186,7 @@ int vtkSlicerDistanceContourRepresentation3D::RenderOverlay(
   count = this->Superclass::RenderOverlay(viewport);
   if (this->DistanceContourActor->GetVisibility()) {
     count += this->DistanceContourActor->RenderOverlay(viewport);
+    count += this->SphereActor->RenderOverlay(viewport);
   }
   return count;
 }
@@ -173,6 +198,7 @@ int vtkSlicerDistanceContourRepresentation3D::RenderOpaqueGeometry(
   count = this->Superclass::RenderOpaqueGeometry(viewport);
   if (this->DistanceContourActor->GetVisibility()) {
     count += this->DistanceContourActor->RenderOpaqueGeometry(viewport);
+    count += this->SphereActor->RenderOpaqueGeometry(viewport);
   }
   return count;
 }
@@ -190,6 +216,15 @@ int vtkSlicerDistanceContourRepresentation3D::RenderTranslucentPolygonalGeometry
     count +=
         this->DistanceContourActor->RenderTranslucentPolygonalGeometry(viewport);
   }
+
+  if (this->SphereActor->GetVisibility()) {
+    // The internal actor needs to share property keys.
+    // This ensures the mapper state is consistent and allows depth peeling to
+    // work as expected.
+    this->SphereActor->SetPropertyKeys(this->GetPropertyKeys());
+    count +=
+        this->SphereActor->RenderTranslucentPolygonalGeometry(viewport);
+  }
   {
     // The internal actor needs to share property keys.
     // This ensures the mapper state is consistent and allows depth peeling to
@@ -204,10 +239,11 @@ vtkSlicerDistanceContourRepresentation3D::HasTranslucentPolygonalGeometry() {
   if (this->Superclass::HasTranslucentPolygonalGeometry()) {
     return true;
   }
-  if (this->DistanceContourActor->GetVisibility() &&
-      this->DistanceContourActor->HasTranslucentPolygonalGeometry()) {
+  if (this->DistanceContourActor->GetVisibility() && this->DistanceContourActor->HasTranslucentPolygonalGeometry() ||
+    this->SphereActor->GetVisibility() && this->SphereActor->HasTranslucentPolygonalGeometry() ) {
     return true;
   }
+
   { return true; }
   return false;
 }
