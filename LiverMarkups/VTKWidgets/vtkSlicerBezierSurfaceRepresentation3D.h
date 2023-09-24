@@ -64,7 +64,7 @@ class vtkPolyDataNormals;
 class vtkPoints;
 class vtkTextureObject;
 class vtkTubeFilter;
-class vtkOpenGLBezierResectionPolyDataMapper;
+class vtkOpenGLResectionPolyDataMapper;
 class vtkOpenGLResection2DPolyDataMapper;
 
 //------------------------------------------------------------------------------
@@ -104,7 +104,7 @@ protected:
   //k Bezier surface releated elements
   vtkSmartPointer<vtkBezierSurfaceSource> BezierSurfaceSource;
   vtkSmartPointer<vtkPoints> BezierSurfaceControlPoints;
-  vtkSmartPointer<vtkOpenGLBezierResectionPolyDataMapper> BezierSurfaceResectionMapper;
+  vtkSmartPointer<vtkOpenGLResectionPolyDataMapper> BezierSurfaceResectionMapper;
   vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor;
   vtkSmartPointer<vtkPolyDataNormals> BezierSurfaceNormals;
   vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor2D;

@@ -53,11 +53,11 @@
 class vtkTextureObject;
 
 //-------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLBezierResectionPolyDataMapper : public vtkOpenGLPolyDataMapper
+class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLResectionPolyDataMapper : public vtkOpenGLPolyDataMapper
 {
 public:
-  static vtkOpenGLBezierResectionPolyDataMapper *New();
-  vtkTypeMacro(vtkOpenGLBezierResectionPolyDataMapper, vtkOpenGLPolyDataMapper);
+  static vtkOpenGLResectionPolyDataMapper *New();
+  vtkTypeMacro(vtkOpenGLResectionPolyDataMapper, vtkOpenGLPolyDataMapper);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   /// Get distance map
@@ -145,8 +145,8 @@ public:
 
 
 protected:
-  vtkOpenGLBezierResectionPolyDataMapper();
-  ~vtkOpenGLBezierResectionPolyDataMapper();
+  vtkOpenGLResectionPolyDataMapper();
+  ~vtkOpenGLResectionPolyDataMapper();
 
   void BuildBufferObjects(vtkRenderer* ren, vtkActor* act) override;
 
@@ -168,8 +168,8 @@ private:
   std::unique_ptr<vtkInternal> Impl;
 
 private:
-  vtkOpenGLBezierResectionPolyDataMapper(const vtkOpenGLBezierResectionPolyDataMapper&) = delete;
-  void operator=(const vtkOpenGLBezierResectionPolyDataMapper&) = delete;
+  vtkOpenGLResectionPolyDataMapper(const vtkOpenGLResectionPolyDataMapper&) = delete;
+  void operator=(const vtkOpenGLResectionPolyDataMapper&) = delete;
 };
 
 #endif // vtkopenglresectionsurfacepolydatamapper_h_

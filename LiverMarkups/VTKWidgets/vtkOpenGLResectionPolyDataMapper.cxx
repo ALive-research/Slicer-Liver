@@ -38,7 +38,7 @@
 ==============================================================================*/
 
 // This module VTK includes
-#include "vtkOpenGLBezierResectionPolyDataMapper.h"
+#include "vtkOpenGLResectionPolyDataMapper.h"
 
 // VTK includes
 #include <vtkCellData.h>
@@ -60,10 +60,10 @@
 #include <vtkTransform.h>
 
 //------------------------------------------------------------------------------
-class vtkOpenGLBezierResectionPolyDataMapper::vtkInternal
+class vtkOpenGLResectionPolyDataMapper::vtkInternal
 {
 public:
-  vtkInternal(vtkOpenGLBezierResectionPolyDataMapper* parent)
+  vtkInternal(vtkOpenGLResectionPolyDataMapper* parent)
   : Parent(parent), DistanceMapTextureObject(nullptr),
     RasToIjkMatrixT(nullptr), IjkToTextureMatrixT(nullptr),
     ResectionMargin(0.0f), UncertaintyMargin(0.0f),
@@ -78,7 +78,7 @@ public:
     this->IjkToTextureMatrixT = vtkSmartPointer<vtkMatrix4x4>::New();
   }
 
-  vtkWeakPointer<vtkOpenGLBezierResectionPolyDataMapper> Parent;
+  vtkWeakPointer<vtkOpenGLResectionPolyDataMapper> Parent;
   vtkSmartPointer<vtkTextureObject> DistanceMapTextureObject;
   vtkSmartPointer<vtkMatrix4x4> RasToIjkMatrixT;
   vtkSmartPointer<vtkMatrix4x4> IjkToTextureMatrixT;
@@ -96,26 +96,26 @@ public:
 };
 
 //------------------------------------------------------------------------------
-vtkStandardNewMacro(vtkOpenGLBezierResectionPolyDataMapper);
+vtkStandardNewMacro(vtkOpenGLResectionPolyDataMapper);
 
 //------------------------------------------------------------------------------
-vtkOpenGLBezierResectionPolyDataMapper::vtkOpenGLBezierResectionPolyDataMapper()
+vtkOpenGLResectionPolyDataMapper::vtkOpenGLResectionPolyDataMapper()
   :Impl(nullptr)
 {
   this->Impl = std::make_unique<vtkInternal>(this);
 }
 
 //------------------------------------------------------------------------------
-vtkOpenGLBezierResectionPolyDataMapper::~vtkOpenGLBezierResectionPolyDataMapper(){}
+vtkOpenGLResectionPolyDataMapper::~vtkOpenGLResectionPolyDataMapper(){}
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::PrintSelf(ostream& os, vtkIndent indent)
+void vtkOpenGLResectionPolyDataMapper::PrintSelf(ostream& os, vtkIndent indent)
 {
    Superclass::PrintSelf(os, indent);
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::BuildBufferObjects(vtkRenderer* ren, vtkActor* act)
+void vtkOpenGLResectionPolyDataMapper::BuildBufferObjects(vtkRenderer* ren, vtkActor* act)
 {
   if (this->CurrentInput && this->HaveTCoords(this->CurrentInput))
     {
@@ -129,7 +129,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::BuildBufferObjects(vtkRenderer* ren
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
+void vtkOpenGLResectionPolyDataMapper::ReplaceShaderValues(
   std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer* ren, vtkActor* actor)
 {
   std::string VSSource = shaders[vtkShader::Vertex]->GetSource();
@@ -251,7 +251,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetCameraShaderParameters(
+void vtkOpenGLResectionPolyDataMapper::SetCameraShaderParameters(
   vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor)
 {
   vtkOpenGLVertexBufferObject* vvbo = this->VBOs->GetVBO("vertexMC");
@@ -279,7 +279,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetCameraShaderParameters(
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetMapperShaderParameters(
+void vtkOpenGLResectionPolyDataMapper::SetMapperShaderParameters(
   vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor)
 {
     if (cellBO.Program->IsUniformUsed("distanceTexture"))
@@ -361,13 +361,13 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetMapperShaderParameters(
 }
 
 //------------------------------------------------------------------------------
-vtkTextureObject* vtkOpenGLBezierResectionPolyDataMapper::GetDistanceMapTextureObject() const
+vtkTextureObject* vtkOpenGLResectionPolyDataMapper::GetDistanceMapTextureObject() const
 {
   return this->Impl->DistanceMapTextureObject;
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetDistanceMapTextureObject(vtkTextureObject* object)
+void vtkOpenGLResectionPolyDataMapper::SetDistanceMapTextureObject(vtkTextureObject* object)
 {
   if (this->Impl->DistanceMapTextureObject == object)
     {
@@ -384,13 +384,13 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetDistanceMapTextureObject(vtkText
 }
 
 //------------------------------------------------------------------------------
-vtkMatrix4x4 const* vtkOpenGLBezierResectionPolyDataMapper::GetRasToIjkMatrixT() const
+vtkMatrix4x4 const* vtkOpenGLResectionPolyDataMapper::GetRasToIjkMatrixT() const
 {
   return this->Impl->RasToIjkMatrixT;
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetRasToIjkMatrixT(const vtkMatrix4x4* matrix)
+void vtkOpenGLResectionPolyDataMapper::SetRasToIjkMatrixT(const vtkMatrix4x4* matrix)
 {
   if (matrix == nullptr)
     {
@@ -402,7 +402,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetRasToIjkMatrixT(const vtkMatrix4
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetRasToIjkMatrix(const vtkMatrix4x4* matrix)
+void vtkOpenGLResectionPolyDataMapper::SetRasToIjkMatrix(const vtkMatrix4x4* matrix)
 {
   if (matrix == nullptr)
     {
@@ -415,13 +415,13 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetRasToIjkMatrix(const vtkMatrix4x
 }
 
 //------------------------------------------------------------------------------
-vtkMatrix4x4 const* vtkOpenGLBezierResectionPolyDataMapper::GetIjkToTextureMatrixT() const
+vtkMatrix4x4 const* vtkOpenGLResectionPolyDataMapper::GetIjkToTextureMatrixT() const
 {
   return this->Impl->IjkToTextureMatrixT;
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetIjkToTextureMatrixT(const vtkMatrix4x4* matrix)
+void vtkOpenGLResectionPolyDataMapper::SetIjkToTextureMatrixT(const vtkMatrix4x4* matrix)
 {
   if (matrix == nullptr)
     {
@@ -433,7 +433,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetIjkToTextureMatrixT(const vtkMat
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetIjkToTextureMatrix(const vtkMatrix4x4* matrix)
+void vtkOpenGLResectionPolyDataMapper::SetIjkToTextureMatrix(const vtkMatrix4x4* matrix)
 {
   if (matrix == nullptr)
     {
@@ -445,26 +445,26 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetIjkToTextureMatrix(const vtkMatr
   this->Modified();
 }
 //------------------------------------------------------------------------------
-float vtkOpenGLBezierResectionPolyDataMapper::GetResectionMargin() const
+float vtkOpenGLResectionPolyDataMapper::GetResectionMargin() const
 {
   return this->Impl->ResectionMargin;
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetResectionMargin(float margin)
+void vtkOpenGLResectionPolyDataMapper::SetResectionMargin(float margin)
 {
   this->Impl->ResectionMargin = margin;
   this->Modified();
 }
 
 //------------------------------------------------------------------------------
-float vtkOpenGLBezierResectionPolyDataMapper::GetUncertaintyMargin() const
+float vtkOpenGLResectionPolyDataMapper::GetUncertaintyMargin() const
 {
   return this->Impl->UncertaintyMargin;
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetUncertaintyMargin(float margin)
+void vtkOpenGLResectionPolyDataMapper::SetUncertaintyMargin(float margin)
 {
   this->Impl->UncertaintyMargin = margin;
   this->Modified();
@@ -472,13 +472,13 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetUncertaintyMargin(float margin)
 
 
 //------------------------------------------------------------------------------
-float const* vtkOpenGLBezierResectionPolyDataMapper::GetResectionMarginColor() const
+float const* vtkOpenGLResectionPolyDataMapper::GetResectionMarginColor() const
 {
   return this->Impl->ResectionMarginColor;
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetResectionMarginColor(float color[3])
+void vtkOpenGLResectionPolyDataMapper::SetResectionMarginColor(float color[3])
 {
   this->Impl->ResectionMarginColor[0] = color[0];
   this->Impl->ResectionMarginColor[1] = color[1];
@@ -487,7 +487,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetResectionMarginColor(float color
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetResectionMarginColor(float red, float green, float blue)
+void vtkOpenGLResectionPolyDataMapper::SetResectionMarginColor(float red, float green, float blue)
 {
   this->Impl->ResectionMarginColor[0] = red;
   this->Impl->ResectionMarginColor[1] = green;
@@ -496,13 +496,13 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetResectionMarginColor(float red, 
 }
 
 //------------------------------------------------------------------------------
-float const* vtkOpenGLBezierResectionPolyDataMapper::GetUncertaintyMarginColor() const
+float const* vtkOpenGLResectionPolyDataMapper::GetUncertaintyMarginColor() const
 {
   return this->Impl->UncertaintyMarginColor;
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetUncertaintyMarginColor(float color[3])
+void vtkOpenGLResectionPolyDataMapper::SetUncertaintyMarginColor(float color[3])
 {
   this->Impl->UncertaintyMarginColor[0] = color[0];
   this->Impl->UncertaintyMarginColor[1] = color[1];
@@ -511,7 +511,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetUncertaintyMarginColor(float col
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetUncertaintyMarginColor(float red, float green, float blue)
+void vtkOpenGLResectionPolyDataMapper::SetUncertaintyMarginColor(float red, float green, float blue)
 {
   this->Impl->UncertaintyMarginColor[0] = red;
   this->Impl->UncertaintyMarginColor[1] = green;
@@ -520,13 +520,13 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetUncertaintyMarginColor(float red
 }
 
 //------------------------------------------------------------------------------
-float const* vtkOpenGLBezierResectionPolyDataMapper::GetResectionColor() const
+float const* vtkOpenGLResectionPolyDataMapper::GetResectionColor() const
 {
   return this->Impl->ResectionColor;
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetResectionColor(float color[3])
+void vtkOpenGLResectionPolyDataMapper::SetResectionColor(float color[3])
 {
   this->Impl->ResectionColor[0] = color[0];
   this->Impl->ResectionColor[1] = color[1];
@@ -535,7 +535,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetResectionColor(float color[3])
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetResectionColor(float red, float green, float blue)
+void vtkOpenGLResectionPolyDataMapper::SetResectionColor(float red, float green, float blue)
 {
   this->Impl->ResectionColor[0] = red;
   this->Impl->ResectionColor[1] = green;
@@ -544,13 +544,13 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetResectionColor(float red, float 
 }
 
 //------------------------------------------------------------------------------
-float const* vtkOpenGLBezierResectionPolyDataMapper::GetResectionGridColor() const
+float const* vtkOpenGLResectionPolyDataMapper::GetResectionGridColor() const
 {
   return this->Impl->ResectionGridColor;
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetResectionGridColor(float color[3])
+void vtkOpenGLResectionPolyDataMapper::SetResectionGridColor(float color[3])
 {
   this->Impl->ResectionGridColor[0] = color[0];
   this->Impl->ResectionGridColor[1] = color[1];
@@ -559,7 +559,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetResectionGridColor(float color[3
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetResectionGridColor(float red, float green, float blue)
+void vtkOpenGLResectionPolyDataMapper::SetResectionGridColor(float red, float green, float blue)
 {
   this->Impl->ResectionGridColor[0] = red;
   this->Impl->ResectionGridColor[1] = green;
@@ -569,65 +569,65 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetResectionGridColor(float red, fl
 
 
 //------------------------------------------------------------------------------
-float vtkOpenGLBezierResectionPolyDataMapper::GetResectionOpacity() const
+float vtkOpenGLResectionPolyDataMapper::GetResectionOpacity() const
 {
   return this->Impl->ResectionOpacity;
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetResectionOpacity(float margin)
+void vtkOpenGLResectionPolyDataMapper::SetResectionOpacity(float margin)
 {
   this->Impl->ResectionOpacity = margin;
   this->Modified();
 }
 
 //------------------------------------------------------------------------------
-bool vtkOpenGLBezierResectionPolyDataMapper::GetResectionClipOut() const
+bool vtkOpenGLResectionPolyDataMapper::GetResectionClipOut() const
 {
   return this->Impl->ResectionClipOut;
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetResectionClipOut(bool clipOut)
+void vtkOpenGLResectionPolyDataMapper::SetResectionClipOut(bool clipOut)
 {
   this->Impl->ResectionClipOut = clipOut;
   this->Modified();
 }
 
 //------------------------------------------------------------------------------
-bool vtkOpenGLBezierResectionPolyDataMapper::GetInterpolatedMargins() const
+bool vtkOpenGLResectionPolyDataMapper::GetInterpolatedMargins() const
 {
   return this->Impl->InterpolatedMargins;
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetInterpolatedMargins(bool clipOut)
+void vtkOpenGLResectionPolyDataMapper::SetInterpolatedMargins(bool clipOut)
 {
   this->Impl->InterpolatedMargins = clipOut;
   this->Modified();
 }
 
 //------------------------------------------------------------------------------
-unsigned int vtkOpenGLBezierResectionPolyDataMapper::GetGridDivisions() const
+unsigned int vtkOpenGLResectionPolyDataMapper::GetGridDivisions() const
 {
   return this->Impl->GridDivisions;
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetGridDivisions(unsigned int divisions)
+void vtkOpenGLResectionPolyDataMapper::SetGridDivisions(unsigned int divisions)
 {
  this->Impl->GridDivisions = divisions;
  this->Modified();
 }
 
 //------------------------------------------------------------------------------
-float vtkOpenGLBezierResectionPolyDataMapper::GetGridThicknessFactor() const
+float vtkOpenGLResectionPolyDataMapper::GetGridThicknessFactor() const
 {
   return this->Impl->GridThicknessFactor;
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetGridThicknessFactor(float thickness)
+void vtkOpenGLResectionPolyDataMapper::SetGridThicknessFactor(float thickness)
 {
  this->Impl->GridThicknessFactor = thickness;
  this->Modified();

@@ -44,7 +44,7 @@
 #include "vtkBezierSurfaceSource.h"
 #include "vtkMRMLScalarVolumeNode.h"
 #include "vtkSlicerMarkupsWidgetRepresentation.h"
-#include "vtkOpenGLBezierResectionPolyDataMapper.h"
+#include "vtkOpenGLResectionPolyDataMapper.h"
 #include "vtkOpenGLResection2DPolyDataMapper.h"
 #include "vtkMultiTextureObjectHelper.h"
 #include "vtkMRMLMarkupsSlicingContourNode.h"
@@ -137,7 +137,7 @@ vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
   this->BezierSurfaceControlPoints->SetNumberOfPoints(16);
   this->BezierSurfaceControlPoints->DeepCopy(planeSource->GetOutput()->GetPoints());;
 
-  this->BezierSurfaceResectionMapper = vtkSmartPointer<vtkOpenGLBezierResectionPolyDataMapper>::New();
+  this->BezierSurfaceResectionMapper = vtkSmartPointer<vtkOpenGLResectionPolyDataMapper>::New();
   this->BezierSurfaceResectionMapper->SetInputConnection(this->BezierSurfaceNormals->GetOutputPort());
   this->BezierSurfaceActor = vtkSmartPointer<vtkOpenGLActor>::New();
   this->BezierSurfaceActor->SetMapper(this->BezierSurfaceResectionMapper);
