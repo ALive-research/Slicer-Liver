@@ -609,8 +609,10 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
     centerlineModel = self.logic.build_centerline_model(self.colormap)
+    centerlineModelPoints = centerlineModel.GetMesh()
+    numberOfPoints = centerlineModelPoints.GetNumberOfPoints()
     refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
-    if not (refVolumeNode):
+    if not (refVolumeNode) or (numberOfPoints<2):
         raise ValueError("Missing inputs to calculate vascular segments")
 
     slicer.app.pauseRender()
@@ -690,7 +692,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
 
   def build_centerline_model(self, colormap):
     centerlineModel = self.createCompleteCenterlineModel(colormap)
-    centerlineSegmentsDict = slicer.util.getNodes("Territory*")
+    centerlineSegmentsDict = slicer.util.getNodes("*Territory*")
     for name, segmentObject in centerlineSegmentsDict.items():
       if segmentObject.GetClassName() == "vtkMRMLModelNode":
         segmentId = int(segmentObject.GetAttribute("SegmentIndex"))
