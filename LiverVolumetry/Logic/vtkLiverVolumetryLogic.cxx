@@ -84,7 +84,7 @@ void vtkLiverVolumetryLogic::PrintSelf(ostream &os, vtkIndent indent)
 void vtkLiverVolumetryLogic::ComputeAdvancedPlanningVolumetry(vtkMRMLLabelMapVolumeNode* SelectedSegmentsLabelMap, vtkMRMLTableNode* OutputTableNode, vtkMRMLMarkupsFiducialNode* ROIMarkersList, vtkCollection* ResectionNodes, double TargetSegmentationVolume){
   vtkLabelMapHelper::LabelMapType::RegionType TargetSegmentsBoundingBox;
   vtkLabelMapHelper::LabelMapType::Pointer TargetSegmentsITKImage;
-  int baseValue = 7;
+  int baseValue = 100;
   double spacing[3];
   SelectedSegmentsLabelMap->GetSpacing(spacing);
 
@@ -116,6 +116,9 @@ void vtkLiverVolumetryLogic::ComputeAdvancedPlanningVolumetry(vtkMRMLLabelMapVol
         {
         auto bezierSurfaceNode = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(this->resectionNodes->GetItemAsObject(i));
         auto Res =  GetRes(bezierSurfaceNode, spacing, 300);
+        if(Res < 500){
+          Res  =  500;
+        }
         BezierHR = GenerateBezierSurface(Res, bezierSurfaceNode);
         if(i == 0){
           this->ProjectedTargetSegmentImage = vtkLabelMapHelper::VolumeNodeToItkImage(TargetSegmentLabelMapCopy, true, false);
