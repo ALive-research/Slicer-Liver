@@ -307,12 +307,12 @@ class LiverWidget(ScriptedLoadableModuleWidget):
           self._distanceContourNode.SetDisplayVisibility(True)
           liverPolyData = liverNode.GetPolyData()
           self._preprocessedLiverNode = self.logic.preprocessing(liverPolyData)
-          self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointEndInteractionEvent,
-                                               lambda x, y: self.logic.runSurfacefromEFD(activeResectionNode,
-                                                                                         self._distanceContourNode,
-                                                                                         self._preprocessedLiverNode))
-          self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
-                                          self.onDistanceContourStartInteraction)
+          # self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointEndInteractionEvent,
+          #                                      lambda x, y: self.logic.runSurfacefromEFD(activeResectionNode,
+          #                                                                                self._distanceContourNode,
+          #                                                                                self._preprocessedLiverNode))
+          # self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
+          #                                 self.onDistanceContourStartInteraction)
         else:
           activeResectionNode.SetInitMode(activeResectionNode.Curved)
           activeResectionNode.SetTargetOrganModelNode(liverNode)
@@ -324,12 +324,12 @@ class LiverWidget(ScriptedLoadableModuleWidget):
           # self._distanceContourNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLMarkupsDistanceContourNode")
           self._distanceContourNode = self.resectionsWidget.DistanceContourComboBox.currentNode()
 
-          self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointEndInteractionEvent,
-                                        lambda x, y: self.logic.runSurfacefromEFD(activeResectionNode,
-                                                                                  self._distanceContourNode,
-                                                                                  self._preprocessedLiverNode))
-          self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
-                                        self.onDistanceContourStartInteraction)
+          # self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointEndInteractionEvent,
+          #                               lambda x, y: self.logic.runSurfacefromEFD(activeResectionNode,
+          #                                                                         self._distanceContourNode,
+          #                                                                         self._preprocessedLiverNode))
+          # self._distanceContourNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
+          #                               self.onDistanceContourStartInteraction)
           BezierNode = activeResectionNode.GetBezierSurfaceNode()
           BezierNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointStartInteractionEvent,
                                  lambda x, y: self.BezierSurfaceModified(self._distanceContourNode))
