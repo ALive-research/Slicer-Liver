@@ -63,38 +63,42 @@
 #include <vtkAddonMathUtilities.h>
 
 // VTK includes
+
 #include <vtkActor.h>
-#include <vtkOpenGLCamera.h>
 #include <vtkCollection.h>
+#include <vtkGaussianBlurPass.h>
+#include <vtkGaussianBlurPass.h>
+#include <vtkImageCast.h>
 #include <vtkImageData.h>
+#include <vtkMatrix3x3.h>
+#include <vtkNamedColors.h>
 #include <vtkNew.h>
 #include <vtkOpenGLActor.h>
+#include <vtkOpenGLCamera.h>
 #include <vtkOpenGLRenderWindow.h>
-#include <vtkOpenGLVertexBufferObjectGroup.h>
+#include <vtkOpenGLRenderer.h>
 #include <vtkOpenGLVertexBufferObject.h>
+#include <vtkOpenGLVertexBufferObjectGroup.h>
 #include <vtkPlaneSource.h>
 #include <vtkPointData.h>
 #include <vtkPolyDataMapper.h>
 #include <vtkPolyDataNormals.h>
 #include <vtkPolyLine.h>
 #include <vtkProperty.h>
+#include <vtkRenderStepsPass.h>
 #include <vtkRenderWindow.h>
+#include <vtkRenderWindowInteractor.h>
+#include <vtkRendererCollection.h>
 #include <vtkSetGet.h>
 #include <vtkShaderProperty.h>
 #include <vtkSmartPointer.h>
 #include <vtkTexture.h>
 #include <vtkTextureObject.h>
-#include <vtkUniforms.h>
-#include <vtkMatrix3x3.h>
-#include "vtkRendererCollection.h"
-#include <vtkNamedColors.h>
 #include <vtkTypeFloat32Array.h>
-#include <vtkImageCast.h>
-#include <vtkRenderWindowInteractor.h>
+#include <vtkUniforms.h>
 
 //------------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerBezierSurfaceRepresentation3D);
-static const int RENDERER_LAYER = 1;
 
 //------------------------------------------------------------------------------
 vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
@@ -142,16 +146,6 @@ vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
   this->BezierSurfaceActor = vtkSmartPointer<vtkOpenGLActor>::New();
   this->BezierSurfaceActor->SetMapper(this->BezierSurfaceResectionMapper);
 
-  // if (!this->BezierSurfaceActor->GetTexture())
-  //   {
-  //   auto image = vtkSmartPointer<vtkImageData>::New();
-  //   image->SetDimensions(1,1,1);
-  //   image->AllocateScalars(VTK_FLOAT, 2);
-  //   auto fakeTexture = vtkSmartPointer<vtkTexture>::New();
-  //   fakeTexture->SetInputData(image);
-  //   this->BezierSurfaceActor->SetTexture(fakeTexture);
-  //   }
-
   this->BezierSurfaceResectionMapper2D = vtkSmartPointer<vtkOpenGLResection2DPolyDataMapper>::New();
   this->BezierSurfaceResectionMapper2D->SetInputConnection(BezierPlane->GetOutputPort());
   this->BezierSurfaceActor2D = vtkSmartPointer<vtkOpenGLActor>::New();
@@ -170,6 +164,11 @@ vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
   this->ControlPolygonActor->SetMapper(this->ControlPolygonMapper);
 
   this->DistanceMapVolumeNode = nullptr;
+
+  this->ResectogramRenderer = vtkSmartPointer<vtkRenderer>::New();
+  this->ResectogramRenderPasses = vtkSmartPointer<vtkRenderStepsPass>::New();
+  this->ResectogramBlurPass = vtkSmartPointer<vtkGaussianBlurPass>::New();
+  this->ResectogramBlurPass->SetDelegatePass(ResectogramRenderPasses);
 }
 
 //------------------------------------------------------------------------------
@@ -247,27 +246,31 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
     this->DistanceMapVolumeNode = distanceMap;
     }
 
-  //------------------- add new renderer here ----------------------//
+  // //------------------- add new renderer here ----------------------//
   if(BezierSurfaceDisplayNode->GetShowResection2D())
     {
-    auto renderWindow1 = vtkRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
-    auto renderers = renderWindow1->GetRenderers();
+
+    auto renderWindow = vtkRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
+    auto renderers = renderWindow->GetRenderers();
+
+    //TODO: Add an explanation on why this seemingly arbitrary number here
     if(renderers->GetNumberOfItems()!=5)
       {
       double yViewport[4] = {0, 0.6, 0.3, 1.0};
 
-      if (renderWindow1->GetNumberOfLayers() < RENDERER_LAYER+1)
+      if (renderWindow->GetNumberOfLayers() < RENDERER_LAYER + 1)
         {
-        renderWindow1->SetNumberOfLayers( RENDERER_LAYER+1 );
+        renderWindow->SetNumberOfLayers(RENDERER_LAYER + 1);
         }
-      auto CoRenderer2D = vtkSmartPointer<vtkRenderer>::New();
-      CoRenderer2D->SetLayer(RENDERER_LAYER);
-      CoRenderer2D->InteractiveOff();
-      CoRenderer2D->SetActiveCamera(this->ResectogramCamera);
-      CoRenderer2D->AddActor(this->BezierSurfaceActor2D);
-      CoRenderer2D->SetViewport(yViewport);
-      renderWindow1->AddRenderer(CoRenderer2D);
-      renderWindow1->Render();
+      ResectogramRenderer->SetLayer(RENDERER_LAYER);
+      ResectogramRenderer->InteractiveOff();
+      ResectogramRenderer->SetActiveCamera(this->ResectogramCamera);
+      ResectogramRenderer->AddActor(this->BezierSurfaceActor2D);
+      ResectogramRenderer->SetViewport(yViewport);
+      renderWindow->AddRenderer(ResectogramRenderer);
+
+      ResectogramRenderer->SetPass(this->ResectogramBlurPass);
+      renderWindow->Render();
       }
     }
 

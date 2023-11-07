@@ -72,9 +72,16 @@ class vtkMRMLMarkupsBezierSurfaceNode;
 class vtkMRMLScalarVolumeNode;
 
 //------------------------------------------------------------------------------
+class vtkRenderStepsPass;
+class vtkGaussianBlurPass;
+
+//------------------------------------------------------------------------------
 class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerBezierSurfaceRepresentation3D
 : public vtkSlicerMarkupsWidgetRepresentation3D
 {
+
+static const int RENDERER_LAYER = 1;
+
 public:
   static vtkSlicerBezierSurfaceRepresentation3D* New();
   vtkTypeMacro(vtkSlicerBezierSurfaceRepresentation3D, vtkSlicerMarkupsWidgetRepresentation3D);
@@ -126,7 +133,12 @@ protected:
   vtkNew<vtkMatrix4x4> VBOShiftScale;
   vtkNew<vtkTransform> VBOInverseTransform;
   vtkWeakPointer<vtkShaderProperty> ShaderProperty;
-  vtkSmartPointer<vtkRenderer> CoRenderer2D;
+
+  // create the basic VTK render steps
+  vtkSmartPointer<vtkRenderStepsPass> ResectogramRenderPasses;
+  vtkSmartPointer<vtkRenderer> ResectogramRenderer;
+  vtkSmartPointer<vtkGaussianBlurPass> ResectogramBlurPass;
+
 
   // Vascular Segments related elements
   vtkSmartPointer<vtkMultiTextureObjectHelper> VascularSegmentsTexture;
