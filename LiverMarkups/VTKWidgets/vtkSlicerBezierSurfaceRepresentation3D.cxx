@@ -63,99 +63,69 @@
 #include <vtkAddonMathUtilities.h>
 
 // VTK includes
+
 #include <vtkActor.h>
-#include <vtkOpenGLCamera.h>
 #include <vtkCollection.h>
+#include <vtkGaussianBlurPass.h>
+#include <vtkImageCast.h>
 #include <vtkImageData.h>
+#include <vtkMatrix3x3.h>
+#include <vtkNamedColors.h>
 #include <vtkNew.h>
 #include <vtkOpenGLActor.h>
+#include <vtkOpenGLCamera.h>
 #include <vtkOpenGLRenderWindow.h>
-#include <vtkOpenGLVertexBufferObjectGroup.h>
+#include <vtkOpenGLRenderer.h>
 #include <vtkOpenGLVertexBufferObject.h>
+#include <vtkOpenGLVertexBufferObjectGroup.h>
 #include <vtkPlaneSource.h>
 #include <vtkPointData.h>
 #include <vtkPolyDataMapper.h>
 #include <vtkPolyDataNormals.h>
 #include <vtkPolyLine.h>
 #include <vtkProperty.h>
+#include <vtkRenderStepsPass.h>
 #include <vtkRenderWindow.h>
+#include <vtkRenderWindowInteractor.h>
+#include <vtkRendererCollection.h>
 #include <vtkSetGet.h>
 #include <vtkShaderProperty.h>
 #include <vtkSmartPointer.h>
 #include <vtkTexture.h>
 #include <vtkTextureObject.h>
-#include <vtkUniforms.h>
-#include <vtkMatrix3x3.h>
-#include "vtkRendererCollection.h"
-#include <vtkNamedColors.h>
 #include <vtkTypeFloat32Array.h>
-#include <vtkImageCast.h>
-#include <vtkRenderWindowInteractor.h>
+#include <vtkUniforms.h>
 
 //------------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerBezierSurfaceRepresentation3D);
-static const int RENDERER_LAYER = 1;
 
 //------------------------------------------------------------------------------
 vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
+  :DistanceMapVolumeNode(nullptr)
 {
+
+  // ------------------------------------------------------------------------------------------
+  // 1. Construct 3D visualization pipeline
+
   this->BezierSurfaceSource = vtkSmartPointer<vtkBezierSurfaceSource>::New();
-  this->BezierSurfaceSource->SetResolution(20,20);
+  this->BezierSurfaceSource->SetResolution(20, 20);
 
-  // Set the initial position of the bezier surface
-  auto planeSource = vtkSmartPointer<vtkPlaneSource>::New();
-  planeSource->SetResolution(3,3);
-  planeSource->Update();
-
-  this->BezierSurfaceNormals = vtkSmartPointer<vtkPolyDataNormals>::New();
-  this->BezierSurfaceNormals->SetInputConnection(this->BezierSurfaceSource->GetOutputPort());
-
-  this->BezierPlane = vtkSmartPointer<vtkBezierSurfaceSource>::New();
-  this->BezierPlane->SetResolution(20,20);
-  auto PlaneControlPoints = vtkSmartPointer<vtkPoints>::New();
-
-  for(int i=0;i<4;i++){
-    PlaneControlPoints->InsertNextPoint(-60,(i*40),0);
-    PlaneControlPoints->InsertNextPoint(-20,(i*40),0);
-    PlaneControlPoints->InsertNextPoint(20,(i*40),0);
-    PlaneControlPoints->InsertNextPoint(60,(i*40),0);
-
-    }
-
-  this->BezierPlane->SetControlPoints(PlaneControlPoints);
-  this->BezierPlane->Update();
-
-  this->ResectogramCamera = vtkSmartPointer<vtkCamera>::New();
-  ResectogramPlaneCenter(true);
-
-  auto BezierPlanePoints = BezierPlane->GetOutput()->GetPoints()->GetData();
-  BezierPlanePoints->SetName("BSPlanePoints");
-  this->BezierSurfaceNormals->GetOutput()->GetPointData()->AddArray(BezierPlanePoints);
-
+  // Set the initial position of the bezier surface (3D)
+  auto BezierControlPointsPlaneSource = vtkSmartPointer<vtkPlaneSource>::New();
+  BezierControlPointsPlaneSource->SetResolution(3,3);
+  BezierControlPointsPlaneSource->Update();
 
   this->BezierSurfaceControlPoints = vtkSmartPointer<vtkPoints>::New();
   this->BezierSurfaceControlPoints->SetNumberOfPoints(16);
-  this->BezierSurfaceControlPoints->DeepCopy(planeSource->GetOutput()->GetPoints());;
+  this->BezierSurfaceControlPoints->DeepCopy(BezierControlPointsPlaneSource->GetOutput()->GetPoints());
+
+  this->BezierSurfaceNormals = vtkSmartPointer<vtkPolyDataNormals>::New();
+  this->BezierSurfaceNormals->SetInputConnection(this->BezierSurfaceSource->GetOutputPort());
 
   this->BezierSurfaceResectionMapper = vtkSmartPointer<vtkOpenGLBezierResectionPolyDataMapper>::New();
   this->BezierSurfaceResectionMapper->SetInputConnection(this->BezierSurfaceNormals->GetOutputPort());
   this->BezierSurfaceActor = vtkSmartPointer<vtkOpenGLActor>::New();
   this->BezierSurfaceActor->SetMapper(this->BezierSurfaceResectionMapper);
-
-  // if (!this->BezierSurfaceActor->GetTexture())
-  //   {
-  //   auto image = vtkSmartPointer<vtkImageData>::New();
-  //   image->SetDimensions(1,1,1);
-  //   image->AllocateScalars(VTK_FLOAT, 2);
-  //   auto fakeTexture = vtkSmartPointer<vtkTexture>::New();
-  //   fakeTexture->SetInputData(image);
-  //   this->BezierSurfaceActor->SetTexture(fakeTexture);
-  //   }
-
-  this->BezierSurfaceResectionMapper2D = vtkSmartPointer<vtkOpenGLResection2DPolyDataMapper>::New();
-  this->BezierSurfaceResectionMapper2D->SetInputConnection(BezierPlane->GetOutputPort());
-  this->BezierSurfaceActor2D = vtkSmartPointer<vtkOpenGLActor>::New();
-  this->BezierSurfaceActor2D->SetMapper(this->BezierSurfaceResectionMapper2D);
 
   this->ControlPolygonPolyData = vtkSmartPointer<vtkPolyData>::New();
   this->ControlPolygonTubeFilter = vtkSmartPointer<vtkTubeFilter>::New();
@@ -169,11 +139,60 @@ vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
   this->ControlPolygonActor = vtkSmartPointer<vtkActor>::New();
   this->ControlPolygonActor->SetMapper(this->ControlPolygonMapper);
 
-  this->DistanceMapVolumeNode = nullptr;
+  // ------------------------------------------------------------------------------------------
+  // 2. Construct Resectogram Visualization pipeline
+
+  this->ResectogramPlaneSource = vtkSmartPointer<vtkPlaneSource>::New();
+  this->ResectogramPlaneSource->SetResolution(19, 19);
+  this->ResectogramPlaneSource->Update();
+
+  this->ResectogramCamera = vtkSmartPointer<vtkCamera>::New();
+  this->ResectogramCamera->ParallelProjectionOn();
+
+  this->ResectogramMapper= vtkSmartPointer<vtkOpenGLResection2DPolyDataMapper>::New();
+  this->ResectogramMapper->SetInputConnection(ResectogramPlaneSource->GetOutputPort());
+  this->ResectogramActor = vtkSmartPointer<vtkOpenGLActor>::New();
+  this->ResectogramActor->SetMapper(this->ResectogramMapper);
+
+  this->ResectogramRenderer = vtkSmartPointer<vtkRenderer>::New();
 }
 
 //------------------------------------------------------------------------------
 vtkSlicerBezierSurfaceRepresentation3D::~vtkSlicerBezierSurfaceRepresentation3D() = default;
+
+//----------------------------------------------------------------------
+void vtkSlicerBezierSurfaceRepresentation3D::SetRenderer(vtkRenderer *renderer)
+{
+  this->Superclass::SetRenderer(renderer);
+
+  if (renderer == nullptr)
+    {
+      return;
+    }
+
+  auto renderWindow = renderer->GetRenderWindow();
+  if (renderWindow == nullptr)
+    {
+      return;
+    }
+
+  if (renderWindow->GetNumberOfLayers() < RENDERER_LAYER + 1)
+    {
+      renderWindow->SetNumberOfLayers(RENDERER_LAYER + 1);
+    }
+
+  double viewport[4] = {0.0, 0.0, 1.0, 1.0};
+  this->ResectogramRenderer->SetLayer(RENDERER_LAYER);
+  this->ResectogramRenderer->InteractiveOff();
+  this->ResectogramRenderer->AddActor(this->ResectogramActor);
+  this->ResectogramRenderer->SetViewport(viewport);
+  this->ResectogramRenderer->GetActiveCamera()->ParallelProjectionOn();
+  this->ResectogramRenderPasses = vtkSmartPointer<vtkRenderPass>::New();
+  this->ResectogramBlurPass = vtkSmartPointer<vtkGaussianBlurPass>::New();
+  this->ResectogramBlurPass->SetDelegatePass(ResectogramRenderPasses);
+  this->ResectogramRenderer->SetPass(this->ResectogramBlurPass);
+
+}
 
 //----------------------------------------------------------------------
 void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void *callData /*=nullptr*/)
@@ -240,42 +259,33 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller,
 
       this->BezierSurfaceResectionMapper->SetRasToIjkMatrixT(rasToIjkT);
       this->BezierSurfaceResectionMapper->SetIjkToTextureMatrixT(ijkToTextureT);
-      this->BezierSurfaceResectionMapper2D->SetRasToIjkMatrixT(rasToIjkT);
-      this->BezierSurfaceResectionMapper2D->SetIjkToTextureMatrixT(ijkToTextureT);
+      this->ResectogramMapper->SetRasToIjkMatrixT(rasToIjkT);
+      this->ResectogramMapper->SetIjkToTextureMatrixT(ijkToTextureT);
       }
 
     this->DistanceMapVolumeNode = distanceMap;
     }
 
-  //------------------- add new renderer here ----------------------//
+  auto renderWindow = vtkRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
   if(BezierSurfaceDisplayNode->GetShowResection2D())
     {
-    auto renderWindow1 = vtkRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
-    auto renderers = renderWindow1->GetRenderers();
-    if(renderers->GetNumberOfItems()!=5)
-      {
-      double yViewport[4] = {0, 0.6, 0.3, 1.0};
-
-      if (renderWindow1->GetNumberOfLayers() < RENDERER_LAYER+1)
+      if (!renderWindow->HasRenderer(this->ResectogramRenderer))
         {
-        renderWindow1->SetNumberOfLayers( RENDERER_LAYER+1 );
+          renderWindow->AddRenderer(ResectogramRenderer);
         }
-      auto CoRenderer2D = vtkSmartPointer<vtkRenderer>::New();
-      CoRenderer2D->SetLayer(RENDERER_LAYER);
-      CoRenderer2D->InteractiveOff();
-      CoRenderer2D->SetActiveCamera(this->ResectogramCamera);
-      CoRenderer2D->AddActor(this->BezierSurfaceActor2D);
-      CoRenderer2D->SetViewport(yViewport);
-      renderWindow1->AddRenderer(CoRenderer2D);
-      renderWindow1->Render();
-      }
     }
+  else{
+    if (renderWindow->HasRenderer(this->ResectogramRenderer))
+      {
+        renderWindow->RemoveRenderer(ResectogramRenderer);
+      }
+  }
 
-  if(BezierSurfaceDisplayNode->GetMirrorDisplay()){
-    ResectogramPlaneCenter(true);
-    } else {
-    ResectogramPlaneCenter(false);
-    };
+  // if(BezierSurfaceDisplayNode->GetMirrorDisplay()){
+  //   ResectogramPlaneCenter(true);
+  //   } else {
+  //   ResectogramPlaneCenter(false);
+  //   };
 
   this->NeedToRenderOn();
 }
@@ -294,7 +304,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::ReleaseGraphicsResources(
 {
   this->Superclass::ReleaseGraphicsResources(win);
   this->BezierSurfaceActor->ReleaseGraphicsResources(win);
-  this->BezierSurfaceActor2D->ReleaseGraphicsResources(win);
+  this->ResectogramActor->ReleaseGraphicsResources(win);
   this->ControlPolygonActor->ReleaseGraphicsResources(win);
 }
 
@@ -364,7 +374,7 @@ vtkTypeBool vtkSlicerBezierSurfaceRepresentation3D::HasTranslucentPolygonalGeome
   if (this->BezierSurfaceActor->GetVisibility() && this->BezierSurfaceActor->HasTranslucentPolygonalGeometry()) {
     return true;
     }
-  if (this->BezierSurfaceActor2D->GetVisibility() && this->BezierSurfaceActor2D->HasTranslucentPolygonalGeometry())
+  if (this->ResectogramActor->GetVisibility() && this->ResectogramActor->HasTranslucentPolygonalGeometry())
     {
     return true;
     }
@@ -423,8 +433,8 @@ void vtkSlicerBezierSurfaceRepresentation3D::PrintSelf(ostream& os, vtkIndent in
     {
     os << indent << "BezierSurface Visibility: (none)\n";
     }
-  if (this->BezierSurfaceActor2D) {
-    os << indent << "BezierSurface2D Visibility: " << this->BezierSurfaceActor2D->GetVisibility() << "\n";
+  if (this->ResectogramActor) {
+    os << indent << "BezierSurface2D Visibility: " << this->ResectogramActor->GetVisibility() << "\n";
     }
   else
     {
@@ -474,17 +484,17 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceGeometry(vtkMRML
 
     this->BezierSurfaceSource->SetControlPoints(this->BezierSurfaceControlPoints);
     this->BezierSurfaceSource->Update();
-    this->BezierSurfaceSourcePoints = this->BezierSurfaceSource->GetOutput()->GetPoints()->GetData();
-    this->BezierSurfaceSourcePoints->SetName("BSPoints");
+    this->BezierSurfaceSourcePointsArray = this->BezierSurfaceSource->GetOutput()->GetPoints()->GetData();
+    this->BezierSurfaceSourcePointsArray->SetName("BSPoints");
     auto BezierSurfaceDisplayNode = vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(node->GetDisplayNode());
     Ratio(BezierSurfaceDisplayNode->GetEnableFlexibleBoundary());
 
-
-    if(this->BezierPlane->GetOutput()->GetPointData()->GetArray("BSPoints")){
-      this->BezierPlane->GetOutput()->GetPointData()->RemoveArray("BSPoints");
-      this->BezierPlane->GetOutput()->GetPointData()->AddArray(this->BezierSurfaceSourcePoints);
+    //TODO: This replacement could happen via SetArray function instead of Remove/Add
+    if(this->ResectogramPlaneSource->GetOutput()->GetPointData()->GetArray("BSPoints")){
+      this->ResectogramPlaneSource->GetOutput()->GetPointData()->RemoveArray("BSPoints");
+      this->ResectogramPlaneSource->GetOutput()->GetPointData()->AddArray(this->BezierSurfaceSourcePointsArray);
       }else{
-      this->BezierPlane->GetOutput()->GetPointData()->AddArray(this->BezierSurfaceSourcePoints);
+      this->ResectogramPlaneSource->GetOutput()->GetPointData()->AddArray(this->BezierSurfaceSourcePointsArray);
       }
     }
 }
@@ -595,10 +605,10 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceDisplay(vtkMRMLM
   this->BezierSurfaceResectionMapper->SetResectionMargin(node->GetResectionMargin());
   this->BezierSurfaceResectionMapper->SetUncertaintyMargin(node->GetUncertaintyMargin());
 
-  this->BezierSurfaceResectionMapper2D->SetResectionMargin(node->GetResectionMargin());
-  this->BezierSurfaceResectionMapper2D->SetUncertaintyMargin(node->GetUncertaintyMargin());
-  this->BezierSurfaceResectionMapper2D->SetHepaticContourThickness(node->GetHepaticContourThickness());
-  this->BezierSurfaceResectionMapper2D->SetPortalContourThickness(node->GetPortalContourThickness());
+  this->ResectogramMapper->SetResectionMargin(node->GetResectionMargin());
+  this->ResectogramMapper->SetUncertaintyMargin(node->GetUncertaintyMargin());
+  this->ResectogramMapper->SetHepaticContourThickness(node->GetHepaticContourThickness());
+  this->ResectogramMapper->SetPortalContourThickness(node->GetPortalContourThickness());
 
   if (displayNode)
     {
@@ -617,20 +627,20 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceDisplay(vtkMRMLM
       this->BezierSurfaceResectionMapper->SetGridThicknessFactor(0.0);
       }
 
-    this->BezierSurfaceResectionMapper2D->SetResectionColor(displayNode->GetResectionColor());
-    this->BezierSurfaceResectionMapper2D->SetResectionGridColor(displayNode->GetResectionGridColor());
-    this->BezierSurfaceResectionMapper2D->SetResectionMarginColor(displayNode->GetResectionMarginColor());
-    this->BezierSurfaceResectionMapper2D->SetUncertaintyMarginColor(displayNode->GetUncertaintyMarginColor());
-    this->BezierSurfaceResectionMapper2D->SetInterpolatedMargins(displayNode->GetInterpolatedMargins());
-    this->BezierSurfaceResectionMapper2D->SetHepaticContourColor(displayNode->GetHepaticContourColor());
-    this->BezierSurfaceResectionMapper2D->SetPortalContourColor(displayNode->GetPortalContourColor());
-    this->BezierSurfaceResectionMapper2D->SetTextureNumComps(displayNode->GetTextureNumComps());
+    this->ResectogramMapper->SetResectionColor(displayNode->GetResectionColor());
+    this->ResectogramMapper->SetResectionGridColor(displayNode->GetResectionGridColor());
+    this->ResectogramMapper->SetResectionMarginColor(displayNode->GetResectionMarginColor());
+    this->ResectogramMapper->SetUncertaintyMarginColor(displayNode->GetUncertaintyMarginColor());
+    this->ResectogramMapper->SetInterpolatedMargins(displayNode->GetInterpolatedMargins());
+    this->ResectogramMapper->SetHepaticContourColor(displayNode->GetHepaticContourColor());
+    this->ResectogramMapper->SetPortalContourColor(displayNode->GetPortalContourColor());
+    this->ResectogramMapper->SetTextureNumComps(displayNode->GetTextureNumComps());
     if (displayNode->GetGrid2DVisibility()){
-      this->BezierSurfaceResectionMapper2D->SetGridDivisions(displayNode->GetGridDivisions());
-      this->BezierSurfaceResectionMapper2D->SetGridThicknessFactor(displayNode->GetGridThickness());
+      this->ResectogramMapper->SetGridDivisions(displayNode->GetGridDivisions());
+      this->ResectogramMapper->SetGridThicknessFactor(displayNode->GetGridThickness());
     } else {
-      this->BezierSurfaceResectionMapper2D->SetGridDivisions(0.0);
-      this->BezierSurfaceResectionMapper2D->SetGridThicknessFactor(0.0);
+      this->ResectogramMapper->SetGridDivisions(0.0);
+      this->ResectogramMapper->SetGridThicknessFactor(0.0);
     }
     }
 }
@@ -658,12 +668,12 @@ void vtkSlicerBezierSurfaceRepresentation3D::Ratio(bool flexibleBoundery){
   if (flexibleBoundery)
     {
     double disU = 0, disV = 0;
-    std::vector<double> p0u = {this->BezierSurfaceSourcePoints->GetTuple3(0)[0],this->BezierSurfaceSourcePoints->GetTuple3(0)[1],this->BezierSurfaceSourcePoints->GetTuple3(0)[2]};
-    std::vector<double> p0v = {this->BezierSurfaceSourcePoints->GetTuple3(0)[0],this->BezierSurfaceSourcePoints->GetTuple3(0)[1],this->BezierSurfaceSourcePoints->GetTuple3(0)[2]};
+    std::vector<double> p0u = {this->BezierSurfaceSourcePointsArray->GetTuple3(0)[0],this->BezierSurfaceSourcePointsArray->GetTuple3(0)[1],this->BezierSurfaceSourcePointsArray->GetTuple3(0)[2]};
+    std::vector<double> p0v = {this->BezierSurfaceSourcePointsArray->GetTuple3(0)[0],this->BezierSurfaceSourcePointsArray->GetTuple3(0)[1],this->BezierSurfaceSourcePointsArray->GetTuple3(0)[2]};
 
     for(int i = 1; i<20; i++){
-      std::vector<double> p1 = {this->BezierSurfaceSourcePoints->GetTuple3(i)[0],this->BezierSurfaceSourcePoints->GetTuple3(i)[1],this->BezierSurfaceSourcePoints->GetTuple3(i)[2]};
-      std::vector<double> p2 = {this->BezierSurfaceSourcePoints->GetTuple3(20*i)[0],this->BezierSurfaceSourcePoints->GetTuple3(20*i)[1],this->BezierSurfaceSourcePoints->GetTuple3(20*i)[2]};
+      std::vector<double> p1 = {this->BezierSurfaceSourcePointsArray->GetTuple3(i)[0],this->BezierSurfaceSourcePointsArray->GetTuple3(i)[1],this->BezierSurfaceSourcePointsArray->GetTuple3(i)[2]};
+      std::vector<double> p2 = {this->BezierSurfaceSourcePointsArray->GetTuple3(20*i)[0],this->BezierSurfaceSourcePointsArray->GetTuple3(20*i)[1],this->BezierSurfaceSourcePointsArray->GetTuple3(20*i)[2]};
 
       auto d01 = sqrt(pow(p0u[0]-p1[0],2.0)+pow(p0u[1]-p1[1],2.0)+pow(p0u[2]-p1[2],2.0));
       disU = disU + d01;
@@ -686,7 +696,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::Ratio(bool flexibleBoundery){
     matR[0] = 1;
     matR[1] = 1;
     }
-  this->BezierSurfaceResectionMapper2D->SetMatRatio(matR);
+  this->ResectogramMapper->SetMatRatio(matR);
 }
 
 void vtkSlicerBezierSurfaceRepresentation3D::ResectogramPlaneCenter(bool mirror){
@@ -697,7 +707,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::ResectogramPlaneCenter(bool mirror)
     z = -1;
     }
   double bounds[6];
-  this->BezierPlane->GetOutput()->GetBounds(bounds);
+  this->ResectogramPlaneSource->GetOutput()->GetBounds(bounds);
   double center[3] = {(bounds[0]+bounds[1])/2, (bounds[2]+bounds[3])/2, z*100.0};
   this->ResectogramCamera->SetPosition(center[0], center[1], center[2] * 3);
   this->ResectogramCamera->SetFocalPoint(center[0], center[1], center[2]);
