@@ -200,10 +200,12 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return
     if not self.ui.inputSegmentSelectorWidget.currentSegmentID():
       return
-    Idno = self.ui.selectedVascularTerritorySegmId.nodeCount()
+    VascSegmIdno = self.ui.selectedVascularTerritorySegmId.currentNode().GetAttribute("LiverSegments.SegmentationId")
+    VascTerrIdno = self.ui.vascularTerritoryId.currentIndex
     vesselPointsSelector = self.ui.endPointsMarkupsSelector
     vesselPointsSelector.blockSignals(True)
-    vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.SegmentationId", str(Idno))
+    vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.SegmentationId", str(VascSegmIdno))
+    vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.VascTerrId", str(VascTerrIdno))
     vesselPointsSelector.blockSignals(False)
 
     endPointsMarkupsNode = self.getVesselSegmentfromName()
@@ -211,7 +213,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.addNode()
       self.ui.endPointsMarkupsSelector.setCurrentNode(endPointsMarkupsNode)
 #    else:
-    endPointsMarkupsNode.SetAttribute("LiverSegments.SegmentationId",str(Idno))
+    endPointsMarkupsNode.SetAttribute("LiverSegments.SegmentationId",str(VascSegmIdno))
+    endPointsMarkupsNode.SetAttribute("LiverSegments.VascTerrId",str(VascTerrIdno))
 #    endPointsMarkupsNode.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.SegmentationId",str(Idno))
 
     self.ui.endPointsMarkupsSelector.baseName = self.getVesselSegmentName()
@@ -538,6 +541,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onVascularTerritoryIdChanged(self):
     index = self.ui.vascularTerritoryId.currentIndex
+    VascSegmIdno = self.ui.selectedVascularTerritorySegmId.currentNode().GetAttribute("LiverSegments.SegmentationId")
     print('onVascularTerritoryIdChanged(',index,')')
     #Add new vascular territory ID
     if(index == 0):
@@ -550,6 +554,13 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if(index > 0):
       self.colormap.SetColorName(index, self.ui.vascularTerritoryId.currentText)
       self.onSegmentChanged()#Also generate new vessel segment point lists when changing territory id
+
+    index = self.ui.vascularTerritoryId.currentIndex
+    vesselPointsSelector = self.ui.endPointsMarkupsSelector
+    vesselPointsSelector.blockSignals(True)
+    vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.SegmentationId", str(VascSegmIdno))
+    vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.VascTerrId", str(index))
+    vesselPointsSelector.blockSignals(False)
 
   def onColorChanged(self):
     print('onColorChanged()')
