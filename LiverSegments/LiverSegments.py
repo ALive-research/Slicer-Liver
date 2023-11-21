@@ -574,7 +574,10 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return
     endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
     self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
-    endPointsMarkupsNode.SetAttribute("SegmentIndex", str(self.ui.vascularTerritoryId.currentIndex))
+    endPointsMarkupsNode.SetAttribute("LiverSegments.VascTerrId", str(self.ui.vascularTerritoryId.currentIndex))
+    vascularTerritorySegm = self.ui.selectedVascularTerritorySegmId.currentNode()
+    vascularTerritorySegmId = vascularTerritorySegm.GetAttribute("LiverSegments.SegmentationId")
+    endPointsMarkupsNode.SetAttribute("LiverSegments.SegmentationId", str(vascularTerritorySegmId))
 
     slicer.app.pauseRender()
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
@@ -602,6 +605,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         mergedLines = self.mergePolydata(centerlineModelNode.GetMesh(), decimatedCenterlinePolyData)
 
       centerlineModelNode.SetAndObserveMesh(mergedLines)
+      centerlineModelNode.SetAttribute("LiverSegments.SegmentationId", str(vascularTerritorySegmId))
+      centerlineModelNode.SetAttribute("LiverSegments.VascTerrId", str(self.ui.vascularTerritoryId.currentIndex))
 
       centerlineModelNode.CreateDefaultDisplayNodes()
       self.useColorFromSelector(centerlineModelNode)
@@ -714,7 +719,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     centerlineSegmentsDict = slicer.util.getNodes("*Territory*")
     for name, segmentObject in centerlineSegmentsDict.items():
       if segmentObject.GetClassName() == "vtkMRMLModelNode":
-        segmentId = int(segmentObject.GetAttribute("SegmentIndex"))
+        segmentId = int(segmentObject.GetAttribute("LiverSegments.VascTerrId"))
         self.scl.MarkSegmentWithID(segmentObject, segmentId)
         self.scl.AddSegmentToCenterlineModel(centerlineModel, segmentObject)
     self.scl.InitializeCenterlineSearchModel(centerlineModel)
@@ -753,7 +758,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     slicer.mrmlScene.RemoveNode(labelmapVolumeNode)
 
   def copyIndex(self, endPointsMarkupsNode, centerlineModelNode):
-    centerlineModelNode.SetAttribute("SegmentIndex", endPointsMarkupsNode.GetAttribute("SegmentIndex"))
+    centerlineModelNode.SetAttribute("LiverSegments.VascTerrId", endPointsMarkupsNode.GetAttribute("LiverSegments.VascTerrId"))
 
   #Using code from centerlineProcessingLogic.preprocess
   def preprocessAndDecimate(self, surfacePolyData):
