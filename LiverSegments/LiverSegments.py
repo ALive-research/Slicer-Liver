@@ -160,7 +160,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Buttons
     self.ui.calculateVascularTerritoryMapButton.connect('clicked(bool)', self.onCalculateVascularTerritoryMapButton)
-    self.ui.addSegmentButton.connect('clicked(bool)', self.onAddCenterlineButton)
+    self.ui.addCenterlineSegmentButton.connect('clicked(bool)', self.onAddCenterlineButton)
     self.ui.addSegmentationButton.connect('clicked(bool)', self.onAddSegmentationButton)
     self.ui.ColorPickerButton.connect('colorChanged(QColor)', self.onColorChanged)
     self.ui.showHideButton.connect('clicked(bool)', self.onShowHideButton)
@@ -171,7 +171,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def enableWidgetButtons(self, state):
     self.ui.addSegmentationButton.setEnabled(state)
-    self.ui.addSegmentButton.setEnabled(state)
+    self.ui.addCenterlineSegmentButton.setEnabled(state)
     self.ui.calculateVascularTerritoryMapButton.setEnabled(state)
     self.ui.inputSurfaceSelector.setEnabled(state)
     self.ui.vascularTerritoryId.setEnabled(state)
@@ -571,14 +571,13 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onAddCenterlineButton(self):
     print('onAddCenterlineButton()')
-    self.onAddCenterline()
+    self.onAddCenterlineSegment()
 
   def onAddSegmentationButton(self):
     print('onAddSegmentationButton()')
-    self.onAddCenterline(addSegmentationInsteadOfLine = True)
+    self.onAddCenterlineSegment(addSegmentationInsteadOfLine = True)
 
-  def onAddCenterline(self, addSegmentationInsteadOfLine = False):
-    print('onAddCenterline()')
+  def onAddCenterlineSegment(self, addSegmentationInsteadOfLine = False):
     if not (self.logic.check_module_Extract_Centerline_installed()):
       self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
       slicer.util.errorDisplay("SlicerVMTK Extension not installed")
