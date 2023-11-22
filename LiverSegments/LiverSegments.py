@@ -760,7 +760,9 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
 
     labelmapVolumeNode.GetDisplayNode().SetAndObserveColorNodeID(colormap.GetID())
     slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
+    segmentationId = vascularTerritorySegmentationNode.GetAttribute("LiverSegments.SegmentationId")
     vascularTerritorySegmentationNode.Reset(None)#Existing node will be overwritten
+    vascularTerritorySegmentationNode.SetAttribute("LiverSegments.SegmentationId", segmentationId)
 
     #Create segmentation from labelmap volume
     vascularTerritorySegmentationNode.CreateDefaultDisplayNodes() # only needed for display
