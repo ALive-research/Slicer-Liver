@@ -291,6 +291,15 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if displayNode:
       displayNode.SetOpacity3D(0.3)
     self.updateShowHideButtonText()
+    # Visualisation of centerline segments
+    centerlineSegments = slicer.util.getNodesByClass('vtkMRMLModelNode')
+    for centerlineSegment in centerlineSegments:
+      SegmIdAttribute = centerlineSegment.GetAttribute("LiverSegments.SegmentationId")
+      if SegmIdAttribute == segmId:
+        centerlineSegment.GetDisplayNode().VisibilityOn()
+      else:
+        centerlineSegment.GetDisplayNode().VisibilityOff()
+
 
   def updateVascTerrList(self, vasc_terr_ID_list, vascular_territory_segm_node):
     print('updateVascTerrList()')
@@ -656,6 +665,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     slicer.app.pauseRender()
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
     vascularTerritorySegmentationNode = self.ui.selectedVascularTerritorySegmId.currentNode()
+    segmId = vascularTerritorySegmentationNode.GetAttribute("LiverSegments.SegmentationId")
+    centerlineModel.SetAttribute("LiverSegments.SegmentationId", segmId)
     print('SegmentationID : ', vascularTerritorySegmentationNode.GetAttribute("LiverSegments.SegmentationId"))
 
     try:
