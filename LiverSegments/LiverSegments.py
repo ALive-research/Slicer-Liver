@@ -552,7 +552,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onVascularTerritoryIdChanged(self):
     index = self.ui.vascularTerritoryId.currentIndex
-    VascSegmIdno = self.ui.selectedVascularTerritorySegmId.currentNode().GetAttribute("LiverSegments.SegmentationId")
+    vascularTerrSegmNode = self.ui.selectedVascularTerritorySegmId.currentNode()
+    VascSegmIdno = vascularTerrSegmNode.GetAttribute("LiverSegments.SegmentationId")
     print('onVascularTerritoryIdChanged(',index,')')
     #Add new vascular territory ID
     if(index == 0):
@@ -560,6 +561,13 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       idString = "Vascular Territory ID " + str(numItems)
       self.ui.vascularTerritoryId.addItem(idString)
       self.ui.vascularTerritoryId.setCurrentIndex(numItems)
+    #Add new Vascular Territory Segmentation
+    segmentName = self.ui.vascularTerritoryId.currentText
+    vascularTerrSegm = vascularTerrSegmNode.GetSegmentation()
+    numberOfSegments = vascularTerrSegm.GetNumberOfSegments()
+    if numberOfSegments < index:
+      vascularTerrSegm.AddEmptySegment(segmentName, segmentName)
+
     #Update color in selector
     self.ui.ColorPickerButton.setColor(self.getCurrentColorQt())
     if(index > 0):
