@@ -206,8 +206,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     print('Vascular Territory Idno = ',VascTerrIdno)
     vesselPointsSelector = self.ui.endPointsMarkupsSelector
     vesselPointsSelector.blockSignals(True)
-    vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.SegmentationId", str(VascSegmIdno))
     vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.VascTerrId", str(VascTerrIdno))
+    vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.SegmentationId", str(VascSegmIdno))
     vesselPointsSelector.blockSignals(False)
 
     endPointsMarkupsNode = self.getVesselSegmentfromName()
@@ -578,8 +578,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     print('onVascularTerritoryIdChanged2(',index,')')
     vesselPointsSelector = self.ui.endPointsMarkupsSelector
     vesselPointsSelector.blockSignals(True)
-    vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.SegmentationId", str(VascSegmIdno))
     vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.VascTerrId", str(index))
+    vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.SegmentationId", str(VascSegmIdno))
     vesselPointsSelector.blockSignals(False)
 
   def onColorChanged(self):
