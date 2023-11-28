@@ -387,8 +387,14 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
         segStatLogic.computeStatistics()
         stats = segStatLogic.getStatistics()
         for segmentId in stats["SegmentIDs"]:
-          voxel_count = stats[segmentId,"LabelmapSegmentStatisticsPlugin.voxel_count"]
-          volume_cm3 = stats[segmentId,"LabelmapSegmentStatisticsPlugin.volume_cm3"]
+          voxel_count = 0
+          volume_cm3 = 0
+          if stats[segmentId,"LabelmapSegmentStatisticsPlugin.voxel_count"]:
+            voxel_count = stats[segmentId,"LabelmapSegmentStatisticsPlugin.voxel_count"]
+            volume_cm3 = stats[segmentId,"LabelmapSegmentStatisticsPlugin.volume_cm3"]
+          elif stats[segmentId,"ScalarVolumeSegmentStatisticsPlugin.voxel_count"]:
+            voxel_count = stats[segmentId,"ScalarVolumeSegmentStatisticsPlugin.voxel_count"]
+            volume_cm3 = stats[segmentId,"ScalarVolumeSegmentStatisticsPlugin.volume_cm3"]
           segmentName = segmentationNode.GetSegmentation().GetSegment(segmentId).GetName()
           statistics[segmentId] = [segmentName, voxel_count, volume_cm3]
           self.scl.VolumetryTable(segmentName, targetSegmentVolume, voxel_count, volume_cm3,outputTable)
