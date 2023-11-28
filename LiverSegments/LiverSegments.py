@@ -276,7 +276,9 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return
     if not segmId:
       print('New Vascular Territory Segmentation node')
-      vasc_terr_segmentationNode.SetAttribute("LiverSegments.SegmentationId",str(count))
+      segmId = count
+
+    vasc_terr_segmentationNode.SetAttribute("LiverSegments.SegmentationId", str(segmId))
 
     segmentationNodeName = vasc_terr_segmentationNode.GetName()
     vasc_terr_ID_combox = self.ui.vascularTerritoryId
@@ -299,6 +301,12 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         centerlineSegment.GetDisplayNode().VisibilityOn()
       else:
         centerlineSegment.GetDisplayNode().VisibilityOff()
+    # Visualisation of Vascular Territories
+    segmentationNodes = slicer.util.getNodesByClass('vtkMRMLSegmentationNode')
+    for node in segmentationNodes:
+      attribute = node.GetAttribute("LiverSegments.SegmentationId")
+      if attribute != None:
+        node.GetDisplayNode().SetAllSegmentsVisibility(False)
 
 
   def updateVascTerrList(self, vasc_terr_ID_list, vascular_territory_segm_node):
