@@ -671,7 +671,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       startTime = time.time()
 
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
-    centerlineModel = self.logic.build_centerline_model(self.colormap)
+    vascTerrSegmentationId = int(self.ui.selectedVascularTerritorySegmId.currentNode().GetAttribute("LiverSegments.SegmentationId"))
+    centerlineModel = self.logic.build_centerline_model(self.colormap, vascTerrSegmentationId)
     centerlineModelPoints = centerlineModel.GetMesh()
     numberOfPoints = centerlineModelPoints.GetNumberOfPoints()
     refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
@@ -758,14 +759,16 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
 
     return completeCenterlineModelNode
 
-  def build_centerline_model(self, colormap):
+  def build_centerline_model(self, colormap, vascSegmSelected):
     centerlineModel = self.createCompleteCenterlineModel(colormap)
     centerlineSegmentsDict = slicer.util.getNodes("*Territory*")
     for name, segmentObject in centerlineSegmentsDict.items():
       if segmentObject.GetClassName() == "vtkMRMLModelNode":
-        segmentId = int(segmentObject.GetAttribute("LiverSegments.VascTerrId"))
-        self.scl.MarkSegmentWithID(segmentObject, segmentId)
-        self.scl.AddSegmentToCenterlineModel(centerlineModel, segmentObject)
+        VascTerrId = int(segmentObject.GetAttribute("LiverSegments.VascTerrId"))
+        VascTerrSegmId = int(segmentObject.GetAttribute("LiverSegments.SegmentationId"))
+        if VascTerrSegmId == vascSegmSelected:
+          self.scl.MarkSegmentWithID(segmentObject, VascTerrId)
+          self.scl.AddSegmentToCenterlineModel(centerlineModel, segmentObject)
     self.scl.InitializeCenterlineSearchModel(centerlineModel)
     return centerlineModel
 
