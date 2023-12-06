@@ -200,6 +200,11 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return
     if not self.ui.inputSegmentSelectorWidget.currentSegmentID():
       return
+    #Check if this is a Vascular Territory Segmentation node
+    segmentationNodeAttribute = self.ui.inputSurfaceSelector.currentNode().GetAttribute("LiverSegments.SegmentationId")
+    if segmentationNodeAttribute is not None:
+      return
+    #Sjekk om kar punkt liste eksisterer for denne kombinasjonen
     VascSegmIdno = self.ui.selectedVascularTerritorySegmId.currentNode().GetAttribute("LiverSegments.SegmentationId")
     VascTerrIdno = self.ui.vascularTerritoryId.currentIndex
     print('Vascular Segment Idno = ',VascSegmIdno)
