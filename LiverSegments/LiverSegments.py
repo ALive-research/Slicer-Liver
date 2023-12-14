@@ -90,6 +90,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic = None
     self._parameterNode = None
     self._updatingGUIFromParameterNode = False
+    self._updatingGUIFromSegmentationNode = False
     ScriptedLoadableModuleWidget.__init__(self, parent)
     VTKObservationMixin.__init__(self)  # needed for parameter node observation
 
@@ -264,9 +265,11 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.showHideButton.setIcon(qt.QIcon("Icons/VisibleOff.png"))
 
   def vascular_territory_segmentationNodeSelected(self):
+    self._updatingGUIFromSegmentationNode = True
     count = self.ui.selectedVascularTerritorySegmId.nodeCount()
     if count <= 0:
       self.enableWidgetButtons(False)
+      self._updatingGUIFromSegmentationNode = False
       return
     else:
       self.enableWidgetButtons(True)
@@ -275,13 +278,17 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     print('vascular_territory_segmentationNodeSelected() - Count: ',count,', SegmId: ', segmId)
 
     vasc_terr_segmentationNode = self.ui.selectedVascularTerritorySegmId.currentNode()
+    vascularTerrSegm = vasc_terr_segmentationNode.GetSegmentation()
 
     if vasc_terr_segmentationNode is None:
       logging.warning('No vascular territory segmentationNode')
+      self._updatingGUIFromSegmentationNode = False
       return
     if not segmId:
       print('New Vascular Territory Segmentation node')
       segmId = count
+      firstSegmentID = 'Vascular Territory ID 1'
+      vascularTerrSegm.AddEmptySegment(firstSegmentID, firstSegmentID)
 
     vasc_terr_segmentationNode.SetAttribute("LiverSegments.SegmentationId", str(segmId))
 
@@ -308,6 +315,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         centerlineSegment.GetDisplayNode().VisibilityOff()
     # Visualisation of Vascular Territories
     segmentationNodes = slicer.util.getNodesByClass('vtkMRMLSegmentationNode')
+    self._updatingGUIFromSegmentationNode = False
     for node in segmentationNodes:
       attribute = node.GetAttribute("LiverSegments.SegmentationId")
       if attribute != None:
@@ -568,6 +576,9 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     vascularTerrSegmNode = self.ui.selectedVascularTerritorySegmId.currentNode()
     VascSegmIdno = vascularTerrSegmNode.GetAttribute("LiverSegments.SegmentationId")
     print('onVascularTerritoryIdChanged(',index,')')
+    # If the GUI is updating - No action
+    if  self._updatingGUIFromSegmentationNode == True:
+      return
     #Add new vascular territory ID
     if(index == 0):
       numItems = self.ui.vascularTerritoryId.count
