@@ -331,7 +331,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     for idString in segments:
       index = index+1
       vasc_terr_ID_list.addItem(idString)
-      self.colormap.SetColorName(index, vasc_terr_ID_list.currentText)
+      self.colormap.SetColorName(index, idString)
       self.onSegmentChanged()
     vasc_terr_ID_list.setCurrentIndex(1)
     vasc_terr_ID_list.blockSignals(False)
