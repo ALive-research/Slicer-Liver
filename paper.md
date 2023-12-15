@@ -49,17 +49,15 @@ aas-journal: Astrophysical Journal <- The name of the AAS journal.
 
 # Summary
 
-This paper introduces SlicerLiver, a software extension to the 3D Slicer platform.
-The ALive project aims to 
-address challenges in liver surgery planning by applying geometric modeling and 
-artificial intelligence to generate resection plans for complex cases, developing 
-parameterized patient-specific vascular models, and creating computational methods 
-for resection visualization in 2D. The project’s implementation revolves around 
-a software platform based on 3D Slicer, organized into four work packages. Progress 
-and preliminary results show improvements in defining virtual resections, visualizing 
-resections using Resectograms and classifying liver segments accurately. These 
-contributions hold promise in enhancing liver surgery planning and potentially 
-improving patient outcomes.
+This paper introduces SlicerLiver, a software extension to the [3D Slicer](https://slicer.org "3D Slicer")
+image computing platform. The software address challenges in liver surgery planning by 
+applying geometric modeling and artificial intelligence to generate liver tumor 
+resection plans for complex cases, developing parameterized patient-specific 
+vascular models, and creating computational methods for resection visualization 
+in 2D. Progress and preliminary results show improvements in defining virtual 
+resections, visualizing resections using Resectograms and classifying liver 
+segments accurately. These contributions hold promise in enhancing liver surgery 
+planning and potentially improving patient outcomes.
 
 # Statement of need
 
