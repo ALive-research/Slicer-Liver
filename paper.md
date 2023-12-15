@@ -1,34 +1,44 @@
 ---
-title: 'Gala: A Python package for galactic dynamics'
+title: 'SlicerLiver: A 3D Slicer extension for liver surgery planning'
 tags:
   - Python
-  - astronomy
-  - dynamics
-  - galactic dynamics
-  - milky way
+  - Image Guided Surgery
+  - Liver surgery planning
+  - Liver tumor resection visualization
+  - Geometric modelling
 authors:
-  - name: Adrian M. Price-Whelan
+  - name: Rafael Palomar
     orcid: 0000-0000-0000-0000
     equal-contrib: true
+    corresponding: true
     affiliation: "1, 2" # (Multiple affiliations must be quoted)
-  - name: Author Without ORCID
-    equal-contrib: true # (This is how you can denote equal contributions between multiple authors)
+  - name: Ruoyan Meng
+    orcid: 0000-0000-0000-0000
+    equal-contrib: true
     affiliation: 2
-  - name: Author with no affiliation
-    corresponding: true # (This is how to denote the corresponding author)
+  - name: Gabriella D'Albenzio
+    orcid: 0000-0000-0000-0000
+    equal-contrib: true # (This is how you can denote equal contributions between multiple authors)
+    affiliation: 1
+  - name: Ole V. Solberg
+    orcid: 0000-0000-0000-0000
+    equal-contrib: true # (This is how you can denote equal contributions between multiple authors)
+    affiliation: 3
+  - name: Geir Arne Tangen
+    orcid: 0000-0000-0000-0000
     affiliation: 3
   - given-names: Ludwig
     dropping-particle: van
     surname: Beethoven
     affiliation: 3
 affiliations:
- - name: Lyman Spitzer, Jr. Fellow, Princeton University, USA
+ - name: The Intervention Centre, Oslo University Hospital, Oslo, Norway
    index: 1
- - name: Institution Name, Country
+ - name: Computer Science Department, NTNU, Gjøvik, Norway
    index: 2
- - name: Independent Researcher, Country
+ - name: Department of Health Research, SINTEF Digital, Trondheim, Norway 
    index: 3
-date: 13 August 2017
+date: 15 Desember 2023
 bibliography: paper.bib
 
 # Optional fields if submitting to a AAS journal too, see this blog post:
@@ -39,37 +49,34 @@ aas-journal: Astrophysical Journal <- The name of the AAS journal.
 
 # Summary
 
-The forces on stars, galaxies, and dark matter under external gravitational
-fields lead to the dynamical evolution of structures in the universe. The orbits
-of these bodies are therefore key to understanding the formation, history, and
-future state of galaxies. The field of "galactic dynamics," which aims to model
-the gravitating components of galaxies to study their structure and evolution,
-is now well-established, commonly taught, and frequently used in astronomy.
-Aside from toy problems and demonstrations, the majority of problems require
-efficient numerical tools, many of which require the same base code (e.g., for
-performing numerical orbit integration).
+This paper introduces SlicerLiver, a software extension to the 3D Slicer platform.
+The ALive project aims to 
+address challenges in liver surgery planning by applying geometric modeling and 
+artificial intelligence to generate resection plans for complex cases, developing 
+parameterized patient-specific vascular models, and creating computational methods 
+for resection visualization in 2D. The project’s implementation revolves around 
+a software platform based on 3D Slicer, organized into four work packages. Progress 
+and preliminary results show improvements in defining virtual resections, visualizing 
+resections using Resectograms and classifying liver segments accurately. These 
+contributions hold promise in enhancing liver surgery planning and potentially 
+improving patient outcomes.
 
 # Statement of need
 
-`Gala` is an Astropy-affiliated Python package for galactic dynamics. Python
-enables wrapping low-level languages (e.g., C) for speed without losing
-flexibility or ease-of-use in the user-interface. The API for `Gala` was
-designed to provide a class-based and user-friendly interface to fast (C or
-Cython-optimized) implementations of common operations such as gravitational
-potential and force evaluation, orbit integration, dynamical transformations,
-and chaos indicators for nonlinear dynamics. `Gala` also relies heavily on and
-interfaces well with the implementations of physical units and astronomical
-coordinate systems in the `Astropy` package [@astropy] (`astropy.units` and
-`astropy.coordinates`).
+Liver cancer, both primary and secondary types, is a global health concern with 
+increasing incidence rates [1]. Surgical resection is the most effective treatment 
+for some of these cancers [2], and the evolution of computer-assisted surgical systems 
+over the past two decades has significantly improved tumor localization and surgeons 
+confidence during surgery [3], [4]. However, despite these advances, several challenges 
+remain in liver surgical practice.
+While patient-specific 3D models are systematically generated for surgical planning 
+and guidance, surgery planning remains a manual process. This is particularly problematic 
+for patients with multiple metastases, where manual surgery planning becomes intricate. 
+The current techniques for planning virtual resections, namely, drawing-on-slices and 
+deformable surfaces [5], [6], have shown limitations. Therefore, there is a pressing 
+need for new algorithms capable of generating precise, rapid, and straightforward 
+resection plans, even in complex cases.
 
-`Gala` was designed to be used by both astronomical researchers and by
-students in courses on gravitational dynamics or astronomy. It has already been
-used in a number of scientific publications [@Pearson:2017] and has also been
-used in graduate courses on Galactic dynamics to, e.g., provide interactive
-visualizations of textbook material [@Binney:2008]. The combination of speed,
-design, and support for Astropy functionality in `Gala` will enable exciting
-scientific explorations of forthcoming data releases from the *Gaia* mission
-[@gaia] by students and experts alike.
 
 # Mathematics
 
