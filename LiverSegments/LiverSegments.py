@@ -320,6 +320,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       attribute = node.GetAttribute("LiverSegments.SegmentationId")
       if attribute != None:
         node.GetDisplayNode().SetAllSegmentsVisibility(False)
+    self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
 
 
   def updateVascTerrList(self, vasc_terr_ID_list, vascular_territory_segm_node):
@@ -585,6 +586,9 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       idString = "Vascular Territory ID " + str(numItems)
       self.ui.vascularTerritoryId.addItem(idString)
       self.ui.vascularTerritoryId.setCurrentIndex(numItems)
+      self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(True)
+    else:
+      self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
     #Add new Vascular Territory Segmentation
     segmentName = self.ui.vascularTerritoryId.currentText
     vascularTerrSegm = vascularTerrSegmNode.GetSegmentation()
