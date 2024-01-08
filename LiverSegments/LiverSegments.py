@@ -180,7 +180,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.showHideButton.setEnabled(state)
 
   def segmentationNodeSelected(self):
-    print('segmentationNodeSelected()')
     self.ui.SegmentationShow3DButton.setEnabled(True)
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
     self.ui.SegmentationShow3DButton.setSegmentationNode(segmentationNode)
@@ -193,7 +192,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   #Auto create if name/id don't exist. Auto switch it it exists
   def onSegmentChanged(self):
-    print('onSegmentChanged()')
     endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
     if endPointsMarkupsNode is not None:
       endPointsMarkupsNode.SetDisplayVisibility(False)#Hide previous markup points
@@ -208,8 +206,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #Sjekk om kar punkt liste eksisterer for denne kombinasjonen
     VascSegmIdno = self.ui.selectedVascularTerritorySegmId.currentNode().GetAttribute("LiverSegments.SegmentationId")
     VascTerrIdno = self.ui.vascularTerritoryId.currentIndex
-    print('Vascular Segment Idno = ',VascSegmIdno)
-    print('Vascular Territory Idno = ',VascTerrIdno)
     vesselPointsSelector = self.ui.endPointsMarkupsSelector
     vesselPointsSelector.blockSignals(True)
     vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.VascTerrId", str(VascTerrIdno))
@@ -226,7 +222,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 #    endPointsMarkupsNode.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.SegmentationId",str(Idno))
 
     self.ui.endPointsMarkupsSelector.baseName = self.getVesselSegmentName()
-    print('currentNode: ' + self.ui.endPointsMarkupsSelector.currentNode().GetName())
     self.refreshShowHideButton()
     endPointsMarkupsNode.SetDisplayVisibility(True)#Show current markup points
 
@@ -275,7 +270,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.enableWidgetButtons(True)
 
     segmId = self.ui.selectedVascularTerritorySegmId.currentNode().GetAttribute("LiverSegments.SegmentationId")
-    print('vascular_territory_segmentationNodeSelected() - Count: ',count,', SegmId: ', segmId)
 
     vasc_terr_segmentationNode = self.ui.selectedVascularTerritorySegmId.currentNode()
     vascularTerrSegm = vasc_terr_segmentationNode.GetSegmentation()
@@ -285,7 +279,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self._updatingGUIFromSegmentationNode = False
       return
     if not segmId:
-      print('New Vascular Territory Segmentation node')
       segmId = count
       firstSegmentID = 'Vascular Territory ID 1'
       vascularTerrSegm.AddEmptySegment(firstSegmentID, firstSegmentID)
@@ -324,7 +317,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 
   def updateVascTerrList(self, vasc_terr_ID_list, vascular_territory_segm_node):
-    print('updateVascTerrList()')
     segments = vascular_territory_segm_node.GetSegmentation().GetSegmentIDs()
     vasc_terr_ID_list.clear()
     initString = 'Create new territory ID'
@@ -390,7 +382,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Called just before the scene is closed.
     """
-    print('onSceneStartClose()')
     # Parameter node will be reset, do not use it anymore
     self.setParameterNode(None)
 
@@ -398,7 +389,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Called just after the scene is closed.
     """
-    print('onSceneEndClose()')
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
     if self.parent.isEntered:
       self.initializeParameterNode()
@@ -407,7 +397,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Ensure parameter node exists and observed.
     """
-    print('initializeParameterNode()')
     # Parameter node stores all user choices in parameter values, node selections, etc.
     # so that when the scene is saved and reloaded, these settings are restored.
 
@@ -418,7 +407,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Set and observe parameter node.
     Observation is needed because when the parameter node is changed then the GUI must be updated immediately.
     """
-    print('setParameterNode()')
     if inputParameterNode:
       self.logic.setDefaultParameters(inputParameterNode)
 
@@ -445,7 +433,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
 
     # Disable all sections if no parameternode is selected
-    print('updateGUIFromParameterNode()')
     parameterNode = self._parameterNode
     if not slicer.mrmlScene.IsNodePresent(parameterNode):
         parameterNode = None
@@ -474,7 +461,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     This method is called when the user makes any change in the GUI.
     The changes are saved into the parameter node (so that they are restored when the scene is saved and loaded).
     """
-    print('updateParameterNodeFromGUI()')
 
     if self._parameterNode is None or self._updatingGUIFromParameterNode:
       return
@@ -497,7 +483,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #    self._parameterNode.EndModify(wasModified)
 
   def getPreprocessedPolyData(self):
-    print('getPreprocessedPolyData()')
     surface = self.ui.inputSurfaceSelector.currentNode()
     segmentId = self.ui.inputSegmentSelectorWidget.currentSegmentID()
 
@@ -510,7 +495,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return preprocessedPolyData
 
   def createCenterlineNode(self, endPointsMarkupsNode):
-    print('createCenterlineNode()')
     nodeName = endPointsMarkupsNode.GetName()
     centerlineModelNode = slicer.mrmlScene.GetNodeByID(nodeName)
     if centerlineModelNode:
@@ -531,11 +515,9 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     segment = segmentation.GetSegment(segmId)
     name = 'Segment_' + self.ui.selectedVascularTerritorySegmId.currentNode().GetAttribute("LiverSegments.SegmentationId") \
       + '_Territory_' + str(self.ui.vascularTerritoryId.currentIndex) + '_' + segment.GetName()
-    print('getVesselSegmentName() - ', name)
     return name
 
   def newEndpointsListCreated(self):
-    print('newEndpointsListCreated()')
     #Set baseName, and use this to create new unique names if endPointsMarkupsNode with this name already exist
     newName = self.getVesselSegmentName()
     self.updateSelectorColor()
@@ -548,13 +530,11 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(True)
 
   def updateSelectorColor(self):
-    print('updateSelectorColor()')
     color = self.getCurrentColor()
     color255 = [int(i * 255) for i in color]
     self.ui.endPointsMarkupsPlaceWidget.ColorButton.setColor(qt.QColor(color255[0], color255[1], color255[2]))
 
   def getCurrentColor(self):
-    print('getCurrentColor()')
     color = [1, 1, 1, 1]
     index = self.ui.vascularTerritoryId.currentIndex
     if (index > 0):
@@ -576,7 +556,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     index = self.ui.vascularTerritoryId.currentIndex
     vascularTerrSegmNode = self.ui.selectedVascularTerritorySegmId.currentNode()
     VascSegmIdno = vascularTerrSegmNode.GetAttribute("LiverSegments.SegmentationId")
-    print('onVascularTerritoryIdChanged(',index,')')
     # If the GUI is updating - No action
     if  self._updatingGUIFromSegmentationNode == True:
       return
@@ -603,7 +582,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.onSegmentChanged()#Also generate new vessel segment point lists when changing territory id
 
     index = self.ui.vascularTerritoryId.currentIndex
-    print('onVascularTerritoryIdChanged2(',index,')')
     vesselPointsSelector = self.ui.endPointsMarkupsSelector
     vesselPointsSelector.blockSignals(True)
     vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "LiverSegments.VascTerrId", str(index))
@@ -611,22 +589,18 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     vesselPointsSelector.blockSignals(False)
 
   def onColorChanged(self):
-    print('onColorChanged()')
     colorIndex = self.ui.vascularTerritoryId.currentIndex
     color = self.ui.ColorPickerButton.color
     if(colorIndex > 0):
       self.colormap.SetColor(colorIndex, color.redF(), color.greenF(), color.blueF()) #Update index color in colormap.
 
   def onAddCenterlineButton(self):
-    print('onAddCenterlineButton()')
     self.onAddCenterlineSegment()
 
   def onAddSegmentationButton(self):
-    print('onAddSegmentationButton()')
     self.onAddCenterlineSegment(addSegmentationInsteadOfLine = True)
 
   def onAddCenterlineSegment(self, addSegmentationInsteadOfLine = False):
-    print('onAddSegment()')
     if not (self.logic.check_module_Extract_Centerline_installed()):
       self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
       slicer.util.errorDisplay("SlicerVMTK Extension not installed")
@@ -685,7 +659,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return combinedPolyData.GetOutput()
 
   def onCalculateVascularTerritoryMapButton(self):
-    print('onCalculateVascularTerritoryMapButton()')
     if self.developerMode is True:
       import time
       startTime = time.time()
@@ -704,14 +677,12 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     vascularTerritorySegmentationNode = self.ui.selectedVascularTerritorySegmId.currentNode()
     segmId = vascularTerritorySegmentationNode.GetAttribute("LiverSegments.SegmentationId")
     centerlineModel.SetAttribute("LiverSegments.SegmentationId", segmId)
-    print('SegmentationID : ', vascularTerritorySegmentationNode.GetAttribute("LiverSegments.SegmentationId"))
 
     try:
         self.logic.calculateVascularTerritoryMap(vascularTerritorySegmentationNode, refVolumeNode, segmentationNode, centerlineModel, self.colormap)
     except ValueError:
         logging.error("Error: Failing when calculating vascular segments")
 
-    print('SegmentationID (2): ', vascularTerritorySegmentationNode.GetAttribute("LiverSegments.SegmentationId"))
 
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
