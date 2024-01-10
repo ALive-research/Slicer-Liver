@@ -37,10 +37,6 @@ affiliations:
 date: 15 Desember 2023
 bibliography: paper.bib
 
-# Optional fields if submitting to a AAS journal too, see this blog post:
-# https://blog.joss.theoj.org/2018/12/a-new-collaboration-with-aas-publishing
-aas-doi: 10.3847/xxxxx <- update this with the DOI from AAS once you know it.
-aas-journal: Astrophysical Journal <- The name of the AAS journal.
 ---
 
 # Summary
@@ -71,8 +67,40 @@ deformable surfaces [@Preim:2013], [@Palomar:2017], have shown limitations. Ther
 need for new algorithms capable of generating precise, rapid, and straightforward 
 resection plans, even in complex cases.
 
+# Overview of SlicerLiver
+
+SlicerLiver is separated into the following four sections:
+
+- Distance Map Computation
+- Resections
+- Resctogram
+- Liver Segments
+
+Each section is oriented towards one part of the liver resection planning workflow but, 
+if desired, can work independently of the other ones.
+
+**Distance Map Computation**
+Calculate a distance map used for creating safety margins in the resectogram.
+
+**Resections**
+Generate an initial resection surface which can be subsequently modified through 16 control points.
+The distance map from the previous section is used to project safety and uncertanty margins 
+in real-time into the resection surface. This allows the user to modify the resection proposal 
+intil the safety margins are met.
+
+**Resectogram**
+Use the resection surface from the previous section to calculate a flat 2D visualization of the resection margin.
+
+**Liver Segments**
+The user can define different vascular territories and one or more vessel segments 
+in the different vessel systems in these territories.
+These vascular territories with corresponding vessel segments are then used to calculate 
+and visuzalize different liver segments.
+
 
 # Implementation
+SlicerLiver is centered around the development of a software platform, based on 3D Slicer [@Kikinis:2013], 
+aimed at addressing challenges in liver surgical practice.
 
 # Results
 
@@ -84,6 +112,7 @@ needs, enhancing outcomes for both atypical and anatomical
 resections. Notably, our proposed a new resection method
 aiming to obtain better parenchyma preservation compared to
 existing methods.
+
 **Improved Visualization of Virtual Resections**
 We successfully implemented the Resectograms method (Fig. 1.b),
 a real-time 2D representation of resections within the ALive
@@ -94,6 +123,7 @@ to inadequate visualization during virtual planning, thus improving surgical acc
 enhance the liver surgery workflow, empowering surgeons with
 valuable insights for optimized liver resection strategies and
 improved patient outcomes.
+
 **Improved Classification of Liver Segments**
 As part of the ALive project, our study introduces a novel approach to
 segmenting liver functional segments \autoref{fig:3}. The method
