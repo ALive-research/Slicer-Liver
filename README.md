@@ -95,10 +95,11 @@ The Liver segments can be defined using the following steps:
 and a `Vessel points` list will be automatically generated.
 5.  Place user-defined markup landmarks along the selected hepatic/portal model in 3D View to mark the part of the vessel where centerlines should be generated.
 6.  Once all the points are placed, Click `Add Vessel Centerline`.
-7.  For generation of several vascular territory segments, select `Vascular Territory` and "Create new territory ID".
-8.  Repeat steps 4 to 6 for creating centerlines to be used for calculation of the new Vascular Territory.
-9.  Click on `Calculate Vascular Territory Segmentation`. The generated vascular territories will then be visible in the 3D- and 2D Views.
-10. Multiple sets of vascular territories can be generated and stored in separat Vascular Territory Segmentations.
+7.  Optionally, repeat steps 4-6 for generation of additional centerline for other vessel segments (portal/hepatic).
+8.  For generation of several vascular territory segments, select `Vascular Territory` and "Create new territory ID".
+9.  Repeat steps 4 to 7 for creating centerlines to be used for calculation of the new Vascular Territory.
+10.  Click on `Calculate Vascular Territory Segmentation`. The generated vascular territories will then be visible in the 3D- and 2D Views.
+11. Multiple sets of vascular territories can be generated and stored in separat Vascular Territory Segmentations.
 To generate a new set of vascular territories, select "Create New Vascular Territory Segmentation" in `Vascular Territory Segmentation`. 
 Then repeat steps 2-9.
 
