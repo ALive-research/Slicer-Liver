@@ -22,7 +22,6 @@ authors:
     affiliation: 1
   - name: Ole V. Solberg
     orcid: 0009-0004-9488-3621
-    equal-contrib: true # (This is how you can denote equal contributions between multiple authors)
     affiliation: 3
   - name: Geir Arne Tangen
     orcid: 0000-0003-0032-8500
@@ -59,6 +58,7 @@ for some of these cancers [@Simmonds:2006], and the evolution of computer-assist
 over the past two decades has significantly improved tumor localization and surgeons 
 confidence during surgery [@Hansen:2014], [@Lamata:2010]. However, despite these advances, several challenges 
 remain in liver surgical practice.
+
 While patient-specific 3D models are systematically generated for surgical planning 
 and guidance, surgery planning remains a manual process. This is particularly problematic 
 for patients with multiple metastases, where manual surgery planning becomes intricate. 
@@ -66,6 +66,39 @@ The current techniques for planning virtual resections, namely, drawing-on-slice
 deformable surfaces [@Preim:2013], [@Palomar:2017], have shown limitations. Therefore, there is a pressing 
 need for new algorithms capable of generating precise, rapid, and straightforward 
 resection plans, even in complex cases.
+
+Furthermore, blood supply to various liver regions or vascu-
+lar territories is crucial for liver resection planning. The estab-
+lished anatomical division of the liver, such as the Couinaud
+division is under question [@Warmann:2016], [@Bismuth:2013]. This calls for innovative
+liver analytics methods that can enable the calculation of
+various types of vascular territories.
+
+Another challenge is the absence of a broad consensus on
+the definition of a good resection, which is partly due to the
+lack of formal methods to specify and communicate resection
+plans. Existing methods, such as subjective descriptions, hand-
+drawings, and pictures, often result in biased and imprecise
+descriptions of surgical plans. The complexity of 3D models
+also hampers their inclusion in 2D media such as medical
+records and scientific journals. Therefore, visualization tech-
+niques that can capture and communicate critical information
+from a resection plan in a compact form, interpretable by
+clinical experts, are needed.
+
+In response to these challenges, the SLiverLiver project aims to support
+three research objectives:
+1) Apply geometric modeling and artificial intelligence to
+generate resection plans suitable for complex cases, such
+as those involving multiple metastases with multiple
+resections.
+2) Generate parameterized patient-specific vascular models
+that include both portal and hepatic vessels systems,
+allowing for the calculation of diverse liver vascular
+territories.
+3) Develop computational methods for the visualization of
+resections in lower dimensions. This should result in a
+set of 2D diagrams suitable for use during planning.
 
 # Overview of SlicerLiver
 
@@ -107,16 +140,19 @@ aimed at addressing challenges in liver surgical practice.
 **Improved Definition of Virtual Resections**
 We developed computer-aided preoperative planning systems \autoref{fig:1},
 streamlining the resection planning process and introducing
-real-time 3D cutting path visualization. Our approach empowers surgeons to make decisions based on individual patient
+real-time 3D cutting path visualization [@Aghayan:2023]. Our approach empowers surgeons to make decisions based on individual patient
 needs, enhancing outcomes for both atypical and anatomical
-resections. Notably, our proposed a new resection method
-aiming to obtain better parenchyma preservation compared to
+resections. Notably, our proposed new resection method
+aims to obtain better parenchyma preservation compared to
 existing methods.
+
+
+![Specification of a virtual resection with visualization of safety margins.\label{fig:1}](Screenshots/Slicer-Liver_screenshot_04.png)
 
 **Improved Visualization of Virtual Resections**
 We successfully implemented the Resectograms method (Fig. 1.b),
-a real-time 2D representation of resections within the ALive
-project. The Resectogram provides an intuitive and occlusionfree visualization of virtual liver resection plans, with three
+a real-time 2D representation of resections into SlicerLiver [@Meng:2023]. 
+The Resectogram provides an intuitive and occlusionfree visualization of virtual liver resection plans, with three
 components: resection cross-section, resection anatomy segments, and resection safety margins. Notably, Resectograms
 effectively identify and characterize invalid resection types due
 to inadequate visualization during virtual planning, thus improving surgical accuracy and decision-making. Resectograms
@@ -125,8 +161,8 @@ valuable insights for optimized liver resection strategies and
 improved patient outcomes.
 
 **Improved Classification of Liver Segments**
-As part of the ALive project, our study introduces a novel approach to
-segmenting liver functional segments \autoref{fig:3}. The method
+The functionality of SlicerLiver also includes a novel approach to
+segment liver functional segments [@d'Albenzio:2023] \autoref{fig:3}. The method
 uses the liver morphology, the interior vascular network,
 and user-defined landmarks to provide enhanced flexibility in
 marker placement, distinguishing it from existing methods. By
@@ -138,22 +174,11 @@ a comprehensive and precise segmentation of the caudate lobe.
 While improvements, particularly in automating the landmark
 marking process, are needed, our approach holds significant
 promise for improving liver surgery planning and has the
-potential to optimize surgical outcomes within the broader
-context of the ALive project.
+potential to optimize surgical outcomes.
 
 
-
-![Specification of a virtual resection with visualization of safety margins.\label{fig:1}](Screenshots/Slicer-Liver_screenshot_04.png)
 ![Visializing liver segments.\label{fig:3}](Screenshots/Slicer-Liver_screenshot_14.jpg)
 
-# Figures
-
-Figures can be included like this:
-![Caption for example figure.\label{fig:example}](figure.png)
-and referenced from text using \autoref{fig:example}.
-
-Figure sizes can be customized by adding an optional second parameter:
-![Caption for example figure.](figure.png){ width=20% }
 
 # Acknowledgements
 This work was conducted as part of the ALive project, funded by the Research Council of Norway under IKTPLUSS (grant nr. 311393).
