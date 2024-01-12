@@ -130,12 +130,7 @@ in the different vessel systems in these territories.
 These vascular territories with corresponding vessel segments are then used to calculate 
 and visuzalize different liver segments.
 
-
-# Implementation
-SlicerLiver is centered around the development of a software platform, based on 3D Slicer [@Kikinis:2013], 
-aimed at addressing challenges in liver surgical practice.
-
-# Results
+# Prelinimary results
 
 **Improved Definition of Virtual Resections**
 We developed computer-aided preoperative planning systems \autoref{fig:1},
@@ -145,7 +140,6 @@ needs, enhancing outcomes for both atypical and anatomical
 resections. Notably, our proposed new resection method
 aims to obtain better parenchyma preservation compared to
 existing methods.
-
 
 ![Specification of a virtual resection with visualization of safety margins.\label{fig:1}](Screenshots/Slicer-Liver_screenshot_04.png)
 
@@ -162,7 +156,7 @@ improved patient outcomes.
 
 **Improved Classification of Liver Segments**
 The functionality of SlicerLiver also includes a novel approach to
-segment liver functional segments [@d'Albenzio:2023] \autoref{fig:3}. The method
+segment liver functional segments [@{d'Albenzio:2023}] \autoref{fig:3}. The method
 uses the liver morphology, the interior vascular network,
 and user-defined landmarks to provide enhanced flexibility in
 marker placement, distinguishing it from existing methods. By
@@ -176,12 +170,9 @@ marking process, are needed, our approach holds significant
 promise for improving liver surgery planning and has the
 potential to optimize surgical outcomes.
 
-
 ![Visializing liver segments.\label{fig:3}](Screenshots/Slicer-Liver_screenshot_14.jpg)
-
 
 # Acknowledgements
 This work was conducted as part of the ALive project, funded by the Research Council of Norway under IKTPLUSS (grant nr. 311393).
-
 
 # References
