@@ -102,12 +102,13 @@ set of 2D diagrams suitable for use during planning.
 
 # Overview of SlicerLiver
 
-SlicerLiver is separated into the following four sections:
+SlicerLiver is separated into the following five sections:
 
 - Distance Map Computation
 - Resections
 - Resctogram
 - Liver Segments
+- Resection Volumetry
 
 Each section is oriented towards one part of the liver resection planning workflow but, 
 if desired, can work independently of the other ones.
@@ -130,12 +131,16 @@ in the different vessel systems in these territories.
 These vascular territories with corresponding vessel segments are then used to calculate 
 and visuzalize different liver segments.
 
+**Resection Volumetry**
+A tool for calculating segment sizes.
+
 # Prelinimary results
 
 **Improved Definition of Virtual Resections**
-We developed computer-aided preoperative planning systems \autoref{fig:1},
+SlicerLiver contain computer-aided preoperative planning systems,
 streamlining the resection planning process and introducing
-real-time 3D cutting path visualization [@Aghayan:2023]. Our approach empowers surgeons to make decisions based on individual patient
+real-time 3D cutting path visualization [@Aghayan:2023], shown in \autoref{fig:1}. 
+Our approach empowers surgeons to make decisions based on individual patient
 needs, enhancing outcomes for both atypical and anatomical
 resections. Notably, our proposed new resection method
 aims to obtain better parenchyma preservation compared to
@@ -144,8 +149,8 @@ existing methods.
 ![Specification of a virtual resection with visualization of safety margins.\label{fig:1}](Screenshots/Slicer-Liver_screenshot_04.png)
 
 **Improved Visualization of Virtual Resections**
-We successfully implemented the Resectograms method \autoref{fig:2},
-a real-time 2D representation of resections into SlicerLiver [@Meng:2023]. 
+The Resectograms method is also implemented in SlicerLiver,
+a real-time 2D representation of resections [@Meng:2023], see example in \autoref{fig:2}. 
 The Resectogram provides an intuitive and occlusionfree visualization of virtual liver resection plans, with three
 components: resection cross-section, resection anatomy segments, and resection safety margins. Notably, Resectograms
 effectively identify and characterize invalid resection types due
@@ -158,7 +163,7 @@ improved patient outcomes.
 
 **Improved Classification of Liver Segments**
 The functionality of SlicerLiver also includes a novel approach to
-segment liver functional segments [@{d'Albenzio:2023}] \autoref{fig:3}. The method
+segment liver functional segments [@{d'Albenzio:2023}], see \autoref{fig:3}. The method
 uses the liver morphology, the interior vascular network,
 and user-defined landmarks to provide enhanced flexibility in
 marker placement, distinguishing it from existing methods. By
@@ -172,7 +177,7 @@ marking process, are needed, our approach holds significant
 promise for improving liver surgery planning and has the
 potential to optimize surgical outcomes.
 
-![Visializing liver segments based on marking hepatic and portal vessels around tumor.\label{fig:3}](Screenshots/JossFigure3.png)
+![Visializing liver segments based on marking hepatic and portal vessel segments around the tumor.\label{fig:3}](Screenshots/JossFigure3.png)
 
 # Acknowledgements
 This work was conducted as part of the ALive project, funded by the Research Council of Norway under IKTPLUSS (grant nr. 311393).
