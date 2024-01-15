@@ -294,6 +294,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.enableWidgetButtons(False)
 
     self.updateVascTerrList(vasc_terr_ID_combox, vasc_terr_segmentationNode)
+    self.ui.vascularTerritoryId.setCurrentIndex(1)
     displayNode = vasc_terr_segmentationNode.GetDisplayNode()
     if displayNode:
       displayNode.SetOpacity3D(0.3)
@@ -318,6 +319,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def updateVascTerrList(self, vasc_terr_ID_list, vascular_territory_segm_node):
     segments = vascular_territory_segm_node.GetSegmentation().GetSegmentIDs()
+    vasc_terr_ID_list.blockSignals(True)
     vasc_terr_ID_list.clear()
     initString = 'Create new territory ID'
     vasc_terr_ID_list.addItem(initString)
@@ -326,13 +328,12 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       # No vascular territory segmentations
       return
     #Start populating Vascular Territory list
-
-    vasc_terr_ID_list.blockSignals(True)
     index = 0
     for idString in segments:
       index = index+1
       vasc_terr_ID_list.addItem(idString)
       self.colormap.SetColorName(index, idString)
+      vasc_terr_ID_list.setCurrentIndex(index)
       self.onSegmentChanged()
     vasc_terr_ID_list.setCurrentIndex(1)
     vasc_terr_ID_list.blockSignals(False)
