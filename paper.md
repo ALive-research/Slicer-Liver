@@ -144,7 +144,7 @@ existing methods.
 ![Specification of a virtual resection with visualization of safety margins.\label{fig:1}](Screenshots/Slicer-Liver_screenshot_04.png)
 
 **Improved Visualization of Virtual Resections**
-We successfully implemented the Resectograms method (Fig. 1.b),
+We successfully implemented the Resectograms method \autoref{fig:2},
 a real-time 2D representation of resections into SlicerLiver [@Meng:2023]. 
 The Resectogram provides an intuitive and occlusionfree visualization of virtual liver resection plans, with three
 components: resection cross-section, resection anatomy segments, and resection safety margins. Notably, Resectograms
@@ -153,6 +153,8 @@ to inadequate visualization during virtual planning, thus improving surgical acc
 enhance the liver surgery workflow, empowering surgeons with
 valuable insights for optimized liver resection strategies and
 improved patient outcomes.
+
+![Virtual 3D resection with corresponding 2D resectogram.\label{fig:2}](Screenshots/JossFigure2.jpg)
 
 **Improved Classification of Liver Segments**
 The functionality of SlicerLiver also includes a novel approach to
@@ -170,7 +172,7 @@ marking process, are needed, our approach holds significant
 promise for improving liver surgery planning and has the
 potential to optimize surgical outcomes.
 
-![Visializing liver segments.\label{fig:3}](Screenshots/Slicer-Liver_screenshot_14.jpg)
+![Visializing liver segments based on marking hepatic and portal vessels around tumor.\label{fig:3}](Screenshots/JossFigure3.jpg)
 
 # Acknowledgements
 This work was conducted as part of the ALive project, funded by the Research Council of Norway under IKTPLUSS (grant nr. 311393).
