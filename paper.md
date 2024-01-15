@@ -154,7 +154,7 @@ enhance the liver surgery workflow, empowering surgeons with
 valuable insights for optimized liver resection strategies and
 improved patient outcomes.
 
-![Virtual 3D resection with corresponding 2D resectogram.\label{fig:2}](Screenshots/JossFigure2.jpg)
+![Virtual 3D resection with corresponding 2D resectogram.\label{fig:2}](Screenshots/JossFigure2.png)
 
 **Improved Classification of Liver Segments**
 The functionality of SlicerLiver also includes a novel approach to
@@ -172,7 +172,7 @@ marking process, are needed, our approach holds significant
 promise for improving liver surgery planning and has the
 potential to optimize surgical outcomes.
 
-![Visializing liver segments based on marking hepatic and portal vessels around tumor.\label{fig:3}](Screenshots/JossFigure3.jpg)
+![Visializing liver segments based on marking hepatic and portal vessels around tumor.\label{fig:3}](Screenshots/JossFigure3.png)
 
 # Acknowledgements
 This work was conducted as part of the ALive project, funded by the Research Council of Norway under IKTPLUSS (grant nr. 311393).
