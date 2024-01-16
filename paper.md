@@ -40,12 +40,12 @@ bibliography: paper.bib
 
 # Summary
 
-This paper introduces SlicerLiver, a software extension to the [3D Slicer](https://slicer.org "3D Slicer")
+This paper introduces SlicerLiver, a software extension to the 3D Slicer (https://slicer.org)
 image computing platform [@Kikinis:2013]. The software address challenges in liver surgery planning by 
 applying geometric modeling and artificial intelligence to generate liver tumor 
 resection plans for complex cases, developing parameterized patient-specific 
-vascular models, and creating computational methods for resection visualization 
-in 2D. Progress and preliminary results show improvements in defining virtual 
+vascular territory segments, and creating computational methods for resection visualization 
+in both 2D and 3D. Progress and preliminary results show improvements in defining virtual 
 resections, visualizing resections using Resectograms and classifying liver 
 segments accurately. These contributions hold promise in enhancing liver surgery 
 planning and potentially improving patient outcomes.
@@ -67,9 +67,8 @@ deformable surfaces [@Preim:2013], [@Palomar:2017], have shown limitations. Ther
 need for new algorithms capable of generating precise, rapid, and straightforward 
 resection plans, even in complex cases.
 
-Furthermore, blood supply to various liver regions or vascu-
-lar territories is crucial for liver resection planning. The estab-
-lished anatomical division of the liver, such as the Couinaud
+Furthermore, blood supply to various liver regions or vascular territories is crucial for liver resection planning. 
+The established anatomical division of the liver, such as the Couinaud
 division is under question [@Warmann:2016], [@Bismuth:2013]. This calls for innovative
 liver analytics methods that can enable the calculation of
 various types of vascular territories.
@@ -77,22 +76,21 @@ various types of vascular territories.
 Another challenge is the absence of a broad consensus on
 the definition of a good resection, which is partly due to the
 lack of formal methods to specify and communicate resection
-plans. Existing methods, such as subjective descriptions, hand-
-drawings, and pictures, often result in biased and imprecise
-descriptions of surgical plans. The complexity of 3D models
+plans. Existing methods, such as subjective descriptions, hand drawings, and pictures, often result 
+in biased and imprecise descriptions of surgical plans. The complexity of 3D models
 also hampers their inclusion in 2D media such as medical
-records and scientific journals. Therefore, visualization tech-
-niques that can capture and communicate critical information
+records and scientific journals. Therefore, visualization techniques that can capture and 
+communicate critical information
 from a resection plan in a compact form, interpretable by
 clinical experts, are needed.
 
-In response to these challenges, the SLiverLiver project aims to support
+In response to these challenges, the SlicerLiver project aims to support
 three research objectives:
 1) Apply geometric modeling and artificial intelligence to
 generate resection plans suitable for complex cases, such
 as those involving multiple metastases with multiple
-resections.
-2) Generate parameterized patient-specific vascular models
+resections. Visualization of resection margins will also be included.
+2) Generate parameterized patient-specific vascular territory segments
 that include both portal and hepatic vessels systems,
 allowing for the calculation of diverse liver vascular
 territories.
@@ -126,15 +124,15 @@ intil the safety margins are met.
 Use the resection surface from the previous section to calculate a flat 2D visualization of the resection margin.
 
 **Liver Segments**
-The user can define different vascular territories and one or more vessel segments 
-in the different vessel systems in these territories.
+The user can define different vascular territories based on segmented patient-specific vessel systems for the liver 
+(portal and hepatic).
 These vascular territories with corresponding vessel segments are then used to calculate 
 and visuzalize different liver segments.
 
 **Resection Volumetry**
 A tool for calculating segment sizes.
 
-# Prelinimary results
+# Preliminary results
 
 **Improved Definition of Virtual Resections**
 SlicerLiver contain computer-aided preoperative planning systems,
@@ -177,7 +175,7 @@ marking process, are needed, our approach holds significant
 promise for improving liver surgery planning and has the
 potential to optimize surgical outcomes.
 
-![Visializing liver segments based on marking hepatic and portal vessel segments around the tumor.\label{fig:3}](Screenshots/JossFigure3.png)
+![Visualizing liver segments based on annotated hepatic and portal vessel segments around the tumor.\label{fig:3}](Screenshots/JossFigure3.png)
 
 # Acknowledgements
 This work was conducted as part of the ALive project, funded by the Research Council of Norway under IKTPLUSS (grant nr. 311393).
