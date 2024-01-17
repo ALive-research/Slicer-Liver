@@ -41,7 +41,7 @@ bibliography: paper.bib
 # Summary
 
 This paper introduces SlicerLiver, a software extension to the 3D Slicer (https://slicer.org)
-image computing platform [@Kikinis:2013]. The software address challenges in liver surgery planning by 
+image computing platform [@Kikinis:2013]. The software addresses challenges in liver surgery planning by 
 applying geometric modeling and artificial intelligence to generate liver tumor 
 resection plans for complex cases, developing parameterized patient-specific 
 vascular territory segments, and creating computational methods for resection visualization 
