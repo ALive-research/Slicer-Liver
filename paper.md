@@ -13,7 +13,7 @@ authors:
     corresponding: true
     affiliation: "1, 2" # (Multiple affiliations must be quoted)
   - name: Ruoyan Meng
-    orcid: 0000-0000-0000-0000
+    orcid: 0000-0003-0246-0011
     equal-contrib: true
     affiliation: 2
   - name: Gabriella D'Albenzio
@@ -157,7 +157,7 @@ enhance the liver surgery workflow, empowering surgeons with
 valuable insights for optimized liver resection strategies and
 improved patient outcomes.
 
-![Virtual 3D resection with corresponding 2D resectogram.\label{fig:2}](Screenshots/JossFigure2.png)
+![Virtual 3D resection with corresponding 2D resectogram.\label{fig:2}](Screenshots/resectograms-overview.svg)
 
 **Improved Classification of Liver Segments**
 The functionality of SlicerLiver also includes a novel approach to
