@@ -157,7 +157,7 @@ enhance the liver surgery workflow, empowering surgeons with
 valuable insights for optimized liver resection strategies and
 improved patient outcomes.
 
-![Virtual 3D resection with corresponding 2D resectogram.\label{fig:2}](Screenshots/resectograms-overview.svg)
+![Virtual 3D resection with corresponding 2D resectogram.\label{fig:2}](Screenshots/resectograms-overview.svg){ width=100% }
 
 **Improved Classification of Liver Segments**
 The functionality of SlicerLiver also includes a novel approach to
