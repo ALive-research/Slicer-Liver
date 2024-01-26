@@ -113,6 +113,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.nodeSelectors = [
         (self.ui.inputSurfaceSelector, "InputSurface"),
         (self.ui.endPointsMarkupsSelector, "CenterlineSegment"),
+        (self.ui.selectedVascularTerritorySegmId, "VascularTerritorySegmentation")
         ]
 
     # Set scene in MRML widgets. Make sure that in Qt designer
@@ -139,6 +140,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #self.ui.endPointsMarkupsSelector.connect('nodeAdded(vtkMRMLNode*)', self.newEndpointsListCreated)
     self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.segmentationNodeSelected)
     self.ui.vascularTerritoryId.connect('currentIndexChanged(int)', self.onVascularTerritoryIdChanged)
+    self.ui.selectedVascularTerritorySegmId.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
     self.ui.selectedVascularTerritorySegmId.connect('currentNodeChanged(bool)', self.vascular_territory_segmentationNodeSelected)
 
     self.ui.selectedVascularTerritorySegmId.setNodeTypeLabel('Vascular Territory Segmentation', 'vtkMRMLSegmentationNode')
@@ -166,7 +168,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.ColorPickerButton.connect('colorChanged(QColor)', self.onColorChanged)
     self.ui.showHideButton.connect('clicked(bool)', self.onShowHideButton)
 
-    self.enableWidgetButtons(False)
+    #self.enableWidgetButtons(False)
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
 
@@ -453,6 +455,9 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     inputSurfaceNode = self._parameterNode.GetNodeReference("InputSurface")
     if inputSurfaceNode and inputSurfaceNode.IsA("vtkMRMLSegmentationNode"):
         self.ui.inputSegmentSelectorWidget.setCurrentSegmentID(self._parameterNode.GetParameter("InputSegmentID"))
+    vascularTerritorySegmNode = self._parameterNode.GetNodeReference("VascularTerritorySegmentation")
+    if vascularTerritorySegmNode and vascularTerritorySegmNode.IsA("vtkMRMLSegmentationNode"):
+        self.enableWidgetButtons(True)
 
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
