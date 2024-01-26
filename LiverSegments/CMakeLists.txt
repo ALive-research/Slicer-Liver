@@ -24,6 +24,29 @@ slicerMacroBuildScriptedModule(
   WITH_GENERIC_TESTS
   )
 
+
+# #-----------------------------------------------------------------------------
+# set(MODULE_EXPORT_DIRECTIVE "Q_SLICER_QTMODULES_${MODULE_NAME_UPPER}_EXPORT")
+
+# set(MODULE_INCLUDE_DIRECTORIES
+#   ${CMAKE_CURRENT_SOURCE_DIR}/Logic
+#   ${CMAKE_CURRENT_BINARY_DIR}/Logic
+#   )
+
+# #-----------------------------------------------------------------------------
+# slicerMacroBuildLoadableModule(
+#   NAME ${MODULE_NAME}
+#   TITLE ${MODULE_TITLE}
+#   EXPORT_DIRECTIVE ${MODULE_EXPORT_DIRECTIVE}
+#   INCLUDE_DIRECTORIES ${MODULE_INCLUDE_DIRECTORIES}
+#   SRCS ${MODULE_SRCS}
+#   MOC_SRCS ${MODULE_MOC_SRCS}
+#   UI_SRCS ${MODULE_UI_SRCS}
+#   TARGET_LIBRARIES ${MODULE_TARGET_LIBRARIES}
+#   RESOURCES ${MODULE_RESOURCES}
+#   # WITH_GENERIC_TESTS
+#   )
+
 #-----------------------------------------------------------------------------
 if(BUILD_TESTING)
 
