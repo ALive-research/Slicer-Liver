@@ -69,7 +69,7 @@ namespace
 int TestDefaults();
 }
 
-int vtkLiverSegmentsLogicTest1(int vtkNotUsed(argc), char * vtkNotUsed(argv)[])
+int vtkSlicerLiverSegmentsLogicTest1(int vtkNotUsed(argc), char * vtkNotUsed(argv)[])
 {
     CHECK_EXIT_SUCCESS(TestDefaults());
     return EXIT_SUCCESS;
