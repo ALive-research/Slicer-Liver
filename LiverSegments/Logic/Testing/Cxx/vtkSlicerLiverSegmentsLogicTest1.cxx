@@ -45,10 +45,10 @@
 // MRML includes
 #include "vtkMRMLCoreTestingMacros.h"
 #include "vtkMRMLScene.h"
+#include <vtkMRMLLabelMapVolumeNode.h>
 
-// VTK includes
-// #include <vtkTimerLog.h>
-
+// VTKSlicer includes
+#include <vtkMRMLLiverResectionNode.h>
 
 // VTK includes
 #include "qMRMLWidget.h"
@@ -67,11 +67,13 @@ using namespace vtkMRMLCoreTestingUtilities;
 namespace
 {
 int TestDefaults();
+int TestFunctions();
 }
 
 int vtkSlicerLiverSegmentsLogicTest1(int vtkNotUsed(argc), char * vtkNotUsed(argv)[])
 {
     CHECK_EXIT_SUCCESS(TestDefaults());
+    CHECK_EXIT_SUCCESS(TestFunctions());
     return EXIT_SUCCESS;
 }
 namespace
@@ -80,24 +82,31 @@ namespace
 //----------------------------------------------------------------------------
 int TestDefaults()
 {
+    std::cout << "TestDefaults" << std::endl;
     // vtkNew<vtkMRMLScene> scene;
-    // vtkLiverSegmentsLogic* liverSegmentsLogic = vtkLiverSegmentsLogic::New();
+    vtkLiverSegmentsLogic* liverSegmentsLogic = vtkLiverSegmentsLogic::New();
+    liverSegmentsLogic->Delete();
+    return EXIT_SUCCESS;
+}
 
-    // vtkNew<vtkTimerLog> overallTimer;
-    // overallTimer->StartTimer();
+int TestFunctions()
+{
+    std::cout << "TestFunctions" << std::endl;
+    vtkLiverSegmentsLogic* liverSegmentsLogic = vtkLiverSegmentsLogic::New();
+    vtkNew<vtkMRMLModelNode> segment;
+    int segmentId = 1;
 
-    // // liverSegmentsLogic->SetMRMLScene(scene.GetPointer());
+    vtkNew<vtkMRMLModelNode> summedCenterline;
+    vtkNew<vtkMRMLModelNode> segmentCenterline;
+    vtkNew<vtkMRMLModelNode> centerlineModel;
+    vtkNew<vtkMRMLLabelMapVolumeNode> labelMap;
 
-    // overallTimer->StopTimer();
-    // std::cout << "Init vtkLiverSegmentsLogic: " << overallTimer->GetElapsedTime() << "s"
-    //           << " " << 1. / overallTimer->GetElapsedTime() << "fps" << std::endl;
-    // overallTimer->StartTimer();
+    // liverSegmentsLogic->MarkSegmentWithID(segment, segmentId);
+    // liverSegmentsLogic->AddSegmentToCenterlineModel(summedCenterline, segmentCenterline);
+    // liverSegmentsLogic->SegmentClassificationProcessing(centerlineModel, labelMap);
+    // liverSegmentsLogic->InitializeCenterlineSearchModel(summedCenterline);
 
-    // liverSegmentsLogic->Delete();
-
-    // std::cout << "Delete vtkLiverSegmentsLogic: " << overallTimer->GetElapsedTime() << "s"
-    //           << " " << 1. / overallTimer->GetElapsedTime() << "fps" << std::endl;
-
+    liverSegmentsLogic->Delete();
     return EXIT_SUCCESS;
 }
 
