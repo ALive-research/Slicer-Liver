@@ -94,7 +94,7 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   vtkMRMLCopyContentDefaultMacro(vtkMRMLLiverResectionNode);
 
   /// Create default storage node or nullptr if does not have one
-  vtkMRMLStorageNode* CreateDefaultStorageNode();
+  vtkMRMLStorageNode* CreateDefaultStorageNode() override;
 
 
   // TODO: Review the need for this further down the road

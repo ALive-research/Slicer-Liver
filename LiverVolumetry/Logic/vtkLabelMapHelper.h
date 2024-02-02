@@ -66,7 +66,7 @@ vtkLabelMapHelper: public vtkObject
  public:
   static vtkLabelMapHelper* New();
  vtkTypeMacro(vtkLabelMapHelper, vtkObject);
-  void PrintSelf(ostream &os, vtkIndent indent);
+  void PrintSelf(ostream &os, vtkIndent indent) override;
 
   //Type definitions
   typedef itk::Image<short, 3> LabelMapType;

@@ -80,7 +80,7 @@ vtkMRMLLiverResectionsDisplayableManager2D
 
 // Description:
 // VTK-specific function for print out information
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) override;
 
  protected:
 
@@ -92,12 +92,12 @@ vtkMRMLLiverResectionsDisplayableManager2D
 
 // Description:
 // MRML virtual functions
-  virtual void SetMRMLSceneInternal(vtkMRMLScene *newScene);
-  virtual void ProcessMRMLNodesEvents(vtkObject *caller, unsigned long event, void *callData);
-  virtual void OnMRMLSceneNodeAdded(vtkMRMLNode *node);
-  virtual void OnMRMLNodeModified(vtkMRMLNode *node);
-  virtual void OnMRMLSceneNodeRemoved(vtkMRMLNode *node);
-  virtual void OnMRMLSceneEndClose();
+  virtual void SetMRMLSceneInternal(vtkMRMLScene *newScene) override;
+  virtual void ProcessMRMLNodesEvents(vtkObject *caller, unsigned long event, void *callData) override;
+  virtual void OnMRMLSceneNodeAdded(vtkMRMLNode *node) override;
+  virtual void OnMRMLNodeModified(vtkMRMLNode *node) override;
+  virtual void OnMRMLSceneNodeRemoved(vtkMRMLNode *node) override;
+  virtual void OnMRMLSceneEndClose() override;
 
  protected:
 
