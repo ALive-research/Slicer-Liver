@@ -53,6 +53,7 @@
 // VTK includes
 #include "qMRMLWidget.h"
 #include <vtkTestingOutputWindow.h>
+#include <vtkSphereSource.h>
 
 
 // LiverSegments includes
@@ -82,7 +83,6 @@ namespace
 //----------------------------------------------------------------------------
 int TestDefaults()
 {
-    std::cout << "TestDefaults" << std::endl;
     // vtkNew<vtkMRMLScene> scene;
     vtkLiverSegmentsLogic* liverSegmentsLogic = vtkLiverSegmentsLogic::New();
     liverSegmentsLogic->Delete();
@@ -91,20 +91,21 @@ int TestDefaults()
 
 int TestFunctions()
 {
-    std::cout << "TestFunctions" << std::endl;
     vtkLiverSegmentsLogic* liverSegmentsLogic = vtkLiverSegmentsLogic::New();
-    vtkNew<vtkMRMLModelNode> segment;
     int segmentId = 1;
-
-    vtkNew<vtkMRMLModelNode> summedCenterline;
-    vtkNew<vtkMRMLModelNode> segmentCenterline;
-    vtkNew<vtkMRMLModelNode> centerlineModel;
+    
+    //Init segment
+    vtkNew<vtkMRMLModelNode> segment;
+    vtkNew<vtkSphereSource> source;
+    segment->SetPolyDataConnection(source->GetOutputPort());
+    
+    //TODO: Init labelMap
     vtkNew<vtkMRMLLabelMapVolumeNode> labelMap;
 
-    // liverSegmentsLogic->MarkSegmentWithID(segment, segmentId);
-    // liverSegmentsLogic->AddSegmentToCenterlineModel(summedCenterline, segmentCenterline);
-    // liverSegmentsLogic->SegmentClassificationProcessing(centerlineModel, labelMap);
-    // liverSegmentsLogic->InitializeCenterlineSearchModel(summedCenterline);
+    liverSegmentsLogic->MarkSegmentWithID(segment, segmentId);
+    liverSegmentsLogic->AddSegmentToCenterlineModel(segment, segment);
+//    liverSegmentsLogic->SegmentClassificationProcessing(segment, labelMap);//TODO
+    liverSegmentsLogic->InitializeCenterlineSearchModel(segment);
 
     liverSegmentsLogic->Delete();
     return EXIT_SUCCESS;
