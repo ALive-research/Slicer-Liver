@@ -54,6 +54,7 @@
 #include "qMRMLWidget.h"
 #include <vtkTestingOutputWindow.h>
 #include <vtkSphereSource.h>
+#include <vtkImageData.h>
 
 
 // LiverSegments includes
@@ -99,15 +100,24 @@ int TestFunctions()
     vtkNew<vtkSphereSource> source;
     segment->SetPolyDataConnection(source->GetOutputPort());
     
-    //TODO: Init labelMap
+    //Create dummy data
+    vtkNew<vtkImageData> dummyImageData;
+    int size = 1;
+    dummyImageData->SetExtent(0, size, 0, size, 0, size);
+    dummyImageData->SetSpacing(1, 1, 1);
+    dummyImageData->AllocateScalars(VTK_UNSIGNED_CHAR, 1);
+    
+    //Init labelMap
     vtkNew<vtkMRMLLabelMapVolumeNode> labelMap;
-
+    labelMap->SetAndObserveImageData(dummyImageData);
+    
     liverSegmentsLogic->MarkSegmentWithID(segment, segmentId);
     liverSegmentsLogic->AddSegmentToCenterlineModel(segment, segment);
-//    liverSegmentsLogic->SegmentClassificationProcessing(segment, labelMap);//TODO
+    liverSegmentsLogic->SegmentClassificationProcessing(segment, labelMap);
     liverSegmentsLogic->InitializeCenterlineSearchModel(segment);
 
     liverSegmentsLogic->Delete();
+    
     return EXIT_SUCCESS;
 }
 
