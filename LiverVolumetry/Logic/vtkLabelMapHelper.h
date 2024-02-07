@@ -98,8 +98,7 @@ vtkLabelMapHelper: public vtkObject
   static unsigned int
   ProjectPointsOntoItkImage(LabelMapType::Pointer itkImage,
                             vtkPoints *points,
-                            unsigned short projectionValue,
-                            unsigned int radius=0);
+                            unsigned short projectionValue);
 
 
   // Description:
