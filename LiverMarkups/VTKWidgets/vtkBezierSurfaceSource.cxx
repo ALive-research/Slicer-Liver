@@ -382,7 +382,7 @@ void vtkBezierSurfaceSource::ComputeBinomialCoefficients()
   unsigned int yGrid = this->NumberOfControlPoints[1];
 
 #pragma omp parallel for
-  for (int i=0; i<xGrid; i++)
+  for (unsigned int i=0; i<xGrid; i++)
     {
     this->BinomialCoefficientsX[i] =
       Factorial(xGrid-1) /
@@ -393,7 +393,7 @@ void vtkBezierSurfaceSource::ComputeBinomialCoefficients()
   if (xGrid != yGrid)
     {
 #pragma omp parallel for
-    for (int i=0; i<yGrid; i++)
+    for (unsigned int i=0; i<yGrid; i++)
       {
       this->BinomialCoefficientsY[i] =
         Factorial(yGrid-1) /
@@ -403,7 +403,7 @@ void vtkBezierSurfaceSource::ComputeBinomialCoefficients()
   else
     {
 #pragma omp parallel for
-    for (int i=0; i<xGrid; i++)
+    for (unsigned int i=0; i<xGrid; i++)
       {
       this->BinomialCoefficientsY[i] = this->BinomialCoefficientsX[i];
       }
@@ -436,7 +436,7 @@ void vtkBezierSurfaceSource::EvaluateBezierSurface(vtkPoints *points)
   unsigned int yRes = this->Resolution[1];
 
 #pragma omp parallel for
-  for (int i=0; i<xRes; i++)
+  for (unsigned int i=0; i<xRes; i++)
     {
     double u;
     u = i / static_cast<double>(xRes - 1);
