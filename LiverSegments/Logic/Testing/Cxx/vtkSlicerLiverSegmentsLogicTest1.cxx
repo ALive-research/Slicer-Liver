@@ -116,6 +116,8 @@ int TestFunctions()
     liverSegmentsLogic->SegmentClassificationProcessing(segment, labelMap);
     liverSegmentsLogic->InitializeCenterlineSearchModel(segment);
 
+    liverSegmentsLogic->calculateVascularTerritoryMap(nullptr);
+
     liverSegmentsLogic->Delete();
     
     return EXIT_SUCCESS;

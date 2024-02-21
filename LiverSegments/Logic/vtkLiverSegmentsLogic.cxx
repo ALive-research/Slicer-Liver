@@ -43,6 +43,8 @@
 #include <vtkMRMLSegmentationNode.h>
 #include <vtkMRMLModelNode.h>
 
+#include <vtkMRMLScene.h>
+
 #include <vtkObjectFactory.h>
 #include <vtkImageData.h>
 #include <vtkImageIterator.h>
@@ -159,4 +161,45 @@ void vtkLiverSegmentsLogic::InitializeCenterlineSearchModel(vtkMRMLModelNode *su
         std::cout << "Error: No PointData in centerline model" << std::endl;
 }
 
+void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNode* segmentation)
+{
+  vtkMRMLScene *scene = this->GetMRMLScene();
+//  auto labelmapVolumeNode = scene->AddNewNodeByClass("vtkMRMLLabelMapVolumeNode");//crash?
+  return;
+  
+  auto segmentationIds = vtkSmartPointer<vtkStringArray>::New();
+  
+  
+  //Get voxels tagged as liver
+  if(segmentation)
+    auto segmentId = segmentation->GetSegmentation()->GetSegmentIdBySegmentName("liver");
+  
+  //Check metadata for segmentation
+  auto segm = segmentation->GetSegmentation();
+  
+//numberOfSegments = segm.GetNumberOfSegments()
+//logging.info('Number of segments: ' + str(numberOfSegments))
+//liverSegm = segm.GetSegment(segmentId)
+//if liverSegm is not None:
+//  logging.info('Segment name: ' + liverSegm.GetName())
+//  logging.info('Segment Label: ' + str(liverSegm.GetLabelValue()))
+
+//segmentationIds.InsertNextValue(segmentId)
+//slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume)
+
+//result = self.scl.SegmentClassificationProcessing(centerlineModel, labelmapVolumeNode)
+//if result==0:
+//  logging.error("Corrupt centerline model - Not possible to calculate vascular segments")
+
+//labelmapVolumeNode.GetDisplayNode().SetAndObserveColorNodeID(colormap.GetID())
+//slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
+//vascularTerritorySegmentationNode.Reset(None)#Existing node will be overwritten
+
+//#Create segmentation from labelmap volume
+//vascularTerritorySegmentationNode.CreateDefaultDisplayNodes() # only needed for display
+//slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(labelmapVolumeNode, vascularTerritorySegmentationNode)
+//vascularTerritorySegmentationNode.CreateClosedSurfaceRepresentation()
+//slicer.mrmlScene.RemoveNode(labelmapVolumeNode)
+  
+}
 
