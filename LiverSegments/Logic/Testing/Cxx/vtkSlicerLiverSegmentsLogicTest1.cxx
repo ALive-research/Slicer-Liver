@@ -84,7 +84,6 @@ namespace
 //----------------------------------------------------------------------------
 int TestDefaults()
 {
-    // vtkNew<vtkMRMLScene> scene;
     vtkLiverSegmentsLogic* liverSegmentsLogic = vtkLiverSegmentsLogic::New();
     liverSegmentsLogic->Delete();
     return EXIT_SUCCESS;
@@ -116,7 +115,9 @@ int TestFunctions()
     liverSegmentsLogic->SegmentClassificationProcessing(segment, labelMap);
     liverSegmentsLogic->InitializeCenterlineSearchModel(segment);
 
-    liverSegmentsLogic->calculateVascularTerritoryMap(nullptr);
+    vtkNew<vtkMRMLScene> scene;
+    liverSegmentsLogic->SetMRMLScene(scene);
+    liverSegmentsLogic->calculateVascularTerritoryMap(nullptr, nullptr);
 
     liverSegmentsLogic->Delete();
     

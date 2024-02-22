@@ -72,7 +72,7 @@ vtkLiverSegmentsLogic : public vtkSlicerModuleLogic
   void AddSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline);
   int  SegmentClassificationProcessing(vtkMRMLModelNode *centerlineModel, vtkMRMLLabelMapVolumeNode *labelMap);
   void InitializeCenterlineSearchModel(vtkMRMLModelNode *summedCenterline);
-  void calculateVascularTerritoryMap(vtkMRMLSegmentationNode* segmentation);
+  void calculateVascularTerritoryMap(vtkMRMLSegmentationNode* segmentation, vtkMRMLLabelMapVolumeNode* refVolume);
 
  protected:
   vtkLiverSegmentsLogic();

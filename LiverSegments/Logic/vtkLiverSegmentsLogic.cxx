@@ -44,6 +44,7 @@
 #include <vtkMRMLModelNode.h>
 
 #include <vtkMRMLScene.h>
+#include <vtkSlicerSegmentationsModuleLogic.h>
 
 #include <vtkObjectFactory.h>
 #include <vtkImageData.h>
@@ -161,31 +162,38 @@ void vtkLiverSegmentsLogic::InitializeCenterlineSearchModel(vtkMRMLModelNode *su
         std::cout << "Error: No PointData in centerline model" << std::endl;
 }
 
-void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNode* segmentation)
+void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNode* segmentation, vtkMRMLLabelMapVolumeNode* refVolume)
 {
-  vtkMRMLScene *scene = this->GetMRMLScene();
-//  auto labelmapVolumeNode = scene->AddNewNodeByClass("vtkMRMLLabelMapVolumeNode");//crash?
-  return;
-  
+    auto mrmlScene = this->GetMRMLScene();
+
+    if (!mrmlScene)
+        vtkErrorMacro("Error in calculateVascularTerritoryMap: no valid MRML scene.");
+
+  vtkMRMLNode* labelmapNode = mrmlScene->AddNewNodeByClass("vtkMRMLLabelMapVolumeNode");
+  vtkMRMLLabelMapVolumeNode* labelmapVolumeNode = vtkMRMLLabelMapVolumeNode::SafeDownCast(labelmapNode);
   auto segmentationIds = vtkSmartPointer<vtkStringArray>::New();
   
-  
-  //Get voxels tagged as liver
-  if(segmentation)
-    auto segmentId = segmentation->GetSegmentation()->GetSegmentIdBySegmentName("liver");
-  
-  //Check metadata for segmentation
-  auto segm = segmentation->GetSegmentation();
-  
-//numberOfSegments = segm.GetNumberOfSegments()
-//logging.info('Number of segments: ' + str(numberOfSegments))
-//liverSegm = segm.GetSegment(segmentId)
-//if liverSegm is not None:
-//  logging.info('Segment name: ' + liverSegm.GetName())
-//  logging.info('Segment Label: ' + str(liverSegm.GetLabelValue()))
+  if(!segmentation)
+  {
+      //Allow function to run with nullptr as input
+      // vtkErrorMacro("Error in calculateVascularTerritoryMap: no input segmentation");
+      return;
+  }
 
-//segmentationIds.InsertNextValue(segmentId)
-//slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume)
+  //Get voxels tagged as liver
+  std::string segmentId = segmentation->GetSegmentation()->GetSegmentIdBySegmentName("liver");
+  //Check metadata for segmentation
+  vtkSegmentation* segm = segmentation->GetSegmentation();
+  int numberOfSegments = segm->GetNumberOfSegments();
+  std::cout << "Liver segmentId: "  << segmentId << " numberOfSegments: " << numberOfSegments << std::endl;
+
+  vtkSegment* liverSegm = segm->GetSegment(segmentId);
+  if(liverSegm)
+      std::cout << "Segment name: "  << liverSegm->GetName() << " Segment label: " << liverSegm->GetLabelValue() << std::endl;
+
+  segmentationIds->InsertNextValue(segmentId);
+  vtkSlicerSegmentationsModuleLogic::ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume);
+
 
 //result = self.scl.SegmentClassificationProcessing(centerlineModel, labelmapVolumeNode)
 //if result==0:

@@ -48,9 +48,11 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
   def vtkLogicFunctions(self):
     from vtkSlicerLiverSegmentsModuleLogicPython import vtkLiverSegmentsLogic
     vtkLogic = vtkLiverSegmentsLogic()
+    vtkLogic.SetMRMLScene(slicer.mrmlScene)
         
     segmentation = self.createEmptyvtkMRMLSegmentationNode()
-    vtkLogic.calculateVascularTerritoryMap(segmentation)
+    refVolume = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
+    vtkLogic.calculateVascularTerritoryMap(segmentation, refVolume)
 
   def create2EmptyMarkupsFiducialNodes(self):
     emptyNode = slicer.mrmlScene.CreateNodeByClass("vtkMRMLMarkupsFiducialNode")
