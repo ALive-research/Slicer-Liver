@@ -34,10 +34,10 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
 
     centerlineModel = logic.build_centerline_model(colormap)
 
-    refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
-    segmentation = self.createEmptyvtkMRMLSegmentationNode()
-    segmentationVascular = self.createEmptyvtkMRMLSegmentationNode()
-    logic.calculateVascularTerritoryMap(segmentationVascular, refVolumeNode, segmentation, centerlineModel, colormap)
+#    refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
+#    segmentation = self.createEmptyvtkMRMLSegmentationNode()
+#    segmentationVascular = self.createEmptyvtkMRMLSegmentationNode()
+#    logic.calculateVascularTerritoryMap(segmentationVascular, refVolumeNode, segmentation, centerlineModel, colormap)
 
     node1, node2 = self.create2EmptyMarkupsFiducialNodes()
     logic.copyIndex(node1, node2)
@@ -49,10 +49,14 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
     from vtkSlicerLiverSegmentsModuleLogicPython import vtkLiverSegmentsLogic
     vtkLogic = vtkLiverSegmentsLogic()
     vtkLogic.SetMRMLScene(slicer.mrmlScene)
-        
+    
+    segmentationVascular = self.createEmptyvtkMRMLSegmentationNode()
     segmentation = self.createEmptyvtkMRMLSegmentationNode()
     refVolume = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
-    vtkLogic.calculateVascularTerritoryMap(segmentation, refVolume)
+    colormap = slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels')
+    logic.createCompleteCenterlineModel(colormap)
+    centerlineModel = logic.build_centerline_model(colormap)
+    vtkLogic.calculateVascularTerritoryMap(segmentationVascular, refVolume, segmentation, centerlineModel, colormap)
 
   def create2EmptyMarkupsFiducialNodes(self):
     emptyNode = slicer.mrmlScene.CreateNodeByClass("vtkMRMLMarkupsFiducialNode")

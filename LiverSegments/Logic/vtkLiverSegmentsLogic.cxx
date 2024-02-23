@@ -42,6 +42,7 @@
 #include <vtkMRMLLabelMapVolumeNode.h>
 #include <vtkMRMLSegmentationNode.h>
 #include <vtkMRMLModelNode.h>
+#include <vtkMRMLDisplayNode.h>
 
 #include <vtkMRMLScene.h>
 #include <vtkSlicerSegmentationsModuleLogic.h>
@@ -85,6 +86,13 @@ void vtkLiverSegmentsLogic::MarkSegmentWithID(vtkMRMLModelNode *segment, int seg
 {
     auto idArray = vtkSmartPointer<vtkIntArray>::New();
     idArray->SetName("segmentId");
+    
+    if(!segment) //Allow function to run with nullptr as input
+    {
+        std::cout << "MarkSegmentWithID Error: No input" << std::endl;
+        return;
+    }
+    
     auto polydata = segment->GetPolyData();
     int numberOfPoints = polydata->GetNumberOfPoints();
     for(int i=0;i<numberOfPoints;i++) {
@@ -95,6 +103,11 @@ void vtkLiverSegmentsLogic::MarkSegmentWithID(vtkMRMLModelNode *segment, int seg
 
 void vtkLiverSegmentsLogic::AddSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline)
 {
+    if(!summedCenterline || !segmentCenterline) //Allow function to run with nullptr as input
+    {
+        std::cout << "AddSegmentToCenterlineModel Error: No input" << std::endl;
+        return;
+    }
     auto segment = segmentCenterline->GetPolyData();
     auto centerlineModel = summedCenterline->GetPolyData();
 
@@ -111,6 +124,13 @@ void vtkLiverSegmentsLogic::AddSegmentToCenterlineModel(vtkMRMLModelNode *summed
 int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLModelNode *centerlineModel, vtkMRMLLabelMapVolumeNode *labelMap)
 {
     auto ijkToRas = vtkSmartPointer<vtkMatrix4x4>::New();
+    
+    if(!centerlineModel || !labelMap) //Allow function to run with nullptr as input
+    {
+        std::cout << "SegmentClassificationProcessing Error: No input" << std::endl;
+        return 0;
+    }
+    
     labelMap->GetIJKToRASMatrix(ijkToRas);
 
     auto centerlinePolyData = centerlineModel->GetPolyData();
@@ -153,8 +173,13 @@ int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLModelNode *cen
 
 void vtkLiverSegmentsLogic::InitializeCenterlineSearchModel(vtkMRMLModelNode *summedCenterline)
 {
-    auto centerlineModel = summedCenterline->GetPolyData();
     this->Locator->Initialize();
+    if(!summedCenterline) //Allow function to run with nullptr as input
+    {
+        std::cout << "InitializeCenterlineSearchModel Error: No input" << std::endl;
+        return;
+    }
+    auto centerlineModel = summedCenterline->GetPolyData();
     this->Locator->SetDataSet(vtkPointSet::SafeDownCast(centerlineModel));
     if(centerlineModel->GetPointData()->GetNumberOfArrays() > 0)
         this->Locator->BuildLocator();
@@ -162,7 +187,11 @@ void vtkLiverSegmentsLogic::InitializeCenterlineSearchModel(vtkMRMLModelNode *su
         std::cout << "Error: No PointData in centerline model" << std::endl;
 }
 
-void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNode* segmentation, vtkMRMLLabelMapVolumeNode* refVolume)
+void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNode *vascularTerritorySegmentationNode,
+                                                          vtkMRMLLabelMapVolumeNode *refVolume,
+                                                          vtkMRMLSegmentationNode *segmentation,
+                                                          vtkMRMLModelNode *centerlineModel,
+                                                          vtkMRMLColorNode *colormap)
 {
     auto mrmlScene = this->GetMRMLScene();
 
@@ -173,11 +202,10 @@ void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNod
   vtkMRMLLabelMapVolumeNode* labelmapVolumeNode = vtkMRMLLabelMapVolumeNode::SafeDownCast(labelmapNode);
   auto segmentationIds = vtkSmartPointer<vtkStringArray>::New();
   
-  if(!segmentation)
+  if(!vascularTerritorySegmentationNode || !segmentation || !colormap)
   {
-      //Allow function to run with nullptr as input
-      // vtkErrorMacro("Error in calculateVascularTerritoryMap: no input segmentation");
-      return;
+    std::cout << "calculateVascularTerritoryMap Error: No input" << std::endl;
+    return;
   }
 
   //Get voxels tagged as liver
@@ -193,21 +221,16 @@ void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNod
 
   segmentationIds->InsertNextValue(segmentId);
   vtkSlicerSegmentationsModuleLogic::ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume);
-
-
-//result = self.scl.SegmentClassificationProcessing(centerlineModel, labelmapVolumeNode)
-//if result==0:
-//  logging.error("Corrupt centerline model - Not possible to calculate vascular segments")
-
-//labelmapVolumeNode.GetDisplayNode().SetAndObserveColorNodeID(colormap.GetID())
-//slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
-//vascularTerritorySegmentationNode.Reset(None)#Existing node will be overwritten
-
-//#Create segmentation from labelmap volume
-//vascularTerritorySegmentationNode.CreateDefaultDisplayNodes() # only needed for display
-//slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(labelmapVolumeNode, vascularTerritorySegmentationNode)
-//vascularTerritorySegmentationNode.CreateClosedSurfaceRepresentation()
-//slicer.mrmlScene.RemoveNode(labelmapVolumeNode)
-  
+  int result = SegmentClassificationProcessing(centerlineModel, labelmapVolumeNode);
+  if(result == 0)
+    vtkErrorMacro("Corrupt centerline model - Not possible to calculate vascular segments.");
+  labelmapVolumeNode->GetDisplayNode()->SetAndObserveColorNodeID(colormap->GetID());
+  //slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
+  labelmapVolumeNode->Modified();//Is this enough, or is more of the code in arrayFromVolumeModified needed?
+  vascularTerritorySegmentationNode->Reset(nullptr);
+  vascularTerritorySegmentationNode->CreateDefaultDisplayNodes(); // only needed for display
+  vtkSlicerSegmentationsModuleLogic::ImportLabelmapToSegmentationNode(labelmapVolumeNode, vascularTerritorySegmentationNode);
+  vascularTerritorySegmentationNode->CreateClosedSurfaceRepresentation();
+  mrmlScene->RemoveNode(labelmapVolumeNode);
 }
 

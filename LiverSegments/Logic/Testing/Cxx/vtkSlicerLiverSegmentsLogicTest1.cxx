@@ -69,13 +69,15 @@ using namespace vtkMRMLCoreTestingUtilities;
 namespace
 {
 int TestDefaults();
-int TestFunctions();
+int TestFunctionsWithNullInput();
+int TestFunctionsWithDummyData();
 }
 
 int vtkSlicerLiverSegmentsLogicTest1(int vtkNotUsed(argc), char * vtkNotUsed(argv)[])
 {
     CHECK_EXIT_SUCCESS(TestDefaults());
-    CHECK_EXIT_SUCCESS(TestFunctions());
+    CHECK_EXIT_SUCCESS(TestFunctionsWithNullInput());
+    CHECK_EXIT_SUCCESS(TestFunctionsWithDummyData());
     return EXIT_SUCCESS;
 }
 namespace
@@ -89,7 +91,24 @@ int TestDefaults()
     return EXIT_SUCCESS;
 }
 
-int TestFunctions()
+int TestFunctionsWithNullInput()
+{
+  vtkLiverSegmentsLogic* liverSegmentsLogic = vtkLiverSegmentsLogic::New();
+  
+  liverSegmentsLogic->MarkSegmentWithID(nullptr, 0);
+  liverSegmentsLogic->AddSegmentToCenterlineModel(nullptr, nullptr);
+  liverSegmentsLogic->SegmentClassificationProcessing(nullptr, nullptr);
+  liverSegmentsLogic->InitializeCenterlineSearchModel(nullptr);
+  
+  vtkNew<vtkMRMLScene> scene;
+  liverSegmentsLogic->SetMRMLScene(scene);
+  liverSegmentsLogic->calculateVascularTerritoryMap(nullptr, nullptr, nullptr, nullptr, nullptr);
+  
+  liverSegmentsLogic->Delete();
+  return EXIT_SUCCESS;
+}
+
+int TestFunctionsWithDummyData()
 {
     vtkLiverSegmentsLogic* liverSegmentsLogic = vtkLiverSegmentsLogic::New();
     int segmentId = 1;
@@ -117,7 +136,7 @@ int TestFunctions()
 
     vtkNew<vtkMRMLScene> scene;
     liverSegmentsLogic->SetMRMLScene(scene);
-    liverSegmentsLogic->calculateVascularTerritoryMap(nullptr, nullptr);
+    liverSegmentsLogic->calculateVascularTerritoryMap(nullptr, nullptr, nullptr, nullptr, nullptr);
 
     liverSegmentsLogic->Delete();
     

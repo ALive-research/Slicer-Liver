@@ -615,7 +615,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     vascularTerritorySegmentationNode = self.ui.selectedVascularTerritorySegmId.currentNode()
 
     try:
-        self.logic.calculateVascularTerritoryMap(vascularTerritorySegmentationNode, refVolumeNode, segmentationNode, centerlineModel, self.colormap)
+#        self.logic.calculateVascularTerritoryMap(vascularTerritorySegmentationNode, refVolumeNode, segmentationNode, centerlineModel, self.colormap)
+        self.scl.calculateVascularTerritoryMap(vascularTerritorySegmentationNode, refVolumeNode, segmentationNode, centerlineModel, self.colormap)
     except ValueError:
         logging.error("Error: Failing when calculating vascular segments")
 
@@ -696,37 +697,37 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     self.scl.InitializeCenterlineSearchModel(centerlineModel)
     return centerlineModel
 
-  def calculateVascularTerritoryMap(self, vascularTerritorySegmentationNode, refVolume, segmentation, centerlineModel, colormap):
-    segmentationIds = vtk.vtkStringArray()
-    labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
+#  def calculateVascularTerritoryMap(self, vascularTerritorySegmentationNode, refVolume, segmentation, centerlineModel, colormap):
+#    segmentationIds = vtk.vtkStringArray()
+#    labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
 
-    # Get voxels tagged as liver
-    segmentId = segmentation.GetSegmentation().GetSegmentIdBySegmentName('liver')
-    #Check metadata for segmentation
-    segm = segmentation.GetSegmentation()
-    numberOfSegments = segm.GetNumberOfSegments()
-    logging.info('Number of segments: ' + str(numberOfSegments))
-    liverSegm = segm.GetSegment(segmentId)
-    if liverSegm is not None:
-      logging.info('Segment name: ' + liverSegm.GetName())
-      logging.info('Segment Label: ' + str(liverSegm.GetLabelValue()))
+#    # Get voxels tagged as liver
+#    segmentId = segmentation.GetSegmentation().GetSegmentIdBySegmentName('liver')
+#    #Check metadata for segmentation
+#    segm = segmentation.GetSegmentation()
+#    numberOfSegments = segm.GetNumberOfSegments()
+#    logging.info('Number of segments: ' + str(numberOfSegments))
+#    liverSegm = segm.GetSegment(segmentId)
+#    if liverSegm is not None:
+#      logging.info('Segment name: ' + liverSegm.GetName())
+#      logging.info('Segment Label: ' + str(liverSegm.GetLabelValue()))
 
-    segmentationIds.InsertNextValue(segmentId)
-    slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume)
+#    segmentationIds.InsertNextValue(segmentId)
+#    slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume)
 
-    result = self.scl.SegmentClassificationProcessing(centerlineModel, labelmapVolumeNode)
-    if result==0:
-      logging.error("Corrupt centerline model - Not possible to calculate vascular segments")
+#    result = self.scl.SegmentClassificationProcessing(centerlineModel, labelmapVolumeNode)
+#    if result==0:
+#      logging.error("Corrupt centerline model - Not possible to calculate vascular segments")
 
-    labelmapVolumeNode.GetDisplayNode().SetAndObserveColorNodeID(colormap.GetID())
-    slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
-    vascularTerritorySegmentationNode.Reset(None)#Existing node will be overwritten
+#    labelmapVolumeNode.GetDisplayNode().SetAndObserveColorNodeID(colormap.GetID())
+#    slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
+#    vascularTerritorySegmentationNode.Reset(None)#Existing node will be overwritten
 
-    #Create segmentation from labelmap volume
-    vascularTerritorySegmentationNode.CreateDefaultDisplayNodes() # only needed for display
-    slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(labelmapVolumeNode, vascularTerritorySegmentationNode)
-    vascularTerritorySegmentationNode.CreateClosedSurfaceRepresentation()
-    slicer.mrmlScene.RemoveNode(labelmapVolumeNode)
+#    #Create segmentation from labelmap volume
+#    vascularTerritorySegmentationNode.CreateDefaultDisplayNodes() # only needed for display
+#    slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(labelmapVolumeNode, vascularTerritorySegmentationNode)
+#    vascularTerritorySegmentationNode.CreateClosedSurfaceRepresentation()
+#    slicer.mrmlScene.RemoveNode(labelmapVolumeNode)
 
   def copyIndex(self, endPointsMarkupsNode, centerlineModelNode):
     centerlineModelNode.SetAttribute("SegmentIndex", endPointsMarkupsNode.GetAttribute("SegmentIndex"))
