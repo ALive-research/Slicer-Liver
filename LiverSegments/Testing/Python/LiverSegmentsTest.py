@@ -22,12 +22,15 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
     self.downloadData()
     self.vtkLogicFunctions()
 
-  def logicFunctionsWithEmptyParameters(self):
+  def initPythonLogic(self):
     logic = LiverSegmentsLogic()
-
     logic.__init__()
     logic.getCenterlineLogic()
     logic.setDefaultParameters(logic.getParameterNode())
+    return logic
+
+  def logicFunctionsWithEmptyParameters(self):
+    logic = self.initPythonLogic()
 
     colormap = slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels')
     logic.createCompleteCenterlineModel(colormap)
@@ -54,6 +57,8 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
     segmentation = self.createEmptyvtkMRMLSegmentationNode()
     refVolume = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
     colormap = slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels')
+
+    logic = self.initPythonLogic()
     logic.createCompleteCenterlineModel(colormap)
     centerlineModel = logic.build_centerline_model(colormap)
     vtkLogic.calculateVascularTerritoryMap(segmentationVascular, refVolume, segmentation, centerlineModel, colormap)

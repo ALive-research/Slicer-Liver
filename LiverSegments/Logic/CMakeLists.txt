@@ -18,7 +18,7 @@ set(${KIT}_TARGET_LIBRARIES
   ${ITK_LIBRARIES}
   MRMLCore
 #  MRMLLogic
-#  vtkSlicerSegmentationsModuleLogic
+  vtkSlicerSegmentationsModuleLogic
   )
 
 #---------------------------------
