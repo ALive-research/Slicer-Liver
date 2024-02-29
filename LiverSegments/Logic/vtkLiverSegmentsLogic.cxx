@@ -188,12 +188,12 @@ void vtkLiverSegmentsLogic::InitializeCenterlineSearchModel(vtkMRMLModelNode *su
 }
 
 void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNode *vascularTerritorySegmentationNode,
-                                                          vtkMRMLLabelMapVolumeNode *refVolume,
+                                                          vtkMRMLScalarVolumeNode *refVolume,
                                                           vtkMRMLSegmentationNode *segmentation,
                                                           vtkMRMLModelNode *centerlineModel,
                                                           vtkMRMLColorNode *colormap)
 {
-    auto mrmlScene = this->GetMRMLScene();
+    vtkMRMLScene *mrmlScene = this->GetMRMLScene();
 
     if (!mrmlScene)
         vtkErrorMacro("Error in calculateVascularTerritoryMap: no valid MRML scene.");

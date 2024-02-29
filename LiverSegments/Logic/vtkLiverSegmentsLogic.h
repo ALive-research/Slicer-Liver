@@ -55,6 +55,7 @@ class vtkMRMLLabelMapVolumeNode;
 class vtkMRMLSegmentationNode;
 class vtkMRMLModelNode;
 class vtkMRMLColorNode;
+class vtkMRMLScalarVolumeNode;
 
 
 class VTK_SLICER_LIVERSEGMENTS_MODULE_LOGIC_EXPORT
@@ -74,7 +75,7 @@ vtkLiverSegmentsLogic : public vtkSlicerModuleLogic
   int  SegmentClassificationProcessing(vtkMRMLModelNode *centerlineModel, vtkMRMLLabelMapVolumeNode *labelMap);
   void InitializeCenterlineSearchModel(vtkMRMLModelNode *summedCenterline);
   void calculateVascularTerritoryMap(vtkMRMLSegmentationNode *vascularTerritorySegmentationNode,
-                                     vtkMRMLLabelMapVolumeNode *refVolume,
+                                     vtkMRMLScalarVolumeNode *refVolume,
                                      vtkMRMLSegmentationNode *segmentation,
                                      vtkMRMLModelNode *centerlineModel,
                                      vtkMRMLColorNode *colormap);

@@ -191,7 +191,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     displayNode.SetOpacity3D(0.3)
     self.updateShowHideButtonText()
 
-  #Auto create if name/id don't exist. Auto switch it it exists
+  #Auto create if name/id don't exist. Auto switch if it exists
   def onSegmentChanged(self):
     endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
     if endPointsMarkupsNode is not None:
@@ -452,8 +452,9 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     surface = self.ui.inputSurfaceSelector.currentNode()
     segmentId = self.ui.inputSegmentSelectorWidget.currentSegmentID()
 
-    centerlineProcessingLogic = self.logic.getCenterlineLogic()
-    inputSurfacePolyData = centerlineProcessingLogic.polyDataFromNode(surface, segmentId)
+    # centerlineProcessingLogic = self.logic.getCenterlineLogic()
+    # inputSurfacePolyData = centerlineProcessingLogic.polyDataFromNode(surface, segmentId)
+    inputSurfacePolyData = self.logic.polyDataFromNode(surface, segmentId)
     if not inputSurfacePolyData or inputSurfacePolyData.GetNumberOfPoints() == 0:
         raise ValueError("Valid input surface is required")
 
@@ -615,8 +616,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     vascularTerritorySegmentationNode = self.ui.selectedVascularTerritorySegmId.currentNode()
 
     try:
-#        self.logic.calculateVascularTerritoryMap(vascularTerritorySegmentationNode, refVolumeNode, segmentationNode, centerlineModel, self.colormap)
-        self.scl.calculateVascularTerritoryMap(vascularTerritorySegmentationNode, refVolumeNode, segmentationNode, centerlineModel, self.colormap)
+       self.logic.calculateVascularTerritoryMap(vascularTerritorySegmentationNode, refVolumeNode, segmentationNode, centerlineModel, self.colormap)
     except ValueError:
         logging.error("Error: Failing when calculating vascular segments")
 
@@ -644,6 +644,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     from vtkSlicerLiverSegmentsModuleLogicPython import vtkLiverSegmentsLogic
     # Create the segmentsclassification logic
     self.scl = vtkLiverSegmentsLogic()
+    self.scl.SetMRMLScene(slicer.mrmlScene)
 
   def check_module_Extract_Centerline_installed(self):
     module_name = 'ExtractCenterline'
@@ -697,7 +698,8 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     self.scl.InitializeCenterlineSearchModel(centerlineModel)
     return centerlineModel
 
-#  def calculateVascularTerritoryMap(self, vascularTerritorySegmentationNode, refVolume, segmentation, centerlineModel, colormap):
+  def calculateVascularTerritoryMap(self, vascularTerritorySegmentationNode, refVolume, segmentation, centerlineModel, colormap):
+    self.scl.calculateVascularTerritoryMap(vascularTerritorySegmentationNode, refVolume, segmentation, centerlineModel, colormap)
 #    segmentationIds = vtk.vtkStringArray()
 #    labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
 
@@ -776,6 +778,23 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     decimate.SetTargetReduction(.90)
     decimate.Update()
     return decimate.GetOutput()
+
+  #Test: Use code from SlicerExtension-VMTK:
+  #https://github.com/vmtk/SlicerExtension-VMTK/blob/master/ExtractCenterline/ExtractCenterline.py
+  def polyDataFromNode(self, surfaceNode, segmentId):
+    if not surfaceNode:
+        logging.error("Invalid input surface node")
+        return None
+    if surfaceNode.IsA("vtkMRMLModelNode"):
+        return surfaceNode.GetPolyData()
+    elif surfaceNode.IsA("vtkMRMLSegmentationNode"):
+        # Segmentation node
+        polyData = vtk.vtkPolyData()
+        surfaceNode.CreateClosedSurfaceRepresentation()
+        surfaceNode.GetClosedSurfaceRepresentation(segmentId, polyData)
+        return polyData
+    else:
+        logging.error
 
 class LiverSegmentsTest(ScriptedLoadableModuleTest):
   """
