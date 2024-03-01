@@ -60,7 +60,7 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
 
     logic = self.initPythonLogic()
     logic.createCompleteCenterlineModel(colormap)
-    centerlineModel = logic.build_centerline_model(colormap)
+    centerlineModel = logic.build_centerline_model(colormap, 1)
     vtkLogic.calculateVascularTerritoryMap(segmentationVascular, refVolume, segmentation, centerlineModel, colormap)
 
   def create2EmptyMarkupsFiducialNodes(self):
