@@ -34,8 +34,8 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
 
     colormap = slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels')
     logic.createCompleteCenterlineModel(colormap)
-
-    centerlineModel = logic.build_centerline_model(colormap)
+    segmentationId = 1
+    centerlineModel = logic.build_centerline_model(colormap, segmentationId)
 
 #    refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
 #    segmentation = self.createEmptyvtkMRMLSegmentationNode()
