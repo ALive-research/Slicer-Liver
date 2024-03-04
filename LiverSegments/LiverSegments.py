@@ -492,8 +492,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     surface = self.ui.inputSurfaceSelector.currentNode()
     segmentId = self.ui.inputSegmentSelectorWidget.currentSegmentID()
 
-    # centerlineProcessingLogic = self.logic.getCenterlineLogic()
-    # inputSurfacePolyData = centerlineProcessingLogic.polyDataFromNode(surface, segmentId)
     inputSurfacePolyData = self.logic.polyDataFromNode(surface, segmentId)
     if not inputSurfacePolyData or inputSurfacePolyData.GetNumberOfPoints() == 0:
         raise ValueError("Valid input surface is required")
@@ -773,36 +771,6 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
 
   def calculateVascularTerritoryMap(self, vascularTerritorySegmentationNode, refVolume, segmentation, centerlineModel, colormap):
     self.scl.calculateVascularTerritoryMap(vascularTerritorySegmentationNode, refVolume, segmentation, centerlineModel, colormap)
-#    segmentationIds = vtk.vtkStringArray()
-#    labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
-
-#    # Get voxels tagged as liver
-#    segmentId = segmentation.GetSegmentation().GetSegmentIdBySegmentName('liver')
-#    #Check metadata for segmentation
-#    segm = segmentation.GetSegmentation()
-#    numberOfSegments = segm.GetNumberOfSegments()
-#    logging.info('Number of segments: ' + str(numberOfSegments))
-#    liverSegm = segm.GetSegment(segmentId)
-#    if liverSegm is not None:
-#      logging.info('Segment name: ' + liverSegm.GetName())
-#      logging.info('Segment Label: ' + str(liverSegm.GetLabelValue()))
-
-#    segmentationIds.InsertNextValue(segmentId)
-#    slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume)
-
-#    result = self.scl.SegmentClassificationProcessing(centerlineModel, labelmapVolumeNode)
-#    if result==0:
-#      logging.error("Corrupt centerline model - Not possible to calculate vascular segments")
-
-#    labelmapVolumeNode.GetDisplayNode().SetAndObserveColorNodeID(colormap.GetID())
-#    slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
-#    vascularTerritorySegmentationNode.Reset(None)#Existing node will be overwritten
-
-#    #Create segmentation from labelmap volume
-#    vascularTerritorySegmentationNode.CreateDefaultDisplayNodes() # only needed for display
-#    slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(labelmapVolumeNode, vascularTerritorySegmentationNode)
-#    vascularTerritorySegmentationNode.CreateClosedSurfaceRepresentation()
-#    slicer.mrmlScene.RemoveNode(labelmapVolumeNode)
 
   def copyIndex(self, endPointsMarkupsNode, centerlineModelNode):
     centerlineModelNode.SetAttribute("LiverSegments.VascTerrId", endPointsMarkupsNode.GetAttribute("LiverSegments.VascTerrId"))
@@ -852,7 +820,7 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
     decimate.Update()
     return decimate.GetOutput()
 
-  #Test: Use code from SlicerExtension-VMTK:
+  #Using code from SlicerExtension-VMTK
   #https://github.com/vmtk/SlicerExtension-VMTK/blob/master/ExtractCenterline/ExtractCenterline.py
   def polyDataFromNode(self, surfaceNode, segmentId):
     if not surfaceNode:
