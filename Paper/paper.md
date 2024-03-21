@@ -33,56 +33,23 @@ affiliations:
    index: 2
  - name: Department of Health Research, SINTEF Digital, Trondheim, Norway 
    index: 3
-date: 15 Desember 2023
-bibliography: paper.bib
+date: 15 March 2024
+bibliography: bibliography.bib
 
 ---
 
 # Summary
 
-This paper introduces SlicerLiver, a software extension to the 3D Slicer (https://slicer.org)
-image computing platform [@Kikinis:2013]. The software addresses challenges in liver surgery planning by 
-applying geometric modeling and artificial intelligence to generate liver tumor 
-resection plans for complex cases, developing parameterized patient-specific 
-vascular territory segments, and creating computational methods for resection visualization 
-in both 2D and 3D. Progress and preliminary results show improvements in defining virtual 
-resections, visualizing resections using Resectograms and classifying liver 
-segments accurately. These contributions hold promise in enhancing liver surgery 
-planning and potentially improving patient outcomes.
+This article introduces SlicerLiver, an extension for the 3D Slicer (https://slicer.org) image computing platform [@Kikinis:2013]. The software aims to address challenges in liver surgery planning by applying geometric modeling and visualization techniques. More specifically, SlicerLiver includes functionality for computing integral liver surgery plans with virtual resections, vascular territories and surgery volumetry analysis. Progress and preliminary results show the potential of the software to improve state-of-the-art approaches in definition of virtual resections, visualization of resection plans, as well as classification of liver in segments. These contributions hold promise in enhancing liver surgery planning and potentially improving liver surgery outcomes. The software is intended for research use within the fields of biomedicine and computer science.
 
 # Statement of need
 
-Liver cancer, both primary and secondary types, is a global health concern with 
-increasing incidence rates [1]. Surgical resection is the most effective treatment 
-for some of these cancers [@Simmonds:2006], and the evolution of computer-assisted surgical systems 
-over the past two decades has significantly improved tumor localization and surgeons 
-confidence during surgery [@Hansen:2014], [@Lamata:2010]. However, despite these advances, several challenges 
-remain in liver surgical practice.
+Liver cancer, both primary and metastatic (i.e,. from colorectal cancer), is a global health concern with increasing incidence rates [@Siegel:2023]. Surgical resection is the most effective treatment for some of the cases [@Simmonds:2006], and the evolution of computer-assisted surgical systems over the past two decades has significantly improved tumor localization and surgeons confidence during surgery [@Hansen:2014, @Lamata:2010]. Despite these advances, systematic use of computer-assisted systems for planning liver resections remains a challenge.
 
-While patient-specific 3D models are systematically generated for surgical planning 
-and guidance, surgery planning remains a manual process. This is particularly problematic 
-for patients with multiple metastases, where manual surgery planning becomes intricate. 
-The current techniques for planning virtual resections, namely, drawing-on-slices and 
-deformable surfaces [@Preim:2013], [@Palomar:2017], have shown limitations. Therefore, there is a pressing 
-need for new algorithms capable of generating precise, rapid, and straightforward 
-resection plans, even in complex cases.
+Thanks to the latest advances in artificial intelligence, generation of 3D ptient-specific models for surgical planning is increasingly becoming a reality in the clinical routine, however, surgical planning with the use of these models remains a complex and  manual process. Planning of surgery is particularly important for complex cases (i.e., those presenting multiple tumors or those where the location and size of the tumor poses a challenge for the surgery practice). Furthermore, precise surgical planning should not only account for the liver geometry, but also for the blood supply to various liver regions (segments) [@Warmann:2016, @Bismuth:2013]. Furthermore, visualization of 3D liver models and resections a difficult task, where occlusions can prevent the effective understanding of the surgical plan. In addition, there is no broad consensus on the definition of a good resection plan, which is partly due to the lack of formal methods to specify and communicate resection plans, and partly due to the different surgery cultures and practices in different hospitals.
 
-Furthermore, blood supply to various liver regions or vascular territories is crucial for liver resection planning. 
-The established anatomical division of the liver, such as the Couinaud
-division is under question [@Warmann:2016], [@Bismuth:2013]. This calls for innovative
-liver analytics methods that can enable the calculation of
-various types of vascular territories.
+All these challenges
 
-Another challenge is the absence of a broad consensus on
-the definition of a good resection, which is partly due to the
-lack of formal methods to specify and communicate resection
-plans. Existing methods, such as subjective descriptions, hand drawings, and pictures, often result 
-in biased and imprecise descriptions of surgical plans. The complexity of 3D models
-also hampers their inclusion in 2D media such as medical
-records and scientific journals. Therefore, visualization techniques that can capture and 
-communicate critical information
-from a resection plan in a compact form, interpretable by
-clinical experts, are needed.
 
 In response to these challenges, the SlicerLiver project aims to support
 three research objectives:
