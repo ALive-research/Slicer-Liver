@@ -315,7 +315,8 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     for node in segmentationNodes:
       attribute = node.GetAttribute("LiverSegments.SegmentationId")
       if attribute != None:
-        node.GetDisplayNode().SetAllSegmentsVisibility(False)
+        if node.GetDisplayNode():
+          node.GetDisplayNode().SetAllSegmentsVisibility(False)
     self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
 
 
@@ -775,43 +776,10 @@ class LiverSegmentsLogic(ScriptedLoadableModuleLogic):
   def copyIndex(self, endPointsMarkupsNode, centerlineModelNode):
     centerlineModelNode.SetAttribute("LiverSegments.VascTerrId", endPointsMarkupsNode.GetAttribute("LiverSegments.VascTerrId"))
 
-  #Using code from centerlineProcessingLogic.preprocess
   def preprocessAndDecimate(self, surfacePolyData):
-    parameters = {}
-    inputSurfaceModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "tempInputSurfaceModel")
-    inputSurfaceModelNode.SetAndObserveMesh(surfacePolyData)
-    parameters["inputModel"] = inputSurfaceModelNode
-    outputSurfaceModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "tempDecimatedSurfaceModel")
-    parameters["outputModel"] = outputSurfaceModelNode
-    parameters["reductionFactor"] = 0.8
-    parameters["method"] = "FastQuadric"
-    parameters["aggressiveness"] = 4
-    decimation = slicer.modules.decimation
-    cliNode = slicer.cli.runSync(decimation, None, parameters)
-    surfacePolyData = outputSurfaceModelNode.GetPolyData()
-    slicer.mrmlScene.RemoveNode(inputSurfaceModelNode)
-    slicer.mrmlScene.RemoveNode(outputSurfaceModelNode)
-    slicer.mrmlScene.RemoveNode(cliNode)
-
-    surfaceCleaner = vtk.vtkCleanPolyData()
-    surfaceCleaner.SetInputData(surfacePolyData)
-    surfaceCleaner.Update()
-
-    surfaceTriangulator = vtk.vtkTriangleFilter()
-    surfaceTriangulator.SetInputData(surfaceCleaner.GetOutput())
-    surfaceTriangulator.PassLinesOff()
-    surfaceTriangulator.PassVertsOff()
-    surfaceTriangulator.Update()
-
-    normals = vtk.vtkPolyDataNormals()
-    normals.SetInputData(surfaceTriangulator.GetOutput())
-    normals.SetAutoOrientNormals(1)
-    normals.SetFlipNormals(0)
-    normals.SetConsistency(1)
-    normals.SplittingOff()
-    normals.Update()
-
-    return normals.GetOutput()
+    processedPolyData = vtk.vtkPolyData()
+    self.scl.preprocessAndDecimate(surfacePolyData, processedPolyData)
+    return processedPolyData
 
   def decimateLine(self, polyDataLine):
     decimate = vtk.vtkDecimatePolylineFilter()

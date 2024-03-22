@@ -55,6 +55,8 @@
 #include <vtkTestingOutputWindow.h>
 #include <vtkSphereSource.h>
 #include <vtkImageData.h>
+#include <vtkCellData.h>
+#include <vtkPointData.h>
 
 
 // LiverSegments includes
@@ -103,6 +105,7 @@ int TestFunctionsWithNullInput()
   vtkNew<vtkMRMLScene> scene;
   liverSegmentsLogic->SetMRMLScene(scene);
   liverSegmentsLogic->calculateVascularTerritoryMap(nullptr, nullptr, nullptr, nullptr, nullptr);
+  liverSegmentsLogic->preprocessAndDecimate(nullptr, nullptr);
   
   liverSegmentsLogic->Delete();
   return EXIT_SUCCESS;
@@ -124,6 +127,7 @@ int TestFunctionsWithDummyData()
     dummyImageData->SetExtent(0, size, 0, size, 0, size);
     dummyImageData->SetSpacing(1, 1, 1);
     dummyImageData->AllocateScalars(VTK_UNSIGNED_CHAR, 1);
+    vtkPolyData *spherePolydata = source->GetOutput();
     
     //Init labelMap
     vtkNew<vtkMRMLLabelMapVolumeNode> labelMap;
@@ -137,6 +141,11 @@ int TestFunctionsWithDummyData()
     vtkNew<vtkMRMLScene> scene;
     liverSegmentsLogic->SetMRMLScene(scene);
     liverSegmentsLogic->calculateVascularTerritoryMap(nullptr, nullptr, nullptr, nullptr, nullptr);
+
+    vtkSmartPointer<vtkPolyData> returnPolyData = vtkSmartPointer<vtkPolyData>::New();
+    liverSegmentsLogic->preprocessAndDecimate(spherePolydata, returnPolyData);
+    CHECK_BOOL(returnPolyData->GetNumberOfPoints() < spherePolydata->GetNumberOfPoints(), true);
+    CHECK_BOOL(returnPolyData->GetNumberOfPolys() < spherePolydata->GetNumberOfPolys(), true);
 
     liverSegmentsLogic->Delete();
     

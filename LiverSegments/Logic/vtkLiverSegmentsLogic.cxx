@@ -58,6 +58,11 @@
 #include <vtkAppendPolyData.h>
 #include <vtkOrientedImageData.h>
 #include <vtkMatrix4x4.h>
+#include <vtkDecimatePro.h>
+#include <vtkCleanPolyData.h>
+#include <vtkTriangleFilter.h>
+#include <vtkPolyDataNormals.h>
+#include <vtkCellData.h>
 
 #include <iostream>
 
@@ -198,8 +203,8 @@ void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNod
     if (!mrmlScene)
         vtkErrorMacro("Error in calculateVascularTerritoryMap: no valid MRML scene.");
 
-  vtkMRMLNode* labelmapNode = mrmlScene->AddNewNodeByClass("vtkMRMLLabelMapVolumeNode");
-  vtkMRMLLabelMapVolumeNode* labelmapVolumeNode = vtkMRMLLabelMapVolumeNode::SafeDownCast(labelmapNode);
+  vtkMRMLNode *labelmapNode = mrmlScene->AddNewNodeByClass("vtkMRMLLabelMapVolumeNode");
+  vtkMRMLLabelMapVolumeNode *labelmapVolumeNode = vtkMRMLLabelMapVolumeNode::SafeDownCast(labelmapNode);
   auto segmentationIds = vtkSmartPointer<vtkStringArray>::New();
   
   if(!vascularTerritorySegmentationNode || !segmentation || !colormap)
@@ -215,7 +220,7 @@ void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNod
   int numberOfSegments = segm->GetNumberOfSegments();
   std::cout << "Liver segmentId: "  << segmentId << " numberOfSegments: " << numberOfSegments << std::endl;
 
-  vtkSegment* liverSegm = segm->GetSegment(segmentId);
+  vtkSegment *liverSegm = segm->GetSegment(segmentId);
   if(liverSegm)
       std::cout << "Segment name: "  << liverSegm->GetName() << " Segment label: " << liverSegm->GetLabelValue() << std::endl;
 
@@ -227,7 +232,7 @@ void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNod
   labelmapVolumeNode->GetDisplayNode()->SetAndObserveColorNodeID(colormap->GetID());
   //slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
   labelmapVolumeNode->Modified();//Is this enough, or is more of the code in arrayFromVolumeModified needed?
-  const char*  segmentationId = vascularTerritorySegmentationNode->GetAttribute("LiverSegments.SegmentationId");
+  const char * segmentationId = vascularTerritorySegmentationNode->GetAttribute("LiverSegments.SegmentationId");
   vascularTerritorySegmentationNode->Reset(nullptr);
   vascularTerritorySegmentationNode->SetAttribute("LiverSegments.SegmentationId", segmentationId);
   vascularTerritorySegmentationNode->CreateDefaultDisplayNodes(); // only needed for display
@@ -236,3 +241,47 @@ void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNod
   mrmlScene->RemoveNode(labelmapVolumeNode);
 }
 
+void vtkLiverSegmentsLogic::preprocessAndDecimate(vtkPolyData *surfacePolyData, vtkPolyData *returnPolyData)
+{
+    vtkMRMLScene *mrmlScene = this->GetMRMLScene();
+    if (!mrmlScene)
+        vtkErrorMacro("Error in preprocessAndDecimate: no valid MRML scene.");
+    if(!surfacePolyData
+        || (surfacePolyData->GetPointData()->GetNumberOfArrays() == 0
+            && surfacePolyData->GetCellData()->GetNumberOfArrays() == 0) )
+    {
+        std::cout << "preprocessAndDecimate Error: no input surfacePolyData." << std::endl;
+        return;
+    }
+
+    vtkSmartPointer<vtkDecimatePro> decimator = vtkSmartPointer<vtkDecimatePro>::New();
+    double decimationFactor = 0.8;
+    decimator->SetInputData(surfacePolyData);
+    decimator->SetFeatureAngle(60);
+    decimator->SplittingOff();
+    decimator->PreserveTopologyOn();
+    decimator->SetMaximumError(1);
+
+    decimator->SetTargetReduction(decimationFactor);
+    decimator->Update();
+
+    vtkSmartPointer<vtkCleanPolyData> surfaceCleaner = vtkSmartPointer<vtkCleanPolyData>::New();
+    surfaceCleaner->SetInputData(decimator->GetOutput());
+    surfaceCleaner->Update();
+
+    vtkSmartPointer<vtkTriangleFilter> surfaceTriangulator = vtkSmartPointer<vtkTriangleFilter>::New();
+    surfaceTriangulator->SetInputData(surfaceCleaner->GetOutput());
+    surfaceTriangulator->PassLinesOff();
+    surfaceTriangulator->PassVertsOff();
+    surfaceTriangulator->Update();
+
+    vtkSmartPointer<vtkPolyDataNormals> normals = vtkSmartPointer<vtkPolyDataNormals>::New();
+    normals->SetInputData(surfaceTriangulator->GetOutput());
+    normals->SetAutoOrientNormals(1);
+    normals->SetFlipNormals(0);
+    normals->SetConsistency(1);
+    normals->SplittingOff();
+    normals->Update();
+
+    returnPolyData->ShallowCopy(normals->GetOutput());
+}

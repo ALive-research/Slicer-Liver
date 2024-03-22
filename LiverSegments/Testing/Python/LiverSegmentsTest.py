@@ -63,6 +63,8 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
     logic.createCompleteCenterlineModel(colormap)
     centerlineModel = logic.build_centerline_model(colormap, 1)
     vtkLogic.calculateVascularTerritoryMap(segmentationVascular, refVolume, segmentation, centerlineModel, colormap)
+    vtkLogic.preprocessAndDecimate(None, None)
+    vtkLogic.preprocessAndDecimate(vtk.vtkPolyData(), vtk.vtkPolyData())
 
   def create2EmptyMarkupsFiducialNodes(self):
     emptyNode = slicer.mrmlScene.CreateNodeByClass("vtkMRMLMarkupsFiducialNode")

@@ -56,6 +56,7 @@ class vtkMRMLSegmentationNode;
 class vtkMRMLModelNode;
 class vtkMRMLColorNode;
 class vtkMRMLScalarVolumeNode;
+class vtkPolyData;
 
 
 class VTK_SLICER_LIVERSEGMENTS_MODULE_LOGIC_EXPORT
@@ -79,6 +80,7 @@ vtkLiverSegmentsLogic : public vtkSlicerModuleLogic
                                      vtkMRMLSegmentationNode *segmentation,
                                      vtkMRMLModelNode *centerlineModel,
                                      vtkMRMLColorNode *colormap);
+  void preprocessAndDecimate(vtkPolyData *surfacePolyData, vtkPolyData *returnPolyData);
 
  protected:
   vtkLiverSegmentsLogic();
