@@ -80,7 +80,7 @@ vtkMRMLLiverResectionsDisplayableManagerHelper2D
 
 // Description:
 // VTK-specific function for printing information
-  void PrintSelf(ostream &os, vtkIndent indent);
+  void PrintSelf(ostream &os, vtkIndent indent) override;
 
 // Description:
 // Add surface contour to the 2D views

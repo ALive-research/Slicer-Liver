@@ -43,6 +43,9 @@
 
 #include "vtkSlicerLiverSegmentsModuleLogicExport.h"
 
+// Slicer include
+#include <vtkSlicerModuleLogic.h>
+
 #include <vtkObject.h>
 #include <vtkSmartPointer.h>
 
@@ -51,10 +54,13 @@ class vtkKdTreePointLocator;
 class vtkMRMLLabelMapVolumeNode;
 class vtkMRMLSegmentationNode;
 class vtkMRMLModelNode;
+class vtkMRMLColorNode;
+class vtkMRMLScalarVolumeNode;
+class vtkPolyData;
 
 
 class VTK_SLICER_LIVERSEGMENTS_MODULE_LOGIC_EXPORT
-vtkLiverSegmentsLogic : public vtkObject
+vtkLiverSegmentsLogic : public vtkSlicerModuleLogic
 {
  private:
     vtkSmartPointer<vtkKdTreePointLocator> Locator;
@@ -69,6 +75,12 @@ vtkLiverSegmentsLogic : public vtkObject
   void AddSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline);
   int  SegmentClassificationProcessing(vtkMRMLModelNode *centerlineModel, vtkMRMLLabelMapVolumeNode *labelMap);
   void InitializeCenterlineSearchModel(vtkMRMLModelNode *summedCenterline);
+  void calculateVascularTerritoryMap(vtkMRMLSegmentationNode *vascularTerritorySegmentationNode,
+                                     vtkMRMLScalarVolumeNode *refVolume,
+                                     vtkMRMLSegmentationNode *segmentation,
+                                     vtkMRMLModelNode *centerlineModel,
+                                     vtkMRMLColorNode *colormap);
+  void preprocessAndDecimate(vtkPolyData *surfacePolyData, vtkPolyData *returnPolyData);
 
  protected:
   vtkLiverSegmentsLogic();

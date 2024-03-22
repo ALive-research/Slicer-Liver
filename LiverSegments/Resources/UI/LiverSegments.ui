@@ -88,7 +88,7 @@
          </widget>
         </item>
         <item row="5" column="2" colspan="3">
-         <widget class="QPushButton" name="addSegmentButton">
+         <widget class="QPushButton" name="addCenterlineSegmentButton">
           <property name="enabled">
            <bool>false</bool>
           </property>

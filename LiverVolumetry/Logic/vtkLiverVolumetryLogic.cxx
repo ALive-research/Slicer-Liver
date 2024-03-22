@@ -122,8 +122,7 @@ void vtkLiverVolumetryLogic::ComputeAdvancedPlanningVolumetry(vtkMRMLLabelMapVol
           }
         vtkLabelMapHelper::ProjectPointsOntoItkImage(this->ProjectedTargetSegmentImage,
                                                      BezierHR->GetOutput()->GetPoints(),
-                                                     baseValue,
-                                                     1);
+                                                     baseValue);
         }
       }
 
@@ -265,7 +264,7 @@ int vtkLiverVolumetryLogic::GetRes(vtkMRMLMarkupsBezierSurfaceNode* bezierSurfac
     std::vector<double> ControlPointsY;
     std::vector<double> ControlPointsZ;
 
-    for (int p = 0; p < ControlPointsIndexs[l].size();p++){
+    for (unsigned int p = 0; p < ControlPointsIndexs[l].size();p++){
       double point[3];
       bezierSurfaceNode->GetNthControlPointPosition(ControlPointsIndexs[l][p],point);
       ControlPointsX.push_back(point[0]);

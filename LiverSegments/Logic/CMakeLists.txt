@@ -17,6 +17,8 @@ set(${KIT}_TARGET_LIBRARIES
   ${VTK_LIBRARIES}
   ${ITK_LIBRARIES}
   MRMLCore
+#  MRMLLogic
+  vtkSlicerSegmentationsModuleLogic
   )
 
 #---------------------------------
@@ -27,3 +29,7 @@ SlicerMacroBuildModuleLogic(
   SRCS ${${KIT}_SRCS}
   TARGET_LIBRARIES ${${KIT}_TARGET_LIBRARIES}
   )
+
+if(BUILD_TESTING)
+  add_subdirectory(Testing)
+endif()

@@ -85,30 +85,28 @@ There are multiple options to create visualizations for the resection (color, op
 
 ### Liver Segments
 
-Our approach to liver segments definition consist of the defintion of a segment by the centerline connecting user-defined sets of points. These centerlines will be the base for computation of liver segments in image space. The computation is based on shortest-distance mapping.
+Our approach to liver vascular territory segments definition consist of the defintion of a vascular territory by the centerline connecting user-defined sets of points. These centerlines will be the base for computation of liver segments in image space. The computation is based on shortest-distance mapping.
 The Liver segments can be defined using the following steps:
 
-1.  Select the `Segmentation`.
-2.  Select the hepatic/portal segmentation for `Segment`.
-3.  You can hide the liver segmentation for better visibility in the 3D view by going to: Modules > search for Data > click on Switch to Module > Click on the eye botton next to the liver segmentation.
-4.  Switch to *Liver* module again.
-5.  Create a *new Point List* for `Vessels points`.
-6.  Click the arrow button next to `Vessel points`," and place fixed landmark points on the hepatic/portal segmentation. These points will be useful for extracting the centralines of user-defined vessel branches.
-7.  Once all the points are placed, Click `Add Vessel Centerline Segments`.
-8.  Repeat steps 5 and 6 for creating *new Point List*, i.e extracting new centerlines.
-9.  Click on `Calculate Vascular Segments`.
+1.  Select `Vascular Territory Segmentation`
+2.  Select the `Segmentation`.
+3.  You can hide the liver segmentation for better visibility in the 3D view by first selecting the liver segmentation, then select `Hide`.
+4.  Select the hepatic/portal segmentation for `Segment`. The 3D view will then automatically switch to landmark "Place Mode" 
+and a `Vessel points` list will be automatically generated.
+5.  Place user-defined markup landmarks along the selected hepatic/portal model in 3D View to mark the part of the vessel where centerlines should be generated.
+6.  Once all the points are placed, Click `Add Vessel Centerline`.
+7.  Optionally, repeat steps 4-6 for generation of additional centerline for other vessel segments (portal/hepatic).
+8.  For generation of several vascular territory segments, select `Vascular Territory` and "Create new territory ID".
+9.  Repeat steps 4 to 7 for creating centerlines to be used for calculation of the new Vascular Territory.
+10.  Click on `Calculate Vascular Territory Segmentation`. The generated vascular territories will then be visible in the 3D- and 2D Views.
+11. Multiple sets of vascular territories can be generated and stored in separat Vascular Territory Segmentations.
+To generate a new set of vascular territories, select "Create New Vascular Territory Segmentation" in `Vascular Territory Segmentation`. 
+Then repeat steps 2-9.
 
 ![Liver segments -- placing fiducials](https://github.com/ALive-research/Slicer-Liver/blob/master/Screenshots/Slicer-Liver_screenshot_06.png?raw=true)
 
 ![Liver segments -- placing fiducials](https://github.com/ALive-research/Slicer-Liver/blob/master/Screenshots/Slicer-Liver_screenshot_08.png?raw=true)
 
-10. If you want to visualize the liver segments in the 3D view:
-	1. Click the search icon on the left of the module selector and write 'Data'. Click switch to module.
-	2. Select the created *VascularSegments* labelmap and right click to `Convert label map to segmentation node`.
-	3. Click again the search icon and go to `Segmentations` module.
-	4. Select the new *VascularSegmentations* as `Active segmentation`.
-	5. Click on `Show 3D`.
- 
  ![Slicer-Liver_screenshot_14](https://github.com/dalbenzioG/Slicer-Liver/blob/master/Screenshots/Slicer-Liver_screenshot_14.jpg?raw=true)
  
 ## Video Tutorial

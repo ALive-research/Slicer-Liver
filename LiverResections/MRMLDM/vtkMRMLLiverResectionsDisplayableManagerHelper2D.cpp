@@ -87,9 +87,9 @@ vtkMRMLLiverResectionsDisplayableManagerHelper2D::
 //---------------------------------------------------------------------------
 void vtkMRMLLiverResectionsDisplayableManagerHelper2D::
 PrintSelf(ostream &os,
-          vtkIndent vtkNotUsed(indent))
+          vtkIndent indent)
 {
-
+    this->vtkObject::PrintSelf(os, indent);
 }
 
 //---------------------------------------------------------------------------
