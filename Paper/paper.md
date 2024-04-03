@@ -70,18 +70,19 @@ In the same line as for the liver segments classification, Slicer-Liver implemen
 **Definition of Virtual Resections**
 Slicer-Liver provides computer-aided preoperative planning systems, streamlining the resection planning process and introducing real-time 3D cutting path visualization [@Aghayan:2023], shown in \autoref{fig:resesction_specification}. The presented approach empowers users to make informed decisions based on individual patient needs, enhancing outcomes for both atypical and anatomical resections as represented in \autoref{fig:atypical_vs_anatomical}. Notably, the proposed new resection methods aim to obtain better liver remnant preservation compared to existing methods.
 
-![Specification of a virtual resection with visualization of safety margins.\label{resection_specification}](Screenshots/Slicer-Liver_screenshot_04.png)
-![3D Planning of Atypical vs Anatomical resections. \label{fig:atypical_vs_anatomical}](Screenshots/AtypicalvsAnatomical.svg)
+![Specification of a virtual resection with visualization of safety margins.\label{fig:resection_specification}](Figures/resection_specification.png)
+
+![3D Planning of Atypical vs Anatomical resections.\label{fig:atypical_vs_anatomical}](Figures/atypical_vs_anatomical_resection.svg)
 
 **Visualization of Virtual Resections Using Resectograms**
 Adding resectograms to Slicer-Liver, allows a real-time 2D representation of resections as shown in \autoref{fig:resection_resectogram}, where the resectogram provides an intuitive and occlusion-free visualization of the virtual resection with three components: resection intersection with liver, vessels and anatomical segments, as well as safety margins. The use of resectograms enables an effective identification and characterization of invalid resection types due to inadequate visualization in the 3D view during planning. 
 
-![Virtual 3D resection with corresponding 2D resectogram.\label{fig:resection_resectogram}](Screenshots/resectograms-overview.svg){ width=100% }
+![Virtual 3D resection with corresponding 2D resectogram.\label{fig:resection_resectogram}](Figures/resectograms_overview.svg){ width=100% }
 
 **Classification of Liver Segments**
 By departing from the standardized Couinaud classification of the liver in segments, the implemented approach our approach enables a more individualized representation of liver segmental distribution \autoref{fig:liver_segments}. Particularly noteworthy is the method’s accurate estimation of the challenging Segment 1, resulting in a comprehensive and precise segmentation of the caudate lobe. While improvements, particularly in automating the landmark marking process, are needed, the approach holds promise for improving liver surgery planning and has the potential to optimize surgical outcomes.
 
-![Visualizing liver segments based on annotated hepatic and portal vessel segments around the tumor.\label{fig:liver_segments}](Screenshots/JossFigure3.png)
+![Visualizing liver segments based on annotated hepatic and portal vessel segments around the tumor.\label{fig:liver_segments}](Figures/liver_segments.png)
 
 # Acknowledgements
 This work was conducted as part of the ALive project, funded by the Research Council of Norway under the IKTPLUSS research program (grant nr. 311393).
