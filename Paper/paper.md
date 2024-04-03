@@ -68,9 +68,11 @@ In the same line as for the liver segments classification, Slicer-Liver implemen
 # Preliminary results
 
 **Definition of Virtual Resections**
-Slicer-Liver provides computer-aided preoperative planning systems, streamlining the resection planning process and introducing real-time 3D cutting path visualization [@Aghayan:2023], shown in \autoref{fig:1}. The presented approach empowers users to make decisions based on individual patient needs, enhancing outcomes for both atypical and anatomical resections. Notably, the proposed new resection methods aim to obtain better liver remnant preservation compared to existing methods.
+Slicer-Liver provides computer-aided preoperative planning systems, streamlining the resection planning process and introducing real-time 3D cutting path visualization [@Aghayan:2023], shown in \autoref{fig:1}. The presented approach empowers users to make informed decisions based on individual patient needs, enhancing outcomes for both atypical and anatomical resections as represented in \autoref{fig:4}. Notably, the proposed new resection methods aim to obtain better liver remnant preservation compared to existing methods.
 
 ![Specification of a virtual resection with visualization of safety margins.\label{fig:1}](Screenshots/Slicer-Liver_screenshot_04.png)
+![3D Planning of Atypical vs Anatomical resections. \label{fig:4}](Screenshots/AtypicalvsAnatomical.svg)
+
 
 **Visualization of Virtual Resections Using Resectograms**
 Adding resectograms to Slicer-Liver, allows a real-time 2D representation of resections as shown in \autoref{fig:2}, where the resectogram provides an intuitive and occlusion-free visualization of the virtual resection with three components: resection intersection with liver, vessels and anatomical segments, as well as safety margins. The use of resectograms enables an effective identification and characterization of invalid resection types due to inadequate visualization in the 3D view during planning. 
