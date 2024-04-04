@@ -77,7 +77,7 @@ Slicer-Liver provides computer-aided preoperative planning systems, streamlining
 **Visualization of Virtual Resections Using Resectograms**
 Adding resectograms to Slicer-Liver, allows a real-time 2D representation of resections as shown in \autoref{fig:resection_resectogram}, where the resectogram provides an intuitive and occlusion-free visualization of the virtual resection with three components: resection intersection with liver, vessels and anatomical segments, as well as safety margins. The use of resectograms enables an effective identification and characterization of invalid resection types due to inadequate visualization in the 3D view during planning. 
 
-![Virtual 3D resection with corresponding 2D resectogram.\label{fig:resection_resectogram}](Figures/resectograms_overview.svg){ width=100% }
+![Virtual 3D resection with corresponding 2D resectogram.\label{fig:resection_resectogram}](Figures/resectograms_overview.svg)
 
 **Classification of Liver Segments**
 By departing from the standardized Couinaud classification of the liver in segments, the implemented approach enables a more individualized representation of liver segmental distribution [@{d'Albenzio:2023}] \autoref{fig:couinaud_segments}. Particularly noteworthy is the method’s estimation of segments 8 and 5, resulting in a classification that is more applicable to real-world surgical scenarios, as shown in \autoref(fig:couinaud_segments.svg)[@Bismuth:1982].  While improvements, particularly in automating the landmark marking process, are needed, the approach holds promise for improving liver surgery planning and has the potential to optimize surgical outcomes.
