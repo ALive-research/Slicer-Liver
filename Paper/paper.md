@@ -13,7 +13,7 @@ authors:
     equal-contrib: true
     affiliation: 2
   - name: Gabriella D'Albenzio
-    orcid: 0000-0000-0000-0000
+    orcid: 0009-0009-5182-4775
     equal-contrib: true # (This is how you can denote equal contributions between multiple authors)
     affiliation: 1
   - name: Ole Vegard Solberg
