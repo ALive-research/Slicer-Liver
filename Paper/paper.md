@@ -80,7 +80,7 @@ Adding resectograms to Slicer-Liver, allows a real-time 2D representation of res
 ![Virtual 3D resection with corresponding 2D resectogram.\label{fig:resection_resectogram}](Figures/resectograms_overview.svg){ width=100% }
 
 **Classification of Liver Segments**
-By departing from the standardized Couinaud classification of the liver in segments, the implemented approach enables a more individualized representation of liver segmental distribution [@{d'Albenzio:2023}] \autoref{fig:couinaud_segments}. Particularly noteworthy is the method’s estimation of segments 8 and 5, rusulting in a classification that is more applicable to real-world surgical scenarios, as shown in \autoref(fig:couinaud_segments.svg)[@Bismuth:1982].  While improvements, particularly in automating the landmark marking process, are needed, the approach holds promise for improving liver surgery planning and has the potential to optimize surgical outcomes.
+By departing from the standardized Couinaud classification of the liver in segments, the implemented approach enables a more individualized representation of liver segmental distribution [@{d'Albenzio:2023}] \autoref{fig:couinaud_segments}. Particularly noteworthy is the method’s estimation of segments 8 and 5, resulting in a classification that is more applicable to real-world surgical scenarios, as shown in \autoref(fig:couinaud_segments.svg)[@Bismuth:1982].  While improvements, particularly in automating the landmark marking process, are needed, the approach holds promise for improving liver surgery planning and has the potential to optimize surgical outcomes.
 
 ![Visualizing liver segments based on annotated hepatic and portal vessel segments.\label{fig:couinaud_segments}](Figures/couinaud_segments.svg)
 
