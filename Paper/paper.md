@@ -51,7 +51,7 @@ All these challenges support the advancing on the integration of computer-aided 
 
 # Overview of Slicer-Liver
 
-Slicer-Liver is a 3D Slicer extension that can be installed directly through the 3D Slicer Extension Manager [@3DSlicerExtensionsManager:2024]. Slicer-Liver is intended for research purposes and is distributed through an MIT license. The software architecture is based on 3D Slicer modules (both C++ and Python) and follows common patterns found in other 3D Slicer extensions. The software provides 4 bodies of functionality that can be used independently or in conjunction as described in the following. 
+Slicer-Liver is a 3D Slicer extension that can be installed directly through the 3D Slicer Extension Manager [@3DSlicerExtensionsManager:2024]. Slicer-Liver is intended for research purposes and is distributed through an MIT license. The software architecture is based on 3D Slicer modules (both C++ and Python) and follows common patterns found in other 3D Slicer extensions. The software provides four bodies of functionality that can be used independently or in conjunction as described in the following. 
 
 **Definition of Virtual Resections**
 Slicer-Liver has integrated different geometric modeling techniques to model virtual resetions (deformable Bézier with planar initialization [@Palomar:2017], NURBS (Non-Uniform Rational B-Spline) and contour-initialized resections). The implementation of these methods include visualization of the resection margin, adaptive grid visualization and clipping of the resection excess. Thanks to the computation of distance maps between anatomical structures, resection margin visualization operates in real-time as the user modifies the resection.
@@ -70,7 +70,7 @@ In the same line as for the liver segments classification, Slicer-Liver implemen
 **Definition of Virtual Resections**
 Slicer-Liver provides computer-aided preoperative planning systems, streamlining the resection planning process and introducing real-time 3D cutting path visualization [@Aghayan:2023], shown in \autoref{fig:resection_specification}. The presented approach empowers users to make informed decisions based on individual patient needs, enhancing outcomes for both atypical and anatomical resections as represented in \autoref{fig:atypical_vs_anatomical}. Notably, the proposed new resection methods aim to obtain better liver remnant preservation compared to existing methods.
 
-![Specification of a virtual resection with visualization of safety margins.\label{fig:resection_specification}](Figures/resection_specification.png)
+![Specification of a virtual resection with visualization of safety margins. Red indicates a violation of user-specified resection margin (in mm). Yellow indicates a violation of an additional user-specified uncertainty margin (in mm).\label{fig:resection_specification}](Figures/resection_specification.png)
 
 ![3D Planning of Atypical vs Anatomical resections.\label{fig:atypical_vs_anatomical}](Figures/atypical_vs_anatomical_resection.svg)
 
