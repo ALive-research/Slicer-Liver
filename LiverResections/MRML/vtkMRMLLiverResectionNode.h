@@ -94,7 +94,7 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   vtkMRMLCopyContentDefaultMacro(vtkMRMLLiverResectionNode);
 
   /// Create default storage node or nullptr if does not have one
-  vtkMRMLStorageNode* CreateDefaultStorageNode();
+  vtkMRMLStorageNode* CreateDefaultStorageNode() override;
 
 
   // TODO: Review the need for this further down the road
@@ -371,16 +371,16 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   bool GridVisibility;
   float GridDivisions;
   float GridThickness;
-  bool Grid3DVisibility;
   bool ShowResection2D;
-  bool EnableFlexibleBoundary;
-  bool Grid2DVisibility;
   double HepaticContourThickness; //Resection margin in mm
   double PortalContourThickness; //Uncertainty margin in mm
   float HepaticContourColor[3];
   float PortalContourColor[3];
   int TextureNumComps;
+  bool EnableFlexibleBoundary;
   bool MirrorDisplay;
+  bool Grid3DVisibility;
+  bool Grid2DVisibility;
 
  private:
   vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);

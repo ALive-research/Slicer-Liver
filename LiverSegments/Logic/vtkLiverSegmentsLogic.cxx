@@ -42,6 +42,10 @@
 #include <vtkMRMLLabelMapVolumeNode.h>
 #include <vtkMRMLSegmentationNode.h>
 #include <vtkMRMLModelNode.h>
+#include <vtkMRMLDisplayNode.h>
+
+#include <vtkMRMLScene.h>
+#include <vtkSlicerSegmentationsModuleLogic.h>
 
 #include <vtkObjectFactory.h>
 #include <vtkImageData.h>
@@ -54,6 +58,11 @@
 #include <vtkAppendPolyData.h>
 #include <vtkOrientedImageData.h>
 #include <vtkMatrix4x4.h>
+#include <vtkDecimatePro.h>
+#include <vtkCleanPolyData.h>
+#include <vtkTriangleFilter.h>
+#include <vtkPolyDataNormals.h>
+#include <vtkCellData.h>
 
 #include <iostream>
 
@@ -82,6 +91,13 @@ void vtkLiverSegmentsLogic::MarkSegmentWithID(vtkMRMLModelNode *segment, int seg
 {
     auto idArray = vtkSmartPointer<vtkIntArray>::New();
     idArray->SetName("segmentId");
+    
+    if(!segment) //Allow function to run with nullptr as input
+    {
+        std::cout << "MarkSegmentWithID Error: No input" << std::endl;
+        return;
+    }
+    
     auto polydata = segment->GetPolyData();
     int numberOfPoints = polydata->GetNumberOfPoints();
     for(int i=0;i<numberOfPoints;i++) {
@@ -92,6 +108,11 @@ void vtkLiverSegmentsLogic::MarkSegmentWithID(vtkMRMLModelNode *segment, int seg
 
 void vtkLiverSegmentsLogic::AddSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline)
 {
+    if(!summedCenterline || !segmentCenterline) //Allow function to run with nullptr as input
+    {
+        std::cout << "AddSegmentToCenterlineModel Error: No input" << std::endl;
+        return;
+    }
     auto segment = segmentCenterline->GetPolyData();
     auto centerlineModel = summedCenterline->GetPolyData();
 
@@ -108,6 +129,13 @@ void vtkLiverSegmentsLogic::AddSegmentToCenterlineModel(vtkMRMLModelNode *summed
 int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLModelNode *centerlineModel, vtkMRMLLabelMapVolumeNode *labelMap)
 {
     auto ijkToRas = vtkSmartPointer<vtkMatrix4x4>::New();
+    
+    if(!centerlineModel || !labelMap) //Allow function to run with nullptr as input
+    {
+        std::cout << "SegmentClassificationProcessing Error: No input" << std::endl;
+        return 0;
+    }
+    
     labelMap->GetIJKToRASMatrix(ijkToRas);
 
     auto centerlinePolyData = centerlineModel->GetPolyData();
@@ -150,8 +178,13 @@ int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLModelNode *cen
 
 void vtkLiverSegmentsLogic::InitializeCenterlineSearchModel(vtkMRMLModelNode *summedCenterline)
 {
-    auto centerlineModel = summedCenterline->GetPolyData();
     this->Locator->Initialize();
+    if(!summedCenterline) //Allow function to run with nullptr as input
+    {
+        std::cout << "InitializeCenterlineSearchModel Error: No input" << std::endl;
+        return;
+    }
+    auto centerlineModel = summedCenterline->GetPolyData();
     this->Locator->SetDataSet(vtkPointSet::SafeDownCast(centerlineModel));
     if(centerlineModel->GetPointData()->GetNumberOfArrays() > 0)
         this->Locator->BuildLocator();
@@ -159,4 +192,96 @@ void vtkLiverSegmentsLogic::InitializeCenterlineSearchModel(vtkMRMLModelNode *su
         std::cout << "Error: No PointData in centerline model" << std::endl;
 }
 
+void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNode *vascularTerritorySegmentationNode,
+                                                          vtkMRMLScalarVolumeNode *refVolume,
+                                                          vtkMRMLSegmentationNode *segmentation,
+                                                          vtkMRMLModelNode *centerlineModel,
+                                                          vtkMRMLColorNode *colormap)
+{
+    vtkMRMLScene *mrmlScene = this->GetMRMLScene();
 
+    if (!mrmlScene)
+        vtkErrorMacro("Error in calculateVascularTerritoryMap: no valid MRML scene.");
+
+  vtkMRMLNode *labelmapNode = mrmlScene->AddNewNodeByClass("vtkMRMLLabelMapVolumeNode");
+  vtkMRMLLabelMapVolumeNode *labelmapVolumeNode = vtkMRMLLabelMapVolumeNode::SafeDownCast(labelmapNode);
+  auto segmentationIds = vtkSmartPointer<vtkStringArray>::New();
+  
+  if(!vascularTerritorySegmentationNode || !segmentation || !colormap)
+  {
+    std::cout << "calculateVascularTerritoryMap Error: No input" << std::endl;
+    return;
+  }
+
+  //Get voxels tagged as liver
+  std::string segmentId = segmentation->GetSegmentation()->GetSegmentIdBySegmentName("liver");
+  //Check metadata for segmentation
+  vtkSegmentation* segm = segmentation->GetSegmentation();
+  int numberOfSegments = segm->GetNumberOfSegments();
+  std::cout << "Liver segmentId: "  << segmentId << " numberOfSegments: " << numberOfSegments << std::endl;
+
+  vtkSegment *liverSegm = segm->GetSegment(segmentId);
+  if(liverSegm)
+      std::cout << "Segment name: "  << liverSegm->GetName() << " Segment label: " << liverSegm->GetLabelValue() << std::endl;
+
+  segmentationIds->InsertNextValue(segmentId);
+  vtkSlicerSegmentationsModuleLogic::ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume);
+  int result = SegmentClassificationProcessing(centerlineModel, labelmapVolumeNode);
+  if(result == 0)
+    vtkErrorMacro("Corrupt centerline model - Not possible to calculate vascular segments.");
+  labelmapVolumeNode->GetDisplayNode()->SetAndObserveColorNodeID(colormap->GetID());
+  //slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
+  labelmapVolumeNode->Modified();//Is this enough, or is more of the code in arrayFromVolumeModified needed?
+  const char * segmentationId = vascularTerritorySegmentationNode->GetAttribute("LiverSegments.SegmentationId");
+  vascularTerritorySegmentationNode->Reset(nullptr);
+  vascularTerritorySegmentationNode->SetAttribute("LiverSegments.SegmentationId", segmentationId);
+  vascularTerritorySegmentationNode->CreateDefaultDisplayNodes(); // only needed for display
+  vtkSlicerSegmentationsModuleLogic::ImportLabelmapToSegmentationNode(labelmapVolumeNode, vascularTerritorySegmentationNode);
+  vascularTerritorySegmentationNode->CreateClosedSurfaceRepresentation();
+  mrmlScene->RemoveNode(labelmapVolumeNode);
+}
+
+void vtkLiverSegmentsLogic::preprocessAndDecimate(vtkPolyData *surfacePolyData, vtkPolyData *returnPolyData)
+{
+    vtkMRMLScene *mrmlScene = this->GetMRMLScene();
+    if (!mrmlScene)
+        vtkErrorMacro("Error in preprocessAndDecimate: no valid MRML scene.");
+    if(!surfacePolyData
+        || (surfacePolyData->GetPointData()->GetNumberOfArrays() == 0
+            && surfacePolyData->GetCellData()->GetNumberOfArrays() == 0) )
+    {
+        std::cout << "preprocessAndDecimate Error: no input surfacePolyData." << std::endl;
+        return;
+    }
+
+    vtkSmartPointer<vtkDecimatePro> decimator = vtkSmartPointer<vtkDecimatePro>::New();
+    double decimationFactor = 0.8;
+    decimator->SetInputData(surfacePolyData);
+    decimator->SetFeatureAngle(60);
+    decimator->SplittingOff();
+    decimator->PreserveTopologyOn();
+    decimator->SetMaximumError(1);
+
+    decimator->SetTargetReduction(decimationFactor);
+    decimator->Update();
+
+    vtkSmartPointer<vtkCleanPolyData> surfaceCleaner = vtkSmartPointer<vtkCleanPolyData>::New();
+    surfaceCleaner->SetInputData(decimator->GetOutput());
+    surfaceCleaner->Update();
+
+    vtkSmartPointer<vtkTriangleFilter> surfaceTriangulator = vtkSmartPointer<vtkTriangleFilter>::New();
+    surfaceTriangulator->SetInputData(surfaceCleaner->GetOutput());
+    surfaceTriangulator->PassLinesOff();
+    surfaceTriangulator->PassVertsOff();
+    surfaceTriangulator->Update();
+
+    vtkSmartPointer<vtkPolyDataNormals> normals = vtkSmartPointer<vtkPolyDataNormals>::New();
+    normals->SetInputData(surfaceTriangulator->GetOutput());
+    normals->SetAutoOrientNormals(1);
+    normals->SetFlipNormals(0);
+    normals->SetConsistency(1);
+    normals->SplittingOff();
+    normals->Update();
+
+    returnPolyData->ShallowCopy(normals->GetOutput());
+}
