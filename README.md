@@ -58,31 +58,23 @@ Follow these steps to compute the Distance Map:
 
 1. **Reference Volume**:
    - Select the CT data from the dropdown menu.
-
 2. **Segmentation**:
    - Choose the binary labelmap representing the segmentation of the liver, tumor, and vascular territories.
-
 3. **Tumor**:
    - Select the tumor segmentation node.
-
 4. **Liver**:
    - Select the liver segmentation node.
-
 5. **Hepatic** (if applicable):
    - Select the hepatic segmentation node.
-
 6. **Portal** (if applicable):
    - Select the portal segmentation node.
-
 7. **Output Distance Map**:
    - Create a new `VectorVolume` for the output distance map.
-
 8. **Downsampling Rate** (optional):
    - Adjust the downsampling rate if needed (default is 1.00).
-
 9. **Compute Distance Map**:
    - Click the `Compute Distance Maps` button to start the computation.
-
+   
 Ensure all required fields are filled; otherwise, the `Compute Distance Maps` button will remain inactive.
 
 ### Resections
@@ -129,7 +121,8 @@ The Resectogram section in Slicer-Liver allows users to configure various option
 9. **Vascular Segments Volume:**
    - Use the dropdown menu to select the vascular segments volume. The available options depend on the pre-loaded volumes in the software.
 
-The following GIF demonstrates the usage of the Resectogram section in Slicer-Liver
+The resectogram can only be used after distance maps have been calculated and uploaded.
+The following GIF demonstrates the usage of the Resectogram section in Slicer-Liver:
 
 ![Slicer-Liver_resectogram.gif](Screenshots_tutorial/Slicer-Liver_resectogram.gif)
 
@@ -139,23 +132,17 @@ Our method for liver segment classification involves defining segments using cen
 
 1. **Vascular Territory Segmentation**:
    - Create or Select a vascular territory segmentation from the dropdown menu.
-
 2. **Vascular Territory**:
    - Create a new territory ID.
-
 3. **Segmentation**:
    - Select the segmentation node representing the hepatic/portal vessels.
-
 4. **Hide Unnecessary Segments**:
    - Use the `Show/Hide` button to hide the liver and/or tumor segmentation nodes if they obstruct the view. This step is not required for creating centerlines on vessel branches but can improve visibility.
-
 5. **Vessel Points**:
    - Create a new Point List for `Vessel points`.
    - Click the arrow button next to `Vessel points` and place fixed landmark points on the hepatic/portal segmentation. These points will be used to extract the centerlines of user-defined vessel branches.
-
 6. **Add Vessel Centerline**:
    - After placing the points, click `Add Vessel Centerline` to generate the centerlines.
-
 7. **Calculate Vascular Territory Segmentation**:
    - Once all points are placed and centerlines are added, click `Calculate Vascular Territory Segmentation` to compute the liver segments.
 
@@ -176,6 +163,9 @@ Our method for liver segment classification involves defining segments using cen
    - Choose one or more resections for the same liver model and calculate the remnant/resected volume by placing marker points onto these areas.
    - This can be combined with liver anatomy segments or self-defined liver segments to gain a deeper understanding of liver volumetry after different resection approaches (anatomical, atypical, etc.).
    - It can also be used to compare different resection plans for the same tumor or to provide a combined view for one surgery with multiple resections.
+
+![Slicer-Liver_screenshot_19.png](Screenshots_tutorial/Slicer-Liver_screenshot_19.png)
+![Slicer-Liver_screenshot_20.png](Screenshots_tutorial/Slicer-Liver_screenshot_20.png)
 
  
 ## Video Tutorial
