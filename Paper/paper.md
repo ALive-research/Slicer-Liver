@@ -63,7 +63,7 @@ As an additional visualization object, Slicer-Liver implements the use of resect
 Slicer-Liver leverages the method for computing liver vascular territories and segments classification utilized in [@{d'Albenzio:2023}]. The method uses the liver morphology, the interior vascular network, and user-defined landmarks to provide enhanced flexibility in marker placement, distinguishing it from other methods. One of the advantages of this approach is that vascular territories participated by both portal and hepatic vessel systems can be computed. The liver segments computed can be visualized and processed as segmentation objects or 3D models, by the rest of the tools provided in 3D Slicer.
 
 **Resection Volumetry**
-In the same line as for the liver segments classification, Slicer-Liver implements a tool for marking liver regions (with and without consideration to resections or liver segments) in a way that allows the user to perform liver resection volumetry analysis.
+Slicer-Liver offers a versatile tool for liver resection volumetry analysis, allowing the integration of resection plans with liver parenchyma and liver segments data. Users can interactively select and calculate the volumes of individual or combined regions of interest (ROIs).
 
 # Preliminary results
 
