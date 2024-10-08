@@ -45,7 +45,7 @@ To test the extension, the LiverVolume and LiverSementation data can be loaded f
 
 ## Slicer-Liver Extension Usage
 
-The extension is separated in the following three sections:
+The extension is separated in the following five sections:
 
 - Distance Map Computation: projection of the safety margins in real-time onto the resection surface, which allows the user to modify the resection proposal until the safety requirement are met.
 - Resections: computation of the first approximation (planar Bézier) of the resection surface which can be subsequently modified through 16 control points.
@@ -139,15 +139,16 @@ Our method for liver segment classification involves defining segments using cen
 2. **Vascular Territory**:
    - Create a new territory ID.
 3. **Segmentation**:
-   - Select the segmentation node representing the hepatic/portal vessels.
+   - Select the segmentation node representing the hepatic/portal vessels, and a new Point List for marking `Vessel points` will be created automatically.
 4. **Hide Unnecessary Segments**:
    - Use the `Show/Hide` button to hide the liver and/or tumor segmentation nodes if they obstruct the view. This step is not required for creating centerlines on vessel branches but can improve visibility.
 5. **Vessel Points**:
-   - Create a new Point List for `Vessel points`.
-   - Click the arrow button next to `Vessel points` and place fixed landmark points on the hepatic/portal segmentation. These points will be used to extract the centerlines of user-defined vessel branches.
+   - Place landmark points on the hepatic/portal segmentation. These points will be added to `Vessel points` and used to extract the centerlines of user-defined vessel branches.
 6. **Add Vessel Centerline**:
    - After placing the points, click `Add Vessel Centerline` to generate the centerlines.
-7. **Calculate Vascular Territory Segmentation**:
+7. **Create multiple Vascular Territories**
+   - Repeat step 1-6 to create multiple Vascular Territories.
+8. **Calculate Vascular Territory Segmentation**:
    - Once all points are placed and centerlines are added, click `Calculate Vascular Territory Segmentation` to compute the liver segments.
 
 ![Slicer-Liver_screenshot_18.jpg](Screenshots_tutorial/Slicer-Liver_screenshot_18.jpg)
