@@ -19,19 +19,23 @@ SlicerLiver is an extension for the medical research software [3D Slicer](https:
 
 The extension provides a fast and accurate solution for:
 
-- Computation and visualization of liver vascular territories (liver segments).
 - Definition of surgical resection in 3D using deformable surfaces, as well as the visualization of resection margins (risk areas).
+- Computation and visualization of liver vascular territories (liver segments).
+- Liver volumetry analysis.
 
 ### Installing the extension
 
-1.  Download and install 3D Slicer according to your operating system from here : https://download.slicer.org/.
-2.  Open Slicer.
-3.  Press Ctrl+4 to open the extension manager. Or click the blue upper-right icon with the letter `E`.
-4.  Once the Extension Manager pops up, make sure to select the `Install Extensions` tab.
-5.  On the upper-right search box write *"Liver"*
-6.  Click `Install` and give okay to install other extensions if asked.
-7.  Restart Slicer.
-8.  Once 3D Slicer restarts, click the search icon on the left of the module selector and write 'Liver'. Click `Switch to module`.
+1. Download and install 3D Slicer according to your operating system from here : https://download.slicer.org/.
+2. Open Slicer.
+3. Press Ctrl+4 to open the extension manager.
+4. Once the Extension Manager pops up, make sure to select the `Install Extensions` tab.
+5. On the upper-right search box write *"slicerliver"*
+6. Click `Install` and give okay to install other extensions if asked.
+
+![Slicer-Liver_screenshot_22.jpg](Screenshots_tutorial/Slicer-Liver_screenshot_22.png)
+
+7. Restart Slicer.
+8. Once 3D Slicer restarts, click the search icon on the left of the module selector and write 'Liver'. Click `Switch to module`.
 
 ![Slicer-Liver_screenshot_10.jpg](Screenshots_tutorial/Slicer-Liver_screenshot_10.jpg)
 ### Sample Data
