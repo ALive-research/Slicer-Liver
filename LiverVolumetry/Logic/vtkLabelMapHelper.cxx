@@ -77,7 +77,7 @@ vtkLabelMapHelper::~vtkLabelMapHelper()
 //------------------------------------------------------------------------------
 void vtkLabelMapHelper::PrintSelf(ostream &os, vtkIndent indent)
 {
-
+    this->vtkObject::PrintSelf(os, indent);
 }
 
 //------------------------------------------------------------------------------
@@ -129,8 +129,7 @@ unsigned int
 vtkLabelMapHelper::
 ProjectPointsOntoItkImage(vtkLabelMapHelper::LabelMapType::Pointer itkImage,
                           vtkPoints *points,
-                          unsigned short projectionValue,
-                          unsigned int radius)
+                          unsigned short projectionValue)
 {
   // Check for null pointers
   if (itkImage.IsNull())

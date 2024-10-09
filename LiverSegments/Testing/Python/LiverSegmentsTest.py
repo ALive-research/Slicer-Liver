@@ -20,18 +20,22 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
     self.setUp()
     self.logicFunctionsWithEmptyParameters()
     self.downloadData()
+    self.vtkLogicFunctions()
 
-  def logicFunctionsWithEmptyParameters(self):
+  def initPythonLogic(self):
     logic = LiverSegmentsLogic()
-
     logic.__init__()
     logic.getCenterlineLogic()
     logic.setDefaultParameters(logic.getParameterNode())
+    return logic
+
+  def logicFunctionsWithEmptyParameters(self):
+    logic = self.initPythonLogic()
 
     colormap = slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels')
     logic.createCompleteCenterlineModel(colormap)
-
-    centerlineModel = logic.build_centerline_model(colormap)
+    segmentationId = 1
+    centerlineModel = logic.build_centerline_model(colormap, segmentationId)
 
     refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
     segmentation = self.createEmptyvtkMRMLSegmentationNode()
@@ -43,6 +47,24 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
 
     logic.preprocessAndDecimate(vtk.vtkPolyData())
     logic.decimateLine(vtk.vtkPolyData())
+    logic.polyDataFromNode(None, segmentationId)
+    
+  def vtkLogicFunctions(self):
+    from vtkSlicerLiverSegmentsModuleLogicPython import vtkLiverSegmentsLogic
+    vtkLogic = vtkLiverSegmentsLogic()
+    vtkLogic.SetMRMLScene(slicer.mrmlScene)
+    
+    segmentationVascular = self.createEmptyvtkMRMLSegmentationNode()
+    segmentation = self.createEmptyvtkMRMLSegmentationNode()
+    refVolume = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
+    colormap = slicer.mrmlScene.GetNodeByID('vtkMRMLColorTableNodeLabels')
+
+    logic = self.initPythonLogic()
+    logic.createCompleteCenterlineModel(colormap)
+    centerlineModel = logic.build_centerline_model(colormap, 1)
+    vtkLogic.calculateVascularTerritoryMap(segmentationVascular, refVolume, segmentation, centerlineModel, colormap)
+    vtkLogic.preprocessAndDecimate(None, None)
+    vtkLogic.preprocessAndDecimate(vtk.vtkPolyData(), vtk.vtkPolyData())
 
   def create2EmptyMarkupsFiducialNodes(self):
     emptyNode = slicer.mrmlScene.CreateNodeByClass("vtkMRMLMarkupsFiducialNode")
@@ -62,6 +84,7 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
     aliveDataURL ='https://github.com/alive-research/aliveresearchtestingdata/releases/download/'
     downloads = {
         'fileNames': '3D-IRCADb-01_08.nrrd',
+#        'fileNames': 'LiverSegmentation000.seg.nrrd',
         'loadFiles': True,
         #'uris': TESTING_DATA_URL + 'SHA256/2e25b8ce2c70cc2e1acd9b3356d0b1291b770274c16fcd0e2a5b69a4587fbf74',
         'uris': aliveDataURL + 'SHA256/2e25b8ce2c70cc2e1acd9b3356d0b1291b770274c16fcd0e2a5b69a4587fbf74',
@@ -71,5 +94,11 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
     import SampleData
     SampleData.downloadFromURL(**downloads)
 
-#    volumeNode = slicer.util.getNode(pattern='Segment_1')
+    modelNodeDict = slicer.util.getNodes('vtkMRMLModelNode*')
+    self.assertIsNotNone(modelNodeDict)
+    counter = 0
+    for name, modelNode in modelNodeDict.items():
+      self.assertIsNotNone(modelNodeDict)
+      counter = counter + 1
+    self.assertEqual(counter, 3)
 

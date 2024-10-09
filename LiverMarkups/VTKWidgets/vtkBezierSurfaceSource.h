@@ -75,7 +75,7 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkBezierSurfaceSource : 
    * @param os ouptut stream to print the properties to.
    * @param indent indentation value.
    */
-  void PrintSelf(ostream &os, vtkIndent indent);
+  void PrintSelf(ostream &os, vtkIndent indent) override;
 
   /**
    * Set the control points.
@@ -164,7 +164,7 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkBezierSurfaceSource : 
    *
    * @return return code.
    */
-  int RequestData(vtkInformation *, vtkInformationVector **, vtkInformationVector *);
+  int RequestData(vtkInformation *, vtkInformationVector **, vtkInformationVector *) override;
 
  private:
   vtkBezierSurfaceSource(const vtkBezierSurfaceSource&);  // Not implemented.
