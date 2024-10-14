@@ -79,6 +79,8 @@ vtkLiverVolumetryLogic : public vtkObject {
   itk::Index<3> GetITKRGSeedIndex(double *ROISeedPoint, itk::SmartPointer<itk::Image<short, 3>> SourceImage);
   void VolumetryTable(std::string Properties, double TargetSegmentationVolume, int ROIVoxels, double ROIVolume, vtkMRMLTableNode *OutputTableNode);
   int GetRes(vtkMRMLMarkupsBezierSurfaceNode *bezierSurfaceNode, double space[3], int Steps);
+  void GetResectionsProjectionITKImage(vtkMRMLLabelMapVolumeNode* SelectedSegmentsLabelMap,vtkCollection* ResectionNodes, int baseValue);
+  void GenerateSegmentsLabelMap(vtkMRMLLabelMapVolumeNode* TargetSegmentLabelMapCopy, vtkMRMLLabelMapVolumeNode* newLabelMap,vtkCollection* ResectionNodes, vtkMRMLMarkupsFiducialNode* ROIMarkersList);
 
  protected:
   itk::SmartPointer<itk::Image<short, 3>> ProjectedTargetSegmentImage;

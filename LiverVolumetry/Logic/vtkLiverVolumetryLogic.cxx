@@ -58,6 +58,7 @@
 #include <vtkPointData.h>
 #include <vtkStringArray.h>
 #include <vtkMatrix4x4.h>
+#include <vtkIntArray.h>
 #include <vtkImageThreshold.h>
 #include <vtkImageAccumulate.h>
 #include <vtkOrientedImageData.h>
@@ -82,7 +83,7 @@ void vtkLiverVolumetryLogic::PrintSelf(ostream &os, vtkIndent indent)
 }
 
 void vtkLiverVolumetryLogic::ComputeAdvancedPlanningVolumetry(vtkMRMLLabelMapVolumeNode* SelectedSegmentsLabelMap, vtkMRMLTableNode* OutputTableNode, vtkMRMLMarkupsFiducialNode* ROIMarkersList, vtkCollection* ResectionNodes, double TargetSegmentationVolume){
-  vtkLabelMapHelper::LabelMapType::RegionType TargetSegmentsBoundingBox;
+
   vtkLabelMapHelper::LabelMapType::Pointer TargetSegmentsITKImage;
   int baseValue = 100;
   double spacing[3];
@@ -95,39 +96,19 @@ void vtkLiverVolumetryLogic::ComputeAdvancedPlanningVolumetry(vtkMRMLLabelMapVol
     return;
     }
 
-
   if (ResectionNodes){
     // Project SelectedSegmentsLabelMap from vtkImage to itkImage
     // need deep copy the label map
+
+    auto LabelRetrievingOnly = vtkLabelMapHelper::VolumeNodeToItkImage(SelectedSegmentsLabelMap, true, false);
+
     auto TargetSegmentImageDataCopy = vtkSmartPointer<vtkImageData>::New();
     TargetSegmentImageDataCopy->DeepCopy(SelectedSegmentsLabelMap->GetImageData());
     auto TargetSegmentLabelMapCopy = vtkSmartPointer<vtkMRMLLabelMapVolumeNode>::New();
     TargetSegmentLabelMapCopy->CopyOrientation(SelectedSegmentsLabelMap);
     TargetSegmentLabelMapCopy->SetAndObserveImageData(TargetSegmentImageDataCopy);
 
-    auto LabelRetrievingOnly = vtkLabelMapHelper::VolumeNodeToItkImage(SelectedSegmentsLabelMap, true, false);
-    TargetSegmentsBoundingBox = vtkLabelMapHelper::GetBoundingBox(LabelRetrievingOnly);
-
-    auto BezierHR = vtkSmartPointer<vtkBezierSurfaceSource>::New();
-    if (this->resectionNodes != ResectionNodes && ResectionNodes != nullptr)
-      {
-      this->resectionNodes = ResectionNodes;
-      for (int i = 0; i < this->resectionNodes->GetNumberOfItems(); i++)
-        {
-        auto bezierSurfaceNode = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(this->resectionNodes->GetItemAsObject(i));
-        auto Res =  GetRes(bezierSurfaceNode, spacing, 300);
-        if(Res < 500){
-          Res  =  500;
-        }
-        BezierHR = GenerateBezierSurface(Res, bezierSurfaceNode);
-        if(i == 0){
-          this->ProjectedTargetSegmentImage = vtkLabelMapHelper::VolumeNodeToItkImage(TargetSegmentLabelMapCopy, true, false);
-          }
-        vtkLabelMapHelper::ProjectPointsOntoItkImage(this->ProjectedTargetSegmentImage,
-                                                     BezierHR->GetOutput()->GetPoints(),
-                                                     baseValue);
-        }
-      }
+    GetResectionsProjectionITKImage(TargetSegmentLabelMapCopy, ResectionNodes, baseValue);
 
     // region growing for every point in the list
     if (ROIMarkersList){
@@ -169,7 +150,6 @@ void vtkLiverVolumetryLogic::ComputeAdvancedPlanningVolumetry(vtkMRMLLabelMapVol
       }
     }
 }
-
 
 vtkSmartPointer<vtkBezierSurfaceSource> vtkLiverVolumetryLogic::GenerateBezierSurface(int Res, vtkMRMLMarkupsBezierSurfaceNode* bezierSurfaceNode){
   if (!bezierSurfaceNode)
@@ -330,8 +310,6 @@ int vtkLiverVolumetryLogic::GetSegmentVoxels(vtkOrientedImageData *TargetSegment
     }
 }
 
-
-
 std::vector<int> vtkLiverVolumetryLogic::GetROIPointsLabelValue(vtkMRMLLabelMapVolumeNode* SelectedSegmentsLabelMap, vtkMRMLMarkupsFiducialNode* ROIMarkersList){
   std::vector<int> re;
   vtkLabelMapHelper::LabelMapType::Pointer TargetSegmentsITKImage;
@@ -358,3 +336,104 @@ std::vector<int> vtkLiverVolumetryLogic::GetROIPointsLabelValue(vtkMRMLLabelMapV
   return re;
 }
 
+void vtkLiverVolumetryLogic::GetResectionsProjectionITKImage(vtkMRMLLabelMapVolumeNode* TargetSegmentLabelMapCopy,vtkCollection* ResectionNodes, int baseValue){
+  double spacing[3];
+  TargetSegmentLabelMapCopy->GetSpacing(spacing);
+
+  auto BezierHR = vtkSmartPointer<vtkBezierSurfaceSource>::New();
+  if (this->resectionNodes != ResectionNodes && ResectionNodes != nullptr)
+    {
+    this->resectionNodes = ResectionNodes;
+    for (int i = 0; i < this->resectionNodes->GetNumberOfItems(); i++)
+      {
+      auto bezierSurfaceNode = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(this->resectionNodes->GetItemAsObject(i));
+      auto Res =  GetRes(bezierSurfaceNode, spacing, 300);
+      if(Res < 500){
+        Res  =  500;
+        }
+      BezierHR = GenerateBezierSurface(700, bezierSurfaceNode);
+      if(i == 0){
+        this->ProjectedTargetSegmentImage = vtkLabelMapHelper::VolumeNodeToItkImage(TargetSegmentLabelMapCopy, true, false);
+        }
+      vtkLabelMapHelper::ProjectPointsOntoItkImage(this->ProjectedTargetSegmentImage,
+                                                   BezierHR->GetOutput()->GetPoints(),
+                                                   baseValue);
+      }
+    }
+}
+
+void vtkLiverVolumetryLogic::GenerateSegmentsLabelMap(vtkMRMLLabelMapVolumeNode* SelectedSegmentsLabelMap, vtkMRMLLabelMapVolumeNode* GeneratedSegmentsNode,vtkCollection* ResectionNodes, vtkMRMLMarkupsFiducialNode* ROIMarkersList){
+  auto ijkras = vtkSmartPointer<vtkMatrix4x4>::New();
+  auto ImageOrigin = SelectedSegmentsLabelMap->GetOrigin();
+  auto ImageSpacing = SelectedSegmentsLabelMap->GetSpacing();
+  SelectedSegmentsLabelMap->GetIJKToRASDirectionMatrix(ijkras);
+  GeneratedSegmentsNode->SetOrigin(ImageOrigin);
+  GeneratedSegmentsNode->SetSpacing(ImageSpacing);
+  GeneratedSegmentsNode->SetIJKToRASDirectionMatrix(ijkras);
+
+  auto ROIlabelvalues = GetROIPointsLabelValue(SelectedSegmentsLabelMap, ROIMarkersList);
+
+  auto SelectedImage = SelectedSegmentsLabelMap->GetImageData();
+  auto Newlabelvalue = vtkSmartPointer<vtkIntArray>::New();
+  Newlabelvalue->DeepCopy(SelectedImage->GetPointData()->GetArray(0));
+  auto NewImage = vtkSmartPointer<vtkImageData>::New();
+  NewImage->DeepCopy(SelectedImage);
+
+  if (ResectionNodes){
+
+    int baseValue = 100;
+    auto LabelRetrievingOnly = vtkLabelMapHelper::VolumeNodeToItkImage(SelectedSegmentsLabelMap, true, false);
+
+    auto TargetSegmentImageDataCopy = vtkSmartPointer<vtkImageData>::New();
+    TargetSegmentImageDataCopy->DeepCopy(SelectedSegmentsLabelMap->GetImageData());
+    auto TargetSegmentLabelMapCopy = vtkSmartPointer<vtkMRMLLabelMapVolumeNode>::New();
+    TargetSegmentLabelMapCopy->CopyOrientation(SelectedSegmentsLabelMap);
+    TargetSegmentLabelMapCopy->SetAndObserveImageData(TargetSegmentImageDataCopy);
+
+    GetResectionsProjectionITKImage(TargetSegmentLabelMapCopy, ResectionNodes, baseValue);
+
+    vtkSmartPointer<vtkLabelMapHelper> labelMapHelper = vtkSmartPointer<vtkLabelMapHelper>::New();
+    for(int i = 0; i<ROIMarkersList->GetNumberOfControlPoints();i++){
+      double point[3];
+      ROIMarkersList->GetNthControlPointPosition(i, point);
+      auto pointLabel = ROIMarkersList->GetNthControlPointLabel(i);
+      this->connectedThreshold = nullptr;
+      if(this->resectionNodes != nullptr)
+        {
+        auto seedIndex = GetITKRGSeedIndex(point, LabelRetrievingOnly);
+        int LabelValue = LabelRetrievingOnly->GetPixel(seedIndex);
+        this->connectedThreshold = labelMapHelper->ConnectedThreshold(this->ProjectedTargetSegmentImage, 1, baseValue-1, baseValue+i, seedIndex);
+
+        int Count = 0;
+        typedef itk::ImageRegionConstIterator<itk::Image<short, 3> > IteratorType;
+        IteratorType iterator(LabelRetrievingOnly, LabelRetrievingOnly->GetRequestedRegion());
+        while (!iterator.IsAtEnd())
+          {
+          auto index = iterator.GetIndex();
+          if (iterator.Get() != 0)
+            {
+            if (this->connectedThreshold->GetPixel(index) == baseValue+i && LabelRetrievingOnly->GetPixel(index) == LabelValue){
+              Newlabelvalue->SetTuple1(Count,baseValue+i);
+              } else if (Newlabelvalue->GetTuple1(Count) < baseValue) {
+              Newlabelvalue->SetTuple1(Count,99);
+              }
+            }
+          ++iterator;
+          Count++;
+          }
+        }
+      }
+  } else {
+    auto LabelValue = SelectedImage->GetPointData()->GetArray(0);
+    for (int i = 0; i< LabelValue->GetNumberOfValues(); i ++){
+      int v = static_cast<int>(LabelValue->GetTuple(i)[0]);
+      if (std::find(ROIlabelvalues.begin(), ROIlabelvalues.end(), v) != ROIlabelvalues.end() || v == 0) {
+        Newlabelvalue->SetTuple1(i,v);
+        } else {
+        Newlabelvalue->SetTuple1(i,99);
+        }
+    }
+  }
+  NewImage->GetPointData()->SetScalars(Newlabelvalue);
+  GeneratedSegmentsNode->SetAndObserveImageData(NewImage);
+}
