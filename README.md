@@ -5,7 +5,9 @@
 - [Slicer-Liver Extension Usage](#slicer-liver-extension-usage)
     - [Distance Map Computation](#distance-map-computation)
     - [Resections](#resections)
+    - [Resectogram](#resectogram)
     - [Liver Segments](#liver-segments)
+    - [Resection Volumetry](#resection-volumetry)
     - [Video Tutorial](#video-tutorial)
 - [Developers](#developers)
     - [Compilation](#compilation)
@@ -17,99 +19,159 @@ SlicerLiver is an extension for the medical research software [3D Slicer](https:
 
 The extension provides a fast and accurate solution for:
 
-- Computation and visualization of liver vascular territories (liver segments).
 - Definition of surgical resection in 3D using deformable surfaces, as well as the visualization of resection margins (risk areas).
+- Computation and visualization of liver vascular territories (liver segments).
+- Liver volumetry analysis.
 
 ### Installing the extension
 
-1.  Download and install 3D Slicer according to your operating system from here : https://download.slicer.org/.
-2.  Open Slicer.
-3.  Press Ctrl+4 to open the extension manager. Or click the blue upper-right icon with the letter `E`.
-4.  Once the Extension Manager pops up, make sure to select the `Install Extensions` tab.
-5.  On the upper-right search box write *"Liver"*
-6.  Click `Install` and give okay to install other extensions if asked.
-7.  Restart Slicer.
-8.  Once 3D Slicer restarts, click the search icon on the left of the module selector and write 'Liver'. Click `Switch to module`.
+1. Download and install 3D Slicer according to your operating system from here : https://download.slicer.org/.
+2. Open Slicer.
+3. Press Ctrl+4 to open the extension manager.
+4. Once the Extension Manager pops up, make sure to select the `Install Extensions` tab.
+5. On the upper-right search box write *"slicerliver"*
+6. Click `Install` and give okay to install other extensions if asked.
 
-![Slicer-Liver_screenshot_10](https://github.com/dalbenzioG/Slicer-Liver/blob/master/Screenshots/Slicer-Liver_screenshot_10.jpg?raw=true)
+![Slicer-Liver_screenshot_22.jpg](Screenshots_tutorial/Slicer-Liver_screenshot_22.png)
 
+7. Restart Slicer.
+8. Once 3D Slicer restarts, click the search icon on the left of the module selector and write 'Liver'. Click `Switch to module`.
+
+![Slicer-Liver_screenshot_10.jpg](Screenshots_tutorial/Slicer-Liver_screenshot_10.jpg)
 ### Sample Data
 
 To test the extension, the LiverVolume and LiverSementation data can be loaded from the Sample Data module, after installing Slicer-Liver. To properly load the data in the plugin, it is advised to first open the extension and afterwards to navigate to the Sample module and to load the data.
-
-![Slicer-Liver_screenshot_9](https://github.com/dalbenzioG/Slicer-Liver/blob/master/Screenshots/Slicer-Liver_screenshot_9.jpg?raw=true)
+![Slicer-Liver_screenshot_09.jpg](Screenshots_tutorial/Slicer-Liver_screenshot_09.jpg)
 
 ## Slicer-Liver Extension Usage
 
-The extension is separated in the following three sections:
+The extension is separated in the following five sections:
 
 - Distance Map Computation: projection of the safety margins in real-time onto the resection surface, which allows the user to modify the resection proposal until the safety requirement are met.
 - Resections: computation of the first approximation (planar Bézier) of the resection surface which can be subsequently modified through 16 control points.
+- Resectogram: visualization of the resection plan in a 2D view.
 - Liver Segments: calculation and visualization of liver vascular territories (liver segments).
+- Resection Volumetry: computation of the volume of the resection and the remaining liver.
 
 Each section is oriented towards one part of the liver resection planning workflow but, if desired, can work independently of the other ones.
-At the end of the workflow, the distance map, resection plan and liver segments can be saved to a given output directory.
+At the end of the workflow, the distance map, resection plan, liver segments and volumetry tables can be saved to a given output directory.
 
 ### Distance Map Computation
 
-The computation of the Distance Map can be done using the following steps:
+Follow these steps to compute the Distance Map:
 
-1.  Select the `Reference Volume` CT data.
-2.  Select the `Segmentation` , i.e the binary labelmap representation which stores the segmentation of the liver, tumour and vascular territories.
-3.  Select the `Tumor` segmentation.
-4.  Select the `Liver` segmentation.
-5.  Create new *VectorVolume* for `Output Distance Map`.
-6.  Finally, click on `Compute Distance Map`.
+1. **Reference Volume**:
+   - Select the CT data from the dropdown menu.
+2. **Segmentation**:
+   - Choose the binary labelmap representing the segmentation of the liver, tumor, and vascular territories.
+3. **Tumor**:
+   - Select the tumor segmentation node.
+4. **Liver**:
+   - Select the liver segmentation node.
+5. **Hepatic** (if applicable):
+   - Select the hepatic segmentation node.
+6. **Portal** (if applicable):
+   - Select the portal segmentation node.
+7. **Output Distance Map**:
+   - Create a new `VectorVolume` for the output distance map.
+8. **Downsampling Rate** (optional):
+   - Adjust the downsampling rate if needed (default is 1.00).
+9. **Compute Distance Map**:
+   - Click the `Compute Distance Maps` button to start the computation.
+   
+Ensure all required fields are filled; otherwise, the `Compute Distance Maps` button will remain inactive.
 
 ### Resections
 
 The liver resection can be planned through the following process:
 
-1.  Create a new *Liver Resection* for `Resection`.
-2.  Select the labelmap (the same used in step 2 for the Distance Map Computation) for `Liver Segmentation`.
-3.  Select the `Liver` segmentation.
-4.  Optional: the user has the possibility to select the *Distance Map* computed at the end of the first section thought the collapsible button `Distance Map`.
-5.  In the 3D View, slide the contour surrounding the liver in the desired position through the *MarkupSlidingContour*.
-6.  The initial resection plane will appear after dropping the mouse.
-7.  The resection can be deformed using the control points (4x4). It is also possible to modify the `Resection grid`, `Resection margin` and `Uncertainty margin` as desired.
-8.  Check `Preview resection` checkbox if you want to visualize the final resection plan.
+1. *Create a new LiverResection* for `Resection`.
+2. Choose the labelmap used in step 2 of the Distance Map Computation for `Liver Segmentation`.
+3. Select the `Liver` segmentation from the dropdown.
+4. Choose the contour initialization method: `Flat`, `Curved`, or `MarkupClosedCurve`.
+5. *(Optional)* Select the *Distance Map* from the first section using the `Distance Map` collapsible button.
+6. In the 3D View, use the *MarkupSlidingContour* or *MarkupDistanceContour* tool to adjust the contour around the liver, or draw a closed curve with the *MarkupClosedCurve* tool.
+7. Release the mouse to display the initial resection plane.
+8. Adjust the resection using the control points. Modify the `Resection grid`, `Resection margin`, and `Uncertainty margin` as needed.
+9. Check the `Preview resection` box to visualize the final plan.
 
-![Slicer-Liver_screenshot_11](https://github.com/dalbenzioG/Slicer-Liver/blob/master/Screenshots/Slicer-Liver_screenshot_11.jpg?raw=true)
-
-![Slicer-Liver_screenshot_12](https://github.com/dalbenzioG/Slicer-Liver/blob/master/Screenshots/Slicer-Liver_screenshot_12.jpg?raw=true)
-
+![Slicer-Liver_screenshot_15.jpg](Screenshots_tutorial/Slicer-Liver_screenshot_15.jpg)
 
 There are multiple options to create visualizations for the resection (color, opacity, configurable grid, etc).
+<p float="left">
+  <img src="Screenshots_tutorial/Slicer-Liver_screenshot_16_2.png" alt="Slicer-Liver_screenshot_16_1" width="45%"/>
+  <img src="Screenshots_tutorial/Slicer-Liver_screenshot_16_1.png" alt="Slicer-Liver_screenshot_16_2" width="45%"/>
+</p>
 
-![Liver planning visualization](https://github.com/ALive-research/Slicer-Liver/blob/master/Screenshots/Slicer-Liver_screenshot_04.png?raw=true)
+### Resectogram
+The Resectogram section in Slicer-Liver allows users to configure various options for visualizing the resectogram. Below are the available settings and their descriptions:
+
+1. **Enable Resectogram:** 
+   - Check this box to enable the resectogram visualization.
+2. **Mirror Resectogram Display**:
+   - Check this box to mirror the display of the resectogram.
+3. **Enable Flexible Boundary:** 
+   - Check this box to enable a flexible boundary for the resectogram.
+4. **Resectogram Size Scale:** 
+   - Use the slider or the input box to adjust the size scale of the resectogram. The value can be set between 0 and 1.
+5. **Hepatic Contour Size (in mm):** 
+   - Adjust the size of the hepatic contour by using the input box. The size can be configured in millimeters.
+6. **Color Picker:** 
+   - Click on the color box to choose a different color for the hepatic contour.
+7. **Portal resection contour size (in mm):** 
+   - Adjust the size of the portal resection contour by using the input box. The size can be configured in millimeters.
+8. **Color Picker:** 
+   - Click on the color box to choose a different color for the portal resection contour.
+9. **Vascular Segments Volume:**
+   - Use the dropdown menu to select the vascular segments volume. The available options depend on the pre-loaded volumes in the software.
+
+The resectogram can only be used after distance maps have been calculated and uploaded.
+The following GIF demonstrates the usage of the Resectogram section in Slicer-Liver:
+
+![Slicer-Liver_resectogram.gif](Screenshots_tutorial/Slicer-Liver_resectogram.gif)
 
 ### Liver Segments
 
-Our approach to liver segments definition consist of the defintion of a segment by the centerline connecting user-defined sets of points. These centerlines will be the base for computation of liver segments in image space. The computation is based on shortest-distance mapping.
-The Liver segments can be defined using the following steps:
+Our method for liver segment classification involves defining segments using centerlines created from user-specified points. These centerlines serve as the foundation for computing liver segments within the image space. The computation leverages shortest-distance mapping
 
-1.  Select the `Segmentation`.
-2.  Select the hepatic/portal segmentation for `Segment`.
-3.  You can hide the liver segmentation for better visibility in the 3D view by going to: Modules > search for Data > click on Switch to Module > Click on the eye botton next to the liver segmentation.
-4.  Switch to *Liver* module again.
-5.  Create a *new Point List* for `Vessels points`.
-6.  Click the arrow button next to `Vessel points`," and place fixed landmark points on the hepatic/portal segmentation. These points will be useful for extracting the centralines of user-defined vessel branches.
-7.  Once all the points are placed, Click `Add Vessel Centerline Segments`.
-8.  Repeat steps 5 and 6 for creating *new Point List*, i.e extracting new centerlines.
-9.  Click on `Calculate Vascular Segments`.
+1. **Vascular Territory Segmentation**:
+   - Create or Select a vascular territory segmentation from the dropdown menu.
+2. **Vascular Territory**:
+   - Create a new territory ID.
+3. **Segmentation**:
+   - Select the segmentation node representing the hepatic/portal vessels, and a new Point List for marking `Vessel points` will be created automatically.
+4. **Hide Unnecessary Segments**:
+   - Use the `Show/Hide` button to hide the liver and/or tumor segmentation nodes if they obstruct the view. This step is not required for creating centerlines on vessel branches but can improve visibility.
+5. **Vessel Points**:
+   - Place landmark points on the hepatic/portal segmentation. These points will be added to `Vessel points` and used to extract the centerlines of user-defined vessel branches.
+6. **Add Vessel Centerline**:
+   - After placing the points, click `Add Vessel Centerline` to generate the centerlines.
+7. **Create multiple Vascular Territories**
+   - Repeat step 1-6 to create multiple Vascular Territories.
+8. **Calculate Vascular Territory Segmentation**:
+   - Once all points are placed and centerlines are added, click `Calculate Vascular Territory Segmentation` to compute the liver segments.
 
-![Liver segments -- placing fiducials](https://github.com/ALive-research/Slicer-Liver/blob/master/Screenshots/Slicer-Liver_screenshot_06.png?raw=true)
+![Slicer-Liver_screenshot_18.jpg](Screenshots_tutorial/Slicer-Liver_screenshot_18.jpg)
 
-![Liver segments -- placing fiducials](https://github.com/ALive-research/Slicer-Liver/blob/master/Screenshots/Slicer-Liver_screenshot_08.png?raw=true)
+### Resection Volumetry
+1. **Volumetry Output Table:** 
+   - Select or create an output table. You can rename the table or switch between different tables.
+2. **Reference Volume:** 
+   - Select a liver volume node.
+3. **Segmentation:** 
+   - Select a liver segmentation node (Labelmap node). This can be liver segmentation (vessel, tumor, liver), liver anatomy segments, or self-defined liver segments (adapted from the vessel segments module). You can select all segments in the dataset or only those of interest.
+4. **Total Volume:** 
+   - Define the total volume by selecting the segments you wish to count (optional; by default, it is the sum of all segments in the data).
+5. **ROI Marker List:** 
+   - Select or create a points list. You can place points onto 2D slices or 3D models to mark the area you want to measure. If no point list is provided, the volume of all segments will be calculated.
+6. **Resection (Optional):** 
+   - Choose one or more resections for the same liver model and calculate the remnant/resected volume by placing marker points onto these areas.
+   - This can be combined with liver anatomy segments or self-defined liver segments to gain a deeper understanding of liver volumetry after different resection approaches (anatomical, atypical, etc.).
+   - It can also be used to compare different resection plans for the same tumor or to provide a combined view for one surgery with multiple resections.
 
-10. If you want to visualize the liver segments in the 3D view:
-	1. Click the search icon on the left of the module selector and write 'Data'. Click switch to module.
-	2. Select the created *VascularSegments* labelmap and right click to `Convert label map to segmentation node`.
-	3. Click again the search icon and go to `Segmentations` module.
-	4. Select the new *VascularSegmentations* as `Active segmentation`.
-	5. Click on `Show 3D`.
- 
- ![Slicer-Liver_screenshot_14](https://github.com/dalbenzioG/Slicer-Liver/blob/master/Screenshots/Slicer-Liver_screenshot_14.jpg?raw=true)
+![Slicer-Liver_screenshot_19.png](Screenshots_tutorial/Slicer-Liver_screenshot_19.png)
+![Slicer-Liver_screenshot_20.png](Screenshots_tutorial/Slicer-Liver_screenshot_20.png)
+
  
 ## Video Tutorial
 [Slicer-Liver tutorial](https://www.youtube.com/watch?v=oRu624mtQZE)
