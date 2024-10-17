@@ -452,6 +452,12 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
 
     seg = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
     slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(generatedSegmentsNode, seg)
+
+    ##set segments label
+    seg.GetSegmentation().GetNthSegment(0).SetName("Remnant")
+    for i in range(ROIMarkersList.GetNumberOfControlPoints()):
+      seg.GetSegmentation().GetNthSegment(i+1).SetName(ROIMarkersList.GetNthFiducialLabel(i))
+
     slicer.mrmlScene.RemoveNode(generatedSegmentsNode)
 
 
