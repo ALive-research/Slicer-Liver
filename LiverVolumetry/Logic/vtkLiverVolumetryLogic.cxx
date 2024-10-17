@@ -351,7 +351,7 @@ void vtkLiverVolumetryLogic::GetResectionsProjectionITKImage(vtkMRMLLabelMapVolu
       if(Res < 500){
         Res  =  500;
         }
-      BezierHR = GenerateBezierSurface(700, bezierSurfaceNode);
+      BezierHR = GenerateBezierSurface(Res, bezierSurfaceNode);
       if(i == 0){
         this->ProjectedTargetSegmentImage = vtkLabelMapHelper::VolumeNodeToItkImage(TargetSegmentLabelMapCopy, true, false);
         }
