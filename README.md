@@ -168,9 +168,11 @@ Our method for liver segment classification involves defining segments using cen
    - Choose one or more resections for the same liver model and calculate the remnant/resected volume by placing marker points onto these areas.
    - This can be combined with liver anatomy segments or self-defined liver segments to gain a deeper understanding of liver volumetry after different resection approaches (anatomical, atypical, etc.).
    - It can also be used to compare different resection plans for the same tumor or to provide a combined view for one surgery with multiple resections.
+7. **Export segments (Optional):**
+   - Press the button "Generate segments based on selected resections and ROI markers" to export a new segmentation node including segmentations marked by ROI points and the unmarked area will be treated as one segmentation
 
 ![Slicer-Liver_screenshot_19.png](Screenshots_tutorial/Slicer-Liver_screenshot_19.png)
-![Slicer-Liver_screenshot_20.png](Screenshots_tutorial/Slicer-Liver_screenshot_20.png)
+![Slicer-Liver_screenshot_23.png](Screenshots_tutorial/Slicer-Liver_screenshot_23.png)
 
  
 ## Video Tutorial
