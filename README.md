@@ -12,6 +12,7 @@
 - [Developers](#developers)
     - [Compilation](#compilation)
     - [Testing](#testing)
+    - [Contributing](#Contributing)
     
 ## Introduction
 
@@ -180,15 +181,18 @@ Our method for liver segment classification involves defining segments using cen
 
 ### Compilation
 
-Slicer-Liver depends on the VMTK which can be installed in Slicer3D using the [extension manager]( https://slicer.readthedocs.io/en/latest/user_guide/extensions_manager.html#install-extensions) or built following the steps for developers here: https://github.com/vmtk/SlicerExtension-VMTK#for-developers.
-
-`SLICER_BUILD_DIR=/path/to/Slicer-SuperBuild`
+Slicer-Liver follows the [3D SLicer extension building process](https://slicer.readthedocs.io/en/latest/developer_guide/extensions.html):
+```
+SLICER_BUILD_DIR=/path/to/Slicer-SuperBuild`
+```
 ```
 git clone https://github.com/ALive-research/Slicer-Liver.git
 cmake -DSlicer_DIR:PATH=SLICER_BUILD_DIR/Slicer-build -S ../Slicer-Liver
 make -j5
 make package
 ```
+Slicer-Liver depends on the VMTK, it can be installed in Slicer3D using the [extension manager]( https://slicer.readthedocs.io/en/latest/user_guide/extensions_manager.html#install-extensions) or [built from source code](https://github.com/vmtk/SlicerExtension-VMTK#for-developers).
+
 ### Testing
 
 -  To enable the developer mode go to :
@@ -201,6 +205,10 @@ make package
 - To visualize the test results, open the Python console by going to: View > Python Interactor.
     
 - The number and the result of the tests will be displayed in the console. Should any of the test fail, please don't hesitate to [open an issue](https://github.com/ALive-research/Slicer-Liver/issues/new/choose) or contact us through the [Slicer forum](https://discourse.slicer.org).
+
+### Contributing
+
+Slicer-Liver welcomes any and all contributions in the way of new tools/scripts, bug fixes or documentation. In the [contributing](CONTRIBUTING.md) page you will find information to help you get started.
     
 ## Authors
 
