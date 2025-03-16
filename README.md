@@ -89,9 +89,9 @@ The liver resection can be planned through the following process:
 1. *Create a new LiverResection* for `Resection`.
 2. Choose the labelmap used in step 2 of the Distance Map Computation for `Liver Segmentation`.
 3. Select the `Liver` segmentation from the dropdown.
-4. Choose the contour initialization method: `Flat`, `Curved`, or `MarkupClosedCurve`.
+4. Choose the [contour initialization method](#contour-initialization-method): `Flat`, `Curved`, or `MarkupClosedCurve`.
 5. *(Optional)* Select the *Distance Map* from the first section using the `Distance Map` collapsible button.
-6. In the 3D View, use the *MarkupSlidingContour* or *MarkupDistanceContour* tool to adjust the contour around the liver, or draw a closed curve with the *MarkupClosedCurve* tool.
+6. In the 3D View, when selecting the `Flat` or `Curved` methods, use the guiding stick to adjust the contour around the liver. Alternatively, you can draw a closed curve using the `MarkupClosedCurve` method. (see [contour initialization method](#contour-initialization-method))
 7. Release the mouse to display the initial resection plane.
 8. Adjust the resection using the control points. Modify the `Resection grid`, `Resection margin`, and `Uncertainty margin` as needed.
 9. Check the `Preview resection` box to visualize the final plan.
@@ -103,6 +103,34 @@ There are multiple options to create visualizations for the resection (color, op
   <img src="Screenshots_tutorial/Slicer-Liver_screenshot_16_2.png" alt="Slicer-Liver_screenshot_16_1" width="45%"/>
   <img src="Screenshots_tutorial/Slicer-Liver_screenshot_16_1.png" alt="Slicer-Liver_screenshot_16_2" width="45%"/>
 </p>
+
+#### *Contour Initialization Method*
+
+As introduced before, we have three contour initialization methods: `Flat`, `Curved`, or `MarkupClosedCurve`.
+
+- The initialization process for both `Flat` and `Curved` methods is similar in usage. In both cases, a guiding stick and a white cutting contour are displayed on the liver model. By moving the guiding stick, the contour’s position can be adjusted to align with the desired operation area. 
+
+   The key difference lies in the type of resection surface generated:
+
+   - In the `Flat` method, a flat resection surface is created. The displayed contour represents the intersection of this flat surface with the liver model. Users must manually adjust the flat surface to achieve a curved resection that meets their needs.
+   - In the `Curved` method, users can select a starting point (e.g., targeting different liver segments). The contour is inherently curved, generating a curved resection surface, which reduces the need for manual modifications compared to the Flat method.
+
+- `MarkupClosedCurve` offers a more flexible approach for defining the initial cutting position. Users can place a series of points that automatically connect to form a closed loop around the desired cutting area, outlining the initial cutting contour. Based on these points, the software then generates a curved initial resection surface.
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="Screenshots_tutorial/flat.gif" style="width: 300px; height: 150px; object-fit: cover;"><br>Flat
+    </td>
+    <td align="center">
+      <img src="Screenshots_tutorial/curve.gif" style="width: 300px; height: 150px; object-fit: cover;"><br>Curved
+    </td>
+    <td align="center">
+      <img src="Screenshots_tutorial/markup.gif" style="width: 300px; height: 150px; object-fit: cover;"><br>MarkupClosedCurve
+    </td>
+  </tr>
+</table>
+
 
 ### Resectogram
 The Resectogram section in Slicer-Liver allows users to configure various options for visualizing the resectogram. Below are the available settings and their descriptions:
