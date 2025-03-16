@@ -394,8 +394,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Called just after the scene is closed.
     """
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
-    if self.parent.isEntered:
-      self.initializeParameterNode()
+    self.initializeParameterNode()
 
   def initializeParameterNode(self):
     """
