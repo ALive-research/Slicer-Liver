@@ -192,6 +192,8 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     This function is for compute volume
     """
+    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+
     resectionNodes = self.getResectionNodes()
 
     segmentsVolumeNode = slicer.mrmlScene.GetFirstNodeByName("segmentVolumeNode")
@@ -216,6 +218,10 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     outputTable = self.ui.VolumeTableSelectorWidget.currentNode()
 
     self.logic.computeVolume(segmentsVolumeNode, targetSegmentVolumeNode, self.ui.InputSegmentationSelector.currentNode(), outputTable, ROIMarkersList, resectionNodes)
+
+    qt.QApplication.restoreOverrideCursor()
+    qt.QMessageBox.information(None, "Information", "The targeted liver volumetry was computed.")
+
     self.showTable(outputTable)
     slicer.mrmlScene.RemoveNode(segmentsVolumeNode)
     slicer.mrmlScene.RemoveNode(targetSegmentVolumeNode)
@@ -293,8 +299,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Called just after the scene is closed.
     """
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
-    if self.parent.isEntered:
-      self.initializeParameterNode()
+    self.initializeParameterNode()
 
   def initializeParameterNode(self):
     """
@@ -417,14 +422,8 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
         segStatLogic.computeStatistics()
         stats = segStatLogic.getStatistics()
         for segmentId in stats["SegmentIDs"]:
-          voxel_count = 0
-          volume_cm3 = 0
-          if stats[segmentId,"LabelmapSegmentStatisticsPlugin.voxel_count"]:
-            voxel_count = stats[segmentId,"LabelmapSegmentStatisticsPlugin.voxel_count"]
-            volume_cm3 = stats[segmentId,"LabelmapSegmentStatisticsPlugin.volume_cm3"]
-          elif stats[segmentId,"ScalarVolumeSegmentStatisticsPlugin.voxel_count"]:
-            voxel_count = stats[segmentId,"ScalarVolumeSegmentStatisticsPlugin.voxel_count"]
-            volume_cm3 = stats[segmentId,"ScalarVolumeSegmentStatisticsPlugin.volume_cm3"]
+          voxel_count = stats[segmentId,"LabelmapSegmentStatisticsPlugin.voxel_count"]
+          volume_cm3 = stats[segmentId,"LabelmapSegmentStatisticsPlugin.volume_cm3"]
           segmentName = segmentationNode.GetSegmentation().GetSegment(segmentId).GetName()
           statistics[segmentId] = [segmentName, voxel_count, volume_cm3]
           self.scl.VolumetryTable(segmentName, targetSegmentVolume, voxel_count, volume_cm3,outputTable)
@@ -444,21 +443,6 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
 
 
 
-  def generateSegments(self, resectionNodes, ROIMarkersList, segmentsVolumeNode):
-    generatedSegmentsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
-    generatedSegmentsNode.CreateDefaultDisplayNodes()
-
-    self.scl.GenerateSegmentsLabelMap(segmentsVolumeNode, generatedSegmentsNode, resectionNodes, ROIMarkersList)
-
-    seg = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
-    slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(generatedSegmentsNode, seg)
-
-    ##set segments label
-    seg.GetSegmentation().GetNthSegment(0).SetName("Remnant")
-    for i in range(ROIMarkersList.GetNumberOfControlPoints()):
-      seg.GetSegmentation().GetNthSegment(i+1).SetName(ROIMarkersList.GetNthFiducialLabel(i))
-
-    slicer.mrmlScene.RemoveNode(generatedSegmentsNode)
 
 
 
