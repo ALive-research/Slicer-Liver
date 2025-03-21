@@ -127,6 +127,17 @@ def registerSampleData():
     loadFileType='SegmentationFile'
   )
 
+  SampleData.SampleDataLogic.registerCustomSampleDataSource(
+    category='Liver',
+    sampleName='LiverSegments000',
+    thumbnailFileName=os.path.join(iconsPath, 'LiverSegments000.png'),
+    uris=aliveDataURL + 'SHA256/101d3903a8b27eb2e7ee3ceb8ddd15f288aeb69960a1606db64d5ae3180e251b',
+    fileNames='LiverSegments000.seg.nrrd',
+    checksums='SHA256:101d3903a8b27eb2e7ee3ceb8ddd15f288aeb69960a1606db64d5ae3180e251b',
+    nodeNames='LiverSements000',
+    loadFileType='SegmentationFile'
+  )
+
   #if developerMode is True:
   SampleData.SampleDataLogic.registerCustomSampleDataSource(
     category ='Development',
@@ -2268,4 +2279,3 @@ class LiverTest(ScriptedLoadableModuleTest):
     inputSegmentation = SampleData.downloadSample('LiverSegmentation000')
     inputVolume = SampleData.downloadSample('LiverVolume000')
     self.delayDisplay('Loaded test data set')
-
