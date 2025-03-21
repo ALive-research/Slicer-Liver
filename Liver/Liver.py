@@ -127,6 +127,17 @@ def registerSampleData():
     loadFileType='SegmentationFile'
   )
 
+  SampleData.SampleDataLogic.registerCustomSampleDataSource(
+    category='Liver',
+    sampleName='LiverSegmentation000-VascularSegments',
+    thumbnailFileName=os.path.join(iconsPath, 'LiverSegmentation000-VascularSegments.png'),
+    uris=aliveDataURL + 'SHA256/101d3903a8b27eb2e7ee3ceb8ddd15f288aeb69960a1606db64d5ae3180e251b',
+    fileNames='LiverSegmentation000-VascularSegments.seg.nrrd',
+    checksums='SHA256:101d3903a8b27eb2e7ee3ceb8ddd15f288aeb69960a1606db64d5ae3180e251b',
+    nodeNames='LiverSegmentation000-VascularSegments',
+    loadFileType='SegmentationFile'
+  )
+
   #if developerMode is True:
   SampleData.SampleDataLogic.registerCustomSampleDataSource(
     category ='Development',
