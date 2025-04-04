@@ -737,6 +737,10 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     downSamplingRate = self.distanceMapsWidget.DownsamplingRateSpinBox.value
     self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode, downSamplingRate)
 
+    slicer.mrmlScene.RemoveNode(tumorLabelmapVolumeNode)
+    slicer.mrmlScene.RemoveNode(parenchymaLabelmapVolumeNode)
+    slicer.mrmlScene.RemoveNode(hepaticLabelmapVolumeNode)
+    slicer.mrmlScene.RemoveNode(portalLabelmapVolumeNode)
 
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
