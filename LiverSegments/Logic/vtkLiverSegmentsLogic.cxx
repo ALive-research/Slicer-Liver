@@ -233,11 +233,22 @@ void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNod
   //slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
   labelmapVolumeNode->Modified();//Is this enough, or is more of the code in arrayFromVolumeModified needed?
   const char * segmentationId = vascularTerritorySegmentationNode->GetAttribute("LiverSegments.SegmentationId");
+  std::string segmentationIdCopy;
+  if (segmentationId)
+  {
+    segmentationIdCopy = segmentationId;
+  }
+
   vascularTerritorySegmentationNode->Reset(nullptr);
   vascularTerritorySegmentationNode->SetAttribute("LiverSegments.SegmentationId", segmentationId);
   vascularTerritorySegmentationNode->CreateDefaultDisplayNodes(); // only needed for display
   vtkSlicerSegmentationsModuleLogic::ImportLabelmapToSegmentationNode(labelmapVolumeNode, vascularTerritorySegmentationNode);
   vascularTerritorySegmentationNode->CreateClosedSurfaceRepresentation();
+
+  if (!segmentationIdCopy.empty())
+  {
+    vascularTerritorySegmentationNode->SetAttribute("LiverSegments.SegmentationId", segmentationIdCopy.c_str());
+  }
   mrmlScene->RemoveNode(labelmapVolumeNode);
 }
 
