@@ -127,6 +127,17 @@ def registerSampleData():
     loadFileType='SegmentationFile'
   )
 
+  SampleData.SampleDataLogic.registerCustomSampleDataSource(
+    category='Liver',
+    sampleName='LiverSegments000',
+    thumbnailFileName=os.path.join(iconsPath, 'LiverSegments000.png'),
+    uris=aliveDataURL + 'SHA256/101d3903a8b27eb2e7ee3ceb8ddd15f288aeb69960a1606db64d5ae3180e251b',
+    fileNames='LiverSegments000.seg.nrrd',
+    checksums='SHA256:101d3903a8b27eb2e7ee3ceb8ddd15f288aeb69960a1606db64d5ae3180e251b',
+    nodeNames='LiverSements000',
+    loadFileType='SegmentationFile'
+  )
+
   #if developerMode is True:
   SampleData.SampleDataLogic.registerCustomSampleDataSource(
     category ='Development',
@@ -414,6 +425,9 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     activeDistanceContour.SetNthControlPointPosition(1, tuple(point))
 
   def onMarkupsResectionCheckBoxChecked(self, checkbox):
+
+    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+
     activeMarkupClosedCurveNode = self.resectionsWidget.MarkupClosedCurveNodeComboBox.currentNode()
     activeResectionNode = self.resectionsWidget.ResectionNodeComboBox.currentNode()
     liverNode = activeResectionNode.GetTargetOrganModelNode()
@@ -425,6 +439,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
                                                                                           liverNode))
       activeMarkupClosedCurveNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
                                               self.onDistanceContourStartInteraction)
+      qt.QApplication.restoreOverrideCursor()
+      qt.QMessageBox.information(None, "Information", "Resection surface initialization finished.")
 
   def onDistanceMapParameterChanged(self):
     """
@@ -737,13 +753,15 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     downSamplingRate = self.distanceMapsWidget.DownsamplingRateSpinBox.value
     self.logic.computeDistanceMaps(tumorLabelmapVolumeNode, parenchymaLabelmapVolumeNode, hepaticLabelmapVolumeNode, portalLabelmapVolumeNode, outputVolumeNode, downSamplingRate)
 
+    # slicer.app.resumeRender()
     slicer.mrmlScene.RemoveNode(tumorLabelmapVolumeNode)
     slicer.mrmlScene.RemoveNode(parenchymaLabelmapVolumeNode)
     slicer.mrmlScene.RemoveNode(hepaticLabelmapVolumeNode)
     slicer.mrmlScene.RemoveNode(portalLabelmapVolumeNode)
 
-    slicer.app.resumeRender()
+    #slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
+    qt.QMessageBox.information(None, "Information", "Distance maps computed.")
     slicer.util.showStatusMessage('')
 
   def onUncertaintyMaginComboBoxChanged(self):
@@ -2261,4 +2279,3 @@ class LiverTest(ScriptedLoadableModuleTest):
     inputSegmentation = SampleData.downloadSample('LiverSegmentation000')
     inputVolume = SampleData.downloadSample('LiverVolume000')
     self.delayDisplay('Loaded test data set')
-
