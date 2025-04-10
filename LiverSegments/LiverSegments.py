@@ -321,21 +321,26 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 
   def updateVascTerrList(self, vasc_terr_ID_list, vascular_territory_segm_node):
-    segments = vascular_territory_segm_node.GetSegmentation().GetSegmentIDs()
+    segmentNames = []
+    segmentIds = vascular_territory_segm_node.GetSegmentation().GetSegmentIDs()
+    for id in segmentIds:
+      segmentName = vascular_territory_segm_node.GetSegmentation().GetSegment(id).GetName()
+      segmentNames.append(segmentName)
+
     vasc_terr_ID_list.blockSignals(True)
     vasc_terr_ID_list.clear()
     initString = 'Create new territory ID'
     vasc_terr_ID_list.addItem(initString)
-    firstSegmentID = 'Vascular Territory ID 1'
-    if firstSegmentID not in segments:
+    firstSegmentName = 'Vascular Territory ID 1'
+    if firstSegmentName not in segmentNames:
       # No vascular territory segmentations
       return
     #Start populating Vascular Territory list
     index = 0
-    for idString in segments:
+    for nameString in segmentNames:
       index = index+1
-      vasc_terr_ID_list.addItem(idString)
-      self.colormap.SetColorName(index, idString)
+      vasc_terr_ID_list.addItem(nameString)
+      self.colormap.SetColorName(index, nameString)
       vasc_terr_ID_list.setCurrentIndex(index)
       self.onSegmentChanged()
     vasc_terr_ID_list.setCurrentIndex(1)
