@@ -192,6 +192,8 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     This function is for compute volume
     """
+    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+
     resectionNodes = self.getResectionNodes()
 
     segmentsVolumeNode = slicer.mrmlScene.GetFirstNodeByName("segmentVolumeNode")
@@ -216,6 +218,10 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     outputTable = self.ui.VolumeTableSelectorWidget.currentNode()
 
     self.logic.computeVolume(segmentsVolumeNode, targetSegmentVolumeNode, self.ui.InputSegmentationSelector.currentNode(), outputTable, ROIMarkersList, resectionNodes)
+
+    qt.QApplication.restoreOverrideCursor()
+    qt.QMessageBox.information(None, "Information", "The targeted liver volumetry was computed.")
+
     self.showTable(outputTable)
     slicer.mrmlScene.RemoveNode(segmentsVolumeNode)
     slicer.mrmlScene.RemoveNode(targetSegmentVolumeNode)
@@ -293,8 +299,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Called just after the scene is closed.
     """
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
-    if self.parent.isEntered:
-      self.initializeParameterNode()
+    self.initializeParameterNode()
 
   def initializeParameterNode(self):
     """
@@ -442,8 +447,6 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
     else:
       self.scl.ComputeAdvancedPlanningVolumetry(segmentsVolumeNode, outputTable, ROIMarkersList, resectionNodes, targetSegmentVolume)
 
-
-
   def generateSegments(self, resectionNodes, ROIMarkersList, segmentsVolumeNode):
     generatedSegmentsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
     generatedSegmentsNode.CreateDefaultDisplayNodes()
@@ -459,9 +462,3 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
       seg.GetSegmentation().GetNthSegment(i+1).SetName(ROIMarkersList.GetNthFiducialLabel(i))
 
     slicer.mrmlScene.RemoveNode(generatedSegmentsNode)
-
-
-
-
-
-

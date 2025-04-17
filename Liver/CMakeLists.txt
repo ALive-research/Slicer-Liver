@@ -13,6 +13,7 @@ set(MODULE_PYTHON_RESOURCES
   Resources/Icons/LiverModels000.png
   Resources/Icons/LiverSegmentation000.png
   Resources/Icons/LiverVolume000.png
+  Resources/Icons/LiverSegments000.png
   Resources/Icons/SlicerInvisible.png
   Resources/Icons/SlicerVisible.png
   Resources/UI/ResectionsWidget.ui
