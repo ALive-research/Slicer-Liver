@@ -43,29 +43,32 @@
 #include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
 
 // Markups VTKWidgets includes
-#include "vtkSlicerMarkupsWidgetRepresentation3D.h"
 #include "vtkMultiTextureObjectHelper.h"
+#include "vtkSlicerMarkupsWidgetRepresentation3D.h"
 
 // MRML includes
 #include <vtkMRMLModelNode.h>
 
 // VTK includes
-#include <vtkWeakPointer.h>
-#include <vtkSmartPointer.h>
-#include "vtkOpenGLPolyDataMapper2D.h"
 #include <vtkActor2D.h>
 #include <vtkCamera.h>
+#include <vtkOpenGLPolyDataMapper2D.h>
+#include <vtkSmartPointer.h>
+#include <vtkWeakPointer.h>
 
 //------------------------------------------------------------------------------
 class vtkBezierSurfaceSource;
+class vtkGaussianBlurPass;
 class vtkOpenGLActor;
-class vtkPolyData;
-class vtkPolyDataNormals;
-class vtkPoints;
-class vtkTextureObject;
-class vtkTubeFilter;
 class vtkOpenGLBezierResectionPolyDataMapper;
 class vtkOpenGLResection2DPolyDataMapper;
+class vtkPlaneSource;
+class vtkPoints;
+class vtkPolyData;
+class vtkPolyDataNormals;
+class vtkRenderStepsPass;
+class vtkTextureObject;
+class vtkTubeFilter;
 
 //------------------------------------------------------------------------------
 class vtkMRMLMarkupsBezierSurfaceNode;
@@ -75,6 +78,9 @@ class vtkMRMLScalarVolumeNode;
 class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerBezierSurfaceRepresentation3D
 : public vtkSlicerMarkupsWidgetRepresentation3D
 {
+
+static const int RENDERER_LAYER = 2;
+
 public:
   static vtkSlicerBezierSurfaceRepresentation3D* New();
   vtkTypeMacro(vtkSlicerBezierSurfaceRepresentation3D, vtkSlicerMarkupsWidgetRepresentation3D);
@@ -94,6 +100,9 @@ public:
   double *GetBounds() override;
 
 protected:
+  void SetRenderer(vtkRenderer *ren) override;
+
+protected:
   /// TransferDistanceMap
   void CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode* node, int numComps);
   void CreateAndTransferVascularSegmentsTexture(vtkMRMLScalarVolumeNode *node);
@@ -107,10 +116,10 @@ protected:
   vtkSmartPointer<vtkOpenGLBezierResectionPolyDataMapper> BezierSurfaceResectionMapper;
   vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor;
   vtkSmartPointer<vtkPolyDataNormals> BezierSurfaceNormals;
-  vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor2D;
-  vtkSmartPointer<vtkOpenGLResection2DPolyDataMapper> BezierSurfaceResectionMapper2D;
-  vtkSmartPointer<vtkBezierSurfaceSource> BezierPlane;
-  vtkSmartPointer<vtkDataArray> BezierSurfaceSourcePoints;
+  vtkSmartPointer<vtkOpenGLActor> ResectogramActor;
+  vtkSmartPointer<vtkOpenGLResection2DPolyDataMapper> ResectogramMapper;
+  vtkSmartPointer<vtkPlaneSource> ResectogramPlaneSource;
+  vtkSmartPointer<vtkDataArray> BezierSurfaceSourcePointsArray;
   vtkSmartPointer<vtkCamera> ResectogramCamera;
 
 
@@ -126,7 +135,12 @@ protected:
   vtkNew<vtkMatrix4x4> VBOShiftScale;
   vtkNew<vtkTransform> VBOInverseTransform;
   vtkWeakPointer<vtkShaderProperty> ShaderProperty;
-  vtkSmartPointer<vtkRenderer> CoRenderer2D;
+
+  // create the basic VTK render steps
+  vtkSmartPointer<vtkRenderStepsPass> ResectogramRenderPasses;
+  vtkSmartPointer<vtkRenderer> ResectogramRenderer;
+  vtkSmartPointer<vtkGaussianBlurPass> ResectogramBlurPass;
+
 
   // Vascular Segments related elements
   vtkSmartPointer<vtkMultiTextureObjectHelper> VascularSegmentsTexture;
