@@ -76,10 +76,10 @@ public:
   const char* GetMarkupType() override {return "BezierSurface";}
 
   // Get markup type GUI display name
-  const char* GetTypeDisplayName() override {return "Bezier Surface";};
+  std::string GetTypeDisplayName() override {return "Bezier Surface";};
 
   /// Get markup short name
-  const char* GetDefaultNodeNamePrefix() override {return "BS";}
+  std::string GetDefaultNodeNamePrefix() override {return "BS";}
 
   /// Set the distance map
   void SetDistanceMapVolumeNode(vtkMRMLScalarVolumeNode* volumeNode)
