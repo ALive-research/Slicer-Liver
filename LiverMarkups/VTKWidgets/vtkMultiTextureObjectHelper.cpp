@@ -3,7 +3,6 @@
 //
 
 #include "vtkMultiTextureObjectHelper.h"
-#include "vtk_glew.h"
 
 #include "vtkObjectFactory.h"
 

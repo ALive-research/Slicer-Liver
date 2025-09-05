@@ -76,7 +76,7 @@ public:
   const char* GetMarkupType() override {return "SlicingContour";}
 
   /// Get markup short name
-  const char* GetDefaultNodeNamePrefix() override {return "SC";}
+  std::string GetDefaultNodeNamePrefix() override {return "SC";}
 
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLMarkupsSlicingContourNode);
