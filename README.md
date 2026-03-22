@@ -1,4 +1,6 @@
 ## Table of content
+
+[![gitcgr](https://gitcgr.com/badge/ALive-research/Slicer-Liver.svg)](https://gitcgr.com/ALive-research/Slicer-Liver)
 - [Introduction](#introduction)
     - [Installing the extension](#installing-the-extension)
     - [Sample Data](#sample-data)
