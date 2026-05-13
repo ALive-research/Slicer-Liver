@@ -29,9 +29,10 @@ Today's coverage in Slicer-Liver:
   registers markup types; no persistence test.
 
 No test covers the `.lrp.fcsv` round-trip — the safety net that
-ADR-0001's Consequences section explicitly identified as required
-*before* any of the cleanup refactors in 0002 can be safely
-attempted.
+ADR-0001's Consequences section explicitly identifies as required to
+catch reload-ordering regressions.  *This ADR* makes that test a
+precondition for the ADR-0002 migration (ADR-0001 itself flags the
+need without gating ADR-0002 on it).
 
 Slicer's Python self-test framework is fast, well-supported, and
 established in upstream modules (`SegmentEditor`, `SegmentStatistics`,
@@ -65,10 +66,15 @@ integration test that pins the behaviour being changed.  Specifically:
    `runTest()` method).  C++ tests follow CTest + the existing patterns
    in `LiverResections/Testing/Cxx/`.
 
-5. **The `/slicer-review` test-coverage reviewer** will flag any PR
-   that violates this rule.  Until CI enforcement lands, reviewer
-   approval depends on the reviewer confirming the test exists, was
-   modified appropriately, and passed locally before merge.
+5. **The `/slicer-review` test-coverage reviewer** enforces the
+   "characterisation test before refactor commit" rule for PRs and
+   commits tagged `refactor:` (see the reviewer prompt at
+   `~/.claude/commands/slicer-review.md`, test-coverage section
+   criterion (c)).  New-feature and bug-fix variants of this rule
+   are reviewer-judgment until the prompt is widened to cover them
+   — until that follow-up lands, human-reviewer approval depends on
+   confirming the test exists, was modified appropriately, and
+   passed locally before merge.
 
 6. **First debt to retire** (before any LayerDM-migration PR lands):
    - `vtkMRMLLiverResectionStorageRoundTripTest` — create a resection,
