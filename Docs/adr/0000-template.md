@@ -54,5 +54,4 @@ didn't, which observers must be added or removed?
 
 - Slicer Discourse threads, GitHub issues, papers, internal notes.
 - Related ADRs (e.g. *Supersedes 0003*, *Depends on 0005*).
-- PKS permanent notes if the decision is informed by a permanent note
-  (e.g. `~/pks/permanent/20260507T100903` style identifier).
+- Internal design notes or research artifacts informing the decision.
