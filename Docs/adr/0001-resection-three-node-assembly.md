@@ -3,7 +3,7 @@
 - **Status:** Proposed
 - **Date:** 2026-05-13
 - **Deciders:** Rafael Palomar (recording rationale on behalf of original authors)
-- **Diagrams:** [current-mrml-node-hierarchy](../architecture/current-mrml-node-hierarchy.puml)
+- **Diagrams:** [current-mrml-node-hierarchy](../architecture/current-mrml-node-hierarchy.md)
 - **PR:** _filled in on merge_
 
 ## Context
