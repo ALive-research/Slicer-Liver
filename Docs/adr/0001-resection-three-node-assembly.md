@@ -26,20 +26,31 @@ Two non-negotiable Slicer platform constraints bound the solution space:
   `vtkMRMLMarkupsNode` class tree. Re-implementing it on a different base
   would mean re-implementing interactive 3D handles, projection geometry, and
   event routing — thousands of lines of upstream-maintained infrastructure.
-- **`vtkMRMLStorableNode` is the conventional save target.** The Slicer I/O
-  manager expects whole-object serialization through `vtkMRMLStorableNode` +
-  `vtkMRMLStorageNode`. Cross-volume references and provenance fields are
-  conventionally carried by Storable nodes.
+- **Markups storage is point-list-centric.** Although `vtkMRMLMarkupsNode`
+  *is* itself Storable — the chain is `vtkMRMLMarkupsNode →
+  vtkMRMLDisplayableNode → vtkMRMLTransformableNode → vtkMRMLStorableNode →
+  vtkMRMLNode` — its default storage classes
+  (`vtkMRMLMarkupsJsonStorageNode`, `vtkMRMLMarkupsFiducialStorageNode`) are
+  designed to serialize control-point geometry. Riding cross-volume
+  references (which CT, which distance map, which vascular segmentation a
+  resection was planned against) and free-form metadata (margins, colours,
+  clinical state) on a MarkupsNode would mean either custom storage-node
+  extensions or opaque node attributes — both brittle, neither
+  introspectable from a saved file.
 
-These two base trees do not unify: `vtkMRMLMarkupsNode` does **not** inherit
-from `vtkMRMLStorableNode`. Any "single content node" design must therefore
-sacrifice one side — either reimplement the widget pipeline on a Storable, or
-forfeit the standard save path.
+A "single content node" design would therefore have to either reimplement
+the widget pipeline on a non-Markups class (rejected below as Alternative A)
+or overload Markups storage with non-geometry data (rejected below as
+Alternative B). The three-node assembly avoids both costs by splitting
+geometry (free Markups widgets, point-list storage) from metadata (typed
+Storable fields, purpose-built CSV writer).
 
-This ADR is recorded retrospectively: the design was already implemented in
-commits `938a2d5..727bd36` (2019) but the rationale lived only in the heads
-of the original authors. Future contributors (human and AI) need this written
-down to avoid re-litigating it.
+This ADR is recorded retrospectively: the resection module was introduced
+over 2021–2023, with the three-node split crystallising in early commits
+`9d1e0d6` (base resection module structure) and `d2f4f41` (BezierSurface
+markup), both 2021-07-01. The rationale lived only in the original
+authors' heads; future contributors (human and AI) need this written down
+to avoid re-litigating it.
 
 ## Decision
 
@@ -81,19 +92,26 @@ impose a permanent integration cost as upstream Markups continues to evolve.
 The widget machinery's bug fixes and improvements would no longer be
 inherited for free.
 
-### B. Geometry-only node, no metadata content node
+### B. Geometry-only node, metadata as MarkupsNode attributes
 
 The resection would be only the Bezier surface Markups node; margins,
-colours, and provenance would live on the display node or as node attributes
-on the Markups node.
+colours, clinical state, and cross-volume references would ride on the
+Markups node itself as opaque MRML attributes (`SetAttribute(key, value)`
+and `AddNodeReferenceID(role, id)`).
 
-**Rejected** because the clinical workflow requires loading and saving a
-resection as one atomic object with cross-volume provenance (which CT
-volume, which distance map, which vascular segmentation it was planned
-against). The Markups class tree has no natural place for such cross-volume
-references. The `Storable` + `StorageNode` pattern, on the other hand, is
-designed exactly for this — its serialization can capture node-reference
-fields that resolve correctly on scene reload.
+**Rejected** because attributes are opaque to the storage node. They
+survive scene reload only through `vtkMRMLNode`'s generic attribute
+serialization, which writes string-keyed values without schema or type
+validation; references travel through the generic node-reference
+machinery, which is correct but not introspectable from a saved `.fcsv`
+file. Margin values would be stored as parseable strings; a future schema
+migration (e.g. adding an uncertainty band, or splitting margin into
+arterial/portal components) would be impossible to detect from the file
+alone. The `Storable` + dedicated `StorageNode` pattern, in contrast,
+gives us typed, validated, save/load-symmetric fields whose schema lives
+in the storage class's `ReadDataInternal`/`WriteDataInternal` — a far
+better fit for a clinical artefact whose metadata will continue to
+evolve.
 
 ### C. Two-node assembly: no initialization node
 
@@ -148,8 +166,10 @@ lines) preserve this initial sketch phase cheaply.
   in the Slicer source tree.
 - `vtkMRMLStorableNode` / `vtkMRMLStorageNode` contract:
   `Libs/MRML/Core/vtkMRMLStorableNode.h`.
-- Historical commits introducing the three-node split: `938a2d5..727bd36`
-  (2019, `LiverResections/`).
+- Historical commits introducing the three-node split: `9d1e0d6` (base
+  resection module structure) and `d2f4f41` (BezierSurface markup), both
+  2021-07-01; the design solidified through subsequent commits over
+  2021–2023 in `LiverResections/`.
 - Related (future): ADR-0002 will address the `Logic` six-maps navigation;
   ADR-0003 will address dedicated `vtkMRMLLiverResectionDisplayNode` and
   property ownership.

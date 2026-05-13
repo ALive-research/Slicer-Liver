@@ -12,6 +12,7 @@ hide empty members
 package "Slicer core (external)" <<Frame>> {
   abstract class vtkMRMLNode
   abstract class vtkMRMLStorableNode
+  abstract class vtkMRMLTransformableNode
   abstract class vtkMRMLDisplayableNode
   abstract class vtkMRMLMarkupsNode
   abstract class vtkMRMLMarkupsLineNode
@@ -21,10 +22,11 @@ package "Slicer core (external)" <<Frame>> {
   abstract class vtkMRMLAbstractSliceViewDisplayableManager
 
   vtkMRMLNode               <|-- vtkMRMLStorableNode
-  vtkMRMLStorableNode       <|-- vtkMRMLDisplayableNode
+  vtkMRMLStorableNode       <|-- vtkMRMLTransformableNode
+  vtkMRMLTransformableNode  <|-- vtkMRMLDisplayableNode
   vtkMRMLDisplayableNode    <|-- vtkMRMLMarkupsNode
   vtkMRMLMarkupsNode        <|-- vtkMRMLMarkupsLineNode
-  vtkMRMLStorableNode       <|-- vtkMRMLStorageNode
+  vtkMRMLNode               <|-- vtkMRMLStorageNode
   vtkMRMLStorageNode        <|-- vtkMRMLMarkupsFiducialStorageNode
 }
 
