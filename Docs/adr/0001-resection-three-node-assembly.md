@@ -1,10 +1,25 @@
 # 0001. Resection is a three-node MRML assembly
 
-- **Status:** Proposed
+- **Status:** Accepted (descriptive — records the current state and its
+  historical rationale; superseded by [ADR-0002](0002-migrate-to-slicerlayerdm.md)
+  for target architecture)
 - **Date:** 2026-05-13
 - **Deciders:** Rafael Palomar (recording rationale on behalf of original authors)
 - **Diagrams:** [current-mrml-node-hierarchy](../architecture/current-mrml-node-hierarchy.md)
 - **PR:** _filled in on merge_
+
+## Update (2026-05-13)
+
+This ADR is **descriptive only**.  It records the rationale that produced
+the current Markups + MRMLDM-based design — not an endorsement of that
+design as the desired end-state.
+
+The target architecture for Slicer-Liver is laid out in
+[ADR-0002 — Migrate to SlicerLayerDisplayableManager](0002-migrate-to-slicerlayerdm.md),
+which drops the Markups inheritance constraint (and with it most of the
+forces that produced the three-node assembly).  The body below is
+preserved as the historical record of why today's code is shaped as it
+is; **do not read it as guidance for new code**.
 
 ## Context
 
