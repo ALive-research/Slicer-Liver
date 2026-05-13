@@ -61,8 +61,9 @@ review context and grades changed code against it:
 
 ## Authoring
 
-PlantUML source is plain text — author in Emacs with `plantuml-mode` (already
-in your config).  Mermaid via `ob-mermaid` for inline org-mode previews.
+PlantUML source is plain text — author with any text editor.  Emacs
+`plantuml-mode` and `ob-mermaid` give inline previews; VS Code, IntelliJ,
+and others have equivalent plugins.
 
 Render locally:
 
@@ -75,7 +76,8 @@ mmdc -i Docs/architecture/observer-flow.mmd \
      -o Docs/architecture/observer-flow.svg
 ```
 
-Both tools available via `guix shell plantuml node-mermaid-cli`.
+Install `plantuml` and `@mermaid-js/mermaid-cli` from your package manager
+of choice (apt, brew, npm, guix, etc.).
 
 ## Relationship to ADRs
 
