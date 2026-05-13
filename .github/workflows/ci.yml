@@ -1,0 +1,153 @@
+# CI for Slicer-Liver — see Docs/adr/0005-github-actions-ci.md
+#
+# Two jobs run in parallel on every PR and on every push to `develop`:
+#   - docs-lint    : fast (~30 s); validates Mermaid fences and internal
+#                    Markdown links across Docs/.  No Slicer dependency.
+#   - build-test   : slow (~10–30 min); builds the extension against a
+#                    pinned slicer-master container and runs CTest.
+#                    The container reference is TBD-verified-on-first-run;
+#                    once confirmed, ADR-0005 is amended to record it.
+
+name: CI
+
+on:
+  pull_request:
+    branches: ['**']
+  push:
+    branches: [develop]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1 — documentation lint (Mermaid fences + internal links).
+  # No Slicer dependency; runs in ~30 s.  Catches broken diagrams and
+  # dead inter-ADR links before they reach human review.
+  # ---------------------------------------------------------------------------
+  docs-lint:
+    name: docs-lint (Mermaid + Markdown links)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (for mermaid-cli)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Mermaid CLI
+        run: npm install -g @mermaid-js/mermaid-cli@10
+
+      - name: Validate Mermaid fences in Docs/architecture/
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          mkdir -p /tmp/mermaid-extracts
+          fail=0
+          for f in Docs/architecture/*.md; do
+            echo "::group::Validating Mermaid fences in $f"
+            # Extract each ```mermaid ... ``` fence to a separate .mmd file
+            # and run mmdc on it to a /dev/null-equivalent output.
+            awk '
+              /^```mermaid$/ { inblock=1; n++; out="/tmp/mermaid-extracts/'$( basename "$f" .md )'-"n".mmd"; next }
+              /^```$/ && inblock { inblock=0; next }
+              inblock { print > out }
+            ' "$f"
+            for mmd in /tmp/mermaid-extracts/"$(basename "$f" .md)"-*.mmd; do
+              [ -e "$mmd" ] || continue
+              if ! mmdc -i "$mmd" -o "${mmd%.mmd}.svg" --quiet; then
+                echo "::error file=$f::Mermaid syntax error in fence (extracted to $mmd)"
+                fail=1
+              fi
+            done
+            echo "::endgroup::"
+          done
+          if [ "$fail" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Check Markdown links via lychee
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --no-progress
+            --offline
+            --include-fragments
+            --exclude-loopback
+            'Docs/**/*.md'
+            'README.md'
+            'CONTRIBUTING.md'
+          fail: true
+
+  # ---------------------------------------------------------------------------
+  # Job 2 — build + test against slicer-master in a pre-built container.
+  # Container reference is TBD on first run.  Adjust both `image:` here
+  # and ADR-0005 if the first run resolves it differently.
+  # ---------------------------------------------------------------------------
+  build-test:
+    name: build-test (slicer-master, Linux)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+
+    # NOTE: The image reference below is the *first attempt* at picking the
+    # Slicer-master pre-built container that mature Slicer extensions use.
+    # If this resolves on first run, ADR-0005 is amended to pin it (ideally
+    # by digest).  If it does not resolve, candidates to try, in order:
+    #   - kitware/slicer-build:latest
+    #   - slicer/slicer-build:nightly
+    #   - ghcr.io/slicer/slicer:nightly
+    # Each candidate is one ENH commit on this PR's branch.
+    container:
+      image: slicer/slicer-build:latest
+      options: --user root
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Locate Slicer in container
+        id: slicer
+        run: |
+          set -euo pipefail
+          # The container is expected to expose either $Slicer_DIR or a
+          # `Slicer` executable on PATH that prints its build tree via
+          # `--launch true; --help`.  We discover the build tree path.
+          if [ -n "${Slicer_DIR:-}" ] && [ -d "$Slicer_DIR" ]; then
+            echo "Using \$Slicer_DIR=$Slicer_DIR from container env"
+            echo "slicer_dir=$Slicer_DIR" >> "$GITHUB_OUTPUT"
+          elif command -v Slicer >/dev/null 2>&1; then
+            inferred=$(Slicer --launch sh -c 'echo $Slicer_DIR' 2>/dev/null || true)
+            if [ -n "$inferred" ]; then
+              echo "Inferred Slicer_DIR=$inferred from \`Slicer --launch\`"
+              echo "slicer_dir=$inferred" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+          if [ -z "${slicer_dir:-}" ]; then
+            echo "::warning::Could not locate Slicer_DIR; build step will likely fail."
+            echo "::warning::See Docs/adr/0005-github-actions-ci.md for the candidate-image escalation list."
+          fi
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING:BOOL=ON \
+            -DSlicer_DIR="${{ steps.slicer.outputs.slicer_dir }}"
+
+      - name: Build
+        run: cmake --build build --config Release -j "$(nproc)"
+
+      - name: Test (CTest)
+        run: |
+          set -euo pipefail
+          cd build
+          ctest --output-on-failure --no-tests=error
