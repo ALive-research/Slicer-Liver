@@ -24,7 +24,7 @@ Two reasons historically pushed Slicer extensions toward C++:
    resolution** are conventionally done by C++ subclasses with proper
    `Set/Get` accessors, `Modified()` events, and `Copy()`/
    `PrintSelf()` / `WriteXML()` / `ReadXMLAttributes()` semantics.
-   The `vtkMRMLScriptedNode` mechanism exists for declaring node
+   The `vtkMRMLScriptedModuleNode` mechanism exists for declaring node
    attributes from Python but is limited compared to a proper C++
    subclass — and the limitations are precisely the ones that hurt
    for a clinical artefact (introspectability, storage
@@ -113,12 +113,12 @@ LayerDM internals.
 - LayerDM's Python pipeline API is wasted; we'd be using LayerDM at a
   small fraction of its capability.
 
-### B. All Python (including MRML nodes via `vtkMRMLScriptedNode`)
+### B. All Python (including MRML nodes via `vtkMRMLScriptedModuleNode`)
 
 Push everything to Python, including the MRML node classes — declare
-them as `vtkMRMLScriptedNode` instances at module load time.
+them as `vtkMRMLScriptedModuleNode` instances at module load time.
 
-**Rejected** because `vtkMRMLScriptedNode` is too limited for a
+**Rejected** because `vtkMRMLScriptedModuleNode` is too limited for a
 clinical artefact:
 
 - **Scene introspection is weaker** — other modules querying the scene
@@ -193,10 +193,12 @@ algorithm libraries" clause.
   unless the case fits one of the two C++ bands (data-only MRML node;
   algorithm library).  The `/slicer-review` reviewer flags drift.
 - **C++/Python boundary crossings** — VTK observer chains crossing
-  the boundary have non-trivial overhead.  Fine for UI events; bad
-  for per-frame render hooks.  Keep Python callbacks out of inner
-  loops.  LayerDM pipelines handle this correctly when used per its
-  API.
+  the boundary are well-known to have measurable overhead (the
+  Python callback round-trip goes through `vtkPythonCommand`).  Fine
+  for UI events; bad for per-frame render hooks.  Keep Python
+  callbacks out of inner loops.  LayerDM pipelines handle this
+  correctly when used per its API.  Profile before assuming a
+  Python-side observer is "free".
 - **Some kinds of static typing/introspection** we'd get in C++ are
   weaker in Python.  Mitigate with `typing`/`mypy`, but accept that
   the discipline is convention rather than compiler-enforced.
@@ -208,6 +210,13 @@ algorithm libraries" clause.
 - **Two test infrastructures coexist temporarily** — Python self-tests
   for new code, CTest C++ tests for the legacy C++ that has not yet
   migrated.  Both must pass on CI.
+- **Lazy `slicer.util.pip_install` is mandatory for heavy Python
+  deps.**  Modules that need numpy-extras, monai, torch, etc. must
+  `pip_install` them on first use (inside the function that needs
+  them) — never at module import time.  Eager imports stall Slicer
+  startup during module enumeration; the lazy pattern is the
+  convention in `Base/Python/slicer/util.py` (see existing usages of
+  `pip_install` for the try-import-then-prompt template).
 
 ## References
 
@@ -216,10 +225,14 @@ algorithm libraries" clause.
   tree.
 - Slicer Python utilities (`getNode`, `loadVolume`, `arrayFromVolume`,
   `pip_install`): `Base/Python/slicer/util.py`.
-- LayerDM Python abstract pipeline class:
-  `~/src/SlicerLayerDisplayableManager/Python/` and the architecture
-  docs at https://slicerlayerdisplayablemanager.readthedocs.io/
-- `vtkMRMLScriptedNode` mechanism — for the record of why it's not
+- LayerDM Python abstract pipeline class: source at
+  `~/src/SlicerLayerDisplayableManager/LayerDM/MRMLDM/Python/vtkMRMLLayerDMScriptedPipeline.py`
+  (the top-level `Python/` directory is only a 2-line re-export
+  shim; the class is consumed in extension mode as
+  `from LayerDMLib import vtkMRMLLayerDMScriptedPipeline`).  Online
+  architecture docs at
+  https://slicerlayerdisplayablemanager.readthedocs.io/
+- `vtkMRMLScriptedModuleNode` mechanism — for the record of why it's not
   used here; see Slicer source `Libs/MRML/Core/vtkMRMLScriptedModuleNode.h`
   (note the limited scope vs a proper subclass).
 - Related:
