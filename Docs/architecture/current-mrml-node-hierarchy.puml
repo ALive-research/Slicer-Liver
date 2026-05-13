@@ -1,0 +1,136 @@
+@startuml current-mrml-node-hierarchy
+title Slicer-Liver MRML Node Hierarchy — current state (2026-05-13)
+
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+hide empty members
+
+' ============================================================
+' Slicer core base classes (external — for orientation only)
+' ============================================================
+package "Slicer core (external)" <<Frame>> {
+  abstract class vtkMRMLNode
+  abstract class vtkMRMLStorableNode
+  abstract class vtkMRMLDisplayableNode
+  abstract class vtkMRMLMarkupsNode
+  abstract class vtkMRMLMarkupsLineNode
+  abstract class vtkMRMLMarkupsDisplayNode
+  abstract class vtkMRMLStorageNode
+  abstract class vtkMRMLMarkupsFiducialStorageNode
+  abstract class vtkMRMLAbstractSliceViewDisplayableManager
+
+  vtkMRMLNode               <|-- vtkMRMLStorableNode
+  vtkMRMLStorableNode       <|-- vtkMRMLDisplayableNode
+  vtkMRMLDisplayableNode    <|-- vtkMRMLMarkupsNode
+  vtkMRMLMarkupsNode        <|-- vtkMRMLMarkupsLineNode
+  vtkMRMLStorableNode       <|-- vtkMRMLStorageNode
+  vtkMRMLStorageNode        <|-- vtkMRMLMarkupsFiducialStorageNode
+}
+
+' ============================================================
+' LiverResections.MRML — content node + storage
+' ============================================================
+package "LiverResections.MRML" {
+  class vtkMRMLLiverResectionNode {
+    +State : enum {Initialization, Deformation, Completed}
+    +InitMode : enum {Flat, Curved}
+    +ResectionMargin, UncertaintyMargin : double
+    +ResectionColor, MarginColor, UncertaintyColor : double[3]
+    +GridDivisions, GridThickness, Opacity, ...
+    --
+    +SetTargetOrganModelNode(weak)
+    +SetDistanceMapVolumeNode(weak)
+    +SetVascularSegmentsVolumeNode(weak)
+    +SetBezierSurfaceNode(weak)
+    +SetInitializationNode(weak)
+  }
+  class vtkMRMLLiverResectionCSVStorageNode {
+    +ReadDataInternal(node)
+    +WriteDataInternal(node)
+  }
+
+  vtkMRMLStorableNode                <|-- vtkMRMLLiverResectionNode
+  vtkMRMLMarkupsFiducialStorageNode  <|-- vtkMRMLLiverResectionCSVStorageNode
+  vtkMRMLLiverResectionNode "1" -- "1" vtkMRMLLiverResectionCSVStorageNode : default storage
+}
+
+' ============================================================
+' LiverMarkups.MRML — geometry + initialization
+' ============================================================
+package "LiverMarkups.MRML" {
+  class vtkMRMLMarkupsBezierSurfaceNode {
+    +MaximumNumberOfControlPoints = 16
+    +RequiredNumberOfControlPoints = 16
+  }
+  class vtkMRMLMarkupsBezierSurfaceDisplayNode {
+    +ResectionColor, MarginColor : double[3]
+    +GridDivisions, Opacity, ...
+  }
+  class vtkMRMLMarkupsSlicingContourNode
+  class vtkMRMLMarkupsSlicingContourDisplayNode
+  class vtkMRMLMarkupsDistanceContourNode
+  class vtkMRMLMarkupsDistanceContourDisplayNode
+
+  vtkMRMLMarkupsNode         <|-- vtkMRMLMarkupsBezierSurfaceNode
+  vtkMRMLMarkupsLineNode     <|-- vtkMRMLMarkupsSlicingContourNode
+  vtkMRMLMarkupsLineNode     <|-- vtkMRMLMarkupsDistanceContourNode
+
+  vtkMRMLMarkupsDisplayNode  <|-- vtkMRMLMarkupsBezierSurfaceDisplayNode
+  vtkMRMLMarkupsDisplayNode  <|-- vtkMRMLMarkupsSlicingContourDisplayNode
+  vtkMRMLMarkupsDisplayNode  <|-- vtkMRMLMarkupsDistanceContourDisplayNode
+
+  vtkMRMLMarkupsBezierSurfaceNode   "1" -- "1" vtkMRMLMarkupsBezierSurfaceDisplayNode
+  vtkMRMLMarkupsSlicingContourNode  "1" -- "1" vtkMRMLMarkupsSlicingContourDisplayNode
+  vtkMRMLMarkupsDistanceContourNode "1" -- "1" vtkMRMLMarkupsDistanceContourDisplayNode
+}
+
+' ============================================================
+' The three-node resection assembly (ADR-0001)
+' ============================================================
+vtkMRMLLiverResectionNode ..> vtkMRMLMarkupsBezierSurfaceNode    : weak ref\n(geometry)
+vtkMRMLLiverResectionNode ..> vtkMRMLMarkupsSlicingContourNode   : weak ref\n(init, mode A)
+vtkMRMLLiverResectionNode ..> vtkMRMLMarkupsDistanceContourNode  : weak ref\n(init, mode B)
+vtkMRMLLiverResectionCSVStorageNode ..> vtkMRMLMarkupsBezierSurfaceNode : delegates I/O
+
+' ============================================================
+' LiverResections.MRMLDM — slice-view rendering
+' ============================================================
+package "LiverResections.MRMLDM" {
+  class vtkMRMLLiverResectionsDisplayableManager2D
+  vtkMRMLAbstractSliceViewDisplayableManager <|-- vtkMRMLLiverResectionsDisplayableManager2D
+}
+vtkMRMLLiverResectionsDisplayableManager2D ..> vtkMRMLMarkupsBezierSurfaceNode : reads, renders\n2D cross-sections
+
+' ============================================================
+' Notes
+' ============================================================
+note right of vtkMRMLLiverResectionNode
+  **Storable** — the conventional save target.
+  Owns metadata, state, and weak refs to
+  geometry/initialization/source-data nodes.
+end note
+
+note right of vtkMRMLMarkupsBezierSurfaceNode
+  **MarkupsNode** — reuses Slicer's widget
+  pipeline (interactive 3D handles).
+  Holds the actual 16 Bezier control points.
+end note
+
+note bottom of vtkMRMLLiverResectionsDisplayableManager2D
+  Reads BezierSurfaceNode; renders the
+  resection's intersection with each slice plane.
+end note
+
+legend right
+  | Style       | Meaning                          |
+  |-------------|----------------------------------|
+  | solid line  | inheritance (UML "extends")      |
+  | dashed line | association / weak reference     |
+  | 1 -- 1      | composition (default node pair)  |
+
+  See **Docs/adr/0001-resection-three-node-assembly.md**
+  for the rationale behind the split.
+endlegend
+
+@enduml
