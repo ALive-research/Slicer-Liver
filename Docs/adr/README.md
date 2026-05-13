@@ -51,7 +51,12 @@ same PR, old one updated to `Superseded by NNNN`).
 ## Authoring
 
 ```sh
-cp Docs/adr/0000-template.md Docs/adr/$(printf '%04d' $((1 + $(ls Docs/adr/[0-9]*.md | wc -l))))-<title>.md
+# Find the next ADR number (handles the no-ADRs-yet case)
+next=$(ls Docs/adr/[0-9][0-9][0-9][0-9]-*.md 2>/dev/null \
+       | sed -E 's|.*/([0-9]{4})-.*|\1|' \
+       | sort -n | tail -1)
+n=$(printf '%04d' $(( ${next:-0} + 1 )))
+cp Docs/adr/0000-template.md Docs/adr/${n}-<title>.md
 ```
 
 Edit the new file, set Status to `Proposed`, fill in Context/Decision/
