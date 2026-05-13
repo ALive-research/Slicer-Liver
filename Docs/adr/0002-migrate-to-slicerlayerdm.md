@@ -58,7 +58,9 @@ addresses exactly these structural pains:
 - *Layer-aware interaction and focus* — prioritised focus across
   pipelines without per-DM custom logic.
 - *First-class Python abstract pipeline class* — pipelines authorable in
-  Python; tests are fast; iteration is seconds, not minutes.
+  Python via `vtkMRMLLayerDMScriptedPipeline` (imported in extension
+  mode as `from LayerDMLib import vtkMRMLLayerDMScriptedPipeline`);
+  tests are fast; iteration is seconds, not minutes.
 - *Pipeline registration via factory + creator API* — replaces the
   string-based DM factory with typed registration.
 
@@ -239,6 +241,23 @@ the public API surface is acceptable to commit against today.
   — Kitware-maintained module, Slicer 5.10+.  Local checkout:
   `~/src/SlicerLayerDisplayableManager/`.  Online architecture docs:
   https://slicerlayerdisplayablemanager.readthedocs.io/
+  - Pipeline manager:
+    `LayerDM/MRMLDM/vtkMRMLLayerDMPipelineManager.{h,cxx}`.
+  - Pipeline factory + lambda creators:
+    `LayerDM/MRMLDM/vtkMRMLLayerDMPipelineFactory.{h,cxx}` and
+    `vtkMRMLLayerDMPipelineCallbackCreator.{h,cxx}`.
+  - Camera synchronizer:
+    `LayerDM/MRMLDM/vtkMRMLLayerDMCameraSynchronizer.{h,cxx}`.
+  - Interaction / focus logic:
+    `LayerDM/MRMLDM/vtkMRMLLayerDMInteractionLogic.{h,cxx}`.
+  - Python abstract pipeline class:
+    `LayerDM/MRMLDM/Python/vtkMRMLLayerDMScriptedPipeline.py`
+    (re-exported via `LayerDMLib` for extension consumers; the
+    top-level `Python/` directory contains only a 2-line shim).
+  - Pipeline interface accepting any `vtkMRMLNode*`:
+    `vtkMRMLLayerDMPipelineI::SetDisplayNode` —
+    `LayerDM/MRMLDM/vtkMRMLLayerDMPipelineI.h`.  This is what enables
+    the Bezier-on-Storable migration without Markups inheritance.
 - [ADR-0001 (descriptive predecessor)](0001-resection-three-node-assembly.md)
   — documents the current state and historical rationale that this ADR
   supersedes as the target.
