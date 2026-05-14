@@ -7,12 +7,13 @@ Thanks for taking the time to contribute! All types of contributions are encoura
 ### Submitting code
 
 We encourage you to submit pull requests as the preferred method for proposing changes to the codebase.
+
 - Fork the [source code](https://github.com/ALive-research/Slicer-Liver)
 - Build Slicer-Liver from the source code following [instructions](https://github.com/ALive-research/Slicer-Liver?tab=readme-ov-file#developers)
-- Create a new branch for your feature or bug fix to keep your changes organized.
+- **Branch off `preview`** (the repository's default branch).  See [ADR-0006](Docs/adr/0006-branch-model.md) for the full branch model; the short version: new work targets `preview`; stable releases live on `master` and receive backports from `preview` periodically.
 - Implement your changes, ensuring they adhere to the Python and C++ coding standards used in the project.
 - Commit and push your changes with clear and descriptive messages.
-- Open a pull request in the original repository, clearly describing the changes you made and their purpose.
+- Open a pull request **against `preview`**, clearly describing the changes you made and their purpose.
 
 We look forward to reviewing your contributions!
 
