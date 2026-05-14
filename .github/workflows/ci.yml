@@ -105,6 +105,13 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 60
 
+    # The container image's default shell is /bin/sh (dash), which
+    # doesn't understand `set -o pipefail`.  Several steps below rely
+    # on it; force bash at the job level.
+    defaults:
+      run:
+        shell: bash
+
     # `ghcr.io/alive-research/slicer-build-ubuntu2404` is the
     # project-maintained image (Ubuntu 24.04 + Qt 6.9 + Slicer main
     # pre-built); recipe and auto-build workflow live in the
