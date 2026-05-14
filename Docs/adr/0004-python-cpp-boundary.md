@@ -42,7 +42,7 @@ Today's Slicer ecosystem precedent has two clear camps:
 The hybrid pattern that emerges in well-maintained extensions is:
 small C++ surface for nodes and algorithms; everything else Python.
 
-Two pressures specifically apply to Slicer-Liver's migration:
+Three pressures specifically apply to Slicer-Liver's migration:
 
 - **Refactor cost dominates over a multi-year migration horizon.**
   Python edits are seconds; C++ edits are a Slicer rebuild
@@ -54,6 +54,15 @@ Two pressures specifically apply to Slicer-Liver's migration:
   barrier without giving up performance requires that the C++ surface
   shrink to a well-defined band where C++ expertise actually pays
   back.
+- **Workflow plurality keeps growing.**  Slicer-Liver supports
+  multiple resection-definition workflows (contour initialisation +
+  Bezier modification; manual contour creation + fitting; 2-point
+  initialisation + fitting) and multiple surface representations
+  (Bezier today, NURBS in progress).  Each variant is a separate
+  LayerDM pipeline class with its own state machine and interaction
+  semantics; the catalogue is expected to grow over the migration
+  horizon.  Code that must absorb new variants without a Slicer
+  rebuild on every iteration belongs in Python.
 
 ## Decision
 
@@ -70,10 +79,17 @@ boundary migrates as opportunity allows (not in dedicated rewrite PRs).
    `vtkMRMLCopyContent`/`InvokeEvent` plumbing that the scene depends
    on.  It does **not** carry business logic, display state, or
    workflow.
-2. **Algorithm libraries.**  Bezier-surface evaluation, distance-map
-   computation, slicing-contour interpolation, volumetry integrators,
-   any custom VTK filters.  These are inner loops; the existing C++
-   investment is sound; keep them.
+2. **Performance-critical algorithm libraries** — when there is a
+   measured or profile-justified need for native speed.  This
+   captures the existing tuned inner loops: Bezier-surface
+   evaluation, distance-map computation, slicing-contour
+   interpolation, volumetry integrators, and any custom VTK filters
+   with a demonstrated per-frame or inner-loop budget.  New compute
+   that does *not* have a profile-justified native-speed need does
+   not belong here — it should be packaged as a Python VTK filter
+   (see Python band below).  The default is not "C++ because it is
+   an algorithm"; the default is "Python VTK filter unless a profile
+   says otherwise".
 
 **Python is used for everything else, including:**
 
@@ -81,12 +97,21 @@ boundary migrates as opportunity allows (not in dedicated rewrite PRs).
 - Widget / GUI logic (Qt `.ui` files loaded via `qt.QUiLoader`,
   wired in Python).
 - Logic / orchestration (the equivalent of `vtkSlicerLiver*Logic`).
-- Storage I/O — CSV reading/writing is trivial in Python and schema
-  evolution is easier; the C++ `vtkMRMLLiverResectionCSVStorageNode`
-  is retired in favour of a Python storage class that reads/writes
-  the same `.lrp.fcsv` format.
+- Storage *parsing / serialization logic* — the `.lrp.fcsv` read/
+  write body can live in Python (CSV is trivial; schema evolution is
+  easier).  Note however that the **`vtkMRMLStorageNode` subclass
+  itself stays C++** — it falls under "MRML node classes" above,
+  because the scene's storage dispatch, file-extension registration,
+  and `IsA()` queries depend on its C++ class identity.  This is
+  precisely the storage pair ADR-0002 calls for; the storage *class*
+  is C++, the parsing *body* can delegate to Python helpers.
 - LayerDM pipelines — per [ADR-0002](0002-migrate-to-slicerlayerdm.md);
   LayerDM provides a first-class Python abstract pipeline class.
+- **Python VTK filters** — compute paths that do not have a measured
+  per-frame or inner-loop bottleneck.  Python-bound filters keep the
+  data flow through VTK's pipeline machinery while preserving Python
+  iteration speed.  This is the default home for new compute under
+  ADR-0002's "unify the language seam" Decision bullet.
 - Tests — per [ADR-0003](0003-testability-invariant.md); the Slicer
   self-test pattern is Python.
 - Build / packaging glue.
@@ -147,10 +172,10 @@ question, review comments accumulate around it, and convention drifts
 over time.  A documented boundary turns a recurring debate into a
 single decision a reviewer can point at.
 
-### D. Python everywhere, including algorithm libraries
+### D. Migrate the existing tuned C++ algorithm libraries to Python
 
-Migrate the algorithm libraries (Bezier evaluation, distance maps) to
-Python using NumPy.
+Reimplement the existing Bezier evaluation, distance-map, and related
+inner-loop algorithms in Python (typically via NumPy).
 
 **Rejected** because:
 
@@ -161,10 +186,11 @@ Python using NumPy.
 - The C++ algorithm surface is small (handful of classes) and stable
   — exactly the kind of place where C++ pays back.
 
-The narrower decision (keep the existing algorithm C++ for now;
-migrate individually only if a specific performance or maintenance
-case justifies it) is captured implicitly by this ADR's "C++ only for
-algorithm libraries" clause.
+This rejection is **narrow**: it covers reimplementing the existing
+tuned native code in Python without a triggering reason.  It is
+*not* a blanket ban on Python algorithms.  New compute defaults to a
+Python VTK filter unless a profile justifies native speed — captured
+by the "Performance-critical algorithm libraries" C++ band above.
 
 ## Consequences
 
@@ -202,11 +228,13 @@ algorithm libraries" clause.
 - **Some kinds of static typing/introspection** we'd get in C++ are
   weaker in Python.  Mitigate with `typing`/`mypy`, but accept that
   the discipline is convention rather than compiler-enforced.
-- **Performance profiling is now part of routine PR review.**  When a
-  PR moves logic from C++ to Python (or adds Python on a path that
-  used to be C++), a profile or microbenchmark is part of the review
-  artefacts.  The `/slicer-review` reviewer can be extended with this
-  check.
+- **Performance profiling is now part of routine PR review — both
+  directions.**  PRs moving logic from C++ to Python (or adding
+  Python on a path that used to be C++) carry a profile /
+  microbenchmark showing no regression.  PRs introducing *new* C++
+  compute carry a profile showing a Python VTK filter would not
+  have sufficed.  The `/slicer-review` reviewer can be extended with
+  this check.
 - **Two test infrastructures coexist temporarily** — Python self-tests
   for new code, CTest C++ tests for the legacy C++ that has not yet
   migrated.  Both must pass on CI.
