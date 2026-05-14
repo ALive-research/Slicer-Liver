@@ -1,7 +1,7 @@
 # Slicer-Liver MRML node hierarchy — current state (2026-05-13)
 
 Descriptive snapshot of the MRML class graph for the `LiverResections` and
-`LiverMarkups` modules as it exists today on `develop`. This file documents
+`LiverMarkups` modules as it exists today on `preview`. This file documents
 *what is*, not what should be — see [`adr/0001-resection-three-node-assembly.md`](../adr/0001-resection-three-node-assembly.md)
 for the historical rationale behind the current shape.
 
