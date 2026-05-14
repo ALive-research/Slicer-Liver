@@ -1,0 +1,21 @@
+# CODEOWNERS
+#
+# Lines later in this file take precedence.  Each line is a glob pattern
+# followed by one or more code-owner usernames / teams.
+#
+# See: https://docs.github.com/repositories/managing-your-repositories-settings-and-features/customizing-your-repository/about-code-owners
+#
+# The `preview` branch protection has `require_code_owner_reviews` enabled —
+# every matched path in this file requires explicit approval from at least
+# one listed owner before a PR can merge.
+
+# Catch-all: the project lead reviews any path not covered below.
+*                              @RafaelPalomar
+
+# Governance-grade artefacts (ADRs, architecture diagrams, CI policy)
+# always require the project lead's explicit approval.  Listed
+# specifically so the rule is unambiguous even if the catch-all is
+# narrowed in the future.
+/Docs/adr/                     @RafaelPalomar
+/Docs/architecture/            @RafaelPalomar
+/.github/                      @RafaelPalomar
