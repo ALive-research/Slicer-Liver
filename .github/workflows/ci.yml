@@ -163,4 +163,16 @@ jobs:
         run: |
           set -euo pipefail
           cd build
-          ctest --output-on-failure --no-tests=error
+          # `py_LiverSegmentsTest` is excluded because it hard-imports
+          # the `ExtractCenterline` module from SlicerExtension-VMTK,
+          # which is intentionally not bundled in the
+          # `slicer-build-ubuntu2404` image (see ALive-Docker PR #4 +
+          # the analysis on Slicer-Liver PR #294's discussion).
+          #
+          # The proper fix lives on the Slicer-Liver side: the test
+          # should detect VMTK absence via `slicer.modules` and skip
+          # itself rather than fail.  Tracked as a follow-up; until
+          # then, the CTest-level exclude keeps CI honestly green for
+          # what it actually covers.
+          ctest --output-on-failure --no-tests=error \
+                --exclude-regex '^py_LiverSegmentsTest$'
