@@ -20,6 +20,15 @@ on:
 
 permissions:
   contents: read
+  # `packages: read` is required even though
+  # ghcr.io/alive-research/slicer-build-ubuntu2404 is public.  The
+  # GitHub Actions runner auto-logs in to ghcr.io as `${{ github.actor }}`
+  # with `GITHUB_TOKEN`; the subsequent docker pull uses those
+  # credentials, and a logged-in pull with a token lacking
+  # `read:packages` scope is denied — even when anonymous pull of the
+  # same image would succeed.  Granting the scope makes the
+  # auto-injected login authoritative.
+  packages: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
