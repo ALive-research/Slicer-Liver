@@ -39,6 +39,30 @@
 // See ADR-0003 (testability invariant) for why this test exists in the
 // state it does, and ADR-0001 Consequences for the reload-ordering
 // requirement that motivates it.
+//
+// Scope (deliberately narrow):
+//   The `.lrp.fcsv` format carries ONLY the Bezier surface's control
+//   points; the storage node delegates Read/Write to the Markups
+//   superclass on `resection->GetBezierSurfaceNode()`.  Resection
+//   metadata (margins, colours, `InitializationControlPoints`, refs to
+//   parent segmentation / target structures) is persisted through the
+//   `.mrml` scene file via `WriteXMLAttributes`, not through
+//   `.lrp.fcsv`.  This test therefore pins:
+//     1. that the 16 Bezier control points survive `.lrp.fcsv` round-
+//        trip with exact coordinate fidelity (within `kCoordinateTolerance`),
+//     2. that today's failure modes of the storage class (missing
+//        Bezier ref; wrong reference-node type) are preserved, and
+//     3. that reading `.lrp.fcsv` does NOT clobber resection-node
+//        metadata on the receiving node — a useful negative invariant
+//        for the refactor, since the storage class is scoped to the
+//        Bezier subnode and must stay that way.
+//
+//   The full ADR-0003 §6 deliverable — scene-level save/load asserting
+//   the three-node assembly is intact, refs resolve, and resection
+//   metadata round-trips through `.mrml` — is a separate follow-up
+//   test, expected to be written in Python (per ADR-0004) and to use
+//   `slicer.util.saveScene` / `loadScene` so it exercises the real
+//   production load orchestration.
 
 // MRML includes
 #include "vtkMRMLCoreTestingMacros.h"
@@ -229,7 +253,28 @@ int vtkMRMLLiverResectionStorageRoundTripTest(int argc, char* argv[])
   // referenced from the resection before ReadDataInternal is called —
   // the storage class delegates I/O via `resection->GetBezierSurfaceNode()`
   // and errors out otherwise.  Pin that ordering with this assertion.
+  //
+  // NOTE (transitional characterisation, not a target invariant): the
+  // LayerDM migration in ADR-0002 §Decision 2-3 explicitly dissolves
+  // the requirement that callers pre-attach a Bezier subnode before
+  // load — the migrated pipeline reads a plain Storable content node
+  // and the storage class is rewritten accordingly.  When that
+  // migration lands, this assertion (and the failure-mode probe in
+  // Phase 4 that pins the "no Bezier => write fails" rule) is
+  // expected to be removed or inverted.  Until then it pins today's
+  // behaviour, which is what `/slicer-review` grades the storage-path
+  // refactors against.
   CHECK_INT(bezierB->GetNumberOfControlPoints(), 0);
+
+  // Sentinel metadata on resectionB BEFORE ReadData.  The `.lrp.fcsv`
+  // format only carries Bezier control points; resection metadata must
+  // not be clobbered by a Read.  See header scope comment §3.
+  constexpr double kSentinelHepaticThickness = 2.5;
+  constexpr double kSentinelPortalThickness  = 1.75;
+  const float kSentinelHepaticColor[3] = { 0.10f, 0.20f, 0.30f };
+  resectionB->SetHepaticContourThickness(kSentinelHepaticThickness);
+  resectionB->SetPortalContourThickness(kSentinelPortalThickness);
+  resectionB->SetHepaticContourColor(const_cast<float*>(kSentinelHepaticColor));
 
   auto storageB = vtkMRMLLiverResectionCSVStorageNode::SafeDownCast(
     scene->AddNewNodeByClass("vtkMRMLLiverResectionCSVStorageNode",
@@ -241,7 +286,8 @@ int vtkMRMLLiverResectionStorageRoundTripTest(int argc, char* argv[])
   CHECK_INT(readStatus, 1);
 
   // --------------------------------------------------------------------------
-  // Phase 3 — assert round-trip preserved the 16 control points
+  // Phase 3 — assert round-trip preserved the 16 control points and did
+  // NOT clobber resection metadata that lives outside the `.lrp.fcsv` scope
   // --------------------------------------------------------------------------
   std::string mismatch;
   if (!ControlPointsMatch(bezierA, bezierB, mismatch))
@@ -249,6 +295,28 @@ int vtkMRMLLiverResectionStorageRoundTripTest(int argc, char* argv[])
     std::cerr << "Round-trip mismatch: " << mismatch << std::endl;
     return EXIT_FAILURE;
     }
+
+  // Metadata sentinels survived the Read — the storage class is and must
+  // remain scoped to the Bezier subnode.
+  CHECK_DOUBLE_TOLERANCE(resectionB->GetHepaticContourThickness(),
+                         kSentinelHepaticThickness, kCoordinateTolerance);
+  CHECK_DOUBLE_TOLERANCE(resectionB->GetPortalContourThickness(),
+                         kSentinelPortalThickness, kCoordinateTolerance);
+  {
+    float readBack[3] = { 0.0f, 0.0f, 0.0f };
+    resectionB->GetHepaticContourColor(readBack);
+    for (int d = 0; d < 3; ++d)
+      {
+      if (std::fabs(readBack[d] - kSentinelHepaticColor[d])
+          > kCoordinateTolerance)
+        {
+        std::cerr << "HepaticContourColor sentinel axis " << d
+                  << " clobbered by ReadData: got " << readBack[d]
+                  << " expected " << kSentinelHepaticColor[d] << std::endl;
+        return EXIT_FAILURE;
+        }
+      }
+  }
 
   // --------------------------------------------------------------------------
   // Phase 4 — pin the failure modes the storage class guards against
