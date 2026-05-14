@@ -13,15 +13,21 @@
 ## Context
 
 Slicer-Liver's current displayable manager (DM) and widget architecture
-exhibits five structural pains that have accumulated over the 2021–2026
+exhibits six structural pains that have accumulated over the 2021–2026
 development of the module:
 
 1. **The three-node resection assembly** (documented in ADR-0001) exists
    primarily because interactive 3D editing of the Bezier surface
-   requires `vtkMRMLMarkupsNode` inheritance, while clean cross-volume
-   serialization wants `vtkMRMLStorableNode` with a dedicated
-   `StorageNode`.  This forces geometry onto a Markups node and metadata
-   onto a Storable node, with a Logic class binding them.
+   requires `vtkMRMLMarkupsNode` inheritance, while persisting the full
+   resection state (the 16 control points *and* per-resection metadata
+   — margins, colours, grid divisions, references to parent
+   segmentation and target structures) demands a dedicated
+   `vtkMRMLStorableNode` + `vtkMRMLStorageNode` pair.  Markups' built-in
+   serializer is shaped around its point-list schema and cannot carry
+   SlicerLiver-specific resection metadata, so we cannot collapse the
+   two roles onto a single Markups node.  The result: geometry on a
+   Markups node, metadata on a Storable node, with a Logic class
+   binding them.
 
 2. **Six `std::map` members in `vtkSlicerLiverResectionsLogic`** maintain
    bidirectional navigation between the three nodes of each resection.
@@ -36,11 +42,27 @@ development of the module:
    `vtkMRMLMarkupsBezierSurfaceDisplayNode` on every `Modified()` event.
    Edits made directly to the display node are silently lost.
 
-4. **`vtkMRMLLiverResectionsDisplayableManager2D`** reimplements
+4. **The Markups interaction model cannot host the resection workflows
+   SlicerLiver actually needs.**  The Bezier control grid is 4×4, and
+   surgically meaningful operations group control points into the
+   inner 4 vs the border 12 (e.g. right-clicking any inner point
+   should let the surgeon translate the inner group as a unit;
+   right-clicking a border point should adjust the boundary as a
+   unit).  Markups' interaction handler is built around per-point
+   semantics with a fixed event vocabulary and no first-class concept
+   of point groups, so expressing these operations on top of it is
+   awkward and brittle.  The same constraint hampers the other
+   resection-definition workflows the module supports — contour
+   initialisation + Bezier modification, manual contour creation +
+   fitting, 2-point initialisation + fitting — and the alternative
+   surface representations (Bezier today, NURBS in progress) that
+   each want their own interaction semantics.
+
+5. **`vtkMRMLLiverResectionsDisplayableManager2D`** reimplements
    pipeline instantiation, renderer setup, and camera handling — the
    same boilerplate as every other Slicer DM.
 
-5. **String-based factory instantiation** of DMs prevents shared-service
+6. **String-based factory instantiation** of DMs prevents shared-service
    injection, complicates testing, and makes future cross-module
    pipelines (e.g. a unified resection-plus-vessels view) awkward.
 
@@ -63,6 +85,11 @@ addresses exactly these structural pains:
   tests are fast; iteration is seconds, not minutes.
 - *Pipeline registration via factory + creator API* — replaces the
   string-based DM factory with typed registration.
+- *Internally validated*: the same LayerDM architecture has been
+  proven in our Hyperprobe project for resectogram-parallel
+  functionalities — first-hand evidence that the framework scales
+  past a single pipeline class and that we can build on it without
+  hitting unforeseen ceilings.
 
 Critically for SlicerLiver: with LayerDM in place, **the
 `vtkMRMLMarkupsNode` inheritance constraint that forced the three-node
@@ -111,7 +138,19 @@ Specifically:
       submodules.
    5. Remove the feature flag and the legacy code paths.
 
-5. **Each migration PR is governed by ADR-0003 (testability invariant)
+5. **Unify the language seam, in line with ADR-0004.**  SlicerLiver
+   today is a mix of C++ (MRML nodes, displayable managers, Bezier
+   evaluation) and Python (resectogram analysis, scripted submodules).
+   The migration is an opportunity to put each piece on the correct
+   side of the seam rather than leave them scattered: compute-heavy
+   or per-frame work moves into VTK filters (C++ when the performance
+   budget demands it, Python-bound VTK filters otherwise), while
+   business logic, workflow state, and pipeline orchestration live in
+   Python LayerDM pipelines.  Existing Python code on the wrong side
+   of the seam — and existing C++ code that is really business logic —
+   relocates as part of the relevant module's migration PR.
+
+6. **Each migration PR is governed by ADR-0003 (testability invariant)
    and ADR-0004 (Python/C++ boundary)** — characterisation tests land
    *before* the migration commits, and new code lands in Python unless
    it falls inside the C++ boundary defined by ADR-0004.
@@ -129,9 +168,11 @@ the six maps to MRML node-reference attributes; introduce a dedicated
 three-node assembly itself is the structural cause (per ADR-0001), and
 it persists for as long as Markups is the only way to get interactive
 widgets.  Incremental fixes also leave us coupled to upstream Markups
-evolution, which has its own roadmap and breaking-change cadence.  Two
-of the five pains (DM boilerplate, string-factory) are *upstream Slicer
-architectural debts* that incremental work cannot reach.
+evolution, which has its own roadmap and breaking-change cadence.
+Three of the six pains (Markups interaction rigidity, DM boilerplate,
+string-factory) are *upstream architectural debts* — in Markups and
+the Slicer DM machinery — that incremental work inside Slicer-Liver
+cannot reach.
 
 ### B. Custom DM rewrite without adopting LayerDM
 
