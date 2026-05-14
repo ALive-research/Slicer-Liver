@@ -339,8 +339,12 @@ int vtkMRMLLiverResectionStorageRoundTripTest(int argc, char* argv[])
 
   // CanReadInReferenceNode pin: a Bezier-only node should NOT be a valid
   // ReadData target — the storage class requires a Liver resection node.
-  CHECK_BOOL(storage->CanReadInReferenceNode(bezierA), false);
-  CHECK_BOOL(storage->CanReadInReferenceNode(resectionB), true);
+  //
+  // NB: use `storageB` (created post-clear, still alive) — `storage` from
+  // Phase 1 was removed by `scene->Clear()` and is a dangling raw pointer.
+  // `bezierA` was likewise removed by the clear; use `bezierB` instead.
+  CHECK_BOOL(storageB->CanReadInReferenceNode(bezierB), false);
+  CHECK_BOOL(storageB->CanReadInReferenceNode(resectionB), true);
 
   return EXIT_SUCCESS;
 }
