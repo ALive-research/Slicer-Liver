@@ -128,6 +128,13 @@ jobs:
 
     env:
       Slicer_DIR: /usr/src/Slicer-build/Slicer-build
+      # Force Qt's offscreen platform plugin.  The image sets
+      # ENV DISPLAY=:99 but does not actually run Xvfb, so any Qt
+      # test that tries to bring up a real X connection (xcb plugin)
+      # crashes with "could not connect to display :99".
+      # `QT_QPA_PLATFORM=offscreen` is Qt's official headless mode —
+      # it renders to an in-memory surface, suitable for CTest.
+      QT_QPA_PLATFORM: offscreen
 
     steps:
       - name: Checkout
