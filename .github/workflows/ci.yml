@@ -96,16 +96,19 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 60
 
-    # NOTE: The image reference below is the *first attempt* at picking the
-    # Slicer-master pre-built container that mature Slicer extensions use.
-    # If this resolves on first run, ADR-0005 is amended to pin it (ideally
-    # by digest).  If it does not resolve, candidates to try, in order:
-    #   - kitware/slicer-build:latest
-    #   - slicer/slicer-build:nightly
-    #   - ghcr.io/slicer/slicer:nightly
-    # Each candidate is one ENH commit on this PR's branch.
+    # Use `slicer/slicer-base` — the same image 3D Slicer's own PR CI
+    # uses to build Slicer (see Slicer/SlicerDocker README + Slicer's
+    # `.github/actions/slicer-build/Dockerfile`).  It ships Slicer
+    # pre-built at /usr/src/Slicer-build/, which lets us build a
+    # downstream extension directly against it.
+    #
+    # The previous `slicer/slicer-build:latest` image was retired in
+    # 2018 and its ancient glibc broke `actions/checkout@v4`'s Node 20
+    # binary; slicer-base is actively maintained (rebuilt with each
+    # Slicer release).  Pin to `:latest` while iterating; switch to a
+    # digest pin once the workflow is stable.
     container:
-      image: slicer/slicer-build:latest
+      image: slicer/slicer-base:latest
       options: --user root
 
     steps:
@@ -116,22 +119,27 @@ jobs:
         id: slicer
         run: |
           set -euo pipefail
-          # The container is expected to expose either $Slicer_DIR or a
-          # `Slicer` executable on PATH that prints its build tree via
-          # `--launch true; --help`.  We discover the build tree path.
-          if [ -n "${Slicer_DIR:-}" ] && [ -d "$Slicer_DIR" ]; then
-            echo "Using \$Slicer_DIR=$Slicer_DIR from container env"
-            echo "slicer_dir=$Slicer_DIR" >> "$GITHUB_OUTPUT"
-          elif command -v Slicer >/dev/null 2>&1; then
-            inferred=$(Slicer --launch sh -c 'echo $Slicer_DIR' 2>/dev/null || true)
-            if [ -n "$inferred" ]; then
-              echo "Inferred Slicer_DIR=$inferred from \`Slicer --launch\`"
-              echo "slicer_dir=$inferred" >> "$GITHUB_OUTPUT"
+          # slicer/slicer-base places the Slicer build tree at a known
+          # path (the inner `Slicer-build` is where SlicerConfig.cmake
+          # lives — that's what `Slicer_DIR` must point at).
+          candidates=(
+            /usr/src/Slicer-build/Slicer-build
+            /usr/src/Slicer-build
+            "${Slicer_DIR:-}"
+          )
+          for cand in "${candidates[@]}"; do
+            [ -n "$cand" ] || continue
+            if [ -f "$cand/SlicerConfig.cmake" ]; then
+              echo "Found SlicerConfig.cmake under $cand"
+              echo "slicer_dir=$cand" >> "$GITHUB_OUTPUT"
+              break
             fi
-          fi
-          if [ -z "${slicer_dir:-}" ]; then
-            echo "::warning::Could not locate Slicer_DIR; build step will likely fail."
-            echo "::warning::See Docs/adr/0005-github-actions-ci.md for the candidate-image escalation list."
+          done
+          if [ -z "$(grep '^slicer_dir=' "$GITHUB_OUTPUT" 2>/dev/null || true)" ]; then
+            echo "::error::Could not locate SlicerConfig.cmake in slicer-base."
+            echo "::error::Probed: ${candidates[*]}"
+            echo "::error::Inspect image with: docker run --rm slicer/slicer-base:latest find / -name SlicerConfig.cmake"
+            exit 1
           fi
 
       - name: Configure
