@@ -13,7 +13,7 @@ PR carries a test that pins the behaviour" a project invariant.  The
 `/slicer-review` test-coverage reviewer enforces this locally, but
 *local* enforcement depends on a human running `/slicer-review` before
 merging — and the cost of forgetting is the regression landing on
-`develop` unobserved.
+`preview` unobserved.
 
 Three external pressures push the same direction:
 
@@ -42,8 +42,9 @@ that pattern today.
 ## Decision
 
 A GitHub Actions workflow at `.github/workflows/ci.yml` runs on every
-pull request targeting any branch and on every push to `develop`.  The
-workflow defines two jobs:
+pull request targeting any branch and on every push to `preview` (the
+publishing branch; see ADR retiring `develop`).  The workflow defines
+two jobs:
 
 1. **`docs-lint`** — fast (~30 s), no Slicer dependency.  Validates:
    - All `Docs/architecture/**/*.md` Mermaid fences parse cleanly via
@@ -54,23 +55,52 @@ workflow defines two jobs:
    style reviewer also flags, but pre-emptively, before review effort.
 
 2. **`build-test`** — slow (~10–30 min once container is warm).  Builds
-   Slicer-Liver against a pinned **`slicer-master`** container and runs
-   the full CTest suite (the existing C++ tests plus the
+   Slicer-Liver against a pinned **slicer-main** container and runs the
+   full CTest suite (the existing C++ tests plus the
    `vtkMRMLLiverResectionStorageRoundTripTest` from PR #294).
    - **Linux only** on the first iteration (Ubuntu 22.04 runner).
-   - **Single Slicer version**: slicer-master.  Catches upstream-Slicer
+   - **Single Slicer version**: slicer-main.  Catches upstream-Slicer
      drift early; cost is acceptable noise when Slicer breaks upstream.
-   - Container reference is **TBD-verified-on-first-run**.  The
-     `slicer-master`-against-pre-built-Docker pattern is what popular
-     Slicer extensions use, but the canonical image name is not
-     well-publicised; the first CI run reveals whether the chosen
-     reference resolves and what to substitute if not.  When the right
-     image is confirmed, this ADR is amended (append-only) to record
-     the choice and the rationale.
+   - **Container image**:
+     `ghcr.io/alive-research/slicer-build-ubuntu2404:latest` — the
+     project-maintained image.  Ubuntu 24.04 + Qt 6.9 (installed via
+     `aqtinstall`) + Slicer `main` pre-built, with SlicerVMTK bundled
+     as a build-time convenience.  Recipe and auto-build workflow live
+     in [`ALive-research/ALive-Docker`](https://github.com/ALive-research/ALive-Docker)
+     (`slicer-build-ubuntu2404/Dockerfile` +
+     `.github/workflows/build-image.yml`); rebuilt weekly to track
+     Slicer main and on every push that touches the Dockerfile.  For
+     reproducible CI, pin a `:main-<7-char-slicer-sha>` tag here once
+     the workflow is stable; `:latest` is fine while iterating.
 
-Failure of either job blocks merge once branch-protection is enabled
-on `develop` (a separate, lightweight follow-up PR after CI is proven
-green for at least one merge cycle).
+Failure of either job blocks merge once branch-protection on `preview`
+includes the GH Actions checks as required status checks (separate
+follow-up after one verified-green merge cycle).
+
+### Why a project-maintained image, not a public one
+
+The Slicer ecosystem does **not** publish a maintained pre-built-Slicer
+image suitable for extension CI.  `slicer/slicer-base` (the only
+actively-maintained Slicer Docker image as of 2026-05) ships *build
+infrastructure* (`BuildSlicer.sh`) but not a pre-built Slicer tree —
+using it would mean a multi-hour Slicer build per CI run.  The legacy
+`slicer/slicer-build`, `slicer/slicer-test`, and `slicer/slicer-test:opengl`
+images are all marked unmaintained (last updated 2017–2018).  We
+therefore maintain our own image, mirroring the pattern Slicer-Liver
+had with the legacy `aliveresearch/slicer-build-ubuntu2004` image
+under CircleCI — but updated to current OS/Qt/Slicer, published to
+GHCR, and built automatically.
+
+### CircleCI retirement
+
+The legacy CircleCI build (`.circleci/config.yml`, image
+`aliveresearch/slicer-build-ubuntu2004`) is removed in the same PR
+that lands this CI workflow.  CircleCI did the same job for the
+legacy image (Slicer 5.2.1 / Qt 5); the new GH Actions workflow
+covers the same ground with the modern image (Slicer main / Qt 6.9)
+and removes the duplicate truth source.  The legacy image's
+Dockerfile is retained in `ALive-Docker/slicer-build-ubuntu2004/` for
+rollback during the transition.
 
 ## Alternatives considered
 
@@ -107,7 +137,7 @@ against it.
 extensive caching, eats GitHub Actions minute budget, and is brittle
 to upstream Slicer build breakages that have nothing to do with
 Slicer-Liver.  The pre-built container approach delivers the same
-slicer-master coverage in a fraction of the time.
+slicer-main coverage in a fraction of the time.
 
 ### D. Use a pinned Slicer **release** tarball
 
@@ -117,7 +147,7 @@ it, build against it.
 **Rejected** because it ties CI to the release cadence — upstream
 Slicer fixes (and breakages) won't reach Slicer-Liver CI until next
 release.  For an extension actively tracking the Markups → LayerDM
-transition that originates in upstream Slicer, slicer-master is the
+transition that originates in upstream Slicer, slicer-main is the
 right target.  Release-pinned CI may be revisited if upstream churn
 becomes prohibitive.
 
@@ -155,7 +185,7 @@ distribution model can be re-evaluated.
 
 - **GitHub Actions minute consumption.**  Each `build-test` run will
   consume meaningful minutes; the public-repo allowance covers
-  expected PR volume but is not infinite.  When `develop` merges
+  expected PR volume but is not infinite.  When `preview` merges
   accumulate near the budget limit, options are self-hosted runners
   (Alternative B) or skipping the build job on docs-only PRs (path-
   filter optimisation).

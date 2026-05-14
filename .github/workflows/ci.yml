@@ -1,12 +1,13 @@
 # CI for Slicer-Liver — see Docs/adr/0005-github-actions-ci.md
 #
-# Two jobs run in parallel on every PR and on every push to `develop`:
-#   - docs-lint    : fast (~30 s); validates Mermaid fences and internal
-#                    Markdown links across Docs/.  No Slicer dependency.
-#   - build-test   : slow (~10–30 min); builds the extension against a
-#                    pinned slicer-master container and runs CTest.
-#                    The container reference is TBD-verified-on-first-run;
-#                    once confirmed, ADR-0005 is amended to record it.
+# Two jobs run in parallel on every PR and on every push to `preview`:
+#   - docs-lint   : fast (~30 s); validates Mermaid fences and internal
+#                   Markdown links across Docs/.  No Slicer dependency.
+#   - build-test  : slow (~10–30 min); builds the extension against the
+#                   project-maintained ghcr.io/alive-research/
+#                   slicer-build-ubuntu2404 image (Slicer main pre-built)
+#                   and runs CTest.  Image recipe and auto-build live in
+#                   the ALive-Docker repository.
 
 name: CI
 
@@ -14,7 +15,7 @@ on:
   pull_request:
     branches: ['**']
   push:
-    branches: [develop]
+    branches: [preview]
   workflow_dispatch: {}
 
 permissions:
@@ -87,60 +88,41 @@ jobs:
           fail: true
 
   # ---------------------------------------------------------------------------
-  # Job 2 — build + test against slicer-master in a pre-built container.
-  # Container reference is TBD on first run.  Adjust both `image:` here
-  # and ADR-0005 if the first run resolves it differently.
+  # Job 2 — build + test against pre-built Slicer in a project-managed
+  # container image.
   # ---------------------------------------------------------------------------
   build-test:
-    name: build-test (slicer-master, Linux)
+    name: build-test (slicer-main, Linux)
     runs-on: ubuntu-22.04
     timeout-minutes: 60
 
-    # Use `slicer/slicer-base` — the same image 3D Slicer's own PR CI
-    # uses to build Slicer (see Slicer/SlicerDocker README + Slicer's
-    # `.github/actions/slicer-build/Dockerfile`).  It ships Slicer
-    # pre-built at /usr/src/Slicer-build/, which lets us build a
-    # downstream extension directly against it.
+    # `ghcr.io/alive-research/slicer-build-ubuntu2404` is the
+    # project-maintained image (Ubuntu 24.04 + Qt 6.9 + Slicer main
+    # pre-built); recipe and auto-build workflow live in the
+    # `ALive-Docker` repository (slicer-build-ubuntu2404/Dockerfile +
+    # .github/workflows/build-image.yml).  Rebuilt weekly to track
+    # Slicer main; pin to a `:main-<sha>` tag here if reproducible
+    # builds become important.
     #
-    # The previous `slicer/slicer-build:latest` image was retired in
-    # 2018 and its ancient glibc broke `actions/checkout@v4`'s Node 20
-    # binary; slicer-base is actively maintained (rebuilt with each
-    # Slicer release).  Pin to `:latest` while iterating; switch to a
-    # digest pin once the workflow is stable.
+    # SlicerConfig.cmake is at /usr/src/Slicer-build/Slicer-build/
+    # (the doubled `Slicer-build` is Slicer's superbuild convention).
     container:
-      image: slicer/slicer-base:latest
+      image: ghcr.io/alive-research/slicer-build-ubuntu2404:latest
       options: --user root
+
+    env:
+      Slicer_DIR: /usr/src/Slicer-build/Slicer-build
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Locate Slicer in container
-        id: slicer
+      - name: Verify Slicer build tree
         run: |
           set -euo pipefail
-          # slicer/slicer-base places the Slicer build tree at a known
-          # path (the inner `Slicer-build` is where SlicerConfig.cmake
-          # lives — that's what `Slicer_DIR` must point at).
-          candidates=(
-            /usr/src/Slicer-build/Slicer-build
-            /usr/src/Slicer-build
-            "${Slicer_DIR:-}"
-          )
-          for cand in "${candidates[@]}"; do
-            [ -n "$cand" ] || continue
-            if [ -f "$cand/SlicerConfig.cmake" ]; then
-              echo "Found SlicerConfig.cmake under $cand"
-              echo "slicer_dir=$cand" >> "$GITHUB_OUTPUT"
-              break
-            fi
-          done
-          if [ -z "$(grep '^slicer_dir=' "$GITHUB_OUTPUT" 2>/dev/null || true)" ]; then
-            echo "::error::Could not locate SlicerConfig.cmake in slicer-base."
-            echo "::error::Probed: ${candidates[*]}"
-            echo "::error::Inspect image with: docker run --rm slicer/slicer-base:latest find / -name SlicerConfig.cmake"
-            exit 1
-          fi
+          test -f "${Slicer_DIR}/SlicerConfig.cmake" \
+            || { echo "::error::SlicerConfig.cmake missing at ${Slicer_DIR} — image layout has drifted"; exit 1; }
+          echo "Slicer_DIR=${Slicer_DIR}"
 
       - name: Configure
         run: |
@@ -149,7 +131,7 @@ jobs:
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING:BOOL=ON \
-            -DSlicer_DIR="${{ steps.slicer.outputs.slicer_dir }}"
+            -DSlicer_DIR="${Slicer_DIR}"
 
       - name: Build
         run: cmake --build build --config Release -j "$(nproc)"
