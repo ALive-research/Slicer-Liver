@@ -1,0 +1,137 @@
+{
+  "SegmentationCategoryTypeContextName": "Segmentation category and type - Slicer-Liver",
+  "@schema": "https://raw.githubusercontent.com/qiicr/dcmqi/master/doc/segment-context-schema.json#",
+  "SegmentationCodes": {
+    "Category": [
+      {
+        "CodeMeaning": "Anatomical Structure",
+        "CodingSchemeDesignator": "SCT",
+        "SNOMEDCTConceptID": "123037004",
+        "CodeValue": "123037004",
+        "showAnatomy": true,
+        "Type": [
+          {
+            "recommendedDisplayRGBValue": [221, 130, 101],
+            "CodeMeaning": "Liver",
+            "CodingSchemeDesignator": "SCT",
+            "3dSlicerLabel": "liver",
+            "SNOMEDCTConceptID": "10200004",
+            "CodeValue": "10200004",
+            "contextGroupName": "AbdominalSegmentationTypes"
+          },
+          {
+            "recommendedDisplayRGBValue": [102, 153, 204],
+            "CodeMeaning": "Portal vein structure",
+            "CodingSchemeDesignator": "SCT",
+            "3dSlicerLabel": "portal_vein",
+            "SNOMEDCTConceptID": "32764006",
+            "CodeValue": "32764006"
+          },
+          {
+            "recommendedDisplayRGBValue": [204, 102, 102],
+            "CodeMeaning": "Hepatic vein structure",
+            "CodingSchemeDesignator": "SCT",
+            "3dSlicerLabel": "hepatic_vein",
+            "SNOMEDCTConceptID": "8993003",
+            "CodeValue": "8993003"
+          }
+        ]
+      },
+      {
+        "CodeMeaning": "Morphologically Altered Structure",
+        "CodingSchemeDesignator": "SCT",
+        "SNOMEDCTConceptID": "49755003",
+        "CodeValue": "49755003",
+        "showAnatomy": false,
+        "Type": [
+          {
+            "recommendedDisplayRGBValue": [200, 60, 60],
+            "CodeMeaning": "Neoplasm, Primary",
+            "CodingSchemeDesignator": "SCT",
+            "3dSlicerLabel": "tumor",
+            "SNOMEDCTConceptID": "86049000",
+            "CodeValue": "86049000"
+          }
+        ]
+      },
+      {
+        "CodeMeaning": "Liver segment",
+        "CodingSchemeDesignator": "99SLIVER",
+        "CodeValue": "LIVER-SEG-CATEGORY",
+        "showAnatomy": false,
+        "Type": [
+          {
+            "recommendedDisplayRGBValue": [218, 165, 32],
+            "CodeMeaning": "Liver segment I (caudate)",
+            "CodingSchemeDesignator": "99SLIVER",
+            "3dSlicerLabel": "couinaud_I",
+            "CodeValue": "LIVER-SEG-I"
+          },
+          {
+            "recommendedDisplayRGBValue": [135, 206, 250],
+            "CodeMeaning": "Liver segment II",
+            "CodingSchemeDesignator": "99SLIVER",
+            "3dSlicerLabel": "couinaud_II",
+            "CodeValue": "LIVER-SEG-II"
+          },
+          {
+            "recommendedDisplayRGBValue": [250, 128, 114],
+            "CodeMeaning": "Liver segment III",
+            "CodingSchemeDesignator": "99SLIVER",
+            "3dSlicerLabel": "couinaud_III",
+            "CodeValue": "LIVER-SEG-III"
+          },
+          {
+            "recommendedDisplayRGBValue": [255, 182, 193],
+            "CodeMeaning": "Liver segment IV",
+            "CodingSchemeDesignator": "99SLIVER",
+            "3dSlicerLabel": "couinaud_IV",
+            "CodeValue": "LIVER-SEG-IV"
+          },
+          {
+            "recommendedDisplayRGBValue": [144, 238, 144],
+            "CodeMeaning": "Liver segment V",
+            "CodingSchemeDesignator": "99SLIVER",
+            "3dSlicerLabel": "couinaud_V",
+            "CodeValue": "LIVER-SEG-V"
+          },
+          {
+            "recommendedDisplayRGBValue": [255, 255, 102],
+            "CodeMeaning": "Liver segment VI",
+            "CodingSchemeDesignator": "99SLIVER",
+            "3dSlicerLabel": "couinaud_VI",
+            "CodeValue": "LIVER-SEG-VI"
+          },
+          {
+            "recommendedDisplayRGBValue": [186, 85, 211],
+            "CodeMeaning": "Liver segment VII",
+            "CodingSchemeDesignator": "99SLIVER",
+            "3dSlicerLabel": "couinaud_VII",
+            "CodeValue": "LIVER-SEG-VII"
+          },
+          {
+            "recommendedDisplayRGBValue": [255, 140, 0],
+            "CodeMeaning": "Liver segment VIII",
+            "CodingSchemeDesignator": "99SLIVER",
+            "3dSlicerLabel": "couinaud_VIII",
+            "CodeValue": "LIVER-SEG-VIII"
+          },
+          {
+            "recommendedDisplayRGBValue": [139, 0, 0],
+            "CodeMeaning": "Right hemiliver (Couinaud V-VIII)",
+            "CodingSchemeDesignator": "99SLIVER",
+            "3dSlicerLabel": "hemiliver_right",
+            "CodeValue": "LIVER-HEMI-RIGHT"
+          },
+          {
+            "recommendedDisplayRGBValue": [0, 0, 139],
+            "CodeMeaning": "Left hemiliver (Couinaud II-IV)",
+            "CodingSchemeDesignator": "99SLIVER",
+            "3dSlicerLabel": "hemiliver_left",
+            "CodeValue": "LIVER-HEMI-LEFT"
+          }
+        ]
+      }
+    ]
+  }
+}

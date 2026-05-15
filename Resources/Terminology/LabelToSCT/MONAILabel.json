@@ -1,0 +1,27 @@
+{
+  "tool": "MONAILabel",
+  "bundle": "segmentation_liver_and_tumor",
+  "notes": "Maps MONAILabel bundle output labels to SNOMED-CT triples per ADR-0011. This file targets the liver-and-tumor segmentation bundle commonly used in OUS workflows; alternate bundles (deepedit_anatomy, deepgrow_2d/3d, etc.) require their own LabelToSCT file or an additional 'bundle' entry.",
+  "schema": "https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0011-sct-terminology-dispatch.md",
+  "mappings": [
+    {
+      "label": "liver",
+      "integerLabel": 1,
+      "sct": {
+        "CodingSchemeDesignator": "SCT",
+        "CodeValue": "10200004",
+        "CodeMeaning": "Liver"
+      }
+    },
+    {
+      "label": "tumor",
+      "integerLabel": 2,
+      "sct": {
+        "CodingSchemeDesignator": "SCT",
+        "CodeValue": "86049000",
+        "CodeMeaning": "Neoplasm, Primary"
+      },
+      "notes": "Uses 'Neoplasm, Primary' (86049000) per DICOM SEG / MONAI ecosystem convention. Switch to 'Mass' (SCT 4147007) when malignancy is uncertain at segmentation time."
+    }
+  ]
+}
