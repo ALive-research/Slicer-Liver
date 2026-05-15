@@ -32,8 +32,8 @@ Capture provenance
 ------------------
 EXPECTED_* arrays below were captured on **2026-05-15** by replaying the
 verbatim function bodies (transcribed by hand and visually diffed against
-the source) under **NumPy 2.3.1** in a plain Guix shell, *not* inside a
-Slicer Python.  The methods on ``LiverLogic`` use no ``self``-state
+the source) under **NumPy 2.3.1** in a plain Python environment, *not*
+inside a Slicer Python.  The methods on ``LiverLogic`` use no ``self``-state
 (verified by inspection — they call only ``numpy`` operators and, when
 ``normalize=False``, no other instance methods), so the replay is
 byte-equivalent to calling the method on a constructed ``LiverLogic()``
