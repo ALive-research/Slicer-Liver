@@ -7,12 +7,12 @@
     "portal_root_seed": {
       "CodingSchemeDesignator": "SCT",
       "CodeValue": "32764006",
-      "CodeMeaning": "Portal vein structure"
+      "CodeMeaning": "Portal vein"
     },
     "hepatic_root_seed": {
       "CodingSchemeDesignator": "SCT",
       "CodeValue": "8993003",
-      "CodeMeaning": "Hepatic vein structure"
+      "CodeMeaning": "Hepatic vein"
     }
   },
   "mappings": []

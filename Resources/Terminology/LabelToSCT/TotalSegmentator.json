@@ -17,7 +17,7 @@
       "sct": {
         "CodingSchemeDesignator": "SCT",
         "CodeValue": "32764006",
-        "CodeMeaning": "Portal vein structure"
+        "CodeMeaning": "Portal vein"
       },
       "notes": "TotalSegmentator v1 combines portal vein + splenic vein into a single label. Slicer-Liver maps to Portal vein; downstream consumers should expect over-inclusive masks until v2's separated labels are adopted by the bundled model."
     },
