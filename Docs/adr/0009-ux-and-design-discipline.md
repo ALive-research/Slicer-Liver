@@ -4,8 +4,8 @@
 - **Date:** 2026-05-15
 - **Deciders:** Rafael Palomar
 - **Diagrams:** N/A (this ADR establishes the requirement for per-module
-  diagrams under `Docs/architecture/ui/`; the diagrams themselves land
-  with the PRs that touch the corresponding UI)
+  GUI diagrams under `Docs/architecture/ui/`; the diagrams themselves
+  land with the PRs that touch the corresponding UI)
 - **PR:** _filled in on merge_
 
 ## Context
@@ -26,15 +26,13 @@ canonical workflow diagrams kept current, no declared methodology
 behind UI decisions.  ADR-0003 establishes a testability invariant for
 behaviour; nothing comparable exists for interaction design.
 
-The medical-device usability literature provides directly applicable
-methodology.  **IEC 62366-1:2015** specifies a usability engineering
-process for medical devices (use-related risk, formative and summative
-evaluation, documented rationale).  **ISO 9241-210:2019** specifies
-human-centred design for interactive systems (iteration, user
-involvement, explicit context of use).  Slicer-Liver is not currently
-certified as a medical device, but the user population *is* clinicians
-planning real interventions, and the methodology cost of adopting now
-is far lower than retrofitting later.
+The medical-device usability literature provides useful reference
+material — **IEC 62366-1:2015** (usability engineering for medical
+devices) and **ISO 9241-210:2019** (human-centred design for
+interactive systems).  Slicer-Liver is not currently certified as a
+medical device and this ADR does not require formal adherence to
+these standards.  They are listed as references that authors and
+reviewers may consult.
 
 The v2.0.0 cutover is the right moment to fix this — before the
 migration locks in patterns by precedent and before retrofitting
@@ -63,35 +61,45 @@ workflow diagram, kept current as PRs land.  A workflow diagram that
 no longer matches the implementation is a review-blocker on the next
 PR that touches the module.
 
-### 3. Methodology declaration per UI-touching PR
+### 3. Design rationale per UI-touching PR
 
-The pull-request description names the design method applied and
-justifies the pick.  Acceptable methods, drawn from established
-practice:
+The pull-request description explains the design choice and justifies
+the pick.  Required content:
+
+- *What* the user-facing change does.
+- *Why* this approach was chosen over the alternatives the author
+  considered.
+- A screenshot or mock of the affected widget, where applicable.
+
+Authors may — but are not required to — draw on established usability
+methodology to inform the rationale.  Methodologies that can serve as
+a guide:
 
 - Heuristic evaluation against Nielsen's 10 usability heuristics.
 - Cognitive walkthrough.
 - Contextual inquiry (surgeon shadowing, interview transcripts).
 - Wizard-of-Oz prototyping (paper or low-fi).
-- Comparative analysis against established surgical-planning tools
-  (with citation).
+- Comparative analysis against established surgical-planning tools.
 
-The method must be named and the relevant finding (which heuristic,
-which walkthrough step, which comparator tool) cited.  A bare
-"heuristic evaluation: passed" is insufficient.
+These are references, not gates.  A PR that documents a clear written
+rationale without naming a methodology is acceptable.  What is *not*
+acceptable is a PR whose rationale is opaque to a future reader.
 
-### 4. Medical-device alignment
+### 4. Medical-device usability — for reference
 
-The discipline above anchors to:
+The medical-device usability literature is a useful reference even
+though Slicer-Liver does not currently pursue medical-device
+certification.  Authors and reviewers may consult:
 
 - **IEC 62366-1:2015** — application of usability engineering to
   medical devices.
 - **ISO 9241-210:2019** — human-centred design for interactive
   systems.
 
-Slicer-Liver does not pursue medical-device certification under this
-ADR.  Adopting the methodology now keeps that door open and reflects
-the actual user population.
+This ADR does not require adherence to these standards.  It records
+that they exist and that informal alignment with their guidance is
+encouraged when it costs little.  A future ADR can revisit the
+adherence question if the project's regulatory posture changes.
 
 ### 5. PR template addition
 
@@ -99,7 +107,7 @@ The pull-request template grows a `## UX impact` section.  For any
 UI-touching PR the section is non-empty and contains:
 
 - The state-machine diff (link to updated diagram or inline summary).
-- The methodology citation per §3.
+- A short design rationale (per §3).
 - A screenshot or mock of the affected widget.
 
 For non-UI PRs the section reads `N/A — non-UI change`.  Reviewers
@@ -152,14 +160,17 @@ default for v2.1.0 onward; deferring the gate means the first
 discipline-compliant PR is fighting against months of
 discipline-free precedent.
 
-### Alternative D — Lightweight checklist instead of methodology citation
+### Alternative D — Lightweight checklist with no written rationale
 
-Replace §3 with a tick-box checklist ("considered Nielsen heuristics:
-yes/no") in the PR template, without requiring a named finding.
+Replace §3 with a tick-box checklist ("considered usability: yes/no")
+without requiring a written rationale or interface diagrams.
 
-**Rejected** because the checklist degrades to rote compliance
-("checked: yes") faster than the citation requirement.  The citation
-of a *specific* finding forces actual engagement with the method.
+**Rejected** because the checklist removes the in-repo design record
+that §1, §2, and §3 together establish.  The chosen approach already
+treats methodology citation as reference rather than gate; removing
+the written rationale on top of that would leave no durable artifact
+of *why* a UI behaves as it does, which is the failure mode this ADR
+exists to fix.
 
 ## Consequences
 
@@ -169,24 +180,24 @@ of a *specific* finding forces actual engagement with the method.
   (human or agentic) can read why a UI looks the way it does without
   spelunking commit history.
 - **Reviewers have a concrete artifact to evaluate against.**  The
-  state-machine diagram and methodology citation give the review a
+  state-machine diagram and written rationale give the review a
   shared object, not a vibe.
-- **Alignment with IEC 62366-1 and ISO 9241-210 is in place** if
-  Slicer-Liver later pursues medical-device certification.  No
-  retrofitting of design history.
+- **References to IEC 62366-1 and ISO 9241-210 are recorded** so that
+  if Slicer-Liver later pursues formal usability engineering, the
+  pointer is already in the project's decision record.
 - **Workflow diagrams stay current** because they're review-blocked.
   Stale architecture documentation — the usual failure mode — is
   caught at the next UI-touching PR.
 
 ### Harder
 
-- **~20–40 minutes additional work per UI-touching PR** for diagram
-  diff + methodology citation.  Non-trivial but bounded.
-- **Methodology declarations risk becoming rote** ("heuristic
-  evaluation: checked against Nielsen").  Mitigation: reviewers
-  spot-check by asking which specific heuristic or finding drove the
-  change.  The citation requirement in §3 is the structural defence;
-  reviewer attention is the behavioural defence.
+- **~10–20 minutes additional work per UI-touching PR** for diagram
+  diff + written rationale.  Bounded; smaller than a citation
+  requirement would impose.
+- **Written rationale risks becoming shallow.**  Mitigation: reviewers
+  expect a real *why*, not a restatement of *what*.  No structural
+  enforcement beyond reviewer judgement — this ADR deliberately
+  trades a stricter gate for lower per-PR friction.
 - **Mermaid becomes a soft documentation dependency.**  GitHub renders
   it natively; offline readers need a Mermaid-aware viewer.  Cost
   judged acceptable.
