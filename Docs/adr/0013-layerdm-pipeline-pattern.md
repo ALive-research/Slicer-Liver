@@ -47,14 +47,7 @@ The reference points are already in the project's orbit:
   observing its node and owning a small set of VTK actor/mapper
   assemblies.  That project is also the source of the
   `render_interactive` fixture pattern adopted in ADR-0008 §3.
-- **[SlicerHyperProbe](https://github.com/MESH-Lab/SlicerHyperProbe)**
-  — an in-project precedent: `vtkMRMLHyperprobeViewDisplayNode`
-  (data-only C++ display node) + `vtkMRMLHyperprobeViewPipeline`
-  (the LayerDM Pipeline subclass that decorates it).  Slicer-Liver
-  has already used this pair in HyperProbe-parallel work; that
-  experience is what ADR-0002 cites as "internally validated".
-
-These three references converge on the same shape: **one Pipeline
+These two references converge on the same shape: **one Pipeline
 per display-node type, with the data node carrying geometry and the
 display node carrying decoration**.  This ADR commits Slicer-Liver to
 that shape and pins the conventions (naming, file layout, lifecycle,
@@ -148,12 +141,33 @@ Pipelines are created and destroyed by LayerDM's
 `vtkMRMLLayerDMPipelineManager` via the factory + creator API, not
 by hand:
 
-- **Creation** — the module's Logic registers a Pipeline-creating
-  callback with `vtkMRMLLayerDMPipelineFactory` at module load.
-  When a `vtkMRMLLiver<Module>DisplayNode` is added to the scene,
-  LayerDM invokes the creator, which instantiates the Pipeline,
-  attaches it to the display node, and adds it to the active
-  view's pipeline set.
+- **Registration** — at module load, each Pipeline class is
+  registered with the global LayerDM factory via
+  `vtkMRMLLayerDMPipelineFactory::GetInstance()->AddPipelineCreator(...)`.
+  The host of that registration call is a Slicer module's `setup()`
+  (or the equivalent for scripted modules).  Two hosting patterns:
+
+   - *User-facing module hosts the registration.*  When the new
+     Pipeline class is owned by a module that already exists and
+     is user-facing (LiverResections in v2.0.0), the registration
+     call lands in that module's `setup()` alongside its existing
+     node registrations.  This is the v2.0.0 default; no new
+     module is introduced solely for registration purposes.
+   - *Hidden init-module stub.*  When no natural user-facing host
+     exists for a Pipeline (e.g. the Pipeline crosses module
+     boundaries, or its data node belongs to a module that has
+     been dissolved per ADR-0014 or has not yet been created),
+     the registration calls live in a tiny init-module stub with
+     `parent.hidden = True` and no user-visible widget.  The stub
+     exists solely to provide a `setup()` hook for factory
+     registration.  v2.0.0 does not exercise this pattern
+     (LiverResections covers the in-scope registrations) but
+     v2.1.0 expansions under ADR-0012 may.
+- **Creation** — once registered, when a `vtkMRMLLiver<Module>
+  DisplayNode` is added to the scene, LayerDM invokes the
+  registered creator, which instantiates the Pipeline, attaches it
+  to the display node, and adds it to the active view's pipeline
+  set.
 - **Updates** — the Pipeline observes the display node's
   `ModifiedEvent` and the data node's geometry events; both route
   through its `update()`.
@@ -445,10 +459,6 @@ the same pattern.
   — Python-orchestrated Pipeline pattern in `slicer_renderer/`,
   plus the `render_interactive` fixture pattern adopted by
   ADR-0008.
-- [SlicerHyperProbe](https://github.com/MESH-Lab/SlicerHyperProbe)
-  — in-project precedent for the data-only-display-node + Python-
-  Pipeline split.  See `vtkMRMLHyperprobeViewDisplayNode` +
-  `vtkMRMLHyperprobeViewPipeline`.
 - Related ADRs:
   - [ADR-0002](0002-migrate-to-slicerlayerdm.md) — the migration
     target this ADR fixes the shape of.
