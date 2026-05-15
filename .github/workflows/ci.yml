@@ -219,5 +219,13 @@ jobs:
           # itself rather than fail.  Tracked as a follow-up; until
           # then, the CTest-level exclude keeps CI honestly green for
           # what it actually covers.
-          ctest --output-on-failure --no-tests=error \
+          # `-V` (verbose) dumps each test's stdout/stderr in the CI log
+          # regardless of pass/fail.  Replaces the prior `--output-on-failure`
+          # so that aggregated pytest entries (e.g. `pytest_scaffold` from
+          # ADR-0008's scaffold) reveal the per-pytest-test breakdown instead
+          # of just the CTest pass/fail line.  Trade-off: more noisy log
+          # (the native C++ tests also dump on success), accepted because
+          # CI logs are append-mostly archives and one-glance pytest
+          # visibility outweighs the line count.
+          ctest -V --no-tests=error \
                 --exclude-regex '^py_LiverSegmentsTest$'
