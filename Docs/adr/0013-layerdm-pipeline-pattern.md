@@ -141,28 +141,57 @@ Pipelines are created and destroyed by LayerDM's
 `vtkMRMLLayerDMPipelineManager` via the factory + creator API, not
 by hand:
 
-- **Registration** — at module load, each Pipeline class is
-  registered with the global LayerDM factory via
-  `vtkMRMLLayerDMPipelineFactory::GetInstance()->AddPipelineCreator(...)`.
-  The host of that registration call is a Slicer module's `setup()`
-  (or the equivalent for scripted modules).  Two hosting patterns:
+- **Registration** — at module load, three distinct registrations
+  must run in a Slicer module's `setup()` (or the scripted-module
+  equivalent) for a LayerDM-aware module to function:
+
+   - MRML node classes for any new data and display node types —
+     via `vtkMRMLScene::RegisterNodeClass()`.
+   - The LayerDM-aware `vtkMRMLLayerDisplayableManager` — via
+     `vtkMRMLLayerDisplayableManager::RegisterInFactory(
+     vtkMRMLThreeDViewDisplayableManagerFactory::GetInstance())` and
+     `RegisterInDefaultViews()` (idempotent across modules; the
+     first module to load it wins).
+   - One creator per Pipeline class — via
+     `vtkMRMLLayerDMPipelineFactory::GetInstance()->AddPipelineCreator(...)`.
+     The creator lambda is typically wrapped in a LayerDM helper
+     that guards on view-type compatibility (e.g.
+     `layer_dm::TryCreateForView<ViewNode, DisplayNode, Pipeline>(...)`)
+     so that a Pipeline only attaches to view types it understands.
+
+  Two hosting patterns for those three registration calls:
 
    - *User-facing module hosts the registration.*  When the new
      Pipeline class is owned by a module that already exists and
-     is user-facing (LiverResections in v2.0.0), the registration
-     call lands in that module's `setup()` alongside its existing
-     node registrations.  This is the v2.0.0 default; no new
-     module is introduced solely for registration purposes.
+     is user-facing (LiverResections in v2.0.0, a C++ loadable
+     module), the registration calls land in that module's
+     existing `setup()` alongside its other node and DM
+     registrations.  This is the v2.0.0 default; no new module is
+     introduced solely for registration.  LiverResections'
+     `qSlicerLiverResectionsModule::setup()` gains the three
+     registration types listed above as part of the T2 migration.
    - *Hidden init-module stub.*  When no natural user-facing host
      exists for a Pipeline (e.g. the Pipeline crosses module
      boundaries, or its data node belongs to a module that has
      been dissolved per ADR-0014 or has not yet been created),
-     the registration calls live in a tiny init-module stub with
-     `parent.hidden = True` and no user-visible widget.  The stub
-     exists solely to provide a `setup()` hook for factory
-     registration.  v2.0.0 does not exercise this pattern
-     (LiverResections covers the in-scope registrations) but
-     v2.1.0 expansions under ADR-0012 may.
+     the registration calls live in a tiny init-module stub whose
+     sole job is the `setup()` hook:
+
+      - *C++ loadable variant:* the module class overrides
+        `isHidden() const` to return `true`; `createWidgetRepresentation()`
+        returns `nullptr`; `createLogic()` returns `nullptr` when no
+        Logic is needed.  Listed under a `Developer Tools` category
+        (or equivalent) so it does not surface to clinicians.
+      - *Python scripted variant:* set `parent.hidden = True` in the
+        module class; no widget setup.
+
+     v2.0.0 does not exercise the stub pattern (LiverResections
+     covers the in-scope registrations).  v2.1.0 expansions under
+     ADR-0012 may need it — for example if a Pipeline whose data
+     node belongs to LiverSegments needs to register before that
+     module's LayerDM migration completes, a transitional stub can
+     host the registration without forcing the LiverSegments
+     migration to land first.
 - **Creation** — once registered, when a `vtkMRMLLiver<Module>
   DisplayNode` is added to the scene, LayerDM invokes the
   registered creator, which instantiates the Pipeline, attaches it
