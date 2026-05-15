@@ -86,7 +86,7 @@ addresses exactly these structural pains:
 - *Pipeline registration via factory + creator API* — replaces the
   string-based DM factory with typed registration.
 - *Internally validated*: the same LayerDM architecture has been
-  proven in our Hyperprobe project for resectogram-parallel
+  exercised in adjacent project work for resectogram-parallel
   functionalities — first-hand evidence that the framework scales
   past a single pipeline class and that we can build on it without
   hitting unforeseen ceilings.
