@@ -669,10 +669,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return combinedPolyData.GetOutput()
 
   def onCalculateVascularTerritoryMapButton(self):
-    if self.developerMode is True:
-      import time
-      startTime = time.time()
-
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
     vascTerrSegmentationId = int(self.ui.selectedVascularTerritorySegmId.currentNode().GetAttribute("LiverSegments.SegmentationId"))
     centerlineModel = self.logic.build_centerline_model(self.colormap, vascTerrSegmentationId)
@@ -696,10 +692,6 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
-
-    if self.developerMode is True:
-      stopTime = time.time()
-      logging.info(f'Vascular Segments processing completed in {stopTime-startTime:.2f} seconds')
 
 # LiverSegmentsLogic
 #
