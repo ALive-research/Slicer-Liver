@@ -56,79 +56,90 @@
       },
       {
         "CodeMeaning": "Liver segment",
-        "CodingSchemeDesignator": "99SLIVER",
-        "CodeValue": "LIVER-SEG-CATEGORY",
+        "CodingSchemeDesignator": "SCT",
+        "SNOMEDCTConceptID": "245553001",
+        "CodeValue": "245553001",
         "showAnatomy": false,
         "Type": [
           {
             "recommendedDisplayRGBValue": [218, 165, 32],
-            "CodeMeaning": "Liver segment I (caudate)",
-            "CodingSchemeDesignator": "99SLIVER",
+            "CodeMeaning": "Caudate lobe of liver",
+            "CodingSchemeDesignator": "SCT",
             "3dSlicerLabel": "couinaud_I",
-            "CodeValue": "LIVER-SEG-I"
+            "SNOMEDCTConceptID": "71133005",
+            "CodeValue": "71133005"
           },
           {
             "recommendedDisplayRGBValue": [135, 206, 250],
             "CodeMeaning": "Liver segment II",
-            "CodingSchemeDesignator": "99SLIVER",
+            "CodingSchemeDesignator": "SCT",
             "3dSlicerLabel": "couinaud_II",
-            "CodeValue": "LIVER-SEG-II"
+            "SNOMEDCTConceptID": "277956007",
+            "CodeValue": "277956007"
           },
           {
             "recommendedDisplayRGBValue": [250, 128, 114],
             "CodeMeaning": "Liver segment III",
-            "CodingSchemeDesignator": "99SLIVER",
+            "CodingSchemeDesignator": "SCT",
             "3dSlicerLabel": "couinaud_III",
-            "CodeValue": "LIVER-SEG-III"
+            "SNOMEDCTConceptID": "277957003",
+            "CodeValue": "277957003"
           },
           {
             "recommendedDisplayRGBValue": [255, 182, 193],
             "CodeMeaning": "Liver segment IV",
-            "CodingSchemeDesignator": "99SLIVER",
+            "CodingSchemeDesignator": "SCT",
             "3dSlicerLabel": "couinaud_IV",
-            "CodeValue": "LIVER-SEG-IV"
+            "SNOMEDCTConceptID": "277958008",
+            "CodeValue": "277958008"
+          },
+          {
+            "recommendedDisplayRGBValue": [255, 192, 203],
+            "CodeMeaning": "Liver segment IVa",
+            "CodingSchemeDesignator": "SCT",
+            "3dSlicerLabel": "couinaud_IVa",
+            "SNOMEDCTConceptID": "871688003",
+            "CodeValue": "871688003"
+          },
+          {
+            "recommendedDisplayRGBValue": [255, 105, 180],
+            "CodeMeaning": "Liver segment IVb",
+            "CodingSchemeDesignator": "SCT",
+            "3dSlicerLabel": "couinaud_IVb",
+            "SNOMEDCTConceptID": "871689006",
+            "CodeValue": "871689006"
           },
           {
             "recommendedDisplayRGBValue": [144, 238, 144],
             "CodeMeaning": "Liver segment V",
-            "CodingSchemeDesignator": "99SLIVER",
+            "CodingSchemeDesignator": "SCT",
             "3dSlicerLabel": "couinaud_V",
-            "CodeValue": "LIVER-SEG-V"
+            "SNOMEDCTConceptID": "277959000",
+            "CodeValue": "277959000"
           },
           {
             "recommendedDisplayRGBValue": [255, 255, 102],
             "CodeMeaning": "Liver segment VI",
-            "CodingSchemeDesignator": "99SLIVER",
+            "CodingSchemeDesignator": "SCT",
             "3dSlicerLabel": "couinaud_VI",
-            "CodeValue": "LIVER-SEG-VI"
+            "SNOMEDCTConceptID": "277960005",
+            "CodeValue": "277960005"
           },
           {
             "recommendedDisplayRGBValue": [186, 85, 211],
             "CodeMeaning": "Liver segment VII",
-            "CodingSchemeDesignator": "99SLIVER",
+            "CodingSchemeDesignator": "SCT",
             "3dSlicerLabel": "couinaud_VII",
-            "CodeValue": "LIVER-SEG-VII"
+            "SNOMEDCTConceptID": "277961009",
+            "CodeValue": "277961009"
           },
           {
             "recommendedDisplayRGBValue": [255, 140, 0],
             "CodeMeaning": "Liver segment VIII",
-            "CodingSchemeDesignator": "99SLIVER",
+            "CodingSchemeDesignator": "SCT",
             "3dSlicerLabel": "couinaud_VIII",
-            "CodeValue": "LIVER-SEG-VIII"
-          },
-          {
-            "recommendedDisplayRGBValue": [139, 0, 0],
-            "CodeMeaning": "Right hemiliver (Couinaud V-VIII)",
-            "CodingSchemeDesignator": "99SLIVER",
-            "3dSlicerLabel": "hemiliver_right",
-            "CodeValue": "LIVER-HEMI-RIGHT"
-          },
-          {
-            "recommendedDisplayRGBValue": [0, 0, 139],
-            "CodeMeaning": "Left hemiliver (Couinaud II-IV)",
-            "CodingSchemeDesignator": "99SLIVER",
-            "3dSlicerLabel": "hemiliver_left",
-            "CodeValue": "LIVER-HEMI-LEFT"
+            "SNOMEDCTConceptID": "277962002",
+            "CodeValue": "277962002"
           }
         ]
       }
