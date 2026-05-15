@@ -1,1 +1,6 @@
 .idea/
+
+# Python / pytest artefacts (ADR-0008 scaffold).
+__pycache__/
+*.pyc
+.pytest_cache/
