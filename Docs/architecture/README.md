@@ -62,18 +62,18 @@ from the intended architecture.  The rules of thumb a reviewer applies:
   update that diagram in the same PR (or justify what changed in an
   ADR).
 
-The project lead additionally has an **optional** AI-agent slash-
-command (`/slicer-review`) that reads this directory into review
-context and applies the same rules of thumb.  It is one reviewer's
-tool, **not a project-wide gate**, and contributors are not expected
-to install or run it — the rules above stand on their own for any
-reviewer.
+An **optional** Claude Code slash-command,
+[`/slicer-review`](https://github.com/OUH-MESHLab/slicer-review),
+reads this directory into review context and applies the same rules
+of thumb (plus Slicer-specific MRML/VTK correctness checks).  It is
+one reviewer's tool, **not a project-wide gate**, and contributors
+are not expected to install or run it — the rules above stand on
+their own for any reviewer.
 
-The skill itself is generic enough to apply to other Slicer
-extensions and is therefore not vendored in this repository; it lives
-in the project lead's personal AI-agent configuration.  If the skill
-stabilises and other maintainers want to run it, packaging it as a
-sharable artefact is a future concern.
+The skill is maintained as a separate, reusable repository under the
+[OUH-MESHLab](https://github.com/OUH-MESHLab) organisation rather
+than vendored here, since it applies generically across 3D Slicer
+extension repositories.  See its README for installation and use.
 
 ## Authoring
 
