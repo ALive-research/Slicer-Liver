@@ -69,7 +69,7 @@ lived **implicitly in scene contents**: "if a `SlicingContour` node
 exists, we are in Initialization with SlicingPlane mode; if a
 `DistanceContour` node exists, we are in Initialization with
 DistanceSpheroid mode; if a `BezierSurface` node exists, we are in
-Planning".  [ADR-0013](0013-layerdm-pipeline-pattern.md) §4 documents
+Planning".  ADR-0013 §4 documents
 the brittleness of that pattern: ambiguous scene round-trip mid-
 transition, undo/redo crossing node boundaries, every state check is a
 scene query.  PR #317's UI baseline at
@@ -85,7 +85,7 @@ scene-contents pattern altogether.
 The `LiverMarkups` module is dissolved in v2.0.0.  Its three
 interactive primitives relocate into `LiverResections` as **non-Markups
 data nodes**, driven by a single state-aware LayerDM Pipeline with
-three Representations (per [ADR-0013](0013-layerdm-pipeline-pattern.md)
+three Representations (per ADR-0013
 §4 and §6) and a single custom widget that subclasses
 `vtkAbstractWidget` directly.
 
@@ -115,7 +115,7 @@ Planning→Init drop-back recovers them losslessly.
 
 ### 2. One LayerDM Pipeline; three state-conditional Representations
 
-Per [ADR-0013](0013-layerdm-pipeline-pattern.md) §4, a single
+Per ADR-0013 §4, a single
 `LiverBezierSurfacePipeline` observes its display node *and* the
 parent `vtkMRMLLiverResectionNode`'s `ResectionState` /
 `InitializationMode` enums.  The Pipeline owns three Representations,
@@ -214,7 +214,7 @@ LiverResections/
 
 Migrate the three Markups-derived nodes' *display* path to LayerDM
 per [ADR-0002](0002-migrate-to-slicerlayerdm.md) and
-[ADR-0013](0013-layerdm-pipeline-pattern.md), but leave the data
+ADR-0013, but leave the data
 nodes inheriting from `vtkMRMLMarkupsNode` and the interaction layer
 on `vtkSlicerMarkupsWidget`.
 
@@ -241,7 +241,7 @@ target liver mesh that seeds the same Bezier fit.  Keeping them in
 LiverMarkups would preserve a module that exists only to host two
 data carriers whose entire lifecycle is governed by the resection
 workflow — re-entrenching the implicit-state-via-scene-contents
-pattern [ADR-0013](0013-layerdm-pipeline-pattern.md) §4 retires.
+pattern ADR-0013 §4 retires.
 
 ### C. Three separate modules for the three primitives
 
@@ -274,7 +274,7 @@ the workflow they share.
   workflow.  T2 reviewers and `/slicer-review` evaluate the
   interactive surface against a single yardstick instead of three
   separate Markups subclasses.
-- **First concrete instantiation of [ADR-0013](0013-layerdm-pipeline-pattern.md)
+- **First concrete instantiation of ADR-0013
   and [ADR-0011](0011-sct-terminology-dispatch.md).**  The Pipeline
   consumes SCT triples for colour and label decoration (replacing the
   hardcoded `HepaticContourColor` / `PortalContourColor` constants in
@@ -337,7 +337,7 @@ The T2 LiverResections (all-in) phase lands in this order:
    `Set/Get` accessors, `WriteXML`/`ReadXMLAttributes` plumbing,
    and `Modified()` events on transition.
 4. **LiverBezierSurfacePipeline + three Representations** per
-   [ADR-0013](0013-layerdm-pipeline-pattern.md) — Python, observing
+   ADR-0013 — Python, observing
    both the display node and `vtkMRMLLiverResectionNode`'s state
    machine.  Ships with the three-tier test set (module test,
    per-Representation unit tests, workflow test using the
@@ -395,7 +395,7 @@ The T2 LiverResections (all-in) phase lands in this order:
     the current `LiverMarkups` constructors.
   - [ADR-0012](0012-layerdm-migration-v2-scope.md) (amended) — the
     v2.0.0 migration map collapses to T2 + T3 in light of this ADR.
-  - [ADR-0013](0013-layerdm-pipeline-pattern.md) — the canonical
+  - ADR-0013 — the canonical
     Pipeline + Representation shape this ADR instantiates; §4 is
     the state-aware-Pipeline pattern.
   - [ADR-0015](0015-cpp-algorithm-library.md) — the C++ algorithm
