@@ -50,8 +50,26 @@ Today's implementation lives in three Python functions in
 
 (These line numbers are approximate; the project-log entries flagged
 this trio as a suspected-buggy hotspot multiple times during the
-2024–2026 development of the module.)  Three pains motivate the lift:
+2024–2026 development of the module.)  The current Python
+implementations are **known to be not very stable** — surgeons and
+maintainers have reported corner-case failures across the EFD
+parameterisation path and the fitting tolerance behaviour, with the
+combination of Slicer's event loop and the scene-state coupling making
+the failures hard to reproduce in isolation.  Four pains motivate the
+lift:
 
+- **Bug discovery.**  The lift is also a deliberate bug-hunt
+  opportunity.  Each lifted function gets a focused C++ unit-test
+  surface; corner cases that the Python implementation silently
+  mishandled (degenerate rings, near-coincident control points, EFD
+  reconstructions that diverge at high harmonic orders) become
+  individually reproducible.  Characterisation-first per
+  [ADR-0003](0003-testability-invariant.md) pins current behaviour
+  including its bugs; the lift then either inverts the assertion for
+  the corrected C++ behaviour or documents the divergence — in either
+  case the bug is now visible and triaged.  This is paired motivation
+  with the testability pain below: testability *and* discoverability
+  improve together.
 - **Testability.**  The functions run inside Slicer's event loop with
   implicit dependencies on the scene state and the active widget.
   Unit-testing them today requires either standing up a Slicer app
