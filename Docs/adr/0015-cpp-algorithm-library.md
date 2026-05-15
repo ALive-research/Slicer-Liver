@@ -135,6 +135,46 @@ so Python consumers reach the classes through the standard
 `import vtkSlicerLiverResectionsModuleLogicPython`-style import (or
 the module's Python facade, per the scripted-module convention).
 
+The new CMakeLists declares **two library dependencies** beyond
+what the parent module already pulls in:
+
+- **VTK** — already mandatory; the algorithm library re-uses VTK's
+  mesh ops (`vtkCutter` for plane intersection,
+  `vtkImplicitFunction` for spheroid cutting) and statistics
+  (`vtkPCAStatistics` is already used in
+  `vtkSlicerLiverResectionsLogic.cxx`).  No VTK-component
+  additions beyond the standard wrapping.
+- **Eigen** (MPL2, header-only) — linear algebra for the Bezier
+  pseudo-inverse fit (`(N^T N)^{-1} N^T` style normal-equation
+  solves on the 4×4 basis matrices and the per-axis matrix
+  multiply) and the EFD harmonic-integration sums.  Slicer's
+  superbuild ships Eigen (`Slicer_USE_Eigen` defaults on in
+  current Slicer main); enabled via `find_package(Eigen3 REQUIRED)`
+  from the new CMakeLists.  **No new external dep is introduced
+  beyond what Slicer's superbuild already provides.**
+
+Deliberately **not** required:
+
+- **FFT library** (FFTW, kissfft, pocketfft, …).  The Python
+  implementation in `Liver/Liver.py` computes elliptic Fourier
+  descriptors via direct closed-form harmonic integration
+  (pyefd-derived sums of `cos(n φ)` / `sin(n φ)` weighted by
+  segment differentials), not via FFT.  The C++ port reproduces
+  the same algebra in plain loops over Eigen vectors; neither
+  side uses an FFT library.
+- **External mesh / geometry library** (CGAL, libigl, OpenMesh).
+  Per Alternatives §B, VTK's mesh facilities suffice for ring
+  extraction and Bezier evaluation; adding one of these would
+  introduce a build dep with no clear payoff for liver-specific
+  algorithms.
+- **ITK** (image-filter library).  Per Alternatives §D, this
+  workload is mesh-centric.
+
+License posture for the introduced deps: BSD-3-Clause (VTK) and
+MPL2 (Eigen — less restrictive than LGPL; commonly used in
+closed-source contexts; compatible with Slicer-Liver's
+BSD-3-Clause release).
+
 ### 3. Test layering — C++ low-level plus Python wrapper
 
 Per [ADR-0008](0008-testing-strategy.md) §2:
@@ -221,7 +261,10 @@ outweighs the (modest) code reuse.  The classes belong in-tree.
 
 Keep the orchestration in Python but rewrite the math against
 NumPy/SciPy: `scipy.interpolate.BSpline` or equivalent for the
-Bezier evaluation, NumPy FFT for the EFD path, vectorised ring
+Bezier evaluation, vectorised NumPy array math for the EFD
+harmonic-integration path (the existing Python implementation
+computes Fourier coefficients via direct closed-form sums of
+`cos(n φ)` / `sin(n φ)` rather than FFT), and vectorised ring
 operations under NumPy slicing.
 
 **Rejected** because the consumer side is `vtkPolyData` (the
@@ -292,8 +335,12 @@ the path of least friction.
   landing the characterisation tests **first**, in their own commit
   or PR, before the lift commit modifies them.  Numerical tolerance
   is documented per test case where bit-equivalence is not
-  achievable (notably the EFD path, where the C++ FFT implementation
-  may differ in last-bit accuracy from the Python reference).
+  achievable — e.g. floating-point operation ordering in the EFD
+  harmonic-integration sums may differ between Python's NumPy
+  reduction order and the C++ `Eigen::VectorXd::sum()` reduction
+  order, producing last-bit-of-double differences.  Neither
+  implementation uses FFT (both are direct closed-form sums per
+  the existing Python reference in `Liver/Liver.py`).
 - **C++ build-cost for iteration on the algorithm layer.**  Changes
   to the algorithm classes require a Slicer rebuild (10–60 min per
   [ADR-0004](0004-python-cpp-boundary.md)'s catalogue).  Acceptable
