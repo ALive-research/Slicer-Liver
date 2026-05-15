@@ -168,77 +168,119 @@ on every UI-touching PR).  The widget's right-click / right-drag
 event-table semantics decided in §3 above are unaffected by that
 deferred visual choice.
 
-### 4. Init control-point lifecycle across Init→Planning — OPEN
+### 4. Init control points persist as read-only audit data after Init→Planning
 
-**Open question, to be settled before the T2 PR lands.**
+After the Init→Planning transition, the init control points (two for
+`SlicingPlane` mode, two-or-more for `DistanceSpheroid` mode)
+**persist on the parent resection's data as read-only audit data**.
+They serve two purposes:
 
-A previous draft of this ADR committed to persisting the init control
-points on the resection's data so a Planning→Init drop-back would be
-lossless.  Review surfaced a prior question: should the surgeon be
-able to drop back to Init at all?  Once Planning has moved the
-Bezier-grid geometry away from the original init ring, the init
-control points may no longer describe anything clinically meaningful;
-the drop-back would mostly be undo-style behaviour better served by
-Slicer's scene-state undo.
+- *Save / load fidelity.*  Round-tripping a resection through the
+  storage layer (§5) recovers the geometry that originally seeded the
+  Bezier fit — useful for clinical documentation and downstream audit
+  ("which ring on which liver mesh produced this resection plan?").
+- *UI annotation.*  The resection panel surfaces the originating
+  init-mode and its control-point ring as read-only metadata so the
+  surgeon can see "what fit produced this geometry".  Display
+  treatment deferred to the T2 implementation per
+  [ADR-0009](0009-ux-and-design-discipline.md) §3.
 
-Two paths under discussion:
+**There is no Planning→Init transition.**  Once Planning is reached,
+the Bezier 4×4 grid is the sole *editable* representation of the
+resection surface.  To re-initialise with a different ring, the
+surgeon creates a *new* resection alongside the original (the new
+resection runs through its own Init→Planning fit; the original
+remains as the prior version).
 
-- *No drop-back.*  Init→Planning is one-way for v2.0.0.  Init control
-  points are discarded at the transition; the Bezier 4×4 grid is the
-  sole persisted representation thereafter.  Save/load round-trip
-  captures only the Bezier grid + state-machine fields.  Simplest
-  workflow; loses recoverable intent for the surgeon who wants to
-  return to "before the fit".
-- *Drop-back with persistence.*  Init control points persist on the
-  resection's data node (handful of `double[3]` per resection — cheap)
-  so Planning→Init recovers them losslessly.  Captures intent across
-  the state boundary at the cost of slightly more storage and one more
-  state transition to validate.
+Rationale: the Bezier grid in Planning may have moved arbitrarily far
+from the original init ring; a Planning→Init drop-back would either
+silently overwrite the surgeon's planning work or surface a misleading
+"this ring is what you started from" affordance that no longer
+matches the current geometry.  The current Markups-based workflow
+effectively allowed drop-back via persistent `SlicingContour` /
+`DistanceContour` nodes in the scene, but the practical clinical value
+is dominated by the audit / save-load case, not by editorial
+round-trips back to the init ring; the read-only persistence above
+captures the former without re-introducing the latter's hazard.
 
-This ADR no longer commits to either path.  The decision feeds the
-schema design for §5 (storage) and the state-machine in ADR-0013 §4.
-Resolution by separate discussion before the T2 PR lands; outcome
-captured by amendment to this ADR.
+Cost on the data node: 6-12 `double[3]` arrays per resection (18-36
+floats).  Negligible.
 
-### 5. Storage — D-class break committed; format mechanism OPEN
+### 5. Storage — new MRML storage node with JSON on-disk format
 
 A **D-class break** per [ADR-0007](0007-version-numbering-policy.md)
 is committed: symmetric round-trip with v1 `.lrp.fcsv` files is no
-longer clean.  Already on the v1→v2 ticket and contributes to the (D)
-trigger ADR-0007 §"Mapping the v1 → v2 jump" enumerates.
+longer clean.  Already on the v1→v2 ticket and contributes to the
+(D) trigger ADR-0007 §"Mapping the v1 → v2 jump" enumerates.
 
-**The storage format itself is OPEN.**  The existing `.lrp.fcsv`
-format was driven by Markups as a base; the LiverMarkups dissolution
-in this ADR retires that base and reopens the format question.
-Candidates under discussion:
+**Storage mechanism**: a new C++ MRML storage node
+`vtkMRMLLiverBezierSurfaceStorageNode` reads and writes `.lrp.json`
+files — a purpose-built schema for the new data model.
 
-- *Extended `.lrp.fcsv`.*  Schema bump in place; minimal migration
-  cost; carries legacy-format baggage.
-- *New MRML storage node.*  A
-  `vtkMRMLLiverBezierSurfaceStorageNode` purpose-built for the new
-  data model.  Cleaner schema; standard MRML scene-XML for the
-  geometry plus a sidecar (JSON or similar) for the high-volume
-  control-point payload.
-- *JSON sidecar to the scene MRML.*  Lightweight and inspection-
-  friendly; closer to the Segmentations-module convention.
+JSON is the on-disk format choice (chosen over XML and over an
+extended `.lrp.fcsv`):
 
-Fields the format must carry (regardless of mechanism):
+- *Inspection-friendly.*  Surgeons and developers can open a
+  `.lrp.json` in any text editor and read the resection geometry,
+  init metadata, and state-machine fields without specialised tools.
+- *Project precedent.*  Slicer's Segmentations module exports JSON
+  alongside its segmentation files; aligns Slicer-Liver with that
+  convention.
+- *Schema-version-friendly.*  A top-level `"schemaVersion"` field
+  carries the schema bump explicitly; future migrations are
+  versioned.
+- *Portability preserved.*  A single `.lrp.json` file carries a
+  complete resection plan independent of the parent Slicer scene —
+  surgeons can share individual resections between colleagues or
+  sessions without round-tripping the entire scene MRML.  This was
+  the practical reason the historical `.lrp.fcsv` existed and is
+  preserved.
 
-- The 16 Bezier control points with ring-role metadata (corner /
-  edge / interior).
-- Init-mode control points (2 for SlicingPlane, ≥2 for
-  DistanceSpheroid) — quantity and persistence conditional on §4's
-  drop-back resolution.
+Rejected alternatives:
+
+- *Extended `.lrp.fcsv`.*  Contorts a Markups-derived line-oriented
+  CSV-with-comments format to carry structured state; the format was
+  designed for fiducial-point lists, not for ring-role metadata +
+  init-mode + state machine.
+- *JSON sidecar to the scene MRML.*  Introduces split-brain
+  geometry/state coordination between the scene `.mrml` and an
+  external sidecar without earning the complexity for a tiny
+  (~70 doubles total) data payload.
+
+**On-disk fields:**
+
+- The 16 Bezier control points (4×4 grid) with ring-role metadata
+  (corner / edge / interior).
+- The originating init-mode (`SlicingPlane` or `DistanceSpheroid`)
+  and its read-only control points per §4.
 - State-machine fields (`ResectionState`, `InitializationMode`) as
-  typed enums.
-- Margins and other decoration that previously lived on the data
-  node (per ADR-0013 §8, those move to the new display node — not
-  the storage node — though both go through the same save/load
-  path).
+  string enums for human readability.
+- Margins and decoration that previously lived on the data node
+  (those move to the new display node per
+  [ADR-0013](0013-layerdm-pipeline-pattern.md) §8, but data and
+  display node both serialize through the same per-resection
+  save/load path).
+- Terminology references per
+  [ADR-0011](0011-sct-terminology-dispatch.md) — SCT triples for the
+  resection's clinical concept.
+- Top-level `"schemaVersion"` field.
 
-Resolution by separate discussion before the T2 PR lands; outcome
-captured by amendment to this ADR or by a follow-on ADR if the
-format choice is substantial enough to warrant its own.
+**v1 → v2 migration**: the storage class detects the legacy
+`.lrp.fcsv` format on load and dispatches a one-way migration into
+the new `.lrp.json` layout.  The legacy reader is preserved as a
+load-only path for the v2.x cycle; legacy writes are not supported.
+Batch conversion of existing `.lrp.fcsv` corpora deferred to a
+follow-on migration tool if surgeon demand surfaces.
+
+**File naming**: `.lrp.json` chosen for paradigm continuity
+(`.lrp.*` was the historical Slicer-Liver convention) while the new
+extension signals the format change.
+
+Schema details — the exact JSON shape, the migration code path, and
+any richer metadata (timestamps, surgeon ID, clinical context
+fields) the new format could carry — land in the T2 implementation
+PR.  v2.0.0 ships the minimal schema covering the dissolution
+fields enumerated above.
 
 ### 6. Illustrative file layout
 
