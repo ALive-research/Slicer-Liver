@@ -63,11 +63,10 @@ maintenance or migration; new tests follow this discipline.
   launched as a GUI app.  Per ADR-0004, this is where most new tests
   go.
 - **C++ secondary**: `ctkTest` (Qt MOC, `Q_OBJECT`, `private slots`
-  pattern — same as Hyperprobe's
-  `vtkMRMLHyperprobeViewPipelineTest.cxx`).  Used only for genuinely
-  C++-only concerns: custom VTK mappers, low-level VTK observers,
-  ITK filter behaviour that can't be exercised through Python.
-  Existing 6 `.cxx` tests remain; new C++ tests are added sparingly.
+  pattern).  Used only for genuinely C++-only concerns: custom VTK
+  mappers, low-level VTK observers, ITK filter behaviour that can't
+  be exercised through Python.  Existing 6 `.cxx` tests remain; new
+  C++ tests are added sparingly.
 - CTest registers all of these (both pytest invocations and ctkTest
   executables) so a single `ctest` run executes the full suite.
 
@@ -170,10 +169,6 @@ that pins behaviour.  This ADR adds:
   commit *inverts the assertion* (`assert right_value`).  Reviewers
   see the broken state recorded in history; the test catches
   regression.
-- This is non-negotiable for the Bezier-fitting bugs flagged in the
-  resection refactor (PKS subnote `20260514T130355`, Liver.py:1914 /
-  :1961 / :2042) and the Kumar-Oram algorithm bugs flagged in the
-  vessel-seeding subnote.
 - For larger migrations (the LayerDM phases per ADR-0002),
   characterisation tests land *before* the migration code: PR N adds
   the pinning test against the old behaviour; PR N+1 implements the
@@ -286,11 +281,7 @@ SlicerLiver is large enough to benefit from the explicit signal.
   that release-notes the test-driven evolution.
 - [SlicerLayerDisplayableManager](https://github.com/KitwareMedical/SlicerLayerDisplayableManager)
   — three-tier test layout (`LayerDM/tests/`,
-  `LayerDM/Testing/Python/`, `LayerDM/Testing/Cxx/`).  Local checkout:
-  `~/src/SlicerLayerDisplayableManager/`.
+  `LayerDM/Testing/Python/`, `LayerDM/Testing/Cxx/`).
 - [trame-slicer](https://github.com/KitwareMedical/trame-slicer) —
   fixture-driven pytest pattern + `render_interactive` mechanism.
   See `tests/conftest.py` for the canonical fixture set.
-- [Hyperprobe](https://github.com/MESH-Lab/SlicerHyperProbe) —
-  ctkTest-based C++ pipeline test pattern with `qMRMLThreeDWidget.show()`.
-  Local checkout: `~/src/SlicerHyperProbe/`.
