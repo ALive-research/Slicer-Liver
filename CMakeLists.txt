@@ -31,5 +31,12 @@ add_subdirectory(LiverVolumetry)
 add_subdirectory(Liver)
 
 #-----------------------------------------------------------------------------
+# Shared (cross-module) pytest scaffold per ADR-0008.
+# Per-module Slicer self-tests continue to register from their own
+# <Module>/Testing/Python/CMakeLists.txt; this directory adds the
+# pytest-driven scaffold and (in follow-up PRs) the cross-module fixtures.
+add_subdirectory(Testing)
+
+#-----------------------------------------------------------------------------
 include(${Slicer_EXTENSION_GENERATE_CONFIG})
 include(${Slicer_EXTENSION_CPACK})
