@@ -55,7 +55,7 @@ custom widget subclassing `vtkAbstractWidget` directly.  The
 combined consequence: LiverMarkups dissolves entirely in v2.0.0, its
 three primitives relocate into LiverResections as non-Markups data
 nodes, and the v2.0.0 in-scope list shrinks to two phases.  Full
-rationale lives in [ADR-0014](0014-livermarkups-dissolution.md).
+rationale lives in ADR-0014 (forthcoming).
 
 ## Decision
 
@@ -69,14 +69,13 @@ Two phases, in order:
 
 - **T2 — LiverResections (all-in)** — pattern-setting migration.
   Absorbs the LiverMarkups dissolution per
-  [ADR-0014](0014-livermarkups-dissolution.md): the three Markups-
-  derived primitives (BezierSurface + SlicingContour + DistanceContour)
-  relocate into LiverResections as non-Markups data nodes, with a
-  single state-aware LayerDM Pipeline owning three state-conditional
-  Representations (per [ADR-0013](0013-layerdm-pipeline-pattern.md)
-  §4).  Bezier-fitting and ring-extraction algorithms lift to a C++
-  algorithm library per
-  [ADR-0015](0015-cpp-algorithm-library.md).  Resolves the structural
+  ADR-0014 (forthcoming): the three Markups-derived primitives
+  (BezierSurface + SlicingContour + DistanceContour) relocate into
+  LiverResections as non-Markups data nodes, with a single
+  state-aware LayerDM Pipeline owning three state-conditional
+  Representations (per ADR-0013 §4, forthcoming).  Bezier-fitting
+  and ring-extraction algorithms lift to a C++ algorithm library
+  per ADR-0015 (forthcoming).  Resolves the structural
   pains ADR-0002 §1–§5 enumerate (three-node assembly, six
   `std::map` members, leaked display fields, Markups
   interaction-model ceiling, DM boilerplate).  Delivers the real-view
@@ -234,13 +233,13 @@ These do not block adoption of this ADR:
 - ADR-0011 (terminology dispatch for LiverSegments) — the
   data-model work that lands in v2.0.0 for the
   display-migration-deferred LiverSegments module.
-- [ADR-0013](0013-layerdm-pipeline-pattern.md) — the canonical
-  LayerDM Pipeline pattern that the T2 LiverResections migration and
-  T3 Resectogram split both instantiate.
-- [ADR-0014](0014-livermarkups-dissolution.md) — the LiverMarkups
-  dissolution decision that this amendment folds into the T2 scope.
-- [ADR-0015](0015-cpp-algorithm-library.md) — the C++ algorithm
-  library decision (Bezier fitter, ring extractors, contour
-  parameterizer) supporting the T2 implementation.
+- ADR-0013 (forthcoming) — the canonical LayerDM Pipeline pattern
+  that the T2 LiverResections migration and T3 Resectogram split
+  both instantiate.
+- ADR-0014 (forthcoming) — the LiverMarkups dissolution decision
+  that this amendment folds into the T2 scope.
+- ADR-0015 (forthcoming) — the C++ algorithm library decision
+  (Bezier fitter, ring extractors, contour parameterizer)
+  supporting the T2 implementation.
 - [SlicerLayerDisplayableManager](https://github.com/KitwareMedical/SlicerLayerDisplayableManager)
   — the upstream framework adopted per ADR-0002.
