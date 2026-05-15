@@ -2,9 +2,8 @@
 
 - **Status:** Findings draft
 - **Date:** 2026-05-15
-- **Reference Slicer revision:** 5.8.1 source tree
-  (`slicer-source-5.8`, content-addressed via the guix-systole `slicer-skill`
-  package; commit hashes preserved by Guix).
+- **Reference Slicer revision:** Slicer 5.8.1 source tree
+  ([github.com/Slicer/Slicer @ `v5.8.1`](https://github.com/Slicer/Slicer/tree/v5.8.1)).
 - **Gates:** [ADR-0010 — Accessibility and i18n stance](../adr/0010-accessibility-and-i18n.md),
   Tier-2 commitments §§4–6 and the open-questions list.
 
