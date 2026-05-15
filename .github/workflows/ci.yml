@@ -140,7 +140,49 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ---------------------------------------------------------------------
+      # Skip the ~6 min Slicer build + CTest run when a PR touches only
+      # documentation / ADRs / architecture diagrams / repo-level meta files.
+      #
+      # The job itself still spawns and reports success on docs-only PRs —
+      # this preserves the "build-test (slicer-main, Linux)" check name so
+      # future branch-protection rules requiring it continue to pass without
+      # needing to be reconfigured (a skipped *job* would block merges; a
+      # job whose steps no-op does not).
+      #
+      # Filter scope:
+      #   - Docs/**                       (ADRs, architecture diagrams, surveys)
+      #   - root-level *.md               (README, CONTRIBUTING, SECURITY, …)
+      #   - .github/pull_request_template.md and CODEOWNERS
+      #   - CITATION.cff / License.txt / COPYRIGHT.txt
+      #
+      # Filter is PR-scoped — push events (merge to preview, direct push,
+      # workflow_dispatch) always run the full build to catch any drift.
+      # ---------------------------------------------------------------------
+      - name: Detect docs-only change
+        id: changes
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          predicate-quantifier: every
+          filters: |
+            docs-only:
+              - 'Docs/**'
+              - '*.md'
+              - '.github/pull_request_template.md'
+              - '.github/CODEOWNERS'
+              - 'CITATION.cff'
+              - 'License.txt'
+              - 'COPYRIGHT.txt'
+
+      - name: Report skip (docs-only PR)
+        if: github.event_name == 'pull_request' && steps.changes.outputs.docs-only == 'true'
+        run: |
+          echo "::notice::Skipping Slicer build/test — this PR only touches documentation, ADRs, or repo-meta files."
+          echo "Filtered paths matched every changed file; build-test job reports success."
+
       - name: Verify Slicer build tree
+        if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
         run: |
           set -euo pipefail
           test -f "${Slicer_DIR}/SlicerConfig.cmake" \
@@ -148,6 +190,7 @@ jobs:
           echo "Slicer_DIR=${Slicer_DIR}"
 
       - name: Configure
+        if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
         run: |
           set -euo pipefail
           mkdir -p build
@@ -157,9 +200,11 @@ jobs:
             -DSlicer_DIR="${Slicer_DIR}"
 
       - name: Build
+        if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
         run: cmake --build build --config Release -j "$(nproc)"
 
       - name: Test (CTest)
+        if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
         run: |
           set -euo pipefail
           cd build
