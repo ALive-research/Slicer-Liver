@@ -190,11 +190,11 @@ distribution model can be re-evaluated.
   (Alternative B) or skipping the build job on docs-only PRs (path-
   filter optimisation).
 - **CI maintenance.**  The workflow becomes another artefact to keep
-  current with Slicer-Liver, Slicer-master, and the container
+  current with Slicer-Liver, Slicer-main, and the container
   ecosystem.  Add it to the per-module-migration PR checklist (per
   ADR-0002) — if the migration breaks CI, the migration PR fixes the
   CI alongside the code.
-- **Upstream Slicer drift surfaces in our CI.**  When Slicer-master
+- **Upstream Slicer drift surfaces in our CI.**  When Slicer-main
   breaks (which happens periodically), Slicer-Liver CI will go red
   through no fault of any Slicer-Liver PR.  Mitigation: pin the
   container by digest after the first verified-green run, and bump
