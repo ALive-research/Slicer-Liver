@@ -1,0 +1,19 @@
+{
+  "tool": "KumarOram",
+  "notes": "Kumar-Oram is a seed-based vessel-refinement algorithm. Its output labels (e.g. vessel_1, vessel_2) carry no intrinsic anatomical role — the role is determined by which seed the surgeon placed (portal root vs hepatic root). Mapping is therefore dynamic: each segmented vessel inherits the SCT triple of its originating seed. This file documents the seed-role contract; the static 'mappings' array stays empty and is populated at runtime from the seed-to-vessel correspondence.",
+  "schema": "https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0011-sct-terminology-dispatch.md",
+  "dynamic_mapping": true,
+  "seed_role_mapping": {
+    "portal_root_seed": {
+      "CodingSchemeDesignator": "SCT",
+      "CodeValue": "32764006",
+      "CodeMeaning": "Portal vein structure"
+    },
+    "hepatic_root_seed": {
+      "CodingSchemeDesignator": "SCT",
+      "CodeValue": "8993003",
+      "CodeMeaning": "Hepatic vein structure"
+    }
+  },
+  "mappings": []
+}

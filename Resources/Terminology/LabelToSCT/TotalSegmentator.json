@@ -1,0 +1,35 @@
+{
+  "tool": "TotalSegmentator",
+  "version": "v2",
+  "notes": "Maps TotalSegmentator (v2 label set) class names to SNOMED-CT triples for use by Slicer-Liver's terminology dispatch per ADR-0011. TotalSegmentator v1 combined some labels (e.g. portal_vein_and_splenic_vein) that v2 may separate; consult the bundled model docs for the active label set. Labels not in the Slicer-Liver core type set are mapped to null and surface in UI as Unknown until the type set expands.",
+  "schema": "https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0011-sct-terminology-dispatch.md",
+  "mappings": [
+    {
+      "label": "liver",
+      "sct": {
+        "CodingSchemeDesignator": "SCT",
+        "CodeValue": "10200004",
+        "CodeMeaning": "Liver"
+      }
+    },
+    {
+      "label": "portal_vein_and_splenic_vein",
+      "sct": {
+        "CodingSchemeDesignator": "SCT",
+        "CodeValue": "32764006",
+        "CodeMeaning": "Portal vein structure"
+      },
+      "notes": "TotalSegmentator v1 combines portal vein + splenic vein into a single label. Slicer-Liver maps to Portal vein; downstream consumers should expect over-inclusive masks until v2's separated labels are adopted by the bundled model."
+    },
+    {
+      "label": "inferior_vena_cava",
+      "sct": null,
+      "notes": "Out of Slicer-Liver core type set for v2.0.0. Surfaces as Unknown; revisit when ADR-0011 type set expands."
+    },
+    {
+      "label": "hepatic_vessels",
+      "sct": null,
+      "notes": "Out of core type set; combined hepatic veins + portal vein at the TS level. Pass to Kumar-Oram for refinement to per-vessel SCT codes when the surgeon opts in."
+    }
+  ]
+}
