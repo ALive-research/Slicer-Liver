@@ -7,6 +7,7 @@ string(TOUPPER ${MODULE_NAME} MODULE_NAME_UPPER)
 
 #-----------------------------------------------------------------------------
 add_subdirectory(MRML)
+add_subdirectory(Algorithm)
 add_subdirectory(Logic)
 add_subdirectory(MRMLDM)
 

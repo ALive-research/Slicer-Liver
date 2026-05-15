@@ -417,3 +417,159 @@ def test_inverse_transform_matches_pinned_reconstruction(liver_logic):
         rtol=_RTOL_TIGHT,
         atol=_ATOL_TIGHT,
     )
+
+
+# --------------------------------------------------------------------------- #
+# C++ wrapper parallel tests — T2 Stack 1 / ADR-0015.
+#
+# The C++ algorithm library introduced by ADR-0015 hosts the same four
+# numerical paths as a Python-wrapped VTK module
+# (``vtkSlicerLiverResectionsModuleAlgorithm``).  Each test below
+# re-asserts the same EXPECTED_* characterisation pin against the C++
+# implementation, so a single PR-test run covers both paths.
+#
+# Tolerance: the C++ side uses Eigen's ``MatrixXd::inverse()`` rather
+# than LAPACK's ``np.linalg.inv``, which may dispatch a different small-
+# matrix kernel and produce last-bit-of-double differences on the 5x5
+# inversion.  The Bezier wrapper assertion below therefore relaxes to
+# ``rtol=1e-10`` — documented in the C++ test file as well, per
+# ADR-0015 §Consequences ("Numerical tolerance is documented per test
+# case where bit-equivalence is not achievable").  The EFD / DC /
+# inverse-transform paths are direct closed-form sums and *do* hold at
+# the tight ``rtol=1e-12`` against the C++ implementation.
+#
+# The whole block skips cleanly when the wrapped module is unavailable
+# (incremental local builds where only Liver/ has been touched, CI
+# stages that run pytest before the C++ build, etc.).
+# --------------------------------------------------------------------------- #
+
+_RTOL_LOOSE_BEZIER = 1e-10  # Eigen vs LAPACK dispatch noise on 5x5 inverse
+_ATOL_LOOSE_BEZIER = 1e-12
+
+
+@pytest.fixture(scope="module")
+def algorithm_module():
+    """Import the C++ Algorithm wrapper, skipping if unavailable.
+
+    The wrapped Python module is named with the ``Python`` suffix as
+    produced by ``SlicerMacroPythonWrapModuleVTKLibrary`` (matching the
+    convention used by ``LiverSegments`` and ``LiverVolumetry``).
+    """
+    return pytest.importorskip(
+        "vtkSlicerLiverResectionsModuleAlgorithmPython",
+        reason=(
+            "vtkSlicerLiverResectionsModuleAlgorithm not built / not on "
+            "sys.path; skip the C++ side of the dual-mode characterisation."
+        ),
+    )
+
+
+def _to_double_array(flat):
+    """Convert a flat float iterable to a vtkDoubleArray (1 component)."""
+    import vtk
+
+    arr = vtk.vtkDoubleArray()
+    arr.SetNumberOfComponents(1)
+    arr.SetNumberOfTuples(len(flat))
+    for i, value in enumerate(flat):
+        arr.SetValue(i, float(value))
+    return arr
+
+
+def test_cxx_bezier_fitter_matches_pinned_control_points(algorithm_module):
+    """C++ ``vtkLiverBezierFitter`` against the same EXPECTED control points.
+
+    Tolerance is relaxed to ``rtol=1e-10`` to absorb Eigen-vs-LAPACK
+    last-bit-of-double dispatch noise on the 5x5 inverse; see the
+    module docstring and the matching C++ test for the rationale.
+
+    Reads the fitted grid back through the polydata output (which is the
+    Python-wrappable surface) rather than ``GetControlPoints()`` (which
+    returns a const std::vector reference VTK does not wrap).
+    """
+    points, basis_u, basis_v = _make_bezier_fixture()
+    fitter = algorithm_module.vtkLiverBezierFitter()
+    fitter.SetNumberOfSamples(5, 5)
+    fitter.SetInputPoints(_to_double_array(points.flatten().tolist()))
+    fitter.SetBasisU(_to_double_array(basis_u.flatten().tolist()))
+    fitter.SetBasisV(_to_double_array(basis_v.flatten().tolist()))
+    fitter.Update()
+
+    out_points = fitter.GetOutput().GetPoints()
+    assert out_points.GetNumberOfPoints() == 25
+    cps = np.zeros((5, 5, 3), dtype=np.float64)
+    for i in range(5):
+        for j in range(5):
+            p = out_points.GetPoint(i * 5 + j)
+            cps[i, j, 0] = p[0]
+            cps[i, j, 1] = p[1]
+            cps[i, j, 2] = p[2]
+    np.testing.assert_allclose(
+        cps,
+        EXPECTED_BEZIER_CONTROL_POINTS,
+        rtol=_RTOL_LOOSE_BEZIER,
+        atol=_ATOL_LOOSE_BEZIER,
+    )
+
+
+def test_cxx_elliptic_fourier_descriptors_matches_pinned_coefficients(
+    algorithm_module,
+):
+    """C++ ``vtkLiverContourParameterizer::ComputeEFDCoefficients`` parity."""
+    contour = _make_contour_fixture()
+    contour_arr = _to_double_array(contour.flatten().tolist())
+    coeffs_arr = (
+        algorithm_module.vtkLiverContourParameterizer.ComputeEFDCoefficients(
+            contour_arr, 8
+        )
+    )
+    n = coeffs_arr.GetNumberOfTuples()
+    coeffs_flat = [coeffs_arr.GetValue(i) for i in range(n)]
+    coeffs = np.array(coeffs_flat).reshape(8, 6)
+    np.testing.assert_allclose(
+        coeffs,
+        EXPECTED_EFD_COEFFS,
+        rtol=_RTOL_TIGHT,
+        atol=_ATOL_TIGHT,
+    )
+
+
+def test_cxx_calculate_dc_coefficients_matches_pinned_values(algorithm_module):
+    """C++ ``vtkLiverContourParameterizer::ComputeDCCoefficients`` parity."""
+    contour = _make_contour_fixture()
+    contour_arr = _to_double_array(contour.flatten().tolist())
+    dc_arr = (
+        algorithm_module.vtkLiverContourParameterizer.ComputeDCCoefficients(
+            contour_arr
+        )
+    )
+    dc = tuple(dc_arr.GetValue(i) for i in range(3))
+    np.testing.assert_allclose(
+        dc,
+        EXPECTED_DC,
+        rtol=_RTOL_TIGHT,
+        atol=_ATOL_TIGHT,
+    )
+
+
+def test_cxx_inverse_transform_matches_pinned_reconstruction(algorithm_module):
+    """C++ ``vtkLiverContourParameterizer::InverseTransform`` parity.
+
+    Uses the *pinned* EFD coefficients directly so this test isolates
+    the inverse-transform path from any drift in the forward EFD.
+    """
+    coeffs_arr = _to_double_array(EXPECTED_EFD_COEFFS.flatten().tolist())
+    recon_arr = (
+        algorithm_module.vtkLiverContourParameterizer.InverseTransform(
+            coeffs_arr, 8, 0.1, 0.2, 0.3, 12
+        )
+    )
+    n = recon_arr.GetNumberOfTuples()
+    recon_flat = [recon_arr.GetValue(i) for i in range(n)]
+    recon = np.array(recon_flat).reshape(1, 3, 12)
+    np.testing.assert_allclose(
+        recon,
+        EXPECTED_INVERSE_TRANSFORM,
+        rtol=_RTOL_TIGHT,
+        atol=_ATOL_TIGHT,
+    )
