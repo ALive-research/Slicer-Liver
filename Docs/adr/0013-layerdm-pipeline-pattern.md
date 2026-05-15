@@ -398,7 +398,7 @@ under a follow-up ADR.
 The two v2.0.0 migration phases under
 [ADR-0012](0012-layerdm-migration-v2-scope.md) (as amended by the
 design discussion folding LiverMarkups into LiverResections — see
-[ADR-0014](0014-livermarkups-dissolution.md)) each instantiate this
+ADR-0014) each instantiate this
 pattern once:
 
 1. **T2 — LiverResections (all-in).**  Pattern-setting migration.
@@ -413,9 +413,9 @@ pattern once:
    `InitializationMode` enums.  A custom widget subclassing
    `vtkAbstractWidget` directly (not `vtkSlicerMarkupsWidget`) wires
    ring-aware right-click and per-role glyph rendering per
-   [ADR-0014](0014-livermarkups-dissolution.md).  Bezier-fitting and
+   ADR-0014.  Bezier-fitting and
    ring-extraction algorithms lift to a C++ algorithm library per
-   [ADR-0015](0015-cpp-algorithm-library.md).  Display fields leave
+   ADR-0015.  Display fields leave
    `vtkMRMLLiverResectionNode` and land on the new
    `vtkMRMLLiverBezierSurfaceDisplayNode` (per §8 above).
    Establishes `Liver<Module>/<Module>Pipeline.py` and the
