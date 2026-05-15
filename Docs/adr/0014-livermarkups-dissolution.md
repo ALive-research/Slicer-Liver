@@ -148,9 +148,8 @@ directly — *not* `vtkSlicerMarkupsWidget`.  Free design space:
   init-mode drop-back), free of `vtkSlicerMarkupsWidget::WidgetEvent
   Menu` / `populateContextMenu` constraints.
 
-Per-role glyph rendering wires through the four existing custom OpenGL
-mappers in `LiverMarkups/VTKWidgets/` (relocated to `LiverResections/
-VTKWidgets/` alongside the widget):
+The four existing custom OpenGL mappers in `LiverMarkups/VTKWidgets/`
+relocate to `LiverResections/VTKWidgets/` alongside the widget:
 
 - `vtkOpenGLBezierResectionPolyDataMapper` — the surface.
 - `vtkOpenGLSlicingContourPolyDataMapper`,
@@ -159,34 +158,87 @@ VTKWidgets/` alongside the widget):
   surface (carried over into the T3 Resectogram migration; relocated
   here only to keep the migration map clean).
 
-### 4. Init control points persist across Init→Planning
+This ADR commits to **relocating** these mappers, **not** to any
+specific visual treatment for selected / ring-grouped / per-role
+control points.  The selection-feedback design (per-role glyph shapes,
+halo overlays around selected points, outline accents, colour
+modulation, …) is a UX choice deferred to the T2 implementation
+per [ADR-0009](0009-ux-and-design-discipline.md) §3 (design rationale
+on every UI-touching PR).  The widget's right-click / right-drag
+event-table semantics decided in §3 above are unaffected by that
+deferred visual choice.
 
-After the Init→Planning transition, the two (SlicingPlane) or
-two-or-more (DistanceSpheroid) init control points **persist** on the
-parent resection's data.  A Planning→Init drop-back recovers them
-losslessly; a save/load round-trip in either state captures the
-surgeon's intent across the state boundary.  Cost on the data node is
-negligible (a handful of `double[3]` arrays per resection); the
-alternative — discarding the init control points at the state
-transition — gives up recoverable workflow intent for no payoff.
+### 4. Init control-point lifecycle across Init→Planning — OPEN
 
-### 5. Storage rides through LiverResections' .lrp.fcsv with a schema bump
+**Open question, to be settled before the T2 PR lands.**
 
-The existing `.lrp.fcsv` storage class (per
-[ADR-0001](0001-resection-three-node-assembly.md) §3 and the round-trip
-test added in PR #294) absorbs the new fields:
+A previous draft of this ADR committed to persisting the init control
+points on the resection's data so a Planning→Init drop-back would be
+lossless.  Review surfaced a prior question: should the surgeon be
+able to drop back to Init at all?  Once Planning has moved the
+Bezier-grid geometry away from the original init ring, the init
+control points may no longer describe anything clinically meaningful;
+the drop-back would mostly be undo-style behaviour better served by
+Slicer's scene-state undo.
 
-- Ring-role metadata on the 16 Bezier control points (corner / edge /
-  interior).
+Two paths under discussion:
+
+- *No drop-back.*  Init→Planning is one-way for v2.0.0.  Init control
+  points are discarded at the transition; the Bezier 4×4 grid is the
+  sole persisted representation thereafter.  Save/load round-trip
+  captures only the Bezier grid + state-machine fields.  Simplest
+  workflow; loses recoverable intent for the surgeon who wants to
+  return to "before the fit".
+- *Drop-back with persistence.*  Init control points persist on the
+  resection's data node (handful of `double[3]` per resection — cheap)
+  so Planning→Init recovers them losslessly.  Captures intent across
+  the state boundary at the cost of slightly more storage and one more
+  state transition to validate.
+
+This ADR no longer commits to either path.  The decision feeds the
+schema design for §5 (storage) and the state-machine in ADR-0013 §4.
+Resolution by separate discussion before the T2 PR lands; outcome
+captured by amendment to this ADR.
+
+### 5. Storage — D-class break committed; format mechanism OPEN
+
+A **D-class break** per [ADR-0007](0007-version-numbering-policy.md)
+is committed: symmetric round-trip with v1 `.lrp.fcsv` files is no
+longer clean.  Already on the v1→v2 ticket and contributes to the (D)
+trigger ADR-0007 §"Mapping the v1 → v2 jump" enumerates.
+
+**The storage format itself is OPEN.**  The existing `.lrp.fcsv`
+format was driven by Markups as a base; the LiverMarkups dissolution
+in this ADR retires that base and reopens the format question.
+Candidates under discussion:
+
+- *Extended `.lrp.fcsv`.*  Schema bump in place; minimal migration
+  cost; carries legacy-format baggage.
+- *New MRML storage node.*  A
+  `vtkMRMLLiverBezierSurfaceStorageNode` purpose-built for the new
+  data model.  Cleaner schema; standard MRML scene-XML for the
+  geometry plus a sidecar (JSON or similar) for the high-volume
+  control-point payload.
+- *JSON sidecar to the scene MRML.*  Lightweight and inspection-
+  friendly; closer to the Segmentations-module convention.
+
+Fields the format must carry (regardless of mechanism):
+
+- The 16 Bezier control points with ring-role metadata (corner /
+  edge / interior).
 - Init-mode control points (2 for SlicingPlane, ≥2 for
-  DistanceSpheroid).
+  DistanceSpheroid) — quantity and persistence conditional on §4's
+  drop-back resolution.
 - State-machine fields (`ResectionState`, `InitializationMode`) as
   typed enums.
+- Margins and other decoration that previously lived on the data
+  node (per ADR-0013 §8, those move to the new display node — not
+  the storage node — though both go through the same save/load
+  path).
 
-This is a **D-class break** per [ADR-0007](0007-version-numbering-policy.md)
-(symmetric round-trip with v1 `.lrp.fcsv` files is no longer clean);
-it is already on the v1→v2 ticket and contributes to the (D) trigger
-ADR-0007 §"Mapping the v1 → v2 jump" enumerates.
+Resolution by separate discussion before the T2 PR lands; outcome
+captured by amendment to this ADR or by a follow-on ADR if the
+format choice is substantial enough to warrant its own.
 
 ### 6. Illustrative file layout
 
