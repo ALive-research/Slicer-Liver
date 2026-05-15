@@ -243,7 +243,7 @@ Slicer-Liver welcomes any and all contributions in the way of new tools/scripts,
 **Branch model**: this repository has two long-lived branches.
 
 - `preview` is the default branch and tracks Slicer's bleeding-edge `main`.  All new work targets `preview`.
-- `master` is the stable branch served to end-users via the Slicer Extension Manager on the current Slicer stable release.  It receives periodic cherry-pick backports from `preview`.
+- `main` is the stable branch served to end-users via the Slicer Extension Manager on the current Slicer stable release.  It receives periodic cherry-pick backports from `preview`.
 
 See [ADR-0006](Docs/adr/0006-branch-model.md) for the full rationale and the day-to-day workflow.
     

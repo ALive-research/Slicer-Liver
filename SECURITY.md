@@ -10,18 +10,24 @@ volumetry, distance, or resection geometry are in scope.
 ## Supported versions
 
 Security fixes are applied to the **active publishing branch** for each
-3D Slicer release line:
+3D Slicer release line, per the model formalised in
+[ADR-0006](Docs/adr/0006-branch-model.md):
 
 | 3D Slicer | Slicer-Liver publishing branch |
 |---|---|
-| 5.10 (stable) | `preview` |
+| 5.10 (stable) | `main` |
 | Slicer main / preview | `preview` |
-| 5.6 / 5.8 (legacy) | `master` |
 
 PRs against the `preview` branch (the default branch of this
 repository) are reviewed and merged following the project's normal
-process.  Older publishing branches receive fixes on a best-effort
-basis.
+process.  Fixes that need to reach Slicer-stable users are cherry-
+picked from `preview` to `main` per ADR-0006's day-to-day workflow.
+
+Slicer 5.6 and 5.8 are **no longer supported** — those release lines
+were retired in the same change set as ADR-0006 (upstream PRs against
+`Slicer/ExtensionsIndex` remove the legacy entries).  Users on those
+Slicer versions are encouraged to upgrade to current Slicer stable
+(5.10+) to continue receiving Slicer-Liver fixes.
 
 ## Reporting a vulnerability
 
