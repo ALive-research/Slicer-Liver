@@ -23,7 +23,7 @@ introduced by [ADR-0014](0014-livermarkups-dissolution.md)) and lifts
 them from `Liver/Liver.py` into a new C++ algorithm library.
 
 The Init→Planning transition (per ADR-0014 §2 and
-[ADR-0013](0013-layerdm-pipeline-pattern.md) §4) needs a Bezier fit
+ADR-0013 §4) needs a Bezier fit
 from a ring on the target liver mesh.  Two flavours, both required for
 v2.0.0:
 
@@ -318,7 +318,7 @@ the path of least friction.
   - [ADR-0008](0008-testing-strategy.md) — the C++ low-level test
     layer the new library plugs into; §2 enumerates the four-layer
     taxonomy.
-  - [ADR-0013](0013-layerdm-pipeline-pattern.md) — the Pipeline
+  - ADR-0013 — the Pipeline
     pattern that consumes the library; §4 is the state-aware-
     Pipeline pattern the Init→Planning transition rides on.
   - [ADR-0014](0014-livermarkups-dissolution.md) — the LiverMarkups
