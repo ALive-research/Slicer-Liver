@@ -9,16 +9,11 @@ fact documentation.
 Source-form diagrams only, embedded in Markdown so GitHub renders them
 inline in PR reviews.
 
-- **Mermaid in `.md` files** (preferred default) — every diagram is a
-  Markdown file containing a fenced ```` ```mermaid ```` block.  GitHub
-  renders the fence natively, so reviewers see the diagram inside the PR
-  diff with no extra click and no `.svg` artefact to keep in sync.  Use
-  Mermaid for class hierarchies, sequence/observer flows, module
-  dependency graphs, and state machines.
-- **PlantUML** (`*.puml`) — only when Mermaid's expressivity genuinely
-  falls short (rare for our needs).  When you do commit a `.puml`,
-  commit the rendered `*.svg` next to it so reviewers still see the
-  diagram in the PR.
+Every diagram is a Markdown file containing a fenced ```` ```mermaid ````
+block.  GitHub renders the fence natively, so reviewers see the diagram
+inside the PR diff with no extra click and no `.svg` artefact to keep
+in sync.  Mermaid covers what we need: class hierarchies, sequence /
+observer flows, module dependency graphs, state machines.
 
 Each `.md` diagram file should have:
 
@@ -33,8 +28,8 @@ Diagrams come in two flavours, distinguished by filename prefix:
 
 | Prefix | Meaning | Example |
 |---|---|---|
-| `current-` | The code as it is **today**.  Snapshot, evolves slowly. | `current-mrml-node-hierarchy.puml` |
-| `target-` | The architecture the refactor is moving **toward**. | `target-mrml-node-hierarchy.puml` |
+| `current-` | The code as it is **today**.  Snapshot, evolves slowly. | `current-mrml-node-hierarchy.md` |
+| `target-` | The architecture the refactor is moving **toward**. | `target-mrml-node-hierarchy.md` |
 
 When `target-X` matches reality, drop the prefix (or convert it to
 `current-X`) — that's how progress on a refactor is recorded.
@@ -54,24 +49,37 @@ Minimum useful set for any non-trivial Slicer extension:
    graph meets MRML; for Slicer-Liver, where solver outputs land in
    `vtkMRMLLiverResectionNode`.
 
-## How `/slicer-review` uses these
+## Review-time use
 
-The `/slicer-review` command reads every file in this directory into the
-review context and grades changed code against it:
+The diagrams in this directory are the **spec** a human reviewer reads
+when judging whether a PR's code change preserves, advances, or drifts
+from the intended architecture.  The rules of thumb a reviewer applies:
 
 - A PR that introduces a new `vtkMRMLLiverFooNode` without updating
-  `target-mrml-node-hierarchy.puml` triggers a **drift** comment.
-- A PR that matches a `target-*` diagram triggers a positive **advances**
-  comment.
-- A change that touches code referenced by a `current-*` diagram should
-  update that diagram in the same PR (or explicitly justify in the ADR
-  what changed).
+  `target-mrml-node-hierarchy.md` is **drift**.
+- A PR that matches a `target-*` diagram **advances** the design.
+- A PR that touches code referenced by a `current-*` diagram should
+  update that diagram in the same PR (or justify what changed in an
+  ADR).
+
+The project lead additionally has an **optional** AI-agent slash-
+command (`/slicer-review`) that reads this directory into review
+context and applies the same rules of thumb.  It is one reviewer's
+tool, **not a project-wide gate**, and contributors are not expected
+to install or run it — the rules above stand on their own for any
+reviewer.
+
+The skill itself is generic enough to apply to other Slicer
+extensions and is therefore not vendored in this repository; it lives
+in the project lead's personal AI-agent configuration.  If the skill
+stabilises and other maintainers want to run it, packaging it as a
+sharable artefact is a future concern.
 
 ## Authoring
 
-Mermaid source is plain text inside a fenced Markdown block — author with
-any text editor.  GitHub renders the fence on push; no local toolchain is
-needed for reviewing.
+Mermaid source is plain text inside a fenced Markdown block — author
+with any text editor.  GitHub renders the fence on push; no local
+toolchain is needed for reviewing.
 
 Optional local preview tools:
 
@@ -81,9 +89,6 @@ Optional local preview tools:
   (`ob-mermaid`), IntelliJ (`mermaid` plugin).
 - **CLI**: `mmdc` (mermaid-cli) for export to SVG/PNG when needed —
   rarely necessary now that GitHub renders fences.
-
-For the (rare) PlantUML case, install `plantuml` from your package
-manager of choice and render with `plantuml -tsvg path/to/file.puml`.
 
 ## Relationship to ADRs
 
