@@ -98,3 +98,92 @@ def test_label_bridge_contract(bridge):
                 assert key in sct, (
                     f"{bridge.name}: mapping '{entry['label']}' missing sct.{key}"
                 )
+
+
+# ---------------------------------------------------------------------------
+# Couinaud-specific assertions.
+#
+# The ten Couinaud codes carried by `SlicerLiver-Terminology.json` MUST be
+# the authoritative SNOMED-CT triples — not project-private placeholders.
+# Absence from Slicer's bundled `DICOM-Master.json` is the reason this file
+# ships at all; the codes themselves are real and must not drift.
+# ---------------------------------------------------------------------------
+
+# CodeMeaning -> CodeValue, verified against the SNOMED-CT browser.
+EXPECTED_COUINAUD_TYPES = {
+    "Caudate lobe of liver":  "71133005",
+    "Liver segment II":       "277956007",
+    "Liver segment III":      "277957003",
+    "Liver segment IV":       "277958008",
+    "Liver segment IVa":      "871688003",
+    "Liver segment IVb":      "871689006",
+    "Liver segment V":        "277959000",
+    "Liver segment VI":       "277960005",
+    "Liver segment VII":      "277961009",
+    "Liver segment VIII":     "277962002",
+}
+
+LIVER_SEGMENT_CATEGORY_CODE = "245553001"
+
+
+def _liver_segment_category():
+    """Locate the 'Liver segment' category, asserting it is present."""
+    data = json.loads(MAIN_FILE.read_text())
+    cats = [
+        c for c in data["SegmentationCodes"]["Category"]
+        if c.get("CodeMeaning") == "Liver segment"
+    ]
+    assert len(cats) == 1, (
+        f"expected exactly one 'Liver segment' category, found {len(cats)}"
+    )
+    return cats[0]
+
+
+def test_liver_segment_category_uses_authoritative_sct():
+    """The category itself is SNOMED-CT 245553001 'Liver segment',
+    not a project-private namespace."""
+    cat = _liver_segment_category()
+    assert cat["CodingSchemeDesignator"] == "SCT", (
+        f"category scheme must be SCT, got {cat['CodingSchemeDesignator']!r} — "
+        "private-scheme placeholders are not acceptable"
+    )
+    assert cat["CodeValue"] == LIVER_SEGMENT_CATEGORY_CODE, (
+        f"category code must be {LIVER_SEGMENT_CATEGORY_CODE}, "
+        f"got {cat['CodeValue']!r}"
+    )
+
+
+def test_couinaud_types_all_use_sct():
+    """Regression test against placeholder-scheme leakage: every Couinaud
+    segment type must declare CodingSchemeDesignator='SCT'."""
+    cat = _liver_segment_category()
+    wrong_scheme = [
+        (t["CodeMeaning"], t["CodingSchemeDesignator"])
+        for t in cat["Type"]
+        if t["CodingSchemeDesignator"] != "SCT"
+    ]
+    assert not wrong_scheme, (
+        f"Couinaud types using non-SCT scheme: {wrong_scheme}"
+    )
+
+
+def test_couinaud_codes_match_authoritative_set():
+    """Every Couinaud segment must carry the verified SNOMED-CT triple.
+    The mapping is authoritative for v2.0.0 and a drift here is either a
+    typo or a regression to placeholder codes."""
+    cat = _liver_segment_category()
+    actual = {t["CodeMeaning"]: t["CodeValue"] for t in cat["Type"]}
+    assert actual == EXPECTED_COUINAUD_TYPES, (
+        f"Couinaud CodeMeaning→CodeValue mismatch.\n"
+        f"  expected: {EXPECTED_COUINAUD_TYPES}\n"
+        f"  actual:   {actual}"
+    )
+
+
+def test_couinaud_types_count_is_ten():
+    """Sanity check — eight standard Couinaud segments (I–VIII) plus the
+    two clinically meaningful IVa/IVb subdivisions = ten types."""
+    cat = _liver_segment_category()
+    assert len(cat["Type"]) == 10, (
+        f"expected 10 Couinaud types (I–VIII + IVa + IVb), got {len(cat['Type'])}"
+    )
