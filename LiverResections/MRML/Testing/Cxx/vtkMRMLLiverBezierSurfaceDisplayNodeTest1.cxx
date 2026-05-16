@@ -263,6 +263,62 @@ int testXMLRoundTrip()
   return EXIT_SUCCESS;
 }
 
+/// Assert that calling ``setter()`` advances ``node->GetMTime()``.
+/// Helper macro so the per-setter scaffolding stays terse.
+#define EXPECT_MTIME_ADVANCES(NODE, SETTER_CALL)                              \
+  do                                                                         \
+  {                                                                          \
+    const vtkMTimeType _baseline = (NODE)->GetMTime();                       \
+    SETTER_CALL;                                                             \
+    if ((NODE)->GetMTime() <= _baseline)                                     \
+    {                                                                        \
+      std::cerr << "Expected MTime to advance after " #SETTER_CALL           \
+                << " (baseline=" << _baseline                                \
+                << ", post=" << (NODE)->GetMTime() << ")\n";                 \
+      return EXIT_FAILURE;                                                   \
+    }                                                                        \
+  } while (0)
+
+int testModifiedEventsOnSetters()
+{
+  // ADR-0008 §2 — characterise the Modified() contract on every
+  // public setter of the display node so a future drift fires a
+  // regression here rather than silently breaking the Pipeline
+  // observers downstream.
+  vtkNew<vtkMRMLLiverBezierSurfaceDisplayNode> node;
+
+  // Colour fields (vtkSetVector3Macro).
+  float c1[3] = { 0.25f, 0.5f, 0.75f };
+  EXPECT_MTIME_ADVANCES(node, node->SetResectionColor(c1));
+  float c2[3] = { 0.1f, 0.2f, 0.3f };
+  EXPECT_MTIME_ADVANCES(node, node->SetResectionGridColor(c2));
+  float c3[3] = { 0.9f, 0.8f, 0.7f };
+  EXPECT_MTIME_ADVANCES(node, node->SetResectionMarginColor(c3));
+  float c4[3] = { 0.6f, 0.5f, 0.4f };
+  EXPECT_MTIME_ADVANCES(node, node->SetUncertaintyMarginColor(c4));
+
+  // Opacity — vtkSetClampMacro.  Default is 1.0; set to 0.5.
+  EXPECT_MTIME_ADVANCES(node, node->SetResectionOpacity(0.5f));
+
+  // Grid + widget visibility — booleans, default values per
+  // testDefaults().
+  EXPECT_MTIME_ADVANCES(node, node->SetGridVisibility(true));
+  EXPECT_MTIME_ADVANCES(node, node->SetGridDivisions(4.0f));
+  EXPECT_MTIME_ADVANCES(node, node->SetGridThickness(2.5f));
+  EXPECT_MTIME_ADVANCES(node, node->SetGrid3DVisibility(false));
+  EXPECT_MTIME_ADVANCES(node, node->SetGrid2DVisibility(true));
+  EXPECT_MTIME_ADVANCES(node, node->SetWidgetVisibility(false));
+
+  // Resection-surface behaviour flags — booleans, default false.
+  EXPECT_MTIME_ADVANCES(node, node->SetClipOut(true));
+  EXPECT_MTIME_ADVANCES(node, node->SetInterpolatedMargins(true));
+  EXPECT_MTIME_ADVANCES(node, node->SetShowResection2D(true));
+  EXPECT_MTIME_ADVANCES(node, node->SetMirrorDisplay(true));
+  return EXIT_SUCCESS;
+}
+
+#undef EXPECT_MTIME_ADVANCES
+
 int testCopyContent()
 {
   vtkNew<vtkMRMLLiverBezierSurfaceDisplayNode> source;
@@ -309,6 +365,7 @@ int vtkMRMLLiverBezierSurfaceDisplayNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testSettersAndGetters());
   CHECK_EXIT_SUCCESS(testXMLRoundTrip());
   CHECK_EXIT_SUCCESS(testCopyContent());
+  CHECK_EXIT_SUCCESS(testModifiedEventsOnSetters());
 
   std::cout << "vtkMRMLLiverBezierSurfaceDisplayNodeTest1 completed successfully"
             << std::endl;

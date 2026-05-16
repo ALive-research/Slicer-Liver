@@ -405,6 +405,79 @@ int testXMLRoundTrip()
   return EXIT_SUCCESS;
 }
 
+/// Assert that calling ``setter()`` advances ``node->GetMTime()``.
+/// Helper macro so the per-setter scaffolding stays terse.
+#define EXPECT_MTIME_ADVANCES(NODE, SETTER_CALL)                              \
+  do                                                                         \
+  {                                                                          \
+    const vtkMTimeType _baseline = (NODE)->GetMTime();                       \
+    SETTER_CALL;                                                             \
+    if ((NODE)->GetMTime() <= _baseline)                                     \
+    {                                                                        \
+      std::cerr << "Expected MTime to advance after " #SETTER_CALL           \
+                << " (baseline=" << _baseline                                \
+                << ", post=" << (NODE)->GetMTime() << ")\n";                 \
+      return EXIT_FAILURE;                                                   \
+    }                                                                        \
+  } while (0)
+
+int testModifiedEventsOnSetters()
+{
+  // ADR-0008 §2 — characterise the Modified() contract on every
+  // public setter so a future drift (e.g. a setter that drops its
+  // ``this->Modified()`` call) fires a regression here rather than
+  // silently breaking observers downstream of the data node.
+  //
+  // Strategy: for each setter, capture GetMTime() before, call the
+  // setter with a value distinct from the current one, assert MTime
+  // strictly advanced.  The macro-generated setters
+  // (vtkSetMacro / vtkSetVector3Macro / vtkSetClampMacro) emit
+  // Modified() only when the new value differs, so we always feed a
+  // known-different value.
+  vtkNew<vtkMRMLLiverBezierSurfaceNode> node;
+
+  // State / InitMode — macro-generated; default Init / SlicingPlane,
+  // so swap to the other enum value.
+  EXPECT_MTIME_ADVANCES(node,
+    node->SetState(vtkMRMLLiverBezierSurfaceNode::Planning));
+  EXPECT_MTIME_ADVANCES(node,
+    node->SetInitMode(vtkMRMLLiverBezierSurfaceNode::DistanceSpheroid));
+
+  // ControlGrid — explicit setter.
+  double values[vtkMRMLLiverBezierSurfaceNode::ControlGridSize];
+  for (int i = 0; i < vtkMRMLLiverBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    values[i] = static_cast<double>(i) + 0.5;
+  }
+  EXPECT_MTIME_ADVANCES(node, node->SetControlGrid(values));
+
+  // SlicingPlane init data — explicit setters and macro-generated
+  // vtkSetVector3Macro accessors.
+  double p[3] = { 1.0, 2.0, 3.0 };
+  EXPECT_MTIME_ADVANCES(node, node->SetSlicingPlaneInitPoint(0, p));
+  double p2[3] = { 4.0, 5.0, 6.0 };
+  EXPECT_MTIME_ADVANCES(node, node->SetSlicingPlaneInitPoint(1, p2));
+  double origin[3] = { 7.0, 8.0, 9.0 };
+  EXPECT_MTIME_ADVANCES(node, node->SetSlicingPlaneOrigin(origin));
+  double normal[3] = { 1.0, 0.0, 0.0 };
+  EXPECT_MTIME_ADVANCES(node, node->SetSlicingPlaneNormal(normal));
+
+  // DistanceSpheroid init data — explicit + macro-generated.
+  EXPECT_MTIME_ADVANCES(node, node->SetNumberOfDistanceSpheroidInitPoints(2));
+  double q[3] = { 10.0, 11.0, 12.0 };
+  EXPECT_MTIME_ADVANCES(node, node->SetDistanceSpheroidInitPoint(0, q));
+  double q2[3] = { 13.0, 14.0, 15.0 };
+  EXPECT_MTIME_ADVANCES(node, node->SetDistanceSpheroidInitPoint(1, q2));
+  double center[3] = { 16.0, 17.0, 18.0 };
+  EXPECT_MTIME_ADVANCES(node, node->SetDistanceSpheroidCenter(center));
+  EXPECT_MTIME_ADVANCES(node, node->SetDistanceSpheroidRadiusX(2.5));
+  EXPECT_MTIME_ADVANCES(node, node->SetDistanceSpheroidRadiusY(3.5));
+  EXPECT_MTIME_ADVANCES(node, node->SetDistanceSpheroidRadiusZ(4.5));
+  return EXIT_SUCCESS;
+}
+
+#undef EXPECT_MTIME_ADVANCES
+
 int testCopyContent()
 {
   vtkNew<vtkMRMLLiverBezierSurfaceNode> source;
@@ -477,6 +550,7 @@ int vtkMRMLLiverBezierSurfaceNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testDistanceSpheroidInit());
   CHECK_EXIT_SUCCESS(testXMLRoundTrip());
   CHECK_EXIT_SUCCESS(testCopyContent());
+  CHECK_EXIT_SUCCESS(testModifiedEventsOnSetters());
 
   std::cout << "vtkMRMLLiverBezierSurfaceNodeTest1 completed successfully"
             << std::endl;
