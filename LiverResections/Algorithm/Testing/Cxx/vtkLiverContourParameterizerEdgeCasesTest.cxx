@@ -123,16 +123,15 @@ void testDuplicatedConsecutivePoints(SubTestReport& r)
   // TODO(#355): invert this assertion to `if (!hasNaN)` when fixed.
   if (hasNaN)
   {
-    std::fprintf(stderr,
-                 "    note: NaN propagation pinned per ADR-0003 (issue #355).\n");
+    std::fprintf(stderr, "    note: NaN propagation pinned per ADR-0003 (issue #355).\n");
     r.pass("DuplicatedConsecutivePoints");
   }
   else
   {
-    r.fail("DuplicatedConsecutivePoints: characterisation pin inverted — "
-           "zero-length-segment path no longer NaN-propagates.  "
-           "If this is intentional (issue #355 fixed), invert the assertion "
-           "and close #355.");
+    r.fail("DuplicatedConsecutivePoints",
+           "characterisation pin inverted — zero-length-segment path no longer "
+           "NaN-propagates.  If this is intentional (issue #355 fixed), invert "
+           "the assertion and close #355.");
   }
 }
 
