@@ -240,30 +240,38 @@ int testXMLRoundTrip()
   float ra[3], rb[3];
   source->GetResectionColor(rb);
   sink->GetResectionColor(ra);
-  for (int j = 0; j < 3; ++j) { CHECK_DOUBLE_TOLERANCE(ra[j], rb[j], 1e-5); }
+  for (int j = 0; j < 3; ++j)
+  {
+    CHECK_DOUBLE_TOLERANCE(ra[j], rb[j], 1e-5);
+  }
   source->GetResectionGridColor(rb);
   sink->GetResectionGridColor(ra);
-  for (int j = 0; j < 3; ++j) { CHECK_DOUBLE_TOLERANCE(ra[j], rb[j], 1e-5); }
+  for (int j = 0; j < 3; ++j)
+  {
+    CHECK_DOUBLE_TOLERANCE(ra[j], rb[j], 1e-5);
+  }
   source->GetResectionMarginColor(rb);
   sink->GetResectionMarginColor(ra);
-  for (int j = 0; j < 3; ++j) { CHECK_DOUBLE_TOLERANCE(ra[j], rb[j], 1e-5); }
+  for (int j = 0; j < 3; ++j)
+  {
+    CHECK_DOUBLE_TOLERANCE(ra[j], rb[j], 1e-5);
+  }
   source->GetUncertaintyMarginColor(rb);
   sink->GetUncertaintyMarginColor(ra);
-  for (int j = 0; j < 3; ++j) { CHECK_DOUBLE_TOLERANCE(ra[j], rb[j], 1e-5); }
+  for (int j = 0; j < 3; ++j)
+  {
+    CHECK_DOUBLE_TOLERANCE(ra[j], rb[j], 1e-5);
+  }
 
-  CHECK_DOUBLE_TOLERANCE(sink->GetResectionOpacity(),
-                         source->GetResectionOpacity(), 1e-5);
+  CHECK_DOUBLE_TOLERANCE(sink->GetResectionOpacity(), source->GetResectionOpacity(), 1e-5);
   CHECK_BOOL(sink->GetGridVisibility(), source->GetGridVisibility());
-  CHECK_DOUBLE_TOLERANCE(sink->GetGridDivisions(),
-                         source->GetGridDivisions(), 1e-5);
-  CHECK_DOUBLE_TOLERANCE(sink->GetGridThickness(),
-                         source->GetGridThickness(), 1e-5);
+  CHECK_DOUBLE_TOLERANCE(sink->GetGridDivisions(), source->GetGridDivisions(), 1e-5);
+  CHECK_DOUBLE_TOLERANCE(sink->GetGridThickness(), source->GetGridThickness(), 1e-5);
   CHECK_BOOL(sink->GetGrid3DVisibility(), source->GetGrid3DVisibility());
   CHECK_BOOL(sink->GetGrid2DVisibility(), source->GetGrid2DVisibility());
   CHECK_BOOL(sink->GetWidgetVisibility(), source->GetWidgetVisibility());
   CHECK_BOOL(sink->GetClipOut(), source->GetClipOut());
-  CHECK_BOOL(sink->GetInterpolatedMargins(),
-             source->GetInterpolatedMargins());
+  CHECK_BOOL(sink->GetInterpolatedMargins(), source->GetInterpolatedMargins());
   CHECK_BOOL(sink->GetShowResection2D(), source->GetShowResection2D());
   CHECK_BOOL(sink->GetMirrorDisplay(), source->GetMirrorDisplay());
   return EXIT_SUCCESS;
@@ -271,18 +279,16 @@ int testXMLRoundTrip()
 
 /// Assert that calling ``setter()`` advances ``node->GetMTime()``.
 /// Helper macro so the per-setter scaffolding stays terse.
-#define EXPECT_MTIME_ADVANCES(NODE, SETTER_CALL)                              \
-  do                                                                         \
-  {                                                                          \
-    const vtkMTimeType _baseline = (NODE)->GetMTime();                       \
-    SETTER_CALL;                                                             \
-    if ((NODE)->GetMTime() <= _baseline)                                     \
-    {                                                                        \
-      std::cerr << "Expected MTime to advance after " #SETTER_CALL           \
-                << " (baseline=" << _baseline                                \
-                << ", post=" << (NODE)->GetMTime() << ")\n";                 \
-      return EXIT_FAILURE;                                                   \
-    }                                                                        \
+#define EXPECT_MTIME_ADVANCES(NODE, SETTER_CALL)                                                                                              \
+  do                                                                                                                                          \
+  {                                                                                                                                           \
+    const vtkMTimeType _baseline = (NODE)->GetMTime();                                                                                        \
+    SETTER_CALL;                                                                                                                              \
+    if ((NODE)->GetMTime() <= _baseline)                                                                                                      \
+    {                                                                                                                                         \
+      std::cerr << "Expected MTime to advance after " #SETTER_CALL << " (baseline=" << _baseline << ", post=" << (NODE)->GetMTime() << ")\n"; \
+      return EXIT_FAILURE;                                                                                                                    \
+    }                                                                                                                                         \
   } while (0)
 
 int testModifiedEventsOnSetters()
@@ -340,16 +346,14 @@ int testTerminologyEntryRoundTrip()
 
   // Realistic SCT triple — Liver, anatomical structure category, no
   // modifier.  The canonical format is documented on the field.
-  const std::string sct =
-    "SCT^123037004^Anatomical Structure~SCT^10200004^Liver~^^";
+  const std::string sct = "SCT^123037004^Anatomical Structure~SCT^10200004^Liver~^^";
   const vtkMTimeType baseline = node->GetMTime();
   node->SetTerminologyEntry(sct);
   CHECK_STRING(node->GetTerminologyEntry().c_str(), sct.c_str());
   if (node->GetMTime() <= baseline)
   {
     std::cerr << "Expected MTime to advance after SetTerminologyEntry"
-              << " (baseline=" << baseline
-              << ", post=" << node->GetMTime() << ")\n";
+              << " (baseline=" << baseline << ", post=" << node->GetMTime() << ")\n";
     return EXIT_FAILURE;
   }
 
@@ -358,8 +362,7 @@ int testTerminologyEntryRoundTrip()
   // commit 07474f2 — project discipline) and the parser decodes
   // them on read.  The triple format itself uses ``^`` and ``~``
   // which are XML-safe, but ``&`` and ``<`` must round-trip too.
-  const std::string hostile =
-    "SCT^123037004^Cat & <Type>~SCT^10200004^Liver~^^";
+  const std::string hostile = "SCT^123037004^Cat & <Type>~SCT^10200004^Liver~^^";
   vtkNew<vtkMRMLBezierSurfaceDisplayNode> source;
   vtkNew<vtkMRMLScene> scene;
   source->SetScene(scene.GetPointer());
@@ -372,16 +375,14 @@ int testTerminologyEntryRoundTrip()
   // The terminologyEntry attribute must be present.
   if (xml.find("terminologyEntry=\"") == std::string::npos)
   {
-    std::cerr << "WriteXML output missing terminologyEntry attribute:\n"
-              << xml << "\n";
+    std::cerr << "WriteXML output missing terminologyEntry attribute:\n" << xml << "\n";
     return EXIT_FAILURE;
   }
   // Hostile chars must be XML-encoded in the on-wire form (else
   // the resulting XML would be malformed).
   if (xml.find("Cat & <Type>") != std::string::npos)
   {
-    std::cerr << "WriteXML output contains unencoded hostile chars:\n"
-              << xml << "\n";
+    std::cerr << "WriteXML output contains unencoded hostile chars:\n" << xml << "\n";
     return EXIT_FAILURE;
   }
 
@@ -420,8 +421,7 @@ int testTerminologyEntryRoundTrip()
     }
     std::string value = xml.substr(valStart, valEnd - valStart);
     // Manually decode the two XML entities relevant here.
-    auto replaceAll = [](std::string& s, const std::string& from,
-                         const std::string& to)
+    auto replaceAll = [](std::string& s, const std::string& from, const std::string& to)
     {
       std::size_t p = 0;
       while ((p = s.find(from, p)) != std::string::npos)
@@ -494,7 +494,7 @@ int testCopyContent()
   return EXIT_SUCCESS;
 }
 
-}  // namespace
+} // namespace
 
 //------------------------------------------------------------------------------
 int vtkMRMLBezierSurfaceDisplayNodeTest1(int, char*[])
@@ -511,7 +511,6 @@ int vtkMRMLBezierSurfaceDisplayNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testModifiedEventsOnSetters());
   CHECK_EXIT_SUCCESS(testTerminologyEntryRoundTrip());
 
-  std::cout << "vtkMRMLBezierSurfaceDisplayNodeTest1 completed successfully"
-            << std::endl;
+  std::cout << "vtkMRMLBezierSurfaceDisplayNodeTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;
 }

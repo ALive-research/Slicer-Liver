@@ -93,10 +93,9 @@
  * which retains its display fields (T2 is *additive*).  T2.7 will
  * collapse the legacy node and retire its display fields.
  */
-class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLBezierSurfaceDisplayNode
-  : public vtkMRMLDisplayNode
+class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLBezierSurfaceDisplayNode : public vtkMRMLDisplayNode
 {
- public:
+public:
   static vtkMRMLBezierSurfaceDisplayNode* New();
   vtkTypeMacro(vtkMRMLBezierSurfaceDisplayNode, vtkMRMLDisplayNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
@@ -224,13 +223,12 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLBezierSurfaceDisplayN
   vtkSetMacro(TerminologyEntry, std::string);
   vtkGetMacro(TerminologyEntry, std::string);
 
- protected:
+protected:
   vtkMRMLBezierSurfaceDisplayNode();
   ~vtkMRMLBezierSurfaceDisplayNode() override;
 
- private:
-  vtkMRMLBezierSurfaceDisplayNode(
-    const vtkMRMLBezierSurfaceDisplayNode&) = delete;
+private:
+  vtkMRMLBezierSurfaceDisplayNode(const vtkMRMLBezierSurfaceDisplayNode&) = delete;
   void operator=(const vtkMRMLBezierSurfaceDisplayNode&) = delete;
 
   float ResectionColor[3];
