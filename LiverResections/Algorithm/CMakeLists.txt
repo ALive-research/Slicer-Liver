@@ -23,18 +23,29 @@ set(KIT ${PROJECT_NAME})
 set(${KIT}_EXPORT_DIRECTIVE "VTK_SLICER_${MODULE_NAME_UPPER}_MODULE_ALGORITHM_EXPORT")
 
 #-----------------------------------------------------------------------------
-# Eigen3 (header-only, MPL2).  Slicer's superbuild exposes Eigen via
-# the standard Slicer_USE_FILE include; we also try find_package as
-# a fall-back so direct CMake builds of the extension work too.
+# Eigen3 (header-only, MPL2).
+#
+# Slicer does NOT expose Eigen as a top-level superbuild dep — it lives
+# inside ITK as `ITKInternalEigen3` (a private bundle) and inside VTK's
+# ThirdParty tree (also private).  The cleanest way to reach a public
+# Eigen3::Eigen target from an extension is to point `find_package(Eigen3)`
+# at ITK's bundled config.  ITK is already pulled in transitively by
+# Slicer's `Slicer_USE_FILE`, so `${ITK_DIR}` is set in this scope.
+#
+# Required (not QUIET) — if Eigen3 is not findable the build must fail
+# loud rather than silently compile without the include path (which was
+# the cause of the first CI failure on PR #334).
 #-----------------------------------------------------------------------------
-find_package(Eigen3 QUIET)
+find_package(ITK REQUIRED)
+find_package(Eigen3 REQUIRED CONFIG
+  HINTS
+    "${ITK_DIR}/ITKInternalEigen3-build"
+    "${ITK_DIR}/../ITK-build/ITKInternalEigen3-build"
+  )
 
 set(${KIT}_INCLUDE_DIRECTORIES
    ${CMAKE_CURRENT_BINARY_DIR}
   )
-if(Eigen3_FOUND)
-  list(APPEND ${KIT}_INCLUDE_DIRECTORIES ${EIGEN3_INCLUDE_DIR})
-endif()
 
 set(${KIT}_SRCS
   vtkLiverPlaneRingExtractor.h
@@ -60,12 +71,10 @@ SlicerMacroBuildModuleLogic(
   TARGET_LIBRARIES ${${KIT}_TARGET_LIBRARIES}
   )
 
-# Eigen3 — header-only, attach as a PUBLIC dependency where the
-# target supports it.  Slicer's superbuild path provides the include
-# directory; the find_package call above is the system-install fallback.
-if(Eigen3_FOUND AND TARGET Eigen3::Eigen)
-  target_link_libraries(${KIT} PUBLIC Eigen3::Eigen)
-endif()
+# Eigen3 — header-only.  The `find_package(Eigen3 REQUIRED CONFIG)`
+# above is guaranteed to define Eigen3::Eigen (ITK's bundled config
+# exports the standard target), so this link is unconditional.
+target_link_libraries(${KIT} PUBLIC Eigen3::Eigen)
 
 #-----------------------------------------------------------------------------
 # C++ low-level tests live next to the algorithm classes (ADR-0008 §2).
