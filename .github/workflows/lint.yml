@@ -16,7 +16,16 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 is required by the pre-commit/action --from-ref step
+      # below — pre-commit invokes `git diff --name-only <base>..<head>` to
+      # build the PR-touched file list, and the default shallow clone
+      # (fetch-depth: 1) doesn't have the base commit reachable.  Surfaced
+      # by PR #345 (ADR-0014 amendment) when PR #344's cutover became
+      # live: lint failed with `CalledProcessError: git diff …<base>..<head>`
+      # because the base commit was not in the local clone.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
