@@ -33,12 +33,12 @@ import sys
 import pytest
 
 # --------------------------------------------------------------------------- #
-# Repo geometry — Representations live under
-# ``LiverResections/Python/Representations/``.
+# Repo geometry — Representations live at
+# ``LiverResections/Representations/`` per ADR-0013 §7 file-layout.
 # --------------------------------------------------------------------------- #
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
-PY_DIR = REPO_ROOT / "LiverResections" / "Python"
+PY_DIR = REPO_ROOT / "LiverResections"
 if str(PY_DIR) not in sys.path:
     sys.path.insert(0, str(PY_DIR))
 

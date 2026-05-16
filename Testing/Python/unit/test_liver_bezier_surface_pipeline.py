@@ -31,14 +31,15 @@ import sys
 import pytest
 
 # --------------------------------------------------------------------------- #
-# Repo geometry — the Pipeline lives under ``LiverResections/Python/``; add
-# that directory to ``sys.path`` so ``import LiverBezierSurfacePipeline``
-# resolves without depending on a Slicer-built install layout.  Pattern
-# matches the sys.path manipulation in ``test_bezier_characterization.py``.
+# Repo geometry — the Pipeline lives at ``LiverResections/LiverBezierSurfacePipeline.py``
+# per ADR-0013 §7 file-layout; add ``LiverResections/`` to ``sys.path`` so
+# ``import LiverBezierSurfacePipeline`` resolves without depending on a
+# Slicer-built install layout.  Pattern matches the sys.path manipulation
+# in ``test_bezier_characterization.py``.
 # --------------------------------------------------------------------------- #
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
-PY_DIR = REPO_ROOT / "LiverResections" / "Python"
+PY_DIR = REPO_ROOT / "LiverResections"
 if str(PY_DIR) not in sys.path:
     sys.path.insert(0, str(PY_DIR))
 
