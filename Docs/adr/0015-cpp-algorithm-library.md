@@ -165,11 +165,25 @@ what the parent module already pulls in:
 - **Eigen** (MPL2, header-only) — linear algebra for the Bezier
   pseudo-inverse fit (`(N^T N)^{-1} N^T` style normal-equation
   solves on the 4×4 basis matrices and the per-axis matrix
-  multiply) and the EFD harmonic-integration sums.  Slicer's
-  superbuild ships Eigen (`Slicer_USE_Eigen` defaults on in
-  current Slicer main); enabled via `find_package(Eigen3 REQUIRED)`
-  from the new CMakeLists.  **No new external dep is introduced
-  beyond what Slicer's superbuild already provides.**
+  multiply) and the EFD harmonic-integration sums.  Slicer does
+  **not** ship Eigen as a top-level superbuild dependency; the
+  reachable Eigen3 `find_package(Eigen3 CONFIG REQUIRED)` target
+  comes from **ITK's bundled `ITKInternalEigen3` private tree**
+  (ITK is mandatory in any Slicer extension via `Slicer_USE_FILE`,
+  so `${ITK_DIR}` is in scope).  The new CMakeLists points
+  `find_package` at that bundled config via:
+
+  ```cmake
+  find_package(ITK REQUIRED)
+  find_package(Eigen3 REQUIRED CONFIG
+    HINTS
+      "${ITK_DIR}/ITKInternalEigen3-build"
+      "${ITK_DIR}/../ITK-build/ITKInternalEigen3-build"
+  )
+  ```
+
+  **No new external dep is introduced** — Eigen is reached
+  transitively through ITK, which is already mandatory.
 
 Deliberately **not** required:
 
