@@ -1,0 +1,484 @@
+/*==============================================================================
+
+ Distributed under the OSI-approved BSD 3-Clause License.
+
+  Copyright (c) Oslo University Hospital. All rights reserved.
+
+  Tests for vtkMRMLLiverBezierSurfaceNode — the data-only node landed by
+  ADR-0014 §1.  Exercises:
+
+   - defaults (constructor values)
+   - State / InitializationMode enum round-trip
+   - Bezier control grid round-trip
+   - SlicingPlane init-mode subordinate data
+   - DistanceSpheroid init-mode subordinate data
+   - XML serialize/deserialize via an internal scene snapshot
+   - CopyContent / DeepCopy
+
+==============================================================================*/
+
+// MRML includes
+#include "vtkMRMLCoreTestingMacros.h"
+#include "vtkMRMLLiverBezierSurfaceNode.h"
+#include "vtkMRMLScene.h"
+
+// VTK includes
+#include <vtkNew.h>
+#include <vtkSmartPointer.h>
+
+// STD includes
+#include <cmath>
+#include <iostream>
+#include <sstream>
+#include <string>
+
+namespace
+{
+
+int testDefaults()
+{
+  vtkNew<vtkMRMLLiverBezierSurfaceNode> node;
+
+  CHECK_INT(node->GetState(),
+            vtkMRMLLiverBezierSurfaceNode::Init);
+  CHECK_INT(node->GetInitMode(),
+            vtkMRMLLiverBezierSurfaceNode::SlicingPlane);
+  CHECK_INT(node->GetNumberOfDistanceSpheroidInitPoints(), 0);
+  CHECK_DOUBLE(node->GetDistanceSpheroidRadiusX(), 0.0);
+  CHECK_DOUBLE(node->GetDistanceSpheroidRadiusY(), 0.0);
+  CHECK_DOUBLE(node->GetDistanceSpheroidRadiusZ(), 0.0);
+
+  // Control grid starts zero-filled.
+  const double* grid = node->GetControlGrid();
+  for (int i = 0; i < vtkMRMLLiverBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    CHECK_DOUBLE(grid[i], 0.0);
+  }
+  double origin[3] = { 1.0, 1.0, 1.0 };
+  node->GetSlicingPlaneOrigin(origin);
+  CHECK_DOUBLE(origin[0], 0.0);
+  CHECK_DOUBLE(origin[1], 0.0);
+  CHECK_DOUBLE(origin[2], 0.0);
+
+  double normal[3] = { 0.0, 0.0, 0.0 };
+  node->GetSlicingPlaneNormal(normal);
+  CHECK_DOUBLE(normal[0], 0.0);
+  CHECK_DOUBLE(normal[1], 0.0);
+  CHECK_DOUBLE(normal[2], 1.0);
+
+  CHECK_STRING(node->GetNodeTagName(), "LiverBezierSurface");
+  return EXIT_SUCCESS;
+}
+
+int testEnumRoundTrip()
+{
+  vtkNew<vtkMRMLLiverBezierSurfaceNode> node;
+
+  node->SetState(vtkMRMLLiverBezierSurfaceNode::Planning);
+  CHECK_INT(node->GetState(), vtkMRMLLiverBezierSurfaceNode::Planning);
+  node->SetState(vtkMRMLLiverBezierSurfaceNode::Init);
+  CHECK_INT(node->GetState(), vtkMRMLLiverBezierSurfaceNode::Init);
+
+  node->SetInitMode(
+    vtkMRMLLiverBezierSurfaceNode::DistanceSpheroid);
+  CHECK_INT(node->GetInitMode(),
+            vtkMRMLLiverBezierSurfaceNode::DistanceSpheroid);
+
+  CHECK_STRING(
+    vtkMRMLLiverBezierSurfaceNode::GetStateAsString(
+      vtkMRMLLiverBezierSurfaceNode::Init),
+    "Init");
+  CHECK_STRING(
+    vtkMRMLLiverBezierSurfaceNode::GetStateAsString(
+      vtkMRMLLiverBezierSurfaceNode::Planning),
+    "Planning");
+  CHECK_INT(
+    vtkMRMLLiverBezierSurfaceNode::GetStateFromString("Init"),
+    vtkMRMLLiverBezierSurfaceNode::Init);
+  CHECK_INT(
+    vtkMRMLLiverBezierSurfaceNode::GetStateFromString("Planning"),
+    vtkMRMLLiverBezierSurfaceNode::Planning);
+  CHECK_INT(
+    vtkMRMLLiverBezierSurfaceNode::GetStateFromString("bogus"), -1);
+
+  CHECK_STRING(
+    vtkMRMLLiverBezierSurfaceNode::GetInitModeAsString(
+      vtkMRMLLiverBezierSurfaceNode::SlicingPlane),
+    "SlicingPlane");
+  CHECK_STRING(
+    vtkMRMLLiverBezierSurfaceNode::GetInitModeAsString(
+      vtkMRMLLiverBezierSurfaceNode::DistanceSpheroid),
+    "DistanceSpheroid");
+  CHECK_INT(
+    vtkMRMLLiverBezierSurfaceNode::GetInitModeFromString(
+      "DistanceSpheroid"),
+    vtkMRMLLiverBezierSurfaceNode::DistanceSpheroid);
+  CHECK_INT(
+    vtkMRMLLiverBezierSurfaceNode::GetInitModeFromString(nullptr),
+    -1);
+  return EXIT_SUCCESS;
+}
+
+int testControlGridRoundTrip()
+{
+  vtkNew<vtkMRMLLiverBezierSurfaceNode> node;
+
+  // Fill with a structured pattern so any layout bug shows up.
+  double values[vtkMRMLLiverBezierSurfaceNode::ControlGridSize];
+  for (int i = 0; i < vtkMRMLLiverBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    values[i] = static_cast<double>(i) * 0.5 + 0.25;
+  }
+  CHECK_BOOL(node->SetControlGrid(values), true);
+
+  const double* grid = node->GetControlGrid();
+  for (int i = 0; i < vtkMRMLLiverBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    CHECK_DOUBLE(grid[i], values[i]);
+  }
+
+  // Null pointer rejected.
+  CHECK_BOOL(node->SetControlGrid(nullptr), false);
+  // Re-check values were not clobbered.
+  for (int i = 0; i < vtkMRMLLiverBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    CHECK_DOUBLE(node->GetControlGrid()[i], values[i]);
+  }
+  return EXIT_SUCCESS;
+}
+
+int testSlicingPlaneInit()
+{
+  vtkNew<vtkMRMLLiverBezierSurfaceNode> node;
+
+  double p0[3] = { 1.0, 2.0, 3.0 };
+  double p1[3] = { -1.5, 4.0, 7.25 };
+  CHECK_BOOL(node->SetSlicingPlaneInitPoint(0, p0), true);
+  CHECK_BOOL(node->SetSlicingPlaneInitPoint(1, p1), true);
+  CHECK_BOOL(node->SetSlicingPlaneInitPoint(2, p0), false);
+  CHECK_BOOL(node->SetSlicingPlaneInitPoint(-1, p0), false);
+  CHECK_BOOL(node->SetSlicingPlaneInitPoint(0, nullptr), false);
+
+  const double* got0 = node->GetSlicingPlaneInitPoint(0);
+  CHECK_NOT_NULL(got0);
+  CHECK_DOUBLE(got0[0], 1.0);
+  CHECK_DOUBLE(got0[1], 2.0);
+  CHECK_DOUBLE(got0[2], 3.0);
+
+  const double* got1 = node->GetSlicingPlaneInitPoint(1);
+  CHECK_NOT_NULL(got1);
+  CHECK_DOUBLE(got1[0], -1.5);
+  CHECK_DOUBLE(got1[1], 4.0);
+  CHECK_DOUBLE(got1[2], 7.25);
+
+  CHECK_NULL(node->GetSlicingPlaneInitPoint(2));
+
+  double origin[3] = { 10.0, 20.0, 30.0 };
+  double normal[3] = { 0.0, 1.0, 0.0 };
+  node->SetSlicingPlaneOrigin(origin);
+  node->SetSlicingPlaneNormal(normal);
+  double readBack[3];
+  node->GetSlicingPlaneOrigin(readBack);
+  CHECK_DOUBLE(readBack[0], 10.0);
+  CHECK_DOUBLE(readBack[1], 20.0);
+  CHECK_DOUBLE(readBack[2], 30.0);
+  node->GetSlicingPlaneNormal(readBack);
+  CHECK_DOUBLE(readBack[0], 0.0);
+  CHECK_DOUBLE(readBack[1], 1.0);
+  CHECK_DOUBLE(readBack[2], 0.0);
+  return EXIT_SUCCESS;
+}
+
+int testDistanceSpheroidInit()
+{
+  vtkNew<vtkMRMLLiverBezierSurfaceNode> node;
+
+  node->SetNumberOfDistanceSpheroidInitPoints(3);
+  CHECK_INT(node->GetNumberOfDistanceSpheroidInitPoints(), 3);
+
+  double p0[3] = { 0.1, 0.2, 0.3 };
+  double p1[3] = { 1.1, 1.2, 1.3 };
+  double p2[3] = { 2.1, 2.2, 2.3 };
+  CHECK_BOOL(node->SetDistanceSpheroidInitPoint(0, p0), true);
+  CHECK_BOOL(node->SetDistanceSpheroidInitPoint(1, p1), true);
+  CHECK_BOOL(node->SetDistanceSpheroidInitPoint(2, p2), true);
+  // Out-of-range / null rejected.
+  CHECK_BOOL(node->SetDistanceSpheroidInitPoint(3, p0), false);
+  CHECK_BOOL(node->SetDistanceSpheroidInitPoint(-1, p0), false);
+  CHECK_BOOL(node->SetDistanceSpheroidInitPoint(0, nullptr), false);
+
+  for (int i = 0; i < 3; ++i)
+  {
+    const double* got = node->GetDistanceSpheroidInitPoint(i);
+    CHECK_NOT_NULL(got);
+    CHECK_DOUBLE(got[0], static_cast<double>(i) + 0.1);
+    CHECK_DOUBLE(got[1], static_cast<double>(i) + 0.2);
+    CHECK_DOUBLE(got[2], static_cast<double>(i) + 0.3);
+  }
+  CHECK_NULL(node->GetDistanceSpheroidInitPoint(3));
+
+  double center[3] = { 5.0, 6.0, 7.0 };
+  node->SetDistanceSpheroidCenter(center);
+  double readBack[3];
+  node->GetDistanceSpheroidCenter(readBack);
+  CHECK_DOUBLE(readBack[0], 5.0);
+  CHECK_DOUBLE(readBack[1], 6.0);
+  CHECK_DOUBLE(readBack[2], 7.0);
+
+  node->SetDistanceSpheroidRadiusX(2.5);
+  node->SetDistanceSpheroidRadiusY(3.5);
+  node->SetDistanceSpheroidRadiusZ(4.5);
+  CHECK_DOUBLE(node->GetDistanceSpheroidRadiusX(), 2.5);
+  CHECK_DOUBLE(node->GetDistanceSpheroidRadiusY(), 3.5);
+  CHECK_DOUBLE(node->GetDistanceSpheroidRadiusZ(), 4.5);
+
+  // Clamp on negative — vtkSetClampMacro pins to >= 0.
+  node->SetDistanceSpheroidRadiusX(-1.0);
+  CHECK_DOUBLE(node->GetDistanceSpheroidRadiusX(), 0.0);
+
+  // Shrink-and-grow: shrinking to 1 then back to 3 should zero-fill.
+  node->SetNumberOfDistanceSpheroidInitPoints(1);
+  CHECK_INT(node->GetNumberOfDistanceSpheroidInitPoints(), 1);
+  CHECK_NULL(node->GetDistanceSpheroidInitPoint(1));
+  node->SetNumberOfDistanceSpheroidInitPoints(3);
+  for (int i = 0; i < 3; ++i)
+  {
+    const double* got = node->GetDistanceSpheroidInitPoint(i);
+    CHECK_NOT_NULL(got);
+    CHECK_DOUBLE(got[0], 0.0);
+    CHECK_DOUBLE(got[1], 0.0);
+    CHECK_DOUBLE(got[2], 0.0);
+  }
+  return EXIT_SUCCESS;
+}
+
+int testXMLRoundTrip()
+{
+  vtkNew<vtkMRMLLiverBezierSurfaceNode> source;
+  vtkNew<vtkMRMLScene> scene;
+  source->SetScene(scene.GetPointer());
+
+  source->SetState(vtkMRMLLiverBezierSurfaceNode::Planning);
+  source->SetInitMode(
+    vtkMRMLLiverBezierSurfaceNode::DistanceSpheroid);
+
+  double values[vtkMRMLLiverBezierSurfaceNode::ControlGridSize];
+  for (int i = 0; i < vtkMRMLLiverBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    values[i] = std::sin(static_cast<double>(i) * 0.1);
+  }
+  source->SetControlGrid(values);
+
+  double p0[3] = { 1.0, 2.0, 3.0 };
+  double p1[3] = { -4.0, 5.0, -6.0 };
+  source->SetSlicingPlaneInitPoint(0, p0);
+  source->SetSlicingPlaneInitPoint(1, p1);
+  double origin[3] = { 7.5, 8.5, 9.5 };
+  double normal[3] = { 0.0, 0.0, -1.0 };
+  source->SetSlicingPlaneOrigin(origin);
+  source->SetSlicingPlaneNormal(normal);
+
+  source->SetNumberOfDistanceSpheroidInitPoints(2);
+  double q0[3] = { 11.0, 12.0, 13.0 };
+  double q1[3] = { 14.0, 15.0, 16.0 };
+  source->SetDistanceSpheroidInitPoint(0, q0);
+  source->SetDistanceSpheroidInitPoint(1, q1);
+  double center[3] = { 17.0, 18.0, 19.0 };
+  source->SetDistanceSpheroidCenter(center);
+  source->SetDistanceSpheroidRadiusX(2.0);
+  source->SetDistanceSpheroidRadiusY(3.0);
+  source->SetDistanceSpheroidRadiusZ(4.0);
+
+  // Serialize to a string buffer.
+  std::ostringstream out;
+  source->WriteXML(out, 0);
+  const std::string xml = out.str();
+
+  // Parse the attribute string back into a name=value pointer array.
+  // WriteXML emits attributes as `name="value"` separated by spaces.
+  std::vector<std::string> storage;  // owns the parsed strings
+  // Naive parser: walks the XML attribute list emitted by WriteXML.
+  // This is good enough for the round-trip test; the production load
+  // path goes through libxml2, which is not linked into this test.
+  std::size_t pos = 0;
+  while (pos < xml.size())
+  {
+    while (pos < xml.size() && std::isspace(xml[pos]))
+    {
+      ++pos;
+    }
+    if (pos >= xml.size())
+    {
+      break;
+    }
+    const std::size_t eq = xml.find('=', pos);
+    if (eq == std::string::npos)
+    {
+      break;
+    }
+    std::string name = xml.substr(pos, eq - pos);
+    if (eq + 1 >= xml.size() || xml[eq + 1] != '"')
+    {
+      break;
+    }
+    const std::size_t valStart = eq + 2;
+    const std::size_t valEnd = xml.find('"', valStart);
+    if (valEnd == std::string::npos)
+    {
+      break;
+    }
+    std::string value = xml.substr(valStart, valEnd - valStart);
+    storage.push_back(name);
+    storage.push_back(value);
+    pos = valEnd + 1;
+  }
+
+  std::vector<const char*> atts;
+  atts.reserve(storage.size() + 1);
+  for (const auto& s : storage)
+  {
+    atts.push_back(s.c_str());
+  }
+  atts.push_back(nullptr);
+
+  vtkNew<vtkMRMLLiverBezierSurfaceNode> sink;
+  sink->SetScene(scene.GetPointer());
+  sink->ReadXMLAttributes(atts.data());
+
+  CHECK_INT(sink->GetState(), source->GetState());
+  CHECK_INT(sink->GetInitMode(), source->GetInitMode());
+
+  for (int i = 0; i < vtkMRMLLiverBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    // Bit-equivalence is not guaranteed across decimal round-trip
+    // (ostream<< double uses default precision); a tight tolerance
+    // tracks the worst case.  This is the same trade-off Slicer's
+    // own vtkMRMLPlotSeriesNode XML serialisation accepts.
+    CHECK_DOUBLE_TOLERANCE(sink->GetControlGrid()[i],
+                           source->GetControlGrid()[i], 1e-5);
+  }
+
+  for (int i = 0; i < 2; ++i)
+  {
+    const double* a = sink->GetSlicingPlaneInitPoint(i);
+    const double* b = source->GetSlicingPlaneInitPoint(i);
+    CHECK_NOT_NULL(a);
+    CHECK_NOT_NULL(b);
+    for (int j = 0; j < 3; ++j)
+    {
+      CHECK_DOUBLE_TOLERANCE(a[j], b[j], 1e-5);
+    }
+  }
+
+  double a3[3], b3[3];
+  sink->GetSlicingPlaneOrigin(a3);
+  source->GetSlicingPlaneOrigin(b3);
+  for (int j = 0; j < 3; ++j) { CHECK_DOUBLE_TOLERANCE(a3[j], b3[j], 1e-5); }
+  sink->GetSlicingPlaneNormal(a3);
+  source->GetSlicingPlaneNormal(b3);
+  for (int j = 0; j < 3; ++j) { CHECK_DOUBLE_TOLERANCE(a3[j], b3[j], 1e-5); }
+
+  CHECK_INT(sink->GetNumberOfDistanceSpheroidInitPoints(),
+            source->GetNumberOfDistanceSpheroidInitPoints());
+  for (int i = 0; i < sink->GetNumberOfDistanceSpheroidInitPoints(); ++i)
+  {
+    const double* a = sink->GetDistanceSpheroidInitPoint(i);
+    const double* b = source->GetDistanceSpheroidInitPoint(i);
+    CHECK_NOT_NULL(a);
+    CHECK_NOT_NULL(b);
+    for (int j = 0; j < 3; ++j)
+    {
+      CHECK_DOUBLE_TOLERANCE(a[j], b[j], 1e-5);
+    }
+  }
+
+  sink->GetDistanceSpheroidCenter(a3);
+  source->GetDistanceSpheroidCenter(b3);
+  for (int j = 0; j < 3; ++j) { CHECK_DOUBLE_TOLERANCE(a3[j], b3[j], 1e-5); }
+
+  CHECK_DOUBLE_TOLERANCE(sink->GetDistanceSpheroidRadiusX(),
+                         source->GetDistanceSpheroidRadiusX(), 1e-5);
+  CHECK_DOUBLE_TOLERANCE(sink->GetDistanceSpheroidRadiusY(),
+                         source->GetDistanceSpheroidRadiusY(), 1e-5);
+  CHECK_DOUBLE_TOLERANCE(sink->GetDistanceSpheroidRadiusZ(),
+                         source->GetDistanceSpheroidRadiusZ(), 1e-5);
+  return EXIT_SUCCESS;
+}
+
+int testCopyContent()
+{
+  vtkNew<vtkMRMLLiverBezierSurfaceNode> source;
+  source->SetState(vtkMRMLLiverBezierSurfaceNode::Planning);
+  source->SetInitMode(
+    vtkMRMLLiverBezierSurfaceNode::DistanceSpheroid);
+
+  double values[vtkMRMLLiverBezierSurfaceNode::ControlGridSize];
+  for (int i = 0; i < vtkMRMLLiverBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    values[i] = static_cast<double>(i) + 0.125;
+  }
+  source->SetControlGrid(values);
+
+  source->SetNumberOfDistanceSpheroidInitPoints(2);
+  double q0[3] = { 1.0, 2.0, 3.0 };
+  double q1[3] = { 4.0, 5.0, 6.0 };
+  source->SetDistanceSpheroidInitPoint(0, q0);
+  source->SetDistanceSpheroidInitPoint(1, q1);
+  source->SetDistanceSpheroidRadiusX(1.5);
+  source->SetDistanceSpheroidRadiusY(2.5);
+  source->SetDistanceSpheroidRadiusZ(3.5);
+
+  vtkNew<vtkMRMLLiverBezierSurfaceNode> sink;
+  sink->CopyContent(source.GetPointer(), /*deepCopy=*/true);
+
+  CHECK_INT(sink->GetState(), source->GetState());
+  CHECK_INT(sink->GetInitMode(), source->GetInitMode());
+  for (int i = 0; i < vtkMRMLLiverBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    CHECK_DOUBLE(sink->GetControlGrid()[i], source->GetControlGrid()[i]);
+  }
+  CHECK_INT(sink->GetNumberOfDistanceSpheroidInitPoints(), 2);
+  for (int i = 0; i < 2; ++i)
+  {
+    const double* a = sink->GetDistanceSpheroidInitPoint(i);
+    const double* b = source->GetDistanceSpheroidInitPoint(i);
+    CHECK_NOT_NULL(a);
+    CHECK_NOT_NULL(b);
+    for (int j = 0; j < 3; ++j) { CHECK_DOUBLE(a[j], b[j]); }
+  }
+  CHECK_DOUBLE(sink->GetDistanceSpheroidRadiusX(), 1.5);
+  CHECK_DOUBLE(sink->GetDistanceSpheroidRadiusY(), 2.5);
+  CHECK_DOUBLE(sink->GetDistanceSpheroidRadiusZ(), 3.5);
+
+  // Mutating the source must not affect the sink (deep-copy semantics).
+  double override0[3] = { -99.0, -99.0, -99.0 };
+  source->SetDistanceSpheroidInitPoint(0, override0);
+  CHECK_DOUBLE(sink->GetDistanceSpheroidInitPoint(0)[0], 1.0);
+  return EXIT_SUCCESS;
+}
+
+}  // namespace
+
+//------------------------------------------------------------------------------
+int vtkMRMLLiverBezierSurfaceNodeTest1(int, char*[])
+{
+  // Exercise the base-class MRML methods (constructor, getters/setters,
+  // Copy, scene registration round-trip).  This catches missing
+  // CreateNodeInstance / vtkStandardNewMacro plumbing.
+  vtkNew<vtkMRMLScene> scene;
+  vtkNew<vtkMRMLLiverBezierSurfaceNode> exerciseNode;
+  exerciseNode->SetScene(scene.GetPointer());
+  EXERCISE_ALL_BASIC_MRML_METHODS(exerciseNode.GetPointer());
+
+  CHECK_EXIT_SUCCESS(testDefaults());
+  CHECK_EXIT_SUCCESS(testEnumRoundTrip());
+  CHECK_EXIT_SUCCESS(testControlGridRoundTrip());
+  CHECK_EXIT_SUCCESS(testSlicingPlaneInit());
+  CHECK_EXIT_SUCCESS(testDistanceSpheroidInit());
+  CHECK_EXIT_SUCCESS(testXMLRoundTrip());
+  CHECK_EXIT_SUCCESS(testCopyContent());
+
+  std::cout << "vtkMRMLLiverBezierSurfaceNodeTest1 completed successfully"
+            << std::endl;
+  return EXIT_SUCCESS;
+}
