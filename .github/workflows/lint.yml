@@ -22,4 +22,14 @@ jobs:
         with:
           python-version: "3.12"
 
+      # ADR-0016 §"Cutover discipline" commits to "run hooks only on
+      # PR-touched files" so existing un-reformatted code is grandfathered
+      # until something touches it.  The pre-commit/action default is
+      # `extra_args: --all-files`, which checks every file in the repo —
+      # surfaced by PR #341 (T2 Stack 2) where Lint failed on ~19 unrelated
+      # files (`Paper/`, `LiverSegments/`, `LiverVolumetry/`, etc.).
+      # Restrict to PR-diff on pull_request events; push events to preview
+      # still run --all-files to catch any drift on the trunk.
       - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
+        with:
+          extra_args: ${{ github.event_name == 'pull_request' && format('--from-ref {0} --to-ref {1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || '--all-files' }}
