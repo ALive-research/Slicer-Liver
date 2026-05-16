@@ -159,6 +159,13 @@ jobs:
       # Filter is PR-scoped — push events (merge to preview, direct push,
       # workflow_dispatch) always run the full build to catch any drift.
       # ---------------------------------------------------------------------
+      # dorny/paths-filter@v3 with `predicate-quantifier: every` matches
+      # *every* changed file against *every* pattern in the filter list
+      # (rather than the union of patterns), so listing the docs paths as
+      # separate list entries fails for any single file that doesn't satisfy
+      # all of them simultaneously — surfaced by PR #340 (one ADR change,
+      # didn't skip).  Consolidate to a single brace-expanded pattern so the
+      # quantifier sees one alternation that each file must match.
       - name: Detect docs-only change
         id: changes
         if: github.event_name == 'pull_request'
@@ -167,13 +174,7 @@ jobs:
           predicate-quantifier: every
           filters: |
             docs-only:
-              - 'Docs/**'
-              - '*.md'
-              - '.github/pull_request_template.md'
-              - '.github/CODEOWNERS'
-              - 'CITATION.cff'
-              - 'License.txt'
-              - 'COPYRIGHT.txt'
+              - '{Docs/**,*.md,.github/pull_request_template.md,.github/CODEOWNERS,CITATION.cff,License.txt,COPYRIGHT.txt}'
 
       - name: Report skip (docs-only PR)
         if: github.event_name == 'pull_request' && steps.changes.outputs.docs-only == 'true'
