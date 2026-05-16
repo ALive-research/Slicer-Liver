@@ -38,8 +38,8 @@
 ==============================================================================*/
 
 // This module MRML includes
-#include "vtkMRMLLiverBezierSurfaceNode.h"
-#include "vtkMRMLLiverBezierSurfaceDisplayNode.h"
+#include "vtkMRMLBezierSurfaceNode.h"
+#include "vtkMRMLBezierSurfaceDisplayNode.h"
 
 // MRML includes
 #include <vtkMRMLNodePropertyMacros.h>
@@ -57,10 +57,10 @@
 #include <string>
 
 //------------------------------------------------------------------------------
-vtkMRMLNodeNewMacro(vtkMRMLLiverBezierSurfaceNode);
+vtkMRMLNodeNewMacro(vtkMRMLBezierSurfaceNode);
 
 //------------------------------------------------------------------------------
-vtkMRMLLiverBezierSurfaceNode::vtkMRMLLiverBezierSurfaceNode()
+vtkMRMLBezierSurfaceNode::vtkMRMLBezierSurfaceNode()
   : State(ResectionState::Init)
   , InitMode(InitializationMode::SlicingPlane)
   , NumberOfDistanceSpheroidInitPoints(0)
@@ -90,10 +90,10 @@ vtkMRMLLiverBezierSurfaceNode::vtkMRMLLiverBezierSurfaceNode()
 }
 
 //------------------------------------------------------------------------------
-vtkMRMLLiverBezierSurfaceNode::~vtkMRMLLiverBezierSurfaceNode() = default;
+vtkMRMLBezierSurfaceNode::~vtkMRMLBezierSurfaceNode() = default;
 
 //------------------------------------------------------------------------------
-const char* vtkMRMLLiverBezierSurfaceNode::GetStateAsString(int state)
+const char* vtkMRMLBezierSurfaceNode::GetStateAsString(int state)
 {
   switch (state)
   {
@@ -104,7 +104,7 @@ const char* vtkMRMLLiverBezierSurfaceNode::GetStateAsString(int state)
 }
 
 //------------------------------------------------------------------------------
-int vtkMRMLLiverBezierSurfaceNode::GetStateFromString(const char* name)
+int vtkMRMLBezierSurfaceNode::GetStateFromString(const char* name)
 {
   if (name == nullptr)
   {
@@ -121,7 +121,7 @@ int vtkMRMLLiverBezierSurfaceNode::GetStateFromString(const char* name)
 }
 
 //------------------------------------------------------------------------------
-const char* vtkMRMLLiverBezierSurfaceNode::GetInitModeAsString(int mode)
+const char* vtkMRMLBezierSurfaceNode::GetInitModeAsString(int mode)
 {
   switch (mode)
   {
@@ -132,7 +132,7 @@ const char* vtkMRMLLiverBezierSurfaceNode::GetInitModeAsString(int mode)
 }
 
 //------------------------------------------------------------------------------
-int vtkMRMLLiverBezierSurfaceNode::GetInitModeFromString(const char* name)
+int vtkMRMLBezierSurfaceNode::GetInitModeFromString(const char* name)
 {
   if (name == nullptr)
   {
@@ -149,7 +149,7 @@ int vtkMRMLLiverBezierSurfaceNode::GetInitModeFromString(const char* name)
 }
 
 //------------------------------------------------------------------------------
-bool vtkMRMLLiverBezierSurfaceNode::SetControlGrid(const double* values)
+bool vtkMRMLBezierSurfaceNode::SetControlGrid(const double* values)
 {
   if (values == nullptr)
   {
@@ -161,7 +161,7 @@ bool vtkMRMLLiverBezierSurfaceNode::SetControlGrid(const double* values)
 }
 
 //------------------------------------------------------------------------------
-bool vtkMRMLLiverBezierSurfaceNode::SetSlicingPlaneInitPoint(int index,
+bool vtkMRMLBezierSurfaceNode::SetSlicingPlaneInitPoint(int index,
                                                              const double point[3])
 {
   if (index < 0 || index > 1 || point == nullptr)
@@ -176,7 +176,7 @@ bool vtkMRMLLiverBezierSurfaceNode::SetSlicingPlaneInitPoint(int index,
 }
 
 //------------------------------------------------------------------------------
-const double* vtkMRMLLiverBezierSurfaceNode::GetSlicingPlaneInitPoint(int index) const
+const double* vtkMRMLBezierSurfaceNode::GetSlicingPlaneInitPoint(int index) const
 {
   if (index < 0 || index > 1)
   {
@@ -186,7 +186,7 @@ const double* vtkMRMLLiverBezierSurfaceNode::GetSlicingPlaneInitPoint(int index)
 }
 
 //------------------------------------------------------------------------------
-void vtkMRMLLiverBezierSurfaceNode::SetNumberOfDistanceSpheroidInitPoints(int n)
+void vtkMRMLBezierSurfaceNode::SetNumberOfDistanceSpheroidInitPoints(int n)
 {
   if (n < 0)
   {
@@ -202,7 +202,7 @@ void vtkMRMLLiverBezierSurfaceNode::SetNumberOfDistanceSpheroidInitPoints(int n)
 }
 
 //------------------------------------------------------------------------------
-bool vtkMRMLLiverBezierSurfaceNode::SetDistanceSpheroidInitPoint(int index,
+bool vtkMRMLBezierSurfaceNode::SetDistanceSpheroidInitPoint(int index,
                                                                  const double point[3])
 {
   if (index < 0 || index >= this->NumberOfDistanceSpheroidInitPoints
@@ -220,7 +220,7 @@ bool vtkMRMLLiverBezierSurfaceNode::SetDistanceSpheroidInitPoint(int index,
 
 //------------------------------------------------------------------------------
 const double*
-vtkMRMLLiverBezierSurfaceNode::GetDistanceSpheroidInitPoint(int index) const
+vtkMRMLBezierSurfaceNode::GetDistanceSpheroidInitPoint(int index) const
 {
   if (index < 0 || index >= this->NumberOfDistanceSpheroidInitPoints)
   {
@@ -266,7 +266,7 @@ namespace
 }
 
 //------------------------------------------------------------------------------
-void vtkMRMLLiverBezierSurfaceNode::WriteXML(ostream& of, int nIndent)
+void vtkMRMLBezierSurfaceNode::WriteXML(ostream& of, int nIndent)
 {
   Superclass::WriteXML(of, nIndent);
 
@@ -314,7 +314,7 @@ void vtkMRMLLiverBezierSurfaceNode::WriteXML(ostream& of, int nIndent)
 }
 
 //------------------------------------------------------------------------------
-void vtkMRMLLiverBezierSurfaceNode::ReadXMLAttributes(const char** atts)
+void vtkMRMLBezierSurfaceNode::ReadXMLAttributes(const char** atts)
 {
   int disabledModify = this->StartModify();
 
@@ -406,17 +406,17 @@ void vtkMRMLLiverBezierSurfaceNode::ReadXMLAttributes(const char** atts)
 }
 
 //------------------------------------------------------------------------------
-void vtkMRMLLiverBezierSurfaceNode::CopyContent(vtkMRMLNode* anode,
+void vtkMRMLBezierSurfaceNode::CopyContent(vtkMRMLNode* anode,
                                                 bool deepCopy /*=true*/)
 {
   MRMLNodeModifyBlocker blocker(this);
   Superclass::CopyContent(anode, deepCopy);
 
-  vtkMRMLLiverBezierSurfaceNode* other =
-    vtkMRMLLiverBezierSurfaceNode::SafeDownCast(anode);
+  vtkMRMLBezierSurfaceNode* other =
+    vtkMRMLBezierSurfaceNode::SafeDownCast(anode);
   if (other == nullptr)
   {
-    vtkErrorMacro("CopyContent: source node is not a vtkMRMLLiverBezierSurfaceNode");
+    vtkErrorMacro("CopyContent: source node is not a vtkMRMLBezierSurfaceNode");
     return;
   }
 
@@ -446,9 +446,9 @@ void vtkMRMLLiverBezierSurfaceNode::CopyContent(vtkMRMLNode* anode,
 }
 
 //------------------------------------------------------------------------------
-void vtkMRMLLiverBezierSurfaceNode::CreateDefaultDisplayNodes()
+void vtkMRMLBezierSurfaceNode::CreateDefaultDisplayNodes()
 {
-  if (vtkMRMLLiverBezierSurfaceDisplayNode::SafeDownCast(this->GetDisplayNode())
+  if (vtkMRMLBezierSurfaceDisplayNode::SafeDownCast(this->GetDisplayNode())
       != nullptr)
   {
     // Display node already exists.
@@ -456,17 +456,17 @@ void vtkMRMLLiverBezierSurfaceNode::CreateDefaultDisplayNodes()
   }
   if (this->GetScene() == nullptr)
   {
-    vtkErrorMacro("vtkMRMLLiverBezierSurfaceNode::CreateDefaultDisplayNodes"
+    vtkErrorMacro("vtkMRMLBezierSurfaceNode::CreateDefaultDisplayNodes"
                   " failed: scene is invalid");
     return;
   }
-  auto displayNode = vtkSmartPointer<vtkMRMLLiverBezierSurfaceDisplayNode>::New();
+  auto displayNode = vtkSmartPointer<vtkMRMLBezierSurfaceDisplayNode>::New();
   this->GetScene()->AddNode(displayNode);
   this->SetAndObserveDisplayNodeID(displayNode->GetID());
 }
 
 //------------------------------------------------------------------------------
-void vtkMRMLLiverBezierSurfaceNode::PrintSelf(ostream& os, vtkIndent indent)
+void vtkMRMLBezierSurfaceNode::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
 

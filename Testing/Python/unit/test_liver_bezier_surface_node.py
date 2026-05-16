@@ -1,5 +1,5 @@
-"""Python unit tests for ``vtkMRMLLiverBezierSurfaceNode`` and
-``vtkMRMLLiverBezierSurfaceDisplayNode`` — T2 Stack 2 / T2.1.
+"""Python unit tests for ``vtkMRMLBezierSurfaceNode`` and
+``vtkMRMLBezierSurfaceDisplayNode`` — T2 Stack 2 / T2.1.
 
 These tests exercise the Python-wrapped surface of the two new MRML
 node classes landed by ADR-0014 §1 (data node, init-mode subordinate
@@ -11,7 +11,7 @@ module is the ground truth and the test imports it via
 is not built.
 
 The C++ test driver
-(``LiverResections/MRML/Testing/Cxx/vtkMRMLLiverBezierSurfaceNodeTest1.cxx``)
+(``LiverResections/MRML/Testing/Cxx/vtkMRMLBezierSurfaceNodeTest1.cxx``)
 covers the same surface from C++.  Both layers exist because ADR-0008
 §3 commits the project to dual-mode tests for any code reachable from
 both languages.
@@ -51,7 +51,7 @@ def mrml_module():
         "vtkSlicerLiverResectionsModuleMRMLPython",
         reason=(
             "vtkSlicerLiverResectionsModuleMRML not built / not on "
-            "sys.path; skip the Python-side LiverBezierSurfaceNode tests."
+            "sys.path; skip the Python-side BezierSurfaceNode tests."
         ),
     )
 
@@ -74,52 +74,52 @@ def _make_grid():
 
 
 # --------------------------------------------------------------------------- #
-# vtkMRMLLiverBezierSurfaceNode — data node
+# vtkMRMLBezierSurfaceNode — data node
 # --------------------------------------------------------------------------- #
 
 
 def test_node_construction_and_tag_name(mrml_module):
     """The node instantiates and reports the expected XML tag name."""
-    node = mrml_module.vtkMRMLLiverBezierSurfaceNode()
+    node = mrml_module.vtkMRMLBezierSurfaceNode()
     assert node is not None
-    assert node.GetNodeTagName() == "LiverBezierSurface"
+    assert node.GetNodeTagName() == "BezierSurface"
 
 
 def test_node_default_state_and_mode(mrml_module):
     """Defaults: State=Init (0), InitializationMode=SlicingPlane (0)."""
-    node = mrml_module.vtkMRMLLiverBezierSurfaceNode()
-    assert node.GetState() == mrml_module.vtkMRMLLiverBezierSurfaceNode.Init
+    node = mrml_module.vtkMRMLBezierSurfaceNode()
+    assert node.GetState() == mrml_module.vtkMRMLBezierSurfaceNode.Init
     assert node.GetInitMode() == (
-        mrml_module.vtkMRMLLiverBezierSurfaceNode.SlicingPlane
+        mrml_module.vtkMRMLBezierSurfaceNode.SlicingPlane
     )
     # Read-only constants exposed to Python.
-    assert mrml_module.vtkMRMLLiverBezierSurfaceNode.GridSize == 4
-    assert mrml_module.vtkMRMLLiverBezierSurfaceNode.ControlGridSize == 48
+    assert mrml_module.vtkMRMLBezierSurfaceNode.GridSize == 4
+    assert mrml_module.vtkMRMLBezierSurfaceNode.ControlGridSize == 48
 
 
 def test_node_state_round_trip(mrml_module):
     """State setter accepts both enum values and round-trips."""
-    node = mrml_module.vtkMRMLLiverBezierSurfaceNode()
-    node.SetState(mrml_module.vtkMRMLLiverBezierSurfaceNode.Planning)
-    assert node.GetState() == mrml_module.vtkMRMLLiverBezierSurfaceNode.Planning
-    node.SetState(mrml_module.vtkMRMLLiverBezierSurfaceNode.Init)
-    assert node.GetState() == mrml_module.vtkMRMLLiverBezierSurfaceNode.Init
+    node = mrml_module.vtkMRMLBezierSurfaceNode()
+    node.SetState(mrml_module.vtkMRMLBezierSurfaceNode.Planning)
+    assert node.GetState() == mrml_module.vtkMRMLBezierSurfaceNode.Planning
+    node.SetState(mrml_module.vtkMRMLBezierSurfaceNode.Init)
+    assert node.GetState() == mrml_module.vtkMRMLBezierSurfaceNode.Init
 
 
 def test_node_initialization_mode_round_trip(mrml_module):
     """InitializationMode setter round-trips through both modes."""
-    node = mrml_module.vtkMRMLLiverBezierSurfaceNode()
+    node = mrml_module.vtkMRMLBezierSurfaceNode()
     node.SetInitMode(
-        mrml_module.vtkMRMLLiverBezierSurfaceNode.DistanceSpheroid
+        mrml_module.vtkMRMLBezierSurfaceNode.DistanceSpheroid
     )
     assert node.GetInitMode() == (
-        mrml_module.vtkMRMLLiverBezierSurfaceNode.DistanceSpheroid
+        mrml_module.vtkMRMLBezierSurfaceNode.DistanceSpheroid
     )
 
 
 def test_node_enum_string_converters(mrml_module):
     """Enum<->string converters cover all enum values."""
-    cls = mrml_module.vtkMRMLLiverBezierSurfaceNode
+    cls = mrml_module.vtkMRMLBezierSurfaceNode
     assert cls.GetStateAsString(cls.Init) == "Init"
     assert cls.GetStateAsString(cls.Planning) == "Planning"
     assert cls.GetStateFromString("Init") == cls.Init
@@ -139,7 +139,7 @@ def test_node_enum_string_converters(mrml_module):
 
 def test_node_slicing_plane_init_round_trip(mrml_module):
     """Two slicing-plane init points + origin + normal round-trip."""
-    node = mrml_module.vtkMRMLLiverBezierSurfaceNode()
+    node = mrml_module.vtkMRMLBezierSurfaceNode()
 
     assert node.SetSlicingPlaneInitPoint(0, [1.0, 2.0, 3.0]) is True
     assert node.SetSlicingPlaneInitPoint(1, [-1.0, -2.0, -3.0]) is True
@@ -158,7 +158,7 @@ def test_node_slicing_plane_init_round_trip(mrml_module):
 
 def test_node_distance_spheroid_init_round_trip(mrml_module):
     """Variable-length spheroid init points + center + radii."""
-    node = mrml_module.vtkMRMLLiverBezierSurfaceNode()
+    node = mrml_module.vtkMRMLBezierSurfaceNode()
 
     node.SetNumberOfDistanceSpheroidInitPoints(3)
     assert node.GetNumberOfDistanceSpheroidInitPoints() == 3
@@ -208,12 +208,12 @@ def test_node_xml_round_trip_via_scene(mrml_module):
     )
 
     scene = slicer.vtkMRMLScene()
-    scene.RegisterNodeClass(mrml_module.vtkMRMLLiverBezierSurfaceNode())
+    scene.RegisterNodeClass(mrml_module.vtkMRMLBezierSurfaceNode())
 
-    source = mrml_module.vtkMRMLLiverBezierSurfaceNode()
-    source.SetState(mrml_module.vtkMRMLLiverBezierSurfaceNode.Planning)
+    source = mrml_module.vtkMRMLBezierSurfaceNode()
+    source.SetState(mrml_module.vtkMRMLBezierSurfaceNode.Planning)
     source.SetInitMode(
-        mrml_module.vtkMRMLLiverBezierSurfaceNode.DistanceSpheroid
+        mrml_module.vtkMRMLBezierSurfaceNode.DistanceSpheroid
     )
     grid = _make_grid()
     source.SetControlGrid(grid)
@@ -242,11 +242,11 @@ def test_node_xml_round_trip_via_scene(mrml_module):
         scene.Commit()
 
         sink_scene = slicer.vtkMRMLScene()
-        sink_scene.RegisterNodeClass(mrml_module.vtkMRMLLiverBezierSurfaceNode())
+        sink_scene.RegisterNodeClass(mrml_module.vtkMRMLBezierSurfaceNode())
         sink_scene.SetURL(path)
         sink_scene.Connect()
 
-        sink = sink_scene.GetFirstNodeByClass("vtkMRMLLiverBezierSurfaceNode")
+        sink = sink_scene.GetFirstNodeByClass("vtkMRMLBezierSurfaceNode")
         assert sink is not None
         assert sink.GetState() == source.GetState()
         assert sink.GetInitMode() == source.GetInitMode()
@@ -290,18 +290,18 @@ def test_node_xml_round_trip_via_scene(mrml_module):
 
 def test_node_copy_content(mrml_module):
     """CopyContent produces an independent copy that survives source edits."""
-    source = mrml_module.vtkMRMLLiverBezierSurfaceNode()
-    source.SetState(mrml_module.vtkMRMLLiverBezierSurfaceNode.Planning)
+    source = mrml_module.vtkMRMLBezierSurfaceNode()
+    source.SetState(mrml_module.vtkMRMLBezierSurfaceNode.Planning)
     source.SetSlicingPlaneOrigin([1.0, 2.0, 3.0])
     source.SetDistanceSpheroidRadiusX(1.5)
     source.SetNumberOfDistanceSpheroidInitPoints(2)
     source.SetDistanceSpheroidInitPoint(0, [1.0, 2.0, 3.0])
     source.SetDistanceSpheroidInitPoint(1, [4.0, 5.0, 6.0])
 
-    sink = mrml_module.vtkMRMLLiverBezierSurfaceNode()
+    sink = mrml_module.vtkMRMLBezierSurfaceNode()
     sink.CopyContent(source, True)
 
-    assert sink.GetState() == mrml_module.vtkMRMLLiverBezierSurfaceNode.Planning
+    assert sink.GetState() == mrml_module.vtkMRMLBezierSurfaceNode.Planning
     assert list(sink.GetSlicingPlaneOrigin()) == [1.0, 2.0, 3.0]
     assert sink.GetDistanceSpheroidRadiusX() == 1.5
     assert sink.GetNumberOfDistanceSpheroidInitPoints() == 2
@@ -312,15 +312,15 @@ def test_node_copy_content(mrml_module):
 
 
 # --------------------------------------------------------------------------- #
-# vtkMRMLLiverBezierSurfaceDisplayNode — display node
+# vtkMRMLBezierSurfaceDisplayNode — display node
 # --------------------------------------------------------------------------- #
 
 
 def test_display_construction_and_tag_name(mrml_module):
     """Display node instantiates and reports the expected XML tag name."""
-    node = mrml_module.vtkMRMLLiverBezierSurfaceDisplayNode()
+    node = mrml_module.vtkMRMLBezierSurfaceDisplayNode()
     assert node is not None
-    assert node.GetNodeTagName() == "LiverBezierSurfaceDisplay"
+    assert node.GetNodeTagName() == "BezierSurfaceDisplay"
 
 
 def test_display_defaults(mrml_module):
@@ -329,7 +329,7 @@ def test_display_defaults(mrml_module):
     See vtkMRMLLiverResectionNode.cxx:56-66.  Any divergence is a
     review-point per ADR-0003.
     """
-    node = mrml_module.vtkMRMLLiverBezierSurfaceDisplayNode()
+    node = mrml_module.vtkMRMLBezierSurfaceDisplayNode()
     assert list(node.GetResectionColor()) == pytest.approx([1.0, 1.0, 1.0])
     assert list(node.GetResectionMarginColor()) == pytest.approx(
         [1.0, 0.0, 0.0]
@@ -356,7 +356,7 @@ def test_display_defaults(mrml_module):
 
 def test_display_setters_and_clamps(mrml_module):
     """Every setter round-trips; ResectionOpacity clamps to [0, 1]."""
-    node = mrml_module.vtkMRMLLiverBezierSurfaceDisplayNode()
+    node = mrml_module.vtkMRMLBezierSurfaceDisplayNode()
 
     node.SetResectionColor([0.25, 0.5, 0.75])
     assert list(node.GetResectionColor()) == pytest.approx([0.25, 0.5, 0.75])
@@ -402,12 +402,12 @@ def test_display_setters_and_clamps(mrml_module):
 
 def test_display_copy_content(mrml_module):
     """CopyContent on the display node produces an independent copy."""
-    source = mrml_module.vtkMRMLLiverBezierSurfaceDisplayNode()
+    source = mrml_module.vtkMRMLBezierSurfaceDisplayNode()
     source.SetResectionColor([0.25, 0.5, 0.75])
     source.SetResectionOpacity(0.42)
     source.SetClipOut(True)
 
-    sink = mrml_module.vtkMRMLLiverBezierSurfaceDisplayNode()
+    sink = mrml_module.vtkMRMLBezierSurfaceDisplayNode()
     sink.CopyContent(source, True)
 
     assert list(sink.GetResectionColor()) == pytest.approx([0.25, 0.5, 0.75])

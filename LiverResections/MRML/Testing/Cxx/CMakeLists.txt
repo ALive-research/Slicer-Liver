@@ -9,8 +9,8 @@ set(KIT vtkSlicer${MODULE_NAME}ModuleMRML)
 
 #-----------------------------------------------------------------------------
 set(KIT_TEST_SRCS
-  vtkMRMLLiverBezierSurfaceNodeTest1.cxx
-  vtkMRMLLiverBezierSurfaceDisplayNodeTest1.cxx
+  vtkMRMLBezierSurfaceNodeTest1.cxx
+  vtkMRMLBezierSurfaceDisplayNodeTest1.cxx
   )
 
 #-----------------------------------------------------------------------------
@@ -25,5 +25,5 @@ slicerMacroConfigureModuleCxxTestDriver(
   WITH_VTK_ERROR_OUTPUT_CHECK
   )
 
-SIMPLE_TEST(vtkMRMLLiverBezierSurfaceNodeTest1)
-SIMPLE_TEST(vtkMRMLLiverBezierSurfaceDisplayNodeTest1)
+SIMPLE_TEST(vtkMRMLBezierSurfaceNodeTest1)
+SIMPLE_TEST(vtkMRMLBezierSurfaceDisplayNodeTest1)

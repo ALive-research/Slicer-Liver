@@ -11,10 +11,10 @@ set(${KIT}_SRCS
   vtkMRMLLiverResectionNode.cxx
   vtkMRMLLiverResectionCSVStorageNode.h
   vtkMRMLLiverResectionCSVStorageNode.cxx
-  vtkMRMLLiverBezierSurfaceNode.h
-  vtkMRMLLiverBezierSurfaceNode.cxx
-  vtkMRMLLiverBezierSurfaceDisplayNode.h
-  vtkMRMLLiverBezierSurfaceDisplayNode.cxx
+  vtkMRMLBezierSurfaceNode.h
+  vtkMRMLBezierSurfaceNode.cxx
+  vtkMRMLBezierSurfaceDisplayNode.h
+  vtkMRMLBezierSurfaceDisplayNode.cxx
   )
 
 set(${KIT}_TARGET_LIBRARIES
