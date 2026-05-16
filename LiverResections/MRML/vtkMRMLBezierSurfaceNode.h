@@ -37,8 +37,8 @@
 
 ==============================================================================*/
 
-#ifndef __vtkmrmlliverbeziersurfacenode_h_
-#define __vtkmrmlliverbeziersurfacenode_h_
+#ifndef __vtkmrmlbeziersurfacenode_h_
+#define __vtkmrmlbeziersurfacenode_h_
 
 #include "vtkSlicerLiverResectionsModuleMRMLExport.h"
 
@@ -54,7 +54,7 @@
 #include <vector>
 
 /**
- * \class vtkMRMLLiverBezierSurfaceNode
+ * \class vtkMRMLBezierSurfaceNode
  *
  * \brief Data-only MRML node carrying the geometry of a Bezier-surface
  *        resection plan, plus the read-only audit trail of the
@@ -63,7 +63,7 @@
  * This node is part of the LayerDM Pipeline pattern committed by
  * [ADR-0013](../../Docs/adr/0013-layerdm-pipeline-pattern.md): a
  * \b data-only node carrying geometry and clinically authoritative
- * metadata, paired with a matching ``vtkMRMLLiverBezierSurfaceDisplayNode``
+ * metadata, paired with a matching ``vtkMRMLBezierSurfaceDisplayNode``
  * that owns all display-side fields (colours, opacity, grid divisions,
  * widget visibility, …).  Decoration leaves the data node entirely
  * (see ADR-0013 §8).
@@ -93,9 +93,9 @@
  *
  * Two nodes participate in the Bezier-surface concept:
  *
- *   - ``vtkMRMLLiverBezierSurfaceNode`` (this class) — \b data: the 4×4
+ *   - ``vtkMRMLBezierSurfaceNode`` (this class) — \b data: the 4×4
  *     control grid, init-mode audit data, state machine.
- *   - ``vtkMRMLLiverBezierSurfaceDisplayNode`` — \b display: all
+ *   - ``vtkMRMLBezierSurfaceDisplayNode`` — \b display: all
  *     decoration fields (colours, opacity, grid visibility,
  *     widget visibility, …) per ADR-0013 §8.
  *
@@ -117,12 +117,12 @@
  * ``SlicingPlane`` / ``DistanceSpheroid``.  These are *parallel*
  * during v2.0.0; T2.7 will collapse to the new names everywhere.
  */
-class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverBezierSurfaceNode
+class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLBezierSurfaceNode
   : public vtkMRMLDisplayableNode
 {
  public:
-  static vtkMRMLLiverBezierSurfaceNode* New();
-  vtkTypeMacro(vtkMRMLLiverBezierSurfaceNode, vtkMRMLDisplayableNode);
+  static vtkMRMLBezierSurfaceNode* New();
+  vtkTypeMacro(vtkMRMLBezierSurfaceNode, vtkMRMLDisplayableNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   /// Resection state machine (per ADR-0013 §4).
@@ -168,7 +168,7 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverBezierSurfaceNod
   vtkMRMLNode* CreateNodeInstance() override;
 
   /// Get node XML tag name (like Volume, Model).
-  const char* GetNodeTagName() override { return "LiverBezierSurface"; }
+  const char* GetNodeTagName() override { return "BezierSurface"; }
 
   /// Read node attributes from XML.
   void ReadXMLAttributes(const char** atts) override;
@@ -180,7 +180,7 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverBezierSurfaceNod
   /// \sa vtkMRMLNode::CopyContent
   void CopyContent(vtkMRMLNode* anode, bool deepCopy = true) override;
 
-  /// Spawn a ``vtkMRMLLiverBezierSurfaceDisplayNode`` and observe it
+  /// Spawn a ``vtkMRMLBezierSurfaceDisplayNode`` and observe it
   /// as this data node's default display node.  No-op if a display
   /// node is already attached.  Requires the data node to be in a
   /// scene; emits an error and returns otherwise.
@@ -301,12 +301,12 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverBezierSurfaceNod
   vtkSetClampMacro(DistanceSpheroidRadiusZ, double, 0.0, VTK_DOUBLE_MAX);
 
  protected:
-  vtkMRMLLiverBezierSurfaceNode();
-  ~vtkMRMLLiverBezierSurfaceNode() override;
+  vtkMRMLBezierSurfaceNode();
+  ~vtkMRMLBezierSurfaceNode() override;
 
  private:
-  vtkMRMLLiverBezierSurfaceNode(const vtkMRMLLiverBezierSurfaceNode&) = delete;
-  void operator=(const vtkMRMLLiverBezierSurfaceNode&) = delete;
+  vtkMRMLBezierSurfaceNode(const vtkMRMLBezierSurfaceNode&) = delete;
+  void operator=(const vtkMRMLBezierSurfaceNode&) = delete;
 
   /// State / mode enums stored as int (so the standard XML int / enum
   /// macros work).  The ``InitMode`` member is *not* named
@@ -335,4 +335,4 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverBezierSurfaceNod
   double DistanceSpheroidRadiusZ;
 };
 
-#endif //__vtkmrmlliverbeziersurfacenode_h_
+#endif //__vtkmrmlbeziersurfacenode_h_

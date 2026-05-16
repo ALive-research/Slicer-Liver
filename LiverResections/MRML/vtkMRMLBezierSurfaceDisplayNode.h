@@ -37,8 +37,8 @@
 
 ==============================================================================*/
 
-#ifndef __vtkmrmlliverbeziersurfacedisplaynode_h_
-#define __vtkmrmlliverbeziersurfacedisplaynode_h_
+#ifndef __vtkmrmlbeziersurfacedisplaynode_h_
+#define __vtkmrmlbeziersurfacedisplaynode_h_
 
 #include "vtkSlicerLiverResectionsModuleMRMLExport.h"
 
@@ -49,10 +49,10 @@
 #include <vtkSetGet.h>
 
 /**
- * \class vtkMRMLLiverBezierSurfaceDisplayNode
+ * \class vtkMRMLBezierSurfaceDisplayNode
  *
  * \brief Display-only MRML node carrying decoration state for a
- *        ``vtkMRMLLiverBezierSurfaceNode``.
+ *        ``vtkMRMLBezierSurfaceNode``.
  *
  * Per [ADR-0013 §8](../../Docs/adr/0013-layerdm-pipeline-pattern.md),
  * the LayerDM Pipeline pattern moves display fields off the data node
@@ -64,9 +64,9 @@
  *
  * \par MRML node shape
  *
- *   - ``vtkMRMLLiverBezierSurfaceNode`` — \b data: geometry + state
+ *   - ``vtkMRMLBezierSurfaceNode`` — \b data: geometry + state
  *     machine + init-mode audit trail.
- *   - ``vtkMRMLLiverBezierSurfaceDisplayNode`` (this class) —
+ *   - ``vtkMRMLBezierSurfaceDisplayNode`` (this class) —
  *     \b display: all decoration fields (per ADR-0013 §8).
  *
  * The field roster mirrors the display-side block of
@@ -90,12 +90,12 @@
  * which retains its display fields (T2 is *additive*).  T2.7 will
  * collapse the legacy node and retire its display fields.
  */
-class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverBezierSurfaceDisplayNode
+class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLBezierSurfaceDisplayNode
   : public vtkMRMLDisplayNode
 {
  public:
-  static vtkMRMLLiverBezierSurfaceDisplayNode* New();
-  vtkTypeMacro(vtkMRMLLiverBezierSurfaceDisplayNode, vtkMRMLDisplayNode);
+  static vtkMRMLBezierSurfaceDisplayNode* New();
+  vtkTypeMacro(vtkMRMLBezierSurfaceDisplayNode, vtkMRMLDisplayNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   //--------------------------------------------------------------------------
@@ -104,7 +104,7 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverBezierSurfaceDis
   vtkMRMLNode* CreateNodeInstance() override;
 
   /// Get node XML tag name (like Volume, Model).
-  const char* GetNodeTagName() override { return "LiverBezierSurfaceDisplay"; }
+  const char* GetNodeTagName() override { return "BezierSurfaceDisplay"; }
 
   /// Read node attributes from XML.
   void ReadXMLAttributes(const char** atts) override;
@@ -197,13 +197,13 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverBezierSurfaceDis
   vtkGetMacro(MirrorDisplay, bool);
 
  protected:
-  vtkMRMLLiverBezierSurfaceDisplayNode();
-  ~vtkMRMLLiverBezierSurfaceDisplayNode() override;
+  vtkMRMLBezierSurfaceDisplayNode();
+  ~vtkMRMLBezierSurfaceDisplayNode() override;
 
  private:
-  vtkMRMLLiverBezierSurfaceDisplayNode(
-    const vtkMRMLLiverBezierSurfaceDisplayNode&) = delete;
-  void operator=(const vtkMRMLLiverBezierSurfaceDisplayNode&) = delete;
+  vtkMRMLBezierSurfaceDisplayNode(
+    const vtkMRMLBezierSurfaceDisplayNode&) = delete;
+  void operator=(const vtkMRMLBezierSurfaceDisplayNode&) = delete;
 
   float ResectionColor[3];
   float ResectionGridColor[3];
@@ -222,4 +222,4 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverBezierSurfaceDis
   bool MirrorDisplay;
 };
 
-#endif //__vtkmrmlliverbeziersurfacedisplaynode_h_
+#endif //__vtkmrmlbeziersurfacedisplaynode_h_

@@ -4,7 +4,7 @@
 
   Copyright (c) Oslo University Hospital. All rights reserved.
 
-  Tests for vtkMRMLLiverBezierSurfaceDisplayNode — the display-only
+  Tests for vtkMRMLBezierSurfaceDisplayNode — the display-only
   node landed by ADR-0013 §8.  Exercises:
 
    - defaults (colours, flags) match the legacy ResectionNode baseline
@@ -17,7 +17,7 @@
 
 // MRML includes
 #include "vtkMRMLCoreTestingMacros.h"
-#include "vtkMRMLLiverBezierSurfaceDisplayNode.h"
+#include "vtkMRMLBezierSurfaceDisplayNode.h"
 #include "vtkMRMLScene.h"
 
 // VTK includes
@@ -35,7 +35,7 @@ namespace
 
 int testDefaults()
 {
-  vtkNew<vtkMRMLLiverBezierSurfaceDisplayNode> node;
+  vtkNew<vtkMRMLBezierSurfaceDisplayNode> node;
 
   // Defaults intentionally match the legacy
   // vtkMRMLLiverResectionNode constructor (ResectionNode.cxx:56-66)
@@ -81,13 +81,13 @@ int testDefaults()
   CHECK_BOOL(node->GetShowResection2D(), false);
   CHECK_BOOL(node->GetMirrorDisplay(), false);
 
-  CHECK_STRING(node->GetNodeTagName(), "LiverBezierSurfaceDisplay");
+  CHECK_STRING(node->GetNodeTagName(), "BezierSurfaceDisplay");
   return EXIT_SUCCESS;
 }
 
 int testSettersAndGetters()
 {
-  vtkNew<vtkMRMLLiverBezierSurfaceDisplayNode> node;
+  vtkNew<vtkMRMLBezierSurfaceDisplayNode> node;
 
   float c1[3] = { 0.25f, 0.5f, 0.75f };
   node->SetResectionColor(c1);
@@ -156,7 +156,7 @@ int testSettersAndGetters()
 
 int testXMLRoundTrip()
 {
-  vtkNew<vtkMRMLLiverBezierSurfaceDisplayNode> source;
+  vtkNew<vtkMRMLBezierSurfaceDisplayNode> source;
   vtkNew<vtkMRMLScene> scene;
   source->SetScene(scene.GetPointer());
 
@@ -226,7 +226,7 @@ int testXMLRoundTrip()
   }
   atts.push_back(nullptr);
 
-  vtkNew<vtkMRMLLiverBezierSurfaceDisplayNode> sink;
+  vtkNew<vtkMRMLBezierSurfaceDisplayNode> sink;
   sink->SetScene(scene.GetPointer());
   sink->ReadXMLAttributes(atts.data());
 
@@ -285,7 +285,7 @@ int testModifiedEventsOnSetters()
   // public setter of the display node so a future drift fires a
   // regression here rather than silently breaking the Pipeline
   // observers downstream.
-  vtkNew<vtkMRMLLiverBezierSurfaceDisplayNode> node;
+  vtkNew<vtkMRMLBezierSurfaceDisplayNode> node;
 
   // Colour fields (vtkSetVector3Macro).
   float c1[3] = { 0.25f, 0.5f, 0.75f };
@@ -321,7 +321,7 @@ int testModifiedEventsOnSetters()
 
 int testCopyContent()
 {
-  vtkNew<vtkMRMLLiverBezierSurfaceDisplayNode> source;
+  vtkNew<vtkMRMLBezierSurfaceDisplayNode> source;
 
   float c1[3] = { 0.25f, 0.5f, 0.75f };
   source->SetResectionColor(c1);
@@ -330,7 +330,7 @@ int testCopyContent()
   source->SetClipOut(true);
   source->SetInterpolatedMargins(true);
 
-  vtkNew<vtkMRMLLiverBezierSurfaceDisplayNode> sink;
+  vtkNew<vtkMRMLBezierSurfaceDisplayNode> sink;
   sink->CopyContent(source.GetPointer(), /*deepCopy=*/true);
 
   float back[3];
@@ -354,10 +354,10 @@ int testCopyContent()
 }  // namespace
 
 //------------------------------------------------------------------------------
-int vtkMRMLLiverBezierSurfaceDisplayNodeTest1(int, char*[])
+int vtkMRMLBezierSurfaceDisplayNodeTest1(int, char*[])
 {
   vtkNew<vtkMRMLScene> scene;
-  vtkNew<vtkMRMLLiverBezierSurfaceDisplayNode> exerciseNode;
+  vtkNew<vtkMRMLBezierSurfaceDisplayNode> exerciseNode;
   exerciseNode->SetScene(scene.GetPointer());
   EXERCISE_ALL_BASIC_MRML_METHODS(exerciseNode.GetPointer());
 
@@ -367,7 +367,7 @@ int vtkMRMLLiverBezierSurfaceDisplayNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testCopyContent());
   CHECK_EXIT_SUCCESS(testModifiedEventsOnSetters());
 
-  std::cout << "vtkMRMLLiverBezierSurfaceDisplayNodeTest1 completed successfully"
+  std::cout << "vtkMRMLBezierSurfaceDisplayNodeTest1 completed successfully"
             << std::endl;
   return EXIT_SUCCESS;
 }
