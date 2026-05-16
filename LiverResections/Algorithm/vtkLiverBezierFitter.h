@@ -73,8 +73,10 @@ class vtkDoubleArray;
  *    increasing v within fixed u).  Sized via ``SetNumberOfSamples(Nu, Nv)``.
  *  - **BasisU** (``SetBasisU``) — the Nu x M matrix evaluating the
  *    Bernstein basis at each of the Nu u-samples, laid out row-major in a
- *    ``vtkDoubleArray`` of length Nu * M.  For the canonical 5x5 lift,
- *    M = 5 (Bernstein degree 4).
+ *    ``vtkDoubleArray`` of length Nu * M.  For the canonical 4x4 lift,
+ *    M = 4 (Bernstein degree 3 — matches the production callers
+ *    ``LiverLogic.runSurfacefromCurve`` / ``runSurfacefromEFD`` in
+ *    ``Liver/Liver.py``, which evaluate ``evaluate_basis_bezier(t, 3)``).
  *  - **BasisV** (``SetBasisV``) — the Nv x M matrix evaluating the
  *    Bernstein basis at each of the Nv v-samples (row-major).
  *

@@ -41,6 +41,31 @@ inside Slicer's Python.  If a future maintainer updates these constants,
 they must (a) document the Slicer + NumPy versions in this docstring and
 (b) explain the behaviour change in the PR body, per ADR-0003 §1.
 
+Bezier degree correction (2026-05-16)
+-------------------------------------
+The original capture (PR #330) pinned ``EXPECTED_BEZIER_CONTROL_POINTS``
+against a **degree-4** Bernstein basis (5x5 → 25 control points), but
+both production callers of ``fit_bezier_surface`` evaluate the basis at
+**degree 3** (4x4 → 16 control points):
+
+* ``LiverLogic.runSurfacefromCurve`` — ``Liver/Liver.py:2010``
+  (``bezier_basis = self.evaluate_basis_bezier(u[i], 3)``).
+* ``LiverLogic.runSurfacefromEFD`` — ``Liver/Liver.py:2163``
+  (same call at degree 3).
+
+A characterisation pin that does not match what production actually
+runs is not a regression net for production — it is a net for a
+hypothetical degree-4 path nobody uses.  ADR-0014 §3 commits to a
+16-control-point ring (corners 4 + edges 8 + interior 4) and the legacy
+``vtkMRMLMarkupsBezierSurfaceNode::RequiredNumberOfControlPoints = 16``
+corroborates the 4x4 truth.  This file's helper, fixture, EXPECTED
+constants, and shape assertions have all been re-captured at
+**degree 3** as of this PR.  The downstream C++ algorithm fixtures
+(``vtkLiverAlgorithmTestFixtures.h``) and the new MRML node from
+PR #341 were both inherited from PR #330's wrong capture; the former
+is fixed in this same PR and the latter will be amended in a
+follow-up.
+
 When run in a plain Python environment (no Slicer), the
 ``pytest.importorskip("slicer")`` at the top of each test gates the
 suite cleanly — the tests are *registered* but skipped, matching the
@@ -137,36 +162,46 @@ def liver_logic():
 # if a maintainer needs to refresh the constants below.
 # --------------------------------------------------------------------------- #
 
-def _bernstein_degree_4(t: float) -> np.ndarray:
-    """Bernstein basis B_{4,0..4}(t) — degree-4 polynomials in [0, 1]."""
+def _bernstein_degree_3(t: float) -> np.ndarray:
+    """Bernstein basis B_{3,0..3}(t) — degree-3 polynomials in [0, 1].
+
+    Matches the basis order used by ``LiverLogic.evaluate_basis_bezier``
+    when called at ``degree=3`` from the production callers
+    ``runSurfacefromCurve`` (``Liver/Liver.py:2010``) and
+    ``runSurfacefromEFD`` (``Liver/Liver.py:2163``).
+    """
     return np.array(
         [
-            (1 - t) ** 4,
-            4 * t * (1 - t) ** 3,
-            6 * t ** 2 * (1 - t) ** 2,
-            4 * t ** 3 * (1 - t),
-            t ** 4,
+            (1 - t) ** 3,
+            3 * t * (1 - t) ** 2,
+            3 * t ** 2 * (1 - t),
+            t ** 3,
         ]
     )
 
 
 def _make_bezier_fixture():
-    """A 5x5x3 grid of saddle-surface points plus matching 5x5 Bernstein bases.
+    """A 4x4x3 grid of saddle-surface points plus matching 4x4 Bernstein bases.
 
     The control-net is the bilinear surface ``z = u*v`` sampled on a
-    uniform 5x5 ``(u, v)`` grid; the basis matrices evaluate
-    Bernstein-4 polynomials at the same sample locations.  Because the
-    basis matrices are square (5x5), ``transpose(B)*B`` is invertible
+    uniform 4x4 ``(u, v)`` grid; the basis matrices evaluate
+    Bernstein-3 polynomials at the same sample locations.  Because the
+    basis matrices are square (4x4), ``transpose(B)*B`` is invertible
     in exact arithmetic — the pseudo-inverse formulation collapses to
     the exact inverse, which is what makes the captured EXPECTED stable
     across NumPy versions for a characterisation pin.
-    """
-    u_samples = np.linspace(0.0, 1.0, 5)
-    v_samples = np.linspace(0.0, 1.0, 5)
-    basis_u = np.stack([_bernstein_degree_4(t) for t in u_samples], axis=0)
-    basis_v = np.stack([_bernstein_degree_4(t) for t in v_samples], axis=0)
 
-    points = np.zeros((5, 5, 3), dtype=np.float64)
+    Degree 3 (4x4 = 16 control points) is what both production callers
+    of ``fit_bezier_surface`` use; see the module docstring's
+    "Bezier degree correction" section for the history of why this
+    helper used to build at degree 4.
+    """
+    u_samples = np.linspace(0.0, 1.0, 4)
+    v_samples = np.linspace(0.0, 1.0, 4)
+    basis_u = np.stack([_bernstein_degree_3(t) for t in u_samples], axis=0)
+    basis_v = np.stack([_bernstein_degree_3(t) for t in v_samples], axis=0)
+
+    points = np.zeros((4, 4, 3), dtype=np.float64)
     for i, u in enumerate(u_samples):
         for j, v in enumerate(v_samples):
             points[i, j, 0] = u
@@ -200,50 +235,43 @@ def _make_contour_fixture():
 # docstring for capture provenance and refresh discipline.
 # --------------------------------------------------------------------------- #
 
-# fit_bezier_surface: shape (5, 5, 3).  Recall the control net was the
+# fit_bezier_surface: shape (4, 4, 3).  Recall the control net was the
 # bilinear z = u*v on a uniform (u, v) grid — and because the Bernstein
-# bases on a uniform 5-sample grid form a non-singular square matrix,
+# bases on a uniform 4-sample grid form a non-singular square matrix,
 # the recovered control points reproduce the input lattice nearly
-# exactly (modulo ~1e-17 floating-point dust on entries that are
+# exactly (modulo ~1e-18 floating-point dust on entries that are
 # mathematically zero, and ~1e-15 relative error on the non-zero
 # entries from the matrix-inverse round-trip).  Captured at full
 # float64 precision so the assertion can run at ``rtol=1e-12``.
+#
+# Re-captured 2026-05-16 at the production-correct Bernstein degree-3
+# (4x4 = 16 control points); see the module docstring's
+# "Bezier degree correction" section.
 EXPECTED_BEZIER_CONTROL_POINTS = np.array(
     [
         [
-            [2.1335056041739302e-17, -3.1679032227310840e-18, -6.7587392791774200e-35],
-            [2.1335056041739311e-17, 2.4999999999999936e-01, 5.3337640104348109e-18],
-            [2.1335056041739191e-17, 4.9999999999999800e-01, 1.0667528020869609e-17],
-            [2.1335056041739308e-17, 7.5000000000000111e-01, 1.6001292031304480e-17],
-            [2.1335056041739296e-17, 9.9999999999999989e-01, 2.1335056041739296e-17],
+            [4.6259292692714846e-18, -1.1993149957370571e-18, -5.5479463418562525e-36],
+            [4.6259292692714869e-18, 3.3333333333333387e-01, 1.5419764230904974e-18],
+            [4.6259292692714907e-18, 6.6666666666666718e-01, 3.0839528461809933e-18],
+            [4.6259292692714853e-18, 1.0000000000000002e+00, 4.6259292692714853e-18],
         ],
         [
-            [2.5000000000000366e-01, -3.1679032227311156e-18, -7.9197580568278295e-19],
-            [2.5000000000000372e-01, 2.5000000000000161e-01, 6.2500000000000819e-02],
-            [2.5000000000000255e-01, 5.0000000000000377e-01, 1.2500000000000114e-01],
-            [2.5000000000000366e-01, 7.5000000000000733e-01, 1.8750000000000328e-01],
-            [2.5000000000000361e-01, 1.0000000000000095e+00, 2.5000000000000361e-01],
+            [3.3333333333333365e-01, -1.1993149957370510e-18, -3.9977166524568520e-19],
+            [3.3333333333333370e-01, 3.3333333333333370e-01, 1.1111111111111140e-01],
+            [3.3333333333333431e-01, 6.6666666666666785e-01, 2.2222222222222271e-01],
+            [3.3333333333333370e-01, 1.0000000000000000e+00, 3.3333333333333370e-01],
         ],
         [
-            [4.9999999999999045e-01, -3.1679032227310162e-18, -1.5839516113655116e-18],
-            [4.9999999999999040e-01, 2.4999999999999487e-01, 1.2499999999999707e-01],
-            [4.9999999999998856e-01, 4.9999999999998579e-01, 2.4999999999999478e-01],
-            [4.9999999999999045e-01, 7.4999999999998757e-01, 3.7499999999999245e-01],
-            [4.9999999999999040e-01, 9.9999999999997924e-01, 4.9999999999999040e-01],
+            [6.6666666666666730e-01, -1.1993149957370633e-18, -7.9954333049137040e-19],
+            [6.6666666666666741e-01, 3.3333333333333437e-01, 2.2222222222222279e-01],
+            [6.6666666666666863e-01, 6.6666666666666841e-01, 4.4444444444444542e-01],
+            [6.6666666666666741e-01, 1.0000000000000020e+00, 6.6666666666666741e-01],
         ],
         [
-            [7.5000000000000355e-01, -3.1679032227311033e-18, -2.3759274170483255e-18],
-            [7.5000000000000422e-01, 2.5000000000000050e-01, 1.8750000000000042e-01],
-            [7.5000000000000056e-01, 5.0000000000000244e-01, 3.7500000000000100e-01],
-            [7.5000000000000411e-01, 7.5000000000000444e-01, 5.6250000000000278e-01],
-            [7.5000000000000333e-01, 1.0000000000000060e+00, 7.5000000000000333e-01],
-        ],
-        [
-            [9.9999999999999978e-01, -3.1679032227310833e-18, -3.1679032227310833e-18],
-            [9.9999999999999967e-01, 2.4999999999999906e-01, 2.4999999999999908e-01],
-            [9.9999999999999523e-01, 4.9999999999999833e-01, 4.9999999999999833e-01],
-            [9.9999999999999956e-01, 7.5000000000000000e-01, 7.5000000000000000e-01],
-            [9.9999999999999967e-01, 9.9999999999999978e-01, 9.9999999999999967e-01],
+            [1.0000000000000002e+00, -1.1993149957370633e-18, -1.1993149957370633e-18],
+            [1.0000000000000009e+00, 3.3333333333333381e-01, 3.3333333333333381e-01],
+            [1.0000000000000022e+00, 6.6666666666666741e-01, 6.6666666666666741e-01],
+            [1.0000000000000004e+00, 1.0000000000000004e+00, 1.0000000000000004e+00],
         ],
     ]
 )
@@ -337,8 +365,8 @@ def test_fit_bezier_surface_matches_pinned_control_points(liver_logic):
     points, basis_u, basis_v = _make_bezier_fixture()
     cps = liver_logic.fit_bezier_surface(points, basis_u, basis_v)
 
-    assert cps.shape == (5, 5, 3), (
-        f"fit_bezier_surface returned shape {cps.shape}, expected (5, 5, 3)"
+    assert cps.shape == (4, 4, 3), (
+        f"fit_bezier_surface returned shape {cps.shape}, expected (4, 4, 3)"
     )
     np.testing.assert_allclose(
         cps,
@@ -430,7 +458,7 @@ def test_inverse_transform_matches_pinned_reconstruction(liver_logic):
 #
 # Tolerance: the C++ side uses Eigen's ``MatrixXd::inverse()`` rather
 # than LAPACK's ``np.linalg.inv``, which may dispatch a different small-
-# matrix kernel and produce last-bit-of-double differences on the 5x5
+# matrix kernel and produce last-bit-of-double differences on the 4x4
 # inversion.  The Bezier wrapper assertion below therefore relaxes to
 # ``rtol=1e-10`` — documented in the C++ test file as well, per
 # ADR-0015 §Consequences ("Numerical tolerance is documented per test
@@ -443,7 +471,7 @@ def test_inverse_transform_matches_pinned_reconstruction(liver_logic):
 # stages that run pytest before the C++ build, etc.).
 # --------------------------------------------------------------------------- #
 
-_RTOL_LOOSE_BEZIER = 1e-10  # Eigen vs LAPACK dispatch noise on 5x5 inverse
+_RTOL_LOOSE_BEZIER = 1e-10  # Eigen vs LAPACK dispatch noise on 4x4 inverse
 _ATOL_LOOSE_BEZIER = 1e-12
 
 
@@ -480,7 +508,7 @@ def test_cxx_bezier_fitter_matches_pinned_control_points(algorithm_module):
     """C++ ``vtkLiverBezierFitter`` against the same EXPECTED control points.
 
     Tolerance is relaxed to ``rtol=1e-10`` to absorb Eigen-vs-LAPACK
-    last-bit-of-double dispatch noise on the 5x5 inverse; see the
+    last-bit-of-double dispatch noise on the 4x4 inverse; see the
     module docstring and the matching C++ test for the rationale.
 
     Reads the fitted grid back through the polydata output (which is the
@@ -489,18 +517,18 @@ def test_cxx_bezier_fitter_matches_pinned_control_points(algorithm_module):
     """
     points, basis_u, basis_v = _make_bezier_fixture()
     fitter = algorithm_module.vtkLiverBezierFitter()
-    fitter.SetNumberOfSamples(5, 5)
+    fitter.SetNumberOfSamples(4, 4)
     fitter.SetInputPoints(_to_double_array(points.flatten().tolist()))
     fitter.SetBasisU(_to_double_array(basis_u.flatten().tolist()))
     fitter.SetBasisV(_to_double_array(basis_v.flatten().tolist()))
     fitter.Update()
 
     out_points = fitter.GetOutput().GetPoints()
-    assert out_points.GetNumberOfPoints() == 25
-    cps = np.zeros((5, 5, 3), dtype=np.float64)
-    for i in range(5):
-        for j in range(5):
-            p = out_points.GetPoint(i * 5 + j)
+    assert out_points.GetNumberOfPoints() == 16
+    cps = np.zeros((4, 4, 3), dtype=np.float64)
+    for i in range(4):
+        for j in range(4):
+            p = out_points.GetPoint(i * 4 + j)
             cps[i, j, 0] = p[0]
             cps[i, j, 1] = p[1]
             cps[i, j, 2] = p[2]
