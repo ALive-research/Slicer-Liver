@@ -286,17 +286,29 @@ void vtkMRMLLiverBezierSurfaceNode::WriteXML(ostream& of, int nIndent)
   // Free-form payloads (variable / large) emitted as plain attributes
   // outside the macro to keep the macro for fixed-size fields.  The
   // node parses them back in ReadXMLAttributes() unconditionally.
+  // Route assembled strings through XMLAttributeEncodeString so any
+  // future control-character or quote in the payload is XML-safe
+  // (current writeDoubles output is whitespace-and-numeric, so this
+  // is defensive — but the discipline matches vtkMRMLNode's own
+  // attribute serialisation, cf. vtkMRMLNode.cxx:699).
   of << " controlGrid=\""
-     << writeDoubles(this->ControlGrid.data(), ControlGridSize) << "\"";
+     << this->XMLAttributeEncodeString(
+          writeDoubles(this->ControlGrid.data(), ControlGridSize))
+     << "\"";
   of << " slicingPlaneInitPoint0=\""
-     << writeDoubles(this->SlicingPlaneInitPoints[0], 3) << "\"";
+     << this->XMLAttributeEncodeString(
+          writeDoubles(this->SlicingPlaneInitPoints[0], 3))
+     << "\"";
   of << " slicingPlaneInitPoint1=\""
-     << writeDoubles(this->SlicingPlaneInitPoints[1], 3) << "\"";
+     << this->XMLAttributeEncodeString(
+          writeDoubles(this->SlicingPlaneInitPoints[1], 3))
+     << "\"";
   if (!this->DistanceSpheroidInitPoints.empty())
   {
     of << " distanceSpheroidInitPoints=\""
-       << writeDoubles(this->DistanceSpheroidInitPoints.data(),
-                       this->DistanceSpheroidInitPoints.size())
+       << this->XMLAttributeEncodeString(
+            writeDoubles(this->DistanceSpheroidInitPoints.data(),
+                         this->DistanceSpheroidInitPoints.size()))
        << "\"";
   }
 }
@@ -336,10 +348,23 @@ void vtkMRMLLiverBezierSurfaceNode::ReadXMLAttributes(const char** atts)
     if (std::strcmp(name, "controlGrid") == 0)
     {
       std::vector<double> values;
-      readDoubles(value, values);
-      if (values.size() >= ControlGridSize)
+      const std::string decoded = this->XMLAttributeDecodeString(value);
+      readDoubles(decoded.c_str(), values);
+      if (values.size() >= static_cast<std::size_t>(ControlGridSize))
       {
         std::copy_n(values.begin(), ControlGridSize, this->ControlGrid.begin());
+      }
+      else
+      {
+        // Truncated payload — keep the existing default-init (zero-
+        // filled or whatever the caller stashed before ReadXML) and
+        // warn loudly so the inconsistency is visible to whoever
+        // produced the malformed scene.  Same shape as the warning
+        // vtkMRMLPlotSeriesNode emits when a truncated array is
+        // encountered on read.
+        vtkWarningMacro("Truncated controlGrid attribute; expected "
+                        << ControlGridSize << " doubles, got "
+                        << values.size() << " — leaving at default");
       }
     }
     else if (std::strcmp(name, "slicingPlaneInitPoint0") == 0
@@ -347,7 +372,8 @@ void vtkMRMLLiverBezierSurfaceNode::ReadXMLAttributes(const char** atts)
     {
       const int idx = (name[strlen("slicingPlaneInitPoint")] == '0') ? 0 : 1;
       std::vector<double> values;
-      readDoubles(value, values);
+      const std::string decoded = this->XMLAttributeDecodeString(value);
+      readDoubles(decoded.c_str(), values);
       if (values.size() >= 3)
       {
         this->SlicingPlaneInitPoints[idx][0] = values[0];
@@ -358,7 +384,8 @@ void vtkMRMLLiverBezierSurfaceNode::ReadXMLAttributes(const char** atts)
     else if (std::strcmp(name, "distanceSpheroidInitPoints") == 0)
     {
       std::vector<double> values;
-      readDoubles(value, values);
+      const std::string decoded = this->XMLAttributeDecodeString(value);
+      readDoubles(decoded.c_str(), values);
       this->DistanceSpheroidInitPoints = values;
       this->NumberOfDistanceSpheroidInitPoints = static_cast<int>(values.size() / 3);
     }
