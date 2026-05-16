@@ -86,13 +86,12 @@ class vtkDoubleArray;
  * \par MRML invariant
  *  No ``vtkMRMLNode`` references.  Per ADR-0015.
  */
-class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverContourParameterizer
-  : public vtkPolyDataAlgorithm
+class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverContourParameterizer : public vtkPolyDataAlgorithm
 {
- public:
-  static vtkLiverContourParameterizer *New();
+public:
+  static vtkLiverContourParameterizer* New();
   vtkTypeMacro(vtkLiverContourParameterizer, vtkPolyDataAlgorithm);
-  void PrintSelf(ostream &os, vtkIndent indent) override;
+  void PrintSelf(ostream& os, vtkIndent indent) override;
 
   enum Mode
   {
@@ -119,12 +118,12 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverContourParamete
   vtkBooleanMacro(UseComputedLocus, bool);
 
   /// Flat (Order * 6) row-major array of EFD coefficients.
-  const std::vector<double> &GetCoefficients() const { return this->Coefficients; }
+  const std::vector<double>& GetCoefficients() const { return this->Coefficients; }
   /// (A0, C0, E0) DC offsets actually used for the reconstruction.
-  const std::vector<double> &GetDCCoefficients() const { return this->DC; }
+  const std::vector<double>& GetDCCoefficients() const { return this->DC; }
   /// Reconstructed contour: 3*NumberOfReconstructionPoints values (x's,
   /// y's, z's in that order — matching the Python (1, 3, n_coords) shape).
-  const std::vector<double> &GetReconstruction() const { return this->Reconstruction; }
+  const std::vector<double>& GetReconstruction() const { return this->Reconstruction; }
 
   /// Compute EFD coefficients of an arbitrary closed 3D contour.
   /// Exposed as a static helper so callers (and tests) can drive the
@@ -134,49 +133,35 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverContourParamete
   /// vtkDoubleArray (1 component per value).
   ///
   /// `contour` must be a 3*n vtkDoubleArray of (x, y, z) triples.
-  static vtkSmartPointer<vtkDoubleArray>
-  ComputeEFDCoefficients(vtkDoubleArray *contour, int order);
+  static vtkSmartPointer<vtkDoubleArray> ComputeEFDCoefficients(vtkDoubleArray* contour, int order);
 
   /// Compute the Kuhl-Giardina (A_0, C_0, E_0) DC triple for a closed
   /// 3D contour.  Returns 3 values in a vtkDoubleArray.
-  static vtkSmartPointer<vtkDoubleArray>
-  ComputeDCCoefficients(vtkDoubleArray *contour);
+  static vtkSmartPointer<vtkDoubleArray> ComputeDCCoefficients(vtkDoubleArray* contour);
 
   /// Inverse EFD transform: reconstruct a contour from coefficients.
   /// Returns 3*nCoords values in the (1, 3, n_coords) layout used by
   /// the Python reference (i.e. all x's, then all y's, then all z's),
   /// packed into a vtkDoubleArray.
-  static vtkSmartPointer<vtkDoubleArray>
-  InverseTransform(vtkDoubleArray *coeffs,
-                   int harmonic,
-                   double locusX, double locusY, double locusZ,
-                   int nCoords);
+  static vtkSmartPointer<vtkDoubleArray> InverseTransform(vtkDoubleArray* coeffs, int harmonic, double locusX, double locusY, double locusZ, int nCoords);
 
   /// C++-friendly overloads on raw pointers — used by the in-process
   /// pipeline and the C++ tests, which need pointer arithmetic over
   /// pre-existing std::vector buffers.
-  static std::vector<double>
-  ComputeEFDCoefficientsRaw(const double *contour, int nPoints, int order);
-  static std::vector<double>
-  ComputeDCCoefficientsRaw(const double *contour, int nPoints);
-  static std::vector<double>
-  InverseTransformRaw(const double *coeffs,
-                      int harmonic,
-                      const double locus[3],
-                      int nCoords);
+  static std::vector<double> ComputeEFDCoefficientsRaw(const double* contour, int nPoints, int order);
+  static std::vector<double> ComputeDCCoefficientsRaw(const double* contour, int nPoints);
+  static std::vector<double> InverseTransformRaw(const double* coeffs, int harmonic, const double locus[3], int nCoords);
 
- protected:
+protected:
   vtkLiverContourParameterizer();
   ~vtkLiverContourParameterizer() override;
 
-  int FillInputPortInformation(int port, vtkInformation *info) override;
-  int RequestData(vtkInformation *,
-                  vtkInformationVector **,
-                  vtkInformationVector *) override;
+  int FillInputPortInformation(int port, vtkInformation* info) override;
+  int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
- private:
-  vtkLiverContourParameterizer(const vtkLiverContourParameterizer &) = delete;
-  void operator=(const vtkLiverContourParameterizer &) = delete;
+private:
+  vtkLiverContourParameterizer(const vtkLiverContourParameterizer&) = delete;
+  void operator=(const vtkLiverContourParameterizer&) = delete;
 
   int Mode;
   int Order;
@@ -189,4 +174,4 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverContourParamete
   std::vector<double> Reconstruction;
 };
 
-#endif  // __vtkLiverContourParameterizer_h_
+#endif // __vtkLiverContourParameterizer_h_

@@ -28,7 +28,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-int vtkLiverBezierFitterTest1(int, char *[])
+int vtkLiverBezierFitterTest1(int, char*[])
 {
   using namespace vtkLiverAlgorithmTestFixtures;
 
@@ -54,46 +54,43 @@ int vtkLiverBezierFitterTest1(int, char *[])
   samplePoints->SetDataTypeToDouble();
   samplePoints->SetNumberOfPoints(static_cast<vtkIdType>(Nu) * Nv);
   for (int i = 0; i < Nu; ++i)
-    {
+  {
     for (int j = 0; j < Nv; ++j)
-      {
+    {
       const size_t base = (static_cast<size_t>(i) * Nv + j) * 3;
-      samplePoints->SetPoint(static_cast<vtkIdType>(i) * Nv + j,
-                             fx.points[base + 0],
-                             fx.points[base + 1],
-                             fx.points[base + 2]);
-      }
+      samplePoints->SetPoint(static_cast<vtkIdType>(i) * Nv + j, fx.points[base + 0], fx.points[base + 1], fx.points[base + 2]);
     }
+  }
   vtkNew<vtkPolyData> pointsPolyData;
   pointsPolyData->SetPoints(samplePoints);
 
   // Port 1 — BasisU as vtkTable (Nu rows, M columns).
   vtkNew<vtkTable> basisUTable;
   for (int j = 0; j < M; ++j)
-    {
+  {
     vtkNew<vtkDoubleArray> col;
     col->SetNumberOfComponents(1);
     col->SetNumberOfTuples(Nu);
     for (int i = 0; i < Nu; ++i)
-      {
+    {
       col->SetValue(i, fx.basisU[static_cast<size_t>(i) * M + j]);
-      }
-    basisUTable->AddColumn(col);
     }
+    basisUTable->AddColumn(col);
+  }
 
   // Port 2 — BasisV as vtkTable (Nv rows, M columns).
   vtkNew<vtkTable> basisVTable;
   for (int j = 0; j < M; ++j)
-    {
+  {
     vtkNew<vtkDoubleArray> col;
     col->SetNumberOfComponents(1);
     col->SetNumberOfTuples(Nv);
     for (int i = 0; i < Nv; ++i)
-      {
+    {
       col->SetValue(i, fx.basisV[static_cast<size_t>(i) * M + j]);
-      }
-    basisVTable->AddColumn(col);
     }
+    basisVTable->AddColumn(col);
+  }
 
   vtkNew<vtkLiverBezierFitter> fitter;
   fitter->SetNumberOfSamples(Nu, Nv);
@@ -102,52 +99,51 @@ int vtkLiverBezierFitterTest1(int, char *[])
   fitter->SetInputData(2, basisVTable);
   fitter->Update();
 
-  const auto &cps = fitter->GetControlPoints();
+  const auto& cps = fitter->GetControlPoints();
   if (cps.size() != static_cast<size_t>(4) * 4 * 3)
-    {
+  {
     std::fprintf(stderr, "[BezierFitter] FAIL: size %zu != 48\n", cps.size());
     return EXIT_FAILURE;
-    }
+  }
   if (fitter->GetGridSize() != 4)
-    {
-    std::fprintf(stderr, "[BezierFitter] FAIL: GridSize %d != 4\n",
-                 fitter->GetGridSize());
+  {
+    std::fprintf(stderr, "[BezierFitter] FAIL: GridSize %d != 4\n", fitter->GetGridSize());
     return EXIT_FAILURE;
-    }
+  }
 
-  const auto &expected = expectedBezierControlPoints();
+  const auto& expected = expectedBezierControlPoints();
   size_t failIdx = 0;
   if (!allClose(cps.data(), expected.data(), cps.size(), rtol, atol, &failIdx))
-    {
-    printFailure("BezierFitter", cps.data(), expected.data(), cps.size(),
-                 failIdx, rtol, atol);
+  {
+    printFailure("BezierFitter", cps.data(), expected.data(), cps.size(), failIdx, rtol, atol);
     return EXIT_FAILURE;
-    }
+  }
 
   // Verify the polydata output round-trips the same control points.
-  vtkPolyData *out = fitter->GetOutput();
+  vtkPolyData* out = fitter->GetOutput();
   if (!out || !out->GetPoints() || out->GetPoints()->GetNumberOfPoints() != 16)
-    {
-    std::fprintf(stderr,
-                 "[BezierFitter] FAIL: output polydata missing or wrong size\n");
+  {
+    std::fprintf(stderr, "[BezierFitter] FAIL: output polydata missing or wrong size\n");
     return EXIT_FAILURE;
-    }
+  }
   for (int i = 0; i < 4; ++i)
-    {
+  {
     for (int j = 0; j < 4; ++j)
-      {
+    {
       double p[3];
       out->GetPoints()->GetPoint(i * 4 + j, p);
       const size_t base = (i * 4 + j) * 3;
       if (p[0] != cps[base + 0] || p[1] != cps[base + 1] || p[2] != cps[base + 2])
-        {
+      {
         std::fprintf(stderr,
                      "[BezierFitter] FAIL: polydata point (%d,%d) does not "
-                     "match raw control-points vector\n", i, j);
+                     "match raw control-points vector\n",
+                     i,
+                     j);
         return EXIT_FAILURE;
-        }
       }
     }
+  }
 
   return EXIT_SUCCESS;
 }
