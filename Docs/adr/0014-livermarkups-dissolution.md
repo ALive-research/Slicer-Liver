@@ -9,6 +9,24 @@
   *shape* those diagrams will record.)
 - **PR:** _filled in on merge_
 
+## Amendments
+
+- **2026-05-16 — rename Bezier-surface MRML classes.**  The `Liver`
+  prefix on the Bezier-surface MRML class trio
+  (`vtkMRMLLiverBezierSurface{,Display,Storage}Node`) carries no
+  semantic weight beyond project-scope decoration, which is already
+  encoded by the file path (`LiverResections/MRML/`).  The classes are
+  renamed to drop the prefix:
+  `vtkMRMLBezierSurfaceNode`, `vtkMRMLBezierSurfaceDisplayNode`,
+  `vtkMRMLBezierSurfaceStorageNode`.  The corresponding scene tag
+  names (`"LiverBezierSurface"`, `"LiverBezierSurfaceDisplay"`) drop
+  the prefix too.  `LiverResection` stays as a compound clinical noun
+  — the project's defining concept — and the project-scope-named
+  helpers around the Bezier surface (`LiverBezierSurfacePipeline`,
+  `vtkLiverBezierWidget`) are unaffected; only the generic-geometric-
+  primitive MRML nodes rename.  This amendment updates every
+  reference in the ADR text below.
+
 ## Context
 
 `LiverMarkups` today is a Markups-derived satellite module that hosts the
@@ -94,13 +112,13 @@ three Representations (per ADR-0013
 The three Markups-derived nodes relocate as plain `vtkMRMLDisplayable
 Node` subclasses (no `vtkMRMLMarkupsNode` inheritance):
 
-- `vtkMRMLLiverBezierSurfaceNode` (+ `vtkMRMLLiverBezierSurfaceDisplay
-  Node`) — the 4×4 control grid plus ring-role metadata (which
-  control points are corner / edge / interior); weakrefs to target
-  model, distance map, vascular segments; the margin/thickness
-  doubles previously hosted by `vtkMRMLMarkupsBezierSurfaceNode`.
+- `vtkMRMLBezierSurfaceNode` (+ `vtkMRMLBezierSurfaceDisplayNode`)
+  — the 4×4 control grid plus ring-role metadata (which control
+  points are corner / edge / interior); weakrefs to target model,
+  distance map, vascular segments; the margin/thickness doubles
+  previously hosted by `vtkMRMLMarkupsBezierSurfaceNode`.
 - `vtkMRMLLiverSlicingPlaneInitNode` (no separate display node — its
-  decoration lives on `vtkMRMLLiverBezierSurfaceDisplayNode`'s
+  decoration lives on `vtkMRMLBezierSurfaceDisplayNode`'s
   state-conditional Representation) — two control points + plane
   parameters; persisted on the parent resection's data, not a
   separate scene node.
@@ -214,7 +232,7 @@ longer clean.  Already on the v1→v2 ticket and contributes to the
 (D) trigger ADR-0007 §"Mapping the v1 → v2 jump" enumerates.
 
 **Storage mechanism**: a new C++ MRML storage node
-`vtkMRMLLiverBezierSurfaceStorageNode` reads and writes `.lrp.json`
+`vtkMRMLBezierSurfaceStorageNode` reads and writes `.lrp.json`
 files — a purpose-built schema for the new data model.
 
 JSON is the on-disk format choice (chosen over XML and over an
@@ -287,8 +305,8 @@ fields enumerated above.
 ```
 LiverResections/
   MRML/
-    vtkMRMLLiverBezierSurfaceNode.{h,cxx}        # data; 4×4 grid + ring-role + weakrefs
-    vtkMRMLLiverBezierSurfaceDisplayNode.{h,cxx} # visibility, opacity, terminology (ADR-0011)
+    vtkMRMLBezierSurfaceNode.{h,cxx}        # data; 4×4 grid + ring-role + weakrefs
+    vtkMRMLBezierSurfaceDisplayNode.{h,cxx} # visibility, opacity, terminology (ADR-0011)
   LiverBezierSurfacePipeline.py                   # LayerDM Pipeline (ADR-0013)
   Representations/
     SlicingPlaneInitRepresentation.py
@@ -422,9 +440,8 @@ The T2 LiverResections (all-in) phase lands in this order:
    behaviour and are the regression yardstick for everything
    downstream.
 2. **New MRML node types** in `LiverResections/MRML/`:
-   `vtkMRMLLiverBezierSurfaceNode`, `vtkMRMLLiverBezierSurfaceDisplay
-   Node`.  Data-only C++ per [ADR-0004](0004-python-cpp-boundary.md)
-   §1.
+   `vtkMRMLBezierSurfaceNode`, `vtkMRMLBezierSurfaceDisplayNode`.
+   Data-only C++ per [ADR-0004](0004-python-cpp-boundary.md) §1.
 3. **State-machine fields** on `vtkMRMLLiverResectionNode`:
    `ResectionState` (`Init`/`Planning`) and `InitializationMode`
    (`SlicingPlane`/`DistanceSpheroid`) as typed enums with
