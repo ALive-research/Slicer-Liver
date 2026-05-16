@@ -7,12 +7,13 @@
 # assembly (actor + mapper(s) + per-frame state) that a Pipeline
 # composes.
 #
-# Members of this PR:
+# Currently populated:
 #
 # * ``BezierPlanningRepresentation`` — active in (state=Planning, *);
-#   renders the 4×4 Bezier control grid and the fitted surface.
+#   renders the 4×4 Bezier control surface.
 #
-# To land in the two follow-up PRs of the T2.2 stack:
+# Reserved for the remaining T2.2 stack iterations (slot names defined
+# as constants on ``LiverBezierSurfacePipeline``):
 #
 # * ``SlicingPlaneInitRepresentation`` — active in
 #   (state=Init, mode=SlicingPlane); renders two control points + the

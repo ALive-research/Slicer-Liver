@@ -1,4 +1,4 @@
-"""Python unit tests for ``LiverBezierSurfacePipeline`` — T2.2 PR 1.
+"""Python unit tests for ``LiverBezierSurfacePipeline`` — T2.2 stack, first iteration.
 
 The Pipeline is pure Python and has no hard dependency on a wrapped
 MRML module (per ADR-0013 §1: Pipelines are Python; per ADR-0008 §2:
@@ -229,9 +229,9 @@ def test_pipeline_dispatches_to_bezier_planning_on_state_planning(
 ):
     """Mutate state Init→Planning → ``BezierPlanning`` becomes active.
 
-    The Init Representations are not populated in this PR (skeleton —
-    two follow-up PRs will land them), so this test exercises the
-    one wired-up dispatch edge.
+    The Init Representations are not populated at this stack
+    iteration (skeleton — later T2.2 iterations land them), so this
+    test exercises the one wired-up dispatch edge.
     """
     data = _StubDataNode(state=pipeline_module.STATE_INIT)
     display = _StubDisplayNode()
@@ -240,8 +240,8 @@ def test_pipeline_dispatches_to_bezier_planning_on_state_planning(
     )
 
     # Before Init→Planning, dispatch resolves to the SlicingPlaneInit
-    # slot — which is None in this PR.  ``update()`` runs but no
-    # active Representation is set.
+    # slot — which is None at this stack iteration.  ``update()`` runs
+    # but no active Representation is set.
     pipeline.update()
     assert pipeline.GetCurrentRepresentationName() == (
         pipeline_module.REPRESENTATION_SLICING_PLANE_INIT
@@ -262,9 +262,10 @@ def test_pipeline_dispatches_distance_spheroid_init_when_mode_set(
 ):
     """When state=Init and mode=DistanceSpheroid, that slot wins dispatch.
 
-    The slot is None in this PR; this test pins the dispatch *key*
-    selection (``_select_representation``) so the follow-up PRs that
-    populate the slot do not have to re-design the table.
+    The slot is None at this stack iteration; this test pins the
+    dispatch *key* selection (``_select_representation``) so the later
+    T2.2 iterations that populate the slot do not have to re-design
+    the table.
     """
     data = _StubDataNode(
         state=pipeline_module.STATE_INIT,
