@@ -37,8 +37,8 @@
 
 ==============================================================================*/
 
-#ifndef __vtklivebezierrepresentation_h_
-#define __vtklivebezierrepresentation_h_
+#ifndef __vtkliverbezierrepresentation_h_
+#define __vtkliverbezierrepresentation_h_
 
 #include "vtkSlicerLiverResectionsModuleVTKWidgetsExport.h"
 
@@ -201,4 +201,4 @@ private:
   void operator=(const vtkLiverBezierRepresentation&) = delete;
 };
 
-#endif //__vtklivebezierrepresentation_h_
+#endif //__vtkliverbezierrepresentation_h_

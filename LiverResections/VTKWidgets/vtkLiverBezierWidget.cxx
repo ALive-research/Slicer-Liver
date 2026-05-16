@@ -80,13 +80,13 @@ vtkLiverBezierWidget::vtkLiverBezierWidget()
   this->CallbackMapper->SetCallbackMethod(vtkCommand::MouseMoveEvent, vtkWidgetEvent::Move, this, vtkLiverBezierWidget::MoveAction);
 
   // Right-drag / right-click — registered so the event table is
-  // *visible* in this PR; the callbacks are no-op placeholders
-  // pending TODO(T2.3 right-drag-ring-group) and
+  // *visible* now; the callbacks are no-op placeholders pending
+  // TODO(T2.3 right-drag-ring-group) and
   // TODO(T2.3 right-click-context-menu).  Wiring the registrations
   // here means upstream interactor events route into the widget
   // (rather than falling through to the Markups widget or the
-  // default 3-D-camera bindings), making the future iterations a
-  // pure callback-body edit.
+  // default 3-D-camera bindings), making later iterations a pure
+  // callback-body edit.
   this->CallbackMapper->SetCallbackMethod(vtkCommand::RightButtonPressEvent, vtkWidgetEvent::Select3D, this, vtkLiverBezierWidget::RightSelectAction);
   this->CallbackMapper->SetCallbackMethod(vtkCommand::RightButtonReleaseEvent, vtkWidgetEvent::EndSelect3D, this, vtkLiverBezierWidget::RightEndSelectAction);
 }
@@ -117,7 +117,7 @@ void vtkLiverBezierWidget::CreateDefaultRepresentation()
 //------------------------------------------------------------------------------
 void vtkLiverBezierWidget::SetRepresentation(vtkLiverBezierRepresentation* r)
 {
-  this->Superclass::SetWidgetRepresentation(reinterpret_cast<vtkWidgetRepresentation*>(r));
+  this->Superclass::SetWidgetRepresentation(r);
   if (r && this->BezierNode.GetPointer())
   {
     r->SetBezierNode(this->BezierNode.GetPointer());
@@ -127,7 +127,7 @@ void vtkLiverBezierWidget::SetRepresentation(vtkLiverBezierRepresentation* r)
 //------------------------------------------------------------------------------
 vtkLiverBezierRepresentation* vtkLiverBezierWidget::GetLiverBezierRepresentation()
 {
-  return reinterpret_cast<vtkLiverBezierRepresentation*>(this->WidgetRep);
+  return static_cast<vtkLiverBezierRepresentation*>(this->WidgetRep);
 }
 
 //------------------------------------------------------------------------------
