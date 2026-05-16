@@ -344,9 +344,14 @@ int testTerminologyEntryRoundTrip()
   vtkNew<vtkMRMLBezierSurfaceDisplayNode> node;
   CHECK_STRING(node->GetTerminologyEntry().c_str(), "");
 
-  // Realistic SCT triple — Liver, anatomical structure category, no
-  // modifier.  The canonical format is documented on the field.
-  const std::string sct = "SCT^123037004^Anatomical Structure~SCT^10200004^Liver~^^";
+  // Realistic SCT terminology entry in Slicer's canonical 7-component
+  // form (terminologyContextName ~ category ~ type ~ typeModifier ~
+  // anatomicContextName ~ anatomicRegion ~ anatomicRegionModifier).
+  // Liver, anatomical structure category, no modifier, no anatomic
+  // region.  Matches the format consumed by
+  // vtkSlicerTerminologiesModuleLogic::DeserializeTerminologyEntry
+  // (which hard-rejects entries with fewer than 7 components).
+  const std::string sct = "SlicerLiver-Terminology~SCT^123037004^Anatomical Structure~SCT^10200004^Liver~^^~~^^~^^";
   const vtkMTimeType baseline = node->GetMTime();
   node->SetTerminologyEntry(sct);
   CHECK_STRING(node->GetTerminologyEntry().c_str(), sct.c_str());
@@ -362,7 +367,8 @@ int testTerminologyEntryRoundTrip()
   // commit 07474f2 — project discipline) and the parser decodes
   // them on read.  The triple format itself uses ``^`` and ``~``
   // which are XML-safe, but ``&`` and ``<`` must round-trip too.
-  const std::string hostile = "SCT^123037004^Cat & <Type>~SCT^10200004^Liver~^^";
+  // Hostile-character payload in the same 7-component form.
+  const std::string hostile = "SlicerLiver-Terminology~SCT^123037004^Cat & <Type>~SCT^10200004^Liver~^^~~^^~^^";
   vtkNew<vtkMRMLBezierSurfaceDisplayNode> source;
   vtkNew<vtkMRMLScene> scene;
   source->SetScene(scene.GetPointer());

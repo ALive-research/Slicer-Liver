@@ -436,7 +436,11 @@ def test_display_terminology_entry_round_trip(mrml_module):
     node = mrml_module.vtkMRMLBezierSurfaceDisplayNode()
     assert node.GetTerminologyEntry() == ""
 
-    sct = "SCT^123037004^Anatomical Structure~SCT^10200004^Liver~^^"
+    # Slicer's canonical 7-component terminology-entry format
+    # (terminologyContextName ~ category ~ type ~ typeModifier ~
+    # anatomicContextName ~ anatomicRegion ~ anatomicRegionModifier) —
+    # matches what vtkSlicerTerminologiesModuleLogic emits/consumes.
+    sct = "SlicerLiver-Terminology~SCT^123037004^Anatomical Structure~SCT^10200004^Liver~^^~~^^~^^"
     baseline = node.GetMTime()
     node.SetTerminologyEntry(sct)
     assert node.GetTerminologyEntry() == sct
