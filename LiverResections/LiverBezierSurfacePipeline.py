@@ -11,13 +11,13 @@ The Pipeline owns three Representations keyed on the
 ``(state, initMode)`` tuple; ``update()`` activates whichever
 Representation matches the current tuple.
 
-Scope of this skeleton — first PR of the T2.2 stack
+Scope of this skeleton — first T2.2 stack iteration
 ---------------------------------------------------
-This is the **first PR of the T2.2 stack** (Path B scoping; see the
-v2.0.0 release tracker).  Only the ``BezierPlanning`` Representation
-is wired up; the two ``Init``-state Representations
+This is the **first iteration of the T2.2 stack** (Path B scoping;
+see the v2.0.0 release tracker).  Only the ``BezierPlanning``
+Representation is wired up; the two ``Init``-state Representations
 (``SlicingPlaneInit`` and ``DistanceSpheroidInit``) are placeholder
-slots with TODO markers.  Two follow-up PRs will populate them.
+slots with TODO markers and land in the remaining T2.2 iterations.
 
 Out of scope here, per the brief:
 
@@ -185,8 +185,9 @@ class LiverBezierSurfacePipeline(_PipelineBase):
       decoration.  Optional at construction time (matches the LayerDM
       lifecycle where the display node may be wired up post-init).
     * ``resection_node`` — ``vtkMRMLLiverResectionNode``, the
-      orchestrating-state node from ADR-0013 §4.  Optional in this
-      PR (T2.6 wires the registration that ensures it is present).
+      orchestrating-state node from ADR-0013 §4.  Optional at this
+      stack iteration (T2.6 wires the registration that ensures it
+      is present).
     * ``renderer`` — the ``vtkRenderer`` the Pipeline draws into.
       Optional; injected by LayerDM's manager when running inside
       Slicer.
@@ -194,8 +195,8 @@ class LiverBezierSurfacePipeline(_PipelineBase):
     Lifecycle
     ---------
     Per ADR-0013 §5 the Pipeline is created and destroyed by the
-    LayerDM manager (not by hand).  In standalone use (this PR's
-    direct-instantiation tests) the caller is responsible for
+    LayerDM manager (not by hand).  In standalone use (e.g. the
+    direct-instantiation unit tests) the caller is responsible for
     ``cleanup()`` to release observers.
 
     Idempotency
@@ -233,10 +234,10 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         # this counter does not advance on a no-op update().
         self._update_count: int = 0
 
-        # Representation slots.  Keys match ADR-0014 §2 names.  In this
-        # PR only BezierPlanning is constructed; the two Init slots are
-        # ``None`` placeholders with TODO markers — populated by the
-        # two follow-up PRs of the T2.2 stack.
+        # Representation slots.  Keys match ADR-0014 §2 names.  At this
+        # stack iteration only BezierPlanning is constructed; the two
+        # Init slots are ``None`` placeholders with TODO markers and
+        # land in later T2.2 iterations.
         self._representations: dict[str, Any | None] = {
             REPRESENTATION_SLICING_PLANE_INIT: None,
             REPRESENTATION_DISTANCE_SPHEROID_INIT: None,
@@ -273,9 +274,9 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         across state transitions — no add/remove churn on the MRML scene
         as the surgeon moves through the workflow.
 
-        This PR wires only ``BezierPlanningRepresentation``.  The two
-        Init-state Representations land in the two follow-up PRs of
-        the T2.2 stack.
+        This iteration wires only ``BezierPlanningRepresentation``.
+        The two Init-state Representations land in later T2.2 stack
+        iterations.
         """
         # Local import to avoid a circular import when the Representations
         # package grows.  The Representation classes themselves are small
@@ -305,11 +306,11 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             BezierPlanningRepresentation(renderer=self.GetRenderer())
         )
 
-        # TODO(T2.2 PR-2): populate SlicingPlaneInit slot per ADR-0014 §2.
+        # TODO(T2.2 SlicingPlaneInit): populate slot per ADR-0014 §2.
         #   self._representations[REPRESENTATION_SLICING_PLANE_INIT] = (
         #       SlicingPlaneInitRepresentation(renderer=self.GetRenderer())
         #   )
-        # TODO(T2.2 PR-3): populate DistanceSpheroidInit slot per ADR-0014 §2.
+        # TODO(T2.2 DistanceSpheroidInit): populate slot per ADR-0014 §2.
         #   self._representations[REPRESENTATION_DISTANCE_SPHEROID_INIT] = (
         #       DistanceSpheroidInitRepresentation(renderer=self.GetRenderer())
         #   )
@@ -442,7 +443,7 @@ class LiverBezierSurfacePipeline(_PipelineBase):
 
         Returns ``None`` when no Representation matches (e.g. an
         unrecognised state value, or the Init Representations have not
-        been populated yet in this PR's skeleton).
+        been populated yet at this stack iteration).
         """
         if state == STATE_PLANNING:
             return REPRESENTATION_BEZIER_PLANNING

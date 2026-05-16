@@ -1,4 +1,4 @@
-"""Python unit tests for ``BezierPlanningRepresentation`` — T2.2 PR 1.
+"""Python unit tests for ``BezierPlanningRepresentation`` — T2.2 stack, first iteration.
 
 Per ADR-0008 §2, Representations are the smallest unit-testable VTK
 assembly; they have no Slicer dependency and a small, well-defined

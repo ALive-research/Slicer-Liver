@@ -7,9 +7,9 @@ edges 8 + interior 4) and the fitted Bezier surface, driven by the
 
 Scope of this skeleton
 ----------------------
-This is the **first PR of the T2.2 stack**.  The Representation
-class is constructed by ``LiverBezierSurfacePipeline.initialize()``
-and exercised by direct Python instantiation in unit tests.  Full
+The first T2.2 stack iteration ships the Representation class
+constructed by ``LiverBezierSurfacePipeline.initialize()`` and
+exercised by direct Python instantiation in unit tests.  Full
 integration with Slicer's LayerDM framework happens at T2.6.
 
 Per ADR-0014 §3 the four custom OpenGL mappers
@@ -18,13 +18,14 @@ Per ADR-0014 §3 the four custom OpenGL mappers
 ``vtkOpenGLDistanceContourPolyDataMapper``,
 ``vtkOpenGLResection2DPolyDataMapper``) **relocate** from
 ``LiverMarkups/VTKWidgets/`` to ``LiverResections/VTKWidgets/``.  The
-relocation has not landed yet in this branch (it is part of the
-broader T2 cohort, not the T2.2 stack); this Representation uses
-the generic ``vtkPolyDataMapper`` + ``vtkActor`` pair until that
-relocation completes, at which point the surface mapper field will
-flip to ``vtkOpenGLBezierResectionPolyDataMapper`` *without changing
-the Representation's public API*.  Marked with ``TODO(T2-mapper-
-relocation)`` at the construction point so the swap is mechanical.
+relocation has not landed yet (it is part of the broader T2 cohort,
+not the T2.2 stack); this Representation uses the generic
+``vtkPolyDataMapper`` + ``vtkActor`` pair until that relocation
+completes, at which point the surface mapper field will flip to
+``vtkOpenGLBezierResectionPolyDataMapper`` *without changing the
+Representation's public API*.  Marked with
+``TODO(T2-mapper-relocation)`` at the construction point so the
+swap is mechanical.
 
 Renderer attachment
 -------------------
@@ -40,10 +41,11 @@ References
 ----------
 * `ADR-0011`_ — SCT terminology dispatch.  The Pipeline reads the
   ``TerminologyEntry`` field off the display node and derives
-  colour / label / badge from the SCT triple; for this PR the
-  Representation honours the pure-vector ``ResectionColor`` etc.
-  fields, falling through to terminology-driven colour resolution
-  when the terminology helper lands (TODO marker below).
+  colour / label / badge from the SCT triple; at this stack
+  iteration the Representation honours the pure-vector
+  ``ResectionColor`` etc. fields, falling through to terminology-
+  driven colour resolution when the terminology helper lands
+  (TODO marker below).
 * `ADR-0013`_ §6 — Representations as composable VTK pipelines.
 * `ADR-0014`_ §3 — mapper relocation.
 
