@@ -123,18 +123,28 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverBezierSurfaceNod
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   /// Resection state machine (per ADR-0013 §4).
+  ///
+  /// Enum integer values are pinned explicitly so that a future
+  /// reorder or insertion does not silently shift any Python or C++
+  /// caller that compares against ``cls.Planning`` as a literal.  XML
+  /// serialisation goes through the name-string converter
+  /// (``GetStateAsString``) and is independent of these values; the
+  /// pinning is purely a defensive measure on the in-memory ABI.
   enum ResectionState
   {
     Init = 0,
-    Planning,
+    Planning = 1,
     ResectionState_Last
   };
 
   /// Init-mode dispatch (per ADR-0014 §1).
+  ///
+  /// Integer values pinned for the same reason as ``ResectionState``
+  /// above.
   enum InitializationMode
   {
     SlicingPlane = 0,
-    DistanceSpheroid,
+    DistanceSpheroid = 1,
     InitializationMode_Last
   };
 
