@@ -48,6 +48,9 @@
 // VTK includes
 #include <vtkSetGet.h>
 
+// STD includes
+#include <string>
+
 /**
  * \class vtkMRMLBezierSurfaceDisplayNode
  *
@@ -196,6 +199,31 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLBezierSurfaceDisplayN
   vtkSetMacro(MirrorDisplay, bool);
   vtkGetMacro(MirrorDisplay, bool);
 
+  //--------------------------------------------------------------------------
+  // SCT terminology reference (ADR-0011 + ADR-0013 §3)
+  //--------------------------------------------------------------------------
+
+  /// Serialised SNOMED-CT terminology triple (Category, Type,
+  /// optional Modifier) describing the clinical concept this display
+  /// node decorates.  The canonical wire format is Slicer's standard
+  /// terminology-entry string,
+  /// ``{CategoryCodingScheme}^{CategoryCode}^{CategoryMeaning}~``
+  /// ``{TypeCodingScheme}^{TypeCode}^{TypeMeaning}~``
+  /// ``{ModifierCodingScheme}^{ModifierCode}^{ModifierMeaning}``
+  /// (e.g. ``SCT^123037004^Anatomical Structure~SCT^10200004^Liver~^^``
+  /// for the liver anatomical concept).
+  ///
+  /// Empty string = no terminology assigned; rendering uses pure-vector
+  /// defaults (``ResectionColor`` etc.).  When set, the LayerDM
+  /// Pipeline (T2.2, out of scope here) uses the SCT triple to derive
+  /// colour, label, and badge presentation per
+  /// [ADR-0011](../../Docs/adr/0011-sct-terminology-dispatch.md) and
+  /// [ADR-0013 §3](../../Docs/adr/0013-layerdm-pipeline-pattern.md);
+  /// this node only stores the string — it does not depend on the
+  /// Terminologies module for parsing.
+  vtkSetMacro(TerminologyEntry, std::string);
+  vtkGetMacro(TerminologyEntry, std::string);
+
  protected:
   vtkMRMLBezierSurfaceDisplayNode();
   ~vtkMRMLBezierSurfaceDisplayNode() override;
@@ -220,6 +248,7 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLBezierSurfaceDisplayN
   bool InterpolatedMargins;
   bool ShowResection2D;
   bool MirrorDisplay;
+  std::string TerminologyEntry;
 };
 
 #endif //__vtkmrmlbeziersurfacedisplaynode_h_

@@ -12,6 +12,7 @@
    - ResectionOpacity clamp to [0, 1]
    - XML serialize/deserialize via WriteXML+ReadXMLAttributes
    - CopyContent / DeepCopy
+   - SCT TerminologyEntry round-trip (ADR-0011 + ADR-0013 §3)
 
 ==============================================================================*/
 
@@ -80,6 +81,11 @@ int testDefaults()
   CHECK_BOOL(node->GetInterpolatedMargins(), false);
   CHECK_BOOL(node->GetShowResection2D(), false);
   CHECK_BOOL(node->GetMirrorDisplay(), false);
+
+  // ADR-0011 + ADR-0013 §3 — TerminologyEntry defaults to empty
+  // (no terminology assigned; Pipeline uses pure-vector colour
+  // defaults rather than dispatching off the SCT triple).
+  CHECK_STRING(node->GetTerminologyEntry().c_str(), "");
 
   CHECK_STRING(node->GetNodeTagName(), "BezierSurfaceDisplay");
   return EXIT_SUCCESS;
@@ -319,6 +325,143 @@ int testModifiedEventsOnSetters()
 
 #undef EXPECT_MTIME_ADVANCES
 
+int testTerminologyEntryRoundTrip()
+{
+  // ADR-0011 + ADR-0013 §3 / §8 — the display node carries a
+  // serialised SCT triple.  This sub-test pins:
+  //   - default is empty
+  //   - get/set round-trip
+  //   - MTime advances on set
+  //   - WriteXML emits a ``terminologyEntry="..."`` attribute that
+  //     survives XMLAttributeEncodeString on hostile XML chars
+  //   - ReadXMLAttributes recovers the original value bit-exactly
+  vtkNew<vtkMRMLBezierSurfaceDisplayNode> node;
+  CHECK_STRING(node->GetTerminologyEntry().c_str(), "");
+
+  // Realistic SCT triple — Liver, anatomical structure category, no
+  // modifier.  The canonical format is documented on the field.
+  const std::string sct =
+    "SCT^123037004^Anatomical Structure~SCT^10200004^Liver~^^";
+  const vtkMTimeType baseline = node->GetMTime();
+  node->SetTerminologyEntry(sct);
+  CHECK_STRING(node->GetTerminologyEntry().c_str(), sct.c_str());
+  if (node->GetMTime() <= baseline)
+  {
+    std::cerr << "Expected MTime to advance after SetTerminologyEntry"
+              << " (baseline=" << baseline
+              << ", post=" << node->GetMTime() << ")\n";
+    return EXIT_FAILURE;
+  }
+
+  // XML round-trip with hostile characters to confirm
+  // XMLAttributeEncodeString is in the write path (per PR #341
+  // commit 07474f2 — project discipline) and the parser decodes
+  // them on read.  The triple format itself uses ``^`` and ``~``
+  // which are XML-safe, but ``&`` and ``<`` must round-trip too.
+  const std::string hostile =
+    "SCT^123037004^Cat & <Type>~SCT^10200004^Liver~^^";
+  vtkNew<vtkMRMLBezierSurfaceDisplayNode> source;
+  vtkNew<vtkMRMLScene> scene;
+  source->SetScene(scene.GetPointer());
+  source->SetTerminologyEntry(hostile);
+
+  std::ostringstream out;
+  source->WriteXML(out, 0);
+  const std::string xml = out.str();
+
+  // The terminologyEntry attribute must be present.
+  if (xml.find("terminologyEntry=\"") == std::string::npos)
+  {
+    std::cerr << "WriteXML output missing terminologyEntry attribute:\n"
+              << xml << "\n";
+    return EXIT_FAILURE;
+  }
+  // Hostile chars must be XML-encoded in the on-wire form (else
+  // the resulting XML would be malformed).
+  if (xml.find("Cat & <Type>") != std::string::npos)
+  {
+    std::cerr << "WriteXML output contains unencoded hostile chars:\n"
+              << xml << "\n";
+    return EXIT_FAILURE;
+  }
+
+  // Hand-parse name="value" pairs (vtkXMLDataParser would decode the
+  // entities for us; here we mimic the parser by replacing the
+  // entities back to their literal form before handing to
+  // ReadXMLAttributes, which expects already-decoded values per
+  // vtkMRMLNodePropertyMacros.h:193).
+  std::vector<std::string> storage;
+  std::size_t pos = 0;
+  while (pos < xml.size())
+  {
+    while (pos < xml.size() && std::isspace(static_cast<unsigned char>(xml[pos])))
+    {
+      ++pos;
+    }
+    if (pos >= xml.size())
+    {
+      break;
+    }
+    const std::size_t eq = xml.find('=', pos);
+    if (eq == std::string::npos)
+    {
+      break;
+    }
+    std::string name = xml.substr(pos, eq - pos);
+    if (eq + 1 >= xml.size() || xml[eq + 1] != '"')
+    {
+      break;
+    }
+    const std::size_t valStart = eq + 2;
+    const std::size_t valEnd = xml.find('"', valStart);
+    if (valEnd == std::string::npos)
+    {
+      break;
+    }
+    std::string value = xml.substr(valStart, valEnd - valStart);
+    // Manually decode the two XML entities relevant here.
+    auto replaceAll = [](std::string& s, const std::string& from,
+                         const std::string& to)
+    {
+      std::size_t p = 0;
+      while ((p = s.find(from, p)) != std::string::npos)
+      {
+        s.replace(p, from.size(), to);
+        p += to.size();
+      }
+    };
+    replaceAll(value, "&lt;", "<");
+    replaceAll(value, "&gt;", ">");
+    replaceAll(value, "&quot;", "\"");
+    replaceAll(value, "&apos;", "'");
+    replaceAll(value, "&amp;", "&");
+    storage.push_back(name);
+    storage.push_back(value);
+    pos = valEnd + 1;
+  }
+
+  std::vector<const char*> atts;
+  atts.reserve(storage.size() + 1);
+  for (const auto& s : storage)
+  {
+    atts.push_back(s.c_str());
+  }
+  atts.push_back(nullptr);
+
+  vtkNew<vtkMRMLBezierSurfaceDisplayNode> sink;
+  sink->SetScene(scene.GetPointer());
+  sink->ReadXMLAttributes(atts.data());
+  CHECK_STRING(sink->GetTerminologyEntry().c_str(), hostile.c_str());
+
+  // CopyContent must deep-copy the string.
+  vtkNew<vtkMRMLBezierSurfaceDisplayNode> copySink;
+  copySink->CopyContent(source.GetPointer(), /*deepCopy=*/true);
+  CHECK_STRING(copySink->GetTerminologyEntry().c_str(), hostile.c_str());
+  source->SetTerminologyEntry("");
+  CHECK_STRING(copySink->GetTerminologyEntry().c_str(), hostile.c_str());
+  return EXIT_SUCCESS;
+}
+
 int testCopyContent()
 {
   vtkNew<vtkMRMLBezierSurfaceDisplayNode> source;
@@ -366,6 +509,7 @@ int vtkMRMLBezierSurfaceDisplayNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testXMLRoundTrip());
   CHECK_EXIT_SUCCESS(testCopyContent());
   CHECK_EXIT_SUCCESS(testModifiedEventsOnSetters());
+  CHECK_EXIT_SUCCESS(testTerminologyEntryRoundTrip());
 
   std::cout << "vtkMRMLBezierSurfaceDisplayNodeTest1 completed successfully"
             << std::endl;

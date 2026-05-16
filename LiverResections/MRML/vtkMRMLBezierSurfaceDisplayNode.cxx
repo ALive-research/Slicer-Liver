@@ -67,6 +67,7 @@ vtkMRMLBezierSurfaceDisplayNode::vtkMRMLBezierSurfaceDisplayNode()
   , InterpolatedMargins(false)
   , ShowResection2D(false)
   , MirrorDisplay(false)
+  , TerminologyEntry()
 {
 }
 
@@ -94,6 +95,7 @@ void vtkMRMLBezierSurfaceDisplayNode::WriteXML(ostream& of, int nIndent)
   vtkMRMLWriteXMLBooleanMacro(interpolatedMargins, InterpolatedMargins);
   vtkMRMLWriteXMLBooleanMacro(showResection2D, ShowResection2D);
   vtkMRMLWriteXMLBooleanMacro(mirrorDisplay, MirrorDisplay);
+  vtkMRMLWriteXMLStdStringMacro(terminologyEntry, TerminologyEntry);
   vtkMRMLWriteXMLEndMacro();
 }
 
@@ -120,6 +122,7 @@ void vtkMRMLBezierSurfaceDisplayNode::ReadXMLAttributes(const char** atts)
   vtkMRMLReadXMLBooleanMacro(interpolatedMargins, InterpolatedMargins);
   vtkMRMLReadXMLBooleanMacro(showResection2D, ShowResection2D);
   vtkMRMLReadXMLBooleanMacro(mirrorDisplay, MirrorDisplay);
+  vtkMRMLReadXMLStdStringMacro(terminologyEntry, TerminologyEntry);
   vtkMRMLReadXMLEndMacro();
 
   this->EndModify(disabledModify);
@@ -148,6 +151,7 @@ void vtkMRMLBezierSurfaceDisplayNode::CopyContent(vtkMRMLNode* anode,
   vtkMRMLCopyBooleanMacro(InterpolatedMargins);
   vtkMRMLCopyBooleanMacro(ShowResection2D);
   vtkMRMLCopyBooleanMacro(MirrorDisplay);
+  vtkMRMLCopyStdStringMacro(TerminologyEntry);
   vtkMRMLCopyEndMacro();
 }
 
@@ -172,5 +176,6 @@ void vtkMRMLBezierSurfaceDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
   vtkMRMLPrintBooleanMacro(InterpolatedMargins);
   vtkMRMLPrintBooleanMacro(ShowResection2D);
   vtkMRMLPrintBooleanMacro(MirrorDisplay);
+  vtkMRMLPrintStdStringMacro(TerminologyEntry);
   vtkMRMLPrintEndMacro();
 }
