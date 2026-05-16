@@ -75,18 +75,9 @@ vtkLiverBezierWidget::vtkLiverBezierWidget()
   // Left-drag = per-point manipulation.  ``Select`` advances to
   // ``Dragging`` on a successful pick; ``EndSelect`` returns to
   // ``Start``; ``Move`` updates the point if Dragging.
-  this->CallbackMapper->SetCallbackMethod(vtkCommand::LeftButtonPressEvent,
-                                          vtkWidgetEvent::Select,
-                                          this,
-                                          vtkLiverBezierWidget::SelectAction);
-  this->CallbackMapper->SetCallbackMethod(vtkCommand::LeftButtonReleaseEvent,
-                                          vtkWidgetEvent::EndSelect,
-                                          this,
-                                          vtkLiverBezierWidget::EndSelectAction);
-  this->CallbackMapper->SetCallbackMethod(vtkCommand::MouseMoveEvent,
-                                          vtkWidgetEvent::Move,
-                                          this,
-                                          vtkLiverBezierWidget::MoveAction);
+  this->CallbackMapper->SetCallbackMethod(vtkCommand::LeftButtonPressEvent, vtkWidgetEvent::Select, this, vtkLiverBezierWidget::SelectAction);
+  this->CallbackMapper->SetCallbackMethod(vtkCommand::LeftButtonReleaseEvent, vtkWidgetEvent::EndSelect, this, vtkLiverBezierWidget::EndSelectAction);
+  this->CallbackMapper->SetCallbackMethod(vtkCommand::MouseMoveEvent, vtkWidgetEvent::Move, this, vtkLiverBezierWidget::MoveAction);
 
   // Right-drag / right-click — registered so the event table is
   // *visible* in this PR; the callbacks are no-op placeholders
@@ -96,14 +87,8 @@ vtkLiverBezierWidget::vtkLiverBezierWidget()
   // (rather than falling through to the Markups widget or the
   // default 3-D-camera bindings), making the future iterations a
   // pure callback-body edit.
-  this->CallbackMapper->SetCallbackMethod(vtkCommand::RightButtonPressEvent,
-                                          vtkWidgetEvent::Select3D,
-                                          this,
-                                          vtkLiverBezierWidget::RightSelectAction);
-  this->CallbackMapper->SetCallbackMethod(vtkCommand::RightButtonReleaseEvent,
-                                          vtkWidgetEvent::EndSelect3D,
-                                          this,
-                                          vtkLiverBezierWidget::RightEndSelectAction);
+  this->CallbackMapper->SetCallbackMethod(vtkCommand::RightButtonPressEvent, vtkWidgetEvent::Select3D, this, vtkLiverBezierWidget::RightSelectAction);
+  this->CallbackMapper->SetCallbackMethod(vtkCommand::RightButtonReleaseEvent, vtkWidgetEvent::EndSelect3D, this, vtkLiverBezierWidget::RightEndSelectAction);
 }
 
 //------------------------------------------------------------------------------
@@ -209,8 +194,7 @@ bool vtkLiverBezierWidget::BeginLeftDragAt(int X, int Y)
   // here so a future loosening of ``Pick`` (e.g. for hover-only
   // tooltips on read-only audit points) does not silently re-enable
   // the drag path.
-  if (node->GetState() == vtkMRMLBezierSurfaceNode::Planning
-      && pick.Role != vtkLiverBezierRepresentation::PickRole_ControlPoint)
+  if (node->GetState() == vtkMRMLBezierSurfaceNode::Planning && pick.Role != vtkLiverBezierRepresentation::PickRole_ControlPoint)
   {
     return false;
   }
@@ -251,8 +235,7 @@ bool vtkLiverBezierWidget::BeginLeftDragAt(int X, int Y)
       this->DragAnchorWorld[2] = p[2];
       break;
     }
-    default:
-      return false;
+    default: return false;
   }
 
   this->PickedRole = pick.Role;
@@ -322,9 +305,7 @@ bool vtkLiverBezierWidget::ApplyPickedPointWorld(const double world[3])
   {
     case vtkLiverBezierRepresentation::PickRole_ControlPoint:
     {
-      if (this->PickedIndex < 0
-          || this->PickedIndex
-            >= vtkMRMLBezierSurfaceNode::GridSize * vtkMRMLBezierSurfaceNode::GridSize)
+      if (this->PickedIndex < 0 || this->PickedIndex >= vtkMRMLBezierSurfaceNode::GridSize * vtkMRMLBezierSurfaceNode::GridSize)
       {
         return false;
       }
@@ -341,12 +322,9 @@ bool vtkLiverBezierWidget::ApplyPickedPointWorld(const double world[3])
       values[this->PickedIndex * 3 + 2] = world[2];
       return node->SetControlGrid(values);
     }
-    case vtkLiverBezierRepresentation::PickRole_SlicingPlaneInit:
-      return node->SetSlicingPlaneInitPoint(this->PickedIndex, world);
-    case vtkLiverBezierRepresentation::PickRole_DistanceSpheroidInit:
-      return node->SetDistanceSpheroidInitPoint(this->PickedIndex, world);
-    default:
-      return false;
+    case vtkLiverBezierRepresentation::PickRole_SlicingPlaneInit: return node->SetSlicingPlaneInitPoint(this->PickedIndex, world);
+    case vtkLiverBezierRepresentation::PickRole_DistanceSpheroidInit: return node->SetDistanceSpheroidInitPoint(this->PickedIndex, world);
+    default: return false;
   }
 }
 
@@ -405,8 +383,7 @@ void vtkLiverBezierWidget::MoveAction(vtkAbstractWidget* w)
       return;
     }
     vtkLiverBezierRepresentation::PickResult hit = rep->Pick(X, Y);
-    self->SetWidgetState(hit.Role == vtkLiverBezierRepresentation::PickRole_None ? Start
-                                                                                 : Hovering);
+    self->SetWidgetState(hit.Role == vtkLiverBezierRepresentation::PickRole_None ? Start : Hovering);
   }
 }
 

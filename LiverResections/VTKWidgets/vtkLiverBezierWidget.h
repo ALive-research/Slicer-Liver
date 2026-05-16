@@ -91,8 +91,7 @@ class vtkMRMLBezierSurfaceNode;
  * calls on a stub ``vtkRenderWindowInteractor`` (the headless test
  * pattern used by the upstream ``vtkLineWidget2Test1``).
  */
-class VTK_SLICER_LIVERRESECTIONS_MODULE_VTKWIDGETS_EXPORT vtkLiverBezierWidget
-  : public vtkAbstractWidget
+class VTK_SLICER_LIVERRESECTIONS_MODULE_VTKWIDGETS_EXPORT vtkLiverBezierWidget : public vtkAbstractWidget
 {
 public:
   static vtkLiverBezierWidget* New();
