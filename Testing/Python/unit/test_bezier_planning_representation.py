@@ -232,41 +232,27 @@ def test_representation_mapper_input_refreshes_on_grid_change(
     assert polydata.GetNumberOfPoints() == 16
     assert polydata.GetNumberOfCells() == 9
 
-    # The grid mapper also has its input refreshed — 16 points + 24
-    # line cells (3 horizontal × 4 + 3 vertical × 4 = 24).
-    grid_mapper = rep.GetGridMapper()
-    grid_polydata = grid_mapper.GetInput()
-    assert grid_polydata.GetNumberOfPoints() == 16
-    assert grid_polydata.GetNumberOfCells() == 24
+    # No separate grid mapper — per ADR-0014 §3 the grid is a fragment-
+    # shader feature on the surface mapper (see Representation class
+    # docstring + TODO(T2-mapper-relocation) in _build_vtk_pipeline).
     rep.cleanup()
 
 
 def test_representation_attach_detach_renderer(rep_module, vtk_module):
-    """``SetRenderer(r)`` adds the actors; ``cleanup()`` removes them."""
+    """``SetRenderer(r)`` adds the surface actor; ``cleanup()`` removes it.
+
+    Per ADR-0014 §3 the grid is a fragment-shader feature on the
+    surface mapper (see Representation class docstring); only the
+    surface actor is attached to the renderer.
+    """
     rep = rep_module()
     renderer = vtk_module.vtkRenderer()
     assert renderer.GetActors().GetNumberOfItems() == 0
 
     rep.SetRenderer(renderer)
-    # Two actors expected: surface + grid.
-    assert renderer.GetActors().GetNumberOfItems() == 2
+    # One actor expected: surface only.  Grid is shader-overlaid.
+    assert renderer.GetActors().GetNumberOfItems() == 1
 
     rep.cleanup()
     # cleanup() detaches and the renderer is empty again.
     assert renderer.GetActors().GetNumberOfItems() == 0
-
-
-def test_representation_grid_visibility_toggles_actor(
-    rep_module, vtk_module
-):
-    """``GridVisibility=True`` on the display node makes the grid actor
-    visible after ``update()``."""
-    rep = rep_module()
-    display = _StubDisplayNode(grid_visibility=False)
-    rep.update(display, _StubDataNode())
-    assert rep.GetGridActor().GetVisibility() == 0
-
-    display.grid_visibility = True
-    rep.update(display, _StubDataNode())
-    assert rep.GetGridActor().GetVisibility() == 1
-    rep.cleanup()
