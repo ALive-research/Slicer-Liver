@@ -9,6 +9,7 @@
 #include "vtkLiverBezierFitter.h"
 
 // VTK includes
+#include <vtkAbstractArray.h>
 #include <vtkDoubleArray.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
@@ -16,6 +17,8 @@
 #include <vtkObjectFactory.h>
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
+#include <vtkStreamingDemandDrivenPipeline.h>
+#include <vtkTable.h>
 
 // Eigen
 #include <Eigen/Core>
@@ -34,8 +37,27 @@ vtkLiverBezierFitter::vtkLiverBezierFitter()
 {
   this->NumberOfSamples[0] = 0;
   this->NumberOfSamples[1] = 0;
-  this->SetNumberOfInputPorts(0);
+  // Three real input ports per ADR-0015 §1: points (port 0), basisU
+  // (port 1), basisV (port 2).  See header for the data-type contract.
+  this->SetNumberOfInputPorts(3);
   this->SetNumberOfOutputPorts(1);
+}
+
+//------------------------------------------------------------------------------
+int vtkLiverBezierFitter::FillInputPortInformation(int port,
+                                                    vtkInformation *info)
+{
+  if (port == 0)
+    {
+    info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkPolyData");
+    return 1;
+    }
+  if (port == 1 || port == 2)
+    {
+    info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkTable");
+    return 1;
+    }
+  return 0;
 }
 
 //------------------------------------------------------------------------------
@@ -60,57 +82,6 @@ void vtkLiverBezierFitter::SetNumberOfSamples(int nu, int nv)
   this->NumberOfSamples[0] = nu;
   this->NumberOfSamples[1] = nv;
   this->Modified();
-}
-
-//------------------------------------------------------------------------------
-void vtkLiverBezierFitter::SetInputPoints(vtkDoubleArray *points)
-{
-  if (this->Points.GetPointer() == points)
-    {
-    return;
-    }
-  this->Points = points;
-  this->Modified();
-}
-
-//------------------------------------------------------------------------------
-vtkDoubleArray *vtkLiverBezierFitter::GetInputPoints() const
-{
-  return this->Points;
-}
-
-//------------------------------------------------------------------------------
-void vtkLiverBezierFitter::SetBasisU(vtkDoubleArray *basisU)
-{
-  if (this->BasisU.GetPointer() == basisU)
-    {
-    return;
-    }
-  this->BasisU = basisU;
-  this->Modified();
-}
-
-//------------------------------------------------------------------------------
-vtkDoubleArray *vtkLiverBezierFitter::GetBasisU() const
-{
-  return this->BasisU;
-}
-
-//------------------------------------------------------------------------------
-void vtkLiverBezierFitter::SetBasisV(vtkDoubleArray *basisV)
-{
-  if (this->BasisV.GetPointer() == basisV)
-    {
-    return;
-    }
-  this->BasisV = basisV;
-  this->Modified();
-}
-
-//------------------------------------------------------------------------------
-vtkDoubleArray *vtkLiverBezierFitter::GetBasisV() const
-{
-  return this->BasisV;
 }
 
 //------------------------------------------------------------------------------
@@ -191,8 +162,55 @@ vtkLiverBezierFitter::BuildBernsteinBasis(vtkDoubleArray *samples, int degree)
 }
 
 //------------------------------------------------------------------------------
+namespace
+{
+// Decode an Nrows x M vtkTable into an Eigen matrix in the same row /
+// column order.  Returns false (and emits an error via vtkErrorMacro on
+// the caller) if the row count does not match the configured Nrows or
+// if columns are non-numeric.
+bool decodeBasisTable(vtkTable *table, int nRows, Eigen::MatrixXd &out,
+                      int &outCols, std::string &err)
+{
+  if (!table)
+    {
+    err = "basis table is null";
+    return false;
+    }
+  const vtkIdType actualRows = table->GetNumberOfRows();
+  const vtkIdType nCols = table->GetNumberOfColumns();
+  if (actualRows != nRows)
+    {
+    err = "basis table row count mismatch";
+    return false;
+    }
+  if (nCols < 1)
+    {
+    err = "basis table has no columns";
+    return false;
+    }
+  outCols = static_cast<int>(nCols);
+  out.resize(nRows, outCols);
+  for (vtkIdType j = 0; j < nCols; ++j)
+    {
+    vtkAbstractArray *col = table->GetColumn(j);
+    if (!col || col->GetNumberOfTuples() != actualRows)
+      {
+      err = "basis table column has wrong tuple count";
+      return false;
+      }
+    for (vtkIdType i = 0; i < actualRows; ++i)
+      {
+      out(static_cast<int>(i), static_cast<int>(j)) =
+        col->GetVariantValue(i).ToDouble();
+      }
+    }
+  return true;
+}
+}  // namespace
+
+//------------------------------------------------------------------------------
 int vtkLiverBezierFitter::RequestData(vtkInformation *,
-                                       vtkInformationVector **,
+                                       vtkInformationVector **inputVector,
                                        vtkInformationVector *outputVector)
 {
   using Matrix = Eigen::MatrixXd;
@@ -206,33 +224,61 @@ int vtkLiverBezierFitter::RequestData(vtkInformation *,
                   << nu << ", " << nv << ").");
     return 0;
     }
-  if (!this->Points || this->Points->GetNumberOfTuples() * this->Points->GetNumberOfComponents()
-      < static_cast<vtkIdType>(nu) * nv * 3)
+
+  // Port 0 — Points: vtkPolyData carrying Nu*Nv samples (row-major u, v).
+  vtkInformation *pointsInfo = inputVector[0]->GetInformationObject(0);
+  vtkPolyData *pointsInput = pointsInfo
+    ? vtkPolyData::SafeDownCast(pointsInfo->Get(vtkDataObject::DATA_OBJECT()))
+    : nullptr;
+  if (!pointsInput || !pointsInput->GetPoints())
     {
-    vtkErrorMacro(<< "InputPoints array too small for "
-                  << nu << "x" << nv << " grid.");
+    vtkErrorMacro(<< "Input points polydata (port 0) is required.");
     return 0;
     }
-  if (!this->BasisU || !this->BasisV)
+  vtkPoints *samplePoints = pointsInput->GetPoints();
+  if (samplePoints->GetNumberOfPoints() < static_cast<vtkIdType>(nu) * nv)
     {
-    vtkErrorMacro(<< "BasisU and BasisV must be set before Update().");
+    vtkErrorMacro(<< "Input points has "
+                  << samplePoints->GetNumberOfPoints()
+                  << " entries, expected at least " << (nu * nv)
+                  << " for a " << nu << "x" << nv << " grid.");
     return 0;
     }
 
-  // Decode BasisU / BasisV row counts from NumberOfSamples; derive the
-  // column count M from the array length.  This matches the Python
-  // contract where basis_u has shape (Nu, M) and basis_v has shape (Nv, M).
-  const vtkIdType totalU = this->BasisU->GetNumberOfTuples()
-                           * this->BasisU->GetNumberOfComponents();
-  const vtkIdType totalV = this->BasisV->GetNumberOfTuples()
-                           * this->BasisV->GetNumberOfComponents();
-  if (totalU % nu != 0 || totalV % nv != 0)
+  // Port 1 — BasisU as vtkTable (Nu rows, M columns).
+  vtkInformation *buInfo = inputVector[1]->GetInformationObject(0);
+  vtkTable *basisUInput = buInfo
+    ? vtkTable::SafeDownCast(buInfo->Get(vtkDataObject::DATA_OBJECT()))
+    : nullptr;
+  // Port 2 — BasisV as vtkTable (Nv rows, M columns).
+  vtkInformation *bvInfo = inputVector[2]->GetInformationObject(0);
+  vtkTable *basisVInput = bvInfo
+    ? vtkTable::SafeDownCast(bvInfo->Get(vtkDataObject::DATA_OBJECT()))
+    : nullptr;
+  if (!basisUInput || !basisVInput)
     {
-    vtkErrorMacro(<< "BasisU/BasisV size not divisible by Nu/Nv.");
+    vtkErrorMacro(<< "BasisU (port 1) and BasisV (port 2) must be set "
+                  << "before Update().");
     return 0;
     }
-  const int mU = static_cast<int>(totalU / nu);
-  const int mV = static_cast<int>(totalV / nv);
+
+  Matrix Bu;
+  Matrix Bv;
+  int mU = 0;
+  int mV = 0;
+  std::string err;
+  if (!decodeBasisTable(basisUInput, nu, Bu, mU, err))
+    {
+    vtkErrorMacro(<< "BasisU (port 1): " << err << " (expected "
+                  << nu << " rows).");
+    return 0;
+    }
+  if (!decodeBasisTable(basisVInput, nv, Bv, mV, err))
+    {
+    vtkErrorMacro(<< "BasisV (port 2): " << err << " (expected "
+                  << nv << " rows).");
+    return 0;
+    }
   if (mU != mV)
     {
     vtkErrorMacro(<< "BasisU and BasisV must have the same number of columns "
@@ -241,24 +287,6 @@ int vtkLiverBezierFitter::RequestData(vtkInformation *,
     }
   const int M = mU;
   this->GridSize = M;
-
-  // Build Eigen matrices from the flat VTK arrays (row-major decode).
-  Matrix Bu(nu, M);
-  for (int i = 0; i < nu; ++i)
-    {
-    for (int j = 0; j < M; ++j)
-      {
-      Bu(i, j) = this->BasisU->GetValue(i * M + j);
-      }
-    }
-  Matrix Bv(nv, M);
-  for (int i = 0; i < nv; ++i)
-    {
-    for (int j = 0; j < M; ++j)
-      {
-      Bv(i, j) = this->BasisV->GetValue(i * M + j);
-      }
-    }
 
   // Per-axis points matrix (Nu x Nv).
   std::array<Matrix, 3> P;
@@ -270,10 +298,11 @@ int vtkLiverBezierFitter::RequestData(vtkInformation *,
     {
     for (int j = 0; j < nv; ++j)
       {
-      const vtkIdType base = (static_cast<vtkIdType>(i) * nv + j) * 3;
-      P[0](i, j) = this->Points->GetValue(base + 0);
-      P[1](i, j) = this->Points->GetValue(base + 1);
-      P[2](i, j) = this->Points->GetValue(base + 2);
+      double p[3];
+      samplePoints->GetPoint(static_cast<vtkIdType>(i) * nv + j, p);
+      P[0](i, j) = p[0];
+      P[1](i, j) = p[1];
+      P[2](i, j) = p[2];
       }
     }
 

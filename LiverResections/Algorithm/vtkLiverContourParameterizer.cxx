@@ -42,7 +42,7 @@ vtkLiverContourParameterizer::vtkLiverContourParameterizer()
   this->Locus[0] = 0.0;
   this->Locus[1] = 0.0;
   this->Locus[2] = 0.0;
-  this->SetNumberOfInputPorts(0);
+  this->SetNumberOfInputPorts(1);
   this->SetNumberOfOutputPorts(1);
 }
 
@@ -61,20 +61,11 @@ void vtkLiverContourParameterizer::PrintSelf(ostream &os, vtkIndent indent)
 }
 
 //------------------------------------------------------------------------------
-void vtkLiverContourParameterizer::SetInputContour(vtkDoubleArray *contour)
+int vtkLiverContourParameterizer::FillInputPortInformation(int /*port*/,
+                                                            vtkInformation *info)
 {
-  if (this->Contour.GetPointer() == contour)
-    {
-    return;
-    }
-  this->Contour = contour;
-  this->Modified();
-}
-
-//------------------------------------------------------------------------------
-vtkDoubleArray *vtkLiverContourParameterizer::GetInputContour() const
-{
-  return this->Contour;
+  info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkPolyData");
+  return 1;
 }
 
 //------------------------------------------------------------------------------
@@ -380,28 +371,39 @@ vtkLiverContourParameterizer::InverseTransform(vtkDoubleArray *coeffs,
 
 //------------------------------------------------------------------------------
 int vtkLiverContourParameterizer::RequestData(vtkInformation *,
-                                                vtkInformationVector **,
+                                                vtkInformationVector **inputVector,
                                                 vtkInformationVector *outputVector)
 {
-  if (!this->Contour)
+  vtkInformation *inInfo = inputVector[0]->GetInformationObject(0);
+  vtkPolyData *inputContour = vtkPolyData::SafeDownCast(
+    inInfo->Get(vtkDataObject::DATA_OBJECT()));
+  if (!inputContour || !inputContour->GetPoints())
     {
-    vtkErrorMacro(<< "InputContour must be set before Update().");
+    vtkErrorMacro(<< "Input contour polydata with points is required on port 0.");
     return 0;
     }
-  const vtkIdType total = this->Contour->GetNumberOfTuples()
-                          * this->Contour->GetNumberOfComponents();
-  if (total < 6 || total % 3 != 0)
+  vtkPoints *inputPoints = inputContour->GetPoints();
+  const vtkIdType n64 = inputPoints->GetNumberOfPoints();
+  if (n64 < 2)
     {
-    vtkErrorMacro(<< "InputContour must contain at least two 3D points and "
-                  << "be a multiple of three values; got " << total << ".");
+    vtkErrorMacro(<< "Input contour must contain at least two 3D points; got "
+                  << n64 << ".");
     return 0;
     }
-  const int n = static_cast<int>(total / 3);
+  const int n = static_cast<int>(n64);
+  const vtkIdType total = static_cast<vtkIdType>(n) * 3;
 
-  std::vector<double> contour(total);
-  for (vtkIdType i = 0; i < total; ++i)
+  // Decode the input ring point-by-point into the flat (x, y, z) buffer
+  // the EFD / corner-mapping algorithms operate on.  Preserves traversal
+  // order: row i = (x_i, y_i, z_i).
+  std::vector<double> contour(static_cast<size_t>(total));
+  for (int i = 0; i < n; ++i)
     {
-    contour[i] = this->Contour->GetValue(i);
+    double p[3];
+    inputPoints->GetPoint(i, p);
+    contour[i * 3 + 0] = p[0];
+    contour[i * 3 + 1] = p[1];
+    contour[i * 3 + 2] = p[2];
     }
 
   vtkInformation *outInfo = outputVector->GetInformationObject(0);

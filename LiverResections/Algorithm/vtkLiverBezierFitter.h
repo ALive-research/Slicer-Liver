@@ -66,19 +66,29 @@ class vtkDoubleArray;
  * ``Testing/Python/unit/test_bezier_characterization.py`` continue to
  * hold against the C++ output at ``rtol=1e-12, atol=1e-12``.
  *
- * \par Inputs
- *  - **Points** (``Set/GetInputPoints``) — Nu * Nv samples of a surface in
- *    3-D, laid out as a flat array of length 3 * Nu * Nv (row-major: each
- *    consecutive triple is the (x,y,z) of a sample, samples grouped by
- *    increasing v within fixed u).  Sized via ``SetNumberOfSamples(Nu, Nv)``.
- *  - **BasisU** (``SetBasisU``) — the Nu x M matrix evaluating the
- *    Bernstein basis at each of the Nu u-samples, laid out row-major in a
- *    ``vtkDoubleArray`` of length Nu * M.  For the canonical 4x4 lift,
- *    M = 4 (Bernstein degree 3 — matches the production callers
+ * \par Inputs (real VTK input ports per ADR-0015 §1)
+ *  Three explicit input ports — option A from issue #339.  The
+ *  alternative (1 port + 2 parameter arrays) was rejected because the
+ *  Bernstein-basis matrices are *data* — they're a function of the
+ *  sample positions (an input), not a function of the algorithm's
+ *  fixed parameters.  Treating them as data on ports lets T2 Stack 4
+ *  Representations compose this fitter via ``SetInputConnection`` from
+ *  a basis-builder upstream (or supply a static
+ *  ``BuildBernsteinBasis``-produced table directly).
+ *
+ *  - **Port 0 — Points** as ``vtkPolyData``.  ``GetPoints()`` carries
+ *    Nu * Nv samples of a surface in 3-D, ordered row-major in u then v
+ *    (i.e. point index ``i * Nv + j`` holds sample ``(u_i, v_j)``).
+ *    Sized via ``SetNumberOfSamples(Nu, Nv)``.
+ *  - **Port 1 — BasisU** as ``vtkTable``.  Nu rows, M columns; row i is
+ *    the Bernstein basis evaluated at u-sample i.  M (= Bernstein order
+ *    + 1) determines the control-grid side length.  For the canonical
+ *    4x4 lift used by the production callers
  *    ``LiverLogic.runSurfacefromCurve`` / ``runSurfacefromEFD`` in
- *    ``Liver/Liver.py``, which evaluate ``evaluate_basis_bezier(t, 3)``).
- *  - **BasisV** (``SetBasisV``) — the Nv x M matrix evaluating the
- *    Bernstein basis at each of the Nv v-samples (row-major).
+ *    ``Liver/Liver.py``, M = 4 (Bernstein degree 3).
+ *  - **Port 2 — BasisV** as ``vtkTable``.  Nv rows, M columns; row i is
+ *    the Bernstein basis evaluated at v-sample i.  Must have the same
+ *    column count M as BasisU.
  *
  * \par Output
  *  - On port 0, a ``vtkPolyData`` whose ``GetPoints()`` array holds the
@@ -123,24 +133,12 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverBezierFitter
   void PrintSelf(ostream &os, vtkIndent indent) override;
 
   /// Set the dimensions of the gridded sample (Nu rows, Nv columns).
-  /// The Points array must contain 3*Nu*Nv values; BasisU must have
-  /// Nu rows and BasisV must have Nv rows.
+  /// The points input must contain Nu*Nv points; BasisU (table on port 1)
+  /// must have Nu rows and BasisV (table on port 2) must have Nv rows.
+  /// Setter only — gridded sample shape is a parameter per ADR-0015 §1
+  /// (an explicit declaration of what shape the input data carries).
   void SetNumberOfSamples(int nu, int nv);
   vtkGetVector2Macro(NumberOfSamples, int);
-
-  /// Set the gridded input points as a flat (Nu*Nv*3) array.  Layout:
-  /// ``[x00, y00, z00, x01, y01, z01, ..., x_{Nu-1,Nv-1}, y_..., z_...]``
-  /// (row-major in u then v).
-  void SetInputPoints(vtkDoubleArray *points);
-  vtkDoubleArray *GetInputPoints() const;
-
-  /// Set the Nu x M Bernstein-basis matrix (row-major).
-  void SetBasisU(vtkDoubleArray *basisU);
-  vtkDoubleArray *GetBasisU() const;
-
-  /// Set the Nv x M Bernstein-basis matrix (row-major).
-  void SetBasisV(vtkDoubleArray *basisV);
-  vtkDoubleArray *GetBasisV() const;
 
   /// Fetch the fitted M*M*3 control points as a flat std::vector.
   /// Valid after ``Update()``.  Layout matches the polydata output:
@@ -176,6 +174,7 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverBezierFitter
   vtkLiverBezierFitter();
   ~vtkLiverBezierFitter() override;
 
+  int FillInputPortInformation(int port, vtkInformation *info) override;
   int RequestData(vtkInformation *,
                   vtkInformationVector **,
                   vtkInformationVector *) override;
@@ -186,9 +185,6 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverBezierFitter
 
   int NumberOfSamples[2];
   int GridSize;
-  vtkSmartPointer<vtkDoubleArray> Points;
-  vtkSmartPointer<vtkDoubleArray> BasisU;
-  vtkSmartPointer<vtkDoubleArray> BasisV;
   std::vector<double> ControlPoints;
 };
 
