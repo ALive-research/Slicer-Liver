@@ -191,8 +191,15 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLBezierSurfaceNode
   //--------------------------------------------------------------------------
 
   /// Resection state (Init / Planning).  Persisted in XML.
+  ///
+  /// ``SetState`` enforces the ADR-0014 §4 one-way invariant: the
+  /// Init→Planning transition is allowed, but a Planning→Init drop-back
+  /// is rejected (emits a ``vtkWarningMacro`` and leaves ``State``
+  /// unchanged).  Setting the same state is a no-op (no ``Modified()``
+  /// emitted) so the macro-generated short-circuit semantics are
+  /// preserved.
   vtkGetMacro(State, int);
-  vtkSetMacro(State, int);
+  void SetState(int state);
 
   /// Initialization mode (SlicingPlane / DistanceSpheroid).  Persisted
   /// in XML.  Meaningful for both States: in Init it drives the
@@ -241,27 +248,40 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLBezierSurfaceNode
 
   //--------------------------------------------------------------------------
   // Init-mode subordinate data — SlicingPlane (read-only after Init→Planning)
+  //
+  // Every setter on this block enforces the ADR-0014 §4 read-only
+  // invariant: once ``State == Planning``, the originating init data
+  // becomes audit-only.  Mutating calls in Planning emit a
+  // ``vtkWarningMacro`` and return without changing state or firing
+  // ``Modified()``.  See ``SetState`` for the Init→Planning transition
+  // contract (one-way).
   //--------------------------------------------------------------------------
 
-  /// Set the two SlicingPlane init points.  Each call sets one point;
-  /// index must be 0 or 1.  Returns true on success.
+  /// Set one of the two SlicingPlane init points.  Index must be 0 or
+  /// 1.  Returns true on success; false on out-of-range, null pointer,
+  /// or read-only rejection (``State == Planning``, see ADR-0014 §4).
   bool SetSlicingPlaneInitPoint(int index, const double point[3]);
 
   /// Get a SlicingPlane init point by index (0 or 1).  Returns nullptr
   /// on out-of-range.
   const double* GetSlicingPlaneInitPoint(int index) const;
 
-  /// Plane origin (3 doubles).
-  vtkSetVector3Macro(SlicingPlaneOrigin, double);
+  /// Plane origin (3 doubles).  Rejected when ``State == Planning``.
+  void SetSlicingPlaneOrigin(double x, double y, double z);
+  void SetSlicingPlaneOrigin(const double xyz[3]);
   vtkGetVector3Macro(SlicingPlaneOrigin, double);
 
-  /// Plane normal (3 doubles).
-  vtkSetVector3Macro(SlicingPlaneNormal, double);
+  /// Plane normal (3 doubles).  Rejected when ``State == Planning``.
+  void SetSlicingPlaneNormal(double x, double y, double z);
+  void SetSlicingPlaneNormal(const double xyz[3]);
   vtkGetVector3Macro(SlicingPlaneNormal, double);
 
   //--------------------------------------------------------------------------
   // Init-mode subordinate data — DistanceSpheroid (read-only after
   // Init→Planning).
+  //
+  // Same ADR-0014 §4 read-only invariant as the SlicingPlane block
+  // above.
   //--------------------------------------------------------------------------
 
   /// Number of DistanceSpheroid init points (2 or more, per ADR-0014 §1).
@@ -271,34 +291,38 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLBezierSurfaceNode
   /// Reserve N slots for the DistanceSpheroid init points.  N must be
   /// >= 2 to be semantically meaningful, but lower values (including
   /// 0 for clear-on-load) are accepted to support partial XML reads.
-  /// All slots are zero-initialised.
+  /// All slots are zero-initialised.  Rejected when
+  /// ``State == Planning``.
   void SetNumberOfDistanceSpheroidInitPoints(int n);
 
   /// Set the DistanceSpheroid init point at ``index``.  Index must be
   /// in [0, GetNumberOfDistanceSpheroidInitPoints()).  Returns true on
-  /// success.
+  /// success; false on out-of-range, null pointer, or read-only
+  /// rejection.
   bool SetDistanceSpheroidInitPoint(int index, const double point[3]);
 
   /// Get the DistanceSpheroid init point at ``index``.  Returns
   /// nullptr on out-of-range.
   const double* GetDistanceSpheroidInitPoint(int index) const;
 
-  /// Spheroid center (3 doubles).
-  vtkSetVector3Macro(DistanceSpheroidCenter, double);
+  /// Spheroid center (3 doubles).  Rejected when ``State == Planning``.
+  void SetDistanceSpheroidCenter(double x, double y, double z);
+  void SetDistanceSpheroidCenter(const double xyz[3]);
   vtkGetVector3Macro(DistanceSpheroidCenter, double);
 
   /// Spheroid radii (each constrained to >= 0).  Three independent
   /// scalars rather than a vector3 because the storage path (ADR-0014
   /// §5) emits them as named JSON fields and the Pipeline reads them
-  /// individually for the spheroid quadric.
+  /// individually for the spheroid quadric.  Rejected when
+  /// ``State == Planning``.
   vtkGetMacro(DistanceSpheroidRadiusX, double);
-  vtkSetClampMacro(DistanceSpheroidRadiusX, double, 0.0, VTK_DOUBLE_MAX);
+  void SetDistanceSpheroidRadiusX(double r);
 
   vtkGetMacro(DistanceSpheroidRadiusY, double);
-  vtkSetClampMacro(DistanceSpheroidRadiusY, double, 0.0, VTK_DOUBLE_MAX);
+  void SetDistanceSpheroidRadiusY(double r);
 
   vtkGetMacro(DistanceSpheroidRadiusZ, double);
-  vtkSetClampMacro(DistanceSpheroidRadiusZ, double, 0.0, VTK_DOUBLE_MAX);
+  void SetDistanceSpheroidRadiusZ(double r);
 
  protected:
   vtkMRMLBezierSurfaceNode();
@@ -333,6 +357,14 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLBezierSurfaceNode
   double DistanceSpheroidRadiusX;
   double DistanceSpheroidRadiusY;
   double DistanceSpheroidRadiusZ;
+
+  /// Internal flag — set to true for the duration of
+  /// ``ReadXMLAttributes`` so the ADR-0014 §4 read-only guards on the
+  /// init-mode setters do not reject XML-driven loads of scenes that
+  /// already serialise ``state="Planning"`` (the guards apply to
+  /// public-API mutation; XML deserialisation is internal load).  The
+  /// flag is reset at the end of ``ReadXMLAttributes``.
+  bool LoadingFromXML;
 };
 
 #endif //__vtkmrmlbeziersurfacenode_h_

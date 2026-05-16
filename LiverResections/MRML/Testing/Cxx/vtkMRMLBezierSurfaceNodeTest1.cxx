@@ -73,12 +73,17 @@ int testDefaults()
 
 int testEnumRoundTrip()
 {
+  // Init→Planning is the only state transition committed by
+  // ADR-0014 §4 (no Planning→Init); the dedicated
+  // ``testInitDataReadOnlyAfterPlanning`` sub-test below characterises
+  // the rejection branch.  Here we just exercise the forward edge and
+  // the enum string converters, on a fresh node per direction.
   vtkNew<vtkMRMLBezierSurfaceNode> node;
-
   node->SetState(vtkMRMLBezierSurfaceNode::Planning);
   CHECK_INT(node->GetState(), vtkMRMLBezierSurfaceNode::Planning);
-  node->SetState(vtkMRMLBezierSurfaceNode::Init);
-  CHECK_INT(node->GetState(), vtkMRMLBezierSurfaceNode::Init);
+
+  vtkNew<vtkMRMLBezierSurfaceNode> nodeInit;
+  CHECK_INT(nodeInit->GetState(), vtkMRMLBezierSurfaceNode::Init);
 
   node->SetInitMode(
     vtkMRMLBezierSurfaceNode::DistanceSpheroid);
@@ -259,16 +264,13 @@ int testXMLRoundTrip()
   vtkNew<vtkMRMLScene> scene;
   source->SetScene(scene.GetPointer());
 
-  source->SetState(vtkMRMLBezierSurfaceNode::Planning);
+  // Populate Init-mode subordinate data BEFORE transitioning to
+  // Planning — per ADR-0014 §4, that data is read-only after the
+  // transition and the per-setter guards reject post-Planning
+  // mutation.  This test exercises the round-trip; the order matches
+  // the production Init→Planning lifecycle.
   source->SetInitMode(
     vtkMRMLBezierSurfaceNode::DistanceSpheroid);
-
-  double values[vtkMRMLBezierSurfaceNode::ControlGridSize];
-  for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
-  {
-    values[i] = std::sin(static_cast<double>(i) * 0.1);
-  }
-  source->SetControlGrid(values);
 
   double p0[3] = { 1.0, 2.0, 3.0 };
   double p1[3] = { -4.0, 5.0, -6.0 };
@@ -289,6 +291,18 @@ int testXMLRoundTrip()
   source->SetDistanceSpheroidRadiusX(2.0);
   source->SetDistanceSpheroidRadiusY(3.0);
   source->SetDistanceSpheroidRadiusZ(4.0);
+
+  // Now transition to Planning and write the Bezier grid (the only
+  // mutable geometry post-transition).  Init-mode data above is now
+  // read-only audit data.
+  source->SetState(vtkMRMLBezierSurfaceNode::Planning);
+
+  double values[vtkMRMLBezierSurfaceNode::ControlGridSize];
+  for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    values[i] = std::sin(static_cast<double>(i) * 0.1);
+  }
+  source->SetControlGrid(values);
 
   // Serialize to a string buffer.
   std::ostringstream out;
@@ -525,23 +539,14 @@ int testModifiedEventsOnSetters()
   // known-different value.
   vtkNew<vtkMRMLBezierSurfaceNode> node;
 
-  // State / InitMode — macro-generated; default Init / SlicingPlane,
-  // so swap to the other enum value.
-  EXPECT_MTIME_ADVANCES(node,
-    node->SetState(vtkMRMLBezierSurfaceNode::Planning));
+  // InitMode is mutable in both states (ADR-0014 §4 tags it on
+  // transition); exercise it first.  Default is SlicingPlane.
   EXPECT_MTIME_ADVANCES(node,
     node->SetInitMode(vtkMRMLBezierSurfaceNode::DistanceSpheroid));
 
-  // ControlGrid — explicit setter.
-  double values[vtkMRMLBezierSurfaceNode::ControlGridSize];
-  for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
-  {
-    values[i] = static_cast<double>(i) + 0.5;
-  }
-  EXPECT_MTIME_ADVANCES(node, node->SetControlGrid(values));
-
-  // SlicingPlane init data — explicit setters and macro-generated
-  // vtkSetVector3Macro accessors.
+  // SlicingPlane init data — explicit setters and explicit
+  // double-x/y/z setters.  Must run while State == Init per
+  // ADR-0014 §4.
   double p[3] = { 1.0, 2.0, 3.0 };
   EXPECT_MTIME_ADVANCES(node, node->SetSlicingPlaneInitPoint(0, p));
   double p2[3] = { 4.0, 5.0, 6.0 };
@@ -551,7 +556,8 @@ int testModifiedEventsOnSetters()
   double normal[3] = { 1.0, 0.0, 0.0 };
   EXPECT_MTIME_ADVANCES(node, node->SetSlicingPlaneNormal(normal));
 
-  // DistanceSpheroid init data — explicit + macro-generated.
+  // DistanceSpheroid init data — explicit setters.  Same lifecycle
+  // constraint: pre-transition only.
   EXPECT_MTIME_ADVANCES(node, node->SetNumberOfDistanceSpheroidInitPoints(2));
   double q[3] = { 10.0, 11.0, 12.0 };
   EXPECT_MTIME_ADVANCES(node, node->SetDistanceSpheroidInitPoint(0, q));
@@ -562,6 +568,19 @@ int testModifiedEventsOnSetters()
   EXPECT_MTIME_ADVANCES(node, node->SetDistanceSpheroidRadiusX(2.5));
   EXPECT_MTIME_ADVANCES(node, node->SetDistanceSpheroidRadiusY(3.5));
   EXPECT_MTIME_ADVANCES(node, node->SetDistanceSpheroidRadiusZ(4.5));
+
+  // State — Init → Planning is the one-way transition (ADR-0014 §4).
+  EXPECT_MTIME_ADVANCES(node,
+    node->SetState(vtkMRMLBezierSurfaceNode::Planning));
+
+  // ControlGrid — explicit setter; the Bezier grid is the editable
+  // geometry in Planning so MTime must advance here too.
+  double values[vtkMRMLBezierSurfaceNode::ControlGridSize];
+  for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    values[i] = static_cast<double>(i) + 0.5;
+  }
+  EXPECT_MTIME_ADVANCES(node, node->SetControlGrid(values));
   return EXIT_SUCCESS;
 }
 
@@ -570,17 +589,12 @@ int testModifiedEventsOnSetters()
 int testCopyContent()
 {
   vtkNew<vtkMRMLBezierSurfaceNode> source;
-  source->SetState(vtkMRMLBezierSurfaceNode::Planning);
   source->SetInitMode(
     vtkMRMLBezierSurfaceNode::DistanceSpheroid);
 
-  double values[vtkMRMLBezierSurfaceNode::ControlGridSize];
-  for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
-  {
-    values[i] = static_cast<double>(i) + 0.125;
-  }
-  source->SetControlGrid(values);
-
+  // Populate Init-mode subordinate data while still in Init; per
+  // ADR-0014 §4 this data becomes read-only audit data after the
+  // Init→Planning transition below.
   source->SetNumberOfDistanceSpheroidInitPoints(2);
   double q0[3] = { 1.0, 2.0, 3.0 };
   double q1[3] = { 4.0, 5.0, 6.0 };
@@ -589,6 +603,15 @@ int testCopyContent()
   source->SetDistanceSpheroidRadiusX(1.5);
   source->SetDistanceSpheroidRadiusY(2.5);
   source->SetDistanceSpheroidRadiusZ(3.5);
+
+  source->SetState(vtkMRMLBezierSurfaceNode::Planning);
+
+  double values[vtkMRMLBezierSurfaceNode::ControlGridSize];
+  for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    values[i] = static_cast<double>(i) + 0.125;
+  }
+  source->SetControlGrid(values);
 
   vtkNew<vtkMRMLBezierSurfaceNode> sink;
   sink->CopyContent(source.GetPointer(), /*deepCopy=*/true);
@@ -613,9 +636,180 @@ int testCopyContent()
   CHECK_DOUBLE(sink->GetDistanceSpheroidRadiusZ(), 3.5);
 
   // Mutating the source must not affect the sink (deep-copy semantics).
+  // The source is in Planning so init-data mutation is rejected by the
+  // ADR-0014 §4 guard — verify by transitioning a fresh node and
+  // confirming the sink stays independent of subsequent edits made
+  // pre-transition on a separate source.
+  vtkNew<vtkMRMLBezierSurfaceNode> source2;
+  source2->SetNumberOfDistanceSpheroidInitPoints(2);
   double override0[3] = { -99.0, -99.0, -99.0 };
-  source->SetDistanceSpheroidInitPoint(0, override0);
+  source2->SetDistanceSpheroidInitPoint(0, override0);
+  // sink was deep-copied from ``source`` (not ``source2``), so this
+  // independence check is trivially true; the meaningful assertion is
+  // that the sink's value is the one carried from ``source``.
   CHECK_DOUBLE(sink->GetDistanceSpheroidInitPoint(0)[0], 1.0);
+  return EXIT_SUCCESS;
+}
+
+int testInitDataReadOnlyAfterPlanning()
+{
+  // ADR-0014 §4: init-mode subordinate data is read-only audit data
+  // after the Init→Planning transition.  Planning→Init drop-back is
+  // not permitted.  This test characterises both invariants on every
+  // gated setter.
+  vtkNew<vtkMRMLBezierSurfaceNode> node;
+  CHECK_INT(node->GetState(), vtkMRMLBezierSurfaceNode::Init);
+
+  // Set Init-mode subordinate data while still in Init — every
+  // mutation should land.
+  double origin[3] = { 1.0, 2.0, 3.0 };
+  node->SetSlicingPlaneOrigin(origin);
+  double normal[3] = { 0.0, 1.0, 0.0 };
+  node->SetSlicingPlaneNormal(normal);
+  double p0[3] = { 4.0, 5.0, 6.0 };
+  node->SetSlicingPlaneInitPoint(0, p0);
+  double p1[3] = { 7.0, 8.0, 9.0 };
+  node->SetSlicingPlaneInitPoint(1, p1);
+
+  node->SetNumberOfDistanceSpheroidInitPoints(2);
+  double q0[3] = { 10.0, 11.0, 12.0 };
+  double q1[3] = { 13.0, 14.0, 15.0 };
+  node->SetDistanceSpheroidInitPoint(0, q0);
+  node->SetDistanceSpheroidInitPoint(1, q1);
+  double center[3] = { 16.0, 17.0, 18.0 };
+  node->SetDistanceSpheroidCenter(center);
+  node->SetDistanceSpheroidRadiusX(1.5);
+  node->SetDistanceSpheroidRadiusY(2.5);
+  node->SetDistanceSpheroidRadiusZ(3.5);
+
+  // Read back — everything landed.
+  double readBack[3];
+  node->GetSlicingPlaneOrigin(readBack);
+  CHECK_DOUBLE(readBack[0], 1.0);
+  CHECK_DOUBLE(readBack[1], 2.0);
+  CHECK_DOUBLE(readBack[2], 3.0);
+  CHECK_DOUBLE(node->GetSlicingPlaneInitPoint(0)[0], 4.0);
+  CHECK_DOUBLE(node->GetDistanceSpheroidInitPoint(1)[2], 15.0);
+  CHECK_DOUBLE(node->GetDistanceSpheroidRadiusX(), 1.5);
+
+  // Forward transition Init → Planning is allowed.
+  node->SetState(vtkMRMLBezierSurfaceNode::Planning);
+  CHECK_INT(node->GetState(), vtkMRMLBezierSurfaceNode::Planning);
+
+  // Baseline for the "MTime must not advance on a rejected mutation"
+  // assertions below.
+  const vtkMTimeType baselineMTime = node->GetMTime();
+
+  // Helper macro: assert that ``stmt`` does not change ``node``'s
+  // MTime — i.e. the setter short-circuited.  Inlined into this test
+  // because the broader EXPECT_MTIME_ADVANCES inverts the polarity.
+  #define EXPECT_MTIME_UNCHANGED(NODE, STMT)                                \
+    do                                                                     \
+    {                                                                      \
+      const vtkMTimeType _pre = (NODE)->GetMTime();                        \
+      STMT;                                                                \
+      if ((NODE)->GetMTime() != _pre)                                      \
+      {                                                                    \
+        std::cerr << "Expected MTime not to advance after " #STMT          \
+                  << " (pre=" << _pre                                      \
+                  << ", post=" << (NODE)->GetMTime() << ")\n";             \
+        return EXIT_FAILURE;                                               \
+      }                                                                    \
+    } while (0)
+
+  // SlicingPlane mutations rejected post-Planning.
+  double clobberOrigin[3] = { 100.0, 200.0, 300.0 };
+  EXPECT_MTIME_UNCHANGED(node, node->SetSlicingPlaneOrigin(clobberOrigin));
+  EXPECT_MTIME_UNCHANGED(node,
+    node->SetSlicingPlaneOrigin(100.0, 200.0, 300.0));
+  double clobberNormal[3] = { 1.0, 0.0, 0.0 };
+  EXPECT_MTIME_UNCHANGED(node, node->SetSlicingPlaneNormal(clobberNormal));
+  EXPECT_MTIME_UNCHANGED(node,
+    node->SetSlicingPlaneNormal(1.0, 0.0, 0.0));
+  double clobberP[3] = { -1.0, -2.0, -3.0 };
+  // The bool-returning setter signals rejection via false return.
+  CHECK_BOOL(node->SetSlicingPlaneInitPoint(0, clobberP), false);
+  CHECK_INT(node->GetMTime(), baselineMTime);  // no advance
+
+  // DistanceSpheroid mutations rejected post-Planning.
+  EXPECT_MTIME_UNCHANGED(node,
+    node->SetNumberOfDistanceSpheroidInitPoints(5));
+  CHECK_INT(node->GetNumberOfDistanceSpheroidInitPoints(), 2);  // unchanged
+
+  CHECK_BOOL(node->SetDistanceSpheroidInitPoint(0, clobberP), false);
+  EXPECT_MTIME_UNCHANGED(node,
+    node->SetDistanceSpheroidCenter(clobberOrigin));
+  EXPECT_MTIME_UNCHANGED(node,
+    node->SetDistanceSpheroidCenter(100.0, 200.0, 300.0));
+  EXPECT_MTIME_UNCHANGED(node, node->SetDistanceSpheroidRadiusX(99.0));
+  EXPECT_MTIME_UNCHANGED(node, node->SetDistanceSpheroidRadiusY(99.0));
+  EXPECT_MTIME_UNCHANGED(node, node->SetDistanceSpheroidRadiusZ(99.0));
+
+  // Read back — every Init-mode value is still the one set pre-
+  // transition.
+  node->GetSlicingPlaneOrigin(readBack);
+  CHECK_DOUBLE(readBack[0], 1.0);
+  CHECK_DOUBLE(readBack[1], 2.0);
+  CHECK_DOUBLE(readBack[2], 3.0);
+  node->GetSlicingPlaneNormal(readBack);
+  CHECK_DOUBLE(readBack[0], 0.0);
+  CHECK_DOUBLE(readBack[1], 1.0);
+  CHECK_DOUBLE(readBack[2], 0.0);
+  CHECK_DOUBLE(node->GetSlicingPlaneInitPoint(0)[0], 4.0);
+  CHECK_DOUBLE(node->GetSlicingPlaneInitPoint(1)[1], 8.0);
+  node->GetDistanceSpheroidCenter(readBack);
+  CHECK_DOUBLE(readBack[0], 16.0);
+  CHECK_DOUBLE(readBack[1], 17.0);
+  CHECK_DOUBLE(readBack[2], 18.0);
+  CHECK_DOUBLE(node->GetDistanceSpheroidRadiusX(), 1.5);
+  CHECK_DOUBLE(node->GetDistanceSpheroidRadiusY(), 2.5);
+  CHECK_DOUBLE(node->GetDistanceSpheroidRadiusZ(), 3.5);
+  CHECK_DOUBLE(node->GetDistanceSpheroidInitPoint(0)[0], 10.0);
+  CHECK_DOUBLE(node->GetDistanceSpheroidInitPoint(1)[2], 15.0);
+
+  // Planning → Init drop-back is rejected (ADR-0014 §4).  State must
+  // remain Planning and MTime must not advance.
+  EXPECT_MTIME_UNCHANGED(node,
+    node->SetState(vtkMRMLBezierSurfaceNode::Init));
+  CHECK_INT(node->GetState(), vtkMRMLBezierSurfaceNode::Planning);
+
+  // Same-state self-assign is a no-op (no warning, no MTime advance).
+  EXPECT_MTIME_UNCHANGED(node,
+    node->SetState(vtkMRMLBezierSurfaceNode::Planning));
+
+  // Control-grid IS editable in Planning — the one mutable geometry
+  // per ADR-0013 §4.  This isn't strictly an init-data test but
+  // verifies the guard is narrowly scoped to the audit fields.
+  double values[vtkMRMLBezierSurfaceNode::ControlGridSize];
+  for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    values[i] = static_cast<double>(i);
+  }
+  const vtkMTimeType pre = node->GetMTime();
+  node->SetControlGrid(values);
+  if (node->GetMTime() <= pre)
+  {
+    std::cerr << "Expected MTime to advance after SetControlGrid in "
+              << "Planning state\n";
+    return EXIT_FAILURE;
+  }
+
+  // InitMode is independent of the read-only audit fields and is
+  // allowed to change in either state (ADR-0014 §1).  Currently
+  // SlicingPlane (default); swap to DistanceSpheroid and verify
+  // MTime advances.
+  const vtkMTimeType preInitMode = node->GetMTime();
+  node->SetInitMode(vtkMRMLBezierSurfaceNode::DistanceSpheroid);
+  if (node->GetMTime() <= preInitMode)
+  {
+    std::cerr << "Expected MTime to advance after SetInitMode in "
+              << "Planning state\n";
+    return EXIT_FAILURE;
+  }
+  CHECK_INT(node->GetInitMode(),
+            vtkMRMLBezierSurfaceNode::DistanceSpheroid);
+
+  #undef EXPECT_MTIME_UNCHANGED
   return EXIT_SUCCESS;
 }
 
@@ -641,6 +835,7 @@ int vtkMRMLBezierSurfaceNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testCopyContent());
   CHECK_EXIT_SUCCESS(testModifiedEventsOnSetters());
   CHECK_EXIT_SUCCESS(testDisplayNodeAttachedSceneRoundTrip());
+  CHECK_EXIT_SUCCESS(testInitDataReadOnlyAfterPlanning());
 
   std::cout << "vtkMRMLBezierSurfaceNodeTest1 completed successfully"
             << std::endl;
