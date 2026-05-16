@@ -10,6 +10,7 @@ add_subdirectory(MRML)
 add_subdirectory(Algorithm)
 add_subdirectory(Logic)
 add_subdirectory(MRMLDM)
+add_subdirectory(VTKWidgets)
 
 #-----------------------------------------------------------------------------
 set(MODULE_EXPORT_DIRECTIVE "Q_SLICER_QTMODULES_${MODULE_NAME_UPPER}_EXPORT")
