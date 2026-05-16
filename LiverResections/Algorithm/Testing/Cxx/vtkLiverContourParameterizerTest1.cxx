@@ -17,6 +17,7 @@
 // VTK includes
 #include <vtkDoubleArray.h>
 #include <vtkNew.h>
+#include <vtkPoints.h>
 #include <vtkPolyData.h>
 
 #include <cstdio>
@@ -99,15 +100,23 @@ int testPipelineEFDMode()
 {
   using namespace vtkLiverAlgorithmTestFixtures;
   // Drive the parameterizer through the algorithm pipeline and verify
-  // the polydata output contains nCoords points.
+  // the polydata output contains nCoords points.  The contour is now
+  // supplied through the real port-0 vtkPolyData input per ADR-0015 §1
+  // (issue #339 rewire) rather than via a member vtkDoubleArray setter.
   auto contour = makeContourFixture();
-  vtkNew<vtkDoubleArray> contourArr;
-  contourArr->SetNumberOfComponents(1);
-  contourArr->SetNumberOfTuples(static_cast<vtkIdType>(contour.size()));
-  for (size_t i = 0; i < contour.size(); ++i)
+  const int nPts = static_cast<int>(contour.size() / 3);
+  vtkNew<vtkPoints> contourPoints;
+  contourPoints->SetDataTypeToDouble();
+  contourPoints->SetNumberOfPoints(nPts);
+  for (int i = 0; i < nPts; ++i)
     {
-    contourArr->SetValue(static_cast<vtkIdType>(i), contour[i]);
+    contourPoints->SetPoint(i,
+                            contour[i * 3 + 0],
+                            contour[i * 3 + 1],
+                            contour[i * 3 + 2]);
     }
+  vtkNew<vtkPolyData> contourPolyData;
+  contourPolyData->SetPoints(contourPoints);
 
   vtkNew<vtkLiverContourParameterizer> param;
   param->SetMode(vtkLiverContourParameterizer::MODE_EFD);
@@ -115,7 +124,7 @@ int testPipelineEFDMode()
   param->SetNumberOfReconstructionPoints(12);
   param->UseComputedLocusOff();
   param->SetLocus(0.1, 0.2, 0.3);
-  param->SetInputContour(contourArr);
+  param->SetInputData(contourPolyData);
   param->Update();
 
   if (param->GetReconstruction().size() != 36)

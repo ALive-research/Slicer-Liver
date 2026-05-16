@@ -49,11 +49,15 @@ class vtkDoubleArray;
  *  direct sum, matching the Python reference.
  *
  * \par Inputs
- *  - **Contour** (``SetInputContour``) — N closed ring points as a flat
- *    ``vtkDoubleArray`` of length 3*N.  The caller is responsible for
- *    closing the loop (i.e. either the last point repeats the first,
- *    or the test fixture handles that explicitly as in the Python
- *    characterisation tests).
+ *  - **Port 0** — closed ring as ``vtkPolyData``; the points array carries
+ *    N (x, y, z) triples in traversal order.  This is the natural output
+ *    type of the upstream ring extractors
+ *    (``vtkLiverPlaneRingExtractor`` / ``vtkLiverSpheroidRingExtractor``)
+ *    so the three classes compose with
+ *    ``parameterizer->SetInputConnection(extractor->GetOutputPort())``
+ *    per ADR-0015 §1.  The caller is responsible for closing the loop
+ *    (i.e. either the last point repeats the first, or the test fixture
+ *    handles that explicitly as in the Python characterisation tests).
  *
  * \par Parameters
  *  - ``Mode`` — ``MODE_CORNER_MAPPING`` (0) or ``MODE_EFD`` (1).
@@ -104,10 +108,6 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverContourParamete
 
   vtkSetMacro(NumberOfReconstructionPoints, int);
   vtkGetMacro(NumberOfReconstructionPoints, int);
-
-  /// Set the input contour as a flat 3*N array (row-major xyz).
-  void SetInputContour(vtkDoubleArray *contour);
-  vtkDoubleArray *GetInputContour() const;
 
   /// Use a caller-supplied locus for EFD reconstruction.  After
   /// ``UseComputedLocusOn`` (the default) the parameteriser computes
@@ -169,6 +169,7 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverContourParamete
   vtkLiverContourParameterizer();
   ~vtkLiverContourParameterizer() override;
 
+  int FillInputPortInformation(int port, vtkInformation *info) override;
   int RequestData(vtkInformation *,
                   vtkInformationVector **,
                   vtkInformationVector *) override;
@@ -183,7 +184,6 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverContourParamete
   double Locus[3];
   bool UseComputedLocus;
 
-  vtkSmartPointer<vtkDoubleArray> Contour;
   std::vector<double> Coefficients;
   std::vector<double> DC;
   std::vector<double> Reconstruction;

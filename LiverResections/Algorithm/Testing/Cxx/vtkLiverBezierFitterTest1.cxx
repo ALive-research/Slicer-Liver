@@ -23,6 +23,7 @@
 #include <vtkNew.h>
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
+#include <vtkTable.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -44,36 +45,61 @@ int vtkLiverBezierFitterTest1(int, char *[])
   constexpr double atol = 1e-12;
 
   auto fx = makeBezierFixture();
+  constexpr int Nu = 4;
+  constexpr int Nv = 4;
+  constexpr int M = 4;
 
-  vtkNew<vtkDoubleArray> pointsArr;
-  pointsArr->SetNumberOfComponents(1);
-  pointsArr->SetNumberOfTuples(static_cast<vtkIdType>(fx.points.size()));
-  for (size_t i = 0; i < fx.points.size(); ++i)
+  // Port 0 — Nu*Nv samples as vtkPolyData (row-major u, v).
+  vtkNew<vtkPoints> samplePoints;
+  samplePoints->SetDataTypeToDouble();
+  samplePoints->SetNumberOfPoints(static_cast<vtkIdType>(Nu) * Nv);
+  for (int i = 0; i < Nu; ++i)
     {
-    pointsArr->SetValue(static_cast<vtkIdType>(i), fx.points[i]);
+    for (int j = 0; j < Nv; ++j)
+      {
+      const size_t base = (static_cast<size_t>(i) * Nv + j) * 3;
+      samplePoints->SetPoint(static_cast<vtkIdType>(i) * Nv + j,
+                             fx.points[base + 0],
+                             fx.points[base + 1],
+                             fx.points[base + 2]);
+      }
+    }
+  vtkNew<vtkPolyData> pointsPolyData;
+  pointsPolyData->SetPoints(samplePoints);
+
+  // Port 1 — BasisU as vtkTable (Nu rows, M columns).
+  vtkNew<vtkTable> basisUTable;
+  for (int j = 0; j < M; ++j)
+    {
+    vtkNew<vtkDoubleArray> col;
+    col->SetNumberOfComponents(1);
+    col->SetNumberOfTuples(Nu);
+    for (int i = 0; i < Nu; ++i)
+      {
+      col->SetValue(i, fx.basisU[static_cast<size_t>(i) * M + j]);
+      }
+    basisUTable->AddColumn(col);
     }
 
-  vtkNew<vtkDoubleArray> basisU;
-  basisU->SetNumberOfComponents(1);
-  basisU->SetNumberOfTuples(static_cast<vtkIdType>(fx.basisU.size()));
-  for (size_t i = 0; i < fx.basisU.size(); ++i)
+  // Port 2 — BasisV as vtkTable (Nv rows, M columns).
+  vtkNew<vtkTable> basisVTable;
+  for (int j = 0; j < M; ++j)
     {
-    basisU->SetValue(static_cast<vtkIdType>(i), fx.basisU[i]);
-    }
-
-  vtkNew<vtkDoubleArray> basisV;
-  basisV->SetNumberOfComponents(1);
-  basisV->SetNumberOfTuples(static_cast<vtkIdType>(fx.basisV.size()));
-  for (size_t i = 0; i < fx.basisV.size(); ++i)
-    {
-    basisV->SetValue(static_cast<vtkIdType>(i), fx.basisV[i]);
+    vtkNew<vtkDoubleArray> col;
+    col->SetNumberOfComponents(1);
+    col->SetNumberOfTuples(Nv);
+    for (int i = 0; i < Nv; ++i)
+      {
+      col->SetValue(i, fx.basisV[static_cast<size_t>(i) * M + j]);
+      }
+    basisVTable->AddColumn(col);
     }
 
   vtkNew<vtkLiverBezierFitter> fitter;
-  fitter->SetNumberOfSamples(4, 4);
-  fitter->SetInputPoints(pointsArr);
-  fitter->SetBasisU(basisU);
-  fitter->SetBasisV(basisV);
+  fitter->SetNumberOfSamples(Nu, Nv);
+  fitter->SetInputData(0, pointsPolyData);
+  fitter->SetInputData(1, basisUTable);
+  fitter->SetInputData(2, basisVTable);
   fitter->Update();
 
   const auto &cps = fitter->GetControlPoints();

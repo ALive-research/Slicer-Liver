@@ -504,6 +504,42 @@ def _to_double_array(flat):
     return arr
 
 
+def _points_polydata(points_flat_nu_nv_3):
+    """Pack an iterable of Nu*Nv*3 floats into a vtkPolyData with points.
+
+    Row-major (u, v) ordering, matching the C++ contour parameterizer +
+    Bezier fitter port-0 input contract introduced by issue #339.
+    """
+    import vtk
+
+    flat = list(points_flat_nu_nv_3)
+    n_points = len(flat) // 3
+    pts = vtk.vtkPoints()
+    pts.SetDataTypeToDouble()
+    pts.SetNumberOfPoints(n_points)
+    for i in range(n_points):
+        pts.SetPoint(i, flat[i * 3 + 0], flat[i * 3 + 1], flat[i * 3 + 2])
+    pd = vtk.vtkPolyData()
+    pd.SetPoints(pts)
+    return pd
+
+
+def _basis_table(basis_2d):
+    """Pack a 2D numpy array (n_rows x M) into a vtkTable with M columns."""
+    import vtk
+
+    n_rows, n_cols = basis_2d.shape
+    table = vtk.vtkTable()
+    for j in range(n_cols):
+        col = vtk.vtkDoubleArray()
+        col.SetNumberOfComponents(1)
+        col.SetNumberOfTuples(n_rows)
+        for i in range(n_rows):
+            col.SetValue(i, float(basis_2d[i, j]))
+        table.AddColumn(col)
+    return table
+
+
 def test_cxx_bezier_fitter_matches_pinned_control_points(algorithm_module):
     """C++ ``vtkLiverBezierFitter`` against the same EXPECTED control points.
 
@@ -514,13 +550,16 @@ def test_cxx_bezier_fitter_matches_pinned_control_points(algorithm_module):
     Reads the fitted grid back through the polydata output (which is the
     Python-wrappable surface) rather than ``GetControlPoints()`` (which
     returns a const std::vector reference VTK does not wrap).
+
+    Uses the post-#339 input-port surface: points on port 0 as a
+    ``vtkPolyData``, BasisU/BasisV on ports 1/2 as ``vtkTable``.
     """
     points, basis_u, basis_v = _make_bezier_fixture()
     fitter = algorithm_module.vtkLiverBezierFitter()
     fitter.SetNumberOfSamples(4, 4)
-    fitter.SetInputPoints(_to_double_array(points.flatten().tolist()))
-    fitter.SetBasisU(_to_double_array(basis_u.flatten().tolist()))
-    fitter.SetBasisV(_to_double_array(basis_v.flatten().tolist()))
+    fitter.SetInputData(0, _points_polydata(points.flatten().tolist()))
+    fitter.SetInputData(1, _basis_table(basis_u))
+    fitter.SetInputData(2, _basis_table(basis_v))
     fitter.Update()
 
     out_points = fitter.GetOutput().GetPoints()
