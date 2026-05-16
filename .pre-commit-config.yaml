@@ -55,3 +55,16 @@ repos:
     hooks:
       - id: check-dependabot
       - id: check-github-workflows
+
+  # Slicer-Liver-specific commit-message validator.  Mirrors the regex
+  # used by Slicer's slicer-check-commit-message-action so the local
+  # commit-msg hook fails the same input that CI would reject.  Run
+  # `./Utilities/SetupForDevelopment.sh` to install the commit-msg
+  # stage hook (`pre-commit install --hook-type commit-msg`).
+  - repo: local
+    hooks:
+      - id: slicer-liver-commit-message
+        name: Slicer-Liver strict commit-message vocabulary
+        entry: Utilities/Hooks/check-commit-message.sh
+        language: script
+        stages: [commit-msg]
