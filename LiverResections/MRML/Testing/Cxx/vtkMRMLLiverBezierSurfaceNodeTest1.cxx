@@ -19,6 +19,7 @@
 
 // MRML includes
 #include "vtkMRMLCoreTestingMacros.h"
+#include "vtkMRMLLiverBezierSurfaceDisplayNode.h"
 #include "vtkMRMLLiverBezierSurfaceNode.h"
 #include "vtkMRMLScene.h"
 
@@ -405,6 +406,94 @@ int testXMLRoundTrip()
   return EXIT_SUCCESS;
 }
 
+int testDisplayNodeAttachedSceneRoundTrip()
+{
+  // The data-node reparent to vtkMRMLDisplayableNode (this PR) unlocks
+  // a first-class display-node observation chain.  This test exercises
+  // the end-to-end round-trip — data node + display node in a scene,
+  // mutated, serialised, reloaded — and asserts the reloaded data
+  // node still points at a reloaded display node carrying the mutated
+  // values.  This is the structural payoff of the reparent and the
+  // strongest single signal that the LayerDM Pipeline path will
+  // work once T2.2 wires it.
+  vtkNew<vtkMRMLScene> scene;
+  scene->RegisterNodeClass(
+    vtkSmartPointer<vtkMRMLLiverBezierSurfaceNode>::New());
+  scene->RegisterNodeClass(
+    vtkSmartPointer<vtkMRMLLiverBezierSurfaceDisplayNode>::New());
+
+  vtkNew<vtkMRMLLiverBezierSurfaceNode> dataNode;
+  scene->AddNode(dataNode.GetPointer());
+  vtkNew<vtkMRMLLiverBezierSurfaceDisplayNode> displayNode;
+  scene->AddNode(displayNode.GetPointer());
+  dataNode->AddAndObserveDisplayNodeID(displayNode->GetID());
+
+  // Mutate both nodes with distinctive values.
+  dataNode->SetState(vtkMRMLLiverBezierSurfaceNode::Planning);
+  dataNode->SetInitMode(
+    vtkMRMLLiverBezierSurfaceNode::DistanceSpheroid);
+  double values[vtkMRMLLiverBezierSurfaceNode::ControlGridSize];
+  for (int i = 0; i < vtkMRMLLiverBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    values[i] = static_cast<double>(i) * 0.25 + 0.125;
+  }
+  dataNode->SetControlGrid(values);
+
+  float colour[3] = { 0.4f, 0.5f, 0.6f };
+  displayNode->SetResectionColor(colour);
+  displayNode->SetResectionOpacity(0.42f);
+  displayNode->SetGridVisibility(true);
+  displayNode->SetClipOut(true);
+
+  // Round-trip via the in-memory XML string path (avoids libxml2 +
+  // tempfile dance; equivalent to file-based Commit/Connect for the
+  // purpose of this test).
+  scene->SetSaveToXMLString(1);
+  scene->Commit();
+  const std::string xml = scene->GetSceneXMLString();
+  if (xml.empty())
+  {
+    std::cerr << "Commit produced empty XML string\n";
+    return EXIT_FAILURE;
+  }
+
+  vtkNew<vtkMRMLScene> sinkScene;
+  sinkScene->RegisterNodeClass(
+    vtkSmartPointer<vtkMRMLLiverBezierSurfaceNode>::New());
+  sinkScene->RegisterNodeClass(
+    vtkSmartPointer<vtkMRMLLiverBezierSurfaceDisplayNode>::New());
+  sinkScene->SetLoadFromXMLString(1);
+  sinkScene->SetSceneXMLString(xml);
+  sinkScene->Connect();
+
+  auto* sinkData = vtkMRMLLiverBezierSurfaceNode::SafeDownCast(
+    sinkScene->GetFirstNodeByClass("vtkMRMLLiverBezierSurfaceNode"));
+  CHECK_NOT_NULL(sinkData);
+  CHECK_INT(sinkData->GetState(), vtkMRMLLiverBezierSurfaceNode::Planning);
+  CHECK_INT(sinkData->GetInitMode(),
+            vtkMRMLLiverBezierSurfaceNode::DistanceSpheroid);
+  for (int i = 0; i < vtkMRMLLiverBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    CHECK_DOUBLE_TOLERANCE(sinkData->GetControlGrid()[i], values[i], 1e-5);
+  }
+
+  // The display-node reference must have round-tripped through the
+  // scene — this is the structural assertion that the reparent
+  // bought.
+  auto* sinkDisplay = vtkMRMLLiverBezierSurfaceDisplayNode::SafeDownCast(
+    sinkData->GetNthDisplayNode(0));
+  CHECK_NOT_NULL(sinkDisplay);
+  float rgb[3];
+  sinkDisplay->GetResectionColor(rgb);
+  CHECK_DOUBLE_TOLERANCE(rgb[0], 0.4f, 1e-5);
+  CHECK_DOUBLE_TOLERANCE(rgb[1], 0.5f, 1e-5);
+  CHECK_DOUBLE_TOLERANCE(rgb[2], 0.6f, 1e-5);
+  CHECK_DOUBLE_TOLERANCE(sinkDisplay->GetResectionOpacity(), 0.42f, 1e-5);
+  CHECK_BOOL(sinkDisplay->GetGridVisibility(), true);
+  CHECK_BOOL(sinkDisplay->GetClipOut(), true);
+  return EXIT_SUCCESS;
+}
+
 /// Assert that calling ``setter()`` advances ``node->GetMTime()``.
 /// Helper macro so the per-setter scaffolding stays terse.
 #define EXPECT_MTIME_ADVANCES(NODE, SETTER_CALL)                              \
@@ -551,6 +640,7 @@ int vtkMRMLLiverBezierSurfaceNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testXMLRoundTrip());
   CHECK_EXIT_SUCCESS(testCopyContent());
   CHECK_EXIT_SUCCESS(testModifiedEventsOnSetters());
+  CHECK_EXIT_SUCCESS(testDisplayNodeAttachedSceneRoundTrip());
 
   std::cout << "vtkMRMLLiverBezierSurfaceNodeTest1 completed successfully"
             << std::endl;
