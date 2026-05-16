@@ -1,0 +1,17 @@
+# Commits listed here are skipped by `git blame` when a developer runs
+# `git config blame.ignoreRevsFile .git-blame-ignore-revs` (or uses an
+# editor / tool that respects this file by default — most modern ones do).
+#
+# This file follows Slicer's convention: list bulk-reformat / mechanical
+# style commits so that `git blame` for a line skips past the reformat and
+# reports the substantive author who last touched the logic.
+#
+# Add a new entry when landing a `STYLE:` commit that mechanically
+# reformats more than ~50 lines without changing behaviour.  Format:
+#
+#   # Brief description (date or PR #)
+#   <full SHA of the commit>
+#
+# References:
+#   - Slicer's .git-blame-ignore-revs (the upstream pattern this mirrors)
+#   - ADR-0016 — Code style discipline and CI enforcement
