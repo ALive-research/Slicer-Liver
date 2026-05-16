@@ -56,9 +56,10 @@ if [ ! -f .pre-commit-config.yaml ]; then
   printErrorAndExit ".pre-commit-config.yaml not found in $ROOT (are you inside the Slicer-Liver clone?)"
 fi
 
-# 3. Make sure the commit-message validator is executable
+# 3. Make sure the local hook scripts are executable
 #    (git mv / fresh clones may strip the +x bit on some filesystems).
 chmod +x Utilities/Hooks/check-commit-message.sh
+chmod +x Utilities/Hooks/check-copyright.sh
 
 # 4. Install hooks (pre-commit + commit-msg stages).
 echo "Installing pre-commit hooks (pre-commit + commit-msg stages)..."
@@ -77,6 +78,8 @@ cat <<'EOF'
     end-of-file-fixer, mixed-line-ending, jsonschema, prettier, …)
   - commit-msg hook (Slicer-strict subject regex
     ^(ENH|PERF|BUG|STYLE|DOC|COMP): ([A-Z])+)
+  - copyright-year hook on staged source files
+    (.cpp .cxx .h .hpp .hxx .txx .py — old files untouched)
 
 Run all hooks against every file ad-hoc (e.g. before a PR):
   pre-commit run --all-files

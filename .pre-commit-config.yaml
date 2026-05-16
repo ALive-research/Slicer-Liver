@@ -68,3 +68,13 @@ repos:
         entry: Utilities/Hooks/check-commit-message.sh
         language: script
         stages: [commit-msg]
+
+      # Year-bearing copyright check on staged source files only.
+      # Untouched files keep their year-less form until the bulk
+      # reformat in issue #338 lands; new + modified files enforce
+      # the convention going forward.
+      - id: slicer-liver-copyright-year
+        name: Slicer-Liver copyright header carries a year
+        entry: Utilities/Hooks/check-copyright.sh
+        language: script
+        files: \.(cpp|cxx|h|hpp|hxx|txx|py)$
