@@ -682,6 +682,14 @@ int testInitDataReadOnlyAfterPlanning()
     }                                                                                                                            \
   } while (0)
 
+  // Every rejected setter below emits a deliberate vtkWarningMacro;
+  // wrap the block so the test driver's WITH_VTK_ERROR_OUTPUT_CHECK
+  // doesn't count those warnings as a failure.  The matching
+  // ``..._END()`` re-arms the warning-as-failure counter and asserts
+  // at least one warning fired in the block (so a silent-drop
+  // regression also surfaces as a failure here).
+  TESTING_OUTPUT_ASSERT_WARNINGS_BEGIN();
+
   // SlicingPlane mutations rejected post-Planning.
   double clobberOrigin[3] = { 100.0, 200.0, 300.0 };
   EXPECT_MTIME_UNCHANGED(node, node->SetSlicingPlaneOrigin(clobberOrigin));
@@ -704,6 +712,8 @@ int testInitDataReadOnlyAfterPlanning()
   EXPECT_MTIME_UNCHANGED(node, node->SetDistanceSpheroidRadiusX(99.0));
   EXPECT_MTIME_UNCHANGED(node, node->SetDistanceSpheroidRadiusY(99.0));
   EXPECT_MTIME_UNCHANGED(node, node->SetDistanceSpheroidRadiusZ(99.0));
+
+  TESTING_OUTPUT_ASSERT_WARNINGS_END();
 
   // Read back — every Init-mode value is still the one set pre-
   // transition.
@@ -728,8 +738,12 @@ int testInitDataReadOnlyAfterPlanning()
   CHECK_DOUBLE(node->GetDistanceSpheroidInitPoint(1)[2], 15.0);
 
   // Planning → Init drop-back is rejected (ADR-0014 §4).  State must
-  // remain Planning and MTime must not advance.
+  // remain Planning and MTime must not advance.  The rejection emits
+  // a vtkWarningMacro — gate the assertion so the test driver does
+  // not count it as a failure.
+  TESTING_OUTPUT_ASSERT_WARNINGS_BEGIN();
   EXPECT_MTIME_UNCHANGED(node, node->SetState(vtkMRMLBezierSurfaceNode::Init));
+  TESTING_OUTPUT_ASSERT_WARNINGS_END();
   CHECK_INT(node->GetState(), vtkMRMLBezierSurfaceNode::Planning);
 
   // Same-state self-assign is a no-op (no warning, no MTime advance).
