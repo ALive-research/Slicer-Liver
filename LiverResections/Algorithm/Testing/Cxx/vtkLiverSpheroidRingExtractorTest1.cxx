@@ -60,9 +60,20 @@ int vtkLiverSpheroidRingExtractorTest1(int, char *[])
   // Every output point should lie on the source sphere (within
   // cutter-discretisation tolerance) and on the spheroid surface
   // (zero level-set of the quadric).
+  //
+  // Tolerance rationale: vtkCutter interpolates the iso-contour
+  // linearly along each triangle edge of the input mesh, so the
+  // residual of a quadratic implicit function at the output points
+  // is bounded by ~(1/8) max|F''| * h^2, where h is the input edge
+  // length.  For a 64x64 unit-sphere tessellation h ≈ 0.1 and the
+  // quadric's second derivatives are O(1/r^2) ≈ 3, giving an upper
+  // bound of order 4e-3.  We allow 1e-2 to leave a safety margin
+  // while still catching gross coefficient errors (an off-by-2 in
+  // the linear terms produced residuals of order 1e-1 — see the
+  // companion fix to vtkLiverSpheroidRingExtractor).
   const vtkIdType n = out->GetPoints()->GetNumberOfPoints();
   constexpr double radTol = 0.02;       // sphere discretisation noise
-  constexpr double quadricTol = 1e-6;   // level-set residual after stripper interp
+  constexpr double quadricTol = 1e-2;   // cutter linear-interp residual bound
   for (vtkIdType i = 0; i < n; ++i)
     {
     double p[3];
