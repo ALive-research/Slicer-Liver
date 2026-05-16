@@ -76,11 +76,14 @@ int vtkLiverSpheroidRingExtractor::RequestData(vtkInformation *,
 
   // Quadric coefficients for the axis-aligned ellipsoid
   //   ((x-cx)/rx)^2 + ((y-cy)/ry)^2 + ((z-cz)/rz)^2 - 1 = 0
-  // Expanding into vtkQuadric form
-  //   a0 x^2 + a1 y^2 + a2 z^2 + 2 a3 xy + 2 a4 yz + 2 a5 xz +
-  //   2 a6 x + 2 a7 y + 2 a8 z + a9 = 0
-  // (the SetCoefficients API is documented in the vtkQuadric header
-  // alongside the equation form above).
+  // vtkQuadric evaluates
+  //   F(x,y,z) = a0 x^2 + a1 y^2 + a2 z^2
+  //            + a3 x y + a4 y z + a5 x z
+  //            + a6 x + a7 y + a8 z + a9
+  // (note: no implicit factor of 2 on the cross or linear terms — see
+  // the header comment on vtkQuadric).  Expanding ((x-cx)/rx)^2 gives
+  //   x^2/rx^2 - 2 cx x / rx^2 + cx^2 / rx^2,
+  // so the linear coefficient is -2 cx / rx^2.
   const double inv2x = 1.0 / (this->RadiusX * this->RadiusX);
   const double inv2y = 1.0 / (this->RadiusY * this->RadiusY);
   const double inv2z = 1.0 / (this->RadiusZ * this->RadiusZ);
@@ -92,12 +95,12 @@ int vtkLiverSpheroidRingExtractor::RequestData(vtkInformation *,
     inv2x,                       // a0 x^2
     inv2y,                       // a1 y^2
     inv2z,                       // a2 z^2
-    0.0,                         // 2 a3 xy
-    0.0,                         // 2 a4 yz
-    0.0,                         // 2 a5 xz
-    -inv2x * cx,                 // 2 a6 x   -> coefficient is -2 cx / rx^2
-    -inv2y * cy,                 // 2 a7 y
-    -inv2z * cz,                 // 2 a8 z
+    0.0,                         // a3 xy
+    0.0,                         // a4 yz
+    0.0,                         // a5 xz
+    -2.0 * inv2x * cx,           // a6 x  = -2 cx / rx^2
+    -2.0 * inv2y * cy,           // a7 y  = -2 cy / ry^2
+    -2.0 * inv2z * cz,           // a8 z  = -2 cz / rz^2
     inv2x * cx * cx + inv2y * cy * cy + inv2z * cz * cz - 1.0);  // a9
 
   vtkNew<vtkCutter> cutter;
