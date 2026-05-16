@@ -71,10 +71,13 @@
  * The shape of the data is fixed by
  * [ADR-0014 §1](../../Docs/adr/0014-livermarkups-dissolution.md):
  *
- * - A **5×5 Bezier control grid** (75 doubles, row-major) — the surface's
- *   single editable geometry in the Planning state, matching the output
- *   of ``vtkLiverBezierFitter`` (ADR-0015) at its canonical
- *   5-samples-per-axis grid.
+ * - A **4×4 Bezier control grid** (48 doubles, row-major) — the surface's
+ *   single editable geometry in the Planning state.  Sixteen control
+ *   points (per ADR-0014 §3: corners 4 + edges 8 + interior 4) define
+ *   a single degree-3 Bernstein patch.  Matches the legacy
+ *   ``vtkMRMLMarkupsBezierSurfaceNode::RequiredNumberOfControlPoints
+ *   == 16`` and the corrected degree-3 characterisation landed on
+ *   ``preview`` by PR #342.
  * - A **state enum** (``Init`` / ``Planning``) and an
  *   **InitializationMode** enum (``SlicingPlane`` / ``DistanceSpheroid``),
  *   tracked explicitly per ADR-0013 §4 so the implicit-state-via-
@@ -90,7 +93,7 @@
  *
  * Two nodes participate in the Bezier-surface concept:
  *
- *   - ``vtkMRMLLiverBezierSurfaceNode`` (this class) — \b data: the 5×5
+ *   - ``vtkMRMLLiverBezierSurfaceNode`` (this class) — \b data: the 4×4
  *     control grid, init-mode audit data, state machine.
  *   - ``vtkMRMLLiverBezierSurfaceDisplayNode`` — \b display: all
  *     decoration fields (colours, opacity, grid visibility,
@@ -148,12 +151,15 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverBezierSurfaceNod
     InitializationMode_Last
   };
 
-  /// Bezier control-grid side length M (degree-4 Bernstein basis).
-  /// Matches ``vtkLiverBezierFitter::GetGridSize() == 5`` at its
-  /// canonical 5-sample-per-axis configuration.
-  static constexpr int GridSize = 5;
+  /// Bezier control-grid side length M (degree-3 Bernstein basis).
+  /// Sixteen control points group by ring role per ADR-0014 §3:
+  /// 4 corners + 8 edges + 4 interior.  Matches the legacy
+  /// ``vtkMRMLMarkupsBezierSurfaceNode::RequiredNumberOfControlPoints
+  /// == 16`` and the corrected degree-3 characterisation landed on
+  /// ``preview`` by PR #342.
+  static constexpr int GridSize = 4;
 
-  /// Total number of doubles in the control grid (M * M * 3).
+  /// Total number of doubles in the control grid (M * M * 3 = 48).
   static constexpr int ControlGridSize = GridSize * GridSize * 3;
 
   //--------------------------------------------------------------------------
@@ -212,20 +218,19 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverBezierSurfaceNod
   static int GetInitModeFromString(const char* name);
 
   //--------------------------------------------------------------------------
-  // Bezier control grid (5×5×3 row-major)
+  // Bezier control grid (4×4×3 row-major, 48 doubles, degree-3)
   //--------------------------------------------------------------------------
 
-  /// Set the 5×5 Bezier control grid from a flat (75-double) array
+  /// Set the 4×4 Bezier control grid from a flat (48-double) array
   /// laid out row-major in (u, v) order with 3 doubles per control
-  /// point.  This matches the layout of
-  /// ``vtkLiverBezierFitter::GetControlPoints()`` and the polydata
-  /// produced on its output port.
+  /// point.  Sixteen control points (4 corners + 8 edges + 4 interior
+  /// per ADR-0014 §3) define a single degree-3 Bernstein patch.
   ///
   /// The pointer must reference at least ``ControlGridSize`` doubles.
   /// Returns true on success; false on null pointer.
   bool SetControlGrid(const double* values);
 
-  /// Read the 5×5 Bezier control grid as a flat (75-double) row-major
+  /// Read the 4×4 Bezier control grid as a flat (48-double) row-major
   /// array.  Valid for the lifetime of the node.
   const double* GetControlGrid() const { return this->ControlGrid.data(); }
 
@@ -311,7 +316,7 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverBezierSurfaceNod
   int State;
   int InitMode;
 
-  /// 5×5×3 control grid laid out row-major in (u, v).
+  /// 4×4×3 control grid laid out row-major in (u, v).
   std::array<double, ControlGridSize> ControlGrid;
 
   /// SlicingPlane init data.  Two points fixed by ADR-0014 §1.
