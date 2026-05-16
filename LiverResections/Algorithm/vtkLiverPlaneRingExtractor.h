@@ -24,6 +24,31 @@
  * \brief Extract the ordered intersection ring of an oriented plane
  * with a target liver mesh.
  *
+ * \par Role in the Init→Planning pipeline
+ *
+ * This class produces a **discrete, ordered ring** suitable for
+ * downstream fitting (`vtkLiverContourParameterizer` →
+ * `vtkLiverBezierFitter`).  It is the **data-extraction** path —
+ * **not** the surgeon-facing visualisation path.
+ *
+ * The visual contour the surgeon sees during Init mode is rendered
+ * by a separate OpenGL mapper that evaluates the implicit surface
+ * per-fragment on the GPU
+ * (`vtkOpenGLSlicingContourPolyDataMapper`, relocated from
+ * `LiverMarkups/VTKWidgets/` per ADR-0014 §3).  The two paths
+ * coexist on the same display-node parameters but produce different
+ * artefacts:
+ *
+ *   - Shader: continuous per-fragment rendering, GPU-bound,
+ *     per-frame cost.
+ *   - This class: discrete `vtkPolyData` ring, CPU-bound, one-shot
+ *     cost per state transition.
+ *
+ * Stack 4 (LayerDM Pipeline + Representations, per ADR-0014 §2)
+ * is responsible for ensuring the same `vtkPlane` parameters reach
+ * both the shader and this extractor, so the surgeon-visible
+ * contour and the extracted ring describe the same surface.
+ *
  * Internally uses ``vtkPlane`` + ``vtkCutter`` to produce the
  * intersection polydata, then ``vtkStripper`` to chain the cut
  * fragments into a closed polyline (cell-array form).  The output is a
