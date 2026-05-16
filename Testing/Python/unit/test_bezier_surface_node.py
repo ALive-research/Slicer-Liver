@@ -98,12 +98,21 @@ def test_node_default_state_and_mode(mrml_module):
 
 
 def test_node_state_round_trip(mrml_module):
-    """State setter accepts both enum values and round-trips."""
+    """State setter accepts both enum values.
+
+    Init→Planning is the one-way transition committed by ADR-0014 §4;
+    a separate test (``test_node_init_data_read_only_after_planning``)
+    asserts that Planning→Init is rejected.  This test exercises the
+    forward edge and the same-state no-op.
+    """
     node = mrml_module.vtkMRMLBezierSurfaceNode()
     node.SetState(mrml_module.vtkMRMLBezierSurfaceNode.Planning)
     assert node.GetState() == mrml_module.vtkMRMLBezierSurfaceNode.Planning
-    node.SetState(mrml_module.vtkMRMLBezierSurfaceNode.Init)
-    assert node.GetState() == mrml_module.vtkMRMLBezierSurfaceNode.Init
+    # Same-state self-assign is a no-op (no Modified() expected; not
+    # asserted here but covered by testModifiedEventsOnSetters on the
+    # C++ side).
+    node.SetState(mrml_module.vtkMRMLBezierSurfaceNode.Planning)
+    assert node.GetState() == mrml_module.vtkMRMLBezierSurfaceNode.Planning
 
 
 def test_node_initialization_mode_round_trip(mrml_module):
@@ -211,12 +220,12 @@ def test_node_xml_round_trip_via_scene(mrml_module):
     scene.RegisterNodeClass(mrml_module.vtkMRMLBezierSurfaceNode())
 
     source = mrml_module.vtkMRMLBezierSurfaceNode()
-    source.SetState(mrml_module.vtkMRMLBezierSurfaceNode.Planning)
+    # Populate Init-mode subordinate data BEFORE the Init→Planning
+    # transition — per ADR-0014 §4 the per-setter guards reject
+    # post-Planning mutation.
     source.SetInitMode(
         mrml_module.vtkMRMLBezierSurfaceNode.DistanceSpheroid
     )
-    grid = _make_grid()
-    source.SetControlGrid(grid)
     source.SetSlicingPlaneInitPoint(0, [1.0, 2.0, 3.0])
     source.SetSlicingPlaneInitPoint(1, [-4.0, 5.0, -6.0])
     source.SetSlicingPlaneOrigin([7.0, 8.0, 9.0])
@@ -228,6 +237,12 @@ def test_node_xml_round_trip_via_scene(mrml_module):
     source.SetDistanceSpheroidRadiusX(2.5)
     source.SetDistanceSpheroidRadiusY(3.5)
     source.SetDistanceSpheroidRadiusZ(4.5)
+
+    # Transition and write the Bezier grid (the only mutable
+    # geometry post-transition).
+    source.SetState(mrml_module.vtkMRMLBezierSurfaceNode.Planning)
+    grid = _make_grid()
+    source.SetControlGrid(grid)
 
     scene.AddNode(source)
 
@@ -289,14 +304,19 @@ def test_node_xml_round_trip_via_scene(mrml_module):
 
 
 def test_node_copy_content(mrml_module):
-    """CopyContent produces an independent copy that survives source edits."""
+    """CopyContent produces an independent copy that survives source edits.
+
+    Init-mode subordinate data is populated pre-transition (the
+    production lifecycle per ADR-0014 §4); the transition runs after
+    so the deep-copy carries State == Planning across.
+    """
     source = mrml_module.vtkMRMLBezierSurfaceNode()
-    source.SetState(mrml_module.vtkMRMLBezierSurfaceNode.Planning)
     source.SetSlicingPlaneOrigin([1.0, 2.0, 3.0])
     source.SetDistanceSpheroidRadiusX(1.5)
     source.SetNumberOfDistanceSpheroidInitPoints(2)
     source.SetDistanceSpheroidInitPoint(0, [1.0, 2.0, 3.0])
     source.SetDistanceSpheroidInitPoint(1, [4.0, 5.0, 6.0])
+    source.SetState(mrml_module.vtkMRMLBezierSurfaceNode.Planning)
 
     sink = mrml_module.vtkMRMLBezierSurfaceNode()
     sink.CopyContent(source, True)
@@ -306,9 +326,100 @@ def test_node_copy_content(mrml_module):
     assert sink.GetDistanceSpheroidRadiusX() == 1.5
     assert sink.GetNumberOfDistanceSpheroidInitPoints() == 2
 
-    # Mutate source; sink must remain unchanged.
+    # Source is in Planning so SetSlicingPlaneOrigin is now rejected
+    # by the ADR-0014 §4 guard.  The deep-copy independence assertion
+    # below is therefore trivially satisfied for *this* source; the
+    # property is exercised more directly by the dedicated read-only
+    # test below.
+    sink_origin_before = list(sink.GetSlicingPlaneOrigin())
     source.SetSlicingPlaneOrigin([99.0, 99.0, 99.0])
-    assert list(sink.GetSlicingPlaneOrigin()) == [1.0, 2.0, 3.0]
+    assert list(sink.GetSlicingPlaneOrigin()) == sink_origin_before
+
+
+def test_node_init_data_read_only_after_planning(mrml_module):
+    """ADR-0014 §4: init-mode data is read-only after Init→Planning.
+
+    Mirrors the C++ ``testInitDataReadOnlyAfterPlanning`` characterisation:
+    every gated setter accepts mutation while ``State == Init``, then
+    short-circuits (no value change, no ``MTime`` advance) once
+    ``State == Planning``.  Planning→Init drop-back is also rejected.
+    """
+    node = mrml_module.vtkMRMLBezierSurfaceNode()
+    cls = mrml_module.vtkMRMLBezierSurfaceNode
+    assert node.GetState() == cls.Init
+
+    # Populate Init-mode subordinate data while State == Init.
+    node.SetSlicingPlaneOrigin([1.0, 2.0, 3.0])
+    node.SetSlicingPlaneNormal([0.0, 1.0, 0.0])
+    assert node.SetSlicingPlaneInitPoint(0, [4.0, 5.0, 6.0]) is True
+    assert node.SetSlicingPlaneInitPoint(1, [7.0, 8.0, 9.0]) is True
+    node.SetNumberOfDistanceSpheroidInitPoints(2)
+    assert node.SetDistanceSpheroidInitPoint(0, [10.0, 11.0, 12.0]) is True
+    assert node.SetDistanceSpheroidInitPoint(1, [13.0, 14.0, 15.0]) is True
+    node.SetDistanceSpheroidCenter([16.0, 17.0, 18.0])
+    node.SetDistanceSpheroidRadiusX(1.5)
+    node.SetDistanceSpheroidRadiusY(2.5)
+    node.SetDistanceSpheroidRadiusZ(3.5)
+
+    # Verify the pre-transition values landed.
+    assert list(node.GetSlicingPlaneOrigin()) == [1.0, 2.0, 3.0]
+    assert list(node.GetSlicingPlaneInitPoint(0)) == [4.0, 5.0, 6.0]
+    assert list(node.GetDistanceSpheroidInitPoint(1)) == [13.0, 14.0, 15.0]
+    assert node.GetDistanceSpheroidRadiusX() == 1.5
+
+    # Forward transition.
+    node.SetState(cls.Planning)
+    assert node.GetState() == cls.Planning
+    baseline_mtime = node.GetMTime()
+
+    # Every gated setter is now rejected.  Mutation does not land and
+    # MTime does not advance.
+    node.SetSlicingPlaneOrigin([99.0, 99.0, 99.0])
+    assert list(node.GetSlicingPlaneOrigin()) == [1.0, 2.0, 3.0]
+    assert node.GetMTime() == baseline_mtime
+
+    node.SetSlicingPlaneNormal([1.0, 0.0, 0.0])
+    assert list(node.GetSlicingPlaneNormal()) == [0.0, 1.0, 0.0]
+    assert node.GetMTime() == baseline_mtime
+
+    # bool-returning setters signal rejection via False.
+    assert (
+        node.SetSlicingPlaneInitPoint(0, [-1.0, -2.0, -3.0]) is False
+    )
+    assert list(node.GetSlicingPlaneInitPoint(0)) == [4.0, 5.0, 6.0]
+    assert node.GetMTime() == baseline_mtime
+
+    node.SetNumberOfDistanceSpheroidInitPoints(7)
+    assert node.GetNumberOfDistanceSpheroidInitPoints() == 2
+    assert node.GetMTime() == baseline_mtime
+
+    assert (
+        node.SetDistanceSpheroidInitPoint(0, [-1.0, -2.0, -3.0]) is False
+    )
+    assert list(node.GetDistanceSpheroidInitPoint(0)) == [10.0, 11.0, 12.0]
+
+    node.SetDistanceSpheroidCenter([99.0, 99.0, 99.0])
+    assert list(node.GetDistanceSpheroidCenter()) == [16.0, 17.0, 18.0]
+
+    node.SetDistanceSpheroidRadiusX(99.0)
+    assert node.GetDistanceSpheroidRadiusX() == 1.5
+    node.SetDistanceSpheroidRadiusY(99.0)
+    assert node.GetDistanceSpheroidRadiusY() == 2.5
+    node.SetDistanceSpheroidRadiusZ(99.0)
+    assert node.GetDistanceSpheroidRadiusZ() == 3.5
+
+    assert node.GetMTime() == baseline_mtime
+
+    # Planning → Init drop-back is rejected (ADR-0014 §4).
+    node.SetState(cls.Init)
+    assert node.GetState() == cls.Planning
+    assert node.GetMTime() == baseline_mtime
+
+    # Control grid is the editable geometry in Planning — outside the
+    # guard's scope.  Mutation lands and MTime advances.
+    grid = _make_grid()
+    node.SetControlGrid(grid)
+    assert node.GetMTime() > baseline_mtime
 
 
 # --------------------------------------------------------------------------- #

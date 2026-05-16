@@ -57,6 +57,35 @@
 #include <string>
 
 //------------------------------------------------------------------------------
+// Read-only-after-Planning guard (ADR-0014 §4).
+//
+// Init-mode subordinate data (slicing-plane / distance-spheroid init
+// points + derived plane / spheroid parameters) is mutable while
+// ``State == Init`` and becomes read-only audit data the moment the
+// node transitions to ``Planning``.  Every setter on that data routes
+// through this macro; if the node is in Planning the call emits a
+// ``vtkWarningMacro`` and returns without mutating or firing
+// ``Modified()``.  Per ADR-0014 §4: "There is no Planning→Init
+// transition" — see ``SetState`` for the matching one-way invariant
+// on the state machine itself.
+//
+// File-local — ``#define``d here and ``#undef``ed at end-of-file so
+// the macro does not leak into other translation units.  ``do { …
+// } while (0)`` lets the macro sit on a single line at the top of the
+// setter body and behave like a statement (early ``return``).
+#define LIVER_BEZIER_GUARD_INIT_ONLY(fieldName)                                \
+  do                                                                          \
+  {                                                                           \
+    if (this->State == Planning && !this->LoadingFromXML)                     \
+    {                                                                         \
+      vtkWarningMacro("Cannot mutate " #fieldName                             \
+                      " after Init→Planning transition"                       \
+                      " (ADR-0014 §4 read-only audit data)");                 \
+      return;                                                                 \
+    }                                                                         \
+  } while (0)
+
+//------------------------------------------------------------------------------
 vtkMRMLNodeNewMacro(vtkMRMLBezierSurfaceNode);
 
 //------------------------------------------------------------------------------
@@ -67,6 +96,7 @@ vtkMRMLBezierSurfaceNode::vtkMRMLBezierSurfaceNode()
   , DistanceSpheroidRadiusX(0.0)
   , DistanceSpheroidRadiusY(0.0)
   , DistanceSpheroidRadiusZ(0.0)
+  , LoadingFromXML(false)
 {
   this->ControlGrid.fill(0.0);
 
@@ -91,6 +121,28 @@ vtkMRMLBezierSurfaceNode::vtkMRMLBezierSurfaceNode()
 
 //------------------------------------------------------------------------------
 vtkMRMLBezierSurfaceNode::~vtkMRMLBezierSurfaceNode() = default;
+
+//------------------------------------------------------------------------------
+void vtkMRMLBezierSurfaceNode::SetState(int state)
+{
+  // ADR-0014 §4: the Init→Planning transition is one-way.  Attempting
+  // to drop back from Planning to Init is rejected (warning + no-op).
+  // The same-state self-assign and any unrecognised int are passed
+  // through to the macro-equivalent path so the caller sees identical
+  // observability to a plain vtkSetMacro short-circuit.
+  if (state == this->State)
+  {
+    return;
+  }
+  if (this->State == Planning && state == Init && !this->LoadingFromXML)
+  {
+    vtkWarningMacro("Planning→Init transition is not permitted"
+                    " (ADR-0014 §4); state left at Planning");
+    return;
+  }
+  this->State = state;
+  this->Modified();
+}
 
 //------------------------------------------------------------------------------
 const char* vtkMRMLBezierSurfaceNode::GetStateAsString(int state)
@@ -168,11 +220,69 @@ bool vtkMRMLBezierSurfaceNode::SetSlicingPlaneInitPoint(int index,
   {
     return false;
   }
+  // ADR-0014 §4 read-only guard.  Returns false (rather than the
+  // macro's plain ``return``) so callers that check the bool see a
+  // clear signal that the mutation did not apply, matching the
+  // existing "rejected on bad input" return path of this setter.
+  // ``LoadingFromXML`` exempts XML deserialisation — see the
+  // ``LIVER_BEZIER_GUARD_INIT_ONLY`` macro at the top of this file.
+  if (this->State == Planning && !this->LoadingFromXML)
+  {
+    vtkWarningMacro("Cannot mutate SlicingPlaneInitPoint["
+                    << index << "]"
+                    << " after Init→Planning transition"
+                    << " (ADR-0014 §4 read-only audit data)");
+    return false;
+  }
   this->SlicingPlaneInitPoints[index][0] = point[0];
   this->SlicingPlaneInitPoints[index][1] = point[1];
   this->SlicingPlaneInitPoints[index][2] = point[2];
   this->Modified();
   return true;
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLBezierSurfaceNode::SetSlicingPlaneOrigin(double x, double y, double z)
+{
+  LIVER_BEZIER_GUARD_INIT_ONLY(SlicingPlaneOrigin);
+  if (this->SlicingPlaneOrigin[0] == x
+      && this->SlicingPlaneOrigin[1] == y
+      && this->SlicingPlaneOrigin[2] == z)
+  {
+    return;
+  }
+  this->SlicingPlaneOrigin[0] = x;
+  this->SlicingPlaneOrigin[1] = y;
+  this->SlicingPlaneOrigin[2] = z;
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLBezierSurfaceNode::SetSlicingPlaneOrigin(const double xyz[3])
+{
+  this->SetSlicingPlaneOrigin(xyz[0], xyz[1], xyz[2]);
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLBezierSurfaceNode::SetSlicingPlaneNormal(double x, double y, double z)
+{
+  LIVER_BEZIER_GUARD_INIT_ONLY(SlicingPlaneNormal);
+  if (this->SlicingPlaneNormal[0] == x
+      && this->SlicingPlaneNormal[1] == y
+      && this->SlicingPlaneNormal[2] == z)
+  {
+    return;
+  }
+  this->SlicingPlaneNormal[0] = x;
+  this->SlicingPlaneNormal[1] = y;
+  this->SlicingPlaneNormal[2] = z;
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLBezierSurfaceNode::SetSlicingPlaneNormal(const double xyz[3])
+{
+  this->SetSlicingPlaneNormal(xyz[0], xyz[1], xyz[2]);
 }
 
 //------------------------------------------------------------------------------
@@ -188,6 +298,7 @@ const double* vtkMRMLBezierSurfaceNode::GetSlicingPlaneInitPoint(int index) cons
 //------------------------------------------------------------------------------
 void vtkMRMLBezierSurfaceNode::SetNumberOfDistanceSpheroidInitPoints(int n)
 {
+  LIVER_BEZIER_GUARD_INIT_ONLY(NumberOfDistanceSpheroidInitPoints);
   if (n < 0)
   {
     n = 0;
@@ -210,12 +321,97 @@ bool vtkMRMLBezierSurfaceNode::SetDistanceSpheroidInitPoint(int index,
   {
     return false;
   }
+  // ADR-0014 §4 read-only guard.  Mirrors the bool-returning rejection
+  // path of SetSlicingPlaneInitPoint — see that setter for rationale.
+  if (this->State == Planning && !this->LoadingFromXML)
+  {
+    vtkWarningMacro("Cannot mutate DistanceSpheroidInitPoint["
+                    << index << "]"
+                    << " after Init→Planning transition"
+                    << " (ADR-0014 §4 read-only audit data)");
+    return false;
+  }
   const size_t base = static_cast<size_t>(index) * 3;
   this->DistanceSpheroidInitPoints[base + 0] = point[0];
   this->DistanceSpheroidInitPoints[base + 1] = point[1];
   this->DistanceSpheroidInitPoints[base + 2] = point[2];
   this->Modified();
   return true;
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLBezierSurfaceNode::SetDistanceSpheroidCenter(double x, double y, double z)
+{
+  LIVER_BEZIER_GUARD_INIT_ONLY(DistanceSpheroidCenter);
+  if (this->DistanceSpheroidCenter[0] == x
+      && this->DistanceSpheroidCenter[1] == y
+      && this->DistanceSpheroidCenter[2] == z)
+  {
+    return;
+  }
+  this->DistanceSpheroidCenter[0] = x;
+  this->DistanceSpheroidCenter[1] = y;
+  this->DistanceSpheroidCenter[2] = z;
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLBezierSurfaceNode::SetDistanceSpheroidCenter(const double xyz[3])
+{
+  this->SetDistanceSpheroidCenter(xyz[0], xyz[1], xyz[2]);
+}
+
+//------------------------------------------------------------------------------
+// Spheroid radii setters.  Each clamps to [0, +inf) — matching the
+// pre-refactor ``vtkSetClampMacro`` behaviour — then routes through
+// the ADR-0014 §4 read-only guard.  The clamp is applied to the
+// argument as the macro did; the guard then either short-circuits or
+// commits the clamped value.
+void vtkMRMLBezierSurfaceNode::SetDistanceSpheroidRadiusX(double r)
+{
+  LIVER_BEZIER_GUARD_INIT_ONLY(DistanceSpheroidRadiusX);
+  if (r < 0.0)
+  {
+    r = 0.0;
+  }
+  if (this->DistanceSpheroidRadiusX == r)
+  {
+    return;
+  }
+  this->DistanceSpheroidRadiusX = r;
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLBezierSurfaceNode::SetDistanceSpheroidRadiusY(double r)
+{
+  LIVER_BEZIER_GUARD_INIT_ONLY(DistanceSpheroidRadiusY);
+  if (r < 0.0)
+  {
+    r = 0.0;
+  }
+  if (this->DistanceSpheroidRadiusY == r)
+  {
+    return;
+  }
+  this->DistanceSpheroidRadiusY = r;
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLBezierSurfaceNode::SetDistanceSpheroidRadiusZ(double r)
+{
+  LIVER_BEZIER_GUARD_INIT_ONLY(DistanceSpheroidRadiusZ);
+  if (r < 0.0)
+  {
+    r = 0.0;
+  }
+  if (this->DistanceSpheroidRadiusZ == r)
+  {
+    return;
+  }
+  this->DistanceSpheroidRadiusZ = r;
+  this->Modified();
 }
 
 //------------------------------------------------------------------------------
@@ -318,6 +514,15 @@ void vtkMRMLBezierSurfaceNode::ReadXMLAttributes(const char** atts)
 {
   int disabledModify = this->StartModify();
 
+  // ADR-0014 §4 read-only guard is *only* for public-API mutation.
+  // XML deserialisation is internal load — temporarily exempt the
+  // guards so a scene serialised with ``state="Planning"`` does not
+  // reject the subsequent slicing-plane / spheroid attribute reads.
+  // Restored before returning regardless of which control path the
+  // attribute parser takes.
+  const bool wasLoadingFromXML = this->LoadingFromXML;
+  this->LoadingFromXML = true;
+
   Superclass::ReadXMLAttributes(atts);
 
   vtkMRMLReadXMLBeginMacro(atts);
@@ -402,6 +607,7 @@ void vtkMRMLBezierSurfaceNode::ReadXMLAttributes(const char** atts)
       static_cast<int>(this->DistanceSpheroidInitPoints.size() / 3);
   }
 
+  this->LoadingFromXML = wasLoadingFromXML;
   this->EndModify(disabledModify);
 }
 
@@ -493,3 +699,8 @@ void vtkMRMLBezierSurfaceNode::PrintSelf(ostream& os, vtkIndent indent)
   }
   os << "\n";
 }
+
+//------------------------------------------------------------------------------
+// File-local guard macro defined at top — undef at end-of-file so it
+// does not leak into other translation units.
+#undef LIVER_BEZIER_GUARD_INIT_ONLY
