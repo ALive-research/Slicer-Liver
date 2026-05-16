@@ -706,14 +706,20 @@ def test_cxx_efd_duplicated_consecutive_points(algorithm_module):
     )
     n = coeffs_arr.GetNumberOfTuples()
     coeffs = np.array([coeffs_arr.GetValue(i) for i in range(n)])
-    # Either the implementation has been patched (no NaN) or it still
-    # propagates NaN -- both are accepted, but log which path we took
-    # so a reviewer sees the change instantly.
+    # ADR-0003 characterisation pin for issue #355
+    # (https://github.com/ALive-research/Slicer-Liver/issues/355): the
+    # current implementation divides each segment displacement by its
+    # arc-length without guarding against zero, so a duplicated point
+    # yields NaN coefficients.  Pinning has_nan == True gives CI a loud
+    # signal the day a future fix lands — the assertion fails, the
+    # fixer flips it to `assert not np.any(...)` and closes #355.
     has_nan = bool(np.any(np.isnan(coeffs)))
-    print(
-        "\n    dup-segment NaN propagation: "
-        + ("YES (current pin)" if has_nan else "NO (behaviour changed)")
+    assert has_nan, (
+        "Characterisation pin inverted: zero-length-segment path no longer "
+        "NaN-propagates.  If this is intentional (issue #355 fixed), invert "
+        "the assertion to `assert not np.any(np.isnan(coeffs))` and close #355."
     )
+    # TODO(#355): invert assertion to `assert not has_nan` when fixed.
 
 
 def test_cxx_efd_planar_circle_round_trip(algorithm_module):

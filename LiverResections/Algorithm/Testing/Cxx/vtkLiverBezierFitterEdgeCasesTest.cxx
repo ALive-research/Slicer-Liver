@@ -235,7 +235,9 @@ void testMinimumSampleCount(SubTestReport& r)
 // textbook unstable form.  The well-conditioned baseline must produce a
 // reasonable κ (< 1e6); the collapsed input is expected to flag κ above
 // the 1e8 alert threshold.  We DO NOT switch the algorithm to
-// JacobiSVD here — characterisation only, sub-issue filed for the fix.
+// JacobiSVD here — characterisation only, see issue #356
+// (https://github.com/ALive-research/Slicer-Liver/issues/356) for the
+// proposed fix path (LLT/ColPivHouseholderQR on the Gram matrix).
 void testConditionNumberProbe(SubTestReport& r)
 {
   // Baseline: 8x8 uniform sampling, well-conditioned.
