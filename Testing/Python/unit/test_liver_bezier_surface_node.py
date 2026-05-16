@@ -252,16 +252,21 @@ def test_node_xml_round_trip_via_scene(mrml_module):
         assert sink.GetInitMode() == source.GetInitMode()
         assert sink.GetNumberOfDistanceSpheroidInitPoints() == 2
 
+        # GetControlGrid() returns the underlying ``const double*``;
+        # the VTK Python wrapping exposes it as an indexable sequence.
+        # If the wrapper ever switches to surfacing a raw memory
+        # address (or anything not subscriptable from Python) this
+        # assertion will fire and force us to expose a proper Python
+        # accessor — silently dropping out of the loop on the first
+        # element, as the original test did, would let a degraded
+        # round-trip pass unnoticed.
+        control_grid = sink.GetControlGrid()
+        assert hasattr(control_grid, "__getitem__"), (
+            "GetControlGrid() must surface as an indexable sequence from "
+            "Python; got " + repr(type(control_grid))
+        )
         for i, expected in enumerate(grid):
-            got = sink.GetControlGrid()[i] if hasattr(
-                sink.GetControlGrid(), "__getitem__"
-            ) else None
-            if got is None:
-                # GetControlGrid returns a const double* the wrapping
-                # may surface as a memory address rather than an
-                # indexable sequence; fall through to looser assertions.
-                break
-            assert got == pytest.approx(expected, rel=1e-5, abs=1e-7)
+            assert control_grid[i] == pytest.approx(expected, rel=1e-5, abs=1e-7)
 
         # Init audit data — independent of how the control-grid pointer
         # wraps.
