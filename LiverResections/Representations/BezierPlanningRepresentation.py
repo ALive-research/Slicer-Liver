@@ -105,14 +105,27 @@ class BezierPlanningRepresentation:
     * ``cleanup()`` — detaches the actor from the renderer and releases
       the VTK pipeline.
 
+    Grid rendering
+    --------------
+    The 4×4 control grid is **not** rendered as a separate actor.  Per
+    ADR-0014 §3 the relocated ``vtkOpenGLBezierResectionPolyDataMapper``
+    overlays the grid as a fragment-shader feature on the *surface*
+    mapper itself — the legacy mapper at
+    ``LiverMarkups/VTKWidgets/vtkOpenGLResection2DPolyDataMapper.cpp:281``
+    draws it procedurally via ``uGridDivisions`` / ``uGridThickness`` /
+    ``uResectionGridColor`` uniforms tested against
+    ``uvCoordsOutput``.  This skeleton therefore renders only the
+    surface actor; the display node's ``GridVisibility`` /
+    ``GridDivisions`` / ``GridThickness`` / ``ResectionGridColor``
+    fields are stored on the node and will be plumbed into the mapper's
+    uniforms when the relocation happens (``TODO(T2-mapper-relocation)``
+    in ``_build_vtk_pipeline``).
+
     Introspection (used by unit tests)
     ----------------------------------
     * ``GetSurfaceActor()`` — the ``vtkActor`` rendering the surface,
       or ``None`` if VTK is not importable.
     * ``GetSurfaceMapper()`` — the surface mapper.
-    * ``GetGridActor()`` — the actor rendering the 4×4 grid as
-      line segments.
-    * ``GetGridMapper()`` — the grid mapper.
     * ``GetCurrentColor()`` — the (r, g, b) triple last written to the
       surface mapper's property.  Returns the default when VTK is
       absent or no ``update()`` has fired.
@@ -127,9 +140,6 @@ class BezierPlanningRepresentation:
         self._surface_polydata: Any | None = None
         self._surface_mapper: Any | None = None
         self._surface_actor: Any | None = None
-        self._grid_polydata: Any | None = None
-        self._grid_mapper: Any | None = None
-        self._grid_actor: Any | None = None
 
         # Last-written colour / opacity — exposed as a stub-friendly
         # introspection surface for unit tests that cannot construct
@@ -201,9 +211,6 @@ class BezierPlanningRepresentation:
         self._surface_polydata = None
         self._surface_mapper = None
         self._surface_actor = None
-        self._grid_polydata = None
-        self._grid_mapper = None
-        self._grid_actor = None
 
     # ------------------------------------------------------------------ #
     # Introspection — used by the unit-layer tests
@@ -214,12 +221,6 @@ class BezierPlanningRepresentation:
 
     def GetSurfaceMapper(self) -> Any | None:
         return self._surface_mapper
-
-    def GetGridActor(self) -> Any | None:
-        return self._grid_actor
-
-    def GetGridMapper(self) -> Any | None:
-        return self._grid_mapper
 
     def GetCurrentColor(self) -> tuple[float, float, float]:
         return self._current_color
@@ -235,13 +236,22 @@ class BezierPlanningRepresentation:
     # ------------------------------------------------------------------ #
 
     def _build_vtk_pipeline(self) -> None:
-        """Construct the surface + grid actors.
+        """Construct the surface actor.
 
         Called from ``__init__`` only when ``vtk`` is importable.
+
+        TODO(T2-mapper-relocation): swap the generic ``vtkPolyDataMapper``
+        for ADR-0014 §3's relocated ``vtkOpenGLBezierResectionPolyDataMapper``
+        and plumb the display node's ``GridDivisions`` / ``GridThickness``
+        / ``ResectionGridColor`` / ``GridVisibility`` fields into the
+        mapper's fragment-shader uniforms (``uGridDivisions`` /
+        ``uGridThickness`` / ``uResectionGridColor``).  The grid is a
+        shader feature on the surface mapper — NOT a separate actor.
+        See ``LiverMarkups/VTKWidgets/vtkOpenGLResection2DPolyDataMapper.cpp:281``
+        for the legacy fragment-shader test against ``uvCoordsOutput``.
         """
         assert vtk is not None  # for the type-checker — gated by _HAS_VTK
 
-        # Surface side ------------------------------------------------
         self._surface_polydata = vtk.vtkPolyData()
         self._surface_mapper = vtk.vtkPolyDataMapper()
         self._surface_mapper.SetInputData(self._surface_polydata)
@@ -252,22 +262,9 @@ class BezierPlanningRepresentation:
         self._surface_actor.GetProperty().SetColor(*DEFAULT_RESECTION_COLOR)
         self._surface_actor.GetProperty().SetOpacity(DEFAULT_RESECTION_OPACITY)
 
-        # Grid side ---------------------------------------------------
-        self._grid_polydata = vtk.vtkPolyData()
-        self._grid_mapper = vtk.vtkPolyDataMapper()
-        self._grid_mapper.SetInputData(self._grid_polydata)
-        self._grid_actor = vtk.vtkActor()
-        self._grid_actor.SetMapper(self._grid_mapper)
-        self._grid_actor.GetProperty().SetColor(0.0, 0.0, 0.0)
-        # Hidden by default — the display node's ``GridVisibility`` flag
-        # turns it on (mirrors the legacy ResectionNode constructor).
-        self._grid_actor.SetVisibility(False)
-
     def _attach_actors(self, renderer: Any) -> None:
         if self._surface_actor is not None and hasattr(renderer, "AddActor"):
             renderer.AddActor(self._surface_actor)
-        if self._grid_actor is not None and hasattr(renderer, "AddActor"):
-            renderer.AddActor(self._grid_actor)
 
     def _detach_actors(self, renderer: Any) -> None:
         if self._surface_actor is not None and hasattr(
@@ -275,11 +272,6 @@ class BezierPlanningRepresentation:
         ):
             try:
                 renderer.RemoveActor(self._surface_actor)
-            except Exception:  # pragma: no cover - defensive
-                pass
-        if self._grid_actor is not None and hasattr(renderer, "RemoveActor"):
-            try:
-                renderer.RemoveActor(self._grid_actor)
             except Exception:  # pragma: no cover - defensive
                 pass
 
@@ -292,13 +284,11 @@ class BezierPlanningRepresentation:
         if display_node is None:
             color = DEFAULT_RESECTION_COLOR
             opacity = DEFAULT_RESECTION_OPACITY
-            grid_visible = False
         else:
             color_getter = getattr(display_node, "GetResectionColor", None)
             opacity_getter = getattr(
                 display_node, "GetResectionOpacity", None
             )
-            grid_getter = getattr(display_node, "GetGridVisibility", None)
 
             color = (
                 _as_color_tuple(color_getter())
@@ -309,9 +299,6 @@ class BezierPlanningRepresentation:
                 float(opacity_getter())
                 if opacity_getter is not None
                 else DEFAULT_RESECTION_OPACITY
-            )
-            grid_visible = (
-                bool(grid_getter()) if grid_getter is not None else False
             )
 
         self._current_color = color
@@ -325,16 +312,23 @@ class BezierPlanningRepresentation:
         # consumer.  Until then we honour the pure-vector fields,
         # which matches today's LiverResectionNode behaviour.
 
+        # TODO(T2-mapper-relocation): the display node's grid fields —
+        # ``GridVisibility``, ``GridDivisions``, ``GridThickness``,
+        # ``ResectionGridColor`` — are stored on the node but not yet
+        # plumbed through to a renderer.  Once the relocated
+        # ``vtkOpenGLBezierResectionPolyDataMapper`` swaps in (per
+        # ADR-0014 §3), read them here and push to that mapper's
+        # ``uGridDivisions`` / ``uGridThickness`` / ``uResectionGridColor``
+        # uniforms.  Grid visibility is a shader feature on the surface
+        # mapper, not a separate actor.
+
         if self._surface_actor is not None:
             prop = self._surface_actor.GetProperty()
             prop.SetColor(*color)
             prop.SetOpacity(opacity)
 
-        if self._grid_actor is not None:
-            self._grid_actor.SetVisibility(bool(grid_visible))
-
     def _apply_data_node(self, data_node: Any | None) -> None:
-        """Push the 4×4 control grid onto the surface / grid mappers."""
+        """Push the 4×4 control grid onto the surface mapper."""
         if data_node is None:
             return
 
@@ -370,15 +364,17 @@ class BezierPlanningRepresentation:
         if not _HAS_VTK:
             return
 
-        # Rebuild the surface and grid polydata from the 4×4 control
-        # mesh.  For the skeleton the "surface" is the raw 4×4 mesh
-        # itself (16 points + 9 quads); the fitted Bernstein patch will
-        # be substituted in when the relocated
+        # Rebuild the surface polydata from the 4×4 control mesh.
+        # For the skeleton the "surface" is the raw 4×4 mesh itself
+        # (16 points + 9 quads); the fitted Bernstein patch will be
+        # substituted in when the relocated
         # ``vtkOpenGLBezierResectionPolyDataMapper`` is wired up per
-        # ADR-0014 §3 (see the TODO at construction time).
+        # ADR-0014 §3 (see TODO(T2-mapper-relocation) in
+        # ``_build_vtk_pipeline``).  At that point the grid also
+        # appears — as fragment-shader uniforms on the surface mapper,
+        # not as separate geometry.
         points = _make_points_from_flat(flat)
         self._refresh_surface_polydata(points)
-        self._refresh_grid_polydata(points)
 
     def _refresh_surface_polydata(self, points: Any) -> None:
         assert vtk is not None
@@ -400,32 +396,6 @@ class BezierPlanningRepresentation:
                 cells.InsertNextCell(quad)
         polydata.SetPolys(cells)
         polydata.Modified()
-
-    def _refresh_grid_polydata(self, points: Any) -> None:
-        assert vtk is not None
-        polydata = self._grid_polydata
-        if polydata is None:
-            return
-        polydata.SetPoints(points)
-
-        lines = vtk.vtkCellArray()
-        # Horizontal edges (3 per row × 4 rows).
-        for v in range(4):
-            for u in range(3):
-                line = vtk.vtkLine()
-                line.GetPointIds().SetId(0, v * 4 + u)
-                line.GetPointIds().SetId(1, v * 4 + (u + 1))
-                lines.InsertNextCell(line)
-        # Vertical edges (3 per column × 4 columns).
-        for u in range(4):
-            for v in range(3):
-                line = vtk.vtkLine()
-                line.GetPointIds().SetId(0, v * 4 + u)
-                line.GetPointIds().SetId(1, (v + 1) * 4 + u)
-                lines.InsertNextCell(line)
-        polydata.SetLines(lines)
-        polydata.Modified()
-
 
 # --------------------------------------------------------------------------- #
 # Helpers
