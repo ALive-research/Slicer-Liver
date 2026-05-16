@@ -11,6 +11,10 @@ set(${KIT}_SRCS
   vtkMRMLLiverResectionNode.cxx
   vtkMRMLLiverResectionCSVStorageNode.h
   vtkMRMLLiverResectionCSVStorageNode.cxx
+  vtkMRMLLiverBezierSurfaceNode.h
+  vtkMRMLLiverBezierSurfaceNode.cxx
+  vtkMRMLLiverBezierSurfaceDisplayNode.h
+  vtkMRMLLiverBezierSurfaceDisplayNode.cxx
   )
 
 set(${KIT}_TARGET_LIBRARIES
@@ -26,3 +30,11 @@ SlicerMacroBuildModuleMRML(
   SRCS ${${KIT}_SRCS}
   TARGET_LIBRARIES ${${KIT}_TARGET_LIBRARIES}
 )
+
+#-----------------------------------------------------------------------------
+# C++ low-level tests for the MRML node classes (ADR-0008 §2, ctkTest
+# driver, no Slicer launch, no Qt).  Sibling-of-source layout matches
+# the Algorithm/Testing/Cxx subdirectory introduced in PR #334.
+if(BUILD_TESTING)
+  add_subdirectory(Testing)
+endif()
