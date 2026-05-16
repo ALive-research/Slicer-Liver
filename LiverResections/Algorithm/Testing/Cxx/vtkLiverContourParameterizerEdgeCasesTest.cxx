@@ -114,24 +114,25 @@ void testDuplicatedConsecutivePoints(SubTestReport& r)
       break;
     }
   }
+  // ADR-0003 characterisation pin for issue #355
+  // (https://github.com/ALive-research/Slicer-Liver/issues/355): the
+  // current implementation propagates NaN from the zero-length-segment
+  // divide.  Pinning hasNaN==true here gives CI a loud signal the day a
+  // future fix lands — the assertion inverts, the test fails, the
+  // fixer flips it to hasNaN==false plus a closing reference to #355.
+  // TODO(#355): invert this assertion to `if (!hasNaN)` when fixed.
   if (hasNaN)
   {
-    // Document the current behaviour: NaN propagates from the zero-
-    // length segment.  Sub-issue filed; passing here pins the
-    // characterisation per ADR-0003.
     std::fprintf(stderr,
-                 "    note: NaN propagation pinned (zero-length segment "
-                 "divide; see follow-up sub-issue).\n");
+                 "    note: NaN propagation pinned per ADR-0003 (issue #355).\n");
     r.pass("DuplicatedConsecutivePoints");
   }
   else
   {
-    // If implementation gets fixed to guard against zero-length, this
-    // branch becomes the new normal: still pass, but log the change.
-    std::fprintf(stderr,
-                 "    note: zero-length-segment path produced finite "
-                 "coefficients; behaviour has changed from NaN-propagating.\n");
-    r.pass("DuplicatedConsecutivePoints");
+    r.fail("DuplicatedConsecutivePoints: characterisation pin inverted — "
+           "zero-length-segment path no longer NaN-propagates.  "
+           "If this is intentional (issue #355 fixed), invert the assertion "
+           "and close #355.");
   }
 }
 
