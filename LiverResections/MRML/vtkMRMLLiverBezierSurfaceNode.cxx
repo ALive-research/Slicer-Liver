@@ -39,13 +39,16 @@
 
 // This module MRML includes
 #include "vtkMRMLLiverBezierSurfaceNode.h"
+#include "vtkMRMLLiverBezierSurfaceDisplayNode.h"
 
 // MRML includes
 #include <vtkMRMLNodePropertyMacros.h>
+#include <vtkMRMLScene.h>
 
 // VTK includes
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
+#include <vtkSmartPointer.h>
 
 // STD includes
 #include <algorithm>
@@ -413,6 +416,26 @@ void vtkMRMLLiverBezierSurfaceNode::CopyContent(vtkMRMLNode* anode,
   this->NumberOfDistanceSpheroidInitPoints =
     other->NumberOfDistanceSpheroidInitPoints;
   this->DistanceSpheroidInitPoints = other->DistanceSpheroidInitPoints;
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLLiverBezierSurfaceNode::CreateDefaultDisplayNodes()
+{
+  if (vtkMRMLLiverBezierSurfaceDisplayNode::SafeDownCast(this->GetDisplayNode())
+      != nullptr)
+  {
+    // Display node already exists.
+    return;
+  }
+  if (this->GetScene() == nullptr)
+  {
+    vtkErrorMacro("vtkMRMLLiverBezierSurfaceNode::CreateDefaultDisplayNodes"
+                  " failed: scene is invalid");
+    return;
+  }
+  auto displayNode = vtkSmartPointer<vtkMRMLLiverBezierSurfaceDisplayNode>::New();
+  this->GetScene()->AddNode(displayNode);
+  this->SetAndObserveDisplayNodeID(displayNode->GetID());
 }
 
 //------------------------------------------------------------------------------

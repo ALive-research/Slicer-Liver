@@ -43,7 +43,7 @@
 #include "vtkSlicerLiverResectionsModuleMRMLExport.h"
 
 // MRML includes
-#include <vtkMRMLStorableNode.h>
+#include <vtkMRMLDisplayableNode.h>
 
 // VTK includes
 #include <vtkNew.h>
@@ -115,11 +115,11 @@
  * during v2.0.0; T2.7 will collapse to the new names everywhere.
  */
 class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverBezierSurfaceNode
-  : public vtkMRMLStorableNode
+  : public vtkMRMLDisplayableNode
 {
  public:
   static vtkMRMLLiverBezierSurfaceNode* New();
-  vtkTypeMacro(vtkMRMLLiverBezierSurfaceNode, vtkMRMLStorableNode);
+  vtkTypeMacro(vtkMRMLLiverBezierSurfaceNode, vtkMRMLDisplayableNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   /// Resection state machine (per ADR-0013 §4).
@@ -173,6 +173,12 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverBezierSurfaceNod
   /// Copy node content (excludes basic data, such as name and node references).
   /// \sa vtkMRMLNode::CopyContent
   void CopyContent(vtkMRMLNode* anode, bool deepCopy = true) override;
+
+  /// Spawn a ``vtkMRMLLiverBezierSurfaceDisplayNode`` and observe it
+  /// as this data node's default display node.  No-op if a display
+  /// node is already attached.  Requires the data node to be in a
+  /// scene; emits an error and returns otherwise.
+  void CreateDefaultDisplayNodes() override;
 
   //--------------------------------------------------------------------------
   // State machine
