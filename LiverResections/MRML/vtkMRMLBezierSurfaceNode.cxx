@@ -73,16 +73,15 @@
 // the macro does not leak into other translation units.  ``do { …
 // } while (0)`` lets the macro sit on a single line at the top of the
 // setter body and behave like a statement (early ``return``).
-#define LIVER_BEZIER_GUARD_INIT_ONLY(fieldName)                                \
-  do                                                                          \
-  {                                                                           \
-    if (this->State == Planning && !this->LoadingFromXML)                     \
-    {                                                                         \
-      vtkWarningMacro("Cannot mutate " #fieldName                             \
-                      " after Init→Planning transition"                       \
-                      " (ADR-0014 §4 read-only audit data)");                 \
-      return;                                                                 \
-    }                                                                         \
+#define LIVER_BEZIER_GUARD_INIT_ONLY(fieldName)                                     \
+  do                                                                                \
+  {                                                                                 \
+    if (this->State == Planning && !this->LoadingFromXML)                           \
+    {                                                                               \
+      vtkWarningMacro("Cannot mutate " #fieldName " after Init→Planning transition" \
+                      " (ADR-0014 §4 read-only audit data)");                       \
+      return;                                                                       \
+    }                                                                               \
   } while (0)
 
 //------------------------------------------------------------------------------
@@ -149,9 +148,9 @@ const char* vtkMRMLBezierSurfaceNode::GetStateAsString(int state)
 {
   switch (state)
   {
-    case Init:     return "Init";
+    case Init: return "Init";
     case Planning: return "Planning";
-    default:       return "Invalid";
+    default: return "Invalid";
   }
 }
 
@@ -177,9 +176,9 @@ const char* vtkMRMLBezierSurfaceNode::GetInitModeAsString(int mode)
 {
   switch (mode)
   {
-    case SlicingPlane:     return "SlicingPlane";
+    case SlicingPlane: return "SlicingPlane";
     case DistanceSpheroid: return "DistanceSpheroid";
-    default:               return "Invalid";
+    default: return "Invalid";
   }
 }
 
@@ -213,8 +212,7 @@ bool vtkMRMLBezierSurfaceNode::SetControlGrid(const double* values)
 }
 
 //------------------------------------------------------------------------------
-bool vtkMRMLBezierSurfaceNode::SetSlicingPlaneInitPoint(int index,
-                                                             const double point[3])
+bool vtkMRMLBezierSurfaceNode::SetSlicingPlaneInitPoint(int index, const double point[3])
 {
   if (index < 0 || index > 1 || point == nullptr)
   {
@@ -228,10 +226,9 @@ bool vtkMRMLBezierSurfaceNode::SetSlicingPlaneInitPoint(int index,
   // ``LIVER_BEZIER_GUARD_INIT_ONLY`` macro at the top of this file.
   if (this->State == Planning && !this->LoadingFromXML)
   {
-    vtkWarningMacro("Cannot mutate SlicingPlaneInitPoint["
-                    << index << "]"
-                    << " after Init→Planning transition"
-                    << " (ADR-0014 §4 read-only audit data)");
+    vtkWarningMacro("Cannot mutate SlicingPlaneInitPoint[" << index << "]"
+                                                           << " after Init→Planning transition"
+                                                           << " (ADR-0014 §4 read-only audit data)");
     return false;
   }
   this->SlicingPlaneInitPoints[index][0] = point[0];
@@ -245,9 +242,7 @@ bool vtkMRMLBezierSurfaceNode::SetSlicingPlaneInitPoint(int index,
 void vtkMRMLBezierSurfaceNode::SetSlicingPlaneOrigin(double x, double y, double z)
 {
   LIVER_BEZIER_GUARD_INIT_ONLY(SlicingPlaneOrigin);
-  if (this->SlicingPlaneOrigin[0] == x
-      && this->SlicingPlaneOrigin[1] == y
-      && this->SlicingPlaneOrigin[2] == z)
+  if (this->SlicingPlaneOrigin[0] == x && this->SlicingPlaneOrigin[1] == y && this->SlicingPlaneOrigin[2] == z)
   {
     return;
   }
@@ -267,9 +262,7 @@ void vtkMRMLBezierSurfaceNode::SetSlicingPlaneOrigin(const double xyz[3])
 void vtkMRMLBezierSurfaceNode::SetSlicingPlaneNormal(double x, double y, double z)
 {
   LIVER_BEZIER_GUARD_INIT_ONLY(SlicingPlaneNormal);
-  if (this->SlicingPlaneNormal[0] == x
-      && this->SlicingPlaneNormal[1] == y
-      && this->SlicingPlaneNormal[2] == z)
+  if (this->SlicingPlaneNormal[0] == x && this->SlicingPlaneNormal[1] == y && this->SlicingPlaneNormal[2] == z)
   {
     return;
   }
@@ -313,11 +306,9 @@ void vtkMRMLBezierSurfaceNode::SetNumberOfDistanceSpheroidInitPoints(int n)
 }
 
 //------------------------------------------------------------------------------
-bool vtkMRMLBezierSurfaceNode::SetDistanceSpheroidInitPoint(int index,
-                                                                 const double point[3])
+bool vtkMRMLBezierSurfaceNode::SetDistanceSpheroidInitPoint(int index, const double point[3])
 {
-  if (index < 0 || index >= this->NumberOfDistanceSpheroidInitPoints
-      || point == nullptr)
+  if (index < 0 || index >= this->NumberOfDistanceSpheroidInitPoints || point == nullptr)
   {
     return false;
   }
@@ -325,10 +316,9 @@ bool vtkMRMLBezierSurfaceNode::SetDistanceSpheroidInitPoint(int index,
   // path of SetSlicingPlaneInitPoint — see that setter for rationale.
   if (this->State == Planning && !this->LoadingFromXML)
   {
-    vtkWarningMacro("Cannot mutate DistanceSpheroidInitPoint["
-                    << index << "]"
-                    << " after Init→Planning transition"
-                    << " (ADR-0014 §4 read-only audit data)");
+    vtkWarningMacro("Cannot mutate DistanceSpheroidInitPoint[" << index << "]"
+                                                               << " after Init→Planning transition"
+                                                               << " (ADR-0014 §4 read-only audit data)");
     return false;
   }
   const size_t base = static_cast<size_t>(index) * 3;
@@ -343,9 +333,7 @@ bool vtkMRMLBezierSurfaceNode::SetDistanceSpheroidInitPoint(int index,
 void vtkMRMLBezierSurfaceNode::SetDistanceSpheroidCenter(double x, double y, double z)
 {
   LIVER_BEZIER_GUARD_INIT_ONLY(DistanceSpheroidCenter);
-  if (this->DistanceSpheroidCenter[0] == x
-      && this->DistanceSpheroidCenter[1] == y
-      && this->DistanceSpheroidCenter[2] == z)
+  if (this->DistanceSpheroidCenter[0] == x && this->DistanceSpheroidCenter[1] == y && this->DistanceSpheroidCenter[2] == z)
   {
     return;
   }
@@ -415,8 +403,7 @@ void vtkMRMLBezierSurfaceNode::SetDistanceSpheroidRadiusZ(double r)
 }
 
 //------------------------------------------------------------------------------
-const double*
-vtkMRMLBezierSurfaceNode::GetDistanceSpheroidInitPoint(int index) const
+const double* vtkMRMLBezierSurfaceNode::GetDistanceSpheroidInitPoint(int index) const
 {
   if (index < 0 || index >= this->NumberOfDistanceSpheroidInitPoints)
   {
@@ -428,38 +415,38 @@ vtkMRMLBezierSurfaceNode::GetDistanceSpheroidInitPoint(int index) const
 //------------------------------------------------------------------------------
 namespace
 {
-  /// Helper: serialise N doubles to a space-separated string.
-  std::string writeDoubles(const double* values, std::size_t n)
+/// Helper: serialise N doubles to a space-separated string.
+std::string writeDoubles(const double* values, std::size_t n)
+{
+  std::stringstream ss;
+  for (std::size_t i = 0; i < n; ++i)
   {
-    std::stringstream ss;
-    for (std::size_t i = 0; i < n; ++i)
+    if (i > 0)
     {
-      if (i > 0)
-      {
-        ss << " ";
-      }
-      ss << values[i];
+      ss << " ";
     }
-    return ss.str();
+    ss << values[i];
   }
+  return ss.str();
+}
 
-  /// Helper: parse N doubles from a space-separated string.  ``out`` is
-  /// resized to exactly the number of values successfully parsed.
-  void readDoubles(const char* text, std::vector<double>& out)
+/// Helper: parse N doubles from a space-separated string.  ``out`` is
+/// resized to exactly the number of values successfully parsed.
+void readDoubles(const char* text, std::vector<double>& out)
+{
+  out.clear();
+  if (text == nullptr)
   {
-    out.clear();
-    if (text == nullptr)
-    {
-      return;
-    }
-    std::stringstream ss(text);
-    double v;
-    while (ss >> v)
-    {
-      out.push_back(v);
-    }
+    return;
+  }
+  std::stringstream ss(text);
+  double v;
+  while (ss >> v)
+  {
+    out.push_back(v);
   }
 }
+} // namespace
 
 //------------------------------------------------------------------------------
 void vtkMRMLBezierSurfaceNode::WriteXML(ostream& of, int nIndent)
@@ -475,8 +462,7 @@ void vtkMRMLBezierSurfaceNode::WriteXML(ostream& of, int nIndent)
   vtkMRMLWriteXMLFloatMacro(distanceSpheroidRadiusX, DistanceSpheroidRadiusX);
   vtkMRMLWriteXMLFloatMacro(distanceSpheroidRadiusY, DistanceSpheroidRadiusY);
   vtkMRMLWriteXMLFloatMacro(distanceSpheroidRadiusZ, DistanceSpheroidRadiusZ);
-  vtkMRMLWriteXMLIntMacro(numberOfDistanceSpheroidInitPoints,
-                          NumberOfDistanceSpheroidInitPoints);
+  vtkMRMLWriteXMLIntMacro(numberOfDistanceSpheroidInitPoints, NumberOfDistanceSpheroidInitPoints);
   vtkMRMLWriteXMLEndMacro();
 
   // Free-form payloads (variable / large) emitted as plain attributes
@@ -487,24 +473,12 @@ void vtkMRMLBezierSurfaceNode::WriteXML(ostream& of, int nIndent)
   // (current writeDoubles output is whitespace-and-numeric, so this
   // is defensive — but the discipline matches vtkMRMLNode's own
   // attribute serialisation, cf. vtkMRMLNode.cxx:699).
-  of << " controlGrid=\""
-     << this->XMLAttributeEncodeString(
-          writeDoubles(this->ControlGrid.data(), ControlGridSize))
-     << "\"";
-  of << " slicingPlaneInitPoint0=\""
-     << this->XMLAttributeEncodeString(
-          writeDoubles(this->SlicingPlaneInitPoints[0], 3))
-     << "\"";
-  of << " slicingPlaneInitPoint1=\""
-     << this->XMLAttributeEncodeString(
-          writeDoubles(this->SlicingPlaneInitPoints[1], 3))
-     << "\"";
+  of << " controlGrid=\"" << this->XMLAttributeEncodeString(writeDoubles(this->ControlGrid.data(), ControlGridSize)) << "\"";
+  of << " slicingPlaneInitPoint0=\"" << this->XMLAttributeEncodeString(writeDoubles(this->SlicingPlaneInitPoints[0], 3)) << "\"";
+  of << " slicingPlaneInitPoint1=\"" << this->XMLAttributeEncodeString(writeDoubles(this->SlicingPlaneInitPoints[1], 3)) << "\"";
   if (!this->DistanceSpheroidInitPoints.empty())
   {
-    of << " distanceSpheroidInitPoints=\""
-       << this->XMLAttributeEncodeString(
-            writeDoubles(this->DistanceSpheroidInitPoints.data(),
-                         this->DistanceSpheroidInitPoints.size()))
+    of << " distanceSpheroidInitPoints=\"" << this->XMLAttributeEncodeString(writeDoubles(this->DistanceSpheroidInitPoints.data(), this->DistanceSpheroidInitPoints.size()))
        << "\"";
   }
 }
@@ -534,8 +508,7 @@ void vtkMRMLBezierSurfaceNode::ReadXMLAttributes(const char** atts)
   vtkMRMLReadXMLFloatMacro(distanceSpheroidRadiusX, DistanceSpheroidRadiusX);
   vtkMRMLReadXMLFloatMacro(distanceSpheroidRadiusY, DistanceSpheroidRadiusY);
   vtkMRMLReadXMLFloatMacro(distanceSpheroidRadiusZ, DistanceSpheroidRadiusZ);
-  vtkMRMLReadXMLIntMacro(numberOfDistanceSpheroidInitPoints,
-                         NumberOfDistanceSpheroidInitPoints);
+  vtkMRMLReadXMLIntMacro(numberOfDistanceSpheroidInitPoints, NumberOfDistanceSpheroidInitPoints);
   vtkMRMLReadXMLEndMacro();
 
   // Free-form payloads — replay the attribute stream a second time so
@@ -567,13 +540,10 @@ void vtkMRMLBezierSurfaceNode::ReadXMLAttributes(const char** atts)
         // produced the malformed scene.  Same shape as the warning
         // vtkMRMLPlotSeriesNode emits when a truncated array is
         // encountered on read.
-        vtkWarningMacro("Truncated controlGrid attribute; expected "
-                        << ControlGridSize << " doubles, got "
-                        << values.size() << " — leaving at default");
+        vtkWarningMacro("Truncated controlGrid attribute; expected " << ControlGridSize << " doubles, got " << values.size() << " — leaving at default");
       }
     }
-    else if (std::strcmp(name, "slicingPlaneInitPoint0") == 0
-             || std::strcmp(name, "slicingPlaneInitPoint1") == 0)
+    else if (std::strcmp(name, "slicingPlaneInitPoint0") == 0 || std::strcmp(name, "slicingPlaneInitPoint1") == 0)
     {
       const int idx = (name[strlen("slicingPlaneInitPoint")] == '0') ? 0 : 1;
       std::vector<double> values;
@@ -600,11 +570,9 @@ void vtkMRMLBezierSurfaceNode::ReadXMLAttributes(const char** atts)
   // *after* distanceSpheroidInitPoints; if they disagree (e.g. legacy
   // XML wrote a count but no points yet), keep the count in sync with
   // the actual storage so callers do not over-read.
-  if (static_cast<size_t>(this->NumberOfDistanceSpheroidInitPoints) * 3
-      != this->DistanceSpheroidInitPoints.size())
+  if (static_cast<size_t>(this->NumberOfDistanceSpheroidInitPoints) * 3 != this->DistanceSpheroidInitPoints.size())
   {
-    this->NumberOfDistanceSpheroidInitPoints =
-      static_cast<int>(this->DistanceSpheroidInitPoints.size() / 3);
+    this->NumberOfDistanceSpheroidInitPoints = static_cast<int>(this->DistanceSpheroidInitPoints.size() / 3);
   }
 
   this->LoadingFromXML = wasLoadingFromXML;
@@ -612,14 +580,12 @@ void vtkMRMLBezierSurfaceNode::ReadXMLAttributes(const char** atts)
 }
 
 //------------------------------------------------------------------------------
-void vtkMRMLBezierSurfaceNode::CopyContent(vtkMRMLNode* anode,
-                                                bool deepCopy /*=true*/)
+void vtkMRMLBezierSurfaceNode::CopyContent(vtkMRMLNode* anode, bool deepCopy /*=true*/)
 {
   MRMLNodeModifyBlocker blocker(this);
   Superclass::CopyContent(anode, deepCopy);
 
-  vtkMRMLBezierSurfaceNode* other =
-    vtkMRMLBezierSurfaceNode::SafeDownCast(anode);
+  vtkMRMLBezierSurfaceNode* other = vtkMRMLBezierSurfaceNode::SafeDownCast(anode);
   if (other == nullptr)
   {
     vtkErrorMacro("CopyContent: source node is not a vtkMRMLBezierSurfaceNode");
@@ -646,16 +612,14 @@ void vtkMRMLBezierSurfaceNode::CopyContent(vtkMRMLNode* anode,
   this->DistanceSpheroidRadiusX = other->DistanceSpheroidRadiusX;
   this->DistanceSpheroidRadiusY = other->DistanceSpheroidRadiusY;
   this->DistanceSpheroidRadiusZ = other->DistanceSpheroidRadiusZ;
-  this->NumberOfDistanceSpheroidInitPoints =
-    other->NumberOfDistanceSpheroidInitPoints;
+  this->NumberOfDistanceSpheroidInitPoints = other->NumberOfDistanceSpheroidInitPoints;
   this->DistanceSpheroidInitPoints = other->DistanceSpheroidInitPoints;
 }
 
 //------------------------------------------------------------------------------
 void vtkMRMLBezierSurfaceNode::CreateDefaultDisplayNodes()
 {
-  if (vtkMRMLBezierSurfaceDisplayNode::SafeDownCast(this->GetDisplayNode())
-      != nullptr)
+  if (vtkMRMLBezierSurfaceDisplayNode::SafeDownCast(this->GetDisplayNode()) != nullptr)
   {
     // Display node already exists.
     return;

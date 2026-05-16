@@ -117,10 +117,9 @@
  * ``SlicingPlane`` / ``DistanceSpheroid``.  These are *parallel*
  * during v2.0.0; T2.7 will collapse to the new names everywhere.
  */
-class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLBezierSurfaceNode
-  : public vtkMRMLDisplayableNode
+class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLBezierSurfaceNode : public vtkMRMLDisplayableNode
 {
- public:
+public:
   static vtkMRMLBezierSurfaceNode* New();
   vtkTypeMacro(vtkMRMLBezierSurfaceNode, vtkMRMLDisplayableNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
@@ -243,8 +242,7 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLBezierSurfaceNode
 
   /// Convenience overload — return a const reference to the std::array
   /// backing the grid (for C++ callers that prefer typed access).
-  const std::array<double, ControlGridSize>& GetControlGridArray() const
-  { return this->ControlGrid; }
+  const std::array<double, ControlGridSize>& GetControlGridArray() const { return this->ControlGrid; }
 
   //--------------------------------------------------------------------------
   // Init-mode subordinate data — SlicingPlane (read-only after Init→Planning)
@@ -324,11 +322,11 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLBezierSurfaceNode
   vtkGetMacro(DistanceSpheroidRadiusZ, double);
   void SetDistanceSpheroidRadiusZ(double r);
 
- protected:
+protected:
   vtkMRMLBezierSurfaceNode();
   ~vtkMRMLBezierSurfaceNode() override;
 
- private:
+private:
   vtkMRMLBezierSurfaceNode(const vtkMRMLBezierSurfaceNode&) = delete;
   void operator=(const vtkMRMLBezierSurfaceNode&) = delete;
 
