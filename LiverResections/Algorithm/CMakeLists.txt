@@ -58,8 +58,17 @@ set(${KIT}_SRCS
   vtkLiverBezierFitter.cxx
   )
 
+#
+# Eigen3::Eigen is an INTERFACE target (header-only); folding it into
+# ${KIT}_TARGET_LIBRARIES lets Slicer's macro handle the link in its
+# plain target_link_libraries(...) form.  An explicit
+# `target_link_libraries(${KIT} PUBLIC Eigen3::Eigen)` after the macro
+# is forbidden — Slicer mixes plain and keyword forms inside the same
+# target, and CMake rejects that mix.
+#
 set(${KIT}_TARGET_LIBRARIES
   ${VTK_LIBRARIES}
+  Eigen3::Eigen
   )
 
 #-----------------------------------------------------------------------------
@@ -70,11 +79,6 @@ SlicerMacroBuildModuleLogic(
   SRCS ${${KIT}_SRCS}
   TARGET_LIBRARIES ${${KIT}_TARGET_LIBRARIES}
   )
-
-# Eigen3 — header-only.  The `find_package(Eigen3 REQUIRED CONFIG)`
-# above is guaranteed to define Eigen3::Eigen (ITK's bundled config
-# exports the standard target), so this link is unconditional.
-target_link_libraries(${KIT} PUBLIC Eigen3::Eigen)
 
 #-----------------------------------------------------------------------------
 # C++ low-level tests live next to the algorithm classes (ADR-0008 §2).
