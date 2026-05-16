@@ -240,8 +240,8 @@ def test_pipeline_dispatches_to_bezier_planning_on_state_planning(
     )
 
     # Before Init→Planning, dispatch resolves to the SlicingPlaneInit
-    # slot — which is None at this stack iteration.  ``update()`` runs
-    # but no active Representation is set.
+    # slot.  ``update()`` runs and the active Representation name is
+    # set on the Pipeline.
     pipeline.update()
     assert pipeline.GetCurrentRepresentationName() == (
         pipeline_module.REPRESENTATION_SLICING_PLANE_INIT

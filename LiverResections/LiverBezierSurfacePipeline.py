@@ -11,13 +11,14 @@ The Pipeline owns three Representations keyed on the
 ``(state, initMode)`` tuple; ``update()`` activates whichever
 Representation matches the current tuple.
 
-Scope of this skeleton — first T2.2 stack iteration
----------------------------------------------------
-This is the **first iteration of the T2.2 stack** (Path B scoping;
-see the v2.0.0 release tracker).  Only the ``BezierPlanning``
-Representation is wired up; the two ``Init``-state Representations
-(``SlicingPlaneInit`` and ``DistanceSpheroidInit``) are placeholder
-slots with TODO markers and land in the remaining T2.2 iterations.
+Scope of this skeleton — T2.2 stack iterations
+----------------------------------------------
+This Pipeline is built incrementally across the T2.2 stack
+iterations (Path B scoping; see the v2.0.0 release tracker).  As of
+iteration 2 the ``BezierPlanning`` and ``SlicingPlaneInit``
+Representations are wired up; the ``DistanceSpheroidInit`` slot
+remains a placeholder with a TODO marker and lands in the remaining
+T2.2 iteration.
 
 Out of scope here, per the brief:
 
@@ -274,9 +275,10 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         across state transitions — no add/remove churn on the MRML scene
         as the surgeon moves through the workflow.
 
-        This iteration wires only ``BezierPlanningRepresentation``.
-        The two Init-state Representations land in later T2.2 stack
-        iterations.
+        As of T2.2 iteration 2 this wires ``BezierPlanningRepresentation``
+        and ``SlicingPlaneInitRepresentation``.  The
+        ``DistanceSpheroidInit`` slot lands in the remaining T2.2 stack
+        iteration.
         """
         # Local import to avoid a circular import when the Representations
         # package grows.  The Representation classes themselves are small
@@ -302,14 +304,23 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                 BezierPlanningRepresentation,
             )
 
+        try:  # pragma: no cover - exercised once per import path
+            from .Representations.SlicingPlaneInitRepresentation import (
+                SlicingPlaneInitRepresentation,
+            )
+        except ImportError:
+            from Representations.SlicingPlaneInitRepresentation import (  # type: ignore[no-redef]
+                SlicingPlaneInitRepresentation,
+            )
+
         self._representations[REPRESENTATION_BEZIER_PLANNING] = (
             BezierPlanningRepresentation(renderer=self.GetRenderer())
         )
 
-        # TODO(T2.2 SlicingPlaneInit): populate slot per ADR-0014 §2.
-        #   self._representations[REPRESENTATION_SLICING_PLANE_INIT] = (
-        #       SlicingPlaneInitRepresentation(renderer=self.GetRenderer())
-        #   )
+        self._representations[REPRESENTATION_SLICING_PLANE_INIT] = (
+            SlicingPlaneInitRepresentation(renderer=self.GetRenderer())
+        )
+
         # TODO(T2.2 DistanceSpheroidInit): populate slot per ADR-0014 §2.
         #   self._representations[REPRESENTATION_DISTANCE_SPHEROID_INIT] = (
         #       DistanceSpheroidInitRepresentation(renderer=self.GetRenderer())

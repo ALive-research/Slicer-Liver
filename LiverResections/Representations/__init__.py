@@ -11,13 +11,15 @@
 #
 # * ``BezierPlanningRepresentation`` — active in (state=Planning, *);
 #   renders the 4×4 Bezier control surface.
-#
-# Reserved for the remaining T2.2 stack iterations (slot names defined
-# as constants on ``LiverBezierSurfacePipeline``):
-#
 # * ``SlicingPlaneInitRepresentation`` — active in
 #   (state=Init, mode=SlicingPlane); renders two control points + the
-#   plane + the ring on the target liver surface.
+#   plane (ring on the target liver surface deferred per
+#   TODO(T2-target-mesh-weakref) until the data node gains a target
+#   mesh reference).
+#
+# Reserved for the remaining T2.2 stack iteration (slot name defined
+# as a constant on ``LiverBezierSurfacePipeline``):
+#
 # * ``DistanceSpheroidInitRepresentation`` — active in
 #   (state=Init, mode=DistanceSpheroid); renders the spheroid control
 #   points + the spheroid + the ring.
