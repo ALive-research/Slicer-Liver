@@ -23,6 +23,13 @@ set(KIT_TEST_SRCS
 add_definitions(-DLIVER_BEZIER_STORAGE_TEST_FIXTURE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/Fixtures\")
 
 #-----------------------------------------------------------------------------
+# Pass a writable temp dir (the standard CMake binary-tree temporary
+# directory) through to the test driver so the JSON round-trip test
+# does not depend on POSIX TMPDIR / /tmp semantics.
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/Testing/Temporary)
+add_definitions(-DLIVER_BEZIER_STORAGE_TEST_TEMP_DIR=\"${CMAKE_BINARY_DIR}/Testing/Temporary\")
+
+#-----------------------------------------------------------------------------
 slicerMacroConfigureModuleCxxTestDriver(
   NAME ${KIT}
   SOURCES ${KIT_TEST_SRCS}

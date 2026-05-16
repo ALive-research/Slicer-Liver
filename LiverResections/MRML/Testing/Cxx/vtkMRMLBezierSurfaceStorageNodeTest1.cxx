@@ -2,7 +2,7 @@
 
  Distributed under the OSI-approved BSD 3-Clause License.
 
-  Copyright (c) Oslo University Hospital. All rights reserved.
+  Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
   Tests for vtkMRMLBezierSurfaceStorageNode — the new ``.lrp.json``
   storage node landed by task T2.5 per ADR-0014 §5.  Exercises:
@@ -40,10 +40,8 @@
 #include <sstream>
 #include <string>
 
-// POSIX include — ``getpid`` for unique-temp-path generation.  On
-// Windows the ctkTest harness does not build (the existing tests in
-// this directory are POSIX-only); guarded so the compile fails
-// loudly there rather than silently using a stale handle.
+// Portable getpid — used to disambiguate temp-file names within a
+// single test run.  ``_getpid`` on Windows, ``getpid`` on POSIX.
 #if defined(_WIN32)
 # include <process.h>
 # define LIVER_BEZIER_GETPID _getpid
@@ -55,26 +53,18 @@
 namespace
 {
 
-/// Generate a unique temp file path with the given extension.  No
-/// reliance on ``mkstemp`` (not portable on Windows) — we use a
-/// pid + counter scheme rooted under
-/// ``vtksys::SystemTools::GetEnv("TMPDIR")`` or ``/tmp`` so the
-/// test does not require the build-tree to be writable.
+/// Generate a unique temp file path with the given extension.  Rooted
+/// under ``LIVER_BEZIER_STORAGE_TEST_TEMP_DIR`` — the CMake binary
+/// tree's ``Testing/Temporary`` directory, resolved at configure time
+/// and guaranteed writable across Windows/macOS/Linux (the
+/// build-tree-relative path avoids POSIX ``TMPDIR`` / ``/tmp``
+/// reliance).  Uniqueness comes from pid + a static counter.
 std::string makeTempPath(const std::string& extension)
 {
   static int counter = 0;
   ++counter;
-  std::string tmpDir;
-  if (const char* env = std::getenv("TMPDIR"))
-  {
-    tmpDir = env;
-  }
-  else
-  {
-    tmpDir = "/tmp";
-  }
   std::ostringstream ss;
-  ss << tmpDir << "/vtkMRMLBezierSurfaceStorageNodeTest1_" << static_cast<long long>(LIVER_BEZIER_GETPID()) << "_" << counter << "." << extension;
+  ss << LIVER_BEZIER_STORAGE_TEST_TEMP_DIR << "/vtkMRMLBezierSurfaceStorageNodeTest1_" << static_cast<long long>(LIVER_BEZIER_GETPID()) << "_" << counter << "." << extension;
   return ss.str();
 }
 
