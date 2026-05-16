@@ -11,7 +11,16 @@ set(KIT vtkSlicer${MODULE_NAME}ModuleMRML)
 set(KIT_TEST_SRCS
   vtkMRMLBezierSurfaceNodeTest1.cxx
   vtkMRMLBezierSurfaceDisplayNodeTest1.cxx
+  vtkMRMLBezierSurfaceStorageNodeTest1.cxx
   )
+
+#-----------------------------------------------------------------------------
+# Pass the in-source Fixtures/ directory through to the test driver so
+# the legacy ``.lrp.fcsv`` fixture (committed under
+# Testing/Cxx/Fixtures/legacy_resection.lrp.fcsv) is locatable at run
+# time.  The macro is consumed by
+# ``vtkMRMLBezierSurfaceStorageNodeTest1.cxx`` (task T2.5).
+add_definitions(-DLIVER_BEZIER_STORAGE_TEST_FIXTURE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/Fixtures\")
 
 #-----------------------------------------------------------------------------
 slicerMacroConfigureModuleCxxTestDriver(
@@ -27,3 +36,4 @@ slicerMacroConfigureModuleCxxTestDriver(
 
 SIMPLE_TEST(vtkMRMLBezierSurfaceNodeTest1)
 SIMPLE_TEST(vtkMRMLBezierSurfaceDisplayNodeTest1)
+SIMPLE_TEST(vtkMRMLBezierSurfaceStorageNodeTest1)

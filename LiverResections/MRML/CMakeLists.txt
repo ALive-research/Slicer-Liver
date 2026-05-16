@@ -15,6 +15,8 @@ set(${KIT}_SRCS
   vtkMRMLBezierSurfaceNode.cxx
   vtkMRMLBezierSurfaceDisplayNode.h
   vtkMRMLBezierSurfaceDisplayNode.cxx
+  vtkMRMLBezierSurfaceStorageNode.h
+  vtkMRMLBezierSurfaceStorageNode.cxx
   )
 
 set(${KIT}_TARGET_LIBRARIES
