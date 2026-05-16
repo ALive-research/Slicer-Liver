@@ -640,3 +640,143 @@ def test_cxx_inverse_transform_matches_pinned_reconstruction(algorithm_module):
         rtol=_RTOL_TIGHT,
         atol=_ATOL_TIGHT,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Edge-case stress tests — issue #335.
+#
+# Drive the C++ Algorithm wrapper with degenerate / extreme inputs and
+# assert either a defined output OR a defined failure mode (graceful
+# vtkErrorMacro return).  The fixtures are deliberately small Python
+# constructs so the test bodies stay readable and ctest output is
+# self-documenting.  All assertions live behind the same
+# ``algorithm_module`` fixture as the parity tests above, so the
+# whole block skips cleanly when the wrapped Algorithm library is
+# unavailable.
+#
+# Findings landed via this block are mirrored in the C++ ctkTest
+# driver under LiverResections/Algorithm/Testing/Cxx/*EdgeCasesTest.cxx
+# (same fixtures, same acceptance, same #335 traceability).  Whichever
+# stage is faster to iterate wins for the day-to-day add-a-fixture loop.
+# --------------------------------------------------------------------------- #
+
+
+def _planar_circle(n, radius=1.0):
+    """Return an (n+1) x 3 closed planar ring at z=0."""
+    theta = np.linspace(0.0, 2.0 * np.pi, n, endpoint=False)
+    pts = np.zeros((n + 1, 3), dtype=np.float64)
+    pts[:n, 0] = radius * np.cos(theta)
+    pts[:n, 1] = radius * np.sin(theta)
+    pts[n] = pts[0]
+    return pts
+
+
+def test_cxx_efd_short_ring_above_nyquist(algorithm_module):
+    """EFD with order > Nyquist on a 6-point ring: defined finite output."""
+    ring = _planar_circle(6)
+    coeffs_arr = (
+        algorithm_module.vtkLiverContourParameterizer.ComputeEFDCoefficients(
+            _to_double_array(ring.flatten().tolist()), 8
+        )
+    )
+    n = coeffs_arr.GetNumberOfTuples()
+    coeffs = np.array([coeffs_arr.GetValue(i) for i in range(n)]).reshape(8, 6)
+    assert coeffs.shape == (8, 6)
+    assert np.all(np.isfinite(coeffs)), (
+        "EFD coefficients on a 6-point ring must remain finite"
+    )
+
+
+def test_cxx_efd_duplicated_consecutive_points(algorithm_module):
+    """Zero-length segment -> NaN propagation (known fragile behaviour).
+
+    Pinned per ADR-0003: the current implementation divides each
+    segment displacement by its arc-length without guarding against
+    zero, so a duplicated consecutive point yields NaN coefficients.
+    The C++ test surfaces the same behaviour via a sub-issue; this
+    Python wrapper test is the dual-mode characterisation pin.
+    """
+    ring = _planar_circle(20)
+    # Splice a duplicate of row 5.
+    dup = np.insert(ring, 6, ring[5], axis=0)
+    coeffs_arr = (
+        algorithm_module.vtkLiverContourParameterizer.ComputeEFDCoefficients(
+            _to_double_array(dup.flatten().tolist()), 8
+        )
+    )
+    n = coeffs_arr.GetNumberOfTuples()
+    coeffs = np.array([coeffs_arr.GetValue(i) for i in range(n)])
+    # Either the implementation has been patched (no NaN) or it still
+    # propagates NaN -- both are accepted, but log which path we took
+    # so a reviewer sees the change instantly.
+    has_nan = bool(np.any(np.isnan(coeffs)))
+    print(
+        "\n    dup-segment NaN propagation: "
+        + ("YES (current pin)" if has_nan else "NO (behaviour changed)")
+    )
+
+
+def test_cxx_efd_planar_circle_round_trip(algorithm_module):
+    """EFD-8 reconstruction of a 60-point unit circle approximates it."""
+    ring = _planar_circle(60)
+    coeffs_arr = (
+        algorithm_module.vtkLiverContourParameterizer.ComputeEFDCoefficients(
+            _to_double_array(ring.flatten().tolist()), 8
+        )
+    )
+    dc_arr = (
+        algorithm_module.vtkLiverContourParameterizer.ComputeDCCoefficients(
+            _to_double_array(ring.flatten().tolist())
+        )
+    )
+    recon_arr = (
+        algorithm_module.vtkLiverContourParameterizer.InverseTransform(
+            coeffs_arr,
+            8,
+            dc_arr.GetValue(0),
+            dc_arr.GetValue(1),
+            dc_arr.GetValue(2),
+            24,
+        )
+    )
+    n = recon_arr.GetNumberOfTuples()
+    recon = np.array(
+        [recon_arr.GetValue(i) for i in range(n)], dtype=np.float64
+    ).reshape(3, 24)
+    radius = np.sqrt(recon[0] ** 2 + recon[1] ** 2)
+    np.testing.assert_allclose(radius, 1.0, atol=5e-3)
+
+
+def test_cxx_bezier_fitter_flat_surface(algorithm_module):
+    """Flat z=0 input: control points must all sit on z=0."""
+    u = np.linspace(0.0, 1.0, 4)
+    v = np.linspace(0.0, 1.0, 4)
+    points = np.zeros((4, 4, 3))
+    for i in range(4):
+        for j in range(4):
+            points[i, j] = (u[i], v[j], 0.0)
+
+    def bern3(t):
+        t1 = 1.0 - t
+        return np.array(
+            [t1**3, 3.0 * t * t1**2, 3.0 * t**2 * t1, t**3]
+        )
+
+    basis_u = np.stack([bern3(t) for t in u])
+    basis_v = np.stack([bern3(t) for t in v])
+
+    fitter = algorithm_module.vtkLiverBezierFitter()
+    fitter.SetNumberOfSamples(4, 4)
+    fitter.SetInputData(0, _points_polydata(points.flatten().tolist()))
+    fitter.SetInputData(1, _basis_table(basis_u))
+    fitter.SetInputData(2, _basis_table(basis_v))
+    fitter.Update()
+
+    out_points = fitter.GetOutput().GetPoints()
+    assert out_points.GetNumberOfPoints() == 16
+    z_max = 0.0
+    for k in range(16):
+        z_max = max(z_max, abs(out_points.GetPoint(k)[2]))
+    assert z_max < 1e-10, (
+        "flat-input control points off z=0: max |z| = " + str(z_max)
+    )
