@@ -317,14 +317,22 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             BezierPlanningRepresentation(renderer=self.GetRenderer())
         )
 
+        try:  # pragma: no cover - exercised once per import path
+            from .Representations.DistanceSpheroidInitRepresentation import (
+                DistanceSpheroidInitRepresentation,
+            )
+        except ImportError:
+            from Representations.DistanceSpheroidInitRepresentation import (  # type: ignore[no-redef]
+                DistanceSpheroidInitRepresentation,
+            )
+
         self._representations[REPRESENTATION_SLICING_PLANE_INIT] = (
             SlicingPlaneInitRepresentation(renderer=self.GetRenderer())
         )
 
-        # TODO(T2.2 DistanceSpheroidInit): populate slot per ADR-0014 §2.
-        #   self._representations[REPRESENTATION_DISTANCE_SPHEROID_INIT] = (
-        #       DistanceSpheroidInitRepresentation(renderer=self.GetRenderer())
-        #   )
+        self._representations[REPRESENTATION_DISTANCE_SPHEROID_INIT] = (
+            DistanceSpheroidInitRepresentation(renderer=self.GetRenderer())
+        )
 
     def update(self) -> None:
         """Dispatch the active Representation by ``(state, initMode)``.
