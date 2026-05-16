@@ -62,8 +62,15 @@ def mrml_module():
 
 
 def _make_grid():
-    """Return 75 doubles laid out row-major (5x5x3)."""
-    return [math.sin(0.1 * i) for i in range(75)]
+    """Return 48 doubles laid out row-major (4x4x3, degree-3 patch).
+
+    The grid size matches ADR-0014 §3: 16 control points (4 corners +
+    8 edges + 4 interior) for a single degree-3 Bernstein patch.  This
+    also matches the legacy ``vtkMRMLMarkupsBezierSurfaceNode::
+    RequiredNumberOfControlPoints == 16`` and the corrected degree-3
+    characterisation landed by PR #342.
+    """
+    return [math.sin(0.1 * i) for i in range(48)]
 
 
 # --------------------------------------------------------------------------- #
@@ -86,8 +93,8 @@ def test_node_default_state_and_mode(mrml_module):
         mrml_module.vtkMRMLLiverBezierSurfaceNode.SlicingPlane
     )
     # Read-only constants exposed to Python.
-    assert mrml_module.vtkMRMLLiverBezierSurfaceNode.GridSize == 5
-    assert mrml_module.vtkMRMLLiverBezierSurfaceNode.ControlGridSize == 75
+    assert mrml_module.vtkMRMLLiverBezierSurfaceNode.GridSize == 4
+    assert mrml_module.vtkMRMLLiverBezierSurfaceNode.ControlGridSize == 48
 
 
 def test_node_state_round_trip(mrml_module):
