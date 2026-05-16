@@ -124,13 +124,12 @@ class vtkDoubleArray;
  *  the algorithm library is pure VTK; MRML lives in the Python
  *  orchestration layer that consumes the output.
  */
-class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverBezierFitter
-  : public vtkPolyDataAlgorithm
+class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverBezierFitter : public vtkPolyDataAlgorithm
 {
- public:
-  static vtkLiverBezierFitter *New();
+public:
+  static vtkLiverBezierFitter* New();
   vtkTypeMacro(vtkLiverBezierFitter, vtkPolyDataAlgorithm);
-  void PrintSelf(ostream &os, vtkIndent indent) override;
+  void PrintSelf(ostream& os, vtkIndent indent) override;
 
   /// Set the dimensions of the gridded sample (Nu rows, Nv columns).
   /// The points input must contain Nu*Nv points; BasisU (table on port 1)
@@ -143,8 +142,7 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverBezierFitter
   /// Fetch the fitted M*M*3 control points as a flat std::vector.
   /// Valid after ``Update()``.  Layout matches the polydata output:
   /// row-major (i, j) order with 3 floats per control point.
-  const std::vector<double> &GetControlPoints() const
-  { return this->ControlPoints; }
+  const std::vector<double>& GetControlPoints() const { return this->ControlPoints; }
 
   /// Convenience: control-grid side length M (= BasisU/BasisV column count).
   /// Zero until ``Update()`` has been called.
@@ -160,32 +158,26 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverBezierFitter
   /// ``nSamples * (degree + 1)`` (1 component per value).
   ///
   /// Wrappable from Python via the VTK array surface.
-  static vtkSmartPointer<vtkDoubleArray>
-  BuildBernsteinBasis(vtkDoubleArray *samples, int degree);
+  static vtkSmartPointer<vtkDoubleArray> BuildBernsteinBasis(vtkDoubleArray* samples, int degree);
 
   /// C++-friendly overload — fill ``out`` (resized to nSamples *
   /// (degree+1)) with the same row-major Bernstein basis.
-  static void BuildBernsteinBasisRaw(const double *samples,
-                                      int nSamples,
-                                      int degree,
-                                      std::vector<double> &out);
+  static void BuildBernsteinBasisRaw(const double* samples, int nSamples, int degree, std::vector<double>& out);
 
- protected:
+protected:
   vtkLiverBezierFitter();
   ~vtkLiverBezierFitter() override;
 
-  int FillInputPortInformation(int port, vtkInformation *info) override;
-  int RequestData(vtkInformation *,
-                  vtkInformationVector **,
-                  vtkInformationVector *) override;
+  int FillInputPortInformation(int port, vtkInformation* info) override;
+  int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
- private:
-  vtkLiverBezierFitter(const vtkLiverBezierFitter &) = delete;
-  void operator=(const vtkLiverBezierFitter &) = delete;
+private:
+  vtkLiverBezierFitter(const vtkLiverBezierFitter&) = delete;
+  void operator=(const vtkLiverBezierFitter&) = delete;
 
   int NumberOfSamples[2];
   int GridSize;
   std::vector<double> ControlPoints;
 };
 
-#endif  // __vtkLiverBezierFitter_h_
+#endif // __vtkLiverBezierFitter_h_

@@ -30,7 +30,7 @@ namespace
 {
 constexpr double TWO_PI = 6.283185307179586476925286766559005768394;
 constexpr double PI = 3.141592653589793238462643383279502884197;
-}
+} // namespace
 
 //------------------------------------------------------------------------------
 vtkLiverContourParameterizer::vtkLiverContourParameterizer()
@@ -50,19 +50,17 @@ vtkLiverContourParameterizer::vtkLiverContourParameterizer()
 vtkLiverContourParameterizer::~vtkLiverContourParameterizer() = default;
 
 //------------------------------------------------------------------------------
-void vtkLiverContourParameterizer::PrintSelf(ostream &os, vtkIndent indent)
+void vtkLiverContourParameterizer::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
   os << indent << "Mode: " << this->Mode << "\n";
   os << indent << "Order: " << this->Order << "\n";
-  os << indent << "NumberOfReconstructionPoints: "
-     << this->NumberOfReconstructionPoints << "\n";
+  os << indent << "NumberOfReconstructionPoints: " << this->NumberOfReconstructionPoints << "\n";
   os << indent << "UseComputedLocus: " << this->UseComputedLocus << "\n";
 }
 
 //------------------------------------------------------------------------------
-int vtkLiverContourParameterizer::FillInputPortInformation(int /*port*/,
-                                                            vtkInformation *info)
+int vtkLiverContourParameterizer::FillInputPortInformation(int /*port*/, vtkInformation* info)
 {
   info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkPolyData");
   return 1;
@@ -72,9 +70,9 @@ int vtkLiverContourParameterizer::FillInputPortInformation(int /*port*/,
 void vtkLiverContourParameterizer::SetLocus(double x, double y, double z)
 {
   if (this->Locus[0] == x && this->Locus[1] == y && this->Locus[2] == z)
-    {
+  {
     return;
-    }
+  }
   this->Locus[0] = x;
   this->Locus[1] = y;
   this->Locus[2] = z;
@@ -104,50 +102,47 @@ void vtkLiverContourParameterizer::SetLocus(double x, double y, double z)
 // six sums in a single pass per harmonic, preserving the (over-segments)
 // reduction order so the floating-point reduction matches NumPy's.
 //------------------------------------------------------------------------------
-std::vector<double>
-vtkLiverContourParameterizer::ComputeEFDCoefficientsRaw(const double *contour,
-                                                        int nPoints,
-                                                        int order)
+std::vector<double> vtkLiverContourParameterizer::ComputeEFDCoefficientsRaw(const double* contour, int nPoints, int order)
 {
   std::vector<double> result(static_cast<size_t>(order) * 6, 0.0);
   if (nPoints < 2 || order < 1)
-    {
+  {
     return result;
-    }
+  }
 
   // Segment-wise differentials and parameter t.
   const int nSeg = nPoints - 1;
   std::vector<double> dx(nSeg), dy(nSeg), dz(nSeg), dt(nSeg);
   std::vector<double> t(nPoints, 0.0);
   for (int i = 0; i < nSeg; ++i)
-    {
+  {
     dx[i] = contour[(i + 1) * 3 + 0] - contour[i * 3 + 0];
     dy[i] = contour[(i + 1) * 3 + 1] - contour[i * 3 + 1];
     dz[i] = contour[(i + 1) * 3 + 2] - contour[i * 3 + 2];
     dt[i] = std::sqrt(dx[i] * dx[i] + dy[i] * dy[i] + dz[i] * dz[i]);
     t[i + 1] = t[i] + dt[i];
-    }
+  }
   const double T = t[nSeg];
   if (T == 0.0)
-    {
+  {
     return result;
-    }
+  }
 
   // phi[k] = 2 * pi * t[k] / T, evaluated per-segment endpoint.
   std::vector<double> phiBase(nPoints);
   for (int k = 0; k < nPoints; ++k)
-    {
+  {
     phiBase[k] = TWO_PI * t[k] / T;
-    }
+  }
 
   // Per-harmonic accumulation.  Per-harmonic constant matches Python:
   //   const_n = T / (2 * n^2 * pi^2)
   for (int n = 1; n <= order; ++n)
-    {
+  {
     const double cn = T / (2.0 * static_cast<double>(n) * n * PI * PI);
     double a = 0.0, b = 0.0, c = 0.0, d = 0.0, e = 0.0, f = 0.0;
     for (int i = 0; i < nSeg; ++i)
-      {
+    {
       const double phi0 = n * phiBase[i];
       const double phi1 = n * phiBase[i + 1];
       const double dCos = std::cos(phi1) - std::cos(phi0);
@@ -163,7 +158,7 @@ vtkLiverContourParameterizer::ComputeEFDCoefficientsRaw(const double *contour,
       d += (dy[i] / dt[i]) * dSin;
       e += (dz[i] / dt[i]) * dCos;
       f += (dz[i] / dt[i]) * dSin;
-      }
+    }
     const int row = n - 1;
     result[row * 6 + 0] = cn * a;
     result[row * 6 + 1] = cn * b;
@@ -171,7 +166,7 @@ vtkLiverContourParameterizer::ComputeEFDCoefficientsRaw(const double *contour,
     result[row * 6 + 3] = cn * d;
     result[row * 6 + 4] = cn * e;
     result[row * 6 + 5] = cn * f;
-    }
+  }
   return result;
 }
 
@@ -187,39 +182,38 @@ vtkLiverContourParameterizer::ComputeEFDCoefficientsRaw(const double *contour,
 // preserving the same per-segment reduction order so the result matches
 // NumPy's sum reduction to within last-bit-of-double.
 //------------------------------------------------------------------------------
-std::vector<double>
-vtkLiverContourParameterizer::ComputeDCCoefficientsRaw(const double *contour, int nPoints)
+std::vector<double> vtkLiverContourParameterizer::ComputeDCCoefficientsRaw(const double* contour, int nPoints)
 {
   std::vector<double> result(3, 0.0);
   if (nPoints < 2)
-    {
+  {
     return result;
-    }
+  }
   const int nSeg = nPoints - 1;
   std::vector<double> dx(nSeg), dy(nSeg), dz(nSeg), dt(nSeg);
   std::vector<double> t(nPoints, 0.0);
   for (int i = 0; i < nSeg; ++i)
-    {
+  {
     dx[i] = contour[(i + 1) * 3 + 0] - contour[i * 3 + 0];
     dy[i] = contour[(i + 1) * 3 + 1] - contour[i * 3 + 1];
     dz[i] = contour[(i + 1) * 3 + 2] - contour[i * 3 + 2];
     dt[i] = std::sqrt(dx[i] * dx[i] + dy[i] * dy[i] + dz[i] * dz[i]);
     t[i + 1] = t[i] + dt[i];
-    }
+  }
   const double T = t[nSeg];
   if (T == 0.0)
-    {
+  {
     result[0] = contour[0];
     result[1] = contour[1];
     result[2] = contour[2];
     return result;
-    }
+  }
   // diff(t**2): segment i contributes t[i+1]^2 - t[i]^2.
   // cumsum of dx/dy/dz: prefix sum along segments.
   double cumDx = 0.0, cumDy = 0.0, cumDz = 0.0;
   double sumX = 0.0, sumY = 0.0, sumZ = 0.0;
   for (int i = 0; i < nSeg; ++i)
-    {
+  {
     cumDx += dx[i];
     cumDy += dy[i];
     cumDz += dz[i];
@@ -231,7 +225,7 @@ vtkLiverContourParameterizer::ComputeDCCoefficientsRaw(const double *contour, in
     sumX += (dx[i] / (2.0 * dt[i])) * diffT2 + xi * dt[i];
     sumY += (dy[i] / (2.0 * dt[i])) * diffT2 + delta * dt[i];
     sumZ += (dz[i] / (2.0 * dt[i])) * diffT2 + zi * dt[i];
-    }
+  }
   const double invT = 1.0 / T;
   result[0] = contour[0] + sumX * invT;
   result[1] = contour[1] + sumY * invT;
@@ -257,48 +251,44 @@ vtkLiverContourParameterizer::ComputeDCCoefficientsRaw(const double *contour, in
 // t_k, sum over harmonics n.  This matches NumPy's matmul-of-row-vector
 // reduction direction.
 //------------------------------------------------------------------------------
-std::vector<double>
-vtkLiverContourParameterizer::InverseTransformRaw(const double *coeffs,
-                                                   int harmonic,
-                                                   const double locus[3],
-                                                   int nCoords)
+std::vector<double> vtkLiverContourParameterizer::InverseTransformRaw(const double* coeffs, int harmonic, const double locus[3], int nCoords)
 {
   std::vector<double> result(static_cast<size_t>(3) * nCoords, 0.0);
   if (harmonic < 1 || nCoords < 1)
-    {
+  {
     return result;
-    }
+  }
   // t = linspace(0, 1, nCoords) — NumPy default endpoint=True.
   std::vector<double> ts(nCoords);
   if (nCoords == 1)
-    {
+  {
     ts[0] = 0.0;
-    }
+  }
   else
-    {
+  {
     const double step = 1.0 / static_cast<double>(nCoords - 1);
     for (int k = 0; k < nCoords; ++k)
-      {
-      ts[k] = step * k;
-      }
-    }
-  for (int k = 0; k < nCoords; ++k)
     {
+      ts[k] = step * k;
+    }
+  }
+  for (int k = 0; k < nCoords; ++k)
+  {
     double xt = 0.0, yt = 0.0, zt = 0.0;
     const double t = ts[k];
     for (int n = 0; n < harmonic; ++n)
-      {
+    {
       const double phase = TWO_PI * static_cast<double>(n + 1) * t;
       const double cp = std::cos(phase);
       const double sp = std::sin(phase);
       xt += coeffs[n * 6 + 0] * cp + coeffs[n * 6 + 1] * sp;
       yt += coeffs[n * 6 + 2] * cp + coeffs[n * 6 + 3] * sp;
       zt += coeffs[n * 6 + 4] * cp + coeffs[n * 6 + 5] * sp;
-      }
+    }
     result[0 * nCoords + k] = xt + locus[0];
     result[1 * nCoords + k] = yt + locus[1];
     result[2 * nCoords + k] = zt + locus[2];
-    }
+  }
   return result;
 }
 
@@ -309,37 +299,36 @@ vtkLiverContourParameterizer::InverseTransformRaw(const double *coeffs,
 //------------------------------------------------------------------------------
 namespace
 {
-vtkSmartPointer<vtkDoubleArray> wrap(const std::vector<double> &values)
+vtkSmartPointer<vtkDoubleArray> wrap(const std::vector<double>& values)
 {
   vtkSmartPointer<vtkDoubleArray> arr = vtkSmartPointer<vtkDoubleArray>::New();
   arr->SetNumberOfComponents(1);
   arr->SetNumberOfTuples(static_cast<vtkIdType>(values.size()));
   for (size_t i = 0; i < values.size(); ++i)
-    {
+  {
     arr->SetValue(static_cast<vtkIdType>(i), values[i]);
-    }
+  }
   return arr;
 }
-std::vector<double> unwrap(vtkDoubleArray *arr)
+std::vector<double> unwrap(vtkDoubleArray* arr)
 {
   std::vector<double> out;
   if (!arr)
-    {
+  {
     return out;
-    }
+  }
   const vtkIdType n = arr->GetNumberOfTuples() * arr->GetNumberOfComponents();
   out.reserve(static_cast<size_t>(n));
   for (vtkIdType i = 0; i < n; ++i)
-    {
+  {
     out.push_back(arr->GetValue(i));
-    }
+  }
   return out;
 }
-}  // namespace
+} // namespace
 
 //------------------------------------------------------------------------------
-vtkSmartPointer<vtkDoubleArray>
-vtkLiverContourParameterizer::ComputeEFDCoefficients(vtkDoubleArray *contour, int order)
+vtkSmartPointer<vtkDoubleArray> vtkLiverContourParameterizer::ComputeEFDCoefficients(vtkDoubleArray* contour, int order)
 {
   auto flat = unwrap(contour);
   const int n = static_cast<int>(flat.size() / 3);
@@ -347,8 +336,7 @@ vtkLiverContourParameterizer::ComputeEFDCoefficients(vtkDoubleArray *contour, in
 }
 
 //------------------------------------------------------------------------------
-vtkSmartPointer<vtkDoubleArray>
-vtkLiverContourParameterizer::ComputeDCCoefficients(vtkDoubleArray *contour)
+vtkSmartPointer<vtkDoubleArray> vtkLiverContourParameterizer::ComputeDCCoefficients(vtkDoubleArray* contour)
 {
   auto flat = unwrap(contour);
   const int n = static_cast<int>(flat.size() / 3);
@@ -356,13 +344,7 @@ vtkLiverContourParameterizer::ComputeDCCoefficients(vtkDoubleArray *contour)
 }
 
 //------------------------------------------------------------------------------
-vtkSmartPointer<vtkDoubleArray>
-vtkLiverContourParameterizer::InverseTransform(vtkDoubleArray *coeffs,
-                                                int harmonic,
-                                                double locusX,
-                                                double locusY,
-                                                double locusZ,
-                                                int nCoords)
+vtkSmartPointer<vtkDoubleArray> vtkLiverContourParameterizer::InverseTransform(vtkDoubleArray* coeffs, int harmonic, double locusX, double locusY, double locusZ, int nCoords)
 {
   auto flat = unwrap(coeffs);
   const double locus[3] = { locusX, locusY, locusZ };
@@ -370,26 +352,22 @@ vtkLiverContourParameterizer::InverseTransform(vtkDoubleArray *coeffs,
 }
 
 //------------------------------------------------------------------------------
-int vtkLiverContourParameterizer::RequestData(vtkInformation *,
-                                                vtkInformationVector **inputVector,
-                                                vtkInformationVector *outputVector)
+int vtkLiverContourParameterizer::RequestData(vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
-  vtkInformation *inInfo = inputVector[0]->GetInformationObject(0);
-  vtkPolyData *inputContour = vtkPolyData::SafeDownCast(
-    inInfo->Get(vtkDataObject::DATA_OBJECT()));
+  vtkInformation* inInfo = inputVector[0]->GetInformationObject(0);
+  vtkPolyData* inputContour = vtkPolyData::SafeDownCast(inInfo->Get(vtkDataObject::DATA_OBJECT()));
   if (!inputContour || !inputContour->GetPoints())
-    {
+  {
     vtkErrorMacro(<< "Input contour polydata with points is required on port 0.");
     return 0;
-    }
-  vtkPoints *inputPoints = inputContour->GetPoints();
+  }
+  vtkPoints* inputPoints = inputContour->GetPoints();
   const vtkIdType n64 = inputPoints->GetNumberOfPoints();
   if (n64 < 2)
-    {
-    vtkErrorMacro(<< "Input contour must contain at least two 3D points; got "
-                  << n64 << ".");
+  {
+    vtkErrorMacro(<< "Input contour must contain at least two 3D points; got " << n64 << ".");
     return 0;
-    }
+  }
   const int n = static_cast<int>(n64);
   const vtkIdType total = static_cast<vtkIdType>(n) * 3;
 
@@ -398,43 +376,39 @@ int vtkLiverContourParameterizer::RequestData(vtkInformation *,
   // order: row i = (x_i, y_i, z_i).
   std::vector<double> contour(static_cast<size_t>(total));
   for (int i = 0; i < n; ++i)
-    {
+  {
     double p[3];
     inputPoints->GetPoint(i, p);
     contour[i * 3 + 0] = p[0];
     contour[i * 3 + 1] = p[1];
     contour[i * 3 + 2] = p[2];
-    }
+  }
 
-  vtkInformation *outInfo = outputVector->GetInformationObject(0);
-  vtkPolyData *out = vtkPolyData::SafeDownCast(
-    outInfo->Get(vtkDataObject::DATA_OBJECT()));
+  vtkInformation* outInfo = outputVector->GetInformationObject(0);
+  vtkPolyData* out = vtkPolyData::SafeDownCast(outInfo->Get(vtkDataObject::DATA_OBJECT()));
 
   this->Coefficients.clear();
   this->DC.clear();
   this->Reconstruction.clear();
 
   if (this->Mode == MODE_EFD)
-    {
+  {
     if (this->Order < 1)
-      {
+    {
       vtkErrorMacro(<< "Order must be >= 1 in EFD mode; got " << this->Order << ".");
       return 0;
-      }
+    }
     this->Coefficients = ComputeEFDCoefficientsRaw(contour.data(), n, this->Order);
     if (this->UseComputedLocus)
-      {
+    {
       this->DC = ComputeDCCoefficientsRaw(contour.data(), n);
-      }
+    }
     else
-      {
+    {
       this->DC = { this->Locus[0], this->Locus[1], this->Locus[2] };
-      }
+    }
     const double locusArr[3] = { this->DC[0], this->DC[1], this->DC[2] };
-    this->Reconstruction = InverseTransformRaw(this->Coefficients.data(),
-                                                this->Order,
-                                                locusArr,
-                                                this->NumberOfReconstructionPoints);
+    this->Reconstruction = InverseTransformRaw(this->Coefficients.data(), this->Order, locusArr, this->NumberOfReconstructionPoints);
 
     // Pack into output polydata: nCoords reconstructed points.
     vtkNew<vtkPoints> outPoints;
@@ -442,15 +416,12 @@ int vtkLiverContourParameterizer::RequestData(vtkInformation *,
     const int nc = this->NumberOfReconstructionPoints;
     outPoints->SetNumberOfPoints(nc);
     for (int k = 0; k < nc; ++k)
-      {
-      outPoints->SetPoint(k,
-                          this->Reconstruction[0 * nc + k],
-                          this->Reconstruction[1 * nc + k],
-                          this->Reconstruction[2 * nc + k]);
-      }
+    {
+      outPoints->SetPoint(k, this->Reconstruction[0 * nc + k], this->Reconstruction[1 * nc + k], this->Reconstruction[2 * nc + k]);
+    }
     out->SetPoints(outPoints);
     return 1;
-    }
+  }
 
   // CornerMapping mode: choose 4 equally spaced corner indices around
   // the ring and surface them via point-data scalars.
@@ -458,12 +429,9 @@ int vtkLiverContourParameterizer::RequestData(vtkInformation *,
   outPoints->SetDataTypeToDouble();
   outPoints->SetNumberOfPoints(n);
   for (int i = 0; i < n; ++i)
-    {
-    outPoints->SetPoint(i,
-                        contour[i * 3 + 0],
-                        contour[i * 3 + 1],
-                        contour[i * 3 + 2]);
-    }
+  {
+    outPoints->SetPoint(i, contour[i * 3 + 0], contour[i * 3 + 1], contour[i * 3 + 2]);
+  }
   out->SetPoints(outPoints);
 
   vtkNew<vtkIntArray> cornerFlags;
@@ -471,16 +439,16 @@ int vtkLiverContourParameterizer::RequestData(vtkInformation *,
   cornerFlags->SetNumberOfComponents(1);
   cornerFlags->SetNumberOfTuples(n);
   for (int i = 0; i < n; ++i)
-    {
+  {
     cornerFlags->SetValue(i, 0);
-    }
+  }
   // Four corners at indices 0, n/4, n/2, 3n/4 (mod n).  Same convention
   // used by the SlicingPlane init path's existing Python helper.
   for (int k = 0; k < 4; ++k)
-    {
+  {
     const int idx = (k * n) / 4;
     cornerFlags->SetValue(idx, k + 1);
-    }
+  }
   out->GetPointData()->AddArray(cornerFlags);
   return 1;
 }
