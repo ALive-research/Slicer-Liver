@@ -165,7 +165,8 @@ void vtkLiverBezierRepresentation::UpdatePickableGlyphs()
   const int state = node->GetState();
   const int mode = node->GetInitMode();
 
-  auto pushPoint = [&](double x, double y, double z) {
+  auto pushPoint = [&](double x, double y, double z)
+  {
     const vtkIdType id = points->InsertNextPoint(x, y, z);
     verts->InsertNextCell(1, &id);
   };
@@ -174,8 +175,7 @@ void vtkLiverBezierRepresentation::UpdatePickableGlyphs()
   {
     // 16 Bezier control points become pickable.
     const double* grid = node->GetControlGrid();
-    for (int i = 0; i < vtkMRMLBezierSurfaceNode::GridSize * vtkMRMLBezierSurfaceNode::GridSize;
-         ++i)
+    for (int i = 0; i < vtkMRMLBezierSurfaceNode::GridSize * vtkMRMLBezierSurfaceNode::GridSize; ++i)
     {
       pushPoint(grid[i * 3 + 0], grid[i * 3 + 1], grid[i * 3 + 2]);
     }
@@ -264,15 +264,11 @@ vtkLiverBezierRepresentation::PickResult vtkLiverBezierRepresentation::Pick(int 
   // under headless interactor.
   double nearWorld[4] = { 0.0, 0.0, 0.0, 1.0 };
   double farWorld[4] = { 0.0, 0.0, 0.0, 1.0 };
-  vtkInteractorObserver::ComputeDisplayToWorld(
-    renderer, static_cast<double>(X), static_cast<double>(Y), 0.0, nearWorld);
-  vtkInteractorObserver::ComputeDisplayToWorld(
-    renderer, static_cast<double>(X), static_cast<double>(Y), 1.0, farWorld);
+  vtkInteractorObserver::ComputeDisplayToWorld(renderer, static_cast<double>(X), static_cast<double>(Y), 0.0, nearWorld);
+  vtkInteractorObserver::ComputeDisplayToWorld(renderer, static_cast<double>(X), static_cast<double>(Y), 1.0, farWorld);
 
   double rayOrigin[3] = { nearWorld[0], nearWorld[1], nearWorld[2] };
-  double rayDir[3] = { farWorld[0] - nearWorld[0],
-                       farWorld[1] - nearWorld[1],
-                       farWorld[2] - nearWorld[2] };
+  double rayDir[3] = { farWorld[0] - nearWorld[0], farWorld[1] - nearWorld[1], farWorld[2] - nearWorld[2] };
   vtkMath::Normalize(rayDir);
 
   // ADR-0014 §3 — pickability is state-gated.
@@ -280,12 +276,11 @@ vtkLiverBezierRepresentation::PickResult vtkLiverBezierRepresentation::Pick(int 
   const int mode = node->GetInitMode();
 
   // Helper: distance from point to ray.
-  auto distanceToRay = [&](const double p[3]) {
+  auto distanceToRay = [&](const double p[3])
+  {
     double op[3] = { p[0] - rayOrigin[0], p[1] - rayOrigin[1], p[2] - rayOrigin[2] };
     const double dot = vtkMath::Dot(op, rayDir);
-    double closest[3] = { rayOrigin[0] + dot * rayDir[0],
-                          rayOrigin[1] + dot * rayDir[1],
-                          rayOrigin[2] + dot * rayDir[2] };
+    double closest[3] = { rayOrigin[0] + dot * rayDir[0], rayOrigin[1] + dot * rayDir[1], rayOrigin[2] + dot * rayDir[2] };
     return std::sqrt(vtkMath::Distance2BetweenPoints(p, closest));
   };
 
@@ -293,8 +288,7 @@ vtkLiverBezierRepresentation::PickResult vtkLiverBezierRepresentation::Pick(int 
   if (state == vtkMRMLBezierSurfaceNode::Planning)
   {
     const double* grid = node->GetControlGrid();
-    for (int i = 0; i < vtkMRMLBezierSurfaceNode::GridSize * vtkMRMLBezierSurfaceNode::GridSize;
-         ++i)
+    for (int i = 0; i < vtkMRMLBezierSurfaceNode::GridSize * vtkMRMLBezierSurfaceNode::GridSize; ++i)
     {
       const double p[3] = { grid[i * 3 + 0], grid[i * 3 + 1], grid[i * 3 + 2] };
       const double d = distanceToRay(p);
@@ -351,9 +345,7 @@ vtkLiverBezierRepresentation::PickResult vtkLiverBezierRepresentation::Pick(int 
 }
 
 //------------------------------------------------------------------------------
-bool vtkLiverBezierRepresentation::DisplayToWorld(int X, int Y,
-                                                  const double referenceWorld[3],
-                                                  double worldOut[3])
+bool vtkLiverBezierRepresentation::DisplayToWorld(int X, int Y, const double referenceWorld[3], double worldOut[3])
 {
   vtkRenderer* renderer = this->GetRenderer();
   if (!renderer || !referenceWorld || !worldOut)
@@ -373,9 +365,7 @@ bool vtkLiverBezierRepresentation::DisplayToWorld(int X, int Y,
   }
   camera->GetFocalPoint(cameraFocal);
   camera->GetPosition(cameraPos);
-  double planeNormal[3] = { cameraFocal[0] - cameraPos[0],
-                            cameraFocal[1] - cameraPos[1],
-                            cameraFocal[2] - cameraPos[2] };
+  double planeNormal[3] = { cameraFocal[0] - cameraPos[0], cameraFocal[1] - cameraPos[1], cameraFocal[2] - cameraPos[2] };
   if (vtkMath::Norm(planeNormal) < 1e-9)
   {
     return false;
@@ -384,18 +374,12 @@ bool vtkLiverBezierRepresentation::DisplayToWorld(int X, int Y,
 
   double nearWorld[4] = { 0.0, 0.0, 0.0, 1.0 };
   double farWorld[4] = { 0.0, 0.0, 0.0, 1.0 };
-  vtkInteractorObserver::ComputeDisplayToWorld(
-    renderer, static_cast<double>(X), static_cast<double>(Y), 0.0, nearWorld);
-  vtkInteractorObserver::ComputeDisplayToWorld(
-    renderer, static_cast<double>(X), static_cast<double>(Y), 1.0, farWorld);
-  double rayDir[3] = { farWorld[0] - nearWorld[0],
-                       farWorld[1] - nearWorld[1],
-                       farWorld[2] - nearWorld[2] };
+  vtkInteractorObserver::ComputeDisplayToWorld(renderer, static_cast<double>(X), static_cast<double>(Y), 0.0, nearWorld);
+  vtkInteractorObserver::ComputeDisplayToWorld(renderer, static_cast<double>(X), static_cast<double>(Y), 1.0, farWorld);
+  double rayDir[3] = { farWorld[0] - nearWorld[0], farWorld[1] - nearWorld[1], farWorld[2] - nearWorld[2] };
   vtkMath::Normalize(rayDir);
   double rayOrigin[3] = { nearWorld[0], nearWorld[1], nearWorld[2] };
-  double rayFar[3] = { rayOrigin[0] + rayDir[0] * 1.0e6,
-                       rayOrigin[1] + rayDir[1] * 1.0e6,
-                       rayOrigin[2] + rayDir[2] * 1.0e6 };
+  double rayFar[3] = { rayOrigin[0] + rayDir[0] * 1.0e6, rayOrigin[1] + rayDir[1] * 1.0e6, rayOrigin[2] + rayDir[2] * 1.0e6 };
   double refCopy[3] = { referenceWorld[0], referenceWorld[1], referenceWorld[2] };
   double t = 0.0;
   if (vtkPlane::IntersectWithLine(rayOrigin, rayFar, planeNormal, refCopy, t, worldOut) == 0)
@@ -472,6 +456,5 @@ int vtkLiverBezierRepresentation::RenderTranslucentPolygonalGeometry(vtkViewport
 //------------------------------------------------------------------------------
 vtkTypeBool vtkLiverBezierRepresentation::HasTranslucentPolygonalGeometry()
 {
-  return this->GlyphActor->HasTranslucentPolygonalGeometry()
-    || this->HighlightActor->HasTranslucentPolygonalGeometry();
+  return this->GlyphActor->HasTranslucentPolygonalGeometry() || this->HighlightActor->HasTranslucentPolygonalGeometry();
 }

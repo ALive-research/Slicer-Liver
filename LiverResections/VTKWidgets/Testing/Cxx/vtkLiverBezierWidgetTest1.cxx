@@ -152,8 +152,7 @@ int testPickControlPoint()
   display[0] = d[0];
   display[1] = d[1];
 
-  vtkLiverBezierRepresentation::PickResult pick =
-    rep->Pick(static_cast<int>(std::round(display[0])), static_cast<int>(std::round(display[1])));
+  vtkLiverBezierRepresentation::PickResult pick = rep->Pick(static_cast<int>(std::round(display[0])), static_cast<int>(std::round(display[1])));
   CHECK_INT(pick.Role, vtkLiverBezierRepresentation::PickRole_ControlPoint);
   // row=2, col=1 -> index 2*4 + 1 = 9
   CHECK_INT(pick.Index, 9);
@@ -308,8 +307,7 @@ int testReadOnlyEnforcement()
   // either resolve to a control-point pick (different role) or miss.
   // Either way, it must NOT carry the SlicingPlaneInit role.
   const bool started = widget->BeginLeftDragAt(X, Y);
-  if (started
-      && widget->GetPickedRole() == vtkLiverBezierRepresentation::PickRole_SlicingPlaneInit)
+  if (started && widget->GetPickedRole() == vtkLiverBezierRepresentation::PickRole_SlicingPlaneInit)
   {
     std::cerr << "Widget entered Dragging on a SlicingPlaneInit pick in "
               << "Planning state — read-only invariant breach\n";

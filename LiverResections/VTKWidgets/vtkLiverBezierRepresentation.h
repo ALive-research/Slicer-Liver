@@ -82,8 +82,7 @@ class vtkSphereSource;
  * they are read-only audit data and the widget must not enter a drag
  * substate on them.
  */
-class VTK_SLICER_LIVERRESECTIONS_MODULE_VTKWIDGETS_EXPORT vtkLiverBezierRepresentation
-  : public vtkWidgetRepresentation
+class VTK_SLICER_LIVERRESECTIONS_MODULE_VTKWIDGETS_EXPORT vtkLiverBezierRepresentation : public vtkWidgetRepresentation
 {
 public:
   static vtkLiverBezierRepresentation* New();
@@ -97,8 +96,8 @@ public:
   enum PickRole
   {
     PickRole_None = 0,
-    PickRole_ControlPoint = 1,      ///< Bezier 4×4 grid (state=Planning).
-    PickRole_SlicingPlaneInit = 2,  ///< Two SlicingPlane init points.
+    PickRole_ControlPoint = 1,         ///< Bezier 4×4 grid (state=Planning).
+    PickRole_SlicingPlaneInit = 2,     ///< Two SlicingPlane init points.
     PickRole_DistanceSpheroidInit = 3, ///< DistanceSpheroid init points.
   };
 
