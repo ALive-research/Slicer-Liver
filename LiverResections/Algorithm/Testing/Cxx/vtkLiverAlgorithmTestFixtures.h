@@ -6,8 +6,16 @@
 
   Shared synthetic fixtures + characterisation-pinned EXPECTED constants
   for the LiverResections/Algorithm C++ tests.  All values transcribed
-  verbatim from Testing/Python/unit/test_bezier_characterization.py
-  (captured 2026-05-15 against NumPy 2.3.1).
+  verbatim from Testing/Python/unit/test_bezier_characterization.py.
+
+  Bezier fixtures re-captured 2026-05-16 at the production-correct
+  Bernstein degree-3 (4x4 = 16 control points): the prior 5x5 / degree-4
+  capture inherited from PR #330 did not match what production actually
+  runs in LiverLogic.runSurfacefromCurve (Liver/Liver.py:2010) or
+  LiverLogic.runSurfacefromEFD (Liver/Liver.py:2163), both of which
+  call ``evaluate_basis_bezier(t, 3)``.  The EFD / DC / inverse-transform
+  EXPECTED constants below do *not* depend on the Bernstein degree and
+  remain as captured 2026-05-15 against NumPy 2.3.1.
 
 ==============================================================================*/
 
@@ -25,57 +33,62 @@ namespace vtkLiverAlgorithmTestFixtures
 constexpr double PI = 3.141592653589793238462643383279502884197;
 
 //------------------------------------------------------------------------------
-// Bernstein basis B_{4, 0..4}(t) at a single t.
-inline std::array<double, 5> bernstein4(double t)
+// Bernstein basis B_{3, 0..3}(t) at a single t.
+//
+// Matches the basis order used by LiverLogic.evaluate_basis_bezier when
+// called at degree=3 from the two production callers of
+// fit_bezier_surface (see file header for the degree correction note).
+inline std::array<double, 4> bernstein3(double t)
 {
   const double t1 = 1.0 - t;
   return {
-    t1 * t1 * t1 * t1,
-    4.0 * t * t1 * t1 * t1,
-    6.0 * t * t * t1 * t1,
-    4.0 * t * t * t * t1,
-    t * t * t * t,
+    t1 * t1 * t1,
+    3.0 * t * t1 * t1,
+    3.0 * t * t * t1,
+    t * t * t,
   };
 }
 
 //------------------------------------------------------------------------------
-// 5x5 saddle-surface fixture: bilinear surface z = u*v on uniform 5x5 (u,v),
-// plus matching 5x5 Bernstein-basis matrices.  Mirrors _make_bezier_fixture
+// 4x4 saddle-surface fixture: bilinear surface z = u*v on uniform 4x4 (u,v),
+// plus matching 4x4 Bernstein-basis matrices.  Mirrors _make_bezier_fixture
 // in test_bezier_characterization.py.
 struct BezierFixture
 {
-  std::vector<double> points;   // length 5*5*3
-  std::vector<double> basisU;   // length 5*5
-  std::vector<double> basisV;   // length 5*5
+  std::vector<double> points;   // length 4*4*3
+  std::vector<double> basisU;   // length 4*4
+  std::vector<double> basisV;   // length 4*4
 };
 
 inline BezierFixture makeBezierFixture()
 {
   BezierFixture fx;
-  fx.points.assign(static_cast<size_t>(5) * 5 * 3, 0.0);
-  fx.basisU.assign(static_cast<size_t>(5) * 5, 0.0);
-  fx.basisV.assign(static_cast<size_t>(5) * 5, 0.0);
-  std::array<double, 5> uSamples = { 0.0, 0.25, 0.5, 0.75, 1.0 };
-  std::array<double, 5> vSamples = { 0.0, 0.25, 0.5, 0.75, 1.0 };
-  for (int i = 0; i < 5; ++i)
+  fx.points.assign(static_cast<size_t>(4) * 4 * 3, 0.0);
+  fx.basisU.assign(static_cast<size_t>(4) * 4, 0.0);
+  fx.basisV.assign(static_cast<size_t>(4) * 4, 0.0);
+  // np.linspace(0.0, 1.0, 4) -> exact float64 thirds at indices 1, 2.
+  const double third = 1.0 / 3.0;
+  std::array<double, 4> uSamples = { 0.0, third, 2.0 * third, 1.0 };
+  std::array<double, 4> vSamples = { 0.0, third, 2.0 * third, 1.0 };
+  for (int i = 0; i < 4; ++i)
     {
-    auto bu = bernstein4(uSamples[i]);
-    auto bv = bernstein4(vSamples[i]);
-    for (int j = 0; j < 5; ++j)
+    auto bu = bernstein3(uSamples[i]);
+    auto bv = bernstein3(vSamples[i]);
+    for (int j = 0; j < 4; ++j)
       {
-      fx.basisU[i * 5 + j] = bu[j];
-      fx.basisV[i * 5 + j] = bv[j];
+      fx.basisU[i * 4 + j] = bu[j];
+      fx.basisV[i * 4 + j] = bv[j];
       }
     }
-  for (int i = 0; i < 5; ++i)
+  for (int i = 0; i < 4; ++i)
     {
-    for (int j = 0; j < 5; ++j)
+    for (int j = 0; j < 4; ++j)
       {
       const double u = uSamples[i];
       const double v = vSamples[j];
-      fx.points[(i * 5 + j) * 3 + 0] = u;
-      fx.points[(i * 5 + j) * 3 + 1] = v;
-      fx.points[(i * 5 + j) * 3 + 2] = u * v;
+      fx.points[(i * 4 + j) * 3 + 0] = u;
+      fx.points[(i * 4 + j) * 3 + 1] = v;
+      fx.points[(i * 4 + j) * 3 + 2] = u * v;
       }
     }
   return fx;
@@ -104,41 +117,33 @@ inline std::vector<double> makeContourFixture()
 }
 
 //------------------------------------------------------------------------------
-// EXPECTED_BEZIER_CONTROL_POINTS — shape (5, 5, 3).  Flat row-major
-// (i, j, axis).
+// EXPECTED_BEZIER_CONTROL_POINTS — shape (4, 4, 3).  Flat row-major
+// (i, j, axis).  Captured 2026-05-16 against Bernstein degree 3 (4x4 = 16
+// control points), matching production callers.  Transcribed from
+// Testing/Python/unit/test_bezier_characterization.py.
 inline const std::vector<double> &expectedBezierControlPoints()
 {
   static const std::vector<double> EXPECTED = {
     // i=0
-    2.1335056041739302e-17, -3.1679032227310840e-18, -6.7587392791774200e-35,
-    2.1335056041739311e-17,  2.4999999999999936e-01,  5.3337640104348109e-18,
-    2.1335056041739191e-17,  4.9999999999999800e-01,  1.0667528020869609e-17,
-    2.1335056041739308e-17,  7.5000000000000111e-01,  1.6001292031304480e-17,
-    2.1335056041739296e-17,  9.9999999999999989e-01,  2.1335056041739296e-17,
+    4.6259292692714846e-18, -1.1993149957370571e-18, -5.5479463418562525e-36,
+    4.6259292692714869e-18,  3.3333333333333387e-01,  1.5419764230904974e-18,
+    4.6259292692714907e-18,  6.6666666666666718e-01,  3.0839528461809933e-18,
+    4.6259292692714853e-18,  1.0000000000000002e+00,  4.6259292692714853e-18,
     // i=1
-    2.5000000000000366e-01, -3.1679032227311156e-18, -7.9197580568278295e-19,
-    2.5000000000000372e-01,  2.5000000000000161e-01,  6.2500000000000819e-02,
-    2.5000000000000255e-01,  5.0000000000000377e-01,  1.2500000000000114e-01,
-    2.5000000000000366e-01,  7.5000000000000733e-01,  1.8750000000000328e-01,
-    2.5000000000000361e-01,  1.0000000000000095e+00,  2.5000000000000361e-01,
+    3.3333333333333365e-01, -1.1993149957370510e-18, -3.9977166524568520e-19,
+    3.3333333333333370e-01,  3.3333333333333370e-01,  1.1111111111111140e-01,
+    3.3333333333333431e-01,  6.6666666666666785e-01,  2.2222222222222271e-01,
+    3.3333333333333370e-01,  1.0000000000000000e+00,  3.3333333333333370e-01,
     // i=2
-    4.9999999999999045e-01, -3.1679032227310162e-18, -1.5839516113655116e-18,
-    4.9999999999999040e-01,  2.4999999999999487e-01,  1.2499999999999707e-01,
-    4.9999999999998856e-01,  4.9999999999998579e-01,  2.4999999999999478e-01,
-    4.9999999999999045e-01,  7.4999999999998757e-01,  3.7499999999999245e-01,
-    4.9999999999999040e-01,  9.9999999999997924e-01,  4.9999999999999040e-01,
+    6.6666666666666730e-01, -1.1993149957370633e-18, -7.9954333049137040e-19,
+    6.6666666666666741e-01,  3.3333333333333437e-01,  2.2222222222222279e-01,
+    6.6666666666666863e-01,  6.6666666666666841e-01,  4.4444444444444542e-01,
+    6.6666666666666741e-01,  1.0000000000000020e+00,  6.6666666666666741e-01,
     // i=3
-    7.5000000000000355e-01, -3.1679032227311033e-18, -2.3759274170483255e-18,
-    7.5000000000000422e-01,  2.5000000000000050e-01,  1.8750000000000042e-01,
-    7.5000000000000056e-01,  5.0000000000000244e-01,  3.7500000000000100e-01,
-    7.5000000000000411e-01,  7.5000000000000444e-01,  5.6250000000000278e-01,
-    7.5000000000000333e-01,  1.0000000000000060e+00,  7.5000000000000333e-01,
-    // i=4
-    9.9999999999999978e-01, -3.1679032227310833e-18, -3.1679032227310833e-18,
-    9.9999999999999967e-01,  2.4999999999999906e-01,  2.4999999999999908e-01,
-    9.9999999999999523e-01,  4.9999999999999833e-01,  4.9999999999999833e-01,
-    9.9999999999999956e-01,  7.5000000000000000e-01,  7.5000000000000000e-01,
-    9.9999999999999967e-01,  9.9999999999999978e-01,  9.9999999999999967e-01,
+    1.0000000000000002e+00, -1.1993149957370633e-18, -1.1993149957370633e-18,
+    1.0000000000000009e+00,  3.3333333333333381e-01,  3.3333333333333381e-01,
+    1.0000000000000022e+00,  6.6666666666666741e-01,  6.6666666666666741e-01,
+    1.0000000000000004e+00,  1.0000000000000004e+00,  1.0000000000000004e+00,
   };
   return EXPECTED;
 }

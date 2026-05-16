@@ -6,8 +6,12 @@
 
   Characterisation test for vtkLiverBezierFitter against the
   Python-pinned EXPECTED_BEZIER_CONTROL_POINTS from
-  Testing/Python/unit/test_bezier_characterization.py (captured
-  2026-05-15 under NumPy 2.3.1, see ADR-0015 §3).
+  Testing/Python/unit/test_bezier_characterization.py.
+
+  Re-captured 2026-05-16 at the production-correct Bernstein degree 3
+  (4x4 = 16 control points); see vtkLiverAlgorithmTestFixtures.h and
+  test_bezier_characterization.py docstrings for the degree-correction
+  history.  ADR-0015 §3.
 
 ==============================================================================*/
 
@@ -29,7 +33,7 @@ int vtkLiverBezierFitterTest1(int, char *[])
 
   // Loosened from rtol=1e-12 because Eigen's MatrixXd::inverse() may
   // dispatch a different LAPACK kernel from NumPy's np.linalg.inv on
-  // the 5x5 case, producing last-bit-of-double differences in the
+  // the 4x4 case, producing last-bit-of-double differences in the
   // ~1e-15 residuals (per ADR-0015 §Consequences "Numerical tolerance
   // is documented per test case where bit-equivalence is not
   // achievable").  rtol=1e-10 still pins the algebra cleanly while
@@ -66,21 +70,21 @@ int vtkLiverBezierFitterTest1(int, char *[])
     }
 
   vtkNew<vtkLiverBezierFitter> fitter;
-  fitter->SetNumberOfSamples(5, 5);
+  fitter->SetNumberOfSamples(4, 4);
   fitter->SetInputPoints(pointsArr);
   fitter->SetBasisU(basisU);
   fitter->SetBasisV(basisV);
   fitter->Update();
 
   const auto &cps = fitter->GetControlPoints();
-  if (cps.size() != static_cast<size_t>(5) * 5 * 3)
+  if (cps.size() != static_cast<size_t>(4) * 4 * 3)
     {
-    std::fprintf(stderr, "[BezierFitter] FAIL: size %zu != 75\n", cps.size());
+    std::fprintf(stderr, "[BezierFitter] FAIL: size %zu != 48\n", cps.size());
     return EXIT_FAILURE;
     }
-  if (fitter->GetGridSize() != 5)
+  if (fitter->GetGridSize() != 4)
     {
-    std::fprintf(stderr, "[BezierFitter] FAIL: GridSize %d != 5\n",
+    std::fprintf(stderr, "[BezierFitter] FAIL: GridSize %d != 4\n",
                  fitter->GetGridSize());
     return EXIT_FAILURE;
     }
@@ -96,19 +100,19 @@ int vtkLiverBezierFitterTest1(int, char *[])
 
   // Verify the polydata output round-trips the same control points.
   vtkPolyData *out = fitter->GetOutput();
-  if (!out || !out->GetPoints() || out->GetPoints()->GetNumberOfPoints() != 25)
+  if (!out || !out->GetPoints() || out->GetPoints()->GetNumberOfPoints() != 16)
     {
     std::fprintf(stderr,
                  "[BezierFitter] FAIL: output polydata missing or wrong size\n");
     return EXIT_FAILURE;
     }
-  for (int i = 0; i < 5; ++i)
+  for (int i = 0; i < 4; ++i)
     {
-    for (int j = 0; j < 5; ++j)
+    for (int j = 0; j < 4; ++j)
       {
       double p[3];
-      out->GetPoints()->GetPoint(i * 5 + j, p);
-      const size_t base = (i * 5 + j) * 3;
+      out->GetPoints()->GetPoint(i * 4 + j, p);
+      const size_t base = (i * 4 + j) * 3;
       if (p[0] != cps[base + 0] || p[1] != cps[base + 1] || p[2] != cps[base + 2])
         {
         std::fprintf(stderr,
