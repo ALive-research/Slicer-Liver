@@ -202,20 +202,32 @@ public:
   // SCT terminology reference (ADR-0011 + ADR-0013 §3)
   //--------------------------------------------------------------------------
 
-  /// Serialised SNOMED-CT terminology triple (Category, Type,
-  /// optional Modifier) describing the clinical concept this display
-  /// node decorates.  The canonical wire format is Slicer's standard
-  /// terminology-entry string,
-  /// ``{CategoryCodingScheme}^{CategoryCode}^{CategoryMeaning}~``
-  /// ``{TypeCodingScheme}^{TypeCode}^{TypeMeaning}~``
-  /// ``{ModifierCodingScheme}^{ModifierCode}^{ModifierMeaning}``
-  /// (e.g. ``SCT^123037004^Anatomical Structure~SCT^10200004^Liver~^^``
-  /// for the liver anatomical concept).
+  /// Serialised SNOMED-CT terminology entry describing the clinical
+  /// concept this display node decorates.  The wire format is Slicer's
+  /// canonical 7-component terminology-entry string as produced by
+  /// ``vtkSlicerTerminologiesModuleLogic::SerializeTerminologyEntry``
+  /// and consumed by ``DeserializeTerminologyEntry`` (which hard-rejects
+  /// anything other than exactly 7 ``~``-separated components):
   ///
-  /// Empty string = no terminology assigned; rendering uses pure-vector
+  /// ``{terminologyContextName}~``
+  /// ``{CategoryScheme}^{CategoryCode}^{CategoryMeaning}~``
+  /// ``{TypeScheme}^{TypeCode}^{TypeMeaning}~``
+  /// ``{TypeModifierScheme}^{TypeModifierCode}^{TypeModifierMeaning}~``
+  /// ``{anatomicContextName}~``
+  /// ``{AnatomicRegionScheme}^{AnatomicRegionCode}^{AnatomicRegionMeaning}~``
+  /// ``{AnatomicRegionModifierScheme}^{AnatomicRegionModifierCode}^{AnatomicRegionModifierMeaning}``
+  ///
+  /// Example (liver, anatomical structure category, no modifiers,
+  /// referencing the Slicer-Liver terminology JSON shipped by PR #315):
+  ///
+  /// ``SlicerLiver-Terminology~SCT^123037004^Anatomical Structure~``
+  /// ``SCT^10200004^Liver~^^~~^^~^^``
+  ///
+  /// Empty string = no terminology assigned; the current renderer
+  /// (v2.0.0 alpha) ignores this field entirely and uses pure-vector
   /// defaults (``ResectionColor`` etc.).  When set, the LayerDM
-  /// Pipeline (T2.2, out of scope here) uses the SCT triple to derive
-  /// colour, label, and badge presentation per
+  /// Pipeline (T2.2 — first consumer; out of scope here) uses the SCT
+  /// triple to derive colour, label, and badge presentation per
   /// [ADR-0011](../../Docs/adr/0011-sct-terminology-dispatch.md) and
   /// [ADR-0013 §3](../../Docs/adr/0013-layerdm-pipeline-pattern.md);
   /// this node only stores the string — it does not depend on the
