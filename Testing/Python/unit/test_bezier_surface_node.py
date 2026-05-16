@@ -416,3 +416,40 @@ def test_display_copy_content(mrml_module):
 
     source.SetResectionColor([0.0, 0.0, 0.0])
     assert list(sink.GetResectionColor()) == pytest.approx([0.25, 0.5, 0.75])
+
+
+def test_display_terminology_entry_round_trip(mrml_module):
+    """SCT terminology field defaults empty and round-trips through set/get.
+
+    Pins the ADR-0011 + ADR-0013 §3 contract from the Python-wrapped
+    surface: the display node stores a serialised SCT triple as a
+    ``std::string``, defaults to empty (meaning "no terminology
+    assigned — Pipeline uses pure-vector defaults"), and round-trips
+    via the wrapped setter / getter without mangling separator chars
+    (``^``, ``~``).  The CopyContent path must deep-copy so source
+    mutation does not leak into a previously-copied sink.
+
+    The XML round-trip is covered by the C++ driver
+    (``vtkMRMLBezierSurfaceDisplayNodeTest1.cxx``); we keep this
+    Python-side check focused on the wrapped Python surface.
+    """
+    node = mrml_module.vtkMRMLBezierSurfaceDisplayNode()
+    assert node.GetTerminologyEntry() == ""
+
+    sct = "SCT^123037004^Anatomical Structure~SCT^10200004^Liver~^^"
+    baseline = node.GetMTime()
+    node.SetTerminologyEntry(sct)
+    assert node.GetTerminologyEntry() == sct
+    assert node.GetMTime() > baseline
+
+    # Separator chars round-trip through the wrapped std::string.
+    assert "^" in node.GetTerminologyEntry()
+    assert "~" in node.GetTerminologyEntry()
+
+    # CopyContent: deep-copy means later source edits do not bleed
+    # into the previously-copied sink.
+    sink = mrml_module.vtkMRMLBezierSurfaceDisplayNode()
+    sink.CopyContent(node, True)
+    assert sink.GetTerminologyEntry() == sct
+    node.SetTerminologyEntry("")
+    assert sink.GetTerminologyEntry() == sct
