@@ -11,11 +11,26 @@ set(EXTENSION_CONTRIBUTORS "Rafael Palomar (Oslo University Hospital / NTNU), Ol
 set(EXTENSION_DESCRIPTION "3D Slicer extension for liver analysis and therapy planning")
 set(EXTENSION_ICONURL "https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/SlicerLiver.png")
 set(EXTENSION_SCREENSHOTURLS "https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/Screenshots/Slicer-Liver_screenshot_01.png https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/Screenshots/Slicer-Liver_screenshot_02.png https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/Screenshots/Slicer-Liver_screenshot_03.png https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/Screenshots/Slicer-Liver_screenshot_04.png https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/Screenshots/Slicer-Liver_screenshot_05.png https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/Screenshots/Slicer-Liver_screenshot_06.png https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/Screenshots/Slicer-Liver_screenshot_07.png https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/Screenshots/Slicer-Liver_screenshot_08.png")
+#-----------------------------------------------------------------------------
+# Opt-in dependency on SlicerLayerDisplayableManager (LayerDM).  Enables
+# T2.6-LayerDM development (Pipeline factory registration + the upstream
+# library's vtkMRMLLayerDisplayableManager per ADR-0013 §5).  OFF by
+# default — production builds and the canonical CI cell stay
+# byte-identical.  See Docs/dependencies/SlicerLayerDM.md for the
+# local-dev + CI build-layer workflow.
+option(Slicer_Liver_USE_SlicerLayerDM
+       "Build Slicer-Liver with SlicerLayerDM as an EXTENSION_DEPENDS entry."
+       OFF)
+
 set(EXTENSION_DEPENDS
   SlicerVMTK
   SegmentEditorExtraEffects
   ExtraMarkups
   )
+
+if(Slicer_Liver_USE_SlicerLayerDM)
+  list(APPEND EXTENSION_DEPENDS SlicerLayerDisplayableManager)
+endif()
 
 #-----------------------------------------------------------------------------
 # Extension dependencies

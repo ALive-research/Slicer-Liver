@@ -53,6 +53,17 @@ To bypass the hooks for an exceptional commit (rare; CI will still re-check on p
 git commit --no-verify
 ```
 
+### Optional: SlicerLayerDM (LayerDM) dev builds
+
+Slicer-Liver carries an opt-in build-time dependency on
+[SlicerLayerDisplayableManager](https://github.com/KitwareMedical/SlicerLayerDisplayableManager)
+gated by the CMake option `Slicer_Liver_USE_SlicerLayerDM` (default
+OFF).  Local-dev clone + build instructions and the pinned commit CI
+uses live in [`Docs/dependencies/SlicerLayerDM.md`](Docs/dependencies/SlicerLayerDM.md).
+The default OFF path remains the canonical developer build until the
+LayerDM migration (per [ADR-0002](Docs/adr/0002-migrate-to-slicerlayerdm.md))
+completes.
+
 ### Commit message format
 
 Slicer-Liver follows Slicer's strict commit-subject format (see [ADR-0016](Docs/adr/0016-code-style-and-lint.md) and the upstream [Slicer style guide][slicer-style]):
