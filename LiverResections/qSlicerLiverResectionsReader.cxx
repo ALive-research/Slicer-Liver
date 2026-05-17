@@ -201,6 +201,17 @@ bool qSlicerLiverResectionsReader::load(const IOProperties& properties)
       return false;
     }
 
+    // ADR-0013 §8 — the display-side decoration (margin / grid /
+    // colour) lives on a separate display node.  Neither
+    // ``vtkMRMLBezierSurfaceStorageNode::ReadDataInternal`` nor the
+    // base ``vtkMRMLStorageNode::ReadData`` create a display node.
+    // Without this call the loaded surface lands with no display
+    // node attached; the eventual LayerDM Pipeline (registered when
+    // the SlicerLayerDM library is reachable in the build, per
+    // ADR-0013 §5's three-call registration contract) needs a
+    // display node to drive the actor pipeline from.
+    surfaceNode->CreateDefaultDisplayNodes();
+
     this->setLoadedNodes(QStringList() << QString(surfaceNode->GetID()));
     return true;
   }
