@@ -178,9 +178,14 @@ void qSlicerLiverResectionsModule::setup()
   // Python side via ``qSlicerPythonManager::executeString`` keeps the
   // ``vtkMRMLLayerDMPipelineScriptedCreator``'s
   // ``SetPythonCallback`` argument as a Python callable — the upstream
-  // ``CustomVR`` example sets the same precedent.  Idempotent: the
-  // factory's ``AddPipelineCreator`` uses ``ContainsPipelineCreator``
-  // to short-circuit duplicate registrations.
+  // ``CustomVR`` example sets the same precedent.  Idempotent via the
+  // module-level ``_REGISTERED`` flag inside
+  // ``registerPipelineCreator()``: the factory's
+  // ``ContainsPipelineCreator`` compares creators by smart-pointer
+  // identity, and a fresh scripted-creator is constructed on each
+  // call, so the Python-side flag is the load-bearing idempotency
+  // guard (factory-side guard cannot short-circuit our pointer-fresh
+  // duplicates).
   //
   // Defensive wrapping: in test harnesses that launch Slicer without
   // the upstream LayerDM extension on the module path (notably the
@@ -188,10 +193,13 @@ void qSlicerLiverResectionsModule::setup()
   // which uses the bare Slicer launcher rather than
   // ``SlicerWithSlicerLiver``), the import of ``LayerDMLib`` fails
   // because ``vtkMRMLLayerDMPipelineI`` is not reachable from
-  // ``slicer``.  Catch + warn rather than letting the exception
-  // propagate into the rest of ``setup()`` — without the LayerDM
-  // module loaded, the Pipeline cannot fire anyway, and the module's
-  // remaining setup (IO registration, etc.) should still run.
+  // ``slicer``.  We catch the ImportError narrowly and emit at
+  // ``logging.critical`` rather than ``warning``: ADR-0002 commits
+  // LayerDM as a hard runtime dependency, so a missing LayerDM in a
+  // production launch is a real configuration error that should be
+  // loud in the log.  The test harness emits the same critical log
+  // (CTest does not fail on log level by default), and the rest of
+  // ``setup()`` continues so IO registration etc. still run.
   if (qSlicerApplication* app = qSlicerApplication::application())
   {
     if (qSlicerPythonManager* pythonManager = app->pythonManager())
@@ -201,10 +209,10 @@ void qSlicerLiverResectionsModule::setup()
                                    "    LiverResectionsLib.registerPipelineCreator()\n"
                                    "except ImportError as exc:\n"
                                    "    import logging\n"
-                                   "    logging.warning('LiverResections: LayerDM Pipeline creator not registered (%s)'\n"
-                                   "                    ' — vtkMRMLBezierSurfaceNode rendering disabled in this'\n"
-                                   "                    ' session.  Loading the SlicerLayerDisplayableManager'\n"
-                                   "                    ' extension is required for the Pipeline path.', exc)\n");
+                                   "    logging.critical('LiverResections: LayerDM Pipeline creator not registered (%s)'\n"
+                                   "                     ' — vtkMRMLBezierSurfaceNode rendering disabled in this'\n"
+                                   "                     ' session.  Loading the SlicerLayerDisplayableManager'\n"
+                                   "                     ' extension is required for the Pipeline path.', exc)\n");
     }
   }
 
