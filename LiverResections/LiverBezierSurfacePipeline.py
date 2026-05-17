@@ -1,3 +1,5 @@
+# Copyright (c) 2026, The Intervention Centre, Oslo University Hospital.  All rights reserved.
+# Distributed under the OSI-approved BSD 3-Clause License.
 """State-aware LayerDM Pipeline for the Bezier-surface concept.
 
 This is the first concrete instantiation of the LayerDM Pipeline
