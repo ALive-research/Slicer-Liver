@@ -64,7 +64,7 @@
 //-----------------------------------------------------------------------------
 class qSlicerLiverResectionsReaderPrivate
 {
-  public:
+public:
   vtkSmartPointer<vtkSlicerLiverResectionsLogic> LiverResectionsLogic;
 };
 
@@ -102,26 +102,25 @@ vtkSlicerLiverResectionsLogic* qSlicerLiverResectionsReader::liverResectionsLogi
 }
 
 //-----------------------------------------------------------------------------
-QString qSlicerLiverResectionsReader::description()const
+QString qSlicerLiverResectionsReader::description() const
 {
   return "LiverResections";
 }
 
 //-----------------------------------------------------------------------------
-qSlicerIO::IOFileType qSlicerLiverResectionsReader::fileType()const
+qSlicerIO::IOFileType qSlicerLiverResectionsReader::fileType() const
 {
   return QString("LiverResectionsFile");
 }
 
 //-----------------------------------------------------------------------------
-QStringList qSlicerLiverResectionsReader::extensions()const
+QStringList qSlicerLiverResectionsReader::extensions() const
 {
   // ``.lrp.json`` is the v1 schema landed by T2.5 + ADR-0014 §5.  The
   // legacy ``.lrp.fcsv`` extension stays in the list for load-only
   // migration of pre-T2 scenes; writes always emit ``.lrp.json``.
-  return QStringList()
-    << "Liver resection plan (*.lrp.json)"
-    << "LiverResections CSV (*.lrp.fcsv)";
+  return QStringList() << "Liver resection plan (*.lrp.json)"
+                       << "LiverResections CSV (*.lrp.fcsv)";
 }
 
 //-----------------------------------------------------------------------------
@@ -135,14 +134,14 @@ bool qSlicerLiverResectionsReader::load(const IOProperties& properties)
 
   QString name;
   if (properties.contains("name"))
-    {
+  {
     name = properties["name"].toString();
-    }
+  }
 
   if (d->LiverResectionsLogic.GetPointer() == nullptr)
-    {
+  {
     return false;
-    }
+  }
 
   this->userMessages()->ClearMessages();
 
@@ -153,80 +152,72 @@ bool qSlicerLiverResectionsReader::load(const IOProperties& properties)
   // logic-side loader that produces a ``vtkMRMLLiverResectionNode``.
   const QString lowerName = fileName.toLower();
   if (lowerName.endsWith(".lrp.json"))
-    {
+  {
     vtkMRMLScene* scene = d->LiverResectionsLogic->GetMRMLScene();
     if (!scene)
-      {
+    {
       this->setLoadedNodes(QStringList());
       return false;
-      }
+    }
 
-    const std::string nodeNameStr =
-      name.isEmpty()
-        ? vtksys::SystemTools::GetFilenameWithoutExtension(
-            vtksys::SystemTools::GetFilenameWithoutExtension(
-              std::string(fileName.toUtf8())))
-        : std::string(name.toUtf8());
+    const std::string nodeNameStr = name.isEmpty()
+                                      ? vtksys::SystemTools::GetFilenameWithoutExtension(vtksys::SystemTools::GetFilenameWithoutExtension(std::string(fileName.toUtf8())))
+                                      : std::string(name.toUtf8());
 
-    auto surfaceNode = vtkMRMLBezierSurfaceNode::SafeDownCast(
-      scene->AddNewNodeByClass("vtkMRMLBezierSurfaceNode",
-                               nodeNameStr));
-    auto storageNode = vtkMRMLBezierSurfaceStorageNode::SafeDownCast(
-      scene->AddNewNodeByClass("vtkMRMLBezierSurfaceStorageNode"));
+    auto surfaceNode = vtkMRMLBezierSurfaceNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLBezierSurfaceNode", nodeNameStr));
+    auto storageNode = vtkMRMLBezierSurfaceStorageNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLBezierSurfaceStorageNode"));
     if (!surfaceNode || !storageNode)
-      {
+    {
       if (surfaceNode)
-        {
+      {
         scene->RemoveNode(surfaceNode);
-        }
+      }
       if (storageNode)
-        {
+      {
         scene->RemoveNode(storageNode);
-        }
+      }
       this->setLoadedNodes(QStringList());
       return false;
-      }
+    }
     storageNode->SetFileName(fileName.toUtf8().constData());
     surfaceNode->SetAndObserveStorageNodeID(storageNode->GetID());
 
     const int readResult = storageNode->ReadData(surfaceNode);
     if (!readResult)
-      {
+    {
       this->userMessages()->AddMessages(storageNode->GetUserMessages());
       scene->RemoveNode(surfaceNode);
       scene->RemoveNode(storageNode);
       this->setLoadedNodes(QStringList());
       return false;
-      }
+    }
 
     this->setLoadedNodes(QStringList() << QString(surfaceNode->GetID()));
     return true;
-    }
+  }
 
   // Legacy ``.lrp.fcsv`` (and any other recognised extension) — delegate
   // to the existing logic-side loader (load-only migration; ADR-0014
   // §5 retires writes of this format).
-  char * nodeIDs = d->LiverResectionsLogic->LoadLiverResection(std::string(fileName.toUtf8()),
-                                                               std::string(name.toUtf8()),
-                                                               this->userMessages());
+  char* nodeIDs = d->LiverResectionsLogic->LoadLiverResection(std::string(fileName.toUtf8()), std::string(name.toUtf8()), this->userMessages());
   if (nodeIDs)
-    {
+  {
     // returned a comma separated list of ids of the nodes that were loaded
     QStringList nodeIDList;
-    char *ptr = strtok(nodeIDs, ",");
+    char* ptr = strtok(nodeIDs, ",");
 
     while (ptr)
-      {
+    {
       nodeIDList.append(ptr);
       ptr = strtok(nullptr, ",");
-      }
-    this->setLoadedNodes(nodeIDList);
     }
+    this->setLoadedNodes(nodeIDList);
+  }
   else
-    {
+  {
     this->setLoadedNodes(QStringList());
     return false;
-    }
+  }
 
   return nodeIDs != nullptr;
 }
