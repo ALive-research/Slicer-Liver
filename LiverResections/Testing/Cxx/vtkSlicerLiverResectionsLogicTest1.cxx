@@ -57,24 +57,24 @@
 
 namespace
 {
-    void checkAddAndGetNode(vtkSmartPointer<vtkMRMLScene> scene, const char* ClassName)
-    {
-        auto node = scene->GetFirstNodeByClass(ClassName);
-        assert(node == nullptr);
+void checkAddAndGetNode(vtkSmartPointer<vtkMRMLScene> scene, const char* ClassName)
+{
+  auto node = scene->GetFirstNodeByClass(ClassName);
+  assert(node == nullptr);
 
-        std::string newNodeName = ClassName;
-        newNodeName.append("_Test");
-        scene->AddNewNodeByClass(ClassName, newNodeName);
-        node = scene->GetFirstNodeByClass(ClassName);
-        assert(node != nullptr);
+  std::string newNodeName = ClassName;
+  newNodeName.append("_Test");
+  scene->AddNewNodeByClass(ClassName, newNodeName);
+  node = scene->GetFirstNodeByClass(ClassName);
+  assert(node != nullptr);
 
-        auto node2 = scene->GetNodeByID(node->GetID());
-        assert(node2 != nullptr);
-        assert(node == node2);
-    }
+  auto node2 = scene->GetNodeByID(node->GetID());
+  assert(node2 != nullptr);
+  assert(node == node2);
 }
+} // namespace
 
-int vtkSlicerLiverResectionsLogicTest1(int, char * [])
+int vtkSlicerLiverResectionsLogicTest1(int, char*[])
 {
   auto scene = vtkSmartPointer<vtkMRMLScene>::New();
 
@@ -97,7 +97,6 @@ int vtkSlicerLiverResectionsLogicTest1(int, char * [])
   vtkNew<vtkMRMLModelNode> targetOrgan;
   vtkNew<vtkSphereSource> source;
   targetOrgan->SetPolyDataConnection(source->GetOutputPort());
-
 
   return EXIT_SUCCESS;
 }

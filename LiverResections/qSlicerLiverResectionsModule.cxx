@@ -57,7 +57,7 @@
 #include <qSlicerModuleManager.h>
 #include <qSlicerNodeWriter.h>
 
-//MRMLDisplayableManager includes
+// MRMLDisplayableManager includes
 #include <vtkMRMLSliceViewDisplayableManagerFactory.h>
 #include <vtkMRMLThreeDViewDisplayableManagerFactory.h>
 
@@ -77,9 +77,7 @@ public:
 // qSlicerLiverResectionsModulePrivate methods
 
 //-----------------------------------------------------------------------------
-qSlicerLiverResectionsModulePrivate::qSlicerLiverResectionsModulePrivate()
-{
-}
+qSlicerLiverResectionsModulePrivate::qSlicerLiverResectionsModulePrivate() {}
 
 //-----------------------------------------------------------------------------
 // qSlicerLiverResectionsModule methods
@@ -92,13 +90,11 @@ qSlicerLiverResectionsModule::qSlicerLiverResectionsModule(QObject* _parent)
 }
 
 //-----------------------------------------------------------------------------
-qSlicerLiverResectionsModule::~qSlicerLiverResectionsModule()
-{
-}
+qSlicerLiverResectionsModule::~qSlicerLiverResectionsModule() {}
 
 bool qSlicerLiverResectionsModule::isHidden() const
 {
-    return true;
+  return true;
 }
 
 //-----------------------------------------------------------------------------
@@ -148,10 +144,10 @@ void qSlicerLiverResectionsModule::setup()
 
   auto logic = vtkSlicerLiverResectionsLogic::SafeDownCast(this->logic());
   if (!logic)
-    {
+  {
     qCritical() << Q_FUNC_INFO << ": cannot get Markups logic.";
     return;
-    }
+  }
   // Register displayable managers (same displayable manager handles both slice and 3D views)
   vtkMRMLSliceViewDisplayableManagerFactory::GetInstance()->RegisterDisplayableManager("vtkMRMLLiverResectionsDisplayableManager2D");
 
@@ -183,7 +179,7 @@ void qSlicerLiverResectionsModule::setup()
 
   // Register IO
   qSlicerIOManager* ioManager = qSlicerApplication::application()->ioManager();
-  qSlicerLiverResectionsReader *markupsReader = new qSlicerLiverResectionsReader(logic, this);
+  qSlicerLiverResectionsReader* markupsReader = new qSlicerLiverResectionsReader(logic, this);
   ioManager->registerIO(markupsReader);
   ioManager->registerIO(new qSlicerLiverResectionsWriter(this));
 
@@ -197,21 +193,19 @@ void qSlicerLiverResectionsModule::setup()
   // plans into a ``vtkMRMLBezierSurfaceNode``.
   qSlicerCoreIOManager* coreIOManager = qSlicerCoreApplication::application()->coreIOManager();
   if (coreIOManager)
-    {
-    coreIOManager->registerIO(new qSlicerNodeWriter(
-      "BezierSurface",
-      QString("BezierSurfaceFile"),
-      QStringList() << "vtkMRMLBezierSurfaceNode",
-      /*supportSceneSave=*/ true,
-      this));
-    }
+  {
+    coreIOManager->registerIO(new qSlicerNodeWriter("BezierSurface",
+                                                    QString("BezierSurfaceFile"),
+                                                    QStringList() << "vtkMRMLBezierSurfaceNode",
+                                                    /*supportSceneSave=*/true,
+                                                    this));
+  }
 }
 
 //-----------------------------------------------------------------------------
-qSlicerAbstractModuleRepresentation* qSlicerLiverResectionsModule
-::createWidgetRepresentation()
+qSlicerAbstractModuleRepresentation* qSlicerLiverResectionsModule ::createWidgetRepresentation()
 {
-    return nullptr;
+  return nullptr;
 }
 
 //-----------------------------------------------------------------------------
@@ -230,11 +224,10 @@ QStringList qSlicerLiverResectionsModule::associatedNodeTypes() const
 void qSlicerLiverResectionsModule::setMRMLScene(vtkMRMLScene* scene)
 {
   Superclass::setMRMLScene(scene);
-  vtkSlicerLiverResectionsLogic* logic =
-    vtkSlicerLiverResectionsLogic::SafeDownCast(this->logic());
+  vtkSlicerLiverResectionsLogic* logic = vtkSlicerLiverResectionsLogic::SafeDownCast(this->logic());
   if (!logic)
-    {
+  {
     qCritical() << Q_FUNC_INFO << " failed: logic is invalid";
     return;
-    }
+  }
 }
