@@ -215,13 +215,22 @@ jobs:
       # (runner OS, pinned SHA) so subsequent runs on the same pin skip
       # the clone + build.
       # -----------------------------------------------------------------
-      - name: Cache SlicerLayerDM build tree
+      - name: Cache SlicerLayerDM source + build tree
         if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
         id: cache-layerdm
         uses: actions/cache@v4
         with:
-          path: ${{ env.LAYERDM_BUILD }}
-          key: layerdm-${{ runner.os }}-${{ env.LAYERDM_SHA }}
+          # Cache both the source AND the build tree.  The exported
+          # ``LayerDisplayableManagerConfig.cmake`` references absolute
+          # paths under the source dir (``${LAYERDM_SRC}/LayerDM/...``)
+          # for its imported targets' ``INTERFACE_INCLUDE_DIRECTORIES``;
+          # caching only the build dir leaves those paths dangling on
+          # a cache HIT and the downstream Slicer-Liver configure
+          # fails with "non-existent path" errors.
+          path: |
+            ${{ env.LAYERDM_SRC }}
+            ${{ env.LAYERDM_BUILD }}
+          key: layerdm-${{ runner.os }}-${{ env.LAYERDM_SHA }}-src-build
 
       - name: Clone SlicerLayerDM (pinned)
         if: |
