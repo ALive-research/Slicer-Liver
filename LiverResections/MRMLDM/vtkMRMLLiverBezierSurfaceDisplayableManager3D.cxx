@@ -97,12 +97,49 @@ void vtkMRMLLiverBezierSurfaceDisplayableManager3D::SetMRMLSceneInternal(vtkMRML
   // vtkMRMLAbstractLogic.
   this->RemoveAllWidgets();
   this->Superclass::SetMRMLSceneInternal(newScene);
+
+  // Late-attach reconcile: if the DM is wired into a view AFTER the
+  // scene is already populated (e.g., second-view attach, late module
+  // load), the existing vtkMRMLBezierSurfaceNode instances will not
+  // re-fire NodeAddedEvent and OnMRMLSceneEndImport / EndClose will
+  // not fire either.  Walk the new scene and create widgets for any
+  // pre-existing Bezier surface nodes.  Same loop as
+  // OnMRMLSceneEndImport.
+  if (!newScene)
+  {
+    return;
+  }
+  std::vector<vtkMRMLNode*> existingNodes;
+  newScene->GetNodesByClass("vtkMRMLBezierSurfaceNode", existingNodes);
+  for (vtkMRMLNode* node : existingNodes)
+  {
+    if (vtkMRMLBezierSurfaceNode* bezierNode = vtkMRMLBezierSurfaceNode::SafeDownCast(node))
+    {
+      this->AddBezierSurfaceNode(bezierNode);
+    }
+  }
 }
 
 //-----------------------------------------------------------------------------
 void vtkMRMLLiverBezierSurfaceDisplayableManager3D::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
 {
   this->Superclass::OnMRMLSceneNodeAdded(node);
+
+  // Match the established Slicer-core DM pattern: during batch
+  // processing (scene import / restore) skip per-node widget
+  // construction and let OnMRMLSceneEndImport do a single reconcile
+  // pass.  Without this guard each imported node creates a widget
+  // that EndImport then tears down and re-creates — functionally
+  // correct due to ``AddBezierSurfaceNode`` idempotency, but wasteful.
+  // Cf. vtkMRMLCameraDisplayableManager, vtkMRMLModelSliceDisplayable
+  // Manager, vtkMRMLThreeDReformatDisplayableManager — all guard
+  // OnMRMLSceneNodeAdded with this exact check.
+  vtkMRMLScene* scene = this->GetMRMLScene();
+  if (scene && scene->IsBatchProcessing())
+  {
+    return;
+  }
+
   vtkMRMLBezierSurfaceNode* bezierNode = vtkMRMLBezierSurfaceNode::SafeDownCast(node);
   if (!bezierNode)
   {

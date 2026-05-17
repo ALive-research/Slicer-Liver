@@ -200,6 +200,16 @@ bool qSlicerLiverResectionsReader::load(const IOProperties& properties)
       return false;
     }
 
+    // ADR-0013 §8 — the display-side decoration (margin / grid / colour)
+    // lives on a separate display node.  ``vtkMRMLStorageNode::ReadData``
+    // does not create it; without an explicit call here the loaded
+    // surface would have no display node attached and the T2.6-DM
+    // rendering chain (vtkMRMLLiverBezierSurfaceDisplayableManager3D ->
+    // LayerDM Pipeline) would receive a surface with no decoration
+    // target, reopening the silent-no-render trap the DM is meant to
+    // close.
+    surfaceNode->CreateDefaultDisplayNodes();
+
     this->setLoadedNodes(QStringList() << QString(surfaceNode->GetID()));
     return true;
   }
