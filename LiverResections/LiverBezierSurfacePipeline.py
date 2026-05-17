@@ -114,11 +114,11 @@ except ImportError:  # pragma: no cover — pure-Python / not-yet-built path
           into.  Returns ``None`` in the standalone path; tests inject
           a stub or a real ``vtkRenderer`` as needed.
 
-        T2.6 swaps this out for ``LayerDMLib.vtkMRMLLayerDMScripted
-        Pipeline``; the call surface above is the contract that survives
-        the swap.  Until then this allows the Pipeline to be exercised
-        from direct Python instantiation and unit tests without a Slicer
-        runtime.
+        T2.6-LayerDM swaps this out for ``LayerDMLib.vtkMRMLLayerDM
+        ScriptedPipeline``; the call surface above is the contract that
+        survives the swap.  Until then this allows the Pipeline to be
+        exercised from direct Python instantiation and unit tests
+        without a Slicer runtime.
         """
 
         def __init__(self) -> None:

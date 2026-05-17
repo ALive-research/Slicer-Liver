@@ -197,7 +197,7 @@ void qSlicerLiverResectionsModule::setup()
     coreIOManager->registerIO(new qSlicerNodeWriter("BezierSurface",
                                                     QString("BezierSurfaceFile"),
                                                     QStringList() << "vtkMRMLBezierSurfaceNode",
-                                                    /*supportSceneSave=*/true,
+                                                    /*supportUseCompression=*/true,
                                                     this));
   }
 }
