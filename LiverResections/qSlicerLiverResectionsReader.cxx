@@ -116,20 +116,23 @@ qSlicerIO::IOFileType qSlicerLiverResectionsReader::fileType() const
 //-----------------------------------------------------------------------------
 QStringList qSlicerLiverResectionsReader::extensions() const
 {
-  // ``.lrp.json`` is the v1 schema landed by T2.5 + ADR-0014 §5; the
-  // reader code path is wired so the storage node round-trips through
-  // scene save/load.  However, the Add Data filter entry for it is
-  // *withheld* until T2.6-DM registers the displayable manager that
-  // renders ``vtkMRMLBezierSurfaceNode`` in the views — without that,
-  // a user-driven Add Data → ``.lrp.json`` would load silently with
-  // no rendering.  When T2.6-DM lands the entry rejoins the list:
-  //
-  //     "Liver resection plan (*.lrp.json)"
+  // ``.lrp.json`` is the v1 schema landed by the prior T2.5 commit
+  // (ADR-0014 §5).  The Add Data filter entry was previously
+  // withheld pending T2.6-LayerDM — without a Pipeline registered
+  // for ``vtkMRMLBezierSurfaceDisplayNode``, a user-driven Add Data
+  // → ``.lrp.json`` would load silently with no rendering.  T2.6-
+  // LayerDM closes that gap: ``qSlicerLiverResectionsModule::setup()``
+  // now performs ADR-0013 §5's three-call contract, so the upstream
+  // ``vtkMRMLLayerDisplayableManager`` instantiates the
+  // ``LiverBezierSurfacePipeline`` for every Bezier-surface display
+  // node in the scene.  Re-enabling the filter here lets Add Data
+  // round-trip to a visible surface.
   //
   // The legacy ``.lrp.fcsv`` stays for load-only migration; writes
   // always emit ``.lrp.json`` via the dedicated ``qSlicerNodeWriter``
   // registered in ``qSlicerLiverResectionsModule::setup()``.
-  return QStringList() << "LiverResections CSV (*.lrp.fcsv)";
+  return QStringList() << "Liver resection plan (*.lrp.json)"
+                       << "LiverResections CSV (*.lrp.fcsv)";
 }
 
 //-----------------------------------------------------------------------------

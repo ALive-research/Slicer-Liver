@@ -94,6 +94,16 @@ int vtkSlicerLiverResectionsLogicTest1(int, char*[])
   checkAddAndGetNode(scene, "vtkMRMLBezierSurfaceDisplayNode");
   checkAddAndGetNode(scene, "vtkMRMLBezierSurfaceStorageNode");
 
+  // T2.6-LayerDM — call 2 of ADR-0013 §5's three-call contract is
+  // performed in ``qSlicerLiverResectionsModule::setup()`` rather
+  // than in the logic, so this logic-only test cannot exercise it
+  // directly (no qSlicerApplication instance reachable from a ctkTest
+  // logic harness).  The Pipeline-creator registration (call 3) is
+  // similarly delegated to ``LiverResectionsLib`` via
+  // ``pythonManager()->executeString``.  Coverage for both calls
+  // lives in the manual-launch probe + the workflow-layer pytest
+  // under ``Testing/Python/workflow/`` (ADR-0008 §3).
+
   vtkNew<vtkMRMLModelNode> targetOrgan;
   vtkNew<vtkSphereSource> source;
   targetOrgan->SetPolyDataConnection(source->GetOutputPort());

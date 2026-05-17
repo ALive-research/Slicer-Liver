@@ -1,5 +1,5 @@
 # Distributed under the OSI-approved BSD 3-Clause License.
-# Copyright (c) Oslo University Hospital. All rights reserved.
+# Copyright (c) 2026, The Intervention Centre, Oslo University Hospital.  All rights reserved.
 #
 # Representations sub-package for the LayerDM Pipeline pattern landing
 # under ADR-0013 §6 and ADR-0014 §2.  Each module under this package
