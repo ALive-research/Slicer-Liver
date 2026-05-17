@@ -151,16 +151,22 @@ void qSlicerLiverResectionsModule::setup()
   // Register displayable managers (same displayable manager handles both slice and 3D views)
   vtkMRMLSliceViewDisplayableManagerFactory::GetInstance()->RegisterDisplayableManager("vtkMRMLLiverResectionsDisplayableManager2D");
 
-  // TODO(T2.6-DM): Register the LayerDM-aware widget displayable
-  // manager for ``vtkMRMLBezierSurfaceNode`` once
-  // ``vtkMRMLLiverBezierSurfaceDisplayableManager3D`` lands (ADR-0014
-  // §3, ADR-0013 §5).  The DM is the C++ glue that observes the
-  // scene for Bezier-surface nodes, spawns one
-  // ``vtkLiverBezierWidget`` instance per (data node, view) pair,
-  // and wires it to the view's interactor.  Until then the legacy
-  // ``vtkSlicerMarkupsWidget`` path still drives Bezier interaction
-  // via the in-tree ``vtkMRMLLiverResectionsDisplayableManager2D``
-  // registered above.
+  // T2.6-DM — register the C++ displayable manager that spawns one
+  // ``vtkLiverBezierWidget`` instance per (``vtkMRMLBezierSurfaceNode``,
+  // 3D view) pair.  The DM is the interactive companion of the
+  // LayerDM Pipeline registered below: the Pipeline draws the surface
+  // + decorations passively per view; the DM owns the interactive
+  // widget binding to the renderer + interactor (ADR-0014 §3,
+  // ADR-0013 §5, ADR-0004 — DM is C++ for the perf-critical observer
+  // chain).
+  vtkMRMLThreeDViewDisplayableManagerFactory::GetInstance()->RegisterDisplayableManager("vtkMRMLLiverBezierSurfaceDisplayableManager3D");
+
+  // TODO(T2.6-DM-2D): Register a slice-view variant of the Bezier-
+  // surface DM once a 2D representation that renders the surface ∩
+  // slice-plane intersection contour exists (``vtkLiverBezierRepre
+  // sentation`` is 3D-only as of T2.6-DM).  Tracked alongside the T3
+  // Resectogram migration that needs the same slice-intersection
+  // primitive.
   //
   // TODO(T2.6-LayerDM-Pipeline): Register the LayerDM Pipeline
   // creator for ``vtkMRMLBezierSurfaceDisplayNode`` once
