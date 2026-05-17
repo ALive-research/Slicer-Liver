@@ -15,7 +15,19 @@ set(EXTENSION_DEPENDS
   SlicerVMTK
   SegmentEditorExtraEffects
   ExtraMarkups
-  SlicerLayerDisplayableManager
+  # Upstream is the SlicerLayerDisplayableManager repo
+  # (https://github.com/KitwareMedical/SlicerLayerDisplayableManager) but
+  # its ``project()`` and exported ``*Config.cmake`` file are named
+  # ``LayerDisplayableManager``.  The EXTENSION_DEPENDS entry must
+  # match the project name so Slicer's launcher-settings block
+  # (``SlicerBlockAdditionalLauncherSettings.cmake``) can
+  # ``find_package(${dep})`` it and forward its
+  # ``LIBRARY_PATHS_LAUNCHER_BUILD`` + ``PYTHONPATH_LAUNCHER_BUILD``
+  # into the launcher's module-paths list.  Otherwise the upstream
+  # ``vtkSlicerLayerDMModule*`` libraries land on ``_DIR-NOTFOUND``
+  # entries in the launcher INI and the LayerDM Python symbols never
+  # become importable from ``slicer`` at runtime.
+  LayerDisplayableManager
   )
 
 #-----------------------------------------------------------------------------

@@ -208,9 +208,12 @@ jobs:
       # -----------------------------------------------------------------
       # SlicerLayerDM build layer.  LayerDM is an EXTENSION_DEPENDS entry
       # of Slicer-Liver per ADR-0013 §5; the Slicer-Liver configure needs
-      # SlicerLayerDisplayableManager_DIR pointing at a built copy of the
-      # upstream extension.  Cached on (runner OS, pinned SHA) so subsequent
-      # runs on the same pin skip the clone + build.
+      # LayerDisplayableManager_DIR pointing at a built copy of the
+      # upstream extension (the upstream's ``project()`` and the exported
+      # ``*Config.cmake`` file are both named ``LayerDisplayableManager``,
+      # not ``SlicerLayerDisplayableManager``).  Cached on
+      # (runner OS, pinned SHA) so subsequent runs on the same pin skip
+      # the clone + build.
       # -----------------------------------------------------------------
       - name: Cache SlicerLayerDM build tree
         if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
@@ -257,13 +260,14 @@ jobs:
           mkdir -p build
           # Upstream SlicerLayerDM is a flat-layout extension: project()
           # produces LayerDisplayableManagerConfig.cmake at the build root
-          # (not in a *-build subdirectory).  SlicerLayerDisplayableManager_DIR
-          # is therefore LAYERDM_BUILD itself.
+          # (not in a *-build subdirectory).  LayerDisplayableManager_DIR
+          # (matching the upstream ``project()`` name) is therefore
+          # LAYERDM_BUILD itself.
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING:BOOL=ON \
             -DSlicer_DIR="${Slicer_DIR}" \
-            -DSlicerLayerDisplayableManager_DIR="${LAYERDM_BUILD}"
+            -DLayerDisplayableManager_DIR="${LAYERDM_BUILD}"
 
       - name: Build
         if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'

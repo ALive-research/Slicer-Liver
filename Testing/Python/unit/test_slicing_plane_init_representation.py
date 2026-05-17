@@ -1,3 +1,5 @@
+# Copyright (c) 2026, The Intervention Centre, Oslo University Hospital.  All rights reserved.
+# Distributed under the OSI-approved BSD 3-Clause License.
 """Python unit tests for ``SlicingPlaneInitRepresentation`` — T2.2 stack, iteration 2.
 
 Mirrors ``test_bezier_planning_representation.py``: per ADR-0008 §2
@@ -29,11 +31,12 @@ import pytest
 
 # --------------------------------------------------------------------------- #
 # Repo geometry — Representations live at
-# ``LiverResections/Representations/`` per ADR-0013 §7 file-layout.
+# ``LiverResections/LiverResectionsLib/Representations/`` per the
+# ``<Module>Lib`` install convention adopted at T2.6-LayerDM.
 # --------------------------------------------------------------------------- #
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
-PY_DIR = REPO_ROOT / "LiverResections"
+PY_DIR = REPO_ROOT / "LiverResections" / "LiverResectionsLib"
 if str(PY_DIR) not in sys.path:
     sys.path.insert(0, str(PY_DIR))
 

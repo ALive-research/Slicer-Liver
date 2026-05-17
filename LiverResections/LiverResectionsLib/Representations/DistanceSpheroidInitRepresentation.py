@@ -1,3 +1,5 @@
+# Copyright (c) 2026, The Intervention Centre, Oslo University Hospital.  All rights reserved.
+# Distributed under the OSI-approved BSD 3-Clause License.
 """Representation active in ``(ResectionState=Init, InitMode=DistanceSpheroid)``.
 
 Renders the geometry that supports the **DistanceSpheroid** init mode

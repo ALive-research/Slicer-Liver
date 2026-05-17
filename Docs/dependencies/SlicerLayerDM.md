@@ -3,9 +3,12 @@
 Slicer-Liver depends on
 [SlicerLayerDisplayableManager][upstream] (LayerDM) at build time per
 [ADR-0002][adr-0002] (migration commitment) and [ADR-0013][adr-0013] §5
-(three registration calls).  `SlicerLayerDisplayableManager` is listed
+(three registration calls).  `LayerDisplayableManager` is listed
 unconditionally in Slicer-Liver's `EXTENSION_DEPENDS` block in the
-root `CMakeLists.txt`.
+root `CMakeLists.txt`.  The upstream's GitHub repo is named
+`SlicerLayerDisplayableManager`, but its `project()` and the exported
+`*Config.cmake` file are named `LayerDisplayableManager` — that
+shorter name is the one Slicer-Liver's CMake and CI use.
 
 [upstream]: https://github.com/KitwareMedical/SlicerLayerDisplayableManager
 [adr-0002]: ../adr/0002-migrate-to-slicerlayerdm.md
@@ -23,8 +26,9 @@ a prerequisite of the `build-test (slicer-main, Linux)` job:
    `ghcr.io/alive-research/slicer-build-ubuntu2404` image).
 3. Caches the resulting build tree on `(runner_os, LAYERDM_SHA)` so
    subsequent runs at the same pin skip the clone + build.
-4. Passes `-DSlicerLayerDisplayableManager_DIR=<LAYERDM_BUILD>` to
-   Slicer-Liver's configure.
+4. Passes `-DLayerDisplayableManager_DIR=<LAYERDM_BUILD>` to
+   Slicer-Liver's configure (the variable name matches the upstream
+   `project()` — see the EXTENSION_DEPENDS note above).
 
 Bumping the pinned SHA is a deliberate workflow edit; document the
 rationale in the commit message.
@@ -63,7 +67,7 @@ cmake --build <SLICERLAYERDM_BUILD> -j
 
 SlicerLayerDM is a flat-layout Slicer extension — `project(LayerDisplayableManager)`
 produces `LayerDisplayableManagerConfig.cmake` at the **build root**.
-`SlicerLayerDisplayableManager_DIR` therefore points at
+`LayerDisplayableManager_DIR` therefore points at
 `<SLICERLAYERDM_BUILD>` itself, not at any inner subdirectory.
 
 ### 3. Configure Slicer-Liver
@@ -73,7 +77,7 @@ cmake -S <SLICER_LIVER_SRC> -B <SLICER_LIVER_BUILD> \
       -DCMAKE_BUILD_TYPE=Release \
       -DBUILD_TESTING=ON \
       -DSlicer_DIR=<SLICER_BUILD> \
-      -DSlicerLayerDisplayableManager_DIR=<SLICERLAYERDM_BUILD>
+      -DLayerDisplayableManager_DIR=<SLICERLAYERDM_BUILD>
 cmake --build <SLICER_LIVER_BUILD> -j
 ```
 

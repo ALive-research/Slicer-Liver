@@ -56,10 +56,17 @@
 #include <qSlicerIOManager.h>
 #include <qSlicerModuleManager.h>
 #include <qSlicerNodeWriter.h>
+#include <qSlicerPythonManager.h>
 
 // MRMLDisplayableManager includes
 #include <vtkMRMLSliceViewDisplayableManagerFactory.h>
 #include <vtkMRMLThreeDViewDisplayableManagerFactory.h>
+
+// LayerDM includes — ADR-0013 §5 calls 2 + 3 wiring.  The Pipeline
+// creator (call 3) is registered from Python — see
+// ``LiverResectionsLib.registerPipelineCreator`` — to keep the
+// scripted-pipeline class identity on the Python side per ADR-0004.
+#include <vtkMRMLLayerDisplayableManager.h>
 
 // DisplayableManager initialization
 #include <vtkAutoInit.h>
@@ -151,31 +158,36 @@ void qSlicerLiverResectionsModule::setup()
   // Register displayable managers (same displayable manager handles both slice and 3D views)
   vtkMRMLSliceViewDisplayableManagerFactory::GetInstance()->RegisterDisplayableManager("vtkMRMLLiverResectionsDisplayableManager2D");
 
-  // TODO(T2.6-DM): Register the LayerDM-aware widget displayable
-  // manager for ``vtkMRMLBezierSurfaceNode`` once
-  // ``vtkMRMLLiverBezierSurfaceDisplayableManager3D`` lands (ADR-0014
-  // §3, ADR-0013 §5).  The DM is the C++ glue that observes the
-  // scene for Bezier-surface nodes, spawns one
-  // ``vtkLiverBezierWidget`` instance per (data node, view) pair,
-  // and wires it to the view's interactor.  Until then the legacy
-  // ``vtkSlicerMarkupsWidget`` path still drives Bezier interaction
-  // via the in-tree ``vtkMRMLLiverResectionsDisplayableManager2D``
-  // registered above.
-  //
-  // TODO(T2.6-LayerDM-Pipeline): Register the LayerDM Pipeline
-  // creator for ``vtkMRMLBezierSurfaceDisplayNode`` once
-  // ``LiverBezierSurfacePipeline.py`` has Python install rules + a
-  // ``LayerDMLib`` runtime path (ADR-0013 §4, §5).  The registration
-  // belongs in this ``setup()`` per ADR-0013's "user-facing module
-  // hosts the registration" pattern — either via a
-  // ``app->pythonManager()->executeString("import LiverResectionsLib")``
-  // call (Markups precedent at ``qSlicerMarkupsModule::setup()``)
-  // that delegates to a ``LiverResectionsLib`` Python module's
-  // ``registerPipelineCreator()``, or directly via
-  // ``vtkMRMLLayerDMPipelineScriptedCreator`` if the C++ headers
-  // become reachable from this build.  Tracked as task T2.6-LayerDM
-  // alongside the Python install glue and the soft-import → hard-
-  // require swap in ``LiverBezierSurfacePipeline.py``.
+  // ADR-0013 §5 call 2 — register the upstream LayerDM-aware
+  // generic displayable manager with the 2D + 3D view factories.
+  // Idempotent: ``vtkMRMLLayerDisplayableManager::RegisterInFactory``
+  // guards on ``IsRegisteredInFactory`` and is a no-op when another
+  // LayerDM-aware module already registered the DM for a given
+  // factory, so multiple LayerDM-aware modules can coexist without
+  // conflict.  ``RegisterInDefaultViews`` covers both view factories
+  // in one call — the equivalent invocation in upstream
+  // ``qSlicerLayerDMModule::setup()`` is the canonical precedent.
+  vtkMRMLLayerDisplayableManager::RegisterInDefaultViews();
+
+  // ADR-0013 §5 call 3 — register the LayerDM Pipeline creator for
+  // ``vtkMRMLBezierSurfaceDisplayNode`` via the
+  // scripted-creator bridge.  The creator lambda is defined in
+  // ``LiverResectionsLib.LiverBezierSurfacePipeline`` (per ADR-0004
+  // §1 the Pipeline class is Python; per ADR-0013 §1 there is exactly
+  // one Pipeline per display-node type).  Delegating the call to the
+  // Python side via ``qSlicerPythonManager::executeString`` keeps the
+  // ``vtkMRMLLayerDMPipelineScriptedCreator``'s
+  // ``SetPythonCallback`` argument as a Python callable — the upstream
+  // ``CustomVR`` example sets the same precedent.  Idempotent: the
+  // factory's ``AddPipelineCreator`` uses ``ContainsPipelineCreator``
+  // to short-circuit duplicate registrations.
+  if (qSlicerApplication* app = qSlicerApplication::application())
+  {
+    if (qSlicerPythonManager* pythonManager = app->pythonManager())
+    {
+      pythonManager->executeString("import LiverResectionsLib; LiverResectionsLib.registerPipelineCreator()");
+    }
+  }
 
   // Register IO
   qSlicerIOManager* ioManager = qSlicerApplication::application()->ioManager();
