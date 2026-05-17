@@ -13,7 +13,7 @@ name: CI
 
 on:
   pull_request:
-    branches: ['**']
+    branches: ["**"]
   push:
     branches: [preview]
   workflow_dispatch: {}
@@ -50,7 +50,7 @@ jobs:
       - name: Setup Node.js (for mermaid-cli)
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Install Mermaid CLI
         run: npm install -g @mermaid-js/mermaid-cli@10
@@ -228,5 +228,170 @@ jobs:
           # (the native C++ tests also dump on success), accepted because
           # CI logs are append-mostly archives and one-glance pytest
           # visibility outweighs the line count.
+          ctest -V --no-tests=error \
+                --exclude-regex '^py_LiverSegmentsTest$'
+
+  # ---------------------------------------------------------------------------
+  # Job 3 — opt-in build + test with SlicerLayerDisplayableManager (LayerDM).
+  # Mirrors Job 2 but configures Slicer-Liver with
+  # `-DSlicer_Liver_USE_SlicerLayerDM=ON`, after first building the upstream
+  # LayerDM extension against the same Slicer build tree the canonical job
+  # consumes.
+  #
+  # Informational only (`continue-on-error: true`): the canonical
+  # `build-test (slicer-main, Linux)` job stays merge-gate authoritative
+  # while the LayerDM migration is in flight.  Once T2.6-LayerDM lands and
+  # stabilises the expectation (per ADR-0012) is to flip the merge-gate
+  # role to this cell.
+  #
+  # See Docs/dependencies/SlicerLayerDM.md for the contract this job
+  # exercises and ADR-0002 + ADR-0013 §5 for the architectural backdrop.
+  # ---------------------------------------------------------------------------
+  build-test-layerdm:
+    name: build-test-layerdm (slicer-main, Linux, opt-in)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 75
+    continue-on-error: true
+    needs: build-test
+
+    defaults:
+      run:
+        shell: bash
+
+    container:
+      image: ghcr.io/alive-research/slicer-build-ubuntu2404:latest
+      options: --user root
+
+    env:
+      Slicer_DIR: /usr/src/Slicer-build/Slicer-build
+      QT_QPA_PLATFORM: offscreen
+      # Pinned SlicerLayerDM commit.  Bump when intentionally moving the
+      # opt-in cell forward; document the bump rationale in the commit
+      # message.  Anchor: upstream KitwareMedical/SlicerLayerDisplayableManager
+      # `main` tip at the time this job was introduced.
+      LAYERDM_SHA: 1689cc55d2deef1f1edd96f6dfa301683e47a469
+      LAYERDM_SRC: /tmp/SlicerLayerDisplayableManager
+      LAYERDM_BUILD: /tmp/SlicerLayerDisplayableManager-build
+
+    steps:
+      - name: Checkout Slicer-Liver
+        uses: actions/checkout@v4
+
+      - name: Detect docs-only change
+        id: changes
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          predicate-quantifier: every
+          filters: |
+            docs-only:
+              - '{Docs/**,*.md,.github/pull_request_template.md,.github/CODEOWNERS,CITATION.cff,License.txt,COPYRIGHT.txt}'
+
+      - name: Report skip (docs-only PR)
+        if: github.event_name == 'pull_request' && steps.changes.outputs.docs-only == 'true'
+        run: |
+          echo "::notice::Skipping LayerDM opt-in build/test — docs-only PR."
+
+      - name: Verify Slicer build tree
+        if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
+        run: |
+          set -euo pipefail
+          test -f "${Slicer_DIR}/SlicerConfig.cmake" \
+            || { echo "::error::SlicerConfig.cmake missing at ${Slicer_DIR}"; exit 1; }
+          echo "Slicer_DIR=${Slicer_DIR}"
+          echo "LAYERDM_SHA=${LAYERDM_SHA}"
+
+      - name: Cache SlicerLayerDM build tree
+        if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
+        id: cache-layerdm
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.LAYERDM_BUILD }}
+          # Cache key includes the runner OS and the pinned LayerDM SHA so
+          # a SHA bump invalidates automatically.  The image tag is `:latest`
+          # (rolling weekly); we accept the cache surviving an image refresh
+          # because LayerDM's Slicer ABI couplings change rarely.  If a
+          # post-image-bump LayerDM build mysteriously misbehaves, bump
+          # LAYERDM_SHA to invalidate.
+          key: layerdm-${{ runner.os }}-${{ env.LAYERDM_SHA }}
+
+      - name: Clone SlicerLayerDM (pinned)
+        if: |
+          (github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true') &&
+          steps.cache-layerdm.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          rm -rf "${LAYERDM_SRC}"
+          git clone https://github.com/KitwareMedical/SlicerLayerDisplayableManager.git \
+            "${LAYERDM_SRC}"
+          cd "${LAYERDM_SRC}"
+          git checkout "${LAYERDM_SHA}"
+          echo "LayerDM HEAD: $(git rev-parse HEAD)"
+
+      - name: Configure SlicerLayerDM
+        if: |
+          (github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true') &&
+          steps.cache-layerdm.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "${LAYERDM_BUILD}"
+          cmake -S "${LAYERDM_SRC}" -B "${LAYERDM_BUILD}" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSlicer_DIR="${Slicer_DIR}"
+
+      - name: Build SlicerLayerDM
+        if: |
+          (github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true') &&
+          steps.cache-layerdm.outputs.cache-hit != 'true'
+        run: cmake --build "${LAYERDM_BUILD}" --config Release -j "$(nproc)"
+
+      - name: Locate LayerDM inner build dir
+        id: layerdm-dir
+        if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
+        run: |
+          set -euo pipefail
+          # Slicer's extension layout produces an inner build directory
+          # (extension's project() name + "-build").  Resolve it dynamically
+          # so the path stays correct if the project name ever changes.
+          inner_dir="${LAYERDM_BUILD}/LayerDisplayableManager-build"
+          if [ ! -d "${inner_dir}" ]; then
+            # Fallback: locate any *-build dir inside LAYERDM_BUILD that
+            # contains a CMakeCache.txt and a Slicer-shaped layout.
+            inner_dir="$(find "${LAYERDM_BUILD}" -maxdepth 2 -type d -name '*-build' \
+                          ! -path "${LAYERDM_BUILD}" \
+                          -exec test -f '{}/CMakeCache.txt' \; -print | head -n 1)"
+          fi
+          if [ -z "${inner_dir}" ] || [ ! -d "${inner_dir}" ]; then
+            echo "::error::Could not locate SlicerLayerDM inner build dir under ${LAYERDM_BUILD}"
+            find "${LAYERDM_BUILD}" -maxdepth 3 -type d || true
+            exit 1
+          fi
+          echo "Resolved LayerDM inner build dir: ${inner_dir}"
+          echo "dir=${inner_dir}" >> "${GITHUB_OUTPUT}"
+
+      - name: Configure Slicer-Liver (LayerDM ON)
+        if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING:BOOL=ON \
+            -DSlicer_DIR="${Slicer_DIR}" \
+            -DSlicer_Liver_USE_SlicerLayerDM:BOOL=ON \
+            -DSlicerLayerDisplayableManager_DIR="${{ steps.layerdm-dir.outputs.dir }}"
+
+      - name: Build Slicer-Liver
+        if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
+        run: cmake --build build --config Release -j "$(nproc)"
+
+      - name: Test (CTest)
+        if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
+        run: |
+          set -euo pipefail
+          cd build
+          # Same exclusion rationale as the canonical build-test job —
+          # `py_LiverSegmentsTest` hard-imports VMTK which isn't bundled
+          # in the slicer-build-ubuntu2404 image.
           ctest -V --no-tests=error \
                 --exclude-regex '^py_LiverSegmentsTest$'
