@@ -2,7 +2,7 @@
 
  Distributed under the OSI-approved BSD 3-Clause License.
 
-  Copyright (c) Oslo University Hospital. All rights reserved.
+  Copyright (c) 2017-2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -82,9 +82,17 @@ int vtkSlicerLiverResectionsLogicTest1(int, char * [])
 
   logic1->SetMRMLScene(scene);
 
-  //Add and get nodes
+  // Legacy node-class registrations (retired by T2.7).
   checkAddAndGetNode(scene, "vtkMRMLLiverResectionNode");
   checkAddAndGetNode(scene, "vtkMRMLLiverResectionCSVStorageNode");
+
+  // T2.6 — new LiverResources data / display / storage nodes
+  // (ADR-0014 §1, §5) must be registered by ``RegisterNodes()``.
+  // Asserting ``scene->AddNewNodeByClass(...)`` round-trips proves
+  // ``vtkMRMLScene::RegisterNodeClass`` ran for each.
+  checkAddAndGetNode(scene, "vtkMRMLBezierSurfaceNode");
+  checkAddAndGetNode(scene, "vtkMRMLBezierSurfaceDisplayNode");
+  checkAddAndGetNode(scene, "vtkMRMLBezierSurfaceStorageNode");
 
   vtkNew<vtkMRMLModelNode> targetOrgan;
   vtkNew<vtkSphereSource> source;

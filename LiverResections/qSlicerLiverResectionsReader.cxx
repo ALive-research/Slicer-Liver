@@ -2,7 +2,7 @@
 
  Distributed under the OSI-approved BSD 3-Clause License.
 
-  Copyright (c) Oslo University Hospital. All rights reserved.
+  Copyright (c) 2017-2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -51,11 +51,15 @@
 #include "vtkSlicerLiverResectionsLogic.h"
 
 // MRML includes
+#include "vtkMRMLBezierSurfaceNode.h"
+#include "vtkMRMLBezierSurfaceStorageNode.h"
 #include "vtkMRMLMessageCollection.h"
+#include "vtkMRMLScene.h"
 
 // VTK includes
 #include <vtkNew.h>
 #include <vtkSmartPointer.h>
+#include <vtksys/SystemTools.hxx>
 
 //-----------------------------------------------------------------------------
 class qSlicerLiverResectionsReaderPrivate
@@ -112,7 +116,12 @@ qSlicerIO::IOFileType qSlicerLiverResectionsReader::fileType()const
 //-----------------------------------------------------------------------------
 QStringList qSlicerLiverResectionsReader::extensions()const
 {
-  return QStringList() << "LiverResections CSV (*.lrp.fcsv)";
+  // ``.lrp.json`` is the v1 schema landed by T2.5 + ADR-0014 §5.  The
+  // legacy ``.lrp.fcsv`` extension stays in the list for load-only
+  // migration of pre-T2 scenes; writes always emit ``.lrp.json``.
+  return QStringList()
+    << "Liver resection plan (*.lrp.json)"
+    << "LiverResections CSV (*.lrp.fcsv)";
 }
 
 //-----------------------------------------------------------------------------
@@ -135,8 +144,68 @@ bool qSlicerLiverResectionsReader::load(const IOProperties& properties)
     return false;
     }
 
-  // pass to logic to do the loading
   this->userMessages()->ClearMessages();
+
+  // Dispatch on extension.  ``.lrp.json`` is the v1 format committed by
+  // T2.5 / ADR-0014 §5; loading routes through the new
+  // ``vtkMRMLBezierSurfaceStorageNode`` directly.  ``.lrp.fcsv`` (and
+  // any other legacy extension) falls through to the existing
+  // logic-side loader that produces a ``vtkMRMLLiverResectionNode``.
+  const QString lowerName = fileName.toLower();
+  if (lowerName.endsWith(".lrp.json"))
+    {
+    vtkMRMLScene* scene = d->LiverResectionsLogic->GetMRMLScene();
+    if (!scene)
+      {
+      this->setLoadedNodes(QStringList());
+      return false;
+      }
+
+    const std::string nodeNameStr =
+      name.isEmpty()
+        ? vtksys::SystemTools::GetFilenameWithoutExtension(
+            vtksys::SystemTools::GetFilenameWithoutExtension(
+              std::string(fileName.toUtf8())))
+        : std::string(name.toUtf8());
+
+    auto surfaceNode = vtkMRMLBezierSurfaceNode::SafeDownCast(
+      scene->AddNewNodeByClass("vtkMRMLBezierSurfaceNode",
+                               nodeNameStr));
+    auto storageNode = vtkMRMLBezierSurfaceStorageNode::SafeDownCast(
+      scene->AddNewNodeByClass("vtkMRMLBezierSurfaceStorageNode"));
+    if (!surfaceNode || !storageNode)
+      {
+      if (surfaceNode)
+        {
+        scene->RemoveNode(surfaceNode);
+        }
+      if (storageNode)
+        {
+        scene->RemoveNode(storageNode);
+        }
+      this->setLoadedNodes(QStringList());
+      return false;
+      }
+    storageNode->SetFileName(fileName.toUtf8().constData());
+    surfaceNode->SetAndObserveStorageNodeID(storageNode->GetID());
+
+    const int readResult = storageNode->ReadData(surfaceNode);
+    if (!readResult)
+      {
+      this->userMessages()->AddMessages(storageNode->GetUserMessages());
+      scene->RemoveNode(surfaceNode);
+      scene->RemoveNode(storageNode);
+      this->setLoadedNodes(QStringList());
+      return false;
+      }
+
+    this->setLoadedNodes(QStringList() << QString(surfaceNode->GetID()));
+    return true;
+    }
+
+  // Legacy ``.lrp.fcsv`` (and any other recognised extension) — delegate
+  // to the existing logic-side loader (load-only migration; ADR-0014
+  // §5 retires writes of this format).
   char * nodeIDs = d->LiverResectionsLogic->LoadLiverResection(std::string(fileName.toUtf8()),
                                                                std::string(name.toUtf8()),
                                                                this->userMessages());

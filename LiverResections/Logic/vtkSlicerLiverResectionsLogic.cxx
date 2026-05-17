@@ -2,7 +2,7 @@
 
  Distributed under the OSI-approved BSD 3-Clause License.
 
-  Copyright (c) Oslo University Hospital. All rights reserved.
+  Copyright (c) 2017-2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -42,6 +42,14 @@
 #include "vtkSlicerLiverResectionsLogic.h"
 #include "vtkMRMLAbstractLogic.h"
 #include "vtkMRMLLiverResectionCSVStorageNode.h"
+
+// T2 LiverResources data nodes (ADR-0014 §1, §5).  Registered with the
+// scene in RegisterNodes() so scene save/load and the Add/Save Data
+// dialogs round-trip the new ``vtkMRMLBezierSurfaceNode`` family and
+// recognise the new ``.lrp.json`` storage format.
+#include "vtkMRMLBezierSurfaceNode.h"
+#include "vtkMRMLBezierSurfaceDisplayNode.h"
+#include "vtkMRMLBezierSurfaceStorageNode.h"
 
 #include <vtkCommand.h>
 #include <vtkMRMLMarkupsSlicingContourNode.h>
@@ -100,9 +108,21 @@ void vtkSlicerLiverResectionsLogic::RegisterNodes()
   assert(this->GetMRMLScene() != nullptr);
   vtkMRMLScene *scene = this->GetMRMLScene();
 
-  // Nodes
+  // Legacy resection node + legacy CSV storage node — still registered
+  // so scenes saved before the T2 migration continue to load.  Retired
+  // by task T2.7 alongside the resection-rename + LiverMarkups
+  // dissolution (ADR-0014).
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLLiverResectionNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLLiverResectionCSVStorageNode>::New());
+
+  // T2 LiverResources data nodes (ADR-0014 §1, §5).  Registering the
+  // storage node here makes scene save/load round-trip the new
+  // ``.lrp.json`` format; the Bezier data + display nodes are
+  // registered so MRML can instantiate them by class name on scene
+  // load.
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceDisplayNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceStorageNode>::New());
 }
 
 //---------------------------------------------------------------------------
