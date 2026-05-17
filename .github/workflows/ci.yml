@@ -135,6 +135,14 @@ jobs:
       # `QT_QPA_PLATFORM=offscreen` is Qt's official headless mode —
       # it renders to an in-memory surface, suitable for CTest.
       QT_QPA_PLATFORM: offscreen
+      # SlicerLayerDM build layer — built as a prerequisite of every
+      # Slicer-Liver build because LayerDM is now an unconditional
+      # EXTENSION_DEPENDS entry (per ADR-0002 / ADR-0013 §5).
+      # Pinned to a specific upstream commit so CI is reproducible;
+      # bump deliberately and document the bump in the commit message.
+      LAYERDM_SHA: 1689cc55d2deef1f1edd96f6dfa301683e47a469
+      LAYERDM_SRC: /tmp/SlicerLayerDisplayableManager
+      LAYERDM_BUILD: /tmp/SlicerLayerDisplayableManager-build
 
     steps:
       - name: Checkout
@@ -159,13 +167,13 @@ jobs:
       # Filter is PR-scoped — push events (merge to preview, direct push,
       # workflow_dispatch) always run the full build to catch any drift.
       # ---------------------------------------------------------------------
-      # dorny/paths-filter@v3 with `predicate-quantifier: every` matches
-      # *every* changed file against *every* pattern in the filter list
-      # (rather than the union of patterns), so listing the docs paths as
-      # separate list entries fails for any single file that doesn't satisfy
-      # all of them simultaneously — surfaced by PR #340 (one ADR change,
-      # didn't skip).  Consolidate to a single brace-expanded pattern so the
-      # quantifier sees one alternation that each file must match.
+      # dorny/paths-filter@v3 with predicate-quantifier: every matches when
+      # every changed file matches at least one of the listed patterns.
+      # Each pattern goes on its own list entry (canonical form); the
+      # earlier brace-consolidated single-pattern form silently matched
+      # files outside the alternation set (surfaced by PR #368's CI run
+      # against ci.yml + CMakeLists.txt changes), so we revert to the
+      # separated form per dorny/paths-filter docs.
       - name: Detect docs-only change
         id: changes
         if: github.event_name == 'pull_request'
@@ -174,7 +182,13 @@ jobs:
           predicate-quantifier: every
           filters: |
             docs-only:
-              - '{Docs/**,*.md,.github/pull_request_template.md,.github/CODEOWNERS,CITATION.cff,License.txt,COPYRIGHT.txt}'
+              - 'Docs/**'
+              - '*.md'
+              - '.github/pull_request_template.md'
+              - '.github/CODEOWNERS'
+              - 'CITATION.cff'
+              - 'License.txt'
+              - 'COPYRIGHT.txt'
 
       - name: Report skip (docs-only PR)
         if: github.event_name == 'pull_request' && steps.changes.outputs.docs-only == 'true'
@@ -189,130 +203,21 @@ jobs:
           test -f "${Slicer_DIR}/SlicerConfig.cmake" \
             || { echo "::error::SlicerConfig.cmake missing at ${Slicer_DIR} — image layout has drifted"; exit 1; }
           echo "Slicer_DIR=${Slicer_DIR}"
-
-      - name: Configure
-        if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
-        run: |
-          set -euo pipefail
-          mkdir -p build
-          cmake -S . -B build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTING:BOOL=ON \
-            -DSlicer_DIR="${Slicer_DIR}"
-
-      - name: Build
-        if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
-        run: cmake --build build --config Release -j "$(nproc)"
-
-      - name: Test (CTest)
-        if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
-        run: |
-          set -euo pipefail
-          cd build
-          # `py_LiverSegmentsTest` is excluded because it hard-imports
-          # the `ExtractCenterline` module from SlicerExtension-VMTK,
-          # which is intentionally not bundled in the
-          # `slicer-build-ubuntu2404` image (see ALive-Docker PR #4 +
-          # the analysis on Slicer-Liver PR #294's discussion).
-          #
-          # The proper fix lives on the Slicer-Liver side: the test
-          # should detect VMTK absence via `slicer.modules` and skip
-          # itself rather than fail.  Tracked as a follow-up; until
-          # then, the CTest-level exclude keeps CI honestly green for
-          # what it actually covers.
-          # `-V` (verbose) dumps each test's stdout/stderr in the CI log
-          # regardless of pass/fail.  Replaces the prior `--output-on-failure`
-          # so that aggregated pytest entries (e.g. `pytest_scaffold` from
-          # ADR-0008's scaffold) reveal the per-pytest-test breakdown instead
-          # of just the CTest pass/fail line.  Trade-off: more noisy log
-          # (the native C++ tests also dump on success), accepted because
-          # CI logs are append-mostly archives and one-glance pytest
-          # visibility outweighs the line count.
-          ctest -V --no-tests=error \
-                --exclude-regex '^py_LiverSegmentsTest$'
-
-  # ---------------------------------------------------------------------------
-  # Job 3 — opt-in build + test with SlicerLayerDisplayableManager (LayerDM).
-  # Mirrors Job 2 but configures Slicer-Liver with
-  # `-DSlicer_Liver_USE_SlicerLayerDM=ON`, after first building the upstream
-  # LayerDM extension against the same Slicer build tree the canonical job
-  # consumes.
-  #
-  # Informational only (`continue-on-error: true`): the canonical
-  # `build-test (slicer-main, Linux)` job stays merge-gate authoritative
-  # while the LayerDM migration is in flight.  Once T2.6-LayerDM lands and
-  # stabilises the expectation (per ADR-0012) is to flip the merge-gate
-  # role to this cell.
-  #
-  # See Docs/dependencies/SlicerLayerDM.md for the contract this job
-  # exercises and ADR-0002 + ADR-0013 §5 for the architectural backdrop.
-  # ---------------------------------------------------------------------------
-  build-test-layerdm:
-    name: build-test-layerdm (slicer-main, Linux, opt-in)
-    runs-on: ubuntu-22.04
-    timeout-minutes: 75
-    continue-on-error: true
-    needs: build-test
-
-    defaults:
-      run:
-        shell: bash
-
-    container:
-      image: ghcr.io/alive-research/slicer-build-ubuntu2404:latest
-      options: --user root
-
-    env:
-      Slicer_DIR: /usr/src/Slicer-build/Slicer-build
-      QT_QPA_PLATFORM: offscreen
-      # Pinned SlicerLayerDM commit.  Bump when intentionally moving the
-      # opt-in cell forward; document the bump rationale in the commit
-      # message.  Anchor: upstream KitwareMedical/SlicerLayerDisplayableManager
-      # `main` tip at the time this job was introduced.
-      LAYERDM_SHA: 1689cc55d2deef1f1edd96f6dfa301683e47a469
-      LAYERDM_SRC: /tmp/SlicerLayerDisplayableManager
-      LAYERDM_BUILD: /tmp/SlicerLayerDisplayableManager-build
-
-    steps:
-      - name: Checkout Slicer-Liver
-        uses: actions/checkout@v4
-
-      - name: Detect docs-only change
-        id: changes
-        if: github.event_name == 'pull_request'
-        uses: dorny/paths-filter@v3
-        with:
-          predicate-quantifier: every
-          filters: |
-            docs-only:
-              - '{Docs/**,*.md,.github/pull_request_template.md,.github/CODEOWNERS,CITATION.cff,License.txt,COPYRIGHT.txt}'
-
-      - name: Report skip (docs-only PR)
-        if: github.event_name == 'pull_request' && steps.changes.outputs.docs-only == 'true'
-        run: |
-          echo "::notice::Skipping LayerDM opt-in build/test — docs-only PR."
-
-      - name: Verify Slicer build tree
-        if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
-        run: |
-          set -euo pipefail
-          test -f "${Slicer_DIR}/SlicerConfig.cmake" \
-            || { echo "::error::SlicerConfig.cmake missing at ${Slicer_DIR}"; exit 1; }
-          echo "Slicer_DIR=${Slicer_DIR}"
           echo "LAYERDM_SHA=${LAYERDM_SHA}"
 
+      # -----------------------------------------------------------------
+      # SlicerLayerDM build layer.  LayerDM is an EXTENSION_DEPENDS entry
+      # of Slicer-Liver per ADR-0013 §5; the Slicer-Liver configure needs
+      # SlicerLayerDisplayableManager_DIR pointing at a built copy of the
+      # upstream extension.  Cached on (runner OS, pinned SHA) so subsequent
+      # runs on the same pin skip the clone + build.
+      # -----------------------------------------------------------------
       - name: Cache SlicerLayerDM build tree
         if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
         id: cache-layerdm
         uses: actions/cache@v4
         with:
           path: ${{ env.LAYERDM_BUILD }}
-          # Cache key includes the runner OS and the pinned LayerDM SHA so
-          # a SHA bump invalidates automatically.  The image tag is `:latest`
-          # (rolling weekly); we accept the cache surviving an image refresh
-          # because LayerDM's Slicer ABI couplings change rarely.  If a
-          # post-image-bump LayerDM build mysteriously misbehaves, bump
-          # LAYERDM_SHA to invalidate.
           key: layerdm-${{ runner.os }}-${{ env.LAYERDM_SHA }}
 
       - name: Clone SlicerLayerDM (pinned)
@@ -345,43 +250,22 @@ jobs:
           steps.cache-layerdm.outputs.cache-hit != 'true'
         run: cmake --build "${LAYERDM_BUILD}" --config Release -j "$(nproc)"
 
-      - name: Locate LayerDM inner build dir
-        id: layerdm-dir
-        if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
-        run: |
-          set -euo pipefail
-          # Slicer's extension layout produces an inner build directory
-          # (extension's project() name + "-build").  Resolve it dynamically
-          # so the path stays correct if the project name ever changes.
-          inner_dir="${LAYERDM_BUILD}/LayerDisplayableManager-build"
-          if [ ! -d "${inner_dir}" ]; then
-            # Fallback: locate any *-build dir inside LAYERDM_BUILD that
-            # contains a CMakeCache.txt and a Slicer-shaped layout.
-            inner_dir="$(find "${LAYERDM_BUILD}" -maxdepth 2 -type d -name '*-build' \
-                          ! -path "${LAYERDM_BUILD}" \
-                          -exec test -f '{}/CMakeCache.txt' \; -print | head -n 1)"
-          fi
-          if [ -z "${inner_dir}" ] || [ ! -d "${inner_dir}" ]; then
-            echo "::error::Could not locate SlicerLayerDM inner build dir under ${LAYERDM_BUILD}"
-            find "${LAYERDM_BUILD}" -maxdepth 3 -type d || true
-            exit 1
-          fi
-          echo "Resolved LayerDM inner build dir: ${inner_dir}"
-          echo "dir=${inner_dir}" >> "${GITHUB_OUTPUT}"
-
-      - name: Configure Slicer-Liver (LayerDM ON)
+      - name: Configure
         if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
         run: |
           set -euo pipefail
           mkdir -p build
+          # Upstream SlicerLayerDM is a flat-layout extension: project()
+          # produces LayerDisplayableManagerConfig.cmake at the build root
+          # (not in a *-build subdirectory).  SlicerLayerDisplayableManager_DIR
+          # is therefore LAYERDM_BUILD itself.
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING:BOOL=ON \
             -DSlicer_DIR="${Slicer_DIR}" \
-            -DSlicer_Liver_USE_SlicerLayerDM:BOOL=ON \
-            -DSlicerLayerDisplayableManager_DIR="${{ steps.layerdm-dir.outputs.dir }}"
+            -DSlicerLayerDisplayableManager_DIR="${LAYERDM_BUILD}"
 
-      - name: Build Slicer-Liver
+      - name: Build
         if: github.event_name != 'pull_request' || steps.changes.outputs.docs-only != 'true'
         run: cmake --build build --config Release -j "$(nproc)"
 
@@ -390,8 +274,24 @@ jobs:
         run: |
           set -euo pipefail
           cd build
-          # Same exclusion rationale as the canonical build-test job —
-          # `py_LiverSegmentsTest` hard-imports VMTK which isn't bundled
-          # in the slicer-build-ubuntu2404 image.
+          # `py_LiverSegmentsTest` is excluded because it hard-imports
+          # the `ExtractCenterline` module from SlicerExtension-VMTK,
+          # which is intentionally not bundled in the
+          # `slicer-build-ubuntu2404` image (see ALive-Docker PR #4 +
+          # the analysis on Slicer-Liver PR #294's discussion).
+          #
+          # The proper fix lives on the Slicer-Liver side: the test
+          # should detect VMTK absence via `slicer.modules` and skip
+          # itself rather than fail.  Tracked as a follow-up; until
+          # then, the CTest-level exclude keeps CI honestly green for
+          # what it actually covers.
+          # `-V` (verbose) dumps each test's stdout/stderr in the CI log
+          # regardless of pass/fail.  Replaces the prior `--output-on-failure`
+          # so that aggregated pytest entries (e.g. `pytest_scaffold` from
+          # ADR-0008's scaffold) reveal the per-pytest-test breakdown instead
+          # of just the CTest pass/fail line.  Trade-off: more noisy log
+          # (the native C++ tests also dump on success), accepted because
+          # CI logs are append-mostly archives and one-glance pytest
+          # visibility outweighs the line count.
           ctest -V --no-tests=error \
                 --exclude-regex '^py_LiverSegmentsTest$'
