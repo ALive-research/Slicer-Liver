@@ -563,13 +563,22 @@ def _safe_get_mtime(node: Any) -> int:
 # --------------------------------------------------------------------------- #
 
 
+_REGISTERED = False
+
+
 def registerPipelineCreator() -> None:
     """Register the ``LiverBezierSurfacePipeline`` creator with LayerDM.
 
-    Idempotent — adding the same creator twice is a no-op in the
-    upstream ``vtkMRMLLayerDMPipelineFactory::AddPipelineCreator``
-    via the ``ContainsPipelineCreator`` guard.  Safe to call from
-    ``qSlicerLiverResectionsModule::setup()`` on every module load.
+    Idempotent via the module-level ``_REGISTERED`` flag.  The
+    upstream ``vtkMRMLLayerDMPipelineFactory::ContainsPipelineCreator``
+    compares creators by smart-pointer identity, and every call to
+    this function constructs a *fresh*
+    ``vtkMRMLLayerDMPipelineScriptedCreator``; without a guard, a
+    second ``setup()`` invocation (module reload, Slicer restart in
+    embedded contexts) would append a duplicate creator.  The flag
+    keeps the public contract — "safe to call from
+    ``qSlicerLiverResectionsModule::setup()`` on every module load" —
+    intact at the Python layer.
 
     The creator returns a fresh ``LiverBezierSurfacePipeline``
     instance only when the (viewNode, node) pair matches
@@ -577,6 +586,10 @@ def registerPipelineCreator() -> None:
     combinations short-circuit to ``None`` so subsequent registered
     creators get a chance to handle them.
     """
+    global _REGISTERED
+    if _REGISTERED:
+        return
+
     # Imports deferred so this module remains importable in plain
     # Python (tests use ``pytest.importorskip("LayerDMLib")`` already;
     # the additional ``slicer``-prefixed symbols below are only
@@ -589,6 +602,16 @@ def registerPipelineCreator() -> None:
     )
 
     def tryCreate(viewNode, node):
+        # 3D-only gating per the Path-B scoping in T2 (slice-view
+        # rendering of vtkMRMLBezierSurfaceNode is deferred — the
+        # Bezier surface intersected with a slice plane is a contour,
+        # not a surface; that representation lives on its own task
+        # (T2.6-DM-2D follow-up, paired with T2.3 slice-aware widget
+        # work).  ``vtkMRMLLayerDisplayableManager::RegisterInDefaultViews``
+        # registers in both 3D and slice factories, so this creator is
+        # invoked for slice-view nodes too — we short-circuit to None
+        # there so other registered creators (or no creator at all)
+        # handle the slice path.
         if not isinstance(viewNode, vtkMRMLViewNode):
             return None
         if not isinstance(node, vtkMRMLBezierSurfaceDisplayNode):
@@ -598,3 +621,4 @@ def registerPipelineCreator() -> None:
     creator = vtkMRMLLayerDMPipelineScriptedCreator()
     creator.SetPythonCallback(tryCreate)
     vtkMRMLLayerDMPipelineFactory.GetInstance().AddPipelineCreator(creator)
+    _REGISTERED = True

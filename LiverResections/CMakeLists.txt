@@ -14,8 +14,12 @@ add_subdirectory(VTKWidgets)
 # T2.6-LayerDM — Python sub-package installed alongside the loadable
 # module.  Hosts the LayerDM Pipeline class + the
 # ``registerPipelineCreator`` entry point invoked by ``setup()``
-# (ADR-0013 §5 call 3).
-add_subdirectory(LiverResectionsLib)
+# (ADR-0013 §5 call 3).  Gated on ``Slicer_USE_PYTHONQT`` to match
+# the Slicer-core ``${MODULE_NAME}Lib`` convention — a Slicer built
+# without PythonQt cannot host the scripted Pipeline anyway.
+if(Slicer_USE_PYTHONQT)
+  add_subdirectory(LiverResectionsLib)
+endif()
 
 #-----------------------------------------------------------------------------
 # T2.6-LayerDM — consume the upstream LayerDisplayableManager extension
