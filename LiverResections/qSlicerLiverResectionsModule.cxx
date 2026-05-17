@@ -2,7 +2,7 @@
 
  Distributed under the OSI-approved BSD 3-Clause License.
 
-  Copyright (c) Oslo University Hospital. All rights reserved.
+  Copyright (c) 2017-2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -49,9 +49,13 @@
 #include "qSlicerLiverResectionsWriter.h"
 #include "qSlicerLiverResectionsReader.h"
 
-#include <qSlicerModuleManager.h>
+// Slicer includes
+#include <qSlicerApplication.h>
 #include <qSlicerCoreApplication.h>
+#include <qSlicerCoreIOManager.h>
 #include <qSlicerIOManager.h>
+#include <qSlicerModuleManager.h>
+#include <qSlicerNodeWriter.h>
 
 //MRMLDisplayableManager includes
 #include <vtkMRMLSliceViewDisplayableManagerFactory.h>
@@ -150,11 +154,57 @@ void qSlicerLiverResectionsModule::setup()
     }
   // Register displayable managers (same displayable manager handles both slice and 3D views)
   vtkMRMLSliceViewDisplayableManagerFactory::GetInstance()->RegisterDisplayableManager("vtkMRMLLiverResectionsDisplayableManager2D");
+
+  // TODO(T2.6-DM): Register the LayerDM-aware widget displayable
+  // manager for ``vtkMRMLBezierSurfaceNode`` once
+  // ``vtkMRMLLiverBezierSurfaceDisplayableManager3D`` lands (ADR-0014
+  // §3, ADR-0013 §5).  The DM is the C++ glue that observes the
+  // scene for Bezier-surface nodes, spawns one
+  // ``vtkLiverBezierWidget`` instance per (data node, view) pair,
+  // and wires it to the view's interactor.  Until then the legacy
+  // ``vtkSlicerMarkupsWidget`` path still drives Bezier interaction
+  // via the in-tree ``vtkMRMLLiverResectionsDisplayableManager2D``
+  // registered above.
+  //
+  // TODO(T2.6-LayerDM-Pipeline): Register the LayerDM Pipeline
+  // creator for ``vtkMRMLBezierSurfaceDisplayNode`` once
+  // ``LiverBezierSurfacePipeline.py`` has Python install rules + a
+  // ``LayerDMLib`` runtime path (ADR-0013 §4, §5).  The registration
+  // belongs in this ``setup()`` per ADR-0013's "user-facing module
+  // hosts the registration" pattern — either via a
+  // ``app->pythonManager()->executeString("import LiverResectionsLib")``
+  // call (Markups precedent at ``qSlicerMarkupsModule::setup()``)
+  // that delegates to a ``LiverResectionsLib`` Python module's
+  // ``registerPipelineCreator()``, or directly via
+  // ``vtkMRMLLayerDMPipelineScriptedCreator`` if the C++ headers
+  // become reachable from this build.  Tracked as task T2.6-LayerDM
+  // alongside the Python install glue and the soft-import → hard-
+  // require swap in ``LiverBezierSurfacePipeline.py``.
+
   // Register IO
   qSlicerIOManager* ioManager = qSlicerApplication::application()->ioManager();
   qSlicerLiverResectionsReader *markupsReader = new qSlicerLiverResectionsReader(logic, this);
   ioManager->registerIO(markupsReader);
   ioManager->registerIO(new qSlicerLiverResectionsWriter(this));
+
+  // T2 LiverResources storage I/O (ADR-0014 §5).  The new
+  // ``vtkMRMLBezierSurfaceStorageNode`` reads + writes ``.lrp.json``
+  // (and reads legacy ``.lrp.fcsv`` for migration).  A dedicated
+  // ``qSlicerNodeWriter`` registers the write path with the Save Data
+  // dialog and binds it to the new data node class.  The legacy
+  // ``qSlicerLiverResectionsReader`` (registered above) grew a
+  // ``.lrp.json`` dispatch branch so the Add Data dialog opens new
+  // plans into a ``vtkMRMLBezierSurfaceNode``.
+  qSlicerCoreIOManager* coreIOManager = qSlicerCoreApplication::application()->coreIOManager();
+  if (coreIOManager)
+    {
+    coreIOManager->registerIO(new qSlicerNodeWriter(
+      "BezierSurface",
+      QString("BezierSurfaceFile"),
+      QStringList() << "vtkMRMLBezierSurfaceNode",
+      /*supportSceneSave=*/ true,
+      this));
+    }
 }
 
 //-----------------------------------------------------------------------------
