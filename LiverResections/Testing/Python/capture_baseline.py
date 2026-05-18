@@ -44,6 +44,7 @@ import sys
 
 import qt  # type: ignore[import-not-found]
 import slicer  # type: ignore[import-not-found]
+import vtk  # type: ignore[import-not-found]
 
 
 def _parse_argv() -> argparse.Namespace:
@@ -153,10 +154,33 @@ def _save_bundle(
     cam_path = staging_dir / f"{test_name}.camera.json"
     vp_path = staging_dir / f"{test_name}.viewport.json"
 
-    # PNG — screenshot of the 3D view, off the same render window as
-    # the replay test will hit.
-    image = qt.QPixmap.grabWidget(view_widget.threeDView())
-    image.save(str(png_path), "PNG")
+    # PNG — snapshot the GL back-buffer directly, identical to the
+    # source ``replay_test.py::_render_scenario`` will compare against.
+    #
+    # The previous implementation used ``qt.QPixmap.grabWidget()``,
+    # which reads the Qt-composited surface AFTER device-pixel-ratio
+    # scaling, freetype glyph rasterisation, and Qt's own surface
+    # composition.  Replay uses ``vtkWindowToImageFilter`` straight
+    # off the OpenGL render window, so the two pipelines produced
+    # different pixels for the same scene — every captured baseline
+    # would have been a guaranteed mismatch against any future replay
+    # (the textbook "baseline != what replay would produce" bug).
+    # Sharing the pixel source between capture and replay means any
+    # future delta surfaces as a real regression, not a tooling
+    # artefact.
+    three_d_view = view_widget.threeDView()
+    three_d_view.forceRender()
+    w2i = vtk.vtkWindowToImageFilter()
+    w2i.SetInput(three_d_view.renderWindow())
+    w2i.SetInputBufferTypeToRGB()
+    w2i.ReadFrontBufferOff()
+    # Already-rendered back buffer; do not force a re-render here.
+    w2i.SetShouldRerender(0)
+    w2i.Update()
+    writer = vtk.vtkPNGWriter()
+    writer.SetFileName(str(png_path))
+    writer.SetInputData(w2i.GetOutput())
+    writer.Write()
 
     # MRML — full scene save.  Saves alongside any referenced data
     # files in the same directory; for the synthetic-parenchyma
