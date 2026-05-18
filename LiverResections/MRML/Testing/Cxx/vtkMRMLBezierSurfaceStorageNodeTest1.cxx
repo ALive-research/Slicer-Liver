@@ -523,6 +523,129 @@ int testJsonReadV2InvalidShape()
   return EXIT_SUCCESS;
 }
 
+int testJsonReadV2OutOfRange()
+{
+  // ADR-0018 §1 — Reader rejects out-of-range square shapes (the
+  // sibling of testJsonReadV2InvalidShape, which pins the non-square
+  // branch).  Crafts a v2 JSON with rows=cols=5 (square but outside
+  // ``{(3, 3), (4, 4)}``) plus a 75-double controlGrid and confirms
+  // the read fails with a vtkErrorMacro before the controlGrid is
+  // even parsed.
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 2,\n";
+    ofs << "  \"state\": \"Init\",\n";
+    ofs << "  \"initMode\": \"SlicingPlane\",\n";
+    ofs << "  \"rows\": 5,\n";
+    ofs << "  \"cols\": 5,\n";
+    ofs << "  \"controlGrid\": [";
+    for (int i = 0; i < 75; ++i)
+    {
+      if (i > 0)
+      {
+        ofs << ", ";
+      }
+      ofs << static_cast<double>(i);
+    }
+    ofs << "]\n";
+    ofs << "}\n";
+  }
+
+  vtkNew<vtkMRMLBezierSurfaceNode> sink;
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
+  storage->SetFileName(path.c_str());
+
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+int testJsonReadV2ControlGridLengthMismatch()
+{
+  // ADR-0018 §1 — Reader rejects a v2 file whose ``controlGrid``
+  // length does not match ``3 * rows * cols``.  Two sub-cases:
+  //   a) shape 4×4 (expects 48), grid 27 doubles → reject
+  //   b) shape 3×3 (expects 27), grid 48 doubles → reject
+  // Both hit the controlGrid-array-length validation branch in
+  // vtkMRMLBezierSurfaceStorageNode::ReadJson (the one that calls
+  // ``vtkErrorMacro`` when the array length disagrees with the
+  // resolved ``Rows * Cols * 3``).
+  {
+    const std::string path = makeTempPath("lrp.json");
+    {
+      std::ofstream ofs(path);
+      ofs << "{\n";
+      ofs << "  \"schemaVersion\": 2,\n";
+      ofs << "  \"state\": \"Init\",\n";
+      ofs << "  \"initMode\": \"SlicingPlane\",\n";
+      ofs << "  \"rows\": 4,\n";
+      ofs << "  \"cols\": 4,\n";
+      ofs << "  \"controlGrid\": [";
+      for (int i = 0; i < 27; ++i)
+      {
+        if (i > 0)
+        {
+          ofs << ", ";
+        }
+        ofs << static_cast<double>(i);
+      }
+      ofs << "]\n";
+      ofs << "}\n";
+    }
+
+    vtkNew<vtkMRMLBezierSurfaceNode> sink;
+    vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
+    storage->SetFileName(path.c_str());
+
+    TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+    CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+    TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+    vtksys::SystemTools::RemoveFile(path);
+  }
+
+  // Symmetric case: rows=3, cols=3 (expects 27), grid 48 doubles.
+  {
+    const std::string path = makeTempPath("lrp.json");
+    {
+      std::ofstream ofs(path);
+      ofs << "{\n";
+      ofs << "  \"schemaVersion\": 2,\n";
+      ofs << "  \"state\": \"Init\",\n";
+      ofs << "  \"initMode\": \"SlicingPlane\",\n";
+      ofs << "  \"rows\": 3,\n";
+      ofs << "  \"cols\": 3,\n";
+      ofs << "  \"controlGrid\": [";
+      for (int i = 0; i < 48; ++i)
+      {
+        if (i > 0)
+        {
+          ofs << ", ";
+        }
+        ofs << static_cast<double>(i);
+      }
+      ofs << "]\n";
+      ofs << "}\n";
+    }
+
+    vtkNew<vtkMRMLBezierSurfaceNode> sink;
+    vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
+    storage->SetFileName(path.c_str());
+
+    TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+    CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+    TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+    vtksys::SystemTools::RemoveFile(path);
+  }
+  return EXIT_SUCCESS;
+}
+
 int testLegacyFcsvFixture()
 {
   // Fixture-based variant of testLegacyFcsvRead: walks the canned
@@ -589,6 +712,8 @@ int vtkMRMLBezierSurfaceStorageNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testJsonRoundTrip3x3());
   CHECK_EXIT_SUCCESS(testJsonReadV1Implicit4x4());
   CHECK_EXIT_SUCCESS(testJsonReadV2InvalidShape());
+  CHECK_EXIT_SUCCESS(testJsonReadV2OutOfRange());
+  CHECK_EXIT_SUCCESS(testJsonReadV2ControlGridLengthMismatch());
 
   std::cout << "vtkMRMLBezierSurfaceStorageNodeTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;
