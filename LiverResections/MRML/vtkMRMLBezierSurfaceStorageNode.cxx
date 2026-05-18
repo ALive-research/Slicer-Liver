@@ -38,19 +38,22 @@
 ==============================================================================*/
 
 //==============================================================================
-// .lrp.json — JSON schema v1
+// .lrp.json — JSON schema v2 (ADR-0018 §1)
 //==============================================================================
 //
 // One ``.lrp.json`` document per liver resection plan (surgeon-to-
-// surgeon plan sharing per ADR-0014 §5).  The current ``schemaVersion``
-// is ``1`` — bump in lock-step with any documented extension; the
-// reader emits a vtkErrorMacro on unknown versions.
+// surgeon plan sharing per ADR-0014 §5).  Current writer
+// ``schemaVersion`` is ``2`` — bump in lock-step with any documented
+// extension; the reader accepts ``MinReadableSchemaVersion``
+// (currently ``1``) through ``SchemaVersion`` (currently ``2``).
 //
 //   {
-//     "schemaVersion": 1,
+//     "schemaVersion": 2,
 //     "state": "Init" | "Planning" | "Confirmed",
 //     "initMode": "SlicingPlane" | "DistanceSpheroid",
-//     "controlGrid": [48 doubles in row-major (i, j, k) order],
+//     "rows": int,             // v2 only — see migration below
+//     "cols": int,             // v2 only — see migration below
+//     "controlGrid": [3 * rows * cols doubles in row-major (i,j,k) order],
 //     "slicingPlane": {
 //       "origin": [3 doubles, RAS],
 //       "normal": [3 doubles, RAS],
@@ -64,6 +67,17 @@
 //     },
 //     "metadata": {}
 //   }
+//
+// v1 → v2 migration:
+//   - v1 files have no ``rows`` / ``cols`` and a 48-double
+//     ``controlGrid``.  The reader infers ``rows = cols = 4`` and
+//     validates the array length.
+//   - v2 files carry explicit ``rows`` and ``cols``.  The reader
+//     enforces ``(rows, cols) ∈ {(3, 3), (4, 4)}`` per ADR-0018 §1
+//     and validates the ``controlGrid`` length is
+//     ``3 * rows * cols``.
+//   - The writer always emits v2.  A v1 file round-tripped through
+//     load + save becomes v2 on disk.
 //
 // The ``initPointsFlat`` fields use a flat layout because the
 // in-tree ``vtkMRMLJsonWriter`` lacks a key-less nested-array entry
@@ -345,10 +359,17 @@ int vtkMRMLBezierSurfaceStorageNode::WriteJson(const std::string& filePath, vtkM
   writer->WriteStringProperty("state", vtkMRMLBezierSurfaceNode::GetStateAsString(surfaceNode->GetState()));
   writer->WriteStringProperty("initMode", vtkMRMLBezierSurfaceNode::GetInitModeAsString(surfaceNode->GetInitMode()));
 
-  // controlGrid — 48 doubles row-major.  ``const_cast`` is necessary
-  // because the writer signature takes ``double*`` (it does not
-  // mutate; the rapidjson backend treats the buffer as input).
-  writer->WriteVectorProperty("controlGrid", const_cast<double*>(surfaceNode->GetControlGrid()), vtkMRMLBezierSurfaceNode::ControlGridSize);
+  // rows + cols — schema v2 explicit shape (ADR-0018 §1).  v1
+  // implicit-4×4 files load via the migration branch in ReadJson;
+  // the writer always emits v2.
+  writer->WriteIntProperty("rows", static_cast<int>(surfaceNode->GetRows()));
+  writer->WriteIntProperty("cols", static_cast<int>(surfaceNode->GetCols()));
+
+  // controlGrid — 3 * rows * cols doubles row-major.  ``const_cast``
+  // is necessary because the writer signature takes ``double*`` (it
+  // does not mutate; the rapidjson backend treats the buffer as
+  // input).
+  writer->WriteVectorProperty("controlGrid", const_cast<double*>(surfaceNode->GetControlGrid()), static_cast<int>(surfaceNode->GetControlGridLength()));
 
   // slicingPlane sub-object.
   writer->WriteObjectPropertyStart("slicingPlane");
@@ -497,11 +518,37 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
     return 0;
   }
   const int schemaVersion = root->GetIntProperty("schemaVersion");
-  if (schemaVersion != SchemaVersion)
+  if (schemaVersion < MinReadableSchemaVersion || schemaVersion > SchemaVersion)
   {
-    vtkErrorMacro("ReadJson: unsupported schemaVersion " << schemaVersion << " in '" << filePath << "' (this build understands schemaVersion " << SchemaVersion << " only)");
+    vtkErrorMacro("ReadJson: unsupported schemaVersion " << schemaVersion << " in '" << filePath << "' (this build understands schemaVersion " << MinReadableSchemaVersion
+                                                         << " through " << SchemaVersion << ")");
     return 0;
   }
+
+  // Control-polygon shape (ADR-0018 §1).  v2 files carry explicit
+  // ``rows`` + ``cols``; v1 files have neither and the shape is
+  // implicit-4×4.  Resolve both schemas to a (rows, cols) pair, then
+  // apply via SetSize after validating square + admitted-size.
+  unsigned int rows = vtkMRMLBezierSurfaceNode::DefaultGridSize;
+  unsigned int cols = vtkMRMLBezierSurfaceNode::DefaultGridSize;
+  if (schemaVersion >= 2)
+  {
+    if (!root->HasMember("rows") || !root->HasMember("cols"))
+    {
+      vtkErrorMacro("ReadJson: schemaVersion " << schemaVersion << " requires 'rows' and 'cols' fields in '" << filePath << "'");
+      return 0;
+    }
+    rows = static_cast<unsigned int>(root->GetIntProperty("rows"));
+    cols = static_cast<unsigned int>(root->GetIntProperty("cols"));
+  }
+  if (rows != cols || static_cast<int>(rows) < vtkMRMLBezierSurfaceNode::MinGridSize || static_cast<int>(rows) > vtkMRMLBezierSurfaceNode::MaxGridSize)
+  {
+    vtkErrorMacro("ReadJson: invalid (rows=" << rows << ", cols=" << cols << ") in '" << filePath << "' — ADR-0018 §1 admits {(3, 3), (4, 4)} only");
+    return 0;
+  }
+  // SetSize zero-fills the control buffer to match the new shape;
+  // the controlGrid payload below populates it.
+  surfaceNode->SetSize(rows);
 
   // State is read LAST — before that, the init-mode subordinate
   // data setters (slicingPlane.*, distanceSpheroid.*) are guarded
@@ -545,13 +592,16 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
     surfaceNode->SetInitMode(code);
   }
 
-  // controlGrid — 48 doubles row-major.
+  // controlGrid — 3 * rows * cols doubles row-major.  Stack buffer
+  // is sized to the worst admitted case (``MaxControlGridSize``);
+  // the live length is bound to ``surfaceNode->GetControlGridLength()``.
   if (root->HasMember("controlGrid"))
   {
-    double grid[vtkMRMLBezierSurfaceNode::ControlGridSize];
-    if (!root->GetVectorProperty("controlGrid", grid, vtkMRMLBezierSurfaceNode::ControlGridSize))
+    const unsigned int expected = surfaceNode->GetControlGridLength();
+    double grid[vtkMRMLBezierSurfaceNode::MaxControlGridSize];
+    if (!root->GetVectorProperty("controlGrid", grid, static_cast<int>(expected)))
     {
-      vtkErrorMacro("ReadJson: 'controlGrid' must be an array of " << vtkMRMLBezierSurfaceNode::ControlGridSize << " doubles in '" << filePath << "'");
+      vtkErrorMacro("ReadJson: 'controlGrid' must be an array of " << expected << " doubles (3 * rows * cols) in '" << filePath << "'");
       return 0;
     }
     surfaceNode->SetControlGrid(grid);
@@ -703,9 +753,12 @@ int vtkMRMLBezierSurfaceStorageNode::ReadLegacyFcsv(const std::string& filePath,
     }
   }
 
-  // ADR-0014 §3 + ADR-0014 §1: a Bezier control grid is 16 points
-  // (degree-3 patch).  Reject anything else as malformed.
-  constexpr int expectedPointCount = vtkMRMLBezierSurfaceNode::GridSize * vtkMRMLBezierSurfaceNode::GridSize;
+  // Legacy ``.lrp.fcsv`` always carries a 4×4 grid (16 control
+  // points; the pre-ADR-0018 hard-code).  Force the surface node to
+  // the 4×4 shape before populating the buffer so the migration is
+  // unambiguous regardless of the node's prior state.
+  surfaceNode->SetSize(vtkMRMLBezierSurfaceNode::DefaultGridSize);
+  constexpr int expectedPointCount = vtkMRMLBezierSurfaceNode::DefaultGridSize * vtkMRMLBezierSurfaceNode::DefaultGridSize;
   if (static_cast<int>(points.size()) != expectedPointCount)
   {
     vtkErrorMacro("ReadLegacyFcsv: expected " << expectedPointCount << " control points in '" << filePath << "' but found " << points.size());
@@ -715,7 +768,7 @@ int vtkMRMLBezierSurfaceStorageNode::ReadLegacyFcsv(const std::string& filePath,
   // Flatten to the row-major 48-double buffer expected by the
   // surface node's SetControlGrid.  See the file-header comment for
   // the field-mapping rationale.
-  std::array<double, vtkMRMLBezierSurfaceNode::ControlGridSize> grid;
+  std::array<double, vtkMRMLBezierSurfaceNode::MaxControlGridSize> grid;
   for (int i = 0; i < expectedPointCount; ++i)
   {
     grid[i * 3 + 0] = points[i][0];

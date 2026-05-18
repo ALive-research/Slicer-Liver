@@ -50,7 +50,6 @@
 #include <vtkSetGet.h>
 
 // STD includes
-#include <array>
 #include <vector>
 
 /**
@@ -69,15 +68,18 @@
  * (see ADR-0013 §8).
  *
  * The shape of the data is fixed by
- * [ADR-0014 §1](../../Docs/adr/0014-livermarkups-dissolution.md):
+ * [ADR-0014 §1](../../Docs/adr/0014-livermarkups-dissolution.md)
+ * and [ADR-0018 §1](../../Docs/adr/0018-nurbs-extension-surface.md):
  *
- * - A **4×4 Bezier control grid** (48 doubles, row-major) — the surface's
- *   single editable geometry in the Planning state.  Sixteen control
- *   points (per ADR-0014 §3: corners 4 + edges 8 + interior 4) define
- *   a single degree-3 Bernstein patch.  Matches the legacy
- *   ``vtkMRMLMarkupsBezierSurfaceNode::RequiredNumberOfControlPoints
- *   == 16`` and the corrected degree-3 characterisation landed on
- *   ``preview`` by PR #342.
+ * - A **Bezier control grid of shape (Rows × Cols)** — the surface's
+ *   single editable geometry in the Planning state.  Per ADR-0018 §1
+ *   the valid Bezier sizes for v2.0.0 are **square only** and
+ *   restricted to ``(Rows, Cols) ∈ {(3, 3), (4, 4)}`` (9 or 16
+ *   control points).  Defaults to 4×4 — the pre-ADR-0018 hard-coded
+ *   case.  Control points group by ring role per ADR-0014 §3 /
+ *   ADR-0018 §1: 4 corners + ``2*(M-2)+2*(N-2)`` edges +
+ *   ``(M-2)*(N-2)`` interior.  Storage is row-major in (u, v) order
+ *   with 3 doubles per control point.
  * - A **state enum** (``Init`` / ``Planning``) and an
  *   **InitializationMode** enum (``SlicingPlane`` / ``DistanceSpheroid``),
  *   tracked explicitly per ADR-0013 §4 so the implicit-state-via-
@@ -180,16 +182,48 @@ public:
     InitializationMode_Last
   };
 
-  /// Bezier control-grid side length M (degree-3 Bernstein basis).
-  /// Sixteen control points group by ring role per ADR-0014 §3:
-  /// 4 corners + 8 edges + 4 interior.  Matches the legacy
-  /// ``vtkMRMLMarkupsBezierSurfaceNode::RequiredNumberOfControlPoints
-  /// == 16`` and the corrected degree-3 characterisation landed on
-  /// ``preview`` by PR #342.
-  static constexpr int GridSize = 4;
+  /// Default Bezier control-grid side length (degree-3 Bernstein
+  /// basis — the v1 hard-coded case).  Retained as a literal default
+  /// for callers / tests that want the historical 4×4 grid without
+  /// instantiating a node first.  Per ADR-0018 §1 the runtime shape
+  /// is now carried by the ``Rows`` / ``Cols`` IVars; valid sizes for
+  /// v2.0.0 are restricted to the square shapes
+  /// ``(Rows, Cols) ∈ {(3, 3), (4, 4)}``.
+  ///
+  /// Typed ``int`` (rather than ``unsigned int``) so the existing
+  /// call-site idiom ``for (int i = 0; i < ControlGridSize; ++i)``
+  /// stays sign-clean.  The setter argument types use ``unsigned
+  /// int`` to mirror VTK conventions for shape-like parameters.
+  static constexpr int DefaultGridSize = 4;
 
-  /// Total number of doubles in the control grid (M * M * 3 = 48).
-  static constexpr int ControlGridSize = GridSize * GridSize * 3;
+  /// Minimum / maximum Bezier control-grid side length admitted in
+  /// v2.0.0 per ADR-0018 §1.  Both ends are inclusive; the runtime
+  /// validation in ``SetRows`` / ``SetCols`` / ``SetSize`` rejects
+  /// values outside this range.  Larger sizes are NURBS-territory
+  /// and arrive with the v2.1 NURBS sibling (ADR-0018 §3).
+  static constexpr int MinGridSize = 3;
+  static constexpr int MaxGridSize = 4;
+
+  /// Backwards-compatibility alias for the v1 4×4 case.  Existing
+  /// callers reading ``GridSize`` as a compile-time literal continue
+  /// to see ``4`` (the default).  Per-node runtime shape is now
+  /// queried via ``GetRows()`` / ``GetCols()``.
+  static constexpr int GridSize = DefaultGridSize;
+
+  /// Maximum number of doubles in the control grid across all
+  /// admitted shapes (``MaxGridSize * MaxGridSize * 3 == 48`` —
+  /// i.e. the 4×4 case).  Reader code that allocates a stack buffer
+  /// for the largest admitted payload uses this constant.  The
+  /// **per-node** byte count is ``3 * Rows * Cols`` and is computed
+  /// from the IVars via ``GetControlGridLength()`` below.
+  static constexpr int MaxControlGridSize = MaxGridSize * MaxGridSize * 3;
+
+  /// Backwards-compatibility alias for the v1 48-double layout.
+  /// Existing tests + storage code that reference ``ControlGridSize``
+  /// as a compile-time literal continue to see the 4×4 byte count.
+  /// Per ADR-0018 §1 the live length is ``3 * Rows * Cols`` and is
+  /// available at runtime via ``GetControlGridLength()``.
+  static constexpr int ControlGridSize = DefaultGridSize * DefaultGridSize * 3;
 
   //--------------------------------------------------------------------------
   // MRMLNode methods
@@ -271,25 +305,67 @@ public:
   static int GetInitModeFromString(const char* name);
 
   //--------------------------------------------------------------------------
-  // Bezier control grid (4×4×3 row-major, 48 doubles, degree-3)
+  // Bezier control grid — (Rows × Cols × 3 row-major)
+  //
+  // Per ADR-0018 §1 the control-polygon shape is square and chosen
+  // from ``(Rows, Cols) ∈ {(3, 3), (4, 4)}``; defaults to 4×4 (the
+  // pre-ADR-0018 hard-code).  Storage backed by a ``std::vector``
+  // sized ``3 * Rows * Cols`` doubles — 27 for 3×3, 48 for 4×4.
   //--------------------------------------------------------------------------
 
-  /// Set the 4×4 Bezier control grid from a flat (48-double) array
-  /// laid out row-major in (u, v) order with 3 doubles per control
-  /// point.  Sixteen control points (4 corners + 8 edges + 4 interior
-  /// per ADR-0014 §3) define a single degree-3 Bernstein patch.
+  /// Number of control-grid rows (M).  Default ``4``.  Per ADR-0018
+  /// §1, square only — ``SetRows`` rejects ``Rows != Cols`` and
+  /// values outside ``[MinGridSize, MaxGridSize]`` with a
+  /// ``vtkErrorMacro`` and no ``Modified()`` emission.  Use
+  /// ``SetSize(unsigned int)`` to change both axes simultaneously
+  /// (the typical call path).
+  vtkGetMacro(Rows, unsigned int);
+  void SetRows(unsigned int rows);
+
+  /// Number of control-grid columns (N).  Default ``4``.  Same
+  /// constraints as ``SetRows``.
+  vtkGetMacro(Cols, unsigned int);
+  void SetCols(unsigned int cols);
+
+  /// Square-grid convenience setter — set both ``Rows`` and ``Cols``
+  /// to ``n`` atomically.  Validated against
+  /// ``[MinGridSize, MaxGridSize]`` per ADR-0018 §1.  Resizes the
+  /// internal control-point buffer to ``3 * n * n`` doubles and
+  /// resets it to zero (clinical workflow: a size change discards
+  /// the in-flight grid and starts fresh; documented in
+  /// ADR-0018 §1).  No-op when ``n`` already matches ``Rows`` and
+  /// ``Cols`` simultaneously.
+  void SetSize(unsigned int n);
+
+  /// Per-node control-grid byte count, i.e. ``3 * Rows * Cols``.
+  /// Equals 27 for 3×3 and 48 for 4×4.  Storage code that walks the
+  /// flat buffer uses this to bound the loop; the compile-time
+  /// ``ControlGridSize`` is the v1 default and is preserved as a
+  /// backwards-compatibility alias only.
+  unsigned int GetControlGridLength() const { return 3u * this->Rows * this->Cols; }
+
+  /// Set the Bezier control grid from a flat (``3 * Rows * Cols``-
+  /// double) array laid out row-major in (u, v) order with 3 doubles
+  /// per control point.  Control points group by ring role per
+  /// ADR-0018 §1 / ADR-0014 §3: 4 corners + ``2*(M-2)+2*(N-2)``
+  /// edges + ``(M-2)*(N-2)`` interior.
   ///
-  /// The pointer must reference at least ``ControlGridSize`` doubles.
-  /// Returns true on success; false on null pointer.
+  /// The pointer must reference at least ``GetControlGridLength()``
+  /// doubles.  Returns true on success; false on null pointer.
   bool SetControlGrid(const double* values);
 
-  /// Read the 4×4 Bezier control grid as a flat (48-double) row-major
-  /// array.  Valid for the lifetime of the node.
+  /// Read the Bezier control grid as a flat row-major array.  Length
+  /// is ``GetControlGridLength()`` (3 * Rows * Cols).  Valid for the
+  /// lifetime of the node, but a subsequent ``SetSize`` /
+  /// ``SetRows`` / ``SetCols`` call resizes the underlying buffer
+  /// and invalidates previously-returned pointers.
   const double* GetControlGrid() const { return this->ControlGrid.data(); }
 
-  /// Convenience overload — return a const reference to the std::array
-  /// backing the grid (for C++ callers that prefer typed access).
-  const std::array<double, ControlGridSize>& GetControlGridArray() const { return this->ControlGrid; }
+  /// Convenience overload — return a const reference to the
+  /// ``std::vector`` backing the grid (for C++ callers that prefer
+  /// typed iteration over a raw pointer).  Same invalidation
+  /// semantics as ``GetControlGrid()``.
+  const std::vector<double>& GetControlGridVector() const { return this->ControlGrid; }
 
   //--------------------------------------------------------------------------
   // Init-mode subordinate data — SlicingPlane (read-only after Init→Planning)
@@ -385,8 +461,17 @@ private:
   int State;
   int InitMode;
 
-  /// 4×4×3 control grid laid out row-major in (u, v).
-  std::array<double, ControlGridSize> ControlGrid;
+  /// Control-polygon shape (Rows × Cols).  Default 4×4 (the
+  /// pre-ADR-0018 hard-coded case).  Per ADR-0018 §1, restricted to
+  /// the square shapes ``{(3, 3), (4, 4)}`` for v2.0.0.
+  unsigned int Rows;
+  unsigned int Cols;
+
+  /// (Rows × Cols × 3) control grid laid out row-major in (u, v).
+  /// Sized at construction to ``3 * Rows * Cols`` doubles and
+  /// resized in lock-step with ``SetRows`` / ``SetCols`` /
+  /// ``SetSize``.
+  std::vector<double> ControlGrid;
 
   /// SlicingPlane init data.  Two points fixed by ADR-0014 §1.
   double SlicingPlaneInitPoints[2][3];

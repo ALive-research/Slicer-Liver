@@ -75,20 +75,33 @@
  * ADR-0007's D-class compatibility-break category, the
  * ``.lrp.fcsv`` deprecation is part of the v2.0.0 MAJOR bump.
  *
- * \par JSON schema (v1)
+ * \par JSON schema (v2 — ADR-0018 §1)
  *
  * See the in-source documentation at the top of
  * ``vtkMRMLBezierSurfaceStorageNode.cxx`` for the canonical
  * schema description.  Briefly:
  *
- *   - ``schemaVersion``: int, currently 1
+ *   - ``schemaVersion``: int, currently 2 (writer); reader accepts
+ *     v1 + v2.
  *   - ``state``: "Init" | "Planning"
  *   - ``initMode``: "SlicingPlane" | "DistanceSpheroid"
- *   - ``controlGrid``: array of 48 doubles (row-major 4×4×3)
+ *   - ``rows`` / ``cols``: control-polygon shape (v2 only; in v1
+ *     these are implicit 4×4).  Per ADR-0018 §1, square only and
+ *     in ``{(3, 3), (4, 4)}``.
+ *   - ``controlGrid``: array of ``3 * rows * cols`` doubles
+ *     (row-major; 27 for 3×3, 48 for 4×4).
  *   - ``slicingPlane``: {origin, normal, initPoints}
  *   - ``distanceSpheroid``: {center, radius{x,y,z}, initPoints}
  *   - ``metadata``: object (empty in v1; reserved for v2's
  *     timestamps + surgeon ID per ADR-0014 §5)
+ *
+ * \par v1 → v2 migration
+ *
+ * The reader infers ``rows = cols = 4`` for v1 files (no ``rows`` /
+ * ``cols`` fields) and validates the ``controlGrid`` array length
+ * is 48.  The writer always emits v2 with explicit ``rows`` +
+ * ``cols``.  Round-trip of a v1 file produces a v2 file on the
+ * next save.
  *
  * \par See also
  *
@@ -108,12 +121,18 @@ public:
   vtkTypeMacro(vtkMRMLBezierSurfaceStorageNode, vtkMRMLStorageNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  /// Current JSON schema version emitted by ``WriteDataInternal``
-  /// and demanded by ``ReadDataInternal``'s strict-equality check.
+  /// Current JSON schema version emitted by ``WriteDataInternal``.
   /// Bump this integer in lock-step with any documented schema
   /// extension; ``ReadDataInternal`` MUST grow an explicit branch
-  /// for every old version it intends to keep loading.
-  static constexpr int SchemaVersion = 1;
+  /// for every old version it intends to keep loading.  Per ADR-0018
+  /// §1 the reader accepts both v1 (implicit 4×4 control polygon)
+  /// and v2 (explicit ``rows`` / ``cols``).
+  static constexpr int SchemaVersion = 2;
+
+  /// Lowest schema version the reader admits.  v1 files (no
+  /// ``rows`` / ``cols``) load with an inferred 4×4 control polygon
+  /// per the ADR-0018 §1 migration path.
+  static constexpr int MinReadableSchemaVersion = 1;
 
   vtkMRMLNode* CreateNodeInstance() override;
 

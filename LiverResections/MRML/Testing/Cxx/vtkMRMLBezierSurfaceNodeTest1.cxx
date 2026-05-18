@@ -915,6 +915,284 @@ int testInitDataReadOnlyAfterPlanning()
   return EXIT_SUCCESS;
 }
 
+int testVariableSizeControlPolygon()
+{
+  // ADR-0018 §1 — Bezier control polygon admits exactly two square
+  // shapes for v2.0.0: 3×3 (9 points, 27 doubles) and 4×4 (16 points,
+  // 48 doubles).  Non-square + out-of-range shapes are rejected with
+  // a vtkErrorMacro and no state change.  This test characterises
+  // every branch of SetSize / SetRows / SetCols.
+  vtkNew<vtkMRMLBezierSurfaceNode> node;
+
+  // Default shape — pre-ADR-0018 4×4 baseline.
+  CHECK_INT(static_cast<int>(node->GetRows()), 4);
+  CHECK_INT(static_cast<int>(node->GetCols()), 4);
+  CHECK_INT(static_cast<int>(node->GetControlGridLength()), 48);
+
+  // Drop to 3×3 via SetSize.  Buffer resizes; MTime advances.
+  const vtkMTimeType pre33 = node->GetMTime();
+  node->SetSize(3);
+  CHECK_INT(static_cast<int>(node->GetRows()), 3);
+  CHECK_INT(static_cast<int>(node->GetCols()), 3);
+  CHECK_INT(static_cast<int>(node->GetControlGridLength()), 27);
+  if (node->GetMTime() <= pre33)
+  {
+    std::cerr << "Expected MTime to advance after SetSize(3)\n";
+    return EXIT_FAILURE;
+  }
+
+  // Self-assign is a no-op (no MTime advance).
+  const vtkMTimeType preNoop = node->GetMTime();
+  node->SetSize(3);
+  CHECK_INT(static_cast<int>(node->GetMTime()), static_cast<int>(preNoop));
+
+  // Populate the 3×3 grid + read back.
+  double grid33[27];
+  for (int i = 0; i < 27; ++i)
+  {
+    grid33[i] = static_cast<double>(i) + 0.25;
+  }
+  CHECK_BOOL(node->SetControlGrid(grid33), true);
+  const double* readBack = node->GetControlGrid();
+  for (int i = 0; i < 27; ++i)
+  {
+    CHECK_DOUBLE(readBack[i], grid33[i]);
+  }
+
+  // Bump back up to 4×4.  Buffer resizes and zero-fills (ADR-0018
+  // §1: shape change discards in-flight grid; surgeons re-seed).
+  node->SetSize(4);
+  CHECK_INT(static_cast<int>(node->GetRows()), 4);
+  CHECK_INT(static_cast<int>(node->GetCols()), 4);
+  CHECK_INT(static_cast<int>(node->GetControlGridLength()), 48);
+  const double* afterResize = node->GetControlGrid();
+  for (int i = 0; i < 48; ++i)
+  {
+    CHECK_DOUBLE(afterResize[i], 0.0);
+  }
+
+  // Out-of-range SetSize values are rejected (vtkErrorMacro;
+  // gate around the ASSERT_ERRORS counter).
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  const vtkMTimeType preReject = node->GetMTime();
+  node->SetSize(2); // below MinGridSize
+  node->SetSize(5); // above MaxGridSize
+  node->SetSize(0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  CHECK_INT(static_cast<int>(node->GetRows()), 4); // unchanged
+  CHECK_INT(static_cast<int>(node->GetCols()), 4);
+  CHECK_INT(static_cast<int>(node->GetMTime()), static_cast<int>(preReject));
+
+  // SetRows / SetCols also enforce square-only.  From 4×4, calling
+  // SetRows(3) attempts a non-square (3, 4) state — rejected.
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  node->SetRows(3);
+  node->SetCols(3);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  CHECK_INT(static_cast<int>(node->GetRows()), 4);
+  CHECK_INT(static_cast<int>(node->GetCols()), 4);
+
+  // Out-of-range values on SetRows / SetCols rejected.
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  node->SetRows(5);
+  node->SetCols(2);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  CHECK_INT(static_cast<int>(node->GetRows()), 4);
+  CHECK_INT(static_cast<int>(node->GetCols()), 4);
+
+  // Defaults / range constants exposed for callers.
+  CHECK_INT(vtkMRMLBezierSurfaceNode::DefaultGridSize, 4);
+  CHECK_INT(vtkMRMLBezierSurfaceNode::MinGridSize, 3);
+  CHECK_INT(vtkMRMLBezierSurfaceNode::MaxGridSize, 4);
+  CHECK_INT(vtkMRMLBezierSurfaceNode::MaxControlGridSize, 48);
+  // Back-compat alias for the v1 4×4 case.
+  CHECK_INT(vtkMRMLBezierSurfaceNode::GridSize, 4);
+  CHECK_INT(vtkMRMLBezierSurfaceNode::ControlGridSize, 48);
+  return EXIT_SUCCESS;
+}
+
+int testCopyContent3x3()
+{
+  // CopyContent must propagate Rows / Cols + the resized control
+  // grid in one shot — the post-ADR-0018 sibling of testCopyContent
+  // for the 3×3 case.  Defensive: a future drift that copies the
+  // buffer without first matching the shape would silently truncate
+  // or pad.
+  vtkNew<vtkMRMLBezierSurfaceNode> source;
+  source->SetSize(3);
+  double grid33[27];
+  for (int i = 0; i < 27; ++i)
+  {
+    grid33[i] = static_cast<double>(i) * 0.5 + 0.125;
+  }
+  source->SetState(vtkMRMLBezierSurfaceNode::Planning);
+  source->SetControlGrid(grid33);
+
+  vtkNew<vtkMRMLBezierSurfaceNode> sink;
+  sink->CopyContent(source.GetPointer(), /*deepCopy=*/true);
+
+  CHECK_INT(static_cast<int>(sink->GetRows()), 3);
+  CHECK_INT(static_cast<int>(sink->GetCols()), 3);
+  CHECK_INT(static_cast<int>(sink->GetControlGridLength()), 27);
+  for (int i = 0; i < 27; ++i)
+  {
+    CHECK_DOUBLE(sink->GetControlGrid()[i], grid33[i]);
+  }
+  CHECK_INT(sink->GetState(), vtkMRMLBezierSurfaceNode::Planning);
+  return EXIT_SUCCESS;
+}
+
+int testXMLRoundTrip3x3()
+{
+  // ADR-0018 §1 — Rows / Cols round-trip through XML attributes,
+  // controlGrid serialises ``3 * Rows * Cols`` doubles.  Mirrors
+  // testXMLRoundTrip for the 3×3 case.  Also exercises the v1
+  // migration: a serialised attribute stream that omits ``rows`` /
+  // ``cols`` defaults to 4×4 on parse.
+  vtkNew<vtkMRMLBezierSurfaceNode> source;
+  vtkNew<vtkMRMLScene> scene;
+  source->SetScene(scene.GetPointer());
+  source->SetSize(3);
+  source->SetState(vtkMRMLBezierSurfaceNode::Planning);
+  double grid33[27];
+  for (int i = 0; i < 27; ++i)
+  {
+    grid33[i] = static_cast<double>(i) * 0.1 - 1.0;
+  }
+  source->SetControlGrid(grid33);
+
+  std::ostringstream out;
+  source->WriteXML(out, 0);
+  const std::string xml = out.str();
+
+  // The XML should explicitly carry the rows + cols + controlGrid.
+  if (xml.find("rows=\"3\"") == std::string::npos)
+  {
+    std::cerr << "Expected rows=\"3\" in WriteXML output: " << xml << "\n";
+    return EXIT_FAILURE;
+  }
+  if (xml.find("cols=\"3\"") == std::string::npos)
+  {
+    std::cerr << "Expected cols=\"3\" in WriteXML output: " << xml << "\n";
+    return EXIT_FAILURE;
+  }
+
+  // Re-parse via the simple attribute-list walker (same as
+  // testXMLRoundTrip — see that test for the parser comment).
+  std::vector<std::string> storage;
+  std::size_t pos = 0;
+  while (pos < xml.size())
+  {
+    while (pos < xml.size() && std::isspace(xml[pos]))
+    {
+      ++pos;
+    }
+    if (pos >= xml.size())
+    {
+      break;
+    }
+    const std::size_t eq = xml.find('=', pos);
+    if (eq == std::string::npos)
+    {
+      break;
+    }
+    std::string name = xml.substr(pos, eq - pos);
+    if (eq + 1 >= xml.size() || xml[eq + 1] != '"')
+    {
+      break;
+    }
+    const std::size_t valStart = eq + 2;
+    const std::size_t valEnd = xml.find('"', valStart);
+    if (valEnd == std::string::npos)
+    {
+      break;
+    }
+    std::string value = xml.substr(valStart, valEnd - valStart);
+    storage.push_back(name);
+    storage.push_back(value);
+    pos = valEnd + 1;
+  }
+  std::vector<const char*> atts;
+  for (const auto& s : storage)
+  {
+    atts.push_back(s.c_str());
+  }
+  atts.push_back(nullptr);
+
+  vtkNew<vtkMRMLBezierSurfaceNode> sink;
+  sink->SetScene(scene.GetPointer());
+  sink->ReadXMLAttributes(atts.data());
+
+  CHECK_INT(static_cast<int>(sink->GetRows()), 3);
+  CHECK_INT(static_cast<int>(sink->GetCols()), 3);
+  CHECK_INT(static_cast<int>(sink->GetControlGridLength()), 27);
+  for (int i = 0; i < 27; ++i)
+  {
+    CHECK_DOUBLE_TOLERANCE(sink->GetControlGrid()[i], grid33[i], 1e-5);
+  }
+
+  // Legacy-XML migration: synthesise an attribute stream with no
+  // ``rows`` / ``cols`` (the pre-ADR-0018 baseline) + a 48-double
+  // controlGrid; the node defaults to 4×4.
+  std::string legacyXml = " state=\"Planning\" initMode=\"SlicingPlane\" controlGrid=\"";
+  std::ostringstream gridSs;
+  for (int i = 0; i < 48; ++i)
+  {
+    if (i > 0)
+    {
+      gridSs << " ";
+    }
+    gridSs << (static_cast<double>(i) * 0.01);
+  }
+  legacyXml += gridSs.str();
+  legacyXml += "\"";
+
+  std::vector<std::string> legacyStorage;
+  std::size_t lpos = 0;
+  while (lpos < legacyXml.size())
+  {
+    while (lpos < legacyXml.size() && std::isspace(legacyXml[lpos]))
+    {
+      ++lpos;
+    }
+    if (lpos >= legacyXml.size())
+    {
+      break;
+    }
+    const std::size_t eq = legacyXml.find('=', lpos);
+    if (eq == std::string::npos)
+    {
+      break;
+    }
+    std::string name = legacyXml.substr(lpos, eq - lpos);
+    if (eq + 1 >= legacyXml.size() || legacyXml[eq + 1] != '"')
+    {
+      break;
+    }
+    const std::size_t valStart = eq + 2;
+    const std::size_t valEnd = legacyXml.find('"', valStart);
+    std::string value = legacyXml.substr(valStart, valEnd - valStart);
+    legacyStorage.push_back(name);
+    legacyStorage.push_back(value);
+    lpos = valEnd + 1;
+  }
+  std::vector<const char*> legacyAtts;
+  for (const auto& s : legacyStorage)
+  {
+    legacyAtts.push_back(s.c_str());
+  }
+  legacyAtts.push_back(nullptr);
+
+  vtkNew<vtkMRMLBezierSurfaceNode> legacySink;
+  legacySink->SetScene(scene.GetPointer());
+  legacySink->ReadXMLAttributes(legacyAtts.data());
+  CHECK_INT(static_cast<int>(legacySink->GetRows()), 4);
+  CHECK_INT(static_cast<int>(legacySink->GetCols()), 4);
+  CHECK_DOUBLE_TOLERANCE(legacySink->GetControlGrid()[0], 0.0, 1e-5);
+  CHECK_DOUBLE_TOLERANCE(legacySink->GetControlGrid()[47], 0.47, 1e-5);
+  return EXIT_SUCCESS;
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -939,6 +1217,9 @@ int vtkMRMLBezierSurfaceNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testDisplayNodeAttachedSceneRoundTrip());
   CHECK_EXIT_SUCCESS(testInitDataReadOnlyAfterPlanning());
   CHECK_EXIT_SUCCESS(testConfirmedStateTransitions());
+  CHECK_EXIT_SUCCESS(testVariableSizeControlPolygon());
+  CHECK_EXIT_SUCCESS(testCopyContent3x3());
+  CHECK_EXIT_SUCCESS(testXMLRoundTrip3x3());
 
   std::cout << "vtkMRMLBezierSurfaceNodeTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;
