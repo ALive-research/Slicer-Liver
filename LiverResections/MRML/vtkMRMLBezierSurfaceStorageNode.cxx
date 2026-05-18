@@ -440,8 +440,50 @@ int vtkMRMLBezierSurfaceStorageNode::WriteJson(const std::string& filePath, vtkM
 }
 
 //------------------------------------------------------------------------------
+namespace
+{
+// RAII guard: flip the surface node's ``LoadingFromXML`` flag on for
+// the duration of a JSON read, restore it on scope exit (covers early
+// returns too).  Mirrors the wrap pattern used in
+// ``vtkMRMLBezierSurfaceNode::ReadXMLAttributes`` so JSON deserialisation
+// bypasses the ADR-0014 §4 audit-data setters' read-only guards and
+// the ADR-0019 ``SetState`` transition matrix the same way XML loads
+// do.  Without the bypass a Confirmed-state round-trip fails: the
+// fresh sink starts at ``Init`` and ``SetState(Confirmed)`` is
+// rejected as an illegal Init→Confirmed transition (the legal path
+// is Init→Planning→Confirmed).
+class ScopedLoadingFromXML
+{
+public:
+  explicit ScopedLoadingFromXML(vtkMRMLBezierSurfaceNode* node)
+    : Node(node)
+    , Prev(node != nullptr ? node->GetLoadingFromXML() : false)
+  {
+    if (this->Node != nullptr)
+    {
+      this->Node->SetLoadingFromXML(true);
+    }
+  }
+  ~ScopedLoadingFromXML()
+  {
+    if (this->Node != nullptr)
+    {
+      this->Node->SetLoadingFromXML(this->Prev);
+    }
+  }
+  ScopedLoadingFromXML(const ScopedLoadingFromXML&) = delete;
+  ScopedLoadingFromXML& operator=(const ScopedLoadingFromXML&) = delete;
+
+private:
+  vtkMRMLBezierSurfaceNode* Node;
+  bool Prev;
+};
+} // namespace
+
 int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMRMLBezierSurfaceNode* surfaceNode)
 {
+  ScopedLoadingFromXML loadingGuard(surfaceNode);
+
   vtkNew<vtkMRMLJsonReader> reader;
   vtkSmartPointer<vtkMRMLJsonElement> root = vtkSmartPointer<vtkMRMLJsonElement>::Take(reader->ReadFromFile(filePath.c_str()));
   if (root == nullptr)
