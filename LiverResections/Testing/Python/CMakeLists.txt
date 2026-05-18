@@ -31,6 +31,30 @@ if(NOT BUILD_TESTING)
   return()
 endif()
 
+# ---------------------------------------------------------------------------
+# Opt-in gate for the visual-regression harness.
+#
+# Default OFF until two preconditions land: (a) the
+# ``ALive-research/AliveTestingData`` release tag holding captured
+# baselines, and (b) confirmation that Slicer's launcher exits cleanly
+# in the no-baseline path under ``--no-main-window --disable-modules
+# --python-script`` (the Qt application event loop has been observed
+# to not yield in initial CI runs; triage tracked in the PR).
+#
+# CI default OFF means scaffolding PRs go green without the CTest
+# entries firing; flip to ON locally (or via workflow env override)
+# once both preconditions are satisfied.
+option(Slicer_Liver_ENABLE_VISUAL_TESTS
+  "Enable Slicer-Liver visual-regression CTest entries (requires baselines + clean launcher-exit; see LiverResections/Testing/README.md)."
+  OFF)
+
+if(NOT Slicer_Liver_ENABLE_VISUAL_TESTS)
+  message(STATUS
+    "Slicer-Liver: visual-regression tests gated OFF "
+    "(set -DSlicer_Liver_ENABLE_VISUAL_TESTS=ON to enable).")
+  return()
+endif()
+
 include(ExternalData)
 
 # Slicer-core defaults may already be set; append rather than replace
