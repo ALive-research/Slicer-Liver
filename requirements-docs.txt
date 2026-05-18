@@ -15,3 +15,8 @@ sphinx-notfound-page
 sphinx-design
 sphinx-reredirects
 sphinx_rtd_theme>=0.5.2
+# Mermaid diagrams.  Used by the architecture diagrams under
+# Docs/architecture/ — class diagrams (target MRML hierarchy,
+# surface taxonomy), sequence diagrams (rendering pipeline), and
+# state diagrams (ADR-0019).  Added by ADR-0018's scaffold extension.
+sphinxcontrib-mermaid

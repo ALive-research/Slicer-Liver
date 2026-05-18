@@ -6,6 +6,20 @@
 - **Diagrams:** N/A
 - **PR:** _filled in on merge_
 
+## Amendments
+
+- **2026-05-18 — variable-degree Bernstein + future NURBS fitter (ADR-0018).**
+  Per [ADR-0018](0018-nurbs-extension-surface.md) §1 the
+  `vtkLiverBezierFitter` generalises to degree-`(Rows-1)` ×
+  degree-`(Cols-1)` Bernstein basis to support variable-size control
+  polygons.  The Eigen normal-equation pseudo-inverse path is
+  unchanged; only the basis-matrix shape parameterizes.  ADR-0018 §1
+  also commits a v2.1 sibling `vtkLiverNurbsFitter` (least-squares on
+  B-spline basis with rational weights + knot vectors); the
+  Eigen-via-ITK-bundle linkage this ADR commits to covers both
+  fitters.  Read every "4×4" / "16-point" reference below as the
+  default case of the general M×N + variable-degree formulation.
+
 ## Context
 
 [ADR-0004](0004-python-cpp-boundary.md) commits Slicer-Liver to a sharp

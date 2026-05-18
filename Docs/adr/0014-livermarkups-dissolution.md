@@ -11,6 +11,25 @@
 
 ## Amendments
 
+- **2026-05-18 — variable-size control polygon (ADR-0018).**  The
+  v2.0.0 commitment in this ADR consistently refers to "the 4×4
+  control grid".  Per [ADR-0018](0018-nurbs-extension-surface.md) §1
+  the architectural commitment is **variable-size M×N control
+  polygon, defaulting to 4×4**.  Everywhere the text below says
+  "4×4 control grid" or "16 control points" or "ring role: corners
+  (4), edges (8), interior (4)", read it as the **default case** of
+  the general M×N formulation:
+  - corners — always exactly 4
+  - edges — `2(M-2) + 2(N-2)`
+  - interior — `(M-2)(M-2)`
+  - total — `M × N`
+  The widget event-table (`vtkLiverBezierWidget`) generalizes
+  mechanically; the per-ring manipulation events are independent of
+  M, N.  `.lrp.json` schema v2 carries explicit `rows` + `cols`
+  alongside `controlGrid`; v1 files implicit-load as (4, 4).  Full
+  rationale + the v2.1 NURBS-as-sibling extension surface in
+  [ADR-0018](0018-nurbs-extension-surface.md).
+
 - **2026-05-16 — rename Bezier-surface MRML classes.**  The `Liver`
   prefix on the Bezier-surface MRML class trio
   (`vtkMRMLLiverBezierSurface{,Display,Storage}Node`) carries no

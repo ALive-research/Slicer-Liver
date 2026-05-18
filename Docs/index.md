@@ -36,4 +36,5 @@ ReadTheDocs.  Mirrors the upstream Slicer-core convention.
 :caption: Scaffold
 
 adr/0017-sphinx-readthedocs.md
+adr/0018-nurbs-extension-surface.md
 ```
