@@ -70,40 +70,59 @@ representation under a single agreed data-node + Pipeline taxonomy.
 
 The decision splits into four sub-commitments:
 
-### 1. Variable-size control polygon in v2.0.0
+### 1. Two control-polygon sizes in v2.0.0: `{3×3, 4×4}` square-only
 
 The `vtkMRMLBezierSurfaceNode` data type carries explicit `Rows` and
-`Cols` integer fields (defaulting to `4` and `4` for backward
-compatibility with PR #361's `.lrp.json` v1 schema).  The
-`ControlGrid` storage becomes a variable-length array of `3 * Rows *
-Cols` doubles.  All downstream code that previously assumed `4 * 4 *
-3 = 48` is parameterized:
+`Cols` integer fields (defaulting to `4` and `4`).  For the v2.0.0
+release the **valid Bezier sizes are restricted to two square
+shapes**:
 
-- **`vtkLiverBezierWidget`** ring-group taxonomy generalizes per the
-  formula:
-  - corners — always exactly 4 (the four corners of any rectangular
-    grid)
-  - edges — `2 * (Rows - 2) + 2 * (Cols - 2)` boundary points minus
-    the corners
-  - interior — `(Rows - 2) * (Cols - 2)`
-  - total — `Rows * Cols`
+| Shape   | Corners | Edges | Interior | Total |
+|---------|---------|-------|----------|-------|
+| **3×3** | 4       | 4     | 1        | 9     |
+| **4×4** | 4       | 8     | 4        | 16    |
+
+Both shapes have a natural "corners-edges-interior" three-ring
+structure, which matches the project's existing ring-of-control-points
+manipulation philosophy ([ADR-0014][adr-0014] §3 widget event
+table).  Non-square shapes (3×4, 4×3) break ring symmetry and are
+NOT admitted in v2.0.0.  Larger sizes (5×5, 5×7, etc.) are also
+not admitted — they are NURBS-territory and arrive with the v2.1
+NURBS sibling (see §3 below).
+
+Setter on `vtkMRMLBezierSurfaceNode::SetRows` / `SetCols` validates
+`(Rows, Cols) ∈ {(3, 3), (4, 4)}` and emits a `vtkErrorMacro` +
+returns without `Modified()` on any other value (mirrors PR #350's
+existing rejection pattern for forbidden state transitions).
+
+The `ControlGrid` storage becomes a variable-length array of `3 *
+Rows * Cols` doubles — either `27` (3×3 case) or `48` (4×4 case).
+Downstream code that previously assumed `48` parameterizes on
+`3 * Rows * Cols`:
+
+- **`vtkLiverBezierWidget`** ring-group taxonomy parameterizes on
+  the (Rows, Cols) shape:
+  - 3×3: corners(4) + edges(4) + interior(1) = 9
+  - 4×4: corners(4) + edges(8) + interior(4) = 16
   The right-drag-ring-group event (`TODO(T2.3 right-drag-ring-group)`)
   manipulates whichever ring set is currently selected; the
-  manipulation math is the same for any M×N.
-- **`vtkLiverBezierFitter`** generalizes to degree-`(Rows-1)` ×
-  degree-`(Cols-1)` Bernstein basis.  The Eigen normal-equation
-  pseudo-inverse path is unchanged; only the basis-matrix shape
-  parameterizes.
+  manipulation math is the same shape per shape.
+- **`vtkLiverBezierFitter`** parameterizes to degree-`(Rows-1)`
+  Bernstein basis (degree-2 for 3×3; degree-3 for 4×4).  The Eigen
+  normal-equation pseudo-inverse path is unchanged; only the
+  basis-matrix shape parameterizes.
 - **`.lrp.json` schema** bumps to v2.  v2 carries explicit `rows` +
   `cols` fields alongside `controlGrid: [3 * rows * cols doubles]`.
   v1 files (with implicit 4×4) load via the existing storage node's
   migration path; default `rows = 4, cols = 4` if the fields are
-  absent.
+  absent.  Schema v2 validates `(rows, cols) ∈ {(3, 3), (4, 4)}` on
+  load + rejects with `vtkErrorMacro` on any other shape.
 
 The 4×4 case stays the **default** because the d'Albenzio study
 identifies it as the most common surgeon-facing shape; the
-architectural change is admitting other sizes, not changing the
-default.
+architectural change is admitting the **smaller** 3×3 shape as a
+valid alternative, NOT opening to arbitrary M×N.  Arbitrary M×N is
+the NURBS v2.1 territory.
 
 ### 2. Single data node, parameterized — NOT a parent class
 
@@ -141,9 +160,9 @@ Concretely:
 Sibling Pipelines, not a polymorphic dispatch on a third axis.
 
 - **v2.0.0**: `LiverBezierSurfacePipeline` is the only Pipeline.  It
-  handles 4×4 and 5×7 and any M×N Bezier surface; the geometry
-  generation is parameterized but the surface math (Bernstein basis,
-  no weights, no knots) is fixed.
+  handles both `{3×3, 4×4}` Bezier shapes; the geometry generation
+  is parameterized but the surface math (Bernstein basis, no weights,
+  no knots) is fixed.
 - **v2.1**: `LiverNurbsSurfacePipeline` lands as a peer Pipeline
   registered with `vtkMRMLLayerDMPipelineFactory` against
   `vtkMRMLNurbsSurfaceDisplayNode`.  Per [ADR-0013][adr-0013] §5 call 3,
@@ -185,6 +204,33 @@ substance; the schema bumps to v2 with explicit `rows` + `cols`
 fields.  v1 files load via the migration path the storage node
 already implements (legacy `Curved` mode handling from PR #361
 extends naturally to legacy-implicit-4×4 handling).
+
+## Why `{3×3, 4×4}` square-only, not arbitrary M×N in v2.0.0
+
+The d'Albenzio study's variable-control-polygon claim covers the
+**NURBS-representation space**, where the control polygon is
+genuinely arbitrary.  For v2.0.0 Bezier surfaces, two arguments
+favour restricting to two square shapes:
+
+- **Ring-philosophy fit.**  The widget's right-drag-ring-group
+  event ([ADR-0014][adr-0014] §3) groups control points by corners /
+  edges / interior.  Both 3×3 and 4×4 have all three ring sets
+  non-empty; non-square shapes (3×4, 4×3, 5×4, …) lose the corner
+  symmetry and the edge-ring is unevenly split between
+  row-direction and column-direction edges.  The UX gets messy.
+- **Clinical signal.**  d'Albenzio's surgeon-interview data does
+  not show evidence that surgeons need M×N > 4×4 for *Bezier*
+  surfaces; the demand for arbitrary M×N is paired with the demand
+  for the NURBS basis (local-control, knot insertion, conic-section
+  reproducibility).  Bezier's degree-`(N-1)` Bernstein basis at large
+  N becomes numerically unstable + has zero local control, which is
+  the wrong shape for clinical-grade surface fitting at scale.
+
+Two-shape restriction in v2.0.0 + NURBS opens the M×N space in v2.1
+is the right phasing.  The architectural surface in `vtkMRMLBezierSurfaceNode`
+(`Rows`/`Cols` IVars, parameterized widget + fitter) is unchanged
+by the restriction — the runtime validation is the only added
+constraint, and it's a single switch statement.
 
 ## Why Option A, not full NURBS in v2.0.0
 
@@ -259,7 +305,8 @@ third axis would make the slot table 3-dimensional.  Rejected because:
   right (some anatomies need 5×5 or 5×7 control polygons; the 4×4
   specialisation was a v1 limitation, not a deliberate UX decision).
 - Schema v2 (`.lrp.json`) carries forward — surgeon plans authored
-  with arbitrary M×N round-trip cleanly.
+  with either `{3×3, 4×4}` shape round-trip cleanly; v2.1 schema v3
+  will admit larger M×N for the NURBS sibling.
 - The ring-group taxonomy generalizes mechanically; T2.3's
   `right-drag-ring-group` event flow inherits the formula.
 - d'Albenzio et al. citation lands as a committed architectural
@@ -295,7 +342,7 @@ third axis would make the slot table 3-dimensional.  Rejected because:
      Bezier ↔ NURBS class taxonomy + mathematical-model contrast.
    - New `Docs/architecture/control-grid-grouping.md` — ring-group
      formula for M×N + example layouts.
-   - Light amendment to [ADR-0014][adr-0014] §3 (4×4 → M×N).
+   - Light amendment to [ADR-0014][adr-0014] §3 (4×4 → {3×3, 4×4}).
    - Light amendment to [ADR-0015][adr-0015] (extension surface for variable-degree
      Bernstein + future NURBS fitter).
    - `sphinxcontrib-mermaid` added to `requirements-docs.txt` +

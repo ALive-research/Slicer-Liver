@@ -10,7 +10,7 @@ that lands in v2.0.0 (Bezier-only) and extends in v2.1 (NURBS).
 
 ## Class taxonomy
 
-```{mermaid}
+```mermaid
 classDiagram
     direction TB
 
@@ -22,8 +22,9 @@ classDiagram
         <<v2.0.0>>
         +RepresentationKind = Bezier
         +SurfaceMath = Bernstein basis
-        +Degree = (Rows-1) × (Cols-1)
-        +DefaultGrid = 4×4
+        +Degree = (Rows-1)<br/>(square-only)
+        +Shapes = {3×3, 4×4}
+        +Default = 4×4
     }
 
     class LiverNurbsSurfacePipeline {
@@ -41,7 +42,7 @@ classDiagram
     class BezierPlanningRepresentation {
         <<v2.0.0>>
         Generates Bezier surface polydata
-        from M×N control grid
+        from {3×3, 4×4} control grid
     }
     class NurbsPlanningRepresentation {
         <<v2.1 Proposed>>
@@ -65,7 +66,7 @@ classDiagram
     class vtkLiverBezierFitter {
         <<v2.0.0>>
         Eigen normal equations
-        Degree-(Rows-1) × (Cols-1) Bernstein basis
+        Degree-(Rows-1) Bernstein basis<br/>(degree-2 / degree-3)
     }
     class vtkLiverNurbsFitter {
         <<v2.1 Proposed>>
@@ -86,7 +87,7 @@ classDiagram
 | Degree              | Implicit from control polygon: `(Rows-1) × (Cols-1)` | Independent per axis: `DegreeU`, `DegreeV` |
 | Knots               | Implicit (uniform)                       | Explicit per axis (`KnotsU`, `KnotsV`); clamped       |
 | Weights             | Uniform (1.0 per control point; non-rational) | Per control point (`Weights[i, j]`); rational    |
-| Control polygon     | M × N (default 4×4)                      | M × N (no default; surgeon-chosen)                    |
+| Control polygon     | `{3×3, 4×4}` square-only (default 4×4)   | M × N (no default; surgeon-chosen)                    |
 | Local control       | Full surface depends on every control point | Locally bounded by `DegreeU+1 × DegreeV+1` span     |
 | Evaluation          | Direct Bernstein polynomial sum          | de Boor's algorithm (recursive) + weight division     |
 | Conic-section repro | Approximation                            | Exact (circles, ellipses, hyperbolas via weights)     |

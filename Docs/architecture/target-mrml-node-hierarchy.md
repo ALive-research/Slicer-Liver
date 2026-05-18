@@ -12,7 +12,7 @@ surface.
 
 ## Class hierarchy
 
-```{mermaid}
+```mermaid
 classDiagram
     direction LR
 
@@ -113,8 +113,11 @@ classDiagram
   intentional — it preserves Slicer's "peer types, no geometry-parent"
   convention (`vtkMRMLModelNode` and `vtkMRMLMarkupsNode` are
   parallel; this trio is parallel for the same reasons).
-- **Default for the Bezier node is 4×4** ([ADR-0018][adr-0018] §1).  Variable
-  M×N is admitted; legacy `.lrp.fcsv` files (per
+- **Default for the Bezier node is 4×4** ([ADR-0018][adr-0018] §1).
+  v2.0.0 admits `(Rows, Cols) ∈ {(3, 3), (4, 4)}` only — square-only,
+  two shapes; per-setter validation rejects other values with
+  `vtkErrorMacro`.  Arbitrary M×N is NURBS-territory and lands with
+  `vtkMRMLNurbsSurfaceNode` in v2.1.  Legacy `.lrp.fcsv` files (per
   [ADR-0014][adr-0014] §5's migration path) implicitly load as 4×4.
 - **Legacy `vtkMRMLLiverResection*` nodes** (the pre-rename / pre-T2
   family) are retired by **T2.7**.  They do not appear here.

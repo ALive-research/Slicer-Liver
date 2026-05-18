@@ -1,37 +1,46 @@
-# Control-grid grouping — M×N ring-group taxonomy
+# Control-grid grouping — `{3×3, 4×4}` ring-group taxonomy
 
 Reference companion to [ADR-0014][adr-0014] §3 +
-[ADR-0018][adr-0018] §1.  Generalises the
-`vtkLiverBezierWidget` right-drag ring-group taxonomy from the v1
-fixed-4×4 case to arbitrary M×N control polygons.
+[ADR-0018][adr-0018] §1.  The `vtkLiverBezierWidget`'s right-drag
+ring-group taxonomy operates on the two control-polygon shapes
+v2.0.0 admits: **3×3** and **4×4** (square only).
+
+Per [ADR-0018][adr-0018] §"Why `{3×3, 4×4}` square-only, not
+arbitrary M×N in v2.0.0", both shapes have a natural three-ring
+structure (corners, edges, interior) that matches the ring-of-
+control-points manipulation philosophy.  Non-square shapes and
+larger sizes are v2.1 NURBS territory.
 
 [adr-0014]: ../adr/0014-livermarkups-dissolution.md
 [adr-0018]: ../adr/0018-nurbs-extension-surface.md
 
-## Ring formula
+## Ring counts
 
-For an M-row × N-column control polygon:
-
-- **Corners** — always exactly `4`.
-- **Edges** — `2 * (M - 2) + 2 * (N - 2)` — boundary points minus corners.
-- **Interior** — `(M - 2) * (N - 2)` — non-boundary points.
-- **Total** — `M * N` — sanity check: `4 + 2(M-2) + 2(N-2) + (M-2)(N-2) = MN`.
-
-| (M, N)  | Corners | Edges | Interior | Total |
+| Shape   | Corners | Edges | Interior | Total |
 |---------|---------|-------|----------|-------|
-| (3, 3)  | 4       | 4     | 1        | 9     |
-| (4, 4)  | 4       | 8     | 4        | 16    |
-| (5, 4)  | 4       | 10    | 6        | 20    |
-| (5, 5)  | 4       | 12    | 9        | 25    |
-| (5, 7)  | 4       | 16    | 15       | 35    |
-| (M, N)  | 4       | 2(M-2)+2(N-2) | (M-2)(N-2) | MN |
+| **3×3** | 4       | 4     | 1        | 9     |
+| **4×4** | 4       | 8     | 4        | 16    |
 
-## Example layouts
+## Layouts
 
 Each cell is a control point; `C` = corner, `E` = edge, `I` =
 interior.
 
-### 4×4 (v1 default)
+### 3×3 — degree-2 Bezier (the smaller shape ADR-0018 adds)
+
+```
++---+---+---+
+| C | E | C |
++---+---+---+
+| E | I | E |
++---+---+---+
+| C | E | C |
++---+---+---+
+```
+
+Corners = 4, Edges = 4, Interior = 1.  Total = 9.
+
+### 4×4 — degree-3 Bezier (the v2.0.0 default)
 
 ```
 +---+---+---+---+
@@ -47,42 +56,6 @@ interior.
 
 Corners = 4, Edges = 8, Interior = 4.  Total = 16.
 
-### 5×5
-
-```
-+---+---+---+---+---+
-| C | E | E | E | C |
-+---+---+---+---+---+
-| E | I | I | I | E |
-+---+---+---+---+---+
-| E | I | I | I | E |
-+---+---+---+---+---+
-| E | I | I | I | E |
-+---+---+---+---+---+
-| C | E | E | E | C |
-+---+---+---+---+---+
-```
-
-Corners = 4, Edges = 12, Interior = 9.  Total = 25.
-
-### 5×7 (non-square)
-
-```
-+---+---+---+---+---+---+---+
-| C | E | E | E | E | E | C |
-+---+---+---+---+---+---+---+
-| E | I | I | I | I | I | E |
-+---+---+---+---+---+---+---+
-| E | I | I | I | I | I | E |
-+---+---+---+---+---+---+---+
-| E | I | I | I | I | I | E |
-+---+---+---+---+---+---+---+
-| C | E | E | E | E | E | C |
-+---+---+---+---+---+---+---+
-```
-
-Corners = 4, Edges = 16, Interior = 15.  Total = 35.
-
 ## Right-drag ring-group event flow
 
 The `vtkLiverBezierWidget` right-drag event (per
@@ -91,28 +64,30 @@ manipulates the picked control point's **ring set** as a group.
 Picking a corner translates / rotates all 4 corners; picking an edge
 point manipulates the edge ring; picking an interior point
 manipulates the interior ring.  The ring-set identification is
-purely positional — `(row, col)` in `[0, M-1] × [0, N-1]`:
+purely positional — `(row, col)` in `[0, Rows-1] × [0, Cols-1]`:
 
 ```
-ring_of(row, col):
-    if row in (0, M-1) and col in (0, N-1):
+ring_of(row, col, Rows, Cols):
+    if row in (0, Rows-1) and col in (0, Cols-1):
         return Corner
-    if row in (0, M-1) or col in (0, N-1):
+    if row in (0, Rows-1) or col in (0, Cols-1):
         return Edge
     return Interior
 ```
 
-This formula is independent of M, N — the right-drag-ring-group
-event flow inherits the formula mechanically, no per-size branching.
+This formula is shape-agnostic — the same code handles 3×3 and 4×4.
+The widget's runtime validates `(Rows, Cols) ∈ {(3, 3), (4, 4)}` at
+its `SetBezierNode()` entry; other shapes are rejected by the data
+node's `SetRows`/`SetCols` setters per [ADR-0018][adr-0018] §1.
 
 ## Implications for `vtkLiverBezierFitter`
 
 The fitter ([ADR-0015][adr-0015]) is independent of the ring taxonomy
 — it sees only the flat control-grid array.  Per [ADR-0018][adr-0018]
-§1, the fitter parameterizes its basis matrix on degree
-`(Rows-1) × (Cols-1)` Bernstein; ring grouping does not feed into the
-fit.  This is the right separation of concerns: the widget owns
-*manipulation*, the fitter owns *math*.
+§1, the fitter parameterizes its basis matrix on degree-`(Rows-1)`
+Bernstein (degree-2 for 3×3; degree-3 for 4×4).  Ring grouping does
+not feed into the fit.  This is the right separation of concerns:
+the widget owns *manipulation*, the fitter owns *math*.
 
 [adr-0015]: ../adr/0015-cpp-algorithm-library.md
 
@@ -120,16 +95,18 @@ fit.  This is the right separation of concerns: the widget owns
 
 The schema v2 (per [ADR-0018][adr-0018] §1 rollout) carries explicit
 `rows` + `cols` + `controlGrid: [3 * rows * cols doubles]` row-major.
-The widget reads these to derive ring membership at load time.  No
-ring metadata is serialised; it derives mechanically from `(rows,
-cols)`.
+Schema v2 readers validate `(rows, cols) ∈ {(3, 3), (4, 4)}` at load
++ reject otherwise with `vtkErrorMacro`.  Forward-compat: v3 readers
+(post NURBS landing) admit larger M×N for the NURBS node sibling but
+keep the {3×3, 4×4} restriction for Bezier nodes.
 
 ## Out of scope of this diagram
 
 - The widget's left-drag (per-point) event flow — handled by the
-  existing skeleton (PR #360) and parameterizes trivially for any
-  M×N.
+  existing skeleton (PR #360) and parameterizes trivially for both
+  shapes.
 - The widget's right-click context menu — separate
   `TODO(T2.3 right-click-context-menu)` deliverable.
 - NURBS-specific manipulation events (e.g., "edit weight at corner")
-  — deferred to v2.1's NURBS extension.
+  — deferred to v2.1's NURBS extension.  v2.1 may relax to arbitrary
+  M×N for NURBS surfaces; Bezier stays {3×3, 4×4}.
