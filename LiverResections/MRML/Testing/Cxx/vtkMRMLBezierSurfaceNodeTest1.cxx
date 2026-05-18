@@ -24,6 +24,8 @@
 #include "vtkMRMLScene.h"
 
 // VTK includes
+#include <vtkCallbackCommand.h>
+#include <vtkCommand.h>
 #include <vtkNew.h>
 #include <vtkSmartPointer.h>
 
@@ -1042,6 +1044,138 @@ int testCopyContent3x3()
   return EXIT_SUCCESS;
 }
 
+int testCopyContentResizesAcrossShapes()
+{
+  // ADR-0018 §1 — CopyContent into a sink whose current shape differs
+  // from the source must resize the sink before copying the buffer.
+  // Sibling of ``testCopyContent3x3``, which only covers the
+  // (fresh-sink, 3×3-source) case.  The harder branch — 4×4 sink
+  // adopts a 3×3 source — exercises the resize-on-copy path that a
+  // naïve buffer-only Copy would silently truncate.
+  {
+    vtkNew<vtkMRMLBezierSurfaceNode> source;
+    source->SetSize(3);
+    source->SetState(vtkMRMLBezierSurfaceNode::Planning);
+    double grid33[27];
+    for (int i = 0; i < 27; ++i)
+    {
+      grid33[i] = static_cast<double>(i) * 0.5 + 0.0625;
+    }
+    source->SetControlGrid(grid33);
+
+    vtkNew<vtkMRMLBezierSurfaceNode> sink;
+    sink->SetSize(4); // sink starts at 4×4, 48 zeros
+    CHECK_INT(static_cast<int>(sink->GetRows()), 4);
+    CHECK_INT(static_cast<int>(sink->GetCols()), 4);
+
+    sink->CopyContent(source.GetPointer(), /*deepCopy=*/true);
+
+    CHECK_INT(static_cast<int>(sink->GetRows()), 3);
+    CHECK_INT(static_cast<int>(sink->GetCols()), 3);
+    CHECK_INT(static_cast<int>(sink->GetControlGridLength()), 27);
+    for (int i = 0; i < 27; ++i)
+    {
+      CHECK_DOUBLE(sink->GetControlGrid()[i], grid33[i]);
+    }
+  }
+
+  // Inverse: 3×3 sink adopts a 4×4 source — buffer must grow from
+  // 27 to 48 and the source values land in their entirety.
+  {
+    vtkNew<vtkMRMLBezierSurfaceNode> source;
+    // Default is 4×4 — populate the full 48-double grid.
+    source->SetState(vtkMRMLBezierSurfaceNode::Planning);
+    double grid44[48];
+    for (int i = 0; i < 48; ++i)
+    {
+      grid44[i] = static_cast<double>(i) * -0.25 + 1.0;
+    }
+    source->SetControlGrid(grid44);
+
+    vtkNew<vtkMRMLBezierSurfaceNode> sink;
+    sink->SetSize(3); // sink starts at 3×3, 27 zeros
+    CHECK_INT(static_cast<int>(sink->GetRows()), 3);
+    CHECK_INT(static_cast<int>(sink->GetCols()), 3);
+
+    sink->CopyContent(source.GetPointer(), /*deepCopy=*/true);
+
+    CHECK_INT(static_cast<int>(sink->GetRows()), 4);
+    CHECK_INT(static_cast<int>(sink->GetCols()), 4);
+    CHECK_INT(static_cast<int>(sink->GetControlGridLength()), 48);
+    for (int i = 0; i < 48; ++i)
+    {
+      CHECK_DOUBLE(sink->GetControlGrid()[i], grid44[i]);
+    }
+  }
+  return EXIT_SUCCESS;
+}
+
+/// Minimal observer used by ``testSizeSettersFireModifiedOnce`` —
+/// counts ``vtkCommand::ModifiedEvent`` invocations so the test can
+/// pin "exactly one Modified() per accepted setter call + zero per
+/// rejected setter call".
+class ModifiedCounter
+{
+public:
+  static void Callback(vtkObject*, unsigned long, void* clientData, void*) { static_cast<ModifiedCounter*>(clientData)->Count++; }
+  int Count = 0;
+  void Reset() { this->Count = 0; }
+};
+
+int testSizeSettersFireModifiedOnce()
+{
+  // ADR-0018 §1 — every accepted shape mutation fires ``Modified()``
+  // exactly once, and every rejected one fires zero times.  This is
+  // the invariant a future setter rewrite (e.g. split into resize +
+  // ivar set) could trip without the existing MTime-advance tests
+  // catching it.  The MTime non-regression test pins "MTime advanced"
+  // — which is also true for a double-fire — but downstream observers
+  // counting Modified events would see twice the work.
+  vtkNew<vtkMRMLBezierSurfaceNode> node;
+
+  ModifiedCounter counter;
+  vtkNew<vtkCallbackCommand> cb;
+  cb->SetCallback(&ModifiedCounter::Callback);
+  cb->SetClientData(&counter);
+  const unsigned long tag = node->AddObserver(vtkCommand::ModifiedEvent, cb.GetPointer());
+
+  // Default is 4×4; SetSize(3) is a real shape change → exactly one
+  // Modified.
+  counter.Reset();
+  node->SetSize(3);
+  CHECK_INT(counter.Count, 1);
+
+  // No-op self-assign → zero Modified.
+  counter.Reset();
+  node->SetSize(3);
+  CHECK_INT(counter.Count, 0);
+
+  // Bump back up to 4×4 → exactly one Modified.
+  counter.Reset();
+  node->SetSize(4);
+  CHECK_INT(counter.Count, 1);
+
+  // Rejection paths — out-of-range SetSize values and non-square
+  // SetRows / SetCols attempts must not fire Modified.  The rejection
+  // emits a ``vtkErrorMacro`` — gate the assertion around the
+  // ASSERT_ERRORS counter so the test driver doesn't count those as
+  // a failure (and so a future silent-drop regression — error gone —
+  // also surfaces here).
+  counter.Reset();
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  node->SetSize(5); // above MaxGridSize
+  node->SetSize(2); // below MinGridSize
+  node->SetRows(3); // non-square attempt: (3, 4)
+  node->SetCols(3); // non-square attempt: (4, 3)
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  CHECK_INT(counter.Count, 0);
+  CHECK_INT(static_cast<int>(node->GetRows()), 4); // unchanged
+  CHECK_INT(static_cast<int>(node->GetCols()), 4);
+
+  node->RemoveObserver(tag);
+  return EXIT_SUCCESS;
+}
+
 int testXMLRoundTrip3x3()
 {
   // ADR-0018 §1 — Rows / Cols round-trip through XML attributes,
@@ -1219,6 +1353,8 @@ int vtkMRMLBezierSurfaceNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testConfirmedStateTransitions());
   CHECK_EXIT_SUCCESS(testVariableSizeControlPolygon());
   CHECK_EXIT_SUCCESS(testCopyContent3x3());
+  CHECK_EXIT_SUCCESS(testCopyContentResizesAcrossShapes());
+  CHECK_EXIT_SUCCESS(testSizeSettersFireModifiedOnce());
   CHECK_EXIT_SUCCESS(testXMLRoundTrip3x3());
 
   std::cout << "vtkMRMLBezierSurfaceNodeTest1 completed successfully" << std::endl;
