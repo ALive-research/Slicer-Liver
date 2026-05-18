@@ -50,21 +50,12 @@
 #include <memory>
 
 //-------------------------------------------------------------------------------
-class vtkTextureObject;
-
-//-------------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLBezierResectionPolyDataMapper : public vtkOpenGLPolyDataMapper
 {
 public:
   static vtkOpenGLBezierResectionPolyDataMapper* New();
   vtkTypeMacro(vtkOpenGLBezierResectionPolyDataMapper, vtkOpenGLPolyDataMapper);
   void PrintSelf(ostream& os, vtkIndent indent) override;
-
-  /// Get distance map
-  vtkTextureObject* GetDistanceMapTextureObject() const;
-
-  /// Set distance map
-  void SetDistanceMapTextureObject(vtkTextureObject* node);
 
   /// Set RAS - IKJ matrix
   void SetRasToIjkMatrix(const vtkMatrix4x4*);
