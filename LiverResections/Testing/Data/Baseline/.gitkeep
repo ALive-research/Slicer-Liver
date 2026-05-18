@@ -1,0 +1,11 @@
+# Visual-regression baseline content-hash stubs (`<test>.<ext>.sha512`)
+# land in this directory.  Each stub is a 64-byte hex digest of the
+# corresponding release asset on
+# github.com/ALive-research/AliveTestingData (release tag
+# `liver-test-baselines-v1`), resolved at test time via CMake
+# ExternalData.
+#
+# Stubs are produced by the upload script:
+#     ./LiverResections/Testing/Scripts/upload_baseline.sh <test>
+#
+# See LiverResections/Testing/README.md for the full workflow.

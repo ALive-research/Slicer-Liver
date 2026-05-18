@@ -255,6 +255,12 @@ jobs:
           # itself rather than fail.  Tracked as a follow-up; until
           # then, the CTest-level exclude keeps CI honestly green for
           # what it actually covers.
+          # `LiverBezierVisualTest_*` entries are excluded from the
+          # mandatory run too — they fetch baseline images from
+          # ALive-research/AliveTestingData via ExternalData and may
+          # need offscreen GL that is not yet validated on the CI
+          # image.  They run as a separate, ``continue-on-error: true``
+          # step below.  See LiverResections/Testing/README.md.
           # `-V` (verbose) dumps each test's stdout/stderr in the CI log
           # regardless of pass/fail.  Replaces the prior `--output-on-failure`
           # so that aggregated pytest entries (e.g. `pytest_scaffold` from
@@ -264,4 +270,23 @@ jobs:
           # CI logs are append-mostly archives and one-glance pytest
           # visibility outweighs the line count.
           ctest -V --no-tests=error \
-                --exclude-regex '^py_LiverSegmentsTest$'
+                --exclude-regex '^(py_LiverSegmentsTest|LiverBezierVisualTest_.*)$'
+
+      # ---------------------------------------------------------------------
+      # Visual-regression tests (per ADR-0020 §"Rollout plan" §7).
+      # Soft-gated: a baseline-fetch failure (e.g. AliveTestingData
+      # release rate-limit) or an offscreen-GL hiccup on the CI image
+      # surfaces here as a notice rather than a blocking failure while
+      # the harness beds in.  Tighten to a hard-required step once the
+      # harness has proven stable across a few PR cycles.
+      # ---------------------------------------------------------------------
+      - name: Test (CTest — visual regression)
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
+        continue-on-error: true
+        env:
+          LIVER_RUN_VISUAL_TESTS: "1"
+        run: |
+          set -euo pipefail
+          cd build
+          ctest -V --no-tests=error \
+                --tests-regex '^LiverBezierVisualTest_.*$'
