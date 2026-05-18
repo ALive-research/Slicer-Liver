@@ -69,6 +69,9 @@ extensions = [
     "sphinx-jsonschema",
     "sphinx_reredirects",
     "sphinx_design",
+    # Mermaid diagrams in the architecture chapter + state-machine
+    # diagrams in ADR-0019.  Added by ADR-0018's scaffold extension.
+    "sphinxcontrib.mermaid",
 ]
 
 # Mocks for autodoc — `LiverResectionsLib` imports from the Slicer
