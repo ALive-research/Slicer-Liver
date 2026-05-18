@@ -58,7 +58,7 @@ each scenario `<test-name>` the bundle is:
 | `<test-name>.notes.md`         | (optional) human rationale for what the baseline validates.            |
 
 The bundle lives as release assets on
-`github.com/ALive-research/AliveTestingData` (release tag
+`github.com/ALive-research/ALiveResearchTestingData` (release tag
 **`liver-test-baselines-v1`**, bumped per the rule in
 [ADR-0020](../../Docs/adr/0020-gpu-tessellation.md) §"Rollout plan").
 
@@ -68,7 +68,7 @@ In the Slicer-Liver repo the bundle is represented by **64-byte
 the matching blob from:
 
 ```
-https://github.com/ALive-research/AliveTestingData/releases/download/liver-test-baselines-v1/SHA512/<hash>
+https://github.com/ALive-research/ALiveResearchTestingData/releases/download/liver-test-baselines-v1/SHA512/<hash>
 ```
 
 ## Workflow
@@ -115,7 +115,7 @@ After visual approval:
 The script:
 
 1. Computes SHA-512 of each staged file.
-2. Uploads each as a release asset on `AliveTestingData` (named by its
+2. Uploads each as a release asset on `ALiveResearchTestingData` (named by its
    digest; `--clobber` so re-captures replace cleanly).
 3. Writes the matching `.sha512` stubs under `Data/Baseline/`.
 4. Prints `git add` + `git commit` hints.
@@ -146,11 +146,11 @@ When a Slicer / VTK / VTK-image upgrade causes legitimate visual drift
 (e.g., a freetype version change or a Mesa rasteriser change), every
 baseline needs re-capture.  The tag-bump procedure is:
 
-1. Create the next-N release on `AliveTestingData`:
+1. Create the next-N release on `ALiveResearchTestingData`:
 
    ```bash
    gh release create liver-test-baselines-v2 \
-     --repo ALive-research/AliveTestingData \
+     --repo ALive-research/ALiveResearchTestingData \
      --title "Slicer-Liver visual-regression test baselines v2" \
      --notes "Re-captured against Slicer X.Y.Z + VTK A.B.C."
    ```
@@ -175,11 +175,11 @@ baseline needs re-capture.  The tag-bump procedure is:
 ## Bootstrapping the release (one-time per organisation)
 
 When the release tag namespace is first established on
-`AliveTestingData`:
+`ALiveResearchTestingData`:
 
 ```bash
 gh release create liver-test-baselines-v1 \
-  --repo ALive-research/AliveTestingData \
+  --repo ALive-research/ALiveResearchTestingData \
   --title "Slicer-Liver visual-regression test baselines v1" \
   --notes "Baseline image bundles for Slicer-Liver visual-regression tests.  Tag namespace: liver-test-baselines-vN.  Bump N when baselines change (Slicer/VTK/image bump).  This release backs Slicer-Liver's Testing/Data/Baseline/*.sha512 fixtures resolved via CMake ExternalData."
 ```

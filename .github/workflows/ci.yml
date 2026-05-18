@@ -257,7 +257,7 @@ jobs:
           # what it actually covers.
           # `LiverBezierVisualTest_*` entries are excluded from the
           # mandatory run too — they fetch baseline images from
-          # ALive-research/AliveTestingData via ExternalData and may
+          # ALive-research/ALiveResearchTestingData via ExternalData and may
           # need offscreen GL that is not yet validated on the CI
           # image.  They run as a separate, ``continue-on-error: true``
           # step below.  See LiverResections/Testing/README.md.
@@ -274,7 +274,7 @@ jobs:
 
       # ---------------------------------------------------------------------
       # Visual-regression tests (per ADR-0020 §"Rollout plan" §7).
-      # Soft-gated: a baseline-fetch failure (e.g. AliveTestingData
+      # Soft-gated: a baseline-fetch failure (e.g. ALiveResearchTestingData
       # release rate-limit) or an offscreen-GL hiccup on the CI image
       # surfaces here as a notice rather than a blocking failure while
       # the harness beds in.  Tighten to a hard-required step once the
