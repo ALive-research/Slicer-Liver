@@ -232,6 +232,21 @@ public:
   vtkGetMacro(State, int);
   void SetState(int state);
 
+  /// ``LoadingFromXML`` — internal flag that exempts the ADR-0014 §4
+  /// audit-data setters and the ADR-0019 ``SetState`` transition
+  /// matrix from the public-API guards for the duration of a
+  /// scene/storage read.  Set automatically by ``ReadXMLAttributes``;
+  /// also set by ``vtkMRMLBezierSurfaceStorageNode::ReadJson`` for
+  /// JSON-driven loads so a Confirmed-state ``.lrp.json`` round-trips
+  /// into a fresh sink (sink starts at ``Init``; without the bypass,
+  /// ``SetState(Confirmed)`` is rejected as an illegal Init→Confirmed
+  /// transition).  Public setter so the storage node — which is in a
+  /// different translation unit and not a friend — can drive the
+  /// flag.  Treat as an internal API: callers other than the storage
+  /// reader path should NOT touch it.
+  vtkGetMacro(LoadingFromXML, bool);
+  vtkSetMacro(LoadingFromXML, bool);
+
   /// Initialization mode (SlicingPlane / DistanceSpheroid).  Persisted
   /// in XML.  Meaningful for both States: in Init it drives the
   /// active Representation; in Planning it tags which init-mode audit
