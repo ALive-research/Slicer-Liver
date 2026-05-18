@@ -56,7 +56,6 @@
 #include <vtkRenderer.h>
 #include <vtkSmartPointer.h>
 #include <vtkShaderProgram.h>
-#include <vtkTextureObject.h>
 #include <vtkTransform.h>
 
 //------------------------------------------------------------------------------
@@ -65,7 +64,6 @@ class vtkOpenGLBezierResectionPolyDataMapper::vtkInternal
 public:
   vtkInternal(vtkOpenGLBezierResectionPolyDataMapper* parent)
     : Parent(parent)
-    , DistanceMapTextureObject(nullptr)
     , RasToIjkMatrixT(nullptr)
     , IjkToTextureMatrixT(nullptr)
     , ResectionMargin(0.0f)
@@ -77,13 +75,14 @@ public:
     , ResectionOpacity(1.0f)
     , InterpolatedMargins(false)
     , ResectionClipOut(false)
+    , GridDivisions(20)
+    , GridThicknessFactor(9.5f)
   {
     this->RasToIjkMatrixT = vtkSmartPointer<vtkMatrix4x4>::New();
     this->IjkToTextureMatrixT = vtkSmartPointer<vtkMatrix4x4>::New();
   }
 
   vtkWeakPointer<vtkOpenGLBezierResectionPolyDataMapper> Parent;
-  vtkSmartPointer<vtkTextureObject> DistanceMapTextureObject;
   vtkSmartPointer<vtkMatrix4x4> RasToIjkMatrixT;
   vtkSmartPointer<vtkMatrix4x4> IjkToTextureMatrixT;
   float ResectionMargin;
@@ -161,7 +160,6 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(std::map<vtkSha
                                "//VTK::PositionVC::Dec\n"
                                "#define M_PI 3.1415926535897932384626433832795\n"
                                "uniform sampler3D distanceTexture;\n"
-                               "uniform sampler2D posMarker;\n"
                                "//vec4 fragPositionMC = vertexWCVSOutput;\n");
 
   vtkShaderProgram::Substitute(FSSource,
@@ -186,7 +184,6 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(std::map<vtkSha
     FSSource,
     "//VTK::Color::Impl",
     "//VTK::Color::Impl\n"
-    "vec4 marker = texture(posMarker, uvCoordsOutput);\n"
     "vec4 dist = texture(distanceTexture, fragPositionMC.xyz);\n"
     "float lowMargin = uResectionMargin - uUncertaintyMargin;\n"
     "float highMargin = uResectionMargin + uUncertaintyMargin;\n"
@@ -289,11 +286,6 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetMapperShaderParameters(vtkOpenGL
     cellBO.Program->SetUniformi("distanceTexture", 0);
   }
 
-  if (cellBO.Program->IsUniformUsed("posMarker"))
-  {
-    cellBO.Program->SetUniformi("posMarker", 15);
-  }
-
   if (cellBO.Program->IsUniformUsed("uRasToIjk"))
   {
     cellBO.Program->SetUniformMatrix("uRasToIjk", this->Impl->RasToIjkMatrixT);
@@ -360,29 +352,6 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetMapperShaderParameters(vtkOpenGL
   }
 
   Superclass::SetMapperShaderParameters(cellBO, ren, actor);
-}
-
-//------------------------------------------------------------------------------
-vtkTextureObject* vtkOpenGLBezierResectionPolyDataMapper::GetDistanceMapTextureObject() const
-{
-  return this->Impl->DistanceMapTextureObject;
-}
-
-//------------------------------------------------------------------------------
-void vtkOpenGLBezierResectionPolyDataMapper::SetDistanceMapTextureObject(vtkTextureObject* object)
-{
-  if (this->Impl->DistanceMapTextureObject == object)
-  {
-    return;
-  }
-
-  this->Impl->DistanceMapTextureObject = object;
-  if (object)
-  {
-    object->Register(this);
-  }
-
-  this->Modified();
 }
 
 //------------------------------------------------------------------------------
