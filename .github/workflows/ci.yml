@@ -379,9 +379,16 @@ jobs:
         if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
         run: |
           set -euo pipefail
-          python3 -m pip install --user --upgrade pip
-          python3 -m pip install --user 'gcovr>=7' 'pytest-cov>=5' 'pytest>=8'
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          # Ubuntu 24.04's system Python is PEP 668 "externally managed",
+          # so ``pip install --user`` refuses without an explicit override.
+          # Use a dedicated venv inside the job — isolates from the image's
+          # Python without needing ``--break-system-packages`` (which the
+          # ALive-Docker follow-up could replace with apt-packaged gcovr +
+          # python3-pytest-cov in the base image).
+          python3 -m venv /tmp/coverage-venv
+          /tmp/coverage-venv/bin/pip install --upgrade pip
+          /tmp/coverage-venv/bin/pip install 'gcovr>=7' 'pytest-cov>=5' 'pytest>=8'
+          echo "/tmp/coverage-venv/bin" >> "$GITHUB_PATH"
 
       - name: Verify Slicer build tree
         if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
