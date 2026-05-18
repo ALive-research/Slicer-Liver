@@ -61,11 +61,19 @@ include(ExternalData)
 # so Slicer's MIDAS / GitHub mirrors continue to work for any shared
 # fixtures the suite eventually pulls.
 list(APPEND ExternalData_URL_TEMPLATES
-  # ALiveResearchTestingData release-asset URL pattern.  Bump the tag suffix
-  # (``-v2``, ``-v3``) when baselines change due to a Slicer/VTK/image
-  # bump; the corresponding ``.sha512`` stubs under ``Data/Baseline/``
-  # rotate at the same time.  See ADR-0020 §"Rollout plan" §7.
-  "https://github.com/ALive-research/ALiveResearchTestingData/releases/download/liver-test-baselines-v1/%(algo)/%(hash)"
+  # ALiveResearchTestingData follows the SlicerTestingData mirror
+  # pattern: one release per hash algorithm (``SHA256``, ``SHA512``,
+  # …); release assets are named by their ``<hashsum>`` with no
+  # per-purpose prefix; a sibling ``<HASHALGO>.csv`` in the repo root
+  # maps ``<hashsum>;<filename>``.  The visual-regression harness
+  # uses ``.sha512`` stubs (CMake's ExternalData default for new
+  # work) and resolves them against the ``SHA512`` release.
+  #
+  # When baselines change due to a Slicer/VTK/image bump, the
+  # ``.sha512`` stubs under ``Data/Baseline/`` rotate to point at
+  # the new hashes; the old assets stay in the ``SHA512`` release
+  # (content-addressed; no overwrites).
+  "https://github.com/ALive-research/ALiveResearchTestingData/releases/download/%(algo)/%(hash)"
 )
 
 # Per-build object store so multiple checkouts on the same machine

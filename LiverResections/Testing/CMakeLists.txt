@@ -4,7 +4,7 @@ add_subdirectory(Cxx)
 #
 # Python-driven golden-image tests; baseline bundles are stored as
 # release assets on the ALive-research/ALiveResearchTestingData repository
-# (release tag ``liver-test-baselines-v1``) and resolved lazily via
+# (SHA512 release, content-addressed per the SlicerTestingData mirror pattern) and resolved lazily via
 # CMake ExternalData when the test runs.  See
 # ``LiverResections/Testing/README.md`` for the full capture / replay
 # workflow and the steps for bumping the baseline tag.
