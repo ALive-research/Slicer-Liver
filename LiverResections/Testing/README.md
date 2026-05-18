@@ -89,7 +89,9 @@ CTest entry  ──►  Slicer --no-main-window --python-script replay_test.py
                   --test <name> --baseline-dir … --scenarios-dir …
               ──►  scenario.setup_scene()  +  setup_camera()  +  setup_viewport()
               ──►  vtkWindowToImageFilter snapshot
-              ──►  vtkImageDifference vs baseline PNG (tolerance 0.15)
+              ──►  vtkImageDifference vs baseline PNG
+                   (threshold 0, no shift; mean per-pixel L1 in [0, 1];
+                    tolerance 0.15)
               ──►  exit 0 / 1
 ```
 
