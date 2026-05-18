@@ -5,7 +5,7 @@
 # v2.1 GPU-tessellation rewrite.  This file wires the CMake side:
 #
 #   * Pulls baseline bundle assets (PNG + MRML + camera + viewport JSON)
-#     from the ALive-research/AliveTestingData repository via the
+#     from the ALive-research/ALiveResearchTestingData repository via the
 #     ``ExternalData`` CMake module, using 64-byte ``.sha512`` content
 #     hash stubs committed under ``Data/Baseline/``.
 #   * Registers one CTest entry per visual-regression scenario; each
@@ -22,7 +22,7 @@
 # Slicer's ``UseSlicer.cmake`` pre-populates ``ExternalData_URL_TEMPLATES``
 # and ``ExternalData_OBJECT_STORES`` from the Slicer-core defaults
 # (see Slicer ``CMake/UseSlicer.cmake.in`` §"ExternalData").  Append our
-# AliveTestingData URL template here so ``DATA{...}`` references in
+# ALiveResearchTestingData URL template here so ``DATA{...}`` references in
 # ``ExternalData_add_test()`` resolve from the Slicer-Liver release
 # bucket first, falling back to the Slicer-core sources for any
 # overlap.
@@ -35,7 +35,7 @@ endif()
 # Opt-in gate for the visual-regression harness.
 #
 # Default OFF until two preconditions land: (a) the
-# ``ALive-research/AliveTestingData`` release tag holding captured
+# ``ALive-research/ALiveResearchTestingData`` release tag holding captured
 # baselines, and (b) confirmation that Slicer's launcher exits cleanly
 # in the no-baseline path under ``--no-main-window --disable-modules
 # --python-script`` (the Qt application event loop has been observed
@@ -61,11 +61,11 @@ include(ExternalData)
 # so Slicer's MIDAS / GitHub mirrors continue to work for any shared
 # fixtures the suite eventually pulls.
 list(APPEND ExternalData_URL_TEMPLATES
-  # AliveTestingData release-asset URL pattern.  Bump the tag suffix
+  # ALiveResearchTestingData release-asset URL pattern.  Bump the tag suffix
   # (``-v2``, ``-v3``) when baselines change due to a Slicer/VTK/image
   # bump; the corresponding ``.sha512`` stubs under ``Data/Baseline/``
   # rotate at the same time.  See ADR-0020 §"Rollout plan" §7.
-  "https://github.com/ALive-research/AliveTestingData/releases/download/liver-test-baselines-v1/%(algo)/%(hash)"
+  "https://github.com/ALive-research/ALiveResearchTestingData/releases/download/liver-test-baselines-v1/%(algo)/%(hash)"
 )
 
 # Per-build object store so multiple checkouts on the same machine

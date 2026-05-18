@@ -3,7 +3,7 @@
 # Distributed under the OSI-approved BSD 3-Clause License.
 #
 # Upload a captured visual-regression baseline bundle to the
-# AliveTestingData release and rotate the matching `.sha512` content
+# ALiveResearchTestingData release and rotate the matching `.sha512` content
 # hash stubs in the Slicer-Liver repo.
 #
 # Usage:
@@ -20,7 +20,7 @@
 #
 # Preconditions:
 #   * ``gh`` CLI authenticated with write access to
-#     github.com/ALive-research/AliveTestingData.
+#     github.com/ALive-research/ALiveResearchTestingData.
 #   * The capture flow (``capture_baseline.py``) has written
 #     ``Testing/baselines-staging/<test-name>.{png,mrml,camera.json,viewport.json}``.
 #
@@ -44,7 +44,7 @@ fi
 
 TEST_NAME="$1"
 RELEASE_TAG="${2:-liver-test-baselines-v1}"
-REPO="ALive-research/AliveTestingData"
+REPO="ALive-research/ALiveResearchTestingData"
 
 # Resolve repo root from this script's location.  The script lives at
 # LiverResections/Testing/Scripts/upload_baseline.sh; the repo root is
