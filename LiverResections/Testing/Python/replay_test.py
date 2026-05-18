@@ -38,10 +38,11 @@ import importlib
 import pathlib
 import sys
 
-# Default similarity tolerance used by ``vtkImageDifference`` —
-# normalized 0..255 L1 channel error averaged across pixels.  A value
-# of 0.15 tolerates minor anti-aliasing / font-metrics drift across
-# Mesa versions while still catching real visual regressions.
+# Default similarity tolerance used by ``vtkImageDifference`` — the
+# mean per-pixel channel-averaged L1 error, normalised to ``[0, 1]``
+# (see ``_compare_images``).  A value of 0.15 tolerates minor
+# anti-aliasing / font-metrics drift across Mesa versions while still
+# catching real visual regressions.
 DEFAULT_TOLERANCE = 0.15
 
 
@@ -60,8 +61,8 @@ def _parse_argv() -> argparse.Namespace:
         type=float,
         default=DEFAULT_TOLERANCE,
         help=(
-            "Maximum allowed per-pixel L1 channel difference (0..255 scale, "
-            f"averaged).  Default {DEFAULT_TOLERANCE}."
+            "Maximum allowed mean per-pixel L1 channel difference, "
+            f"normalised to [0, 1].  Default {DEFAULT_TOLERANCE}."
         ),
     )
     if "--" in sys.argv:
@@ -159,14 +160,49 @@ def _load_png(path: pathlib.Path):
 
 
 def _compare_images(rendered, baseline, tolerance: float) -> float:
-    """Return mean per-pixel L1 difference (0 = identical)."""
+    """Return mean per-pixel L1 difference, normalised to [0, 1].
+
+    ``vtkImageDifference`` reports two error accumulators:
+
+    * ``Error`` — sum over all pixels of the per-pixel channel-averaged
+      delta, with each per-pixel contribution already normalised to
+      ``[0, 1]`` (see ``vtkImageDifference.cxx``: ``error += sum / (nComp * 255)``).
+    * ``ThresholdedError`` — same accumulator but with the per-channel
+      ``Threshold`` clamp applied first.
+
+    VTK's defaults (``Threshold = 105``, ``AllowShift = true``,
+    ``Averaging = true``) are tuned for graphics-renderer regression
+    tests where ~41 %-per-channel single-pixel deltas should NOT trip
+    the gate.  For our use case (fixed camera + viewport, identical
+    Slicer-Liver build) we want any per-pixel delta to surface, so we
+    zero the threshold and disable the 1-pixel shift.  The 3x3
+    averaging is left on because it is the only mechanism that
+    distinguishes anti-aliasing fringe from a real regression.
+
+    Both accumulators are sums — divide by the pixel count to recover
+    the mean per-pixel error, consistent with the function's
+    docstring + the README's "tolerance 0.15" wording.
+    """
     import vtk  # type: ignore[import-not-found]
 
     diff = vtk.vtkImageDifference()
     diff.SetInputData(rendered)
     diff.SetImageData(baseline)
+    # No built-in per-channel masking — full per-pixel delta surfaces.
+    diff.SetThreshold(0)
+    # Disable the symmetric 1-pixel shift tolerance.  Canonical for
+    # regression testing on a fixed render pipeline; the shift allowance
+    # is what masks observer-ordering regressions in the mapper.
+    diff.SetAllowShift(False)
     diff.Update()
-    return float(diff.GetThresholdedError())
+
+    # Recover the per-pixel mean from the accumulator.  ``rendered``
+    # and ``baseline`` share extent by construction (replay renders at
+    # the scenario's declared viewport size; capture wrote the PNG at
+    # the same size).
+    dims = rendered.GetDimensions()
+    pixel_count = max(1, dims[0] * dims[1] * max(1, dims[2]))
+    return float(diff.GetThresholdedError()) / pixel_count
 
 
 def main() -> int:
