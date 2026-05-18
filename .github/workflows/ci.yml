@@ -167,53 +167,46 @@ jobs:
       # Filter is PR-scoped — push events (merge to preview, direct push,
       # workflow_dispatch) always run the full build to catch any drift.
       # ---------------------------------------------------------------------
-      # Inversion: we define ``non-docs`` — a filter that's true when ANY
-      # changed file is OUTSIDE the docs-only set.  Skip build-test when
-      # ``non-docs == false`` (every changed file is a doc-shaped file).
+      # We want: "every changed file is a doc-shaped file → skip build".
+      # dorny/paths-filter@v3 cannot express that natively: its
+      # ``predicate-quantifier`` supports only ``some`` (≥ 1 file matches
+      # any pattern) and ``every`` (≥ 1 file matches every pattern);
+      # neither is "every file matches some pattern".  Prior attempts
+      # using ``predicate-quantifier: every`` with positive patterns
+      # (PR #368, PR #371) and the negation-plus-``**`` inversion
+      # (PR #375) both failed for that reason.  PR #375's smoke test
+      # against a single-file pure-docs diff explicitly confirmed
+      # ``non-docs = true`` instead of false.
       #
-      # Why the inversion: dorny/paths-filter@v3's ``predicate-quantifier:
-      # every`` means *every pattern must match at least one file*, NOT
-      # *every file must match at least one pattern*.  Previous attempts
-      # (PR #368 separate-list form + PR #371 ``requirements-docs.txt``
-      # addition) had the semantics backwards: with ``every`` the filter
-      # would only return true when every listed doc-pattern got touched
-      # in the diff — impossible for a typical PR — so docs-only PRs
-      # never actually skipped the heavy build.  Surfaced cleanly by
-      # PR #374 (the first pure-docs PR: build-test ran 7m57s when it
-      # should have skipped).
-      #
-      # The corrected shape uses picomatch negation patterns followed by
-      # ``**`` fallback.  With default ``predicate-quantifier: some`` the
-      # filter is true if at least one changed file matches ``**`` AFTER
-      # the negations have excluded the doc paths — i.e., at least one
-      # non-docs file changed.  Order matters: negations must precede
-      # ``**``.
+      # tj-actions/changed-files DOES express it natively via
+      # ``files_ignore``: ``any_changed`` is true iff at least one
+      # changed file is outside the ignored set.  Pure-docs PRs (every
+      # changed file matches the ignore list) yield ``any_changed=false``
+      # → skip the heavy build steps.
       - name: Detect non-docs change
         id: changes
         if: github.event_name == 'pull_request'
-        uses: dorny/paths-filter@v3
+        uses: tj-actions/changed-files@v45
         with:
-          filters: |
-            non-docs:
-              - '!Docs/**'
-              - '!*.md'
-              - '!.github/pull_request_template.md'
-              - '!.github/CODEOWNERS'
-              - '!CITATION.cff'
-              - '!License.txt'
-              - '!COPYRIGHT.txt'
-              - '!requirements-docs.txt'
-              - '!.readthedocs.yaml'
-              - '**'
+          files_ignore: |
+            Docs/**
+            *.md
+            .github/pull_request_template.md
+            .github/CODEOWNERS
+            CITATION.cff
+            License.txt
+            COPYRIGHT.txt
+            requirements-docs.txt
+            .readthedocs.yaml
 
       - name: Report skip (docs-only PR)
-        if: github.event_name == 'pull_request' && steps.changes.outputs.non-docs == 'false'
+        if: github.event_name == 'pull_request' && steps.changes.outputs.any_changed == 'false'
         run: |
-          echo "::notice::Skipping Slicer build/test — every changed file is a doc-shaped file."
-          echo "non-docs filter is false; build-test job reports success."
+          echo "::notice::Skipping Slicer build/test — every changed file is in the docs-ignore set."
+          echo "any_changed is false; build-test job reports success without running heavy steps."
 
       - name: Verify Slicer build tree
-        if: github.event_name != 'pull_request' || steps.changes.outputs.non-docs == 'true'
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
         run: |
           set -euo pipefail
           test -f "${Slicer_DIR}/SlicerConfig.cmake" \
@@ -232,7 +225,7 @@ jobs:
       # the clone + build.
       # -----------------------------------------------------------------
       - name: Cache SlicerLayerDM source + build tree
-        if: github.event_name != 'pull_request' || steps.changes.outputs.non-docs == 'true'
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
         id: cache-layerdm
         uses: actions/cache@v4
         with:
@@ -250,7 +243,7 @@ jobs:
 
       - name: Clone SlicerLayerDM (pinned)
         if: |
-          (github.event_name != 'pull_request' || steps.changes.outputs.non-docs == 'true') &&
+          (github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true') &&
           steps.cache-layerdm.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
@@ -263,7 +256,7 @@ jobs:
 
       - name: Configure SlicerLayerDM
         if: |
-          (github.event_name != 'pull_request' || steps.changes.outputs.non-docs == 'true') &&
+          (github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true') &&
           steps.cache-layerdm.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
@@ -274,12 +267,12 @@ jobs:
 
       - name: Build SlicerLayerDM
         if: |
-          (github.event_name != 'pull_request' || steps.changes.outputs.non-docs == 'true') &&
+          (github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true') &&
           steps.cache-layerdm.outputs.cache-hit != 'true'
         run: cmake --build "${LAYERDM_BUILD}" --config Release -j "$(nproc)"
 
       - name: Configure
-        if: github.event_name != 'pull_request' || steps.changes.outputs.non-docs == 'true'
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
         run: |
           set -euo pipefail
           mkdir -p build
@@ -295,11 +288,11 @@ jobs:
             -DLayerDisplayableManager_DIR="${LAYERDM_BUILD}"
 
       - name: Build
-        if: github.event_name != 'pull_request' || steps.changes.outputs.non-docs == 'true'
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
         run: cmake --build build --config Release -j "$(nproc)"
 
       - name: Test (CTest)
-        if: github.event_name != 'pull_request' || steps.changes.outputs.non-docs == 'true'
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
         run: |
           set -euo pipefail
           cd build
