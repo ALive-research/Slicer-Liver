@@ -3,15 +3,141 @@
 Reference companion to [ADR-0013][adr-0013] §5 + [ADR-0018][adr-0018].
 Shows the data flow from the moment a `vtkMRMLBezierSurfaceNode`
 lands in the scene to the point a custom OpenGL mapper writes
-framebuffer pixels.
+framebuffer pixels.  Two views: a **class diagram** of the C++ /
+Python types involved + a **sequence diagram** of the runtime
+dispatch.
 
 [adr-0013]: ../adr/0013-layerdm-pipeline-pattern.md
 [adr-0014]: ../adr/0014-livermarkups-dissolution.md
 [adr-0018]: ../adr/0018-nurbs-extension-surface.md
 
+## Class structure
+
+```mermaid
+classDiagram
+    direction TB
+
+    class vtkMRMLScene {
+        <<Slicer-core>>
+    }
+    class vtkMRMLBezierSurfaceNode {
+        <<v2.0.0 data node>>
+    }
+    class vtkMRMLBezierSurfaceDisplayNode {
+        <<v2.0.0 display node>>
+        +GridVisibility / Divisions / Thickness
+        +ResectionGridColor
+        +ResectionMargin / UncertaintyMargin
+        +TerminologyEntry
+    }
+    class vtkMRMLLayerDisplayableManager {
+        <<upstream LayerDM>>
+        Observes scene
+        Per-view singleton
+    }
+    class vtkMRMLLayerDMPipelineFactory {
+        <<upstream LayerDM>>
+        AddPipelineCreator()
+        CreatePipeline(viewNode, displayNode)
+    }
+    class vtkMRMLLayerDMPipelineScriptedCreator {
+        <<upstream LayerDM>>
+        SetPythonCallback(tryCreate)
+    }
+
+    class LiverBezierSurfacePipeline {
+        <<v2.0.0 — Python>>
+        SetDisplayNode()
+        UpdatePipeline()
+        OnRendererAdded()
+        cleanup()
+        Dispatch: (state, initMode) → Representation
+    }
+
+    class BezierPlanningRepresentation {
+        <<v2.0.0 — Python>>
+        Active in (Planning, *)
+    }
+    class SlicingPlaneInitRepresentation {
+        <<v2.0.0 — Python>>
+        Active in (Init, SlicingPlane)
+    }
+    class DistanceSpheroidInitRepresentation {
+        <<v2.0.0 — Python>>
+        Active in (Init, DistanceSpheroid)
+    }
+    class ConfirmedRepresentation {
+        <<ADR-0019 Proposed>>
+        Active in (Confirmed, *)
+    }
+
+    class vtkOpenGLBezierResectionPolyDataMapper {
+        <<post T2-mapper-relocation>>
+        Bezier surface render
+        + grid-overlay shader (Planning)
+        + parenchyma-trim shader (Confirmed)
+        Both gated by uniform feeds
+    }
+    class vtkOpenGLDistanceContourPolyDataMapper {
+        <<post T2-mapper-relocation>>
+        Distance-map contour shader
+    }
+    class vtkOpenGLResectogramPolyDataMapper {
+        <<post T2-mapper-relocation;<br/>T3 wire-up>>
+        Resectogram texture path
+    }
+    class FragmentShader {
+        <<GLSL>>
+        Bernstein basis evaluation
+        Grid overlay: tan(uv*π*divs) > thickness
+        Margin / uncertainty colour stops
+        Parenchyma trim by distance
+    }
+
+    vtkMRMLScene "1" --> "*" vtkMRMLBezierSurfaceNode : contains
+    vtkMRMLBezierSurfaceNode "1" --> "1" vtkMRMLBezierSurfaceDisplayNode : SetAndObserveDisplayNodeID
+
+    vtkMRMLScene "1" --> "1" vtkMRMLLayerDisplayableManager : observed by (per view)
+    vtkMRMLLayerDisplayableManager ..> vtkMRMLLayerDMPipelineFactory : dispatches
+    vtkMRMLLayerDMPipelineFactory ..> vtkMRMLLayerDMPipelineScriptedCreator : per-creator
+    vtkMRMLLayerDMPipelineScriptedCreator ..> LiverBezierSurfacePipeline : Python lambda<br/>(tryCreate)
+
+    LiverBezierSurfacePipeline ..> BezierPlanningRepresentation : Planning
+    LiverBezierSurfacePipeline ..> SlicingPlaneInitRepresentation : Init / SlicingPlane
+    LiverBezierSurfacePipeline ..> DistanceSpheroidInitRepresentation : Init / DistanceSpheroid
+    LiverBezierSurfacePipeline ..> ConfirmedRepresentation : Confirmed<br/>(ADR-0019)
+
+    BezierPlanningRepresentation ..> vtkOpenGLBezierResectionPolyDataMapper : surface + grid uniforms
+    ConfirmedRepresentation ..> vtkOpenGLBezierResectionPolyDataMapper : trim uniforms on / grid off
+    BezierPlanningRepresentation ..> vtkOpenGLDistanceContourPolyDataMapper : distance contours
+
+    vtkOpenGLBezierResectionPolyDataMapper ..> FragmentShader : GLSL uniforms
+    vtkOpenGLDistanceContourPolyDataMapper ..> FragmentShader : GLSL uniforms
+    vtkOpenGLResectogramPolyDataMapper ..> FragmentShader : GLSL uniforms
+
+    vtkMRMLBezierSurfaceDisplayNode ..> vtkOpenGLBezierResectionPolyDataMapper : uniform feed
+```
+
+The class diagram shows:
+
+- **Scene → display node → Pipeline**: the scene owns data + display
+  nodes; `vtkMRMLLayerDisplayableManager` observes scene events and
+  uses the factory to instantiate one Pipeline per `(view,
+  display node)` pair.
+- **Pipeline → Representation**: one Pipeline owns four
+  Representations (v2.0.0 + ADR-0019); dispatch table on
+  `(ResectionState, InitializationMode)` picks one active at a time.
+- **Representation → custom OpenGL mapper**: each Representation
+  owns a (small) set of mappers; the mappers live under
+  `LiverResections/VTKWidgets/` post T2-mapper-relocation.
+- **Mapper → fragment shader**: each mapper feeds uniforms to a
+  GLSL fragment shader that does the actual pixel work.  The
+  display node's fields (`GridVisibility`, `GridDivisions`,
+  `ResectionMargin`, …) wire into the uniform binds.
+
 ## Sequence
 
-```{mermaid}
+```mermaid
 sequenceDiagram
     participant User
     participant Scene as vtkMRMLScene

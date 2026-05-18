@@ -10,15 +10,42 @@
 
 - **2026-05-18 — variable-degree Bernstein + future NURBS fitter (ADR-0018).**
   Per [ADR-0018](0018-nurbs-extension-surface.md) §1 the
-  `vtkLiverBezierFitter` generalises to degree-`(Rows-1)` ×
-  degree-`(Cols-1)` Bernstein basis to support variable-size control
-  polygons.  The Eigen normal-equation pseudo-inverse path is
-  unchanged; only the basis-matrix shape parameterizes.  ADR-0018 §1
-  also commits a v2.1 sibling `vtkLiverNurbsFitter` (least-squares on
-  B-spline basis with rational weights + knot vectors); the
-  Eigen-via-ITK-bundle linkage this ADR commits to covers both
-  fitters.  Read every "4×4" / "16-point" reference below as the
-  default case of the general M×N + variable-degree formulation.
+  `vtkLiverBezierFitter` parameterizes to degree-`(Rows-1)` Bernstein
+  basis to support the v2.0.0 `{3×3, 4×4}` Bezier shapes.  The Eigen
+  normal-equation pseudo-inverse path is unchanged; only the
+  basis-matrix shape parameterizes (degree-2 for 3×3; degree-3 for
+  4×4).  Eigen alone covers v2.0.0; no new external dependency.
+
+  ADR-0018 §3 commits a v2.1 sibling `vtkLiverNurbsFitter` for the
+  NURBS extension.  **NURBS evaluation does require additional
+  numerics** (de Boor's recursive algorithm, knot-vector validation,
+  rational weight division) that Eigen does not ship.  Three library
+  options for the v2.1 NURBS fitter, deferred to the v2.1
+  NURBS-specific ADR:
+
+  - **Custom B-spline code atop Eigen.**  Smallest dependency
+    surface; Eigen handles the linear-algebra core (least squares,
+    weight estimation).  The de Boor recursion is ~150 lines of C++.
+    Risk: home-rolled numerics need careful characterisation testing
+    (per [ADR-0003](0003-testability-invariant.md)).
+  - **[OpenNURBS](https://github.com/mcneel/opennurbs)** (BSD-3, McNeel & Associates).  Industry-standard
+    NURBS toolkit used by Rhino, FreeCAD, gmsh.  Pros: battle-tested
+    numerics, complete B-spline + NURBS API, IGES / STEP I/O if
+    surgeon-to-CAD interchange ever lands.  Cons: ~50 KLOC, slow
+    build, brings in its own geometry kernel types that don't
+    interop directly with `vtkPolyData`.
+  - **[CGAL](https://www.cgal.org/)** (GPL / commercial dual-license; LGPL for some packages).
+    Has a `Polynomial`/`Algebraic_kernel` surface, but NURBS-surface
+    coverage is incomplete + licensing makes downstream distribution
+    in a Slicer extension complicated (Slicer is BSD-3; CGAL's
+    GPL packages would force GPL contamination per the GPL viral
+    clause, which is incompatible with Slicer-Liver's BSD-3
+    license).
+
+  **Decision deferred** to the v2.1 NURBS ADR; the v2.0.0 Bezier
+  parameterization in this ADR's main body needs no new library.
+  Read every "4×4" / "16-point" reference below as the 4×4 case of
+  the parameterized {3×3, 4×4} formulation.
 
 ## Context
 
