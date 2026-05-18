@@ -37,4 +37,5 @@ ReadTheDocs.  Mirrors the upstream Slicer-core convention.
 
 adr/0017-sphinx-readthedocs.md
 adr/0018-nurbs-extension-surface.md
+adr/0019-resection-state-machine.md
 ```
