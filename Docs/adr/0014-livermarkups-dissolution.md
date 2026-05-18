@@ -11,6 +11,23 @@
 
 ## Amendments
 
+- **2026-05-18 — 3-state resection machine (ADR-0019).**  §4 of this
+  ADR commits to a 2-state `ResectionState` enum (`Init` /
+  `Planning`) with the `Init → Planning` transition as irreversible
+  audit-data-locking.  Per
+  [ADR-0019](0019-resection-state-machine.md),
+  a third `Confirmed = 2` state lands as a peer of `Planning`,
+  round-trippable: `Planning ↔ Confirmed`.  The `Confirmed` state
+  hides the control polygon, disables the widget, and renders the
+  resection surface with the parenchyma-trim shader (a v1 feature
+  the 2-state contract dropped).  The read-only-after-Planning
+  audit-data rule in §4 below is **unchanged in substance** — init
+  data becomes audit-only at the first `Init → Planning`
+  transition; subsequent transitions (`Planning ↔ Confirmed`) only
+  re-enable / re-lock the control polygon, never the init data.
+  No `Planning → Init` or `Confirmed → Init` transitions are
+  permitted.
+
 - **2026-05-18 — `{3×3, 4×4}` control polygons + NURBS extension surface (ADR-0018).**
   The v2.0.0 commitment in this ADR consistently refers to "the 4×4
   control grid".  Per [ADR-0018](0018-nurbs-extension-surface.md) §1
@@ -22,15 +39,13 @@
   Per-setter validation on `vtkMRMLBezierSurfaceNode::SetRows` /
   `SetCols` rejects other `(Rows, Cols)` combinations.  Arbitrary
   M×N control polygons remain reserved for the v2.1 NURBS sibling
-  representation per [ADR-0018][adr-0018-link] §3.  The widget
-  event-table (`vtkLiverBezierWidget`) parameterizes on `(Rows,
-  Cols)`; the same ring-of-control-points formula handles both
-  shapes.  `.lrp.json` schema v2 carries explicit `rows` + `cols`
-  alongside `controlGrid`; v1 files implicit-load as (4, 4); v2
-  readers validate `(rows, cols) ∈ {(3, 3), (4, 4)}` and reject
+  representation per [ADR-0018](0018-nurbs-extension-surface.md) §3.
+  The widget event-table (`vtkLiverBezierWidget`) parameterizes on
+  `(Rows, Cols)`; the same ring-of-control-points formula handles
+  both shapes.  `.lrp.json` schema v2 carries explicit `rows` +
+  `cols` alongside `controlGrid`; v1 files implicit-load as (4, 4);
+  v2 readers validate `(rows, cols) ∈ {(3, 3), (4, 4)}` and reject
   others.
-
-[adr-0018-link]: 0018-nurbs-extension-surface.md
 
 - **2026-05-16 — rename Bezier-surface MRML classes.**  The `Liver`
   prefix on the Bezier-surface MRML class trio
