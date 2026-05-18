@@ -54,6 +54,8 @@
 #include <vtkWidgetEvent.h>
 #include <vtkWidgetEventTranslator.h>
 
+#include <vector>
+
 //------------------------------------------------------------------------------
 vtkStandardNewMacro(vtkLiverBezierWidget);
 
@@ -305,22 +307,29 @@ bool vtkLiverBezierWidget::ApplyPickedPointWorld(const double world[3])
   {
     case vtkLiverBezierRepresentation::PickRole_ControlPoint:
     {
-      if (this->PickedIndex < 0 || this->PickedIndex >= vtkMRMLBezierSurfaceNode::GridSize * vtkMRMLBezierSurfaceNode::GridSize)
+      // Per ADR-0018 §1 the control-polygon shape is selected per node
+      // (3x3 → 9 control points / 27 doubles; 4x4 → 16 / 48).  Query
+      // the node for both the control-point count and the flat-array
+      // length so the bounds check and the buffer walk match the
+      // node's current shape (not the compile-time 4x4 default).
+      const unsigned int controlCount = node->GetRows() * node->GetCols();
+      if (this->PickedIndex < 0 || static_cast<unsigned int>(this->PickedIndex) >= controlCount)
       {
         return false;
       }
-      // SetControlGrid takes the full 48-double array; copy current,
-      // patch the picked point, push back.
-      double values[vtkMRMLBezierSurfaceNode::ControlGridSize];
+      // SetControlGrid takes the full (3 * Rows * Cols)-double array;
+      // copy current, patch the picked point, push back.
+      const unsigned int flatLength = node->GetControlGridLength();
+      std::vector<double> values(flatLength);
       const double* current = node->GetControlGrid();
-      for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
+      for (unsigned int i = 0; i < flatLength; ++i)
       {
         values[i] = current[i];
       }
       values[this->PickedIndex * 3 + 0] = world[0];
       values[this->PickedIndex * 3 + 1] = world[1];
       values[this->PickedIndex * 3 + 2] = world[2];
-      return node->SetControlGrid(values);
+      return node->SetControlGrid(values.data());
     }
     case vtkLiverBezierRepresentation::PickRole_SlicingPlaneInit: return node->SetSlicingPlaneInitPoint(this->PickedIndex, world);
     case vtkLiverBezierRepresentation::PickRole_DistanceSpheroidInit: return node->SetDistanceSpheroidInitPoint(this->PickedIndex, world);
