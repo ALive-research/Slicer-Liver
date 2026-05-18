@@ -178,6 +178,15 @@ def setup_camera(view_node: slicer.vtkMRMLViewNode | None = None) -> None:
     vtk_camera.SetViewAngle(CAMERA_VIEW_ANGLE)
     vtk_camera.SetClippingRange(*CAMERA_CLIPPING_RANGE)
 
+    # Explicit Modified() on the MRML camera node so any observer
+    # (e.g. the active 3D view) repositions before the subsequent
+    # ``forceRender()`` in the replay flow.  Without it the first
+    # frame captured under CI has been observed to use a stale pose
+    # (the camera setters above only mutate the underlying
+    # ``vtkCamera`` directly; the MRML-level Modified event is what
+    # the view manager listens for).
+    camera_node.Modified()
+
 
 def setup_viewport(view_node: slicer.vtkMRMLViewNode | None = None) -> None:
     """Set viewport pixel size, background colour, anti-aliasing.

@@ -44,14 +44,14 @@ endif()
 # CI default OFF means scaffolding PRs go green without the CTest
 # entries firing; flip to ON locally (or via workflow env override)
 # once both preconditions are satisfied.
-option(Slicer_Liver_ENABLE_VISUAL_TESTS
+option(SlicerLiver_ENABLE_VISUAL_TESTS
   "Enable Slicer-Liver visual-regression CTest entries (requires baselines + clean launcher-exit; see LiverResections/Testing/README.md)."
   OFF)
 
-if(NOT Slicer_Liver_ENABLE_VISUAL_TESTS)
+if(NOT SlicerLiver_ENABLE_VISUAL_TESTS)
   message(STATUS
     "Slicer-Liver: visual-regression tests gated OFF "
-    "(set -DSlicer_Liver_ENABLE_VISUAL_TESTS=ON to enable).")
+    "(set -DSlicerLiver_ENABLE_VISUAL_TESTS=ON to enable).")
   return()
 endif()
 
