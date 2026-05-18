@@ -197,7 +197,7 @@ void vtkLiverBezierRepresentation::UpdatePickableGlyphs()
       pushPoint(grid[i * 3 + 0], grid[i * 3 + 1], grid[i * 3 + 2]);
     }
   }
-  else // Init
+  else if (state == vtkMRMLBezierSurfaceNode::Init)
   {
     if (mode == vtkMRMLBezierSurfaceNode::SlicingPlane)
     {
@@ -222,6 +222,18 @@ void vtkLiverBezierRepresentation::UpdatePickableGlyphs()
         }
       }
     }
+  }
+  else
+  {
+    // Per ADR-0019 §"Per-state contract", in any state other than
+    // ``Init`` / ``Planning`` (i.e. the future ``Confirmed = 2``
+    // value the enum will grow when ADR-0019's enabler PR lands) the
+    // control polygon is **hidden** and the widget is **disabled**.
+    // Leave the glyph cloud empty — the ``points->Reset()`` /
+    // ``verts->Reset()`` above already cleared it; nothing further to
+    // push.  ``BuildRepresentation`` turns the glyph actor invisible
+    // when ``GetNumberOfPoints() == 0``, matching the
+    // hidden-polygon + disabled-widget invariant.
   }
 
   this->GlyphPolyData->Modified();
@@ -328,7 +340,7 @@ vtkLiverBezierRepresentation::PickResult vtkLiverBezierRepresentation::Pick(int 
       }
     }
   }
-  else // Init — init-mode points become pickable.
+  else if (state == vtkMRMLBezierSurfaceNode::Init) // init-mode points become pickable.
   {
     if (mode == vtkMRMLBezierSurfaceNode::SlicingPlane)
     {
@@ -368,6 +380,9 @@ vtkLiverBezierRepresentation::PickResult vtkLiverBezierRepresentation::Pick(int 
       }
     }
   }
+  // else: future ``Confirmed`` state per ADR-0019 §"Per-state contract"
+  // — widget is disabled, nothing is pickable.  Fall through and
+  // return ``PickRole_None``.
 
   return result;
 }
