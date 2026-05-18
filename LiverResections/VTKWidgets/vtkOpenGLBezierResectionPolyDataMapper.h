@@ -46,7 +46,7 @@
 #include <vtkOpenGLPolyDataMapper.h>
 #include <vtkRenderingOpenGL2Module.h>
 
-//STD includes
+// STD includes
 #include <memory>
 
 //-------------------------------------------------------------------------------
@@ -56,7 +56,7 @@ class vtkTextureObject;
 class VTK_SLICER_LIVERRESECTIONS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLBezierResectionPolyDataMapper : public vtkOpenGLPolyDataMapper
 {
 public:
-  static vtkOpenGLBezierResectionPolyDataMapper *New();
+  static vtkOpenGLBezierResectionPolyDataMapper* New();
   vtkTypeMacro(vtkOpenGLBezierResectionPolyDataMapper, vtkOpenGLPolyDataMapper);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
@@ -71,14 +71,14 @@ public:
   /// Set RAS - IKJ matrix transposed
   void SetRasToIjkMatrixT(const vtkMatrix4x4*);
   /// Get RAS - IJK matrix transposed
-  vtkMatrix4x4 const* GetRasToIjkMatrixT() const;
+  const vtkMatrix4x4* GetRasToIjkMatrixT() const;
 
   /// Set IKJ - Texture space matrix
   void SetIjkToTextureMatrix(const vtkMatrix4x4*);
   /// Set IJK - Texture space matrix transposed
   void SetIjkToTextureMatrixT(const vtkMatrix4x4*);
   /// Get IJK - Texture matrixj
-  vtkMatrix4x4 const* GetIjkToTextureMatrixT() const;
+  const vtkMatrix4x4* GetIjkToTextureMatrixT() const;
 
   /// Get the resection margin
   float GetResectionMargin() const;
@@ -91,28 +91,28 @@ public:
   void SetUncertaintyMargin(float margin);
 
   /// Get the interpolated margin
-  float const* GetResectionMarginColor() const;
+  const float* GetResectionMarginColor() const;
   /// Set the resection margin
   void SetResectionMarginColor(float color[3]);
   /// Set the resection margin
   void SetResectionMarginColor(float red, float green, float blue);
 
   /// Get the interpolated margin
-  float const* GetUncertaintyMarginColor() const;
+  const float* GetUncertaintyMarginColor() const;
   /// Set the resection margin
   void SetUncertaintyMarginColor(float color[3]);
   /// Set the resection margin
   void SetUncertaintyMarginColor(float red, float green, float blue);
 
   /// Get the resection color
-  float const* GetResectionColor() const;
+  const float* GetResectionColor() const;
   /// Set the resection color
   void SetResectionColor(float color[3]);
   /// Set the resection color
   void SetResectionColor(float red, float green, float blue);
 
   /// Get the resection grid color
-  float const* GetResectionGridColor() const;
+  const float* GetResectionGridColor() const;
   /// Set the resection gird color
   void SetResectionGridColor(float color[3]);
   /// Set the resection grid color
@@ -143,7 +143,6 @@ public:
   /// Set the thickness factor for the grid
   void SetGridThicknessFactor(float thicknessFactor);
 
-
 protected:
   vtkOpenGLBezierResectionPolyDataMapper();
   ~vtkOpenGLBezierResectionPolyDataMapper();
@@ -151,18 +150,13 @@ protected:
   void BuildBufferObjects(vtkRenderer* ren, vtkActor* act) override;
 
   // Perform string replacements on the shader templates
-  void ReplaceShaderValues(std::map<vtkShader::Type, vtkShader*> shaders,
-                           vtkRenderer* ren,
-                           vtkActor* act) override;
+  void ReplaceShaderValues(std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer* ren, vtkActor* act) override;
 
-  void SetMapperShaderParameters(vtkOpenGLHelper& cellBO,
-                                 vtkRenderer* ren,
-                                 vtkActor* actor) override;
+  void SetMapperShaderParameters(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor) override;
 
   // Set CameraShaderParameters
-  void SetCameraShaderParameters(vtkOpenGLHelper& cellBO,
-                                 vtkRenderer* ren,
-                                 vtkActor* actor) override;
+  void SetCameraShaderParameters(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor) override;
+
 private:
   class vtkInternal;
   std::unique_ptr<vtkInternal> Impl;
