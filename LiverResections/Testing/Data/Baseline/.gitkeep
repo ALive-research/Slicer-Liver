@@ -1,7 +1,7 @@
 # Visual-regression baseline content-hash stubs (`<test>.<ext>.sha512`)
 # land in this directory.  Each stub is a 64-byte hex digest of the
 # corresponding release asset on
-# github.com/ALive-research/AliveTestingData (release tag
+# github.com/ALive-research/ALiveResearchTestingData (`SHA512` release tag
 # `SHA512` release, content-addressed per the SlicerTestingData mirror pattern), resolved at test time via CMake
 # ExternalData.
 #

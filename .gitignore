@@ -10,8 +10,7 @@ Docs/_build/
 
 # Visual-regression capture staging area — see
 # LiverResections/Testing/README.md.  Bundles land here transiently
-# before upload_baseline.sh ships them to the AliveTestingData release.
+# before upload_baseline.sh ships them to the ALiveResearchTestingData SHA512 release.
 Testing/baselines-staging/
 
 # CMake ExternalData object store (per-build cache of downloaded blobs).
-build/ExternalData/

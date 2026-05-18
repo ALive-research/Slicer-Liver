@@ -52,7 +52,7 @@ CAMERA_VIEW_ANGLE = _planning.CAMERA_VIEW_ANGLE
 CAMERA_CLIPPING_RANGE = _planning.CAMERA_CLIPPING_RANGE
 
 
-def setup_scene():
+def setup_scene() -> slicer.vtkMRMLNode:
     """Build the Planning fixture, then flip ``ClipOut`` to 1.
 
     Returns
@@ -99,12 +99,12 @@ def setup_scene():
     return resection
 
 
-def setup_camera(view_node=None):
+def setup_camera(view_node: slicer.vtkMRMLViewNode | None = None) -> None:
     """Forward to the Planning scenario's camera pose."""
     _planning.setup_camera(view_node)
 
 
-def setup_viewport(view_node=None):
+def setup_viewport(view_node: slicer.vtkMRMLViewNode | None = None) -> None:
     """Forward to the Planning scenario's viewport configuration."""
     _planning.setup_viewport(view_node)
 
