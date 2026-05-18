@@ -14,10 +14,15 @@
 #
 # Paired with ``vtkLiverBezierRepresentation`` (a
 # ``vtkWidgetRepresentation`` subclass), which owns the interaction-
-# time actors (selection highlight, drag preview).  The relocated
-# OpenGL surface mappers from ``LiverMarkups/VTKWidgets/`` are
-# TODO(T2-mapper-relocation); the LayerDM Pipeline keeps the
-# Bezier-surface render path through that follow-on.
+# time actors (selection highlight, drag preview).
+#
+# Per ADR-0014 §3, ``vtkOpenGLBezierResectionPolyDataMapper`` lives in
+# this module — it relocated here from ``LiverMarkups/VTKWidgets/`` as
+# a lift-and-shift (same algorithm, same shaders, same uniforms).
+# Subsequent work depends on the relocation: ADR-0019's
+# ``ConfirmedRepresentation`` consumes the mapper as-is, and the v2.1
+# GPU-tessellation rewrite per ADR-0020 replaces the geometry path in
+# this same file.
 #-----------------------------------------------------------------------------
 
 project(vtkSlicer${MODULE_NAME}ModuleVTKWidgets)
@@ -36,6 +41,8 @@ set(${KIT}_SRCS
   vtkLiverBezierRepresentation.cxx
   vtkLiverBezierWidget.h
   vtkLiverBezierWidget.cxx
+  vtkOpenGLBezierResectionPolyDataMapper.h
+  vtkOpenGLBezierResectionPolyDataMapper.cxx
   )
 
 set(${KIT}_TARGET_LIBRARIES

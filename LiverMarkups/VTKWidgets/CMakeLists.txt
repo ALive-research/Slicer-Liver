@@ -9,6 +9,17 @@ set(${KIT}_INCLUDE_DIRECTORIES
   ${vtkSlicer${MODULE_NAME}ModuleMRML_BINARY_DIR}
   ${vtkSlicerMarkupsModuleVTKWidgets_INCLUDE_DIRS}
   ${vtkSlicerMarkupsModuleVTKWidgets_INCLUDE_DIRS}
+  # ``vtkSlicerBezierSurfaceRepresentation3D`` still consumes
+  # ``vtkOpenGLBezierResectionPolyDataMapper.h``, which now lives in
+  # ``LiverResections/VTKWidgets/`` per ADR-0014 §3
+  # (T2-mapper-relocation).  Because the top-level CMakeLists
+  # processes ``LiverMarkups`` before ``LiverResections``, the
+  # ``vtkSlicerLiverResectionsModuleVTKWidgets_SOURCE_DIR`` variable
+  # is not yet defined here — use the explicit paths.  The
+  # corresponding ``target_link_libraries`` entry below is forward-
+  # resolved by CMake at generate time.
+  ${CMAKE_SOURCE_DIR}/LiverResections/VTKWidgets
+  ${CMAKE_BINARY_DIR}/LiverResections/VTKWidgets
   )
 
 set(${KIT}_SRCS
@@ -38,8 +49,6 @@ set(${KIT}_SRCS
   vtkBezierSurfaceSource.cxx
   vtkSlicerShaderHelper.h
   vtkSlicerShaderHelper.cxx
-  vtkOpenGLBezierResectionPolyDataMapper.h
-  vtkOpenGLBezierResectionPolyDataMapper.cxx
   vtkOpenGLResection2DPolyDataMapper.cpp
   vtkOpenGLResection2DPolyDataMapper.h
   vtkMultiTextureObjectHelper.cpp
@@ -49,6 +58,11 @@ set(${KIT}_SRCS
 set(${KIT}_TARGET_LIBRARIES
   vtkSlicer${MODULE_NAME}ModuleMRML
   vtkSlicerMarkupsModuleVTKWidgets
+  # ``vtkOpenGLBezierResectionPolyDataMapper`` now ships from the
+  # LiverResections VTKWidgets target (ADR-0014 §3 lift-and-shift).
+  # Forward-reference resolved at CMake generate time; the source
+  # ordering caveat is documented under INCLUDE_DIRECTORIES above.
+  vtkSlicerLiverResectionsModuleVTKWidgets
   )
 
 #-----------------------------------------------------------------------------
