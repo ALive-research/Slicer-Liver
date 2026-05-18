@@ -108,6 +108,14 @@ myst_heading_anchors = 6
 # Block math with equation-label syntax.
 myst_dmath_allow_labels = True
 
+# Route bare ``` mermaid `` ` fenced code blocks to the
+# sphinxcontrib.mermaid directive.  Without this, MyST falls
+# through to Pygments syntax highlighting and "mermaid" is not a
+# known lexer, so the build fails with `[misc.highlighting_failure]`.
+# The bare-fence form is also what GitHub renders natively (per
+# PR #371's review feedback on ``` {mermaid} `` ` vs ``` mermaid `` `).
+myst_fence_as_directive = ["mermaid"]
+
 templates_path = ["_templates"]
 # Scaffold scope (ADR-0017 PR 1): only `index.md` and the ADR ledger
 # are wired into the build.  The architecture diagrams, dependency

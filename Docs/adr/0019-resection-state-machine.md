@@ -76,15 +76,19 @@ ResectionState ::= Init = 0
                  | Confirmed = 2
 ```
 
-with the transition table:
+with the transition diagram:
 
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> Init : node created
+    Init --> Planning : surgeon commits init data<br/>(irreversible per ADR-0014 §4)
+    Planning --> Confirmed : surgeon confirms plan
+    Confirmed --> Planning : surgeon revises plan
 ```
-                            ┌──────────────────────────────────────┐
-                            ▼                                      │
-        Init ──────────► Planning ◄═══════════════════► Confirmed
-   (start state)      (irreversible from Init;       (round-trippable
-                       reversible from Confirmed)     with Planning)
-```
+
+Full per-state contract + workflow sequence diagram live in the
+[architecture companion](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/architecture/resection-state-machine.md).
 
 The full transition matrix:
 
