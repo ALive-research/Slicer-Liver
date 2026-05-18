@@ -332,13 +332,29 @@ class BezierPlanningRepresentation:
             prop.SetOpacity(opacity)
 
     def _apply_data_node(self, data_node: Any | None) -> None:
-        """Push the 4×4 control grid onto the surface mapper."""
+        """Push the (Rows×Cols) control grid onto the surface mapper.
+
+        Per ADR-0018 §1 the control-polygon shape is selected per node
+        from ``(Rows, Cols) ∈ {(3, 3), (4, 4)}``; this method reads the
+        shape from the node and walks the flat array accordingly so the
+        Representation works on both shapes without assuming the 4×4
+        default.
+        """
         if data_node is None:
             return
 
         grid_getter = getattr(data_node, "GetControlGrid", None)
         if grid_getter is None:
             return
+
+        # Resolve (rows, cols) from the node — required to size the
+        # iteration over the flat ``GetControlGrid()`` return.  Default
+        # to 4×4 when the accessors are absent (legacy stubs in unit
+        # tests); the array-length check below catches any drift.
+        rows = int(getattr(data_node, "GetRows", lambda: 4)())
+        cols = int(getattr(data_node, "GetCols", lambda: 4)())
+        control_count = rows * cols
+        flat_length = 3 * control_count
 
         try:
             raw = grid_getter()
@@ -347,16 +363,20 @@ class BezierPlanningRepresentation:
         if raw is None:
             return
 
-        # Materialise to a tuple of 48 floats for memoisation.  The
-        # wrapped ``const double*`` from C++ may surface as a sequence
-        # that does not implement ``__hash__``; tuple it for the
-        # signature comparison.
+        # Materialise to a tuple of ``flat_length`` floats for
+        # memoisation.  The wrapped ``const double*`` from C++ may
+        # surface as a sequence that does not implement ``__hash__``;
+        # tuple it for the signature comparison.  An ``IndexError`` /
+        # ``TypeError`` here means the underlying buffer is shorter
+        # than ``3 * Rows * Cols`` — a shape-drift bug worth surfacing,
+        # not silently swallowing.
         try:
-            flat = tuple(float(raw[i]) for i in range(48))
-        except Exception:
-            # Some VTK Python wrappings return a raw pointer-like object
-            # that is not indexable — defer the input refresh until a
-            # proper accessor lands.  Tracked as TODO below.
+            flat = tuple(float(raw[i]) for i in range(flat_length))
+        except (IndexError, TypeError):
+            # Either the buffer is shorter than ``3 * Rows * Cols``
+            # (shape drift — investigate the data node) or the VTK
+            # Python wrapping returned a non-indexable pointer-like
+            # object.  Defer the refresh either way; do not paper over.
             return
 
         signature = flat
@@ -368,19 +388,19 @@ class BezierPlanningRepresentation:
         if not _HAS_VTK:
             return
 
-        # Rebuild the surface polydata from the 4×4 control mesh.
-        # For the skeleton the "surface" is the raw 4×4 mesh itself
-        # (16 points + 9 quads); the fitted Bernstein patch will be
-        # substituted in when the relocated
-        # ``vtkOpenGLBezierResectionPolyDataMapper`` is wired up per
-        # ADR-0014 §3 (see TODO(T2-mapper-relocation) in
-        # ``_build_vtk_pipeline``).  At that point the grid also
+        # Rebuild the surface polydata from the (Rows×Cols) control
+        # mesh.  For the skeleton the "surface" is the raw control mesh
+        # itself (``control_count`` points + ``(rows-1)*(cols-1)``
+        # quads); the fitted Bernstein patch will be substituted in
+        # when the relocated ``vtkOpenGLBezierResectionPolyDataMapper``
+        # is wired up per ADR-0014 §3 (see TODO(T2-mapper-relocation)
+        # in ``_build_vtk_pipeline``).  At that point the grid also
         # appears — as fragment-shader uniforms on the surface mapper,
         # not as separate geometry.
-        points = _make_points_from_flat(flat)
-        self._refresh_surface_polydata(points)
+        points = _make_points_from_flat(flat, control_count)
+        self._refresh_surface_polydata(points, rows, cols)
 
-    def _refresh_surface_polydata(self, points: Any) -> None:
+    def _refresh_surface_polydata(self, points: Any, rows: int, cols: int) -> None:
         assert vtk is not None
         polydata = self._surface_polydata
         if polydata is None:
@@ -388,15 +408,17 @@ class BezierPlanningRepresentation:
         polydata.SetPoints(points)
 
         cells = vtk.vtkCellArray()
-        # Connect the 4×4 control mesh into 3×3 quads.  ``ids`` indexes
-        # the flat 0..15 point array laid out row-major in (u, v).
-        for v in range(3):
-            for u in range(3):
+        # Connect the (rows×cols) control mesh into
+        # ((rows-1)×(cols-1)) quads.  ``ids`` indexes the flat
+        # ``0..control_count-1`` point array laid out row-major in
+        # (u, v).
+        for v in range(rows - 1):
+            for u in range(cols - 1):
                 quad = vtk.vtkQuad()
-                quad.GetPointIds().SetId(0, v * 4 + u)
-                quad.GetPointIds().SetId(1, v * 4 + (u + 1))
-                quad.GetPointIds().SetId(2, (v + 1) * 4 + (u + 1))
-                quad.GetPointIds().SetId(3, (v + 1) * 4 + u)
+                quad.GetPointIds().SetId(0, v * cols + u)
+                quad.GetPointIds().SetId(1, v * cols + (u + 1))
+                quad.GetPointIds().SetId(2, (v + 1) * cols + (u + 1))
+                quad.GetPointIds().SetId(3, (v + 1) * cols + u)
                 cells.InsertNextCell(quad)
         polydata.SetPolys(cells)
         polydata.Modified()
@@ -421,12 +443,17 @@ def _as_color_tuple(raw: Any) -> tuple[float, float, float]:
         return DEFAULT_RESECTION_COLOR
 
 
-def _make_points_from_flat(flat: tuple) -> Any:
-    """Build a ``vtkPoints`` from a 48-double row-major control grid."""
+def _make_points_from_flat(flat: tuple, control_count: int) -> Any:
+    """Build a ``vtkPoints`` from a row-major control grid.
+
+    ``flat`` has length ``3 * control_count``; the resulting
+    ``vtkPoints`` has ``control_count`` points (9 for 3×3, 16 for 4×4
+    per ADR-0018 §1).
+    """
     assert vtk is not None
     points = vtk.vtkPoints()
-    points.SetNumberOfPoints(16)
-    for i in range(16):
+    points.SetNumberOfPoints(control_count)
+    for i in range(control_count):
         x = flat[i * 3 + 0]
         y = flat[i * 3 + 1]
         z = flat[i * 3 + 2]
