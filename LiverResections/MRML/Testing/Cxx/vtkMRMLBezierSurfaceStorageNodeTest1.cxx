@@ -194,6 +194,72 @@ int testJsonRoundTrip()
   return EXIT_SUCCESS;
 }
 
+int testConfirmedStateRoundTrip()
+{
+  // ADR-0019: ``Confirmed`` is the third state and round-trips
+  // through .lrp.json the same way Planning does — schemaVersion is
+  // unchanged (still 1), only the enum-string set grows.
+  vtkNew<vtkMRMLBezierSurfaceNode> source;
+  populate(source.GetPointer());
+  // ``populate`` leaves the source in Planning; advance to Confirmed
+  // for this test.  Planning -> Confirmed is the legal forward edge.
+  source->SetState(vtkMRMLBezierSurfaceNode::Confirmed);
+
+  const std::string path = makeTempPath("lrp.json");
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> writeStorage;
+  writeStorage->SetFileName(path.c_str());
+  CHECK_INT(writeStorage->WriteData(source.GetPointer()), 1);
+
+  vtkNew<vtkMRMLBezierSurfaceNode> sink;
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> readStorage;
+  readStorage->SetFileName(path.c_str());
+  CHECK_INT(readStorage->ReadData(sink.GetPointer()), 1);
+
+  CHECK_INT(sink->GetState(), vtkMRMLBezierSurfaceNode::Confirmed);
+  // Control grid carried across the round-trip in Confirmed (the
+  // serialiser does not gate on state).
+  for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    CHECK_DOUBLE_TOLERANCE(sink->GetControlGrid()[i], source->GetControlGrid()[i], 1e-9);
+  }
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+int testUnknownStateFallback()
+{
+  // ADR-0019 §"Storage / persistence": an unknown ``state`` value
+  // falls back to ``Planning`` gracefully — exercises the forward-
+  // compatible default for scenes authored by a future build that
+  // adds a fourth state (or a build that pre-dates this PR loading
+  // a v3-authored "Confirmed" scene, which the test simulates by
+  // writing an unknown name directly).
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 1,\n";
+    ofs << "  \"state\": \"Approved\",\n";
+    ofs << "  \"initMode\": \"SlicingPlane\"\n";
+    ofs << "}\n";
+  }
+
+  vtkNew<vtkMRMLBezierSurfaceNode> sink;
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
+  storage->SetFileName(path.c_str());
+
+  // The fallback emits a vtkWarningMacro by design (visible audit
+  // trail for the unknown-state degrade).
+  TESTING_OUTPUT_ASSERT_WARNINGS_BEGIN();
+  CHECK_INT(storage->ReadData(sink.GetPointer()), 1);
+  TESTING_OUTPUT_ASSERT_WARNINGS_END();
+  CHECK_INT(sink->GetState(), vtkMRMLBezierSurfaceNode::Planning);
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
 int testSchemaVersionMismatch()
 {
   // Synthesize a JSON with an unknown schemaVersion and assert
@@ -383,6 +449,8 @@ int vtkMRMLBezierSurfaceStorageNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testDefaultWriteFileExtension());
   CHECK_EXIT_SUCCESS(testCanReadCanWriteDiscrimination());
   CHECK_EXIT_SUCCESS(testJsonRoundTrip());
+  CHECK_EXIT_SUCCESS(testConfirmedStateRoundTrip());
+  CHECK_EXIT_SUCCESS(testUnknownStateFallback());
   CHECK_EXIT_SUCCESS(testSchemaVersionMismatch());
   CHECK_EXIT_SUCCESS(testLegacyFcsvRead());
   CHECK_EXIT_SUCCESS(testLegacyFcsvWriteRejected());

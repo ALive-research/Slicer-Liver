@@ -122,6 +122,20 @@ def test_pipeline_update_dispatches_state(pipeline_module, bezier_nodes):
         pipeline_module.REPRESENTATION_BEZIER_PLANNING
     )
 
+    # ADR-0019: transition to (state=Confirmed) → Confirmed slot wins.
+    data.SetState(pipeline_module.STATE_CONFIRMED)
+    pipeline.UpdatePipeline()
+    assert pipeline.GetCurrentRepresentationName() == (
+        pipeline_module.REPRESENTATION_CONFIRMED
+    )
+
+    # Round-trip back to Planning re-activates BezierPlanning.
+    data.SetState(pipeline_module.STATE_PLANNING)
+    pipeline.UpdatePipeline()
+    assert pipeline.GetCurrentRepresentationName() == (
+        pipeline_module.REPRESENTATION_BEZIER_PLANNING
+    )
+
     pipeline.cleanup()
 
 

@@ -2,7 +2,7 @@
 
  Distributed under the OSI-approved BSD 3-Clause License.
 
-  Copyright (c) Oslo University Hospital. All rights reserved.
+  Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -57,31 +57,33 @@
 #include <string>
 
 //------------------------------------------------------------------------------
-// Read-only-after-Planning guard (ADR-0014 §4).
+// Read-only-after-Init guard (ADR-0014 §4 + ADR-0019).
 //
 // Init-mode subordinate data (slicing-plane / distance-spheroid init
 // points + derived plane / spheroid parameters) is mutable while
 // ``State == Init`` and becomes read-only audit data the moment the
-// node transitions to ``Planning``.  Every setter on that data routes
-// through this macro; if the node is in Planning the call emits a
-// ``vtkWarningMacro`` and returns without mutating or firing
-// ``Modified()``.  Per ADR-0014 §4: "There is no Planning→Init
-// transition" — see ``SetState`` for the matching one-way invariant
-// on the state machine itself.
+// node transitions to ``Planning``.  It stays read-only across the
+// ``Planning <-> Confirmed`` round-trip introduced by ADR-0019 — the
+// audit invariant is "init data is fixed once committed", regardless
+// of which post-Init state the node currently sits in.  Every setter
+// on that data routes through this macro; if the node is in any
+// post-Init state the call emits a ``vtkWarningMacro`` and returns
+// without mutating or firing ``Modified()``.
 //
 // File-local — ``#define``d here and ``#undef``ed at end-of-file so
 // the macro does not leak into other translation units.  ``do { …
 // } while (0)`` lets the macro sit on a single line at the top of the
 // setter body and behave like a statement (early ``return``).
-#define LIVER_BEZIER_GUARD_INIT_ONLY(fieldName)                                     \
-  do                                                                                \
-  {                                                                                 \
-    if (this->State == Planning && !this->LoadingFromXML)                           \
-    {                                                                               \
-      vtkWarningMacro("Cannot mutate " #fieldName " after Init→Planning transition" \
-                      " (ADR-0014 §4 read-only audit data)");                       \
-      return;                                                                       \
-    }                                                                               \
+#define LIVER_BEZIER_GUARD_INIT_ONLY(fieldName)                                        \
+  do                                                                                   \
+  {                                                                                    \
+    if (this->State != Init && !this->LoadingFromXML)                                  \
+    {                                                                                  \
+      vtkWarningMacro("Cannot mutate " #fieldName " after Init->Planning transition"   \
+                      " (ADR-0014 §4 / ADR-0019 read-only audit data; current state: " \
+                      << GetStateAsString(this->State) << ")");                        \
+      return;                                                                          \
+    }                                                                                  \
   } while (0)
 
 //------------------------------------------------------------------------------
@@ -124,20 +126,37 @@ vtkMRMLBezierSurfaceNode::~vtkMRMLBezierSurfaceNode() = default;
 //------------------------------------------------------------------------------
 void vtkMRMLBezierSurfaceNode::SetState(int state)
 {
-  // ADR-0014 §4: the Init→Planning transition is one-way.  Attempting
-  // to drop back from Planning to Init is rejected (warning + no-op).
-  // The same-state self-assign and any unrecognised int are passed
-  // through to the macro-equivalent path so the caller sees identical
-  // observability to a plain vtkSetMacro short-circuit.
+  // ADR-0019 transition matrix:
+  //
+  //   Init      -> Planning   allowed (one-way; ADR-0014 §4).
+  //   Planning  -> Confirmed  allowed.
+  //   Confirmed -> Planning   allowed (round-trip).
+  //   Init      -> Confirmed  forbidden (must traverse Planning).
+  //   Planning  -> Init       forbidden (ADR-0014 §4).
+  //   Confirmed -> Init       forbidden (audit data permanent).
+  //
+  // Self-assign and any unrecognised int are passed through to the
+  // macro-equivalent path so the caller sees identical observability
+  // to a plain vtkSetMacro short-circuit.  XML deserialisation is
+  // exempt from the transition guard via ``LoadingFromXML`` so a scene
+  // serialised with ``state="Confirmed"`` loads into a freshly-default
+  // ``Init`` node without tripping the Init -> Confirmed rejection.
   if (state == this->State)
   {
     return;
   }
-  if (this->State == Planning && state == Init && !this->LoadingFromXML)
+  if (!this->LoadingFromXML)
   {
-    vtkWarningMacro("Planning→Init transition is not permitted"
-                    " (ADR-0014 §4); state left at Planning");
-    return;
+    const bool forbidden =                            //
+      (this->State == Planning && state == Init)      // ADR-0014 §4
+      || (this->State == Confirmed && state == Init)  // ADR-0019
+      || (this->State == Init && state == Confirmed); // ADR-0019
+    if (forbidden)
+    {
+      vtkWarningMacro("Resection state transition " << GetStateAsString(this->State) << " -> " << GetStateAsString(state) << " is not permitted (ADR-0019); state left at "
+                                                    << GetStateAsString(this->State));
+      return;
+    }
   }
   this->State = state;
   this->Modified();
@@ -150,6 +169,7 @@ const char* vtkMRMLBezierSurfaceNode::GetStateAsString(int state)
   {
     case Init: return "Init";
     case Planning: return "Planning";
+    case Confirmed: return "Confirmed";
     default: return "Invalid";
   }
 }
@@ -218,17 +238,19 @@ bool vtkMRMLBezierSurfaceNode::SetSlicingPlaneInitPoint(int index, const double 
   {
     return false;
   }
-  // ADR-0014 §4 read-only guard.  Returns false (rather than the
-  // macro's plain ``return``) so callers that check the bool see a
-  // clear signal that the mutation did not apply, matching the
+  // ADR-0014 §4 / ADR-0019 read-only guard.  Returns false (rather
+  // than the macro's plain ``return``) so callers that check the bool
+  // see a clear signal that the mutation did not apply, matching the
   // existing "rejected on bad input" return path of this setter.
   // ``LoadingFromXML`` exempts XML deserialisation — see the
   // ``LIVER_BEZIER_GUARD_INIT_ONLY`` macro at the top of this file.
-  if (this->State == Planning && !this->LoadingFromXML)
+  if (this->State != Init && !this->LoadingFromXML)
   {
     vtkWarningMacro("Cannot mutate SlicingPlaneInitPoint[" << index << "]"
-                                                           << " after Init→Planning transition"
-                                                           << " (ADR-0014 §4 read-only audit data)");
+                                                           << " after Init->Planning transition"
+                                                           << " (ADR-0014 §4 / ADR-0019 read-only audit data;"
+                                                              " current state: "
+                                                           << GetStateAsString(this->State) << ")");
     return false;
   }
   this->SlicingPlaneInitPoints[index][0] = point[0];
@@ -312,13 +334,16 @@ bool vtkMRMLBezierSurfaceNode::SetDistanceSpheroidInitPoint(int index, const dou
   {
     return false;
   }
-  // ADR-0014 §4 read-only guard.  Mirrors the bool-returning rejection
-  // path of SetSlicingPlaneInitPoint — see that setter for rationale.
-  if (this->State == Planning && !this->LoadingFromXML)
+  // ADR-0014 §4 / ADR-0019 read-only guard.  Mirrors the bool-returning
+  // rejection path of SetSlicingPlaneInitPoint — see that setter for
+  // rationale.
+  if (this->State != Init && !this->LoadingFromXML)
   {
     vtkWarningMacro("Cannot mutate DistanceSpheroidInitPoint[" << index << "]"
-                                                               << " after Init→Planning transition"
-                                                               << " (ADR-0014 §4 read-only audit data)");
+                                                               << " after Init->Planning transition"
+                                                               << " (ADR-0014 §4 / ADR-0019 read-only audit data;"
+                                                                  " current state: "
+                                                               << GetStateAsString(this->State) << ")");
     return false;
   }
   const size_t base = static_cast<size_t>(index) * 3;

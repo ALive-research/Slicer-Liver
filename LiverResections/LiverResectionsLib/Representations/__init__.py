@@ -16,10 +16,15 @@
 #   plane (ring on the target liver surface deferred per
 #   TODO(T2-target-mesh-weakref) until the data node gains a target
 #   mesh reference).
-#
-# Reserved for the remaining T2.2 stack iteration (slot name defined
-# as a constant on ``LiverBezierSurfacePipeline``):
-#
 # * ``DistanceSpheroidInitRepresentation`` — active in
 #   (state=Init, mode=DistanceSpheroid); renders the spheroid control
 #   points + the spheroid + the ring.
+# * ``ConfirmedRepresentation`` — active in (state=Confirmed, *) per
+#   ADR-0019.  Renders the fitted Bezier surface with the parenchyma-
+#   trim shader on (``uResectionClipOut == 1``) and hides the control
+#   polygon + widget.  The trim-shader wiring is gated on
+#   T2-mapper-relocation (the relocated
+#   ``vtkOpenGLBezierResectionPolyDataMapper`` is the
+#   ``SetResectionClipOut`` host); until that lands the Representation
+#   renders the surface without the trim, matching the ADR-0019
+#   §"Rollout plan" "land WITHOUT a working trim shader" fallback.

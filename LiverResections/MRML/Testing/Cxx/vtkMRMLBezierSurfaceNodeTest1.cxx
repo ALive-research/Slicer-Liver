@@ -2,7 +2,7 @@
 
  Distributed under the OSI-approved BSD 3-Clause License.
 
-  Copyright (c) Oslo University Hospital. All rights reserved.
+  Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
   Tests for vtkMRMLBezierSurfaceNode — the data-only node landed by
   ADR-0014 §1.  Exercises:
@@ -71,11 +71,12 @@ int testDefaults()
 
 int testEnumRoundTrip()
 {
-  // Init→Planning is the only state transition committed by
-  // ADR-0014 §4 (no Planning→Init); the dedicated
-  // ``testInitDataReadOnlyAfterPlanning`` sub-test below characterises
-  // the rejection branch.  Here we just exercise the forward edge and
-  // the enum string converters, on a fresh node per direction.
+  // Init -> Planning is the canonical forward edge; ADR-0019 adds the
+  // Planning <-> Confirmed round-trip on top.  The dedicated
+  // ``testInitDataReadOnlyAfterPlanning`` and
+  // ``testConfirmedStateTransitions`` sub-tests below characterise the
+  // legal transition cycle and every forbidden edge.  Here we just
+  // exercise the enum string converters across all three states.
   vtkNew<vtkMRMLBezierSurfaceNode> node;
   node->SetState(vtkMRMLBezierSurfaceNode::Planning);
   CHECK_INT(node->GetState(), vtkMRMLBezierSurfaceNode::Planning);
@@ -88,14 +89,144 @@ int testEnumRoundTrip()
 
   CHECK_STRING(vtkMRMLBezierSurfaceNode::GetStateAsString(vtkMRMLBezierSurfaceNode::Init), "Init");
   CHECK_STRING(vtkMRMLBezierSurfaceNode::GetStateAsString(vtkMRMLBezierSurfaceNode::Planning), "Planning");
+  CHECK_STRING(vtkMRMLBezierSurfaceNode::GetStateAsString(vtkMRMLBezierSurfaceNode::Confirmed), "Confirmed");
   CHECK_INT(vtkMRMLBezierSurfaceNode::GetStateFromString("Init"), vtkMRMLBezierSurfaceNode::Init);
   CHECK_INT(vtkMRMLBezierSurfaceNode::GetStateFromString("Planning"), vtkMRMLBezierSurfaceNode::Planning);
+  CHECK_INT(vtkMRMLBezierSurfaceNode::GetStateFromString("Confirmed"), vtkMRMLBezierSurfaceNode::Confirmed);
   CHECK_INT(vtkMRMLBezierSurfaceNode::GetStateFromString("bogus"), -1);
 
   CHECK_STRING(vtkMRMLBezierSurfaceNode::GetInitModeAsString(vtkMRMLBezierSurfaceNode::SlicingPlane), "SlicingPlane");
   CHECK_STRING(vtkMRMLBezierSurfaceNode::GetInitModeAsString(vtkMRMLBezierSurfaceNode::DistanceSpheroid), "DistanceSpheroid");
   CHECK_INT(vtkMRMLBezierSurfaceNode::GetInitModeFromString("DistanceSpheroid"), vtkMRMLBezierSurfaceNode::DistanceSpheroid);
   CHECK_INT(vtkMRMLBezierSurfaceNode::GetInitModeFromString(nullptr), -1);
+  return EXIT_SUCCESS;
+}
+
+int testConfirmedStateTransitions()
+{
+  // ADR-0019 transition matrix:
+  //
+  //   Init      -> Planning   allowed.
+  //   Planning  -> Confirmed  allowed.
+  //   Confirmed -> Planning   allowed (round-trip).
+  //   Init      -> Confirmed  forbidden.
+  //   Planning  -> Init       forbidden (also covered by
+  //                            ``testInitDataReadOnlyAfterPlanning``).
+  //   Confirmed -> Init       forbidden.
+  //
+  // Each rejected transition emits a vtkWarningMacro and leaves the
+  // state unchanged; advance/non-advance of GetMTime() is the
+  // observable proxy.
+
+  // ---- Legal path: Init -> Planning -> Confirmed -> Planning ----
+  vtkNew<vtkMRMLBezierSurfaceNode> node;
+  CHECK_INT(node->GetState(), vtkMRMLBezierSurfaceNode::Init);
+
+  // Init -> Planning (forward edge).
+  vtkMTimeType pre = node->GetMTime();
+  node->SetState(vtkMRMLBezierSurfaceNode::Planning);
+  CHECK_INT(node->GetState(), vtkMRMLBezierSurfaceNode::Planning);
+  if (node->GetMTime() <= pre)
+  {
+    std::cerr << "Expected MTime advance on Init -> Planning\n";
+    return EXIT_FAILURE;
+  }
+
+  // Planning -> Confirmed.
+  pre = node->GetMTime();
+  node->SetState(vtkMRMLBezierSurfaceNode::Confirmed);
+  CHECK_INT(node->GetState(), vtkMRMLBezierSurfaceNode::Confirmed);
+  if (node->GetMTime() <= pre)
+  {
+    std::cerr << "Expected MTime advance on Planning -> Confirmed\n";
+    return EXIT_FAILURE;
+  }
+
+  // Confirmed -> Planning (round-trip).
+  pre = node->GetMTime();
+  node->SetState(vtkMRMLBezierSurfaceNode::Planning);
+  CHECK_INT(node->GetState(), vtkMRMLBezierSurfaceNode::Planning);
+  if (node->GetMTime() <= pre)
+  {
+    std::cerr << "Expected MTime advance on Confirmed -> Planning\n";
+    return EXIT_FAILURE;
+  }
+
+  // Re-confirm — Planning -> Confirmed again.
+  pre = node->GetMTime();
+  node->SetState(vtkMRMLBezierSurfaceNode::Confirmed);
+  CHECK_INT(node->GetState(), vtkMRMLBezierSurfaceNode::Confirmed);
+  if (node->GetMTime() <= pre)
+  {
+    std::cerr << "Expected MTime advance on second Planning -> Confirmed\n";
+    return EXIT_FAILURE;
+  }
+
+  // Same-state self-assign is a no-op (no warning, no MTime advance).
+  pre = node->GetMTime();
+  node->SetState(vtkMRMLBezierSurfaceNode::Confirmed);
+  CHECK_INT(node->GetMTime(), pre);
+
+  // ---- Forbidden: Confirmed -> Init ----
+  TESTING_OUTPUT_ASSERT_WARNINGS_BEGIN();
+  pre = node->GetMTime();
+  node->SetState(vtkMRMLBezierSurfaceNode::Init);
+  TESTING_OUTPUT_ASSERT_WARNINGS_END();
+  CHECK_INT(node->GetState(), vtkMRMLBezierSurfaceNode::Confirmed);
+  CHECK_INT(node->GetMTime(), pre);
+
+  // ---- Forbidden: Init -> Confirmed (fresh node) ----
+  vtkNew<vtkMRMLBezierSurfaceNode> nodeInit;
+  CHECK_INT(nodeInit->GetState(), vtkMRMLBezierSurfaceNode::Init);
+  TESTING_OUTPUT_ASSERT_WARNINGS_BEGIN();
+  pre = nodeInit->GetMTime();
+  nodeInit->SetState(vtkMRMLBezierSurfaceNode::Confirmed);
+  TESTING_OUTPUT_ASSERT_WARNINGS_END();
+  CHECK_INT(nodeInit->GetState(), vtkMRMLBezierSurfaceNode::Init);
+  CHECK_INT(nodeInit->GetMTime(), pre);
+
+  // Audit-data setters stay rejected in Confirmed (per ADR-0019
+  // §"Per-state contract": init data is read-only in both Planning
+  // and Confirmed).  Drive the node to Confirmed via the legal path
+  // and assert the guard fires.
+  vtkNew<vtkMRMLBezierSurfaceNode> guarded;
+  double origin[3] = { 1.0, 2.0, 3.0 };
+  guarded->SetSlicingPlaneOrigin(origin);
+  guarded->SetState(vtkMRMLBezierSurfaceNode::Planning);
+  guarded->SetState(vtkMRMLBezierSurfaceNode::Confirmed);
+  CHECK_INT(guarded->GetState(), vtkMRMLBezierSurfaceNode::Confirmed);
+
+  TESTING_OUTPUT_ASSERT_WARNINGS_BEGIN();
+  pre = guarded->GetMTime();
+  double clobber[3] = { 99.0, 99.0, 99.0 };
+  guarded->SetSlicingPlaneOrigin(clobber);
+  TESTING_OUTPUT_ASSERT_WARNINGS_END();
+  CHECK_INT(guarded->GetMTime(), pre);
+  double readBack[3];
+  guarded->GetSlicingPlaneOrigin(readBack);
+  CHECK_DOUBLE(readBack[0], 1.0);
+
+  // Control-grid IS editable in Confirmed at the data-node level — the
+  // ADR-0019 §"Per-state contract" "control-grid mutable: no
+  // (rejected)" row describes the UX-level lockout, enforced by the
+  // widget (vtkLiverBezierWidget) and Representation gating, not by
+  // the data node's macro setter.  Keeping the data-node setter open
+  // preserves round-trippability of scene XML and the
+  // Pipeline-driven SetState round-trip pattern (Confirmed ->
+  // Planning -> edit -> Confirmed) without a defensive
+  // unset/re-set dance.
+  pre = guarded->GetMTime();
+  double values[vtkMRMLBezierSurfaceNode::ControlGridSize];
+  for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
+  {
+    values[i] = static_cast<double>(i);
+  }
+  guarded->SetControlGrid(values);
+  if (guarded->GetMTime() <= pre)
+  {
+    std::cerr << "Expected SetControlGrid in Confirmed to fire Modified()\n";
+    return EXIT_FAILURE;
+  }
   return EXIT_SUCCESS;
 }
 
@@ -807,6 +938,7 @@ int vtkMRMLBezierSurfaceNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testModifiedEventsOnSetters());
   CHECK_EXIT_SUCCESS(testDisplayNodeAttachedSceneRoundTrip());
   CHECK_EXIT_SUCCESS(testInitDataReadOnlyAfterPlanning());
+  CHECK_EXIT_SUCCESS(testConfirmedStateTransitions());
 
   std::cout << "vtkMRMLBezierSurfaceNodeTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;

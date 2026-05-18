@@ -2,7 +2,7 @@
 
  Distributed under the OSI-approved BSD 3-Clause License.
 
-  Copyright (c) Oslo University Hospital. All rights reserved.
+  Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -124,7 +124,36 @@ public:
   vtkTypeMacro(vtkMRMLBezierSurfaceNode, vtkMRMLDisplayableNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  /// Resection state machine (per ADR-0013 §4).
+  /// Resection state machine (per ADR-0013 §4 and ADR-0019).
+  ///
+  /// Three-state automaton:
+  ///
+  /// \verbatim
+  ///   [*] -> Init -> Planning <-> Confirmed
+  /// \endverbatim
+  ///
+  /// - ``Init``      — node exists, init-mode audit data is editable,
+  ///                   the Bezier control grid is not yet fitted.
+  /// - ``Planning``  — control polygon is editable, init-mode audit
+  ///                   data is read-only (ADR-0014 §4), the full
+  ///                   resection surface renders (no parenchyma trim).
+  /// - ``Confirmed`` — control polygon is frozen, the parenchyma-trim
+  ///                   shader is active (``uResectionClipOut == 1`` on
+  ///                   ``vtkOpenGLBezierResectionPolyDataMapper``); the
+  ///                   surgeon can revise back to ``Planning``.
+  ///
+  /// ``SetState`` enforces the transition matrix from ADR-0019:
+  ///
+  ///   - Init      -> Planning   allowed (one-way per ADR-0014 §4).
+  ///   - Planning  -> Confirmed  allowed.
+  ///   - Confirmed -> Planning   allowed (round-trip).
+  ///   - Init      -> Confirmed  forbidden (must traverse Planning).
+  ///   - Planning  -> Init       forbidden (ADR-0014 §4).
+  ///   - Confirmed -> Init       forbidden (audit data permanent).
+  ///
+  /// Forbidden transitions emit a ``vtkWarningMacro`` and reject the
+  /// change (mirrors the Planning -> Init rejection precedent set by
+  /// the ADR-0014 §4 read-only audit-data rule).
   ///
   /// Enum integer values are pinned explicitly so that a future
   /// reorder or insertion does not silently shift any Python or C++
@@ -136,6 +165,7 @@ public:
   {
     Init = 0,
     Planning = 1,
+    Confirmed = 2,
     ResectionState_Last
   };
 
@@ -189,14 +219,16 @@ public:
   // State machine
   //--------------------------------------------------------------------------
 
-  /// Resection state (Init / Planning).  Persisted in XML.
+  /// Resection state (Init / Planning / Confirmed).  Persisted in XML.
   ///
-  /// ``SetState`` enforces the ADR-0014 §4 one-way invariant: the
-  /// Init→Planning transition is allowed, but a Planning→Init drop-back
-  /// is rejected (emits a ``vtkWarningMacro`` and leaves ``State``
-  /// unchanged).  Setting the same state is a no-op (no ``Modified()``
-  /// emitted) so the macro-generated short-circuit semantics are
-  /// preserved.
+  /// ``SetState`` enforces the ADR-0019 transition matrix (which
+  /// subsumes the ADR-0014 §4 Planning -> Init invariant): the
+  /// Init -> Planning, Planning -> Confirmed, and Confirmed -> Planning
+  /// transitions are allowed; every other non-self transition is
+  /// rejected with a ``vtkWarningMacro``.  Setting the same state is a
+  /// no-op (no ``Modified()`` emitted) so the macro-generated
+  /// short-circuit semantics are preserved.  See the ``ResectionState``
+  /// enum docstring for the full matrix.
   vtkGetMacro(State, int);
   void SetState(int state);
 
