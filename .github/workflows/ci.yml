@@ -1,6 +1,6 @@
 # CI for Slicer-Liver — see Docs/adr/0005-github-actions-ci.md
 #
-# Two jobs run in parallel on every PR and on every push to `preview`:
+# Three jobs run in parallel on every PR and on every push to `preview`:
 #   - docs-lint   : fast (~30 s); validates Mermaid fences and internal
 #                   Markdown links across Docs/.  No Slicer dependency.
 #   - build-test  : slow (~10–30 min); builds the extension against the
@@ -8,6 +8,14 @@
 #                   slicer-build-ubuntu2404 image (Slicer main pre-built)
 #                   and runs CTest.  Image recipe and auto-build live in
 #                   the ALive-Docker repository.
+#   - coverage    : slow (~10–30 min); same image as build-test but
+#                   instruments the C++ build with GCC --coverage, runs
+#                   CTest + pytest under coverage.py, and uploads the
+#                   resulting Cobertura XML files to Codecov.  Per
+#                   Docs/adr/0021-coverage-measurement.md the job is
+#                   intentionally NON-BLOCKING in its first cut — not on
+#                   branch protection's required list; the PR-comment
+#                   diff coverage is the signal.
 
 name: CI
 
@@ -201,6 +209,7 @@ jobs:
             COPYRIGHT.txt
             requirements-docs.txt
             .readthedocs.yaml
+            .codecov.yml
 
       - name: Report skip (docs-only PR)
         if: github.event_name == 'pull_request' && steps.changes.outputs.any_changed == 'false'
@@ -290,3 +299,197 @@ jobs:
           cd build
           ctest -V --no-tests=error \
                 --tests-regex '^LiverBezierVisualTest_.*$'
+
+  # ---------------------------------------------------------------------------
+  # Job 3 — coverage instrumentation.
+  #
+  # Per Docs/adr/0021-coverage-measurement.md, builds the extension with
+  # GCC's --coverage flags (a Debug rebuild — separate from build-test's
+  # Release build, so the two jobs run in parallel without artefact
+  # collisions), runs CTest, generates a Cobertura coverage-cxx.xml
+  # via `gcovr`, generates a Cobertura coverage-py.xml from pytest's
+  # --cov plugin, and uploads both to Codecov via
+  # codecov/codecov-action@v5.
+  #
+  # The job is intentionally NON-BLOCKING in its first cut: do NOT add
+  # `coverage (slicer-main, Linux)` to branch-protection's required
+  # checks.  The signal is the PR comment (line-by-line diff coverage),
+  # not the job's pass/fail status.  ADR-0021 §"Why no absolute
+  # threshold" — informational only.
+  #
+  # The first run after this PR merges will likely fail or report
+  # partial data until the maintainer authorises the Codecov GitHub
+  # app on ALive-research/Slicer-Liver (one-time admin step, ~2 min,
+  # OAuth via codecov.io).  That's expected; the workflow itself is
+  # otherwise complete.
+  # ---------------------------------------------------------------------------
+  coverage:
+    name: coverage (slicer-main, Linux)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+
+    defaults:
+      run:
+        shell: bash
+
+    container:
+      image: ghcr.io/alive-research/slicer-build-ubuntu2404:latest
+      options: --user root
+
+    env:
+      Slicer_DIR: /usr/src/Slicer-build/Slicer-build
+      QT_QPA_PLATFORM: offscreen
+      LayerDisplayableManager_DIR: /usr/src/SlicerLayerDM-build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Mirror build-test's docs-only skip: pure-docs PRs do not need
+      # the coverage job either.  Identical ignore list with the
+      # exception that .codecov.yml is NOT ignored here — changing the
+      # Codecov config should re-run the coverage job to verify the
+      # config still produces a valid upload.
+      - name: Detect non-docs change
+        id: changes
+        if: github.event_name == 'pull_request'
+        uses: tj-actions/changed-files@v45
+        with:
+          files_ignore: |
+            Docs/**
+            *.md
+            .github/pull_request_template.md
+            .github/CODEOWNERS
+            CITATION.cff
+            License.txt
+            COPYRIGHT.txt
+            requirements-docs.txt
+            .readthedocs.yaml
+
+      - name: Report skip (docs-only PR)
+        if: github.event_name == 'pull_request' && steps.changes.outputs.any_changed == 'false'
+        run: |
+          echo "::notice::Skipping coverage build — every changed file is in the docs-ignore set."
+
+      # gcovr + pytest-cov are not yet baked into the
+      # slicer-build-ubuntu2404 image.  Bootstrap via pip --user; an
+      # ALive-Docker follow-up issue tracks adding them to the base
+      # image so the bootstrap step disappears.
+      - name: Install coverage tools
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
+        run: |
+          set -euo pipefail
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user 'gcovr>=7' 'pytest-cov>=5' 'pytest>=8'
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Slicer build tree
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
+        run: |
+          set -euo pipefail
+          test -f "${Slicer_DIR}/SlicerConfig.cmake" \
+            || { echo "::error::SlicerConfig.cmake missing at ${Slicer_DIR} — image layout has drifted"; exit 1; }
+          test -f "${LayerDisplayableManager_DIR}/LayerDisplayableManagerConfig.cmake" \
+            || { echo "::error::LayerDisplayableManagerConfig.cmake missing at ${LayerDisplayableManager_DIR} — image layout has drifted"; exit 1; }
+
+      - name: Configure (Debug + --coverage)
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p build-coverage
+          # -O0 prevents inlining that would confuse gcov line attribution.
+          # --coverage is short for -fprofile-arcs -ftest-coverage and
+          # implies -lgcov at link time.
+          cmake -S . -B build-coverage \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_TESTING:BOOL=ON \
+            -DCMAKE_C_FLAGS="-O0 --coverage" \
+            -DCMAKE_CXX_FLAGS="-O0 --coverage" \
+            -DCMAKE_EXE_LINKER_FLAGS="--coverage" \
+            -DCMAKE_SHARED_LINKER_FLAGS="--coverage" \
+            -DSlicer_DIR="${Slicer_DIR}" \
+            -DLayerDisplayableManager_DIR="${LayerDisplayableManager_DIR}"
+
+      - name: Build (instrumented)
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
+        run: cmake --build build-coverage --config Debug -j "$(nproc)"
+
+      - name: Test (CTest, instrumented)
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
+        run: |
+          set -euo pipefail
+          cd build-coverage
+          # Same VMTK exclusion as build-test; coverage % drift between
+          # the two jobs is acceptable as long as the same set of tests
+          # actually runs in both.  fail_ci_if_error is false on the
+          # upload step so a single failed instrumented test does not
+          # block the rest of the PR.
+          ctest -V --no-tests=error \
+                --exclude-regex '^py_LiverSegmentsTest$' || true
+
+      - name: Generate coverage-cxx.xml (gcovr)
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
+        run: |
+          set -euo pipefail
+          # Cobertura output (Codecov auto-detects).  Excludes Testing
+          # subtrees + system headers; the path filter list mirrors
+          # `ignore:` in .codecov.yml so the two views agree.
+          gcovr \
+            --root . \
+            --xml --output coverage-cxx.xml \
+            --exclude '.*Testing.*' \
+            --exclude '.*CMakeFiles.*' \
+            --exclude '/usr/.*' \
+            --exclude '.*/build-coverage/.*' \
+            --print-summary \
+            build-coverage || {
+              echo "::warning::gcovr produced no usable data — coverage upload will be partial."
+              # Emit an empty Cobertura skeleton so the Codecov upload
+              # step still has a file path to attach (it tolerates
+              # empty coverage but errors on missing files).
+              cat > coverage-cxx.xml <<'XML'
+          <?xml version="1.0" ?>
+          <coverage version="0"><sources/><packages/></coverage>
+          XML
+            }
+
+      - name: Run pytest with coverage
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
+        run: |
+          set -euo pipefail
+          # Per ADR-0021 §"Out of scope", Slicer-launcher Python
+          # coverage (wrapped MRML bindings) is opt-in per test and may
+          # not be reachable from a plain pytest invocation in the
+          # image.  Run what we can: collect any importable pytest
+          # roots under LiverResectionsLib/ and emit a Cobertura XML.
+          # If nothing collects, write an empty skeleton so the upload
+          # step has a file.
+          if find LiverResectionsLib -name 'test_*.py' -o -name '*_test.py' | grep -q .; then
+            python3 -m pytest LiverResectionsLib \
+              --cov=LiverResectionsLib \
+              --cov-report=xml:coverage-py.xml \
+              --cov-report=term \
+              || true
+          else
+            echo "::notice::No pytest tests discovered under LiverResectionsLib/ — emitting empty coverage-py.xml."
+            cat > coverage-py.xml <<'XML'
+          <?xml version="1.0" ?>
+          <coverage version="0"><sources/><packages/></coverage>
+          XML
+          fi
+
+      - name: Upload coverage to Codecov
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage-cxx.xml,./coverage-py.xml
+          flags: cxx,py
+          # Non-blocking: per ADR-0021 the job's pass/fail is not a
+          # branch-protection signal.  An upload failure (Codecov
+          # outage, OAuth not yet configured by the maintainer, etc.)
+          # surfaces as a workflow warning but does not fail the PR.
+          fail_ci_if_error: false
+          # No token needed for public repos with the Codecov GitHub
+          # app installed.  If/when the maintainer wants tokenless
+          # uploads disabled, set CODECOV_TOKEN in repo secrets and
+          # add `token: ${{ secrets.CODECOV_TOKEN }}` here.
