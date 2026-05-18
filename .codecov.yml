@@ -1,0 +1,76 @@
+# Codecov configuration for Slicer-Liver.
+#
+# Decision context: Docs/adr/0021-coverage-measurement.md.
+#
+# Signal philosophy for the first cut:
+#   - Diff coverage on the PR comment is the primary review surface;
+#     the comment shows reviewer + contributor which new/modified lines
+#     are uncovered, which is the load-bearing signal.
+#   - Both project (whole-tree %) and patch (diff %) checks run
+#     informationally — they appear in the GitHub UI but never block
+#     merge.  Premature gating discourages contributions and ADR-0003's
+#     characterisation-test-before-refactor convention is the actual
+#     enforcement mechanism.
+#   - Comment posts once and updates in place (`behavior: once`) and
+#     only when coverage actually changes (`require_changes: true`) so
+#     unchanged-coverage rebases don't spam the thread.
+#
+# Tighten any of these settings as the maintainer learns what's noisy.
+
+codecov:
+  require_ci_to_pass: true
+  # Wait briefly for both flags (cxx + py) before posting.  Without this,
+  # Codecov can post a comment after only one upload arrives, then
+  # update it on the second arrival — which counts as a thread bump on
+  # some notification settings.
+  notify:
+    wait_for_ci: true
+    after_n_builds: 1
+
+coverage:
+  precision: 2
+  round: down
+  range: "60...90"
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+        target: auto
+        if_not_found: success
+
+comment:
+  behavior: once
+  require_changes: true
+  layout: "diff,flags,files"
+
+flags:
+  cxx:
+    paths:
+      - LiverResections/
+      - LiverResectionsLib/
+      - LiverMarkups/
+      - LiverSegments/
+      - LiverVolumetry/
+      - Modeling/
+  py:
+    paths:
+      - LiverResections/Testing/Python/
+      - LiverResectionsLib/Testing/Python/
+      - LiverSegments/
+      - LiverVolumetry/
+
+# Exclude generated, test-only, and third-party code from both
+# coverage % and PR comment annotations.  These paths are uninteresting
+# for the "did this PR test what it changed?" signal.
+ignore:
+  - "**/Testing/**"
+  - "**/CMakeFiles/**"
+  - "build/**"
+  - "Docs/**"
+  - "Utilities/**"
+  - "**/moc_*.cpp"
+  - "**/qrc_*.cpp"
+  - "**/ui_*.h"
