@@ -189,6 +189,13 @@ jobs:
               - 'CITATION.cff'
               - 'License.txt'
               - 'COPYRIGHT.txt'
+              # Docs-build-supporting root files — touching these
+              # affects only the Sphinx scaffold (ADR-0017), not the
+              # C++ build path.  Surfaced by PR #371 where bumping
+              # ``requirements-docs.txt`` triggered a full build-test
+              # despite being a docs-only change.
+              - 'requirements-docs.txt'
+              - '.readthedocs.yaml'
 
       - name: Report skip (docs-only PR)
         if: github.event_name == 'pull_request' && steps.changes.outputs.docs-only == 'true'
