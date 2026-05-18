@@ -335,6 +335,53 @@ int testReadOnlyEnforcement()
   return EXIT_SUCCESS;
 }
 
+int testConfirmedStatePickGate()
+{
+  // ADR-0019 §"Per-state contract": in ``Confirmed`` the widget is
+  // disabled and the control polygon is hidden.  The representation
+  // must return ``PickRole_None`` for every (X, Y), and the widget
+  // must not enter ``Dragging`` on any pick attempt — even at a
+  // display coordinate that maps to a control-grid world point.
+  vtkSmartPointer<vtkMRMLBezierSurfaceNode> node = makePlanningNode();
+  // Legal transition Planning -> Confirmed (the only path to
+  // Confirmed; Init -> Confirmed is rejected per ADR-0019).
+  node->SetState(vtkMRMLBezierSurfaceNode::Confirmed);
+  CHECK_INT(node->GetState(), vtkMRMLBezierSurfaceNode::Confirmed);
+
+  vtkSmartPointer<vtkRenderer> renderer = makeRenderer();
+  vtkNew<vtkGenericOpenGLRenderWindow> renderWindow;
+  renderWindow->SetShowWindow(false);
+  renderWindow->AddRenderer(renderer);
+  renderWindow->SetSize(400, 400);
+  renderer->ResetCameraClippingRange();
+
+  vtkNew<vtkLiverBezierRepresentation> rep;
+  rep->SetRenderer(renderer);
+  rep->SetBezierNode(node);
+  rep->BuildRepresentation();
+
+  vtkNew<vtkLiverBezierWidget> widget;
+  widget->SetRepresentation(rep);
+  widget->SetBezierNode(node);
+
+  // Display coordinate of a control point that *would* pick if the
+  // state were Planning — assert it misses in Confirmed.
+  double world[3] = { -5.0, 5.0, 0.0 };
+  renderer->SetWorldPoint(world[0], world[1], world[2], 1.0);
+  renderer->WorldToDisplay();
+  double* d = renderer->GetDisplayPoint();
+  const int X = static_cast<int>(std::round(d[0]));
+  const int Y = static_cast<int>(std::round(d[1]));
+
+  vtkLiverBezierRepresentation::PickResult pick = rep->Pick(X, Y);
+  CHECK_INT(pick.Role, vtkLiverBezierRepresentation::PickRole_None);
+
+  // Widget rejects a left-drag at the same coordinate.
+  CHECK_BOOL(widget->BeginLeftDragAt(X, Y), false);
+  CHECK_INT(widget->GetWidgetState(), vtkLiverBezierWidget::Start);
+  return EXIT_SUCCESS;
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -344,6 +391,7 @@ int vtkLiverBezierWidgetTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testPickControlPoint());
   CHECK_EXIT_SUCCESS(testLeftDragMutatesControlGrid());
   CHECK_EXIT_SUCCESS(testReadOnlyEnforcement());
+  CHECK_EXIT_SUCCESS(testConfirmedStatePickGate());
 
   std::cout << "vtkLiverBezierWidgetTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;

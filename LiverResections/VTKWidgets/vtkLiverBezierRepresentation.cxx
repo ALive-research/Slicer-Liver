@@ -161,7 +161,11 @@ void vtkLiverBezierRepresentation::UpdatePickableGlyphs()
     return;
   }
 
-  // ADR-0014 §3 — pickable set depends on (State, InitMode).
+  // ADR-0014 §3 + ADR-0019 — pickable set depends on (State, InitMode).
+  // In ``Confirmed`` the control polygon is hidden and the widget is
+  // disabled (per ADR-0019 §"Per-state contract"), so no points are
+  // pickable.  In ``Planning`` the 16 Bezier control-grid points are
+  // pickable; in ``Init`` the init-mode subordinate points are.
   const int state = node->GetState();
   const int mode = node->GetInitMode();
 
@@ -171,7 +175,14 @@ void vtkLiverBezierRepresentation::UpdatePickableGlyphs()
     verts->InsertNextCell(1, &id);
   };
 
-  if (state == vtkMRMLBezierSurfaceNode::Planning)
+  if (state == vtkMRMLBezierSurfaceNode::Confirmed)
+  {
+    // No pickable glyphs in Confirmed — ADR-0019 §"Per-state contract"
+    // commits to "control polygon hidden, widget disabled".  The
+    // empty glyph cloud below makes ``BuildRepresentation`` hide the
+    // glyph actor on the next render pass.
+  }
+  else if (state == vtkMRMLBezierSurfaceNode::Planning)
   {
     // 16 Bezier control points become pickable.
     const double* grid = node->GetControlGrid();
@@ -271,9 +282,15 @@ vtkLiverBezierRepresentation::PickResult vtkLiverBezierRepresentation::Pick(int 
   double rayDir[3] = { farWorld[0] - nearWorld[0], farWorld[1] - nearWorld[1], farWorld[2] - nearWorld[2] };
   vtkMath::Normalize(rayDir);
 
-  // ADR-0014 §3 — pickability is state-gated.
+  // ADR-0014 §3 + ADR-0019 — pickability is state-gated.  In
+  // ``Confirmed`` the widget is disabled, so every (X, Y) is a miss
+  // regardless of where the cursor lands.
   const int state = node->GetState();
   const int mode = node->GetInitMode();
+  if (state == vtkMRMLBezierSurfaceNode::Confirmed)
+  {
+    return result;
+  }
 
   // Helper: distance from point to ray.
   auto distanceToRay = [&](const double p[3])

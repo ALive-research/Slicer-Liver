@@ -126,6 +126,7 @@ from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
 REPRESENTATION_SLICING_PLANE_INIT = "SlicingPlaneInit"
 REPRESENTATION_DISTANCE_SPHEROID_INIT = "DistanceSpheroidInit"
 REPRESENTATION_BEZIER_PLANNING = "BezierPlanning"
+REPRESENTATION_CONFIRMED = "Confirmed"
 
 
 # --------------------------------------------------------------------------- #
@@ -144,6 +145,7 @@ REPRESENTATION_BEZIER_PLANNING = "BezierPlanning"
 
 STATE_INIT = 0
 STATE_PLANNING = 1
+STATE_CONFIRMED = 2
 
 INIT_MODE_SLICING_PLANE = 0
 INIT_MODE_DISTANCE_SPHEROID = 1
@@ -212,6 +214,7 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             REPRESENTATION_SLICING_PLANE_INIT: None,
             REPRESENTATION_DISTANCE_SPHEROID_INIT: None,
             REPRESENTATION_BEZIER_PLANNING: None,
+            REPRESENTATION_CONFIRMED: None,
         }
 
         # Whether Representations have been constructed yet — guards
@@ -408,6 +411,9 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             from .Representations.BezierPlanningRepresentation import (
                 BezierPlanningRepresentation,
             )
+            from .Representations.ConfirmedRepresentation import (
+                ConfirmedRepresentation,
+            )
             from .Representations.DistanceSpheroidInitRepresentation import (
                 DistanceSpheroidInitRepresentation,
             )
@@ -417,6 +423,9 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         except ImportError:
             from Representations.BezierPlanningRepresentation import (  # type: ignore[no-redef]
                 BezierPlanningRepresentation,
+            )
+            from Representations.ConfirmedRepresentation import (  # type: ignore[no-redef]
+                ConfirmedRepresentation,
             )
             from Representations.DistanceSpheroidInitRepresentation import (  # type: ignore[no-redef]
                 DistanceSpheroidInitRepresentation,
@@ -433,6 +442,9 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         )
         self._representations[REPRESENTATION_DISTANCE_SPHEROID_INIT] = (
             DistanceSpheroidInitRepresentation(renderer=renderer)
+        )
+        self._representations[REPRESENTATION_CONFIRMED] = (
+            ConfirmedRepresentation(renderer=renderer)
         )
 
         self._representations_initialised = True
@@ -456,11 +468,14 @@ class LiverBezierSurfacePipeline(_PipelineBase):
     def _select_representation(
         self, state: int | None, init_mode: int | None
     ) -> str | None:
-        """Map ``(state, initMode)`` → Representation key per ADR-0014 §2.
+        """Map ``(state, initMode)`` → Representation key per ADR-0014 §2
+        and ADR-0019 §"Pipeline dispatch".
 
         Returns ``None`` when no Representation matches (e.g. an
         unrecognised state value).
         """
+        if state == STATE_CONFIRMED:
+            return REPRESENTATION_CONFIRMED
         if state == STATE_PLANNING:
             return REPRESENTATION_BEZIER_PLANNING
         if state == STATE_INIT:

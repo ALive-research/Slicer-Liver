@@ -48,7 +48,7 @@
 //
 //   {
 //     "schemaVersion": 1,
-//     "state": "Init" | "Planning",
+//     "state": "Init" | "Planning" | "Confirmed",
 //     "initMode": "SlicingPlane" | "DistanceSpheroid",
 //     "controlGrid": [48 doubles in row-major (i, j, k) order],
 //     "slicingPlane": {
@@ -472,11 +472,22 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
   if (root->HasMember("state"))
   {
     const std::string s = root->GetStringProperty("state");
-    const int code = vtkMRMLBezierSurfaceNode::GetStateFromString(s.c_str());
+    int code = vtkMRMLBezierSurfaceNode::GetStateFromString(s.c_str());
     if (code < 0)
     {
-      vtkErrorMacro("ReadJson: unknown state name '" << s << "' in '" << filePath << "'");
-      return 0;
+      // ADR-0019 §"Storage / persistence": unknown state values fall
+      // back to "Planning" gracefully so a scene authored by a future
+      // build that adds a fourth state (e.g. "Approved") still opens
+      // in older builds with the surface visible and editable.  The
+      // fallback also covers the symmetric forward-compat case for the
+      // existing readership: a v3-authored "Confirmed" scene loaded by
+      // a build that pre-dates this PR would have read as unknown;
+      // adding the fallback here means the same loader behaviour ages
+      // gracefully into the next schema bump.
+      vtkWarningMacro("ReadJson: unknown state name '" << s << "' in '" << filePath
+                                                       << "' — falling back to Planning"
+                                                          " (ADR-0019 forward-compatible default)");
+      code = vtkMRMLBezierSurfaceNode::Planning;
     }
     pendingState = code;
   }

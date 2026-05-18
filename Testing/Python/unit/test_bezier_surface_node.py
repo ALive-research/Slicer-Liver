@@ -1,3 +1,5 @@
+# Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
+# Distributed under the OSI-approved BSD 3-Clause License.
 """Python unit tests for ``vtkMRMLBezierSurfaceNode`` and
 ``vtkMRMLBezierSurfaceDisplayNode`` — T2 Stack 2 / T2.1.
 
@@ -98,21 +100,57 @@ def test_node_default_state_and_mode(mrml_module):
 
 
 def test_node_state_round_trip(mrml_module):
-    """State setter accepts both enum values.
+    """State setter accepts all three enum values along the legal path.
 
-    Init→Planning is the one-way transition committed by ADR-0014 §4;
-    a separate test (``test_node_init_data_read_only_after_planning``)
-    asserts that Planning→Init is rejected.  This test exercises the
-    forward edge and the same-state no-op.
+    Init -> Planning -> Confirmed -> Planning is the legal cycle
+    committed by ADR-0019; ADR-0014 §4's Planning -> Init invariant
+    plus ADR-0019's Confirmed -> Init and Init -> Confirmed bans are
+    covered by ``test_node_state_transitions_forbidden`` below.
     """
-    node = mrml_module.vtkMRMLBezierSurfaceNode()
-    node.SetState(mrml_module.vtkMRMLBezierSurfaceNode.Planning)
-    assert node.GetState() == mrml_module.vtkMRMLBezierSurfaceNode.Planning
+    cls = mrml_module.vtkMRMLBezierSurfaceNode
+    node = cls()
+    node.SetState(cls.Planning)
+    assert node.GetState() == cls.Planning
     # Same-state self-assign is a no-op (no Modified() expected; not
     # asserted here but covered by testModifiedEventsOnSetters on the
     # C++ side).
-    node.SetState(mrml_module.vtkMRMLBezierSurfaceNode.Planning)
-    assert node.GetState() == mrml_module.vtkMRMLBezierSurfaceNode.Planning
+    node.SetState(cls.Planning)
+    assert node.GetState() == cls.Planning
+    # ADR-0019: Planning -> Confirmed -> Planning round-trip.
+    node.SetState(cls.Confirmed)
+    assert node.GetState() == cls.Confirmed
+    node.SetState(cls.Planning)
+    assert node.GetState() == cls.Planning
+
+
+def test_node_state_transitions_forbidden(mrml_module):
+    """Forbidden transitions per ADR-0019 leave State unchanged.
+
+    Each rejection emits a ``vtkWarningMacro`` and short-circuits
+    without firing ``Modified()`` — only the post-condition (State
+    unchanged) is asserted from Python; ``GetMTime()`` non-advance is
+    covered by the C++ ``testConfirmedStateTransitions`` sub-test.
+    """
+    cls = mrml_module.vtkMRMLBezierSurfaceNode
+
+    # Init -> Confirmed forbidden.
+    node = cls()
+    node.SetState(cls.Confirmed)
+    assert node.GetState() == cls.Init
+
+    # Confirmed -> Init forbidden.
+    node2 = cls()
+    node2.SetState(cls.Planning)
+    node2.SetState(cls.Confirmed)
+    node2.SetState(cls.Init)
+    assert node2.GetState() == cls.Confirmed
+
+    # Planning -> Init forbidden (also covered by
+    # ``test_node_init_data_read_only_after_planning`` below).
+    node3 = cls()
+    node3.SetState(cls.Planning)
+    node3.SetState(cls.Init)
+    assert node3.GetState() == cls.Planning
 
 
 def test_node_initialization_mode_round_trip(mrml_module):
@@ -131,8 +169,10 @@ def test_node_enum_string_converters(mrml_module):
     cls = mrml_module.vtkMRMLBezierSurfaceNode
     assert cls.GetStateAsString(cls.Init) == "Init"
     assert cls.GetStateAsString(cls.Planning) == "Planning"
+    assert cls.GetStateAsString(cls.Confirmed) == "Confirmed"
     assert cls.GetStateFromString("Init") == cls.Init
     assert cls.GetStateFromString("Planning") == cls.Planning
+    assert cls.GetStateFromString("Confirmed") == cls.Confirmed
     assert cls.GetStateFromString("nonsense") == -1
 
     assert cls.GetInitModeAsString(cls.SlicingPlane) == "SlicingPlane"

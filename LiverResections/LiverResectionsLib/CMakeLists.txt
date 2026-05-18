@@ -1,4 +1,7 @@
 #-----------------------------------------------------------------------------
+# Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
+# Distributed under the OSI-approved BSD 3-Clause License.
+#
 # T2.6-LayerDM — Python install rules for the LayerDM Pipeline classes.
 #
 # Mirrors the convention used by Slicer-core's ``MarkupsLib`` and the
@@ -23,6 +26,7 @@ set(LiverResectionsLib_PYTHON_SCRIPTS
   LiverBezierSurfacePipeline.py
   Representations/__init__.py
   Representations/BezierPlanningRepresentation.py
+  Representations/ConfirmedRepresentation.py
   Representations/DistanceSpheroidInitRepresentation.py
   Representations/SlicingPlaneInitRepresentation.py
   )
