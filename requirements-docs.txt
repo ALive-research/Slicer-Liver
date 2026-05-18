@@ -1,0 +1,17 @@
+# Sphinx + ReadTheDocs build dependencies.
+# Mirrors Slicer-core's `requirements-docs.txt` per ADR-0017 to keep
+# the cognitive overhead low for contributors moving between the
+# upstream and Slicer-Liver.
+docutils
+linkify-it-py
+lxml>=4.9.1
+myst-parser
+pygments>=2.15.1
+# Workaround for readthedocs bug (https://github.com/readthedocs/sphinx_rtd_theme/issues/1343)
+sphinx>=5.0,!=5.2.0.post0
+sphinx-jsonschema
+sphinx_markdown_tables>=0.0.17
+sphinx-notfound-page
+sphinx-design
+sphinx-reredirects
+sphinx_rtd_theme>=0.5.2
