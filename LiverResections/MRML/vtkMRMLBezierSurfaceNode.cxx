@@ -52,6 +52,7 @@
 
 // STD includes
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -93,13 +94,18 @@ vtkMRMLNodeNewMacro(vtkMRMLBezierSurfaceNode);
 vtkMRMLBezierSurfaceNode::vtkMRMLBezierSurfaceNode()
   : State(ResectionState::Init)
   , InitMode(InitializationMode::SlicingPlane)
+  , Rows(DefaultGridSize)
+  , Cols(DefaultGridSize)
   , NumberOfDistanceSpheroidInitPoints(0)
   , DistanceSpheroidRadiusX(0.0)
   , DistanceSpheroidRadiusY(0.0)
   , DistanceSpheroidRadiusZ(0.0)
   , LoadingFromXML(false)
 {
-  this->ControlGrid.fill(0.0);
+  // Default to the v1 4×4 control-grid byte count (48 doubles, all
+  // zeroed).  ``SetSize`` / ``SetRows`` / ``SetCols`` resize this
+  // buffer in lock-step with the shape change per ADR-0018 §1.
+  this->ControlGrid.assign(static_cast<size_t>(3u) * this->Rows * this->Cols, 0.0);
 
   for (int i = 0; i < 2; ++i)
   {
@@ -226,9 +232,92 @@ bool vtkMRMLBezierSurfaceNode::SetControlGrid(const double* values)
   {
     return false;
   }
-  std::copy_n(values, ControlGridSize, this->ControlGrid.begin());
+  const size_t length = this->ControlGrid.size();
+  std::copy_n(values, length, this->ControlGrid.begin());
   this->Modified();
   return true;
+}
+
+//------------------------------------------------------------------------------
+// Control-grid shape setters (ADR-0018 §1).
+//
+// Square only for v2.0.0 — ``SetRows`` / ``SetCols`` reject any
+// (Rows, Cols) outside ``{(3, 3), (4, 4)}`` with a ``vtkErrorMacro``
+// and no state change.  ``SetSize`` is the convenience entry point
+// that sets both axes atomically.
+//
+// All three resize the underlying ``ControlGrid`` buffer to
+// ``3 * Rows * Cols`` doubles and zero-fill on a shape change — per
+// ADR-0018 §1, a mid-edit transition discards the in-flight grid
+// rather than attempting corner-preservation (simpler semantic;
+// surgeons re-seed after the transition).
+//------------------------------------------------------------------------------
+void vtkMRMLBezierSurfaceNode::SetSize(unsigned int n)
+{
+  if (static_cast<int>(n) < MinGridSize || static_cast<int>(n) > MaxGridSize)
+  {
+    vtkErrorMacro("SetSize: invalid grid size " << n << "; ADR-0018 §1 admits {" << MinGridSize << ", " << MaxGridSize << "} only — leaving shape at (" << this->Rows << ", "
+                                                << this->Cols << ")");
+    return;
+  }
+  if (this->Rows == n && this->Cols == n)
+  {
+    return;
+  }
+  this->Rows = n;
+  this->Cols = n;
+  this->ControlGrid.assign(static_cast<size_t>(3u) * this->Rows * this->Cols, 0.0);
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLBezierSurfaceNode::SetRows(unsigned int rows)
+{
+  // ADR-0018 §1: square only for v2.0.0.  Reject any value that
+  // would leave the node in a non-square state (i.e. rows != Cols
+  // unless Cols is about to change too — and the canonical way to
+  // change both axes simultaneously is ``SetSize``).
+  if (static_cast<int>(rows) < MinGridSize || static_cast<int>(rows) > MaxGridSize)
+  {
+    vtkErrorMacro("SetRows: invalid Rows " << rows << "; ADR-0018 §1 admits {" << MinGridSize << ", " << MaxGridSize << "} only — leaving Rows at " << this->Rows);
+    return;
+  }
+  if (rows != this->Cols)
+  {
+    vtkErrorMacro("SetRows: non-square shape (Rows=" << rows << ", Cols=" << this->Cols
+                                                     << ") not admitted in v2.0.0 (ADR-0018 §1); use SetSize() to change both axes atomically — leaving Rows at " << this->Rows);
+    return;
+  }
+  if (rows == this->Rows)
+  {
+    return;
+  }
+  this->Rows = rows;
+  this->ControlGrid.assign(static_cast<size_t>(3u) * this->Rows * this->Cols, 0.0);
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLBezierSurfaceNode::SetCols(unsigned int cols)
+{
+  if (static_cast<int>(cols) < MinGridSize || static_cast<int>(cols) > MaxGridSize)
+  {
+    vtkErrorMacro("SetCols: invalid Cols " << cols << "; ADR-0018 §1 admits {" << MinGridSize << ", " << MaxGridSize << "} only — leaving Cols at " << this->Cols);
+    return;
+  }
+  if (cols != this->Rows)
+  {
+    vtkErrorMacro("SetCols: non-square shape (Rows=" << this->Rows << ", Cols=" << cols
+                                                     << ") not admitted in v2.0.0 (ADR-0018 §1); use SetSize() to change both axes atomically — leaving Cols at " << this->Cols);
+    return;
+  }
+  if (cols == this->Cols)
+  {
+    return;
+  }
+  this->Cols = cols;
+  this->ControlGrid.assign(static_cast<size_t>(3u) * this->Rows * this->Cols, 0.0);
+  this->Modified();
 }
 
 //------------------------------------------------------------------------------
@@ -481,6 +570,8 @@ void vtkMRMLBezierSurfaceNode::WriteXML(ostream& of, int nIndent)
   vtkMRMLWriteXMLBeginMacro(of);
   vtkMRMLWriteXMLEnumMacro(state, State);
   vtkMRMLWriteXMLEnumMacro(initMode, InitMode);
+  vtkMRMLWriteXMLIntMacro(rows, Rows);
+  vtkMRMLWriteXMLIntMacro(cols, Cols);
   vtkMRMLWriteXMLVectorMacro(slicingPlaneOrigin, SlicingPlaneOrigin, double, 3);
   vtkMRMLWriteXMLVectorMacro(slicingPlaneNormal, SlicingPlaneNormal, double, 3);
   vtkMRMLWriteXMLVectorMacro(distanceSpheroidCenter, DistanceSpheroidCenter, double, 3);
@@ -498,7 +589,7 @@ void vtkMRMLBezierSurfaceNode::WriteXML(ostream& of, int nIndent)
   // (current writeDoubles output is whitespace-and-numeric, so this
   // is defensive — but the discipline matches vtkMRMLNode's own
   // attribute serialisation, cf. vtkMRMLNode.cxx:699).
-  of << " controlGrid=\"" << this->XMLAttributeEncodeString(writeDoubles(this->ControlGrid.data(), ControlGridSize)) << "\"";
+  of << " controlGrid=\"" << this->XMLAttributeEncodeString(writeDoubles(this->ControlGrid.data(), this->ControlGrid.size())) << "\"";
   of << " slicingPlaneInitPoint0=\"" << this->XMLAttributeEncodeString(writeDoubles(this->SlicingPlaneInitPoints[0], 3)) << "\"";
   of << " slicingPlaneInitPoint1=\"" << this->XMLAttributeEncodeString(writeDoubles(this->SlicingPlaneInitPoints[1], 3)) << "\"";
   if (!this->DistanceSpheroidInitPoints.empty())
@@ -536,6 +627,55 @@ void vtkMRMLBezierSurfaceNode::ReadXMLAttributes(const char** atts)
   vtkMRMLReadXMLIntMacro(numberOfDistanceSpheroidInitPoints, NumberOfDistanceSpheroidInitPoints);
   vtkMRMLReadXMLEndMacro();
 
+  // ``rows`` / ``cols`` are read manually (NOT via
+  // ``vtkMRMLReadXMLIntMacro``) because the macros route through
+  // ``Set##propertyName`` and the public ``SetRows`` / ``SetCols``
+  // setters reject non-square intermediate states (e.g. rows=3 with
+  // cols still at the default 4 — see ADR-0018 §1).  XML load is an
+  // internal-load context, exempt from the public-API guard, similar
+  // to the ``LoadingFromXML`` exemption around the slicing-plane /
+  // spheroid setters.  We collect both values before validating the
+  // pair as a unit, then resize the control-grid buffer to match.
+  unsigned int parsedRows = this->Rows;
+  unsigned int parsedCols = this->Cols;
+  bool hasRowsAttr = false;
+  bool hasColsAttr = false;
+  for (const char** att = atts; att && *att; att += 2)
+  {
+    const char* name = att[0];
+    const char* value = att[1];
+    if (value == nullptr)
+    {
+      break;
+    }
+    if (std::strcmp(name, "rows") == 0)
+    {
+      parsedRows = static_cast<unsigned int>(std::atoi(value));
+      hasRowsAttr = true;
+    }
+    else if (std::strcmp(name, "cols") == 0)
+    {
+      parsedCols = static_cast<unsigned int>(std::atoi(value));
+      hasColsAttr = true;
+    }
+  }
+  (void)hasRowsAttr;
+  (void)hasColsAttr;
+  // Per ADR-0018 §1: shape must be square and in
+  // ``{(3, 3), (4, 4)}``.  Clamp legacy / malformed scenes back to
+  // the v1 default so the rest of ReadXMLAttributes keeps a valid
+  // buffer to populate.
+  if (static_cast<int>(parsedRows) < MinGridSize || static_cast<int>(parsedRows) > MaxGridSize || parsedRows != parsedCols)
+  {
+    vtkWarningMacro("ReadXMLAttributes: invalid (rows=" << parsedRows << ", cols=" << parsedCols << "); ADR-0018 §1 admits {(3,3), (4,4)} only — falling back to "
+                                                        << DefaultGridSize << "x" << DefaultGridSize);
+    parsedRows = DefaultGridSize;
+    parsedCols = DefaultGridSize;
+  }
+  this->Rows = parsedRows;
+  this->Cols = parsedCols;
+  this->ControlGrid.assign(static_cast<size_t>(3u) * this->Rows * this->Cols, 0.0);
+
   // Free-form payloads — replay the attribute stream a second time so
   // the order of declarations does not matter.  ``Set*`` is not used
   // for the array fields because they do not have macro-generated
@@ -553,9 +693,10 @@ void vtkMRMLBezierSurfaceNode::ReadXMLAttributes(const char** atts)
       std::vector<double> values;
       const std::string decoded = this->XMLAttributeDecodeString(value);
       readDoubles(decoded.c_str(), values);
-      if (values.size() >= static_cast<std::size_t>(ControlGridSize))
+      const std::size_t expected = this->ControlGrid.size();
+      if (values.size() >= expected)
       {
-        std::copy_n(values.begin(), ControlGridSize, this->ControlGrid.begin());
+        std::copy_n(values.begin(), expected, this->ControlGrid.begin());
       }
       else
       {
@@ -565,7 +706,7 @@ void vtkMRMLBezierSurfaceNode::ReadXMLAttributes(const char** atts)
         // produced the malformed scene.  Same shape as the warning
         // vtkMRMLPlotSeriesNode emits when a truncated array is
         // encountered on read.
-        vtkWarningMacro("Truncated controlGrid attribute; expected " << ControlGridSize << " doubles, got " << values.size() << " — leaving at default");
+        vtkWarningMacro("Truncated controlGrid attribute; expected " << expected << " doubles (3 * Rows * Cols), got " << values.size() << " — leaving at default");
       }
     }
     else if (std::strcmp(name, "slicingPlaneInitPoint0") == 0 || std::strcmp(name, "slicingPlaneInitPoint1") == 0)
@@ -619,6 +760,10 @@ void vtkMRMLBezierSurfaceNode::CopyContent(vtkMRMLNode* anode, bool deepCopy /*=
 
   this->State = other->State;
   this->InitMode = other->InitMode;
+  // Shape + buffer in one assignment — ADR-0018 §1.  std::vector
+  // copy handles the resize automatically.
+  this->Rows = other->Rows;
+  this->Cols = other->Cols;
   this->ControlGrid = other->ControlGrid;
 
   for (int i = 0; i < 2; ++i)
@@ -668,6 +813,8 @@ void vtkMRMLBezierSurfaceNode::PrintSelf(ostream& os, vtkIndent indent)
   vtkMRMLPrintBeginMacro(os, indent);
   vtkMRMLPrintEnumMacro(State);
   vtkMRMLPrintEnumMacro(InitMode);
+  vtkMRMLPrintIntMacro(Rows);
+  vtkMRMLPrintIntMacro(Cols);
   vtkMRMLPrintVectorMacro(SlicingPlaneOrigin, double, 3);
   vtkMRMLPrintVectorMacro(SlicingPlaneNormal, double, 3);
   vtkMRMLPrintVectorMacro(DistanceSpheroidCenter, double, 3);
@@ -677,8 +824,8 @@ void vtkMRMLBezierSurfaceNode::PrintSelf(ostream& os, vtkIndent indent)
   vtkMRMLPrintIntMacro(NumberOfDistanceSpheroidInitPoints);
   vtkMRMLPrintEndMacro();
 
-  os << indent << "ControlGrid (" << ControlGridSize << " doubles): ";
-  for (int i = 0; i < ControlGridSize; ++i)
+  os << indent << "ControlGrid (" << this->ControlGrid.size() << " doubles, " << this->Rows << "x" << this->Cols << "): ";
+  for (size_t i = 0; i < this->ControlGrid.size(); ++i)
   {
     if (i > 0)
     {

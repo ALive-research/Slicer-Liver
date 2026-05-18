@@ -392,6 +392,137 @@ int testLegacyFcsvWriteRejected()
   return EXIT_SUCCESS;
 }
 
+int testJsonRoundTrip3x3()
+{
+  // ADR-0018 §1 — 3×3 round-trip.  Writer always emits schema v2
+  // with explicit rows + cols (3, 3) and a 27-double controlGrid.
+  // Reader resolves rows/cols on parse + matches the controlGrid
+  // length.  Mirrors testJsonRoundTrip for the 3×3 case.
+  vtkNew<vtkMRMLBezierSurfaceNode> source;
+  source->SetSize(3);
+  source->SetState(vtkMRMLBezierSurfaceNode::Planning);
+  double grid33[27];
+  for (int i = 0; i < 27; ++i)
+  {
+    grid33[i] = static_cast<double>(i) * 0.375 - 0.5;
+  }
+  source->SetControlGrid(grid33);
+
+  const std::string path = makeTempPath("lrp.json");
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> writeStorage;
+  writeStorage->SetFileName(path.c_str());
+  CHECK_INT(writeStorage->WriteData(source.GetPointer()), 1);
+
+  vtkNew<vtkMRMLBezierSurfaceNode> sink;
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> readStorage;
+  readStorage->SetFileName(path.c_str());
+  CHECK_INT(readStorage->ReadData(sink.GetPointer()), 1);
+
+  CHECK_INT(static_cast<int>(sink->GetRows()), 3);
+  CHECK_INT(static_cast<int>(sink->GetCols()), 3);
+  CHECK_INT(static_cast<int>(sink->GetControlGridLength()), 27);
+  for (int i = 0; i < 27; ++i)
+  {
+    CHECK_DOUBLE_TOLERANCE(sink->GetControlGrid()[i], grid33[i], 1e-9);
+  }
+
+  // Spot-check the on-disk JSON carries the explicit shape — a
+  // schema-v2 file MUST emit rows + cols + schemaVersion = 2.
+  std::ifstream f(path);
+  std::stringstream ss;
+  ss << f.rdbuf();
+  const std::string contents = ss.str();
+  if (contents.find("\"schemaVersion\":2") == std::string::npos && contents.find("\"schemaVersion\": 2") == std::string::npos)
+  {
+    std::cerr << "Expected schemaVersion: 2 in output JSON\n" << contents << "\n";
+    return EXIT_FAILURE;
+  }
+  if (contents.find("\"rows\":3") == std::string::npos && contents.find("\"rows\": 3") == std::string::npos)
+  {
+    std::cerr << "Expected \"rows\": 3 in output JSON\n" << contents << "\n";
+    return EXIT_FAILURE;
+  }
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+int testJsonReadV1Implicit4x4()
+{
+  // ADR-0018 §1 — Reader must accept v1 files (no rows / cols
+  // fields; implicit 4×4 control polygon) and load them as a 4×4
+  // node.  This is the migration path for existing on-disk plans.
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 1,\n";
+    ofs << "  \"state\": \"Planning\",\n";
+    ofs << "  \"initMode\": \"SlicingPlane\",\n";
+    ofs << "  \"controlGrid\": [";
+    for (int i = 0; i < 48; ++i)
+    {
+      if (i > 0)
+      {
+        ofs << ", ";
+      }
+      ofs << (static_cast<double>(i) * 0.0625);
+    }
+    ofs << "],\n";
+    ofs << "  \"slicingPlane\": { \"origin\": [0, 0, 0], \"normal\": [0, 0, 1], \"initPointsFlat\": [0, 0, 0, 0, 0, 0] },\n";
+    ofs << "  \"distanceSpheroid\": { \"center\": [0, 0, 0], \"radius\": {\"x\": 0, \"y\": 0, \"z\": 0}, \"numberOfInitPoints\": 0, \"initPointsFlat\": [] },\n";
+    ofs << "  \"metadata\": {}\n";
+    ofs << "}\n";
+  }
+
+  vtkNew<vtkMRMLBezierSurfaceNode> sink;
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
+  storage->SetFileName(path.c_str());
+  CHECK_INT(storage->ReadData(sink.GetPointer()), 1);
+
+  // v1 → 4×4 inference.
+  CHECK_INT(static_cast<int>(sink->GetRows()), 4);
+  CHECK_INT(static_cast<int>(sink->GetCols()), 4);
+  CHECK_INT(static_cast<int>(sink->GetControlGridLength()), 48);
+  for (int i = 0; i < 48; ++i)
+  {
+    CHECK_DOUBLE_TOLERANCE(sink->GetControlGrid()[i], static_cast<double>(i) * 0.0625, 1e-9);
+  }
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+int testJsonReadV2InvalidShape()
+{
+  // ADR-0018 §1 — Reader rejects non-square + out-of-range shapes
+  // explicitly.  Crafts a v2 JSON with rows=3, cols=4 (non-square)
+  // and confirms the read fails with a vtkErrorMacro.
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 2,\n";
+    ofs << "  \"state\": \"Init\",\n";
+    ofs << "  \"initMode\": \"SlicingPlane\",\n";
+    ofs << "  \"rows\": 3,\n";
+    ofs << "  \"cols\": 4,\n";
+    ofs << "  \"controlGrid\": [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35]\n";
+    ofs << "}\n";
+  }
+
+  vtkNew<vtkMRMLBezierSurfaceNode> sink;
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
+  storage->SetFileName(path.c_str());
+
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
 int testLegacyFcsvFixture()
 {
   // Fixture-based variant of testLegacyFcsvRead: walks the canned
@@ -455,6 +586,9 @@ int vtkMRMLBezierSurfaceStorageNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testLegacyFcsvRead());
   CHECK_EXIT_SUCCESS(testLegacyFcsvWriteRejected());
   CHECK_EXIT_SUCCESS(testLegacyFcsvFixture());
+  CHECK_EXIT_SUCCESS(testJsonRoundTrip3x3());
+  CHECK_EXIT_SUCCESS(testJsonReadV1Implicit4x4());
+  CHECK_EXIT_SUCCESS(testJsonReadV2InvalidShape());
 
   std::cout << "vtkMRMLBezierSurfaceStorageNodeTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;

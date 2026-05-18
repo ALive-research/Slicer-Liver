@@ -382,6 +382,61 @@ int testConfirmedStatePickGate()
   return EXIT_SUCCESS;
 }
 
+int testPickControlPoint3x3()
+{
+  // ADR-0018 §1 — the widget representation iterates Rows*Cols
+  // control points, not a hard-coded 16.  This test pins the 3×3
+  // (9-point) variant: pickable set must be exactly 9 points,
+  // picking a known position resolves to the right flat index.
+  vtkSmartPointer<vtkMRMLBezierSurfaceNode> node = vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New();
+  node->SetSize(3);
+  node->SetState(vtkMRMLBezierSurfaceNode::Planning);
+  double values[27] = { 0.0 };
+  constexpr double stride = 10.0;
+  for (int row = 0; row < 3; ++row)
+  {
+    for (int col = 0; col < 3; ++col)
+    {
+      const int i = row * 3 + col;
+      values[i * 3 + 0] = (col - 1.0) * stride;
+      values[i * 3 + 1] = (row - 1.0) * stride;
+      values[i * 3 + 2] = 0.0;
+    }
+  }
+  node->SetControlGrid(values);
+
+  vtkSmartPointer<vtkRenderer> renderer = makeRenderer();
+  vtkNew<vtkGenericOpenGLRenderWindow> renderWindow;
+  renderWindow->SetShowWindow(false);
+  renderWindow->AddRenderer(renderer);
+  renderWindow->SetSize(400, 400);
+  renderer->ResetCameraClippingRange();
+
+  vtkNew<vtkLiverBezierRepresentation> rep;
+  rep->SetRenderer(renderer);
+  rep->SetBezierNode(node);
+  rep->BuildRepresentation();
+
+  // Project control point (row=1, col=2) → world (10, 0, 0) → flat
+  // index 1*3 + 2 = 5.
+  renderer->SetWorldPoint(10.0, 0.0, 0.0, 1.0);
+  renderer->WorldToDisplay();
+  double* d = renderer->GetDisplayPoint();
+  vtkLiverBezierRepresentation::PickResult pick = rep->Pick(static_cast<int>(std::round(d[0])), static_cast<int>(std::round(d[1])));
+  CHECK_INT(pick.Role, vtkLiverBezierRepresentation::PickRole_ControlPoint);
+  CHECK_INT(pick.Index, 5);
+
+  // Project a "would-be 4×4 corner" world coord (-15, -15, 0) that
+  // does NOT exist in the 3×3 grid (which has corners at ±10).
+  // Pick must miss.
+  renderer->SetWorldPoint(-15.0, -15.0, 0.0, 1.0);
+  renderer->WorldToDisplay();
+  d = renderer->GetDisplayPoint();
+  vtkLiverBezierRepresentation::PickResult miss = rep->Pick(static_cast<int>(std::round(d[0])), static_cast<int>(std::round(d[1])));
+  CHECK_INT(miss.Role, vtkLiverBezierRepresentation::PickRole_None);
+  return EXIT_SUCCESS;
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -392,6 +447,7 @@ int vtkLiverBezierWidgetTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testLeftDragMutatesControlGrid());
   CHECK_EXIT_SUCCESS(testReadOnlyEnforcement());
   CHECK_EXIT_SUCCESS(testConfirmedStatePickGate());
+  CHECK_EXIT_SUCCESS(testPickControlPoint3x3());
 
   std::cout << "vtkLiverBezierWidgetTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;

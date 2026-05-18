@@ -184,9 +184,15 @@ void vtkLiverBezierRepresentation::UpdatePickableGlyphs()
   }
   else if (state == vtkMRMLBezierSurfaceNode::Planning)
   {
-    // 16 Bezier control points become pickable.
+    // Per ADR-0018 §1 the per-node Bezier control polygon is
+    // ``Rows × Cols`` points (9 for 3×3, 16 for 4×4); query the
+    // shape from the data node.  Tear-down of the previous glyph
+    // cloud is handled by the ``points->Reset()`` / ``verts->Reset()``
+    // above — the cloud size on the next BuildRepresentation()
+    // matches the data node's current shape.
     const double* grid = node->GetControlGrid();
-    for (int i = 0; i < vtkMRMLBezierSurfaceNode::GridSize * vtkMRMLBezierSurfaceNode::GridSize; ++i)
+    const unsigned int controlPointCount = node->GetRows() * node->GetCols();
+    for (unsigned int i = 0; i < controlPointCount; ++i)
     {
       pushPoint(grid[i * 3 + 0], grid[i * 3 + 1], grid[i * 3 + 2]);
     }
@@ -304,8 +310,13 @@ vtkLiverBezierRepresentation::PickResult vtkLiverBezierRepresentation::Pick(int 
   double bestDist = kPickRadiusWorld;
   if (state == vtkMRMLBezierSurfaceNode::Planning)
   {
+    // Per ADR-0018 §1 the pickable control-point set is
+    // ``Rows * Cols`` (9 for 3×3, 16 for 4×4).  The index returned
+    // in PickResult is grid-flat (i * Cols + j); callers that need
+    // (row, col) can recover it via the data node's Rows / Cols.
     const double* grid = node->GetControlGrid();
-    for (int i = 0; i < vtkMRMLBezierSurfaceNode::GridSize * vtkMRMLBezierSurfaceNode::GridSize; ++i)
+    const int controlPointCount = static_cast<int>(node->GetRows() * node->GetCols());
+    for (int i = 0; i < controlPointCount; ++i)
     {
       const double p[3] = { grid[i * 3 + 0], grid[i * 3 + 1], grid[i * 3 + 2] };
       const double d = distanceToRay(p);

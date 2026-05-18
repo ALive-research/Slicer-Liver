@@ -66,17 +66,19 @@ class vtkSphereSource;
  * "representation" concepts coexist by accident of vocabulary.
  *
  * The representation observes a ``vtkMRMLBezierSurfaceNode`` for its
- * geometry source (the 4×4 control grid + init data per ADR-0014 §1)
- * and exposes a picker that resolves a display-space (X, Y) cursor to a
- * point index in the underlying data node.
+ * geometry source (the M×N control grid + init data per ADR-0014 §1
+ * and ADR-0018 §1; M = N ∈ {3, 4} for v2.0.0) and exposes a picker
+ * that resolves a display-space (X, Y) cursor to a point index in
+ * the underlying data node.
  *
- * Per ADR-0014 §3, the *pickable* set depends on the data node's
- * ``(State, InitMode)`` tuple:
+ * Per ADR-0014 §3 + ADR-0018 §1, the *pickable* set depends on the
+ * data node's ``(State, InitMode)`` tuple:
  *
  *   - ``(Init, SlicingPlane)``  — the two SlicingPlane init points.
  *   - ``(Init, DistanceSpheroid)`` — the DistanceSpheroid init points.
- *   - ``(Planning, *)``  — the 16 Bezier control-grid points
- *     (corners 4 + edges 8 + interior 4).
+ *   - ``(Planning, *)``  — the ``Rows * Cols`` Bezier control-grid
+ *     points (9 for 3×3, 16 for 4×4; ring-group taxonomy: corners 4 +
+ *     edges ``2*(M-2)+2*(N-2)`` + interior ``(M-2)*(N-2)``).
  *
  * Init-mode points are not pickable in Planning state; per ADR-0014 §4
  * they are read-only audit data and the widget must not enter a drag
@@ -96,15 +98,16 @@ public:
   enum PickRole
   {
     PickRole_None = 0,
-    PickRole_ControlPoint = 1,         ///< Bezier 4×4 grid (state=Planning).
+    PickRole_ControlPoint = 1,         ///< Bezier M×N grid (state=Planning); ADR-0018 §1.
     PickRole_SlicingPlaneInit = 2,     ///< Two SlicingPlane init points.
     PickRole_DistanceSpheroidInit = 3, ///< DistanceSpheroid init points.
   };
 
   /// Result of ``Pick(X, Y)`` — role + point index.  The index is
-  /// role-relative: control-grid is [0..15], slicing-plane init is
-  /// [0..1], distance-spheroid init is [0..N) where N is the data
-  /// node's ``NumberOfDistanceSpheroidInitPoints``.
+  /// role-relative: control-grid is [0..Rows*Cols-1] (per ADR-0018
+  /// §1; 9 or 16 for v2.0.0), slicing-plane init is [0..1],
+  /// distance-spheroid init is [0..N) where N is the data node's
+  /// ``NumberOfDistanceSpheroidInitPoints``.
   struct PickResult
   {
     int Role{ PickRole_None };
@@ -158,8 +161,13 @@ protected:
   ~vtkLiverBezierRepresentation() override;
 
   /// Rebuild the internal poly data carrying the currently-pickable
-  /// glyph cloud.  Cheap (≤ 16 sphere glyphs); called from
-  /// ``BuildRepresentation()``.  The control-grid OpenGL mapper from
+  /// glyph cloud.  Cheap (≤ ``MaxGridSize * MaxGridSize`` = 16
+  /// sphere glyphs for the 4×4 case; 9 for 3×3 per ADR-0018 §1);
+  /// called from ``BuildRepresentation()``.  Re-instantiates the
+  /// per-control-point glyph set on every shape change (the buffer
+  /// ``Reset`` above is idempotent across sizes; the glyph count on
+  /// the next frame matches the data node's current Rows × Cols).
+  /// The control-grid OpenGL mapper from
   /// ``LiverMarkups/VTKWidgets/`` is *not* hosted here — it relocates
   /// in TODO(T2-mapper-relocation) and the LayerDM Pipeline keeps the
   /// surface render path.  This representation only owns the
