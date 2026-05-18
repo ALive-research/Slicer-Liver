@@ -58,9 +58,18 @@ each scenario `<test-name>` the bundle is:
 | `<test-name>.notes.md`         | (optional) human rationale for what the baseline validates.            |
 
 The bundle lives as release assets on
-`github.com/ALive-research/ALiveResearchTestingData` (release tag
-**`liver-test-baselines-v1`**, bumped per the rule in
-[ADR-0020](../../Docs/adr/0020-gpu-tessellation.md) §"Rollout plan").
+`github.com/ALive-research/ALiveResearchTestingData`, which follows
+the [SlicerTestingData mirror pattern](https://github.com/Slicer/SlicerTestingData):
+
+- One release per hash algorithm, named `<HASHALGO>` (`SHA256`,
+  `SHA512`, …).  The visual-regression harness uses **`SHA512`**
+  (CMake `ExternalData`'s default for new content addressing).
+- Release assets are named by their `<hashsum>` — there is no
+  per-purpose tag (no `liver-test-baselines-v1`).  The same `SHA512`
+  release backs every Slicer-Liver fixture and any future ALive
+  fixture.
+- A sibling `SHA512.csv` in the repo root maps `<hashsum>;<filename>`;
+  `process_release_data.py` regenerates `SHA512.md` on each upload.
 
 In the Slicer-Liver repo the bundle is represented by **64-byte
 `.sha512` content-hash stubs** under `Data/Baseline/`.  CMake's
@@ -68,7 +77,7 @@ In the Slicer-Liver repo the bundle is represented by **64-byte
 the matching blob from:
 
 ```
-https://github.com/ALive-research/ALiveResearchTestingData/releases/download/liver-test-baselines-v1/SHA512/<hash>
+https://github.com/ALive-research/ALiveResearchTestingData/releases/download/SHA512/<hash>
 ```
 
 ## Workflow
@@ -106,21 +115,36 @@ A Qt window opens with the scenario rendered.  Keypresses:
   and print the next-step hint.
 - **`q`** Quit without saving.
 
-After visual approval:
+After visual approval, hash + stage the bundle for the testing-data
+repo's canonical `INCOMING/` workflow:
 
 ```bash
+export ALIVE_TESTING_DATA_INCOMING=~/src/ALiveResearchTestingData/INCOMING
 ./LiverResections/Testing/Scripts/upload_baseline.sh BezierSurface4x4Planning
 ```
 
 The script:
 
-1. Computes SHA-512 of each staged file.
-2. Uploads each as a release asset on `ALiveResearchTestingData` (named by its
-   digest; `--clobber` so re-captures replace cleanly).
-3. Writes the matching `.sha512` stubs under `Data/Baseline/`.
-4. Prints `git add` + `git commit` hints.
+1. Bundle-completeness pre-flight: refuses to proceed unless all four
+   sidecars (`.png`, `.mrml`, `.camera.json`, `.viewport.json`) are
+   present in staging.
+2. Computes SHA-512 of each staged file.
+3. Two-pass atomic stage: writes the `.sha512` stubs under
+   `Data/Baseline/` AND copies the staged artefacts into the
+   testing-data repo's `INCOMING/` directory.
 
-Finally:
+Then run the testing-data canonical upload script:
+
+```bash
+cd ~/src/ALiveResearchTestingData
+python process_release_data.py upload --hashalgo SHA512 \
+                                      --github-token "$GH_TOKEN"
+git add SHA512.csv SHA512.md
+git commit -m "ENH: Add BezierSurface4x4Planning visual-regression baseline"
+git push
+```
+
+Finally on the Slicer-Liver side:
 
 ```bash
 git add LiverResections/Testing/Data/Baseline/BezierSurface4x4Planning.*.sha512
@@ -140,48 +164,44 @@ git commit -m "ENH: Capture BezierSurface4x4Planning visual-regression baseline"
 The CTest entry registers automatically once the scenario is listed in
 the CMake; no per-scenario CMake boilerplate.
 
-## Bumping the baseline tag
+## Bumping baselines after a Slicer/VTK/image upgrade
 
 When a Slicer / VTK / VTK-image upgrade causes legitimate visual drift
 (e.g., a freetype version change or a Mesa rasteriser change), every
-baseline needs re-capture.  The tag-bump procedure is:
+baseline needs re-capture.  Because the testing-data repo is
+**content-addressed** (one `SHA512` release; no per-purpose tags), the
+procedure does NOT involve rotating a release tag.  Just re-capture:
 
-1. Create the next-N release on `ALiveResearchTestingData`:
+1. For each scenario, run the capture flow + upload script (same as
+   the per-scenario capture path documented above).  New hashes are
+   computed; new assets land in the `SHA512` release; the
+   `<HASHALGO>.csv` grows.
+2. The `.sha512` stubs in `Data/Baseline/` rotate automatically as
+   part of the upload script.
+3. Commit the rotated stubs on the Slicer-Liver side; commit the
+   `SHA512.csv` update on the testing-data side.
 
-   ```bash
-   gh release create liver-test-baselines-v2 \
-     --repo ALive-research/ALiveResearchTestingData \
-     --title "Slicer-Liver visual-regression test baselines v2" \
-     --notes "Re-captured against Slicer X.Y.Z + VTK A.B.C."
-   ```
+The old hashes stay in the release indefinitely (content-addressed;
+no deletion needed for forward-compat).  History remains
+reproducible.
 
-2. Edit the URL template in `Python/CMakeLists.txt`:
-
-   ```cmake
-   "https://github.com/.../releases/download/liver-test-baselines-v2/%(algo)/%(hash)"
-   ```
-
-3. Run the capture flow for every scenario.  The upload script
-   accepts an optional tag argument:
-
-   ```bash
-   ./LiverResections/Testing/Scripts/upload_baseline.sh BezierSurface4x4Planning liver-test-baselines-v2
-   ```
-
-4. Commit the rotated `.sha512` stubs and the CMakeLists.txt URL
-   change in a single PR.  The PR title should be `ENH: Bump
-   visual-regression baselines to liver-test-baselines-v2`.
-
-## Bootstrapping the release (one-time per organisation)
-
-When the release tag namespace is first established on
-`ALiveResearchTestingData`:
+## Bootstrapping a local testing-data clone (one-time)
 
 ```bash
-gh release create liver-test-baselines-v1 \
-  --repo ALive-research/ALiveResearchTestingData \
-  --title "Slicer-Liver visual-regression test baselines v1" \
-  --notes "Baseline image bundles for Slicer-Liver visual-regression tests.  Tag namespace: liver-test-baselines-vN.  Bump N when baselines change (Slicer/VTK/image bump).  This release backs Slicer-Liver's Testing/Data/Baseline/*.sha512 fixtures resolved via CMake ExternalData."
+cd ~/src
+git clone https://github.com/ALive-research/ALiveResearchTestingData.git
+cd ALiveResearchTestingData
+# process_release_data.py requires the githubrelease package.
+pip install --user githubrelease
+
+# Export the INCOMING path for the upload script.
+export ALIVE_TESTING_DATA_INCOMING=~/src/ALiveResearchTestingData/INCOMING
+
+# Verify the SHA512 release exists.  If not, ask a maintainer to run:
+#     gh release create SHA512 --repo ALive-research/ALiveResearchTestingData \
+#       --title "SHA512" --notes "SHA512-keyed content-addressed assets."
+# and create the initial SHA512.csv as an empty file in the repo root.
+gh release view SHA512 --repo ALive-research/ALiveResearchTestingData
 ```
 
 ## Initial scope (v2.0.0)

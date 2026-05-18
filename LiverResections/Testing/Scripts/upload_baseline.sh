@@ -2,67 +2,102 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 #
-# Upload a captured visual-regression baseline bundle to the
-# ALiveResearchTestingData release and rotate the matching `.sha512` content
-# hash stubs in the Slicer-Liver repo.
+# Stage a captured visual-regression baseline bundle for upload to the
+# ALive-research/ALiveResearchTestingData repository (SlicerTestingData
+# mirror pattern) and rotate the matching ``.sha512`` content-hash
+# stubs in the Slicer-Liver repo.
+#
+# ALiveResearchTestingData's convention (per its README):
+#
+#   * One release per hash algorithm, named ``<HASHALGO>`` (``SHA256``,
+#     ``SHA512``, etc.).
+#   * Release assets are named by their ``<hashsum>`` — no
+#     per-purpose prefix, no per-bundle tag.
+#   * A sibling ``<HASHALGO>.csv`` in the repo root maps
+#     ``<hashsum>;<filename>``.
+#   * Files are added by dropping them into ``INCOMING/`` and running
+#     ``process_release_data.py upload --hashalgo SHA512`` in the
+#     testing-data repo working copy.
+#
+# This script does NOT push directly to the release.  It performs the
+# Slicer-Liver-side work (compute hashes, write stubs, stage files for
+# the canonical INCOMING upload):
+#
+#   1. Computes SHA-512 of each staged bundle artefact.
+#   2. Writes ``LiverResections/Testing/Data/Baseline/<test>.<ext>.sha512``
+#      stubs with the digests.
+#   3. Copies the staged artefacts to the path the maintainer points
+#      ``ALIVE_TESTING_DATA_INCOMING`` at (typically a local checkout's
+#      ``INCOMING/`` directory).
+#   4. Prints the canonical next step:
+#
+#         cd $ALIVE_TESTING_DATA_INCOMING/.. && \\
+#           python process_release_data.py upload --hashalgo SHA512 \\
+#                                                 --github-token $GH_TOKEN
+#
+#   The maintainer runs the canonical script + commits the CSV update
+#   on the testing-data repo side, then commits the ``.sha512`` stub
+#   changes on the Slicer-Liver side.
 #
 # Usage:
-#     ./LiverResections/Testing/Scripts/upload_baseline.sh <test-name> [tag]
+#     ./LiverResections/Testing/Scripts/upload_baseline.sh <test-name>
 #
 # Where:
 #     <test-name>   Matches a scenario module under
 #                   LiverResections/Testing/Python/scenarios/
 #                   (e.g. BezierSurface4x4Planning).
-#     [tag]         Optional release tag override.  Defaults to
-#                   ``liver-test-baselines-v1``.  Bump (-v2, -v3) when
-#                   re-capturing all baselines after a Slicer/VTK/image
-#                   bump (see ADR-0020 §"Rollout plan" §7).
+#
+# Environment:
+#     ALIVE_TESTING_DATA_INCOMING  Path to a local checkout of
+#         ALive-research/ALiveResearchTestingData's INCOMING/
+#         directory.  Required.
 #
 # Preconditions:
-#   * ``gh`` CLI authenticated with write access to
-#     github.com/ALive-research/ALiveResearchTestingData.
-#   * The capture flow (``capture_baseline.py``) has written
+#   * The capture flow (``capture_baseline.py``) has written all four
+#     bundle artefacts to
 #     ``Testing/baselines-staging/<test-name>.{png,mrml,camera.json,viewport.json}``.
 #
 # Postconditions:
-#   * Each staged file is uploaded as a release asset (named by its
-#     SHA-512 hash).
-#   * ``LiverResections/Testing/Data/Baseline/<test-name>.<ext>.sha512``
-#     stubs are written / overwritten with the new content hashes.
+#   * Bundle-completeness pre-flight passed (all four sidecars present).
+#   * ``.sha512`` stubs written / overwritten with the new content
+#     hashes.
+#   * Bundle artefacts copied to ``$ALIVE_TESTING_DATA_INCOMING``.
 #
 # The script does NOT commit the .sha512 changes — the maintainer
 # inspects the diff and commits in a follow-up step.
 
 set -euo pipefail
 
-if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+if [ "$#" -ne 1 ]; then
   cat >&2 <<EOF
-usage: $0 <test-name> [release-tag]
+usage: $0 <test-name>
+
+Set ALIVE_TESTING_DATA_INCOMING to the local INCOMING/ directory of
+a checkout of github.com/ALive-research/ALiveResearchTestingData
+before running.
 EOF
   exit 2
 fi
 
 TEST_NAME="$1"
-RELEASE_TAG="${2:-liver-test-baselines-v1}"
-REPO="ALive-research/ALiveResearchTestingData"
 
-# Resolve repo root from this script's location.  The script lives at
-# LiverResections/Testing/Scripts/upload_baseline.sh; the repo root is
-# three levels up.
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-REPO_ROOT="$( cd "${SCRIPT_DIR}/../../.." && pwd )"
+if [ -z "${ALIVE_TESTING_DATA_INCOMING:-}" ]; then
+  cat >&2 <<EOF
+error: ALIVE_TESTING_DATA_INCOMING is not set.
 
-STAGING_DIR="${REPO_ROOT}/Testing/baselines-staging"
-STUB_DIR="${REPO_ROOT}/LiverResections/Testing/Data/Baseline"
+Point it at the INCOMING/ directory of a local checkout of
+github.com/ALive-research/ALiveResearchTestingData, e.g.
 
-BUNDLE_EXTS=(png mrml camera.json viewport.json)
+    export ALIVE_TESTING_DATA_INCOMING=~/src/ALiveResearchTestingData/INCOMING
 
-# --------------------------------------------------------------------------- #
-# Sanity checks
-# --------------------------------------------------------------------------- #
+See LiverResections/Testing/README.md §"Bootstrapping a local
+testing-data clone" for the one-time setup.
+EOF
+  exit 1
+fi
 
-if ! command -v gh >/dev/null 2>&1; then
-  echo "error: 'gh' CLI not found on PATH" >&2
+if [ ! -d "${ALIVE_TESTING_DATA_INCOMING}" ]; then
+  echo "error: ALIVE_TESTING_DATA_INCOMING does not exist: ${ALIVE_TESTING_DATA_INCOMING}" >&2
   exit 1
 fi
 
@@ -70,6 +105,22 @@ if ! command -v sha512sum >/dev/null 2>&1; then
   echo "error: 'sha512sum' not found on PATH" >&2
   exit 1
 fi
+
+# Resolve repo root from this script's location.
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+REPO_ROOT="$( cd "${SCRIPT_DIR}/../../.." && pwd )"
+
+STAGING_DIR="${REPO_ROOT}/Testing/baselines-staging"
+STUB_DIR="${REPO_ROOT}/LiverResections/Testing/Data/Baseline"
+
+# Canonical bundle composition.  A baseline is a *reproducible recipe*
+# (not just a screenshot): the .png is the comparison target; the
+# .mrml + .camera.json + .viewport.json sidecars are the audit
+# artefacts that pin what scenario state produced those pixels.  Per
+# the project's documented bundle-completeness contract, partial
+# bundles are rejected — uploading 2 of 4 leaves the harness pointing
+# at a structurally invalid baseline.
+BUNDLE_EXTS=(png mrml camera.json viewport.json)
 
 if [ ! -d "${STAGING_DIR}" ]; then
   cat >&2 <<EOF
@@ -79,17 +130,22 @@ EOF
   exit 1
 fi
 
-# Verify the release exists.  Print a helpful hint if it doesn't —
-# bootstrapping the release is a one-time setup step described in
-# Testing/README.md.
-if ! gh release view "${RELEASE_TAG}" --repo "${REPO}" >/dev/null 2>&1; then
+# Bundle-completeness pre-flight.  Refuse to proceed on a partial
+# bundle (per the /slicer-review GAP-4 finding on PR #384).
+missing=()
+for ext in "${BUNDLE_EXTS[@]}"; do
+  if [ ! -f "${STAGING_DIR}/${TEST_NAME}.${ext}" ]; then
+    missing+=("${TEST_NAME}.${ext}")
+  fi
+done
+if [ "${#missing[@]}" -gt 0 ]; then
   cat >&2 <<EOF
-error: release '${RELEASE_TAG}' not found on ${REPO}.
-       Bootstrap with:
-           gh release create ${RELEASE_TAG} --repo ${REPO} \\
-             --title "Slicer-Liver visual-regression test baselines vN" \\
-             --notes "Backing store for Testing/Data/Baseline/*.sha512 fixtures."
-       See LiverResections/Testing/README.md §"Bootstrapping the release".
+error: incomplete bundle for ${TEST_NAME} — missing sidecars:
+$(printf '  %s\n' "${missing[@]}")
+
+A baseline must be a complete recipe (PNG + MRML + camera + viewport
+sidecars).  Re-run capture_baseline.py and ensure 's' was pressed in
+the capture window so every sidecar got written.
 EOF
   exit 1
 fi
@@ -97,48 +153,57 @@ fi
 mkdir -p "${STUB_DIR}"
 
 # --------------------------------------------------------------------------- #
-# Upload + stub-rotation loop
+# Two-pass: hash every file first, then stage all atomically.  Per the
+# /slicer-review GAP-5 finding, the prior interleaved upload→stub loop
+# could leave the bundle internally inconsistent on partial failure;
+# the all-or-nothing two-pass shape prevents that.
 # --------------------------------------------------------------------------- #
 
+declare -a digests
+declare -a srcs
 for ext in "${BUNDLE_EXTS[@]}"; do
   src="${STAGING_DIR}/${TEST_NAME}.${ext}"
-  if [ ! -f "${src}" ]; then
-    echo "warning: staged file missing: ${src} — skipping ${ext}" >&2
-    continue
-  fi
-
-  # Compute SHA-512 of the *content*; this is what CMake's
-  # ExternalData resolves the .sha512 stub against.
   digest="$( sha512sum "${src}" | awk '{print $1}' )"
+  digests+=("${digest}")
+  srcs+=("${src}")
+done
 
-  # Release-asset filename is the digest itself — matches the URL
-  # template wired in LiverResections/Testing/Python/CMakeLists.txt:
-  #
-  #     https://github.com/.../releases/download/<tag>/SHA512/<digest>
-  #
-  # ExternalData's default URL scheme places the algorithm directory
-  # one level above the digest filename.  Slicer-core does the same.
-  asset_name="${digest}"
+# Stage to INCOMING (atomic per file, but the loop is now read-only on
+# the staging dir; no half-written state on the testing-data side).
+for i in "${!BUNDLE_EXTS[@]}"; do
+  ext="${BUNDLE_EXTS[$i]}"
+  src="${srcs[$i]}"
+  cp -f "${src}" "${ALIVE_TESTING_DATA_INCOMING}/${TEST_NAME}.${ext}"
+done
 
-  # Upload (--clobber so re-captures overwrite cleanly).  gh accepts
-  # ``<localpath>#<assetname>`` to remap the asset name on upload.
-  gh release upload "${RELEASE_TAG}" "${src}#${asset_name}" \
-    --repo "${REPO}" --clobber
-
-  # Write the stub.  Format is a single line: the digest (lowercase
-  # hex).  Matches the CMake ExternalData expectation for ``.sha512``
-  # stubs.
+# Write all stubs.
+for i in "${!BUNDLE_EXTS[@]}"; do
+  ext="${BUNDLE_EXTS[$i]}"
+  digest="${digests[$i]}"
   echo "${digest}" > "${STUB_DIR}/${TEST_NAME}.${ext}.sha512"
-
-  echo "  uploaded ${TEST_NAME}.${ext} (sha512=${digest:0:16}…)"
+  printf '  staged %s (sha512=%s…)\n' "${TEST_NAME}.${ext}" "${digest:0:16}"
 done
 
 cat <<EOF
 
-Fixture updated for ${TEST_NAME}.  Stubs rotated under:
+Bundle staged for ${TEST_NAME}.
+
+Stubs rotated under:
     ${STUB_DIR}/
 
-Next step: review the .sha512 diff and commit, e.g.
+Files copied to:
+    ${ALIVE_TESTING_DATA_INCOMING}/
+
+Next step — push to the ALiveResearchTestingData SHA512 release:
+
+    cd $( dirname "${ALIVE_TESTING_DATA_INCOMING}" )
+    python process_release_data.py upload --hashalgo SHA512 \\
+                                          --github-token "\$GH_TOKEN"
+    # process_release_data.py: hashes files in INCOMING/, uploads
+    # them as release assets named by their hash, appends to
+    # SHA512.csv, regenerates SHA512.md.  Commit the CSV update.
+
+Then on the Slicer-Liver side:
 
     git add LiverResections/Testing/Data/Baseline/${TEST_NAME}.*.sha512
     git commit -m "ENH: Capture ${TEST_NAME} visual-regression baseline"
