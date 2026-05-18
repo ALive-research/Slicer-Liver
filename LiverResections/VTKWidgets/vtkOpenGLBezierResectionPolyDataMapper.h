@@ -2,7 +2,7 @@
 
  Distributed under the OSI-approved BSD 3-Clause License.
 
-  Copyright (c) Oslo University Hospital. All rights reserved.
+  Copyright (c) 2018-2026, Oslo University Hospital. All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -40,7 +40,7 @@
 #ifndef vtkopenglresectionbezierpolydatamapper_h_
 #define vtkopenglresectionbezierpolydatamapper_h_
 
-#include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
+#include "vtkSlicerLiverResectionsModuleVTKWidgetsExport.h"
 
 // VTK includes
 #include <vtkOpenGLPolyDataMapper.h>
@@ -53,7 +53,7 @@
 class vtkTextureObject;
 
 //-------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLBezierResectionPolyDataMapper : public vtkOpenGLPolyDataMapper
+class VTK_SLICER_LIVERRESECTIONS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLBezierResectionPolyDataMapper : public vtkOpenGLPolyDataMapper
 {
 public:
   static vtkOpenGLBezierResectionPolyDataMapper *New();
