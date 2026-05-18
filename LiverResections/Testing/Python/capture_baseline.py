@@ -269,4 +269,13 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # See replay_test.py::_exit for the rationale: Slicer's
+    # ``--python-script`` interpreter wrapper does not exit the
+    # QApplication event loop on plain ``sys.exit``.
+    _code = main()
+    try:
+        import slicer  # type: ignore[import-not-found]
+
+        slicer.util.exit(_code)
+    except ImportError:
+        sys.exit(_code)

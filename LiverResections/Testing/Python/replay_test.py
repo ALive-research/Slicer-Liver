@@ -210,5 +210,27 @@ def main() -> int:
     return 0
 
 
+def _exit(code: int) -> None:
+    """Terminate the process even when running inside Slicer.
+
+    ``Slicer --no-main-window --python-script`` does NOT auto-exit when
+    the script returns: control returns to Slicer's QApplication event
+    loop, which keeps running until something calls
+    ``slicer.app.exit()``.  Plain ``sys.exit()`` raises ``SystemExit``,
+    which Slicer's interpreter wrapper swallows — the process hangs
+    until the CTest / workflow timeout fires.
+
+    Route through ``slicer.util.exit`` when running inside Slicer; fall
+    back to ``sys.exit`` for the rare standalone CPython invocation
+    (e.g. local lint).
+    """
+    try:
+        import slicer  # type: ignore[import-not-found]
+
+        slicer.util.exit(code)
+    except ImportError:
+        sys.exit(code)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    _exit(main())
