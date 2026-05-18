@@ -22,8 +22,8 @@ classDiagram
         <<v2.0.0>>
         +RepresentationKind = Bezier
         +SurfaceMath = Bernstein basis
-        +Degree = (Rows-1)<br/>(square-only)
-        +Shapes = {3×3, 4×4}
+        +Degree = (Rows-1)
+        +Shapes = 3×3 or 4×4 (square only)
         +Default = 4×4
     }
 
@@ -42,7 +42,7 @@ classDiagram
     class BezierPlanningRepresentation {
         <<v2.0.0>>
         Generates Bezier surface polydata
-        from {3×3, 4×4} control grid
+        from 3×3 or 4×4 control grid
     }
     class NurbsPlanningRepresentation {
         <<v2.1 Proposed>>
