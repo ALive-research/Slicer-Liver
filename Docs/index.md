@@ -40,4 +40,5 @@ adr/0018-nurbs-extension-surface.md
 adr/0019-resection-state-machine.md
 adr/0020-gpu-tessellation.md
 adr/0021-coverage-measurement.md
+adr/0022-nurbs-v2-1-design.md
 ```

@@ -1,10 +1,13 @@
 # Surface representation taxonomy — Bezier ↔ NURBS
 
-Reference companion to [ADR-0018][adr-0018].  Shows the
-sibling-Pipeline + sibling-Representation + sibling-Fitter taxonomy
-that lands in v2.0.0 (Bezier-only) and extends in v2.1 (NURBS).
+Reference companion to [ADR-0018][adr-0018] and [ADR-0022][adr-0022].
+Shows the sibling-Pipeline + sibling-Representation + sibling-Fitter
+taxonomy that lands in v2.0.0 (Bezier-only) and extends in v2.1
+(NURBS), with the schema-v3 field roster per [ADR-0022][adr-0022]
+Decision 2.
 
 [adr-0018]: ../adr/0018-nurbs-extension-surface.md
+[adr-0022]: ../adr/0022-nurbs-v2-1-design.md
 [adr-0013]: ../adr/0013-layerdm-pipeline-pattern.md
 [adr-0015]: ../adr/0015-cpp-algorithm-library.md
 
@@ -28,12 +31,13 @@ classDiagram
     }
 
     class LiverNurbsSurfacePipeline {
-        <<v2.1 Proposed>>
+        <<v2.1 (deferred)>>
         +RepresentationKind = NURBS
         +SurfaceMath = B-spline basis + weights
-        +DegreeU + DegreeV : independent
-        +KnotsU + KnotsV : variable
-        +RationalWeights : per control point
+        +DegreeU, DegreeV ∈ {2, 3}  (v2.1)
+        +KnotsU clamped-uniform, length = Rows+DegreeU+1
+        +KnotsV clamped-uniform, length = Cols+DegreeV+1
+        +Weights default 1.0; storage admits non-rational
     }
 
     vtkMRMLLayerDMScriptedPipeline <|-- LiverBezierSurfacePipeline
@@ -45,9 +49,9 @@ classDiagram
         from 3×3 or 4×4 control grid
     }
     class NurbsPlanningRepresentation {
-        <<v2.1 Proposed>>
+        <<v2.1 (deferred)>>
         Generates NURBS surface polydata
-        via de Boor's algorithm
+        via de Boor's algorithm + rational weight division
     }
     class SlicingPlaneInitRepresentation {
         <<v2.0.0 — shared>>
@@ -69,10 +73,11 @@ classDiagram
         Degree-(Rows-1) Bernstein basis<br/>(degree-2 / degree-3)
     }
     class vtkLiverNurbsFitter {
-        <<v2.1 Proposed>>
-        Least squares on basis × weights
-        Knot insertion / refinement
-        Rational weight estimation
+        <<v2.1 (deferred)>>
+        Custom-atop-Eigen (ADR-0022 Decision 3)
+        Linear least squares on clamped-knot basis
+        Non-rational v2.1 (weights = 1.0)
+        Knot insertion + rational fit deferred
     }
 
     BezierPlanningRepresentation ..> vtkLiverBezierFitter : fits surface
@@ -92,6 +97,32 @@ classDiagram
 | Evaluation          | Direct Bernstein polynomial sum          | de Boor's algorithm (recursive) + weight division     |
 | Conic-section repro | Approximation                            | Exact (circles, ellipses, hyperbolas via weights)     |
 | Continuity at knots | C∞ (single Bezier patch)                 | C^(DegreeU-1) at internal knots                       |
+
+## NURBS branch — `.lrp.json` schema-v3 fields
+
+Per [ADR-0022][adr-0022] Decision 2 the storage schema bumps from v2
+to v3 with a top-level `surfaceType: "Bezier" | "NURBS"` discriminator.
+When `surfaceType == "NURBS"` the following NURBS-specific fields
+appear alongside the v2 shape:
+
+| Field | JSON type | Length / constraint | Meaning |
+|---|---|---|---|
+| `surfaceType` | string | `"NURBS"` (or `"Bezier"`; absent → implicit Bezier) | top-level discriminator |
+| `rows` | int | `rows ≥ degreeU + 1` | per-axis control-point count |
+| `cols` | int | `cols ≥ degreeV + 1` | per-axis control-point count |
+| `degreeU` | int | `2 ≤ degreeU ≤ 3` in v2.1 | per-axis basis degree |
+| `degreeV` | int | `2 ≤ degreeV ≤ 3` in v2.1 | per-axis basis degree |
+| `knotsU` | array&lt;double&gt; | `len = rows + degreeU + 1`; non-decreasing; clamped at both ends | U-direction knot vector |
+| `knotsV` | array&lt;double&gt; | `len = cols + degreeV + 1`; non-decreasing; clamped at both ends | V-direction knot vector |
+| `weights` | array&lt;double&gt; | `len = rows * cols`; strictly positive | per-control-point rational weights (default `1.0`) |
+| `controlGrid` | array&lt;double&gt; | `len = 3 * rows * cols` | row-major xyz control-point coordinates (same shape as Bezier) |
+
+Reader compat is backward to v1 (implicit 4×4 Bezier) and v2
+(explicit Bezier shape).  Bezier writes always omit
+`degreeU` / `degreeV` / `knotsU` / `knotsV` / `weights` (they have
+no meaning for the Bernstein basis).  See [ADR-0022][adr-0022]
+Decision 2 for the full reader/writer compat matrix +
+validation-rule enumeration.
 
 ## What is shared, what is sibling
 
