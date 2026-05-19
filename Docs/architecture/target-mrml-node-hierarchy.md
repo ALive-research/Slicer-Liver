@@ -1,11 +1,13 @@
-# Target MRML node hierarchy — post-T2 + ADR-0018 extension surface
+# Target MRML node hierarchy — post-T2 + ADR-0018 / ADR-0022 extension surface
 
-Reference companion to [ADR-0018][adr-0018].  Shows the post-T2
-parametric-surface family (`vtkMRMLBezierSurfaceNode` trio) with the
-v2.0.0 variable-size commitment + the v2.1 NURBS sibling extension
-surface.
+Reference companion to [ADR-0018][adr-0018] and [ADR-0022][adr-0022].
+Shows the post-T2 parametric-surface family
+(`vtkMRMLBezierSurfaceNode` trio) with the v2.0.0 variable-size
+commitment + the v2.1 NURBS sibling extension surface
+(field-roster details per [ADR-0022][adr-0022] Decision 1).
 
 [adr-0018]: ../adr/0018-nurbs-extension-surface.md
+[adr-0022]: ../adr/0022-nurbs-v2-1-design.md
 [adr-0014]: ../adr/0014-livermarkups-dissolution.md
 [adr-0015]: ../adr/0015-cpp-algorithm-library.md
 [adr-0001]: ../adr/0001-resection-three-node-assembly.md
@@ -69,26 +71,29 @@ classDiagram
     }
 
     class vtkMRMLNurbsSurfaceNode {
-        <<v2.1 Proposed>>
-        +int Rows
-        +int Cols
-        +int DegreeU
-        +int DegreeV
-        +double[] KnotsU
-        +double[] KnotsV
-        +double[Rows*Cols] Weights
+        <<v2.1 (deferred)>>
+        +unsigned int Rows (Rows ≥ DegreeU+1)
+        +unsigned int Cols (Cols ≥ DegreeV+1)
+        +unsigned int DegreeU = 3 (range 2..3 in v2.1)
+        +unsigned int DegreeV = 3 (range 2..3 in v2.1)
+        +double[Rows+DegreeU+1] KnotsU (clamped-uniform default)
+        +double[Cols+DegreeV+1] KnotsV (clamped-uniform default)
+        +double[Rows*Cols] Weights = 1.0 (strictly positive)
         +double[3*Rows*Cols] ControlGrid
-        +ResectionState State
-        +InitializationMode InitMode
+        +ResectionState State (shared with Bezier)
+        +InitializationMode InitMode (shared with Bezier)
     }
 
     class vtkMRMLNurbsSurfaceDisplayNode {
-        <<v2.1 Proposed>>
+        <<v2.1 (deferred)>>
+        +shared uniform feed with Bezier display node
     }
 
     class vtkMRMLNurbsSurfaceStorageNode {
-        <<v2.1 Proposed>>
+        <<v2.1 (deferred)>>
         +.lrp.json schemaVersion = 3
+        +surfaceType = "NURBS" discriminator
+        +emits +degreeU +degreeV +knotsU +knotsV +weights
     }
 
     vtkMRMLDisplayableNode <|-- vtkMRMLBezierSurfaceNode
@@ -125,6 +130,19 @@ classDiagram
   `Weights`) live ONLY on `vtkMRMLNurbsSurfaceNode`; the Bezier node
   has no degree field (always polynomial degree `Rows-1` × `Cols-1`)
   and no weights (uniform rational coefficients are implicit Bezier).
+- **Field defaults + ranges** on `vtkMRMLNurbsSurfaceNode` come from
+  [ADR-0022][adr-0022] Decision 1: `DegreeU` / `DegreeV` default to
+  `3` (cubic NURBS, surgical-planning canonical), admitted range
+  `{2, 3}` in v2.1; `Weights` default to all `1.0` (non-rational /
+  B-spline degenerate case); `KnotsU` / `KnotsV` default to a
+  clamped-uniform vector of length `Rows + DegreeU + 1` (resp.
+  `Cols + DegreeV + 1`).  Per-control-point editable weights are
+  out of scope for the v2.1 UI per [ADR-0022][adr-0022] "Out of
+  scope".
+- **Storage schema v3** per [ADR-0022][adr-0022] Decision 2 adds a
+  top-level `surfaceType: "Bezier" | "NURBS"` discriminator;
+  Bezier-side storage stays at the v2 field roster (no degree,
+  knots, or weights emitted).
 - The data → display node reference is the
   `SetAndObserveDisplayNodeID` standard Slicer relationship.  The
   data → storage node reference is `SetAndObserveStorageNodeID` per
