@@ -16,6 +16,7 @@ set(KIT_TEST_SRCS
   vtkLiverContourParameterizerEdgeCasesTest.cxx
   vtkLiverPlaneRingExtractorEdgeCasesTest.cxx
   vtkLiverSpheroidRingExtractorEdgeCasesTest.cxx
+  vtkSlicerLiverBezierControlPolygonGeometryTest1.cxx
   )
 
 #-----------------------------------------------------------------------------
@@ -38,3 +39,4 @@ SIMPLE_TEST(vtkLiverBezierFitterEdgeCasesTest)
 SIMPLE_TEST(vtkLiverContourParameterizerEdgeCasesTest)
 SIMPLE_TEST(vtkLiverPlaneRingExtractorEdgeCasesTest)
 SIMPLE_TEST(vtkLiverSpheroidRingExtractorEdgeCasesTest)
+SIMPLE_TEST(vtkSlicerLiverBezierControlPolygonGeometryTest1)

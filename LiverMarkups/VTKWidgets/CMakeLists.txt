@@ -20,6 +20,15 @@ set(${KIT}_INCLUDE_DIRECTORIES
   # resolved by CMake at generate time.
   ${CMAKE_SOURCE_DIR}/LiverResections/VTKWidgets
   ${CMAKE_BINARY_DIR}/LiverResections/VTKWidgets
+  # ``vtkSlicerBezierSurfaceRepresentation3D::UpdateControlPolygonGeometry``
+  # delegates to ``vtkSlicerLiverBezierControlPolygonGeometry`` in the
+  # LiverResections Algorithm library (ADR-0015 §1 — pure-VTK helpers
+  # shared between the legacy v1 representation here and the v2
+  # representation under ``LiverResections/VTKWidgets/``).  Same
+  # forward-reference caveat as the VTKWidgets entry above: source
+  # directory and binary directory both supplied explicitly.
+  ${CMAKE_SOURCE_DIR}/LiverResections/Algorithm
+  ${CMAKE_BINARY_DIR}/LiverResections/Algorithm
   )
 
 set(${KIT}_SRCS
@@ -63,6 +72,10 @@ set(${KIT}_TARGET_LIBRARIES
   # Forward-reference resolved at CMake generate time; the source
   # ordering caveat is documented under INCLUDE_DIRECTORIES above.
   vtkSlicerLiverResectionsModuleVTKWidgets
+  # ``vtkSlicerLiverBezierControlPolygonGeometry`` lives in the
+  # LiverResections Algorithm library (ADR-0015 §1).  Same forward-
+  # reference pattern.
+  vtkSlicerLiverResectionsModuleAlgorithm
   )
 
 #-----------------------------------------------------------------------------
@@ -74,9 +87,3 @@ SlicerMacroBuildModuleLogic(
   TARGET_LIBRARIES ${${KIT}_TARGET_LIBRARIES}
   )
 
-#-----------------------------------------------------------------------------
-# C++ low-level tests for the widget library (ADR-0008 §2, ctkTest
-# driver, no Slicer launch, no Qt).
-if(BUILD_TESTING)
-  add_subdirectory(Testing)
-endif()

@@ -56,6 +56,8 @@ set(${KIT}_SRCS
   vtkLiverContourParameterizer.cxx
   vtkLiverBezierFitter.h
   vtkLiverBezierFitter.cxx
+  vtkSlicerLiverBezierControlPolygonGeometry.h
+  vtkSlicerLiverBezierControlPolygonGeometry.cxx
   )
 
 #
