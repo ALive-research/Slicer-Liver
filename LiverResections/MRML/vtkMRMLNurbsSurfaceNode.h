@@ -94,6 +94,37 @@
  * are duplicated from ``vtkMRMLBezierSurfaceNode`` for v2.1 per
  * ADR-0022 §"Sharing with the Bezier node — deliberate non-sharing".
  *
+ * \par Shape-change side effects
+ *
+ * The shape-change setters — ``SetRows``, ``SetCols``, ``SetSize``,
+ * ``SetDegreeU``, ``SetDegreeV``, ``SetDegree`` — regenerate the
+ * dependent buffers from defaults on every accepted call:
+ *
+ *   - ``Weights`` is re-filled with ``1.0`` (the non-rational
+ *     B-spline degenerate case — pre-resize weight edits do **not**
+ *     survive a shape change).
+ *   - ``ControlGrid`` is re-zeroed to the new ``3 * Rows * Cols``
+ *     length (matching ``vtkMRMLBezierSurfaceNode``'s
+ *     analogous behaviour — a shape change discards the in-flight
+ *     surface, on the assumption that a new shape implies a new
+ *     surface, not a fitted resample).
+ *   - ``KnotsU`` / ``KnotsV`` are regenerated to clamped-uniform
+ *     vectors of the new length (``Rows + DegreeU + 1`` resp.
+ *     ``Cols + DegreeV + 1``) via ``ResetKnotsToClampedUniform``.
+ *
+ * Each accepted setter coalesces these dependent mutations into
+ * exactly one ``Modified()`` event via ``MRMLNodeModifyBlocker`` so
+ * downstream observers see a single shape-change notification per
+ * setter call (ADR-0018 §1 single-fire invariant — same convention
+ * as ``vtkMRMLBezierSurfaceNode::SetSize``).  Rejected setter calls
+ * fire ``Modified()`` zero times.
+ *
+ * The NURBS-specific ``Weights`` regeneration is the meaningful
+ * delta from the Bezier sibling (which regenerates only the
+ * ``ControlGrid``).  Consumers that have populated ``Weights`` and
+ * then change the shape need to re-issue ``SetWeights`` on the new
+ * shape.
+ *
  * \par TODO — common abstract base
  *
  * ADR-0022 §"Sharing with the Bezier node — deliberate non-sharing"
