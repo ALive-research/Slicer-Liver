@@ -26,6 +26,8 @@
 #include "vtkMRMLScene.h"
 
 // VTK includes
+#include <vtkCallbackCommand.h>
+#include <vtkCommand.h>
 #include <vtkNew.h>
 #include <vtkSmartPointer.h>
 
@@ -599,6 +601,155 @@ int testSetKnotsLengthMismatch()
   return EXIT_SUCCESS;
 }
 
+/// Minimal observer used by ``testModifiedFiresOnceOnSetSize`` —
+/// counts ``vtkCommand::ModifiedEvent`` invocations so the test can
+/// pin the ADR-0018 §1 single-fire invariant for the NURBS composite
+/// setters (``SetRows`` / ``SetCols`` / ``SetSize`` / ``SetDegreeU``
+/// / ``SetDegreeV`` / ``SetDegree``).  Mirrors the
+/// ``ModifiedCounter`` helper in the Bezier sibling test driver.
+class ModifiedCounter
+{
+public:
+  static void Callback(vtkObject*, unsigned long, void* clientData, void*) { static_cast<ModifiedCounter*>(clientData)->Count++; }
+  int Count = 0;
+  void Reset() { this->Count = 0; }
+};
+
+int testModifiedFiresOnceOnSetSize()
+{
+  // ADR-0018 §1 single-fire invariant: every accepted composite
+  // shape / degree change fires ``Modified()`` exactly once + every
+  // rejection fires zero times.  Each NURBS composite setter calls
+  // ``ResetKnotsToClampedUniform`` internally (which itself emits
+  // ``Modified()``) so without the ``MRMLNodeModifyBlocker`` wrap
+  // the setter doubles the event count downstream — a regression
+  // the MTime-advance tests would NOT catch because MTime still
+  // advances on the (single-fire) coalesced emission.
+  vtkNew<vtkMRMLNurbsSurfaceNode> node;
+
+  ModifiedCounter counter;
+  vtkNew<vtkCallbackCommand> cb;
+  cb->SetCallback(&ModifiedCounter::Callback);
+  cb->SetClientData(&counter);
+  const unsigned long tag = node->AddObserver(vtkCommand::ModifiedEvent, cb.GetPointer());
+
+  // Default is (4, 4, 3, 3).  SetSize(5) is a real shape change →
+  // exactly one Modified.
+  counter.Reset();
+  node->SetSize(5);
+  CHECK_INT(counter.Count, 1);
+
+  // No-op self-assign on accepted-value path → zero Modified.
+  counter.Reset();
+  node->SetSize(5);
+  CHECK_INT(counter.Count, 0);
+
+  // Rejection path: SetSize(3) with the current default DegreeU=3
+  // (need 3 >= 4) is rejected with vtkErrorMacro + zero Modified.
+  counter.Reset();
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  node->SetSize(3);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  CHECK_INT(counter.Count, 0);
+  CHECK_INT(static_cast<int>(node->GetRows()), 5); // unchanged
+
+  // SetDegree(2) is accepted (admitted range, both axes 5 >= 3) →
+  // exactly one Modified.
+  counter.Reset();
+  node->SetDegree(2);
+  CHECK_INT(counter.Count, 1);
+
+  // SetDegree(4) is rejected (above MaxDegree) → zero Modified.
+  counter.Reset();
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  node->SetDegree(4);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  CHECK_INT(counter.Count, 0);
+
+  // SetRows(6) is accepted (6 >= DegreeU + 1 = 3) → one Modified.
+  counter.Reset();
+  node->SetRows(6);
+  CHECK_INT(counter.Count, 1);
+
+  // SetCols(7) is accepted → one Modified.
+  counter.Reset();
+  node->SetCols(7);
+  CHECK_INT(counter.Count, 1);
+
+  // SetDegreeU(3) is accepted (DegreeU + 1 = 4 <= Rows = 6) → one
+  // Modified.
+  counter.Reset();
+  node->SetDegreeU(3);
+  CHECK_INT(counter.Count, 1);
+
+  // SetDegreeV(3) is accepted (DegreeV + 1 = 4 <= Cols = 7) → one
+  // Modified.
+  counter.Reset();
+  node->SetDegreeV(3);
+  CHECK_INT(counter.Count, 1);
+
+  // SetDegreeU(3) self-assign → zero Modified.
+  counter.Reset();
+  node->SetDegreeU(3);
+  CHECK_INT(counter.Count, 0);
+
+  node->RemoveObserver(tag);
+  return EXIT_SUCCESS;
+}
+
+int testSetKnotsRejectsNonMonotonic()
+{
+  // ADR-0022 §"Validation rules per surface type — NURBS":
+  // ``SetKnotsU`` / ``SetKnotsV`` reject knot vectors that violate
+  // the on-disk invariant (non-decreasing, clamped, in [0, 1]) with
+  // ``vtkErrorMacro``.  Pairs the storage-layer validation in
+  // ``vtkMRMLBezierSurfaceStorageNode::ReadJsonNurbs`` for the case
+  // where a caller drives the data node directly (bypassing the
+  // storage path).
+  vtkNew<vtkMRMLNurbsSurfaceNode> node;
+  CHECK_INT(static_cast<int>(node->GetKnotsULength()), 8);
+
+  // Reject non-monotonic — a decrease in the interior.  Synthesise
+  // an 8-double knot vector that is clamped at both ends but with a
+  // decreasing pair mid-sequence.  ``SetSize(5)`` first to widen the
+  // interior region so we have somewhere to violate monotonicity.
+  node->SetDegree(2);
+  node->SetSize(5);
+  CHECK_INT(static_cast<int>(node->GetKnotsULength()), 8); // 5 + 2 + 1
+  // Default clamped-uniform is [0, 0, 0, 1/3, 2/3, 1, 1, 1].
+  // Replace the interior knot pair with a decreasing pair.
+  double nonMono[8] = { 0.0, 0.0, 0.0, 0.7, 0.4, 1.0, 1.0, 1.0 };
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_BOOL(node->SetKnotsU(nonMono, 8), false);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+  // Reject out-of-range — knots[0] < 0 or knots[end] > 1.
+  double outOfRange[8] = { -0.1, -0.1, -0.1, 0.3, 0.7, 1.0, 1.0, 1.0 };
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_BOOL(node->SetKnotsU(outOfRange, 8), false);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+  // Reject unclamped start — first ``degree + 1`` entries should
+  // all be equal (here degree = 2 → 3 equal repeats expected).
+  double unclamped[8] = { 0.0, 0.1, 0.2, 0.3, 0.7, 1.0, 1.0, 1.0 };
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_BOOL(node->SetKnotsU(unclamped, 8), false);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+  // A well-formed clamped-monotonic vector is still accepted —
+  // pins the contract did not become over-restrictive.
+  double valid[8] = { 0.0, 0.0, 0.0, 0.25, 0.75, 1.0, 1.0, 1.0 };
+  CHECK_BOOL(node->SetKnotsU(valid, 8), true);
+
+  // Symmetric for KnotsV.  At (Rows=5, Cols=5, DegreeV=2) the
+  // KnotsV length is also 8.
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_BOOL(node->SetKnotsV(nonMono, 8), false);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  CHECK_BOOL(node->SetKnotsV(valid, 8), true);
+  return EXIT_SUCCESS;
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -621,6 +772,8 @@ int vtkMRMLNurbsSurfaceNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testXMLRoundTrip());
   CHECK_EXIT_SUCCESS(testResetKnotsHelper());
   CHECK_EXIT_SUCCESS(testSetKnotsLengthMismatch());
+  CHECK_EXIT_SUCCESS(testSetKnotsRejectsNonMonotonic());
+  CHECK_EXIT_SUCCESS(testModifiedFiresOnceOnSetSize());
 
   std::cout << "vtkMRMLNurbsSurfaceNodeTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;
