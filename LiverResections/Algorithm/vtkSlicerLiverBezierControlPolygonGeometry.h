@@ -85,8 +85,7 @@ class vtkCellArray;
  *  remains reachable from both the LayerDM-bound v2 path and the
  *  legacy MRML-bound v1 path without inverting the dependency.
  */
-class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkSlicerLiverBezierControlPolygonGeometry
-  : public vtkObject
+class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkSlicerLiverBezierControlPolygonGeometry : public vtkObject
 {
 public:
   static vtkSlicerLiverBezierControlPolygonGeometry* New();

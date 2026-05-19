@@ -55,9 +55,7 @@ void vtkSlicerLiverBezierControlPolygonGeometry::PrintSelf(ostream& os, vtkInden
 }
 
 //------------------------------------------------------------------------------
-vtkSmartPointer<vtkCellArray>
-vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells(unsigned int rows,
-                                                                    unsigned int cols)
+vtkSmartPointer<vtkCellArray> vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells(unsigned int rows, unsigned int cols)
 {
   vtkSmartPointer<vtkCellArray> planeCells = vtkSmartPointer<vtkCellArray>::New();
 
@@ -73,20 +71,22 @@ vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells(unsigned in
   // aware shape for the v2 binding that ADR-0018 enables.
   const bool validShape = (rows == 3 && cols == 3) || (rows == 4 && cols == 4);
   if (!validShape)
-    {
+  {
     vtkGenericWarningMacro("vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells:"
-                           " (rows, cols) = (" << rows << ", " << cols << ") is outside the"
-                           " ADR-0018 §1 closed set {(3, 3), (4, 4)}; returning empty cell array.");
+                           " (rows, cols) = ("
+                           << rows << ", " << cols
+                           << ") is outside the"
+                              " ADR-0018 §1 closed set {(3, 3), (4, 4)}; returning empty cell array.");
     return planeCells;
-    }
+  }
 
   // Emit ``(rows - 1) * (cols - 1)`` closed quad polylines, each with
   // five point ids (last id repeats the first to close the quad).
   // Row-major indexing: point ``(i, j)`` has flat index ``i * cols + j``.
   for (unsigned int i = 0; i + 1 < rows; ++i)
-    {
+  {
     for (unsigned int j = 0; j + 1 < cols; ++j)
-      {
+    {
       vtkSmartPointer<vtkPolyLine> polyLine = vtkSmartPointer<vtkPolyLine>::New();
       polyLine->GetPointIds()->SetNumberOfIds(5);
       polyLine->GetPointIds()->SetId(0, i * cols + j);
@@ -95,8 +95,8 @@ vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells(unsigned in
       polyLine->GetPointIds()->SetId(3, (i + 1) * cols + j);
       polyLine->GetPointIds()->SetId(4, i * cols + j);
       planeCells->InsertNextCell(polyLine);
-      }
     }
+  }
 
   return planeCells;
 }

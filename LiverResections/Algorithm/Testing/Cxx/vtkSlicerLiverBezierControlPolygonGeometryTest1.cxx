@@ -57,35 +57,37 @@
 namespace
 {
 
-#define LIVER_CHECK_INT(actual, expected) \
-  do { \
-    const long long _a = static_cast<long long>(actual); \
-    const long long _e = static_cast<long long>(expected); \
-    if (_a != _e) \
-    { \
-      std::fprintf(stderr, "[%s:%d] FAIL: %s = %lld; expected %lld\n", \
-                   __FILE__, __LINE__, #actual, _a, _e); \
-      return EXIT_FAILURE; \
-    } \
+#define LIVER_CHECK_INT(actual, expected)                                                                    \
+  do                                                                                                         \
+  {                                                                                                          \
+    const long long _a = static_cast<long long>(actual);                                                     \
+    const long long _e = static_cast<long long>(expected);                                                   \
+    if (_a != _e)                                                                                            \
+    {                                                                                                        \
+      std::fprintf(stderr, "[%s:%d] FAIL: %s = %lld; expected %lld\n", __FILE__, __LINE__, #actual, _a, _e); \
+      return EXIT_FAILURE;                                                                                   \
+    }                                                                                                        \
   } while (0)
 
-#define LIVER_CHECK_NOT_NULL(ptr) \
-  do { \
-    if ((ptr) == nullptr) \
-    { \
+#define LIVER_CHECK_NOT_NULL(ptr)                                                   \
+  do                                                                                \
+  {                                                                                 \
+    if ((ptr) == nullptr)                                                           \
+    {                                                                               \
       std::fprintf(stderr, "[%s:%d] FAIL: %s is null\n", __FILE__, __LINE__, #ptr); \
-      return EXIT_FAILURE; \
-    } \
+      return EXIT_FAILURE;                                                          \
+    }                                                                               \
   } while (0)
 
-#define LIVER_CHECK_EXIT_SUCCESS(call) \
-  do { \
-    const int _r = (call); \
-    if (_r != EXIT_SUCCESS) \
-    { \
+#define LIVER_CHECK_EXIT_SUCCESS(call)                                                       \
+  do                                                                                         \
+  {                                                                                          \
+    const int _r = (call);                                                                   \
+    if (_r != EXIT_SUCCESS)                                                                  \
+    {                                                                                        \
       std::fprintf(stderr, "[%s:%d] FAIL: %s returned %d\n", __FILE__, __LINE__, #call, _r); \
-      return EXIT_FAILURE; \
-    } \
+      return EXIT_FAILURE;                                                                   \
+    }                                                                                        \
   } while (0)
 
 /// Expected number of closed-quad cells for an ``(rows, cols)`` lattice:
@@ -113,8 +115,7 @@ int verifyTopology(vtkCellArray* cells, unsigned int rows, unsigned int cols)
       const int hasNext = cells->GetNextCell(ids);
       if (!hasNext)
       {
-        std::fprintf(stderr, "Cell array exhausted at (i=%u, j=%u); expected %lld cells\n",
-                     i, j, static_cast<long long>(expected));
+        std::fprintf(stderr, "Cell array exhausted at (i=%u, j=%u); expected %lld cells\n", i, j, static_cast<long long>(expected));
         return EXIT_FAILURE;
       }
       LIVER_CHECK_INT(ids->GetNumberOfIds(), 5);
@@ -134,8 +135,7 @@ int test4x4Topology()
   // Legacy v1 ``vtkMRMLMarkupsBezierSurfaceNode`` shape — 16 control
   // points, ``(Rows, Cols) = (4, 4)`` implicit.  Expected: 9 closed-quad
   // polylines, point ids spanning [0, 15] with stride 4.
-  vtkSmartPointer<vtkCellArray> cells =
-    vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells(4, 4);
+  vtkSmartPointer<vtkCellArray> cells = vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells(4, 4);
   LIVER_CHECK_EXIT_SUCCESS(verifyTopology(cells, 4, 4));
 
   // Spot-check: the top-left quad (i=0, j=0) must reference point ids
@@ -176,8 +176,7 @@ int test3x3Topology()
   // a 9-point grid would index id ``(3*4+3) = 15``, which is out of
   // range for a 9-point ``vtkPoints`` (heap OOB on render).  Post-fix
   // the helper indexes ``i*3+j`` and stays within [0, 8].
-  vtkSmartPointer<vtkCellArray> cells =
-    vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells(3, 3);
+  vtkSmartPointer<vtkCellArray> cells = vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells(3, 3);
   LIVER_CHECK_EXIT_SUCCESS(verifyTopology(cells, 3, 3));
 
   // Spot-check: the top-left quad (i=0, j=0) must reference point ids
@@ -237,26 +236,22 @@ int testInvalidShapesRejected()
   TESTING_OUTPUT_ASSERT_WARNINGS_BEGIN();
 
   // Below the closed set.
-  vtkSmartPointer<vtkCellArray> tooSmall =
-    vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells(2, 2);
+  vtkSmartPointer<vtkCellArray> tooSmall = vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells(2, 2);
   LIVER_CHECK_NOT_NULL(tooSmall);
   LIVER_CHECK_INT(tooSmall->GetNumberOfCells(), 0);
 
   // Above the closed set — would be NURBS territory per ADR-0018 §3.
-  vtkSmartPointer<vtkCellArray> tooBig =
-    vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells(5, 5);
+  vtkSmartPointer<vtkCellArray> tooBig = vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells(5, 5);
   LIVER_CHECK_NOT_NULL(tooBig);
   LIVER_CHECK_INT(tooBig->GetNumberOfCells(), 0);
 
   // Non-square — ADR-0018 §1 admits only square shapes (ring-symmetry
   // constraint).
-  vtkSmartPointer<vtkCellArray> nonSquare =
-    vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells(3, 4);
+  vtkSmartPointer<vtkCellArray> nonSquare = vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells(3, 4);
   LIVER_CHECK_NOT_NULL(nonSquare);
   LIVER_CHECK_INT(nonSquare->GetNumberOfCells(), 0);
 
-  vtkSmartPointer<vtkCellArray> nonSquareT =
-    vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells(4, 3);
+  vtkSmartPointer<vtkCellArray> nonSquareT = vtkSlicerLiverBezierControlPolygonGeometry::BuildControlPolygonCells(4, 3);
   LIVER_CHECK_NOT_NULL(nonSquareT);
   LIVER_CHECK_INT(nonSquareT->GetNumberOfCells(), 0);
 
