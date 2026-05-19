@@ -1,11 +1,43 @@
 <!--
 Thanks for the contribution. Keep this template brief and reviewable;
 drop the helper comments before merging if they no longer apply.
+
+Keep the above-the-fold sections (Summary, ADR refs, Conformance, Test
+plan, UX impact) short and scannable.  Long-form context, design tree,
+and rejected alternatives belong in the collapsed Detailed rationale
+block at the bottom.
 -->
 
 ## Summary
 
-<!-- 1-3 bullets on the *why* and the *what*. -->
+<!--
+<=150 words.  The "why" + the "what" + the risk surface — scannable in
+under 30 seconds.  Long-form context belongs in the collapsed Detailed
+rationale section at the bottom.
+-->
+
+-
+
+## ADR references
+
+<!--
+List the ADRs this PR realises or amends. Format:
+  `ADR-NNNN: <short title> — <how this PR relates>`
+
+For PRs that touch no ADR-tracked decision: `N/A — tactical change`.
+-->
+
+-
+
+## Conformance
+
+<!--
+Which invariant tests / architecture-doc anchors / lint checks prove the
+ADR(s) above are honoured by this PR? See the Conformance section of
+each cited ADR for the spec.
+
+For PRs that don't realise an ADR: `N/A — tactical change`.
+-->
 
 -
 
@@ -34,3 +66,14 @@ For non-UI PRs replace the section body with exactly:
 Interface diagrams live at `Docs/architecture/ui/<module>.md`.
 -->
 
+
+<details>
+<summary><b>Detailed rationale</b> (optional long-form context)</summary>
+
+<!--
+Optional.  Long-form context, design tree, rejected alternatives,
+exhaustive references to upstream issues.  Reviewers can skip if the
+above-the-fold sections answered their questions.
+-->
+
+</details>

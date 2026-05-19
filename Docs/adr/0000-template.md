@@ -50,6 +50,19 @@ imply (other ADRs, diagram updates, migration tasks)?  Where will the
 seams of this decision show up — e.g., which classes now hold state they
 didn't, which observers must be added or removed?
 
+## Conformance
+
+How a reviewer (or an automated fitness function) can tell this decision
+is honoured.  List one or more of: invariant test names, architecture-doc
+anchors, code patterns to grep for, CI checks that gate on this
+decision.  Empty list is acceptable when enforcement is not yet
+implemented — file the gap as a TODO with a linked issue number.
+
+- Example: `LiverResections/Algorithm/Testing/test_foo.cpp::testInvariant` (invariant test).
+- Example: `Docs/architecture/<diagram>.md` §<anchor> (target diagram element).
+- Example: grep `vtkSomeClass::SetMode\(.*::Confirmed\)` should match in every state-transition path.
+- Example: GitHub Actions job `<name>` blocks merge when violated.
+
 ## References
 
 - Slicer Discourse threads, GitHub issues, papers, internal notes.
