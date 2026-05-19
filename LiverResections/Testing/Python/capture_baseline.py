@@ -37,10 +37,21 @@ References
 from __future__ import annotations
 
 import argparse
+import faulthandler
 import importlib
 import json
 import pathlib
 import sys
+
+# Install a SIGSEGV / SIGABRT handler that dumps a C stack trace to
+# stderr before the process dies — invaluable when debugging crashes in
+# the bezier mapper's GL texture upload that yield no Python traceback.
+# Use the raw stderr file descriptor (fd 2): Slicer's ``--python-script``
+# replaces ``sys.stderr`` with ``PythonQtStdOutRedirect`` which lacks
+# ``fileno()``, so passing ``sys.stderr`` to ``faulthandler.enable``
+# raises ``AttributeError``.
+import os as _os
+faulthandler.enable(file=_os.fdopen(2, "w", buffering=1, closefd=False), all_threads=True)
 
 import qt  # type: ignore[import-not-found]
 import slicer  # type: ignore[import-not-found]
@@ -111,11 +122,31 @@ def _load_scenario(name: str):
     return importlib.import_module(f"Python.scenarios.{name}")
 
 
-def _serialise_camera(view_node) -> dict:
+def _live_renderer(view_widget):
+    """Return the first ``vtkRenderer`` of the view widget's render window.
+
+    ``qMRMLThreeDView.renderer()`` is C++-only — not exposed through
+    PythonQt — so we reach the renderer through the render-window's
+    renderer collection, which is plain VTK and fully wrapped.
+    """
+    return view_widget.threeDView().renderWindow().GetRenderers().GetFirstRenderer()
+
+
+def _live_camera(view_widget):
+    """Return the VTK camera the view widget actually renders with.
+
+    In ``--no-main-window`` mode the standalone ``qMRMLThreeDWidget`` is
+    not bound to an MRML camera node by the layout manager, so the
+    ``vtkMRMLCameraNode`` ``setup_camera`` configures is orphaned.  The
+    renderer's active VTK camera is the only authoritative source for
+    what was actually drawn.
+    """
+    return _live_renderer(view_widget).GetActiveCamera()
+
+
+def _serialise_camera(view_node, view_widget) -> dict:
     """Read the live ``vtkCamera`` state into a plain JSON-ready dict."""
-    cam_logic = slicer.modules.cameras.logic()
-    cam_node = cam_logic.GetViewActiveCameraNode(view_node)
-    cam = cam_node.GetCamera()
+    cam = _live_camera(view_widget)
     return {
         "position": list(cam.GetPosition()),
         "focal_point": list(cam.GetFocalPoint()),
@@ -129,15 +160,47 @@ def _serialise_camera(view_node) -> dict:
 def _serialise_viewport(view_node, view_widget) -> dict:
     """Capture deterministic render-window state into a dict."""
     size = view_widget.size
+    renderer = _live_renderer(view_widget)
+    background = list(renderer.GetBackground())
     return {
         "size": [int(size.width()), int(size.height())],
-        "background": [
-            *view_node.GetBackgroundColor(),
-        ],
+        "background": background,
         "anti_aliasing_frames": int(
             view_widget.threeDView().renderWindow().GetMultiSamples()
         ),
     }
+
+
+def _apply_camera_to_live_view(view_widget, camera_spec: dict) -> None:
+    """Write the deterministic camera pose to the renderer's VTK camera.
+
+    The standalone ``qMRMLThreeDWidget`` does not honour MRML camera-
+    node mutations (no layout manager glue), so the scenario's
+    ``setup_camera(view_node)`` only configures an orphan MRML node.
+    Capture must write to the live VTK camera directly for the render
+    pose to match the scenario spec.
+    """
+    cam = _live_camera(view_widget)
+    cam.SetPosition(*camera_spec["position"])
+    cam.SetFocalPoint(*camera_spec["focal_point"])
+    cam.SetViewUp(*camera_spec["view_up"])
+    cam.SetParallelScale(camera_spec["parallel_scale"])
+    cam.SetViewAngle(camera_spec["view_angle"])
+    cam.SetClippingRange(*camera_spec["clipping_range"])
+
+
+def _apply_viewport_to_live_view(view_widget, viewport_spec: dict) -> None:
+    """Write background/AA settings to the live renderer + render window.
+
+    Same rationale as ``_apply_camera_to_live_view``: the MRML view-node
+    settings the scenario writes are not propagated to the standalone
+    widget's renderer.
+    """
+    renderer = _live_renderer(view_widget)
+    renderer.SetBackground(*viewport_spec["background"])
+    renderer.SetBackground2(*viewport_spec["background"])
+    render_window = view_widget.threeDView().renderWindow()
+    render_window.SetMultiSamples(int(viewport_spec["anti_aliasing_frames"]))
 
 
 def _save_bundle(
@@ -189,7 +252,7 @@ def _save_bundle(
     slicer.util.saveScene(str(mrml_path))
 
     with cam_path.open("w") as fh:
-        json.dump(_serialise_camera(view_node), fh, indent=2, sort_keys=True)
+        json.dump(_serialise_camera(view_node, view_widget), fh, indent=2, sort_keys=True)
     with vp_path.open("w") as fh:
         json.dump(_serialise_viewport(view_node, view_widget), fh, indent=2, sort_keys=True)
 
@@ -210,12 +273,14 @@ class _KeyFilter(qt.QObject):
         staging_dir: pathlib.Path,
         view_node,
         view_widget,
+        loop: qt.QEventLoop,
     ) -> None:
         super().__init__()
         self._test_name = test_name
         self._staging_dir = staging_dir
         self._view_node = view_node
         self._view_widget = view_widget
+        self._loop = loop
 
     def eventFilter(self, obj, event) -> bool:  # noqa: N802 (Qt API)
         if event.type() == qt.QEvent.KeyPress:
@@ -227,10 +292,11 @@ class _KeyFilter(qt.QObject):
                     self._view_node,
                     self._view_widget,
                 )
+                self._loop.quit()
                 return True
             if key == qt.Qt.Key_Q:
                 print("quit without saving")
-                qt.QApplication.instance().quit()
+                self._loop.quit()
                 return True
         return False
 
@@ -240,7 +306,16 @@ def main() -> int:
     staging_dir = pathlib.Path(args.staging_dir) if args.staging_dir else _default_staging_dir()
 
     scenario = _load_scenario(args.test)
-    scenario.setup_scene()
+    try:
+        scenario.setup_scene()
+    except Exception as exc:  # noqa: BLE001 — surface every error
+        import traceback
+        sys.stderr.write(
+            f"FATAL: scenario.setup_scene() raised {type(exc).__name__}: {exc}\n"
+        )
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        raise
 
     # Build the interactive view.  qMRMLThreeDWidget hosts a
     # qMRMLThreeDView which carries the VTK render window through the
@@ -257,6 +332,21 @@ def main() -> int:
             view_node = slicer.mrmlScene.AddNewNodeByClass(
                 "vtkMRMLViewNode", "VisualCaptureView"
             )
+        # Show the widget + force a first render BEFORE binding the
+        # view node, so the GL context is initialised and VTK's GL
+        # extension loader has resolved ``glGetError`` and friends.
+        # ``setMRMLViewNode`` attaches the displayable-manager group
+        # to the view's renderer, which immediately fires the bezier
+        # representation's ``UpdateFromMRML`` → texture-upload path.
+        # That path calls ``vtkOpenGLClearErrorMacro`` (a ``glGetError``
+        # drain) at function entry; if the GL function pointers
+        # haven't been loaded yet (no render has occurred), the call
+        # segfaults on a NULL function pointer.
+        # Verified via gdb: SIGSEGV at addr 0x0 inside
+        # ``vtkClearOpenGLErrors`` (vtkOpenGLError.h:219), called from
+        # ``vtkMultiTextureObjectHelper::CreateSeq3DFromRaw`` line 79.
+        view_widget.show()
+        view_widget.threeDView().forceRender()
         view_widget.setMRMLViewNode(view_node)
     else:
         view_widget = layout_manager.threeDWidget(0)
@@ -265,16 +355,17 @@ def main() -> int:
     scenario.setup_camera(view_node)
     scenario.setup_viewport(view_node)
 
-    width = getattr(
-        scenario,
-        "VIEWPORT_WIDTH",
-        scenario.describe()["viewport"]["size"][0],
-    )
-    height = getattr(
-        scenario,
-        "VIEWPORT_HEIGHT",
-        scenario.describe()["viewport"]["size"][1],
-    )
+    # In ``--no-main-window`` mode the standalone ``qMRMLThreeDWidget``
+    # is not bound to an MRML camera node + a layout manager, so the
+    # MRML-side configuration the scenario just performed is orphaned.
+    # Push the same fixture values directly onto the live VTK camera +
+    # renderer so the captured render matches the spec.
+    spec = scenario.describe()
+    _apply_camera_to_live_view(view_widget, spec["camera"])
+    _apply_viewport_to_live_view(view_widget, spec["viewport"])
+
+    width = spec["viewport"]["size"][0]
+    height = spec["viewport"]["size"][1]
     view_widget.resize(width, height)
     view_widget.show()
     view_widget.threeDView().forceRender()
@@ -284,12 +375,17 @@ def main() -> int:
         f"press 's' to save the bundle, 'q' to quit without saving."
     )
 
-    key_filter = _KeyFilter(args.test, staging_dir, view_node, view_widget)
+    # Slicer's primary ``QApplication.exec_()`` is already on the
+    # stack by the time ``--python-script`` runs.  Re-entering it
+    # returns immediately ("event loop is already running").  Use a
+    # nested ``QEventLoop`` instead — Qt explicitly supports nesting
+    # these, and the key filter calls ``loop.quit()`` to unblock.
+    loop = qt.QEventLoop()
+    key_filter = _KeyFilter(args.test, staging_dir, view_node, view_widget, loop)
     view_widget.installEventFilter(key_filter)
     qt.QApplication.instance().installEventFilter(key_filter)
 
-    # Run the Qt event loop until 'q' or window close.
-    return qt.QApplication.instance().exec_()
+    return loop.exec_()
 
 
 if __name__ == "__main__":

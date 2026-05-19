@@ -110,23 +110,6 @@ def setup_scene() -> slicer.vtkMRMLNode:
     # mapper's ``uResectionClipOut`` uniform flips to 1.
     resection.SetClipOut(True)
 
-    # ``vtkSlicerLiverResectionsLogic::AddBezierSurface`` returns a
-    # ``vtkMRMLMarkupsBezierSurfaceNode`` (LiverMarkups path) — NOT a
-    # ``vtkMRMLBezierSurfaceNode`` (LiverResections path / ADR-0014
-    # v2).  Its display node is correspondingly
-    # ``vtkMRMLMarkupsBezierSurfaceDisplayNode``, which is a distinct
-    # MRML class from ``vtkMRMLBezierSurfaceDisplayNode``.  Both
-    # classes happen to expose ``SetClipOut`` so this works
-    # polymorphically; we read the display node from whatever the
-    # logic returned rather than assume a specific class, so the
-    # scenario keeps working when ``AddBezierSurface`` gets retargeted
-    # to the v2 path.
-    bezier = resection.GetBezierSurfaceNode()
-    if bezier is not None:
-        display = bezier.GetDisplayNode()
-        if display is not None and hasattr(display, "SetClipOut"):
-            display.SetClipOut(True)
-
     return resection
 
 
