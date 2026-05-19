@@ -496,7 +496,16 @@ jobs:
           # outage, OAuth not yet configured by the maintainer, etc.)
           # surfaces as a workflow warning but does not fail the PR.
           fail_ci_if_error: false
-          # No token needed for public repos with the Codecov GitHub
-          # app installed.  If/when the maintainer wants tokenless
-          # uploads disabled, set CODECOV_TOKEN in repo secrets and
-          # add `token: ${{ secrets.CODECOV_TOKEN }}` here.
+          # CODECOV_TOKEN is required even for public repos with the
+          # Codecov GitHub app installed: as of late 2024 Codecov
+          # tightened the upload acceptance rules and tokenless
+          # uploads are rejected with the server-side error
+          # ``Token required - not valid tokenless upload`` (the
+          # initial post-PR-#386 run on preview surfaced this; the
+          # workflow itself stayed green because ``fail_ci_if_error:
+          # false`` swallows the upload step's exit code).  Wire the
+          # repository upload token from app.codecov.io/gh/<org>/
+          # <repo>/settings, exported into GitHub Actions as the
+          # ``CODECOV_TOKEN`` secret.  Rotating the token is a
+          # maintainer-only step on the Codecov side.
+          token: ${{ secrets.CODECOV_TOKEN }}
