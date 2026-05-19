@@ -190,11 +190,16 @@ void vtkMRMLNurbsSurfaceNode::SetRows(unsigned int rows)
   {
     return;
   }
+  // ``MRMLNodeModifyBlocker`` suppresses the intermediate
+  // ``Modified()`` emitted by ``ResetKnotsToClampedUniform`` so the
+  // composite shape change fires ``Modified()`` exactly once on
+  // scope exit (ADR-0018 §1 single-fire invariant — same pattern
+  // ``CopyContent`` uses below).
+  MRMLNodeModifyBlocker blocker(this);
   this->Rows = rows;
   this->ControlGrid.assign(static_cast<size_t>(3u) * this->Rows * this->Cols, 0.0);
   this->Weights.assign(static_cast<size_t>(this->Rows) * this->Cols, 1.0);
   this->ResetKnotsToClampedUniform();
-  this->Modified();
 }
 
 //------------------------------------------------------------------------------
@@ -210,11 +215,11 @@ void vtkMRMLNurbsSurfaceNode::SetCols(unsigned int cols)
   {
     return;
   }
+  MRMLNodeModifyBlocker blocker(this);
   this->Cols = cols;
   this->ControlGrid.assign(static_cast<size_t>(3u) * this->Rows * this->Cols, 0.0);
   this->Weights.assign(static_cast<size_t>(this->Rows) * this->Cols, 1.0);
   this->ResetKnotsToClampedUniform();
-  this->Modified();
 }
 
 //------------------------------------------------------------------------------
@@ -230,12 +235,12 @@ void vtkMRMLNurbsSurfaceNode::SetSize(unsigned int n)
   {
     return;
   }
+  MRMLNodeModifyBlocker blocker(this);
   this->Rows = n;
   this->Cols = n;
   this->ControlGrid.assign(static_cast<size_t>(3u) * this->Rows * this->Cols, 0.0);
   this->Weights.assign(static_cast<size_t>(this->Rows) * this->Cols, 1.0);
   this->ResetKnotsToClampedUniform();
-  this->Modified();
 }
 
 //------------------------------------------------------------------------------
@@ -257,9 +262,9 @@ void vtkMRMLNurbsSurfaceNode::SetDegreeU(unsigned int degree)
   {
     return;
   }
+  MRMLNodeModifyBlocker blocker(this);
   this->DegreeU = degree;
   this->ResetKnotsToClampedUniform();
-  this->Modified();
 }
 
 //------------------------------------------------------------------------------
@@ -281,9 +286,9 @@ void vtkMRMLNurbsSurfaceNode::SetDegreeV(unsigned int degree)
   {
     return;
   }
+  MRMLNodeModifyBlocker blocker(this);
   this->DegreeV = degree;
   this->ResetKnotsToClampedUniform();
-  this->Modified();
 }
 
 //------------------------------------------------------------------------------
@@ -305,10 +310,10 @@ void vtkMRMLNurbsSurfaceNode::SetDegree(unsigned int d)
   {
     return;
   }
+  MRMLNodeModifyBlocker blocker(this);
   this->DegreeU = d;
   this->DegreeV = d;
   this->ResetKnotsToClampedUniform();
-  this->Modified();
 }
 
 //------------------------------------------------------------------------------
