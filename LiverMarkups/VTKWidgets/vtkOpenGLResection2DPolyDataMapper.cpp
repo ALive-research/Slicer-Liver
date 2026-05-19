@@ -2,7 +2,7 @@
 
  Distributed under the OSI-approved BSD 3-Clause License.
 
-  Copyright (c) Oslo University Hospital. All rights reserved.
+  Copyright (c) 2023-2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -185,7 +185,6 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
     "#define M_PI 3.1415926535897932384626433832795\n"
     "uniform sampler3D distanceTexture;\n"
     "uniform sampler3D vesselSegTexture;\n"
-    "uniform sampler2D posMarker;\n"
     "//vec4 fragPositionMC = vertexWCVSOutput;\n");
 
   vtkShaderProgram::Substitute(
@@ -213,7 +212,6 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
   vtkShaderProgram::Substitute(
     FSSource, "//VTK::Color::Impl",
     "//VTK::Color::Impl\n"
-    "vec4 marker = texture(posMarker, uvCoordsOutput);\n"
     "vec4 dist = texture(distanceTexture, fragPositionMCBS.xyz);\n"
     "vec4 vesselBg = texture(vesselSegTexture, fragPositionMCBS.xyz);\n"
     "float lowMargin = uResectionMargin - uUncertaintyMargin;\n"
@@ -386,11 +384,6 @@ void vtkOpenGLResection2DPolyDataMapper::SetMapperShaderParameters(
   if (cellBO.Program->IsUniformUsed("distanceTexture"))
     {
     cellBO.Program->SetUniformi("distanceTexture", 0);
-    }
-
-  if (cellBO.Program->IsUniformUsed("posMarker"))
-    {
-    cellBO.Program->SetUniformi("posMarker", 15);
     }
 
   if (cellBO.Program->IsUniformUsed("vesselSegTexture"))
