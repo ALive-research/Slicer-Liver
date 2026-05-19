@@ -146,16 +146,6 @@ vtkSlicerBezierSurfaceRepresentation3D::vtkSlicerBezierSurfaceRepresentation3D()
   this->BezierSurfaceActor = vtkSmartPointer<vtkOpenGLActor>::New();
   this->BezierSurfaceActor->SetMapper(this->BezierSurfaceResectionMapper);
 
-  // if (!this->BezierSurfaceActor->GetTexture())
-  //   {
-  //   auto image = vtkSmartPointer<vtkImageData>::New();
-  //   image->SetDimensions(1,1,1);
-  //   image->AllocateScalars(VTK_FLOAT, 2);
-  //   auto fakeTexture = vtkSmartPointer<vtkTexture>::New();
-  //   fakeTexture->SetInputData(image);
-  //   this->BezierSurfaceActor->SetTexture(fakeTexture);
-  //   }
-
   this->BezierSurfaceResectionMapper2D = vtkSmartPointer<vtkOpenGLResection2DPolyDataMapper>::New();
   this->BezierSurfaceResectionMapper2D->SetInputConnection(BezierPlane->GetOutputPort());
   this->BezierSurfaceActor2D = vtkSmartPointer<vtkOpenGLActor>::New();
