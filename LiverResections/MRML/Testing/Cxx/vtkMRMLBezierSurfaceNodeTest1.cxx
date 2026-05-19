@@ -1330,72 +1330,66 @@ int testXMLRoundTrip3x3()
 // ----------------------------------------------------------------------------
 // testReadXMLNullMidStream
 //
-// Pins the *currently broken* behaviour of ``ReadXMLAttributes`` when an
+// Pins the corrected behaviour of ``ReadXMLAttributes`` when an
 // ``atts[]`` array carries a ``nullptr`` value mid-stream.  Both walks
 // (rows/cols extraction and the free-form payload pass) have independent
-// ``value == nullptr`` guards that today ``break;`` out of the walk —
-// silently dropping every later attribute even though later attributes
-// remain well-formed.  The MRML scene-load path can legitimately produce
-// such gaps for unset / placeholder attributes, so the walk-abort is a
-// real footgun against ADR-0014 §1 (data-shape contract: a well-formed
-// scene must round-trip).
+// ``value == nullptr`` guards that now ``continue;`` past the gap rather
+// than aborting the walk.  The MRML scene-load path can legitimately
+// produce (non-null name, null value) pairs for unset / placeholder
+// attributes; the libxml2 outer-loop sentinel is the null *name* slot,
+// not the null value slot.  A walk-abort on the value slot would
+// silently drop every downstream attribute and violate ADR-0014 §1
+// (data-shape contract: a well-formed scene must round-trip).
 //
-// This sub-test asserts the broken state (post-null attributes are
-// dropped, so the targeted fields stay at their constructor defaults).
-// A companion BUG commit changes both ``break;`` to ``continue;`` and
-// flips these assertions to the correct values; that flip is the
-// implementer's responsibility, not this sub-test's.
+// Historical context: the commit preceding this one pinned the broken
+// ``break;``-on-null state (assertions captured the post-default
+// fallback values) per the red-then-green test discipline in
+// ADR-0008 §7.  The companion BUG commit flips both walks to
+// ``continue;`` and these assertions to the corrected values, making
+// the fix visible as a test diff.
 int testReadXMLNullMidStream()
 {
   // The ``ReadXMLAttributes`` walks iterate with the outer condition
   // ``att && *att`` (i.e. terminate when the *name* slot is null —
-  // that is the libxml2 sentinel).  The walk-abort bug fires on the
-  // *value* slot: a (non-null name, null value) pair triggers a
-  // ``break;`` that drops every downstream attribute, even though the
-  // sentinel has not yet arrived.  The trigger pattern is therefore
+  // that is the libxml2 sentinel).  The mid-stream-null trigger fires
+  // on the *value* slot: a (non-null name, null value) pair must be
+  // skipped without aborting the walk so downstream attributes remain
+  // observable.  The trigger pattern is therefore
   // ``{"someName", nullptr, "rows", "3", nullptr}`` — name is
   // non-null, value is null, and a valid attribute follows.
 
-  // ---- Walk-1 trigger: rows/cols extraction (cxx lines 643-661) ----
+  // ---- Walk-1: rows/cols extraction ----
   //
   // Constructor default for ``Cols`` is ``DefaultGridSize == 4``.  We
   // place a (non-null name, null value) pair *before* the ``cols``
-  // attribute so the broken ``break;`` swallows ``cols``.  The
-  // ADR-0018 §1 square-shape check then clamps the partial pair
-  // (rows=3, cols=default=4) back to (4, 4) — emitting a
-  // ``vtkWarningMacro`` we capture below.
+  // attribute.  Under the corrected ``continue;`` walk-1 consumes
+  // both ``rows="3"`` and ``cols="3"``; the (3, 3) pair passes the
+  // ADR-0018 §1 square-shape check and is accepted as-is, so no
+  // warning is emitted.
   vtkNew<vtkMRMLBezierSurfaceNode> sinkA;
-  const char* attsA[] = { "rows", "3", "placeholder", nullptr, // mid-stream (non-null name, null value) — walk-1 ``break;``s here
-                          "cols", "3",                         // dropped under the broken state
+  const char* attsA[] = { "rows", "3", "placeholder", nullptr, // mid-stream (non-null name, null value) — skipped via ``continue;``
+                          "cols", "3",                         // consumed under the corrected walk
                           nullptr };
   TESTING_OUTPUT_ASSERT_WARNINGS_BEGIN();
   sinkA->ReadXMLAttributes(attsA);
   TESTING_OUTPUT_ASSERT_WARNINGS_END();
-  // Broken-state assertion: walk-1 aborted on the null value, so the
-  // ``cols`` attribute was never consumed; ``parsedCols`` stayed at
-  // ``DefaultGridSize``; the non-square (3, 4) pair tripped the
-  // ADR-0018 §1 fallback at cxx lines 668-674 and reset to (4, 4).
-  // Observable: ``GetCols() == DefaultGridSize``.
-  //
-  // The companion BUG commit flips walk-1's ``break;`` to
-  // ``continue;``; ``cols=3`` is then consumed, the (3, 3) pair
-  // passes the square-shape check, and ``GetCols()`` becomes 3.
-  // That assertion flip is the implementer's job — this sub-test
-  // pins the broken state to make the fix observable as a test diff.
-  CHECK_INT(static_cast<int>(sinkA->GetCols()), vtkMRMLBezierSurfaceNode::DefaultGridSize);
+  // Corrected-state assertion: walk-1 skipped the null pair and
+  // consumed ``cols="3"``; the (3, 3) pair satisfies ADR-0018 §1's
+  // closed shape set and ``GetCols()`` reports 3.
+  CHECK_INT(static_cast<int>(sinkA->GetCols()), 3);
 
-  // ---- Walk-2 trigger: free-form payload (cxx lines 683-733) ----
+  // ---- Walk-2: free-form payload ----
   //
   // Same (non-null name, null value) pattern, but placed before
   // ``slicingPlaneInitPoint0``.  Constructor default for
-  // ``SlicingPlaneInitPoints[0]`` is ``{0.0, 0.0, 0.0}`` (cxx
-  // constructor block, lines 110-116).  Under the broken walk-2
-  // ``break;`` the init point stays at its default.
+  // ``SlicingPlaneInitPoints[0]`` is ``{0.0, 0.0, 0.0}``.  Under the
+  // corrected walk-2 ``continue;`` the init point is read from the
+  // post-null attribute.
   vtkNew<vtkMRMLBezierSurfaceNode> sinkB;
   // Build a well-formed 48-double controlGrid payload so the
   // truncated-controlGrid branch does not muddy the assertion —
-  // this isolates the walk-abort as the sole reason
-  // ``slicingPlaneInitPoint0`` could be missing post-parse.
+  // this isolates the mid-stream-null skip as the sole determinant
+  // of whether ``slicingPlaneInitPoint0`` is observed post-parse.
   std::ostringstream gridSs;
   for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
   {
@@ -1410,21 +1404,18 @@ int testReadXMLNullMidStream()
   const char* attsB[] = { "controlGrid",
                           gridStr.c_str(),
                           "placeholder",
-                          nullptr, // mid-stream (non-null name, null value) — walk-2 ``break;``s here
+                          nullptr, // mid-stream (non-null name, null value) — skipped via ``continue;``
                           "slicingPlaneInitPoint0",
-                          initPt.c_str(), // dropped under the broken state
+                          initPt.c_str(), // consumed under the corrected walk
                           nullptr };
   sinkB->ReadXMLAttributes(attsB);
-  // Broken-state assertion: walk-2 aborted on the null value, so the
-  // init point stayed at its constructor default of ``{0, 0, 0}``.
-  // The companion BUG commit flips walk-2's ``break;`` to
-  // ``continue;`` and the assertions will need to flip to
-  // ``{1.0, 2.0, 3.0}`` — implementer's responsibility.
+  // Corrected-state assertion: walk-2 skipped the null pair and
+  // consumed ``slicingPlaneInitPoint0="1.0 2.0 3.0"``.
   const double* pt = sinkB->GetSlicingPlaneInitPoint(0);
   CHECK_NOT_NULL(pt);
-  CHECK_DOUBLE(pt[0], 0.0);
-  CHECK_DOUBLE(pt[1], 0.0);
-  CHECK_DOUBLE(pt[2], 0.0);
+  CHECK_DOUBLE(pt[0], 1.0);
+  CHECK_DOUBLE(pt[1], 2.0);
+  CHECK_DOUBLE(pt[2], 3.0);
   return EXIT_SUCCESS;
 }
 
