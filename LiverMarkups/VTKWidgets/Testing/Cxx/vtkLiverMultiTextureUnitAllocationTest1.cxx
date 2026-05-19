@@ -74,8 +74,7 @@ vtkSmartPointer<vtkOpenGLRenderWindow> makeOffscreenContext()
 
   rw->Initialize();
 
-  vtkSmartPointer<vtkOpenGLRenderWindow> oglrw =
-    vtkOpenGLRenderWindow::SafeDownCast(rw);
+  vtkSmartPointer<vtkOpenGLRenderWindow> oglrw = vtkOpenGLRenderWindow::SafeDownCast(rw);
   return oglrw;
 }
 
@@ -88,16 +87,15 @@ std::vector<float> makeStubVolume(int w, int h, int d)
   // Plant a recognisable pattern so future visual asserts could hook
   // in if needed.
   for (int z = 0; z < d; ++z)
-    {
+  {
     for (int y = 0; y < h; ++y)
-      {
+    {
       for (int x = 0; x < w; ++x)
-        {
-        data[static_cast<std::size_t>(z) * h * w + y * w + x] =
-          static_cast<float>(x + y * 10 + z * 100);
-        }
+      {
+        data[static_cast<std::size_t>(z) * h * w + y * w + x] = static_cast<float>(x + y * 10 + z * 100);
       }
     }
+  }
   return data;
 }
 
@@ -119,15 +117,15 @@ int testDistinctUnitAllocation(vtkOpenGLRenderWindow* renWin)
   // upload path used by the migrated representation.
   auto vol = makeStubVolume(2, 2, 2);
   if (!texA->Create3DFromRaw(2, 2, 2, 1, VTK_FLOAT, vol.data()))
-    {
+  {
     std::cerr << "FAIL: Create3DFromRaw on texA returned false" << std::endl;
     return EXIT_FAILURE;
-    }
+  }
   if (!texB->Create3DFromRaw(2, 2, 2, 1, VTK_FLOAT, vol.data()))
-    {
+  {
     std::cerr << "FAIL: Create3DFromRaw on texB returned false" << std::endl;
     return EXIT_FAILURE;
-    }
+  }
 
   texA->Activate();
   texB->Activate();
@@ -136,23 +134,20 @@ int testDistinctUnitAllocation(vtkOpenGLRenderWindow* renWin)
   const int unitB = texB->GetTextureUnit();
 
   if (unitA < 0)
-    {
-    std::cerr << "FAIL: texA->GetTextureUnit() = " << unitA
-              << " (expected >= 0 after Activate())" << std::endl;
+  {
+    std::cerr << "FAIL: texA->GetTextureUnit() = " << unitA << " (expected >= 0 after Activate())" << std::endl;
     return EXIT_FAILURE;
-    }
+  }
   if (unitB < 0)
-    {
-    std::cerr << "FAIL: texB->GetTextureUnit() = " << unitB
-              << " (expected >= 0 after Activate())" << std::endl;
+  {
+    std::cerr << "FAIL: texB->GetTextureUnit() = " << unitB << " (expected >= 0 after Activate())" << std::endl;
     return EXIT_FAILURE;
-    }
+  }
   if (unitA == unitB)
-    {
-    std::cerr << "FAIL: texA and texB share unit " << unitA
-              << " (expected distinct allocations)" << std::endl;
+  {
+    std::cerr << "FAIL: texA and texB share unit " << unitA << " (expected distinct allocations)" << std::endl;
     return EXIT_FAILURE;
-    }
+  }
 
   // Mirror the migrated mapper's SetUniformi(name, tex->GetTextureUnit())
   // pattern.  The shader-program object is not exercised here (no
@@ -161,45 +156,39 @@ int testDistinctUnitAllocation(vtkOpenGLRenderWindow* renWin)
   const int distanceUniform = texA->GetTextureUnit();
   const int vesselSegUniform = texB->GetTextureUnit();
   if (distanceUniform == vesselSegUniform || distanceUniform < 0 || vesselSegUniform < 0)
-    {
+  {
     std::cerr << "FAIL: uniform-mirroring produced an invalid pair "
-              << "(distance=" << distanceUniform
-              << ", vesselSeg=" << vesselSegUniform << ")" << std::endl;
+              << "(distance=" << distanceUniform << ", vesselSeg=" << vesselSegUniform << ")" << std::endl;
     return EXIT_FAILURE;
-    }
+  }
 
   // Contract 2: Deactivate() frees the unit on the unit manager.
   vtkTextureUnitManager* mgr = renWin->GetTextureUnitManager();
   if (!mgr)
-    {
+  {
     std::cerr << "FAIL: render window has no texture unit manager" << std::endl;
     return EXIT_FAILURE;
-    }
+  }
   if (!mgr->IsAllocated(unitA) || !mgr->IsAllocated(unitB))
-    {
+  {
     std::cerr << "FAIL: unit manager does not report units as allocated "
-              << "after Activate() (unitA=" << unitA
-              << " allocated=" << mgr->IsAllocated(unitA)
-              << ", unitB=" << unitB
-              << " allocated=" << mgr->IsAllocated(unitB) << ")" << std::endl;
+              << "after Activate() (unitA=" << unitA << " allocated=" << mgr->IsAllocated(unitA) << ", unitB=" << unitB << " allocated=" << mgr->IsAllocated(unitB) << ")"
+              << std::endl;
     return EXIT_FAILURE;
-    }
+  }
 
   texA->Deactivate();
   texB->Deactivate();
 
   if (mgr->IsAllocated(unitA) || mgr->IsAllocated(unitB))
-    {
+  {
     std::cerr << "FAIL: unit manager still reports units allocated "
-              << "after Deactivate() (unitA=" << unitA
-              << " allocated=" << mgr->IsAllocated(unitA)
-              << ", unitB=" << unitB
-              << " allocated=" << mgr->IsAllocated(unitB) << ")" << std::endl;
+              << "after Deactivate() (unitA=" << unitA << " allocated=" << mgr->IsAllocated(unitA) << ", unitB=" << unitB << " allocated=" << mgr->IsAllocated(unitB) << ")"
+              << std::endl;
     return EXIT_FAILURE;
-    }
+  }
 
-  std::cout << "PASS: distinct unit allocation (unitA=" << unitA
-            << ", unitB=" << unitB << ")" << std::endl;
+  std::cout << "PASS: distinct unit allocation (unitA=" << unitA << ", unitB=" << unitB << ")" << std::endl;
   return EXIT_SUCCESS;
 }
 
@@ -237,15 +226,15 @@ int testCreate3DUploadAndRenderNoGLError(vtkOpenGLRenderWindow* renWin)
   const int dim = 4;
   auto vol = makeStubVolume(dim, dim, dim);
   if (!distanceTex->Create3DFromRaw(dim, dim, dim, 1, VTK_FLOAT, vol.data()))
-    {
+  {
     std::cerr << "FAIL: Create3DFromRaw on distanceTex returned false" << std::endl;
     return EXIT_FAILURE;
-    }
+  }
   if (!vesselSegTex->Create3DFromRaw(dim, dim, dim, 1, VTK_FLOAT, vol.data()))
-    {
+  {
     std::cerr << "FAIL: Create3DFromRaw on vesselSegTex returned false" << std::endl;
     return EXIT_FAILURE;
-    }
+  }
 
   distanceTex->Activate();
   vesselSegTex->Activate();
@@ -272,11 +261,11 @@ int vtkLiverMultiTextureUnitAllocationTest1(int /*argc*/, char* /*argv*/[])
 {
   vtkSmartPointer<vtkOpenGLRenderWindow> renWin = makeOffscreenContext();
   if (!renWin)
-    {
+  {
     std::cerr << "FAIL: could not obtain an OpenGL render window "
               << "(offscreen Initialize returned null)." << std::endl;
     return EXIT_FAILURE;
-    }
+  }
 
   // Some CI images lack a working offscreen GL driver
   // (mesa/llvmpipe / EGL).  In that case the texture-unit manager is
@@ -286,28 +275,29 @@ int vtkLiverMultiTextureUnitAllocationTest1(int /*argc*/, char* /*argv*/[])
   // available.  A stricter mode (fail-on-missing-GL) can be opted in
   // via SLICERLIVER_REQUIRE_OPENGL=1.
   if (!renWin->GetTextureUnitManager())
-    {
+  {
     const char* require = std::getenv("SLICERLIVER_REQUIRE_OPENGL");
     if (require && require[0] == '1')
-      {
+    {
       std::cerr << "FAIL: no texture unit manager and "
-                   "SLICERLIVER_REQUIRE_OPENGL=1" << std::endl;
+                   "SLICERLIVER_REQUIRE_OPENGL=1"
+                << std::endl;
       return EXIT_FAILURE;
-      }
+    }
     std::cout << "SKIP: no usable offscreen OpenGL context "
                  "(set SLICERLIVER_REQUIRE_OPENGL=1 to fail instead)."
               << std::endl;
     return EXIT_SUCCESS;
-    }
+  }
 
   if (testDistinctUnitAllocation(renWin) != EXIT_SUCCESS)
-    {
+  {
     return EXIT_FAILURE;
-    }
+  }
   if (testCreate3DUploadAndRenderNoGLError(renWin) != EXIT_SUCCESS)
-    {
+  {
     return EXIT_FAILURE;
-    }
+  }
 
   return EXIT_SUCCESS;
 }
