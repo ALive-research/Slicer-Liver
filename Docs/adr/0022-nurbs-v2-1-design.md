@@ -152,20 +152,20 @@ NURBS-only fields.
 
 ### Discriminator + new fields
 
-```jsonc
+```json
 {
   "schemaVersion": 3,
-  "surfaceType": "Bezier" | "NURBS",  // new in v3; defaults to "Bezier" on v2-implicit reads
+  "surfaceType": "Bezier or NURBS — new in v3; defaults to Bezier on v2-implicit reads",
   "rows": 4,
   "cols": 4,
-  "controlGrid": [/* 3 * rows * cols doubles, row-major */],
+  "controlGrid": ["3 * rows * cols doubles, row-major"],
 
-  // present only when surfaceType == "NURBS":
+  "_comment_nurbs_only": "the following fields appear only when surfaceType == NURBS",
   "degreeU": 3,
   "degreeV": 3,
-  "knotsU": [/* rows + degreeU + 1 doubles, non-decreasing */],
-  "knotsV": [/* cols + degreeV + 1 doubles, non-decreasing */],
-  "weights": [/* rows * cols doubles, all positive */]
+  "knotsU": ["rows + degreeU + 1 doubles, non-decreasing"],
+  "knotsV": ["cols + degreeV + 1 doubles, non-decreasing"],
+  "weights": ["rows * cols doubles, all positive"]
 }
 ```
 
@@ -476,7 +476,7 @@ its own PR.  Diff-coverage on each PR is visible per
 - **Larger surface area** — three new MRML node classes, one new
   Pipeline, one new Representation, one new fitter, one new CPU
   evaluator, schema-v3 reader/writer migration, single mapper's
-  shader variant.  ~~5-10 KLOC of code + tests + docs.
+  shader variant.  Roughly 5-10 KLOC of code + tests + docs.
 - **Custom-atop-Eigen fitter is maintenance debt.**  Mitigated by
   characterisation testing per [ADR-0003][adr-0003] + bounded
   scope (no knot insertion, no degree elevation, no rational
