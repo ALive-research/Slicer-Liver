@@ -14,3 +14,10 @@ Docs/_build/
 Testing/baselines-staging/
 
 # CMake ExternalData object store (per-build cache of downloaded blobs).
+
+# Tool-local developer configuration. Each contributor's preferred
+# editor / coding-agent / AI-assistant config stays outside the shared
+# repo so workflow choices are personal, not enforced project-wide.
+.claude/
+.cursor/
+.aider*
