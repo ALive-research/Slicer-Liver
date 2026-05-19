@@ -7,30 +7,49 @@ trim is ON (``ClipOut`` uniform 1) — only the resected side of the
 Bezier surface remains visible after the fragment shader's discard
 runs.
 
-The Confirmed-state machine on the v2 Bezier surface node
-(ADR-0019) has not landed in ``preview`` HEAD at the time of
-writing.  This scenario therefore drives the underlying knob
-directly: the ``ClipOut`` setter on ``vtkMRMLLiverResectionNode``
-propagates to the ``uResectionClipOut`` shader uniform in
-``vtkOpenGLBezierResectionPolyDataMapper``.  When the v2 state
-machine lands the scenario should migrate from the raw setter to
-``bezier_v2.SetState(vtkMRMLBezierSurfaceNode.Confirmed)`` — see the
-in-line TODO inside :func:`setup_scene` for the migration anchor.
+Per ADR-0019 (the v2 resection state machine on
+``vtkMRMLBezierSurfaceNode``), the Confirmed state is committed via
+``vtkMRMLBezierSurfaceNode::SetState(Confirmed)`` — a legal
+``Planning -> Confirmed`` transition.  The state-machine API is the
+single source of truth for the Confirmed contract; this scenario
+exercises it on a v2 data node added to the scene alongside the
+Planning fixture.
+
+Non-Pipeline render path — fallback to legacy display-node
+``ClipOut``
+==============================================================
+The state-machine -> trim-shader auto-propagation lives in
+``ConfirmedRepresentation`` (LayerDM Pipeline; ADR-0013 §6 +
+ADR-0019 §"Per-state contract").  The Pipeline is reachable only via
+the LayerDM dispatch; the visual-regression harness renders through a
+plain ``qMRMLThreeDWidget`` (see ``replay_test.py``), whose
+displayable-manager chain still binds the legacy
+``vtkMRMLMarkupsBezierSurfaceNode`` display node.  In that
+non-Pipeline context the state change on the v2 data node does NOT
+flip the legacy mapper's ``uResectionClipOut`` uniform — so the
+explicit ``display.SetClipOut(True)`` push on the markups display node
+stays, gated by a ``hasattr`` check to remain robust if
+``AddBezierSurface`` is later retargeted to the v2 path.
 
 The v1 enum on ``vtkMRMLLiverResectionNode`` is
 ``{Initialization, Deformation, Completed}`` — it does NOT carry a
 ``Confirmed`` value; that name belongs to the v2 enum on
-``vtkMRMLBezierSurfaceNode`` introduced by ADR-0019.
+``vtkMRMLBezierSurfaceNode`` (ADR-0019).
 
 References
 ----------
-* ADR-0019 — resection state machine (Init/Planning/Confirmed) on
-  ``vtkMRMLBezierSurfaceNode``.
+* ADR-0019 §"Per-state contract" — Confirmed-state visual contract
+  (control polygon hidden, widget disabled, parenchyma-trim shader
+  on).
+* ADR-0019 transition matrix — ``Init -> Planning -> Confirmed`` is
+  the legal path; ``Init -> Confirmed`` is rejected.
 * ADR-0020 §"Rollout plan" §7 — Confirmed-state characterisation
   baseline as a regression gate for the v2.1 mapper rewrite.
 """
 
 from __future__ import annotations
+
+import slicer  # type: ignore[import-not-found]
 
 # Reuse Planning camera/viewport plus the scene-construction helpers.
 # The "two scenarios that differ in one shader uniform" shape is the
@@ -53,7 +72,7 @@ CAMERA_CLIPPING_RANGE = _planning.CAMERA_CLIPPING_RANGE
 
 
 def setup_scene() -> slicer.vtkMRMLNode:
-    """Build the Planning fixture, then flip ``ClipOut`` to 1.
+    """Build the Planning fixture, drive the v2 state machine to Confirmed.
 
     Returns
     -------
@@ -63,20 +82,32 @@ def setup_scene() -> slicer.vtkMRMLNode:
     """
     resection = _planning.setup_scene()
 
-    # TODO: when the v2 Bezier state machine (ADR-0019) lands, replace
-    # the manual ClipOut wiring below with the state-machine call on
-    # ``vtkMRMLBezierSurfaceNode``:
-    #     bezier_v2.SetState(vtkMRMLBezierSurfaceNode.Confirmed)
-    # The v1 enum on ``vtkMRMLLiverResectionNode`` is
-    # {Initialization, Deformation, Completed} — it does NOT carry a
-    # ``Confirmed`` value; that name belongs to the v2 enum on
-    # ``vtkMRMLBezierSurfaceNode`` (ADR-0019).  Until v2 lands we
-    # drive the underlying uniform directly: on the resection node
-    # (for persistence) and on the live display node of the Bezier
-    # surface the LiverResections logic returns (for the running
-    # mapper, since the state-machine auto-propagation only fires on
-    # ``Initialization → Deformation`` and this scenario stays in
-    # ``Initialization``).
+    # ADR-0019 §"Per-state contract": the Confirmed state lives on the
+    # v2 ``vtkMRMLBezierSurfaceNode`` (data-only LayerDM node), not on
+    # the legacy ``vtkMRMLLiverResectionNode``.  Add a v2 data node to
+    # the scene and walk it ``Init -> Planning -> Confirmed`` — the
+    # transition matrix rejects ``Init -> Confirmed`` directly
+    # (forbidden per ADR-0019), so the Planning step is mandatory.
+    bezier_v2 = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLBezierSurfaceNode", "VisualTestBezierSurfaceV2"
+    )
+    bezier_v2.SetState(slicer.vtkMRMLBezierSurfaceNode.Planning)
+    bezier_v2.SetState(slicer.vtkMRMLBezierSurfaceNode.Confirmed)
+
+    # Mirror the state on the legacy resection node so the v1 stack's
+    # XML round-trip + GUI bindings agree with the v2 state machine.
+    # The v1 ``Completed`` enum value is the historical analog of
+    # ``Confirmed``; T2.7 (LiverMarkups dissolution) retires the
+    # legacy node and the parallel state altogether.
+    resection.SetState(resection.Completed)
+
+    # Non-Pipeline fallback (see the module docstring): the legacy
+    # ``vtkMRMLMarkupsBezierSurfaceNode`` display node still drives the
+    # visible pixels in this harness (plain ``qMRMLThreeDWidget`` render
+    # path; the LayerDM ``ConfirmedRepresentation`` is not engaged
+    # without the Pipeline).  Push ``ClipOut`` on both the persistence
+    # carrier (resection node) and the live display node so the legacy
+    # mapper's ``uResectionClipOut`` uniform flips to 1.
     resection.SetClipOut(True)
 
     # ``vtkSlicerLiverResectionsLogic::AddBezierSurface`` returns a
