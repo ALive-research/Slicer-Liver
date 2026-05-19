@@ -10,12 +10,12 @@
   These tests pin the upstream ``vtkTextureObject`` API contract that
   the resection mappers
   (``vtkOpenGLBezierResectionPolyDataMapper`` and
-  ``vtkOpenGLResection2DPolyDataMapper``) depend on after the removal
-  of the obsolete ``vtkMultiTextureObjectHelper`` subclass.  The helper
-  was a pre-VTK-9.0 era shim that let callers pass an explicit
-  texture-unit index to ``CreateSeqNDFromRaw``.  Upstream VTK 9.x
+  ``vtkOpenGLResection2DPolyDataMapper``) depend on.  Slicer-Liver
+  used to ship a pre-VTK-9.0 era ``vtkTextureObject`` subclass that
+  let callers pass an explicit texture-unit index; upstream VTK 9.x
   exposes ``vtkTextureUnitManager``-based dynamic allocation through
-  ``vtkTextureObject::Activate()`` +  ``GetTextureUnit()``.  The
+  ``vtkTextureObject::Activate()`` + ``GetTextureUnit()``, and the
+  representation now uploads via plain ``Create3DFromRaw``.  The
   mappers' shaders bind to ``sampler3D`` uniforms (``distanceTexture``,
   ``vesselSegTexture``); the contract this file pins is:
 

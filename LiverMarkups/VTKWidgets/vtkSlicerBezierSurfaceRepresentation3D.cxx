@@ -46,7 +46,6 @@
 #include "vtkSlicerMarkupsWidgetRepresentation.h"
 #include "vtkOpenGLBezierResectionPolyDataMapper.h"
 #include "vtkOpenGLResection2DPolyDataMapper.h"
-#include "vtkMultiTextureObjectHelper.h"
 #include "vtkMRMLMarkupsSlicingContourNode.h"
 #include "vtkMRMLMarkupsSlicingContourDisplayNode.h"
 
@@ -521,7 +520,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateControlPolygonGeometry(vtkMRM
 void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode* node, int numComps)
 {
   auto renderWindow = vtkOpenGLRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
-  this->DistanceMapTexture = vtkSmartPointer<vtkMultiTextureObjectHelper>::New();
+  this->DistanceMapTexture = vtkSmartPointer<vtkTextureObject>::New();
   this->DistanceMapTexture->SetContext(renderWindow);
 
   if (!node)
@@ -546,7 +545,11 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture
   this->DistanceMapTexture->SetMinificationFilter(vtkTextureObject::Linear);
   this->DistanceMapTexture->SetMagnificationFilter(vtkTextureObject::Linear);
   this->DistanceMapTexture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
-  this->DistanceMapTexture->CreateSeq3DFromRaw(dimensions[0], dimensions[1], dimensions[2], numComps, VTK_FLOAT, imageData->GetScalarPointer(), 0);
+  // Upstream Create3DFromRaw activates a texture unit via the
+  // vtkTextureUnitManager, uploads, and deactivates.  The texture
+  // unit allocation contract is pinned by
+  // vtkLiverMultiTextureUnitAllocationTest1.
+  this->DistanceMapTexture->Create3DFromRaw(dimensions[0], dimensions[1], dimensions[2], numComps, VTK_FLOAT, imageData->GetScalarPointer());
 }
 
 
@@ -554,7 +557,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture
 void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferVascularSegmentsTexture(vtkMRMLScalarVolumeNode *node) {
 
   auto renderWindow = vtkOpenGLRenderWindow::SafeDownCast(this->GetRenderer()->GetRenderWindow());
-  this->VascularSegmentsTexture = vtkSmartPointer<vtkMultiTextureObjectHelper>::New();
+  this->VascularSegmentsTexture = vtkSmartPointer<vtkTextureObject>::New();
   this->VascularSegmentsTexture->SetContext(renderWindow);
 
   if (!node) {
@@ -583,8 +586,11 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferVascularSegmentsTe
   this->VascularSegmentsTexture->SetMinificationFilter(vtkTextureObject::Nearest);
   this->VascularSegmentsTexture->SetMagnificationFilter(vtkTextureObject::Nearest);
   this->VascularSegmentsTexture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
-  this->VascularSegmentsTexture->CreateSeq3DFromRaw(dimensions[0], dimensions[1], dimensions[2], 1, VTK_FLOAT,
-                                                    cast->GetOutput()->GetScalarPointer(), 1);
+  // See CreateAndTransferDistanceMapTexture above for the upstream
+  // Create3DFromRaw rationale; texture-unit allocation is driven by
+  // vtkTextureUnitManager.
+  this->VascularSegmentsTexture->Create3DFromRaw(dimensions[0], dimensions[1], dimensions[2], 1, VTK_FLOAT,
+                                                 cast->GetOutput()->GetScalarPointer());
 }
 
 //----------------------------------------------------------------------

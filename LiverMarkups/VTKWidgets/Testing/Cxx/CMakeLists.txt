@@ -1,12 +1,16 @@
 #-----------------------------------------------------------------------------
+# Distributed under the OSI-approved BSD 3-Clause License.
+# Copyright (c) 2026, The Intervention Centre, Oslo University Hospital.
+# All rights reserved.
+#-----------------------------------------------------------------------------
 # C++ low-level tests for the LiverMarkups VTKWidgets library.
 # Per ADR-0008 §2 — "C++ low-level" row, ctkTest driver, no Slicer
 # launch, no Qt.  Mirrors the LiverResections/VTKWidgets/Testing/Cxx
 # pattern.
 #
-# These tests exercise the texture-unit allocation contract pinned by
-# the removal of vtkMultiTextureObjectHelper (pre-VTK-9.0 shim).  See
-# the test header for the contract.
+# These tests exercise the texture-unit allocation contract relied on
+# by the LiverMarkups resection-mapper render path after the pre-VTK-9.0
+# texture-unit shim was retired.  See the test header for the contract.
 #-----------------------------------------------------------------------------
 
 set(KIT vtkSlicer${MODULE_NAME}ModuleVTKWidgets)
