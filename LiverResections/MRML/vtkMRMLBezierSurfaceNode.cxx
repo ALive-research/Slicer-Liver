@@ -646,7 +646,7 @@ void vtkMRMLBezierSurfaceNode::ReadXMLAttributes(const char** atts)
     const char* value = att[1];
     if (value == nullptr)
     {
-      break;
+      continue;
     }
     if (std::strcmp(name, "rows") == 0)
     {
@@ -686,7 +686,7 @@ void vtkMRMLBezierSurfaceNode::ReadXMLAttributes(const char** atts)
     const char* value = att[1];
     if (value == nullptr)
     {
-      break;
+      continue;
     }
     if (std::strcmp(name, "controlGrid") == 0)
     {
