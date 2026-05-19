@@ -51,6 +51,14 @@
 #include "vtkMRMLBezierSurfaceDisplayNode.h"
 #include "vtkMRMLBezierSurfaceStorageNode.h"
 
+// v2.1 NURBS sibling data node + dedicated storage class
+// (ADR-0022 §"Decision 1 — Data node" + §"Decision 2 — Schema v3").
+// The NURBS data node is registered here for the same reason as the
+// Bezier family — scene save/load needs the class registered so MRML
+// can instantiate it on load.
+#include "vtkMRMLNurbsSurfaceNode.h"
+#include "vtkMRMLNurbsSurfaceStorageNode.h"
+
 #include <vtkCommand.h>
 #include <vtkMRMLMarkupsSlicingContourNode.h>
 #include <vtkMRMLMarkupsSlicingContourDisplayNode.h>
@@ -123,6 +131,13 @@ void vtkSlicerLiverResectionsLogic::RegisterNodes()
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceDisplayNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceStorageNode>::New());
+
+  // v2.1 NURBS sibling (ADR-0022 §"Decision 1 — Data node",
+  // §"Decision 2 — Schema v3").  Display-node + Pipeline come with
+  // NURBS-3; for NURBS-1 the data + storage classes alone are
+  // enough to round-trip scenes that carry NURBS resections.
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLNurbsSurfaceNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLNurbsSurfaceStorageNode>::New());
 }
 
 //---------------------------------------------------------------------------

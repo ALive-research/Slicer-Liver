@@ -38,22 +38,35 @@
 ==============================================================================*/
 
 //==============================================================================
-// .lrp.json — JSON schema v2 (ADR-0018 §1)
+// .lrp.json — JSON schema v3 (ADR-0022 §"Decision 2 — Schema v3")
 //==============================================================================
 //
 // One ``.lrp.json`` document per liver resection plan (surgeon-to-
 // surgeon plan sharing per ADR-0014 §5).  Current writer
-// ``schemaVersion`` is ``2`` — bump in lock-step with any documented
+// ``schemaVersion`` is ``3`` — bump in lock-step with any documented
 // extension; the reader accepts ``MinReadableSchemaVersion``
-// (currently ``1``) through ``SchemaVersion`` (currently ``2``).
+// (currently ``1``) through ``SchemaVersion`` (currently ``3``).
+//
+// v3 adds the ``surfaceType`` top-level discriminator and the
+// NURBS-specific fields (``degreeU``, ``degreeV``, ``knotsU``,
+// ``knotsV``, ``weights``).  Bezier files keep the v2 shape; the
+// NURBS path is additive.
 //
 //   {
-//     "schemaVersion": 2,
+//     "schemaVersion": 3,
+//     "surfaceType": "Bezier" | "NURBS",  // v3 only; absent → Bezier
 //     "state": "Init" | "Planning" | "Confirmed",
 //     "initMode": "SlicingPlane" | "DistanceSpheroid",
-//     "rows": int,             // v2 only — see migration below
-//     "cols": int,             // v2 only — see migration below
+//     "rows": int,
+//     "cols": int,
 //     "controlGrid": [3 * rows * cols doubles in row-major (i,j,k) order],
+//     // ---- NURBS-only block (only when surfaceType == "NURBS") ----
+//     "degreeU": int,                       // 2..3 per ADR-0022
+//     "degreeV": int,                       // 2..3 per ADR-0022
+//     "knotsU": [rows + degreeU + 1 doubles, non-decreasing, clamped],
+//     "knotsV": [cols + degreeV + 1 doubles, non-decreasing, clamped],
+//     "weights": [rows * cols doubles, all strictly positive],
+//     // ---- Bezier-only init-mode block (Bezier surfaces only) ----
 //     "slicingPlane": {
 //       "origin": [3 doubles, RAS],
 //       "normal": [3 doubles, RAS],
@@ -68,16 +81,29 @@
 //     "metadata": {}
 //   }
 //
-// v1 → v2 migration:
-//   - v1 files have no ``rows`` / ``cols`` and a 48-double
-//     ``controlGrid``.  The reader infers ``rows = cols = 4`` and
-//     validates the array length.
-//   - v2 files carry explicit ``rows`` and ``cols``.  The reader
-//     enforces ``(rows, cols) ∈ {(3, 3), (4, 4)}`` per ADR-0018 §1
-//     and validates the ``controlGrid`` length is
-//     ``3 * rows * cols``.
-//   - The writer always emits v2.  A v1 file round-tripped through
-//     load + save becomes v2 on disk.
+// v1 → v2 → v3 reader-compat matrix (ADR-0022 §"Reader compat
+// matrix"):
+//   - v1 (no ``rows``/``cols``/``surfaceType``) → implicit 4×4 Bezier.
+//   - v2 (``rows``+``cols``, no ``surfaceType``) → explicit Bezier
+//     with declared shape.
+//   - v3 + ``surfaceType == "Bezier"`` → Bezier path with the
+//     discriminator made explicit.
+//   - v3 + ``surfaceType == "NURBS"`` → full NURBS path; degrees +
+//     knots + weights consumed and validated.
+//
+// Validation per surface type (ADR-0022 §"Validation rules per
+// surface type"):
+//   - Bezier: ``(rows, cols) ∈ {(3, 3), (4, 4)}`` per ADR-0018 §1;
+//     ``len(controlGrid) == 3 * rows * cols``.
+//   - NURBS: ``2 ≤ degreeU, degreeV ≤ 3``; ``rows ≥ degreeU + 1``,
+//     ``cols ≥ degreeV + 1``; ``len(knotsU) == rows + degreeU + 1``,
+//     ``len(knotsV) == cols + degreeV + 1``; ``len(weights) ==
+//     rows * cols``, every weight > 0; ``len(controlGrid) == 3 *
+//     rows * cols``.
+//
+// The writer always emits v3 + the most-specific ``surfaceType`` +
+// the minimum redundant fields.  A v1 or v2 file round-tripped
+// through load + save becomes v3 on disk.
 //
 // The ``initPointsFlat`` fields use a flat layout because the
 // in-tree ``vtkMRMLJsonWriter`` lacks a key-less nested-array entry
@@ -156,6 +182,7 @@
 // This module MRML includes
 #include "vtkMRMLBezierSurfaceStorageNode.h"
 #include "vtkMRMLBezierSurfaceNode.h"
+#include "vtkMRMLNurbsSurfaceNode.h"
 
 // MRML includes
 #include <vtkMRMLJsonElement.h>
@@ -200,13 +227,16 @@ void vtkMRMLBezierSurfaceStorageNode::PrintSelf(ostream& os, vtkIndent indent)
 //------------------------------------------------------------------------------
 bool vtkMRMLBezierSurfaceStorageNode::CanReadInReferenceNode(vtkMRMLNode* refNode)
 {
-  return refNode != nullptr && refNode->IsA("vtkMRMLBezierSurfaceNode");
+  // Per ADR-0022 §"Decision 2 — Schema v3" the storage node serves
+  // both Bezier and NURBS data nodes — the on-disk ``surfaceType``
+  // discriminator picks the read path inside ``ReadDataInternal``.
+  return refNode != nullptr && (refNode->IsA("vtkMRMLBezierSurfaceNode") || refNode->IsA("vtkMRMLNurbsSurfaceNode"));
 }
 
 //------------------------------------------------------------------------------
 bool vtkMRMLBezierSurfaceStorageNode::CanWriteFromReferenceNode(vtkMRMLNode* refNode)
 {
-  return refNode != nullptr && refNode->IsA("vtkMRMLBezierSurfaceNode");
+  return refNode != nullptr && (refNode->IsA("vtkMRMLBezierSurfaceNode") || refNode->IsA("vtkMRMLNurbsSurfaceNode"));
 }
 
 //------------------------------------------------------------------------------
@@ -263,10 +293,11 @@ int vtkMRMLBezierSurfaceStorageNode::ReadDataInternal(vtkMRMLNode* refNode)
     vtkErrorMacro("ReadDataInternal: null reference node");
     return 0;
   }
-  auto* surfaceNode = vtkMRMLBezierSurfaceNode::SafeDownCast(refNode);
-  if (surfaceNode == nullptr)
+  auto* bezierNode = vtkMRMLBezierSurfaceNode::SafeDownCast(refNode);
+  auto* nurbsNode = vtkMRMLNurbsSurfaceNode::SafeDownCast(refNode);
+  if (bezierNode == nullptr && nurbsNode == nullptr)
   {
-    vtkErrorMacro("ReadDataInternal: reference node is not a vtkMRMLBezierSurfaceNode (got '" << refNode->GetClassName() << "')");
+    vtkErrorMacro("ReadDataInternal: reference node is neither vtkMRMLBezierSurfaceNode nor vtkMRMLNurbsSurfaceNode (got '" << refNode->GetClassName() << "')");
     return 0;
   }
 
@@ -279,16 +310,25 @@ int vtkMRMLBezierSurfaceStorageNode::ReadDataInternal(vtkMRMLNode* refNode)
 
   // Dispatch on the file extension.  Both ``.lrp.json`` and
   // ``.lrp.fcsv`` are accepted on read (legacy load-only migration
-  // per ADR-0014 §5).  ``.json`` alone is *not* accepted — the
-  // ``.lrp`` prefix discriminates Liver resection plans from any
-  // other JSON file someone might point the storage node at.
+  // per ADR-0014 §5).  Legacy ``.lrp.fcsv`` carries Bezier control
+  // points only; it predates the NURBS sibling so a NURBS reference
+  // node + ``.lrp.fcsv`` is a configuration error.
   if (endsWithLower(fullName, ".lrp.json"))
   {
-    return this->ReadJson(fullName, surfaceNode);
+    if (nurbsNode != nullptr)
+    {
+      return this->ReadJsonNurbs(fullName, nurbsNode);
+    }
+    return this->ReadJsonBezier(fullName, bezierNode);
   }
   if (endsWithLower(fullName, ".lrp.fcsv"))
   {
-    return this->ReadLegacyFcsv(fullName, surfaceNode);
+    if (nurbsNode != nullptr)
+    {
+      vtkErrorMacro("ReadDataInternal: legacy .lrp.fcsv is Bezier-only; cannot load into a vtkMRMLNurbsSurfaceNode ('" << fullName << "')");
+      return 0;
+    }
+    return this->ReadLegacyFcsv(fullName, bezierNode);
   }
   vtkErrorMacro("ReadDataInternal: unsupported file extension for '" << fullName << "' (expected .lrp.json or .lrp.fcsv)");
   return 0;
@@ -302,10 +342,11 @@ int vtkMRMLBezierSurfaceStorageNode::WriteDataInternal(vtkMRMLNode* refNode)
     vtkErrorMacro("WriteDataInternal: null reference node");
     return 0;
   }
-  auto* surfaceNode = vtkMRMLBezierSurfaceNode::SafeDownCast(refNode);
-  if (surfaceNode == nullptr)
+  auto* bezierNode = vtkMRMLBezierSurfaceNode::SafeDownCast(refNode);
+  auto* nurbsNode = vtkMRMLNurbsSurfaceNode::SafeDownCast(refNode);
+  if (bezierNode == nullptr && nurbsNode == nullptr)
   {
-    vtkErrorMacro("WriteDataInternal: reference node is not a vtkMRMLBezierSurfaceNode (got '" << refNode->GetClassName() << "')");
+    vtkErrorMacro("WriteDataInternal: reference node is neither vtkMRMLBezierSurfaceNode nor vtkMRMLNurbsSurfaceNode (got '" << refNode->GetClassName() << "')");
     return 0;
   }
 
@@ -336,11 +377,15 @@ int vtkMRMLBezierSurfaceStorageNode::WriteDataInternal(vtkMRMLNode* refNode)
     vtkErrorMacro("WriteDataInternal: unsupported file extension for '" << fullName << "' (expected .lrp.json)");
     return 0;
   }
-  return this->WriteJson(fullName, surfaceNode);
+  if (nurbsNode != nullptr)
+  {
+    return this->WriteJsonNurbs(fullName, nurbsNode);
+  }
+  return this->WriteJsonBezier(fullName, bezierNode);
 }
 
 //------------------------------------------------------------------------------
-int vtkMRMLBezierSurfaceStorageNode::WriteJson(const std::string& filePath, vtkMRMLBezierSurfaceNode* surfaceNode)
+int vtkMRMLBezierSurfaceStorageNode::WriteJsonBezier(const std::string& filePath, vtkMRMLBezierSurfaceNode* surfaceNode)
 {
   vtkNew<vtkMRMLJsonWriter> writer;
   // ``WriteToFileBegin`` writes the opening ``{`` and an optional
@@ -351,17 +396,21 @@ int vtkMRMLBezierSurfaceStorageNode::WriteJson(const std::string& filePath, vtkM
   // file and is governed by the ``SchemaVersion`` integer).
   if (!writer->WriteToFileBegin(filePath.c_str(), nullptr))
   {
-    vtkErrorMacro("WriteJson: failed to open '" << filePath << "' for writing");
+    vtkErrorMacro("WriteJsonBezier: failed to open '" << filePath << "' for writing");
     return 0;
   }
 
   writer->WriteIntProperty("schemaVersion", SchemaVersion);
+  // schemaVersion 3 adds an explicit ``surfaceType`` discriminator
+  // per ADR-0022 §"Decision 2 — Schema v3".  Bezier writes never
+  // include the NURBS-only fields (``degreeU`` / ``degreeV`` /
+  // ``knotsU`` / ``knotsV`` / ``weights``) — those are meaningless
+  // for the Bernstein basis.
+  writer->WriteStringProperty("surfaceType", "Bezier");
   writer->WriteStringProperty("state", vtkMRMLBezierSurfaceNode::GetStateAsString(surfaceNode->GetState()));
   writer->WriteStringProperty("initMode", vtkMRMLBezierSurfaceNode::GetInitModeAsString(surfaceNode->GetInitMode()));
 
-  // rows + cols — schema v2 explicit shape (ADR-0018 §1).  v1
-  // implicit-4×4 files load via the migration branch in ReadJson;
-  // the writer always emits v2.
+  // rows + cols — explicit Bezier shape (ADR-0018 §1).
   writer->WriteIntProperty("rows", static_cast<int>(surfaceNode->GetRows()));
   writer->WriteIntProperty("cols", static_cast<int>(surfaceNode->GetCols()));
 
@@ -501,7 +550,7 @@ private:
 };
 } // namespace
 
-int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMRMLBezierSurfaceNode* surfaceNode)
+int vtkMRMLBezierSurfaceStorageNode::ReadJsonBezier(const std::string& filePath, vtkMRMLBezierSurfaceNode* surfaceNode)
 {
   ScopedLoadingFromXML loadingGuard(surfaceNode);
 
@@ -509,20 +558,33 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
   vtkSmartPointer<vtkMRMLJsonElement> root = vtkSmartPointer<vtkMRMLJsonElement>::Take(reader->ReadFromFile(filePath.c_str()));
   if (root == nullptr)
   {
-    vtkErrorMacro("ReadJson: failed to parse '" << filePath << "'");
+    vtkErrorMacro("ReadJsonBezier: failed to parse '" << filePath << "'");
     return 0;
   }
   if (!root->HasMember("schemaVersion"))
   {
-    vtkErrorMacro("ReadJson: missing required 'schemaVersion' field in '" << filePath << "'");
+    vtkErrorMacro("ReadJsonBezier: missing required 'schemaVersion' field in '" << filePath << "'");
     return 0;
   }
   const int schemaVersion = root->GetIntProperty("schemaVersion");
   if (schemaVersion < MinReadableSchemaVersion || schemaVersion > SchemaVersion)
   {
-    vtkErrorMacro("ReadJson: unsupported schemaVersion " << schemaVersion << " in '" << filePath << "' (this build understands schemaVersion " << MinReadableSchemaVersion
-                                                         << " through " << SchemaVersion << ")");
+    vtkErrorMacro("ReadJsonBezier: unsupported schemaVersion " << schemaVersion << " in '" << filePath << "' (this build understands schemaVersion " << MinReadableSchemaVersion
+                                                               << " through " << SchemaVersion << ")");
     return 0;
+  }
+  // v3 carries an explicit ``surfaceType`` discriminator.  If the
+  // file declares NURBS but the reference node is a Bezier node, the
+  // caller pointed the wrong storage path at the file — error out
+  // rather than silently misinterpreting the data.
+  if (schemaVersion >= 3 && root->HasMember("surfaceType"))
+  {
+    const std::string declared = root->GetStringProperty("surfaceType");
+    if (declared != "Bezier")
+    {
+      vtkErrorMacro("ReadJsonBezier: file declares surfaceType='" << declared << "' but reference node is a vtkMRMLBezierSurfaceNode in '" << filePath << "'");
+      return 0;
+    }
   }
 
   // Control-polygon shape (ADR-0018 §1).  v2 files carry explicit
@@ -535,7 +597,7 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
   {
     if (!root->HasMember("rows") || !root->HasMember("cols"))
     {
-      vtkErrorMacro("ReadJson: schemaVersion " << schemaVersion << " requires 'rows' and 'cols' fields in '" << filePath << "'");
+      vtkErrorMacro("ReadJsonBezier: schemaVersion " << schemaVersion << " requires 'rows' and 'cols' fields in '" << filePath << "'");
       return 0;
     }
     rows = static_cast<unsigned int>(root->GetIntProperty("rows"));
@@ -543,7 +605,7 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
   }
   if (rows != cols || static_cast<int>(rows) < vtkMRMLBezierSurfaceNode::MinGridSize || static_cast<int>(rows) > vtkMRMLBezierSurfaceNode::MaxGridSize)
   {
-    vtkErrorMacro("ReadJson: invalid (rows=" << rows << ", cols=" << cols << ") in '" << filePath << "' — ADR-0018 §1 admits {(3, 3), (4, 4)} only");
+    vtkErrorMacro("ReadJsonBezier: invalid (rows=" << rows << ", cols=" << cols << ") in '" << filePath << "' — ADR-0018 §1 admits {(3, 3), (4, 4)} only");
     return 0;
   }
   // SetSize zero-fills the control buffer to match the new shape;
@@ -573,9 +635,9 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
       // a build that pre-dates this PR would have read as unknown;
       // adding the fallback here means the same loader behaviour ages
       // gracefully into the next schema bump.
-      vtkWarningMacro("ReadJson: unknown state name '" << s << "' in '" << filePath
-                                                       << "' — falling back to Planning"
-                                                          " (ADR-0019 forward-compatible default)");
+      vtkWarningMacro("ReadJsonBezier: unknown state name '" << s << "' in '" << filePath
+                                                             << "' — falling back to Planning"
+                                                                " (ADR-0019 forward-compatible default)");
       code = vtkMRMLBezierSurfaceNode::Planning;
     }
     pendingState = code;
@@ -586,7 +648,7 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
     const int code = vtkMRMLBezierSurfaceNode::GetInitModeFromString(s.c_str());
     if (code < 0)
     {
-      vtkErrorMacro("ReadJson: unknown initMode name '" << s << "' in '" << filePath << "'");
+      vtkErrorMacro("ReadJsonBezier: unknown initMode name '" << s << "' in '" << filePath << "'");
       return 0;
     }
     surfaceNode->SetInitMode(code);
@@ -601,7 +663,7 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
     double grid[vtkMRMLBezierSurfaceNode::MaxControlGridSize];
     if (!root->GetVectorProperty("controlGrid", grid, static_cast<int>(expected)))
     {
-      vtkErrorMacro("ReadJson: 'controlGrid' must be an array of " << expected << " doubles (3 * rows * cols) in '" << filePath << "'");
+      vtkErrorMacro("ReadJsonBezier: 'controlGrid' must be an array of " << expected << " doubles (3 * rows * cols) in '" << filePath << "'");
       return 0;
     }
     surfaceNode->SetControlGrid(grid);
@@ -684,6 +746,320 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
   if (pendingState >= 0)
   {
     surfaceNode->SetState(pendingState);
+  }
+  return 1;
+}
+
+//------------------------------------------------------------------------------
+// NURBS read / write paths (ADR-0022 §"Decision 2 — Schema v3").
+//
+// The implementation deliberately mirrors the Bezier paths above
+// rather than factoring into a templatized helper.  The two surface
+// types share the schema-version + state + initMode + shape blocks
+// but diverge on (a) the validation rules (degree range, knot
+// lengths, weights positivity for NURBS; ``{(3,3), (4,4)}`` for
+// Bezier) and (b) the per-surface-type field roster (no init-mode
+// audit data on NURBS in v2.1 per ADR-0022; the slicingPlane /
+// distanceSpheroid sub-objects belong to the Bezier path).  A future
+// refactor — paired with the ``vtkMRMLParametricSurfaceNode``
+// abstract base flagged in ADR-0022 §"Sharing with the Bezier node
+// — deliberate non-sharing" — can collapse the common prefix.
+//------------------------------------------------------------------------------
+
+namespace
+{
+/// RAII guard mirroring the Bezier ``ScopedLoadingFromXML`` above but
+/// for ``vtkMRMLNurbsSurfaceNode``.  Flips ``LoadingFromXML`` on for
+/// the duration of a JSON read so the ADR-0019 transition-matrix
+/// guard does not reject a Confirmed-state file loaded into a fresh
+/// (Init) sink.
+class ScopedNurbsLoadingFromXML
+{
+public:
+  explicit ScopedNurbsLoadingFromXML(vtkMRMLNurbsSurfaceNode* node)
+    : Node(node)
+    , Prev(node != nullptr ? node->GetLoadingFromXML() : false)
+  {
+    if (this->Node != nullptr)
+    {
+      this->Node->SetLoadingFromXML(true);
+    }
+  }
+  ~ScopedNurbsLoadingFromXML()
+  {
+    if (this->Node != nullptr)
+    {
+      this->Node->SetLoadingFromXML(this->Prev);
+    }
+  }
+  ScopedNurbsLoadingFromXML(const ScopedNurbsLoadingFromXML&) = delete;
+  ScopedNurbsLoadingFromXML& operator=(const ScopedNurbsLoadingFromXML&) = delete;
+
+private:
+  vtkMRMLNurbsSurfaceNode* Node;
+  bool Prev;
+};
+} // namespace
+
+int vtkMRMLBezierSurfaceStorageNode::WriteJsonNurbs(const std::string& filePath, vtkMRMLNurbsSurfaceNode* surfaceNode)
+{
+  vtkNew<vtkMRMLJsonWriter> writer;
+  if (!writer->WriteToFileBegin(filePath.c_str(), nullptr))
+  {
+    vtkErrorMacro("WriteJsonNurbs: failed to open '" << filePath << "' for writing");
+    return 0;
+  }
+
+  writer->WriteIntProperty("schemaVersion", SchemaVersion);
+  writer->WriteStringProperty("surfaceType", "NURBS");
+  writer->WriteStringProperty("state", vtkMRMLNurbsSurfaceNode::GetStateAsString(surfaceNode->GetState()));
+  writer->WriteStringProperty("initMode", vtkMRMLNurbsSurfaceNode::GetInitModeAsString(surfaceNode->GetInitMode()));
+
+  writer->WriteIntProperty("rows", static_cast<int>(surfaceNode->GetRows()));
+  writer->WriteIntProperty("cols", static_cast<int>(surfaceNode->GetCols()));
+  writer->WriteIntProperty("degreeU", static_cast<int>(surfaceNode->GetDegreeU()));
+  writer->WriteIntProperty("degreeV", static_cast<int>(surfaceNode->GetDegreeV()));
+
+  // controlGrid + NURBS-specific vector fields.  ``const_cast`` to
+  // match the writer signature (input-only; rapidjson backend does
+  // not mutate the buffer).
+  writer->WriteVectorProperty("controlGrid", const_cast<double*>(surfaceNode->GetControlGrid()), static_cast<int>(surfaceNode->GetControlGridLength()));
+  writer->WriteVectorProperty("knotsU", const_cast<double*>(surfaceNode->GetKnotsU()), static_cast<int>(surfaceNode->GetKnotsULength()));
+  writer->WriteVectorProperty("knotsV", const_cast<double*>(surfaceNode->GetKnotsV()), static_cast<int>(surfaceNode->GetKnotsVLength()));
+  writer->WriteVectorProperty("weights", const_cast<double*>(surfaceNode->GetWeights()), static_cast<int>(surfaceNode->GetWeightsLength()));
+
+  // metadata — reserved per ADR-0014 §5; emit empty for shape parity
+  // with the Bezier path so JSON-Schema validators see the same set
+  // of top-level keys across surface types.
+  writer->WriteObjectPropertyStart("metadata");
+  writer->WriteObjectPropertyEnd();
+
+  if (!writer->WriteToFileEnd())
+  {
+    vtkErrorMacro("WriteJsonNurbs: failed to close '" << filePath << "' after write");
+    return 0;
+  }
+  return 1;
+}
+
+//------------------------------------------------------------------------------
+int vtkMRMLBezierSurfaceStorageNode::ReadJsonNurbs(const std::string& filePath, vtkMRMLNurbsSurfaceNode* surfaceNode)
+{
+  ScopedNurbsLoadingFromXML loadingGuard(surfaceNode);
+
+  vtkNew<vtkMRMLJsonReader> reader;
+  vtkSmartPointer<vtkMRMLJsonElement> root = vtkSmartPointer<vtkMRMLJsonElement>::Take(reader->ReadFromFile(filePath.c_str()));
+  if (root == nullptr)
+  {
+    vtkErrorMacro("ReadJsonNurbs: failed to parse '" << filePath << "'");
+    return 0;
+  }
+  if (!root->HasMember("schemaVersion"))
+  {
+    vtkErrorMacro("ReadJsonNurbs: missing required 'schemaVersion' field in '" << filePath << "'");
+    return 0;
+  }
+  const int schemaVersion = root->GetIntProperty("schemaVersion");
+  // NURBS files require schemaVersion >= 3 — the ``surfaceType``
+  // discriminator only exists in v3.  v1 / v2 files are implicit
+  // Bezier; routing them through this path is a configuration
+  // error.
+  if (schemaVersion < 3 || schemaVersion > SchemaVersion)
+  {
+    vtkErrorMacro("ReadJsonNurbs: schemaVersion " << schemaVersion << " is not a NURBS-capable schema (need 3..<=" << SchemaVersion << ") in '" << filePath << "'");
+    return 0;
+  }
+  if (!root->HasMember("surfaceType"))
+  {
+    vtkErrorMacro("ReadJsonNurbs: v3 file missing 'surfaceType' discriminator in '" << filePath << "'");
+    return 0;
+  }
+  const std::string declared = root->GetStringProperty("surfaceType");
+  if (declared != "NURBS")
+  {
+    vtkErrorMacro("ReadJsonNurbs: file declares surfaceType='" << declared << "' but reference node is a vtkMRMLNurbsSurfaceNode in '" << filePath << "'");
+    return 0;
+  }
+
+  // Shape + degrees — full ADR-0022 §"Validation rules per surface
+  // type — NURBS" check.
+  if (!root->HasMember("rows") || !root->HasMember("cols") || !root->HasMember("degreeU") || !root->HasMember("degreeV"))
+  {
+    vtkErrorMacro("ReadJsonNurbs: missing one of {rows, cols, degreeU, degreeV} in '" << filePath << "'");
+    return 0;
+  }
+  const int rowsI = root->GetIntProperty("rows");
+  const int colsI = root->GetIntProperty("cols");
+  const int degreeUI = root->GetIntProperty("degreeU");
+  const int degreeVI = root->GetIntProperty("degreeV");
+  if (degreeUI < vtkMRMLNurbsSurfaceNode::MinDegree || degreeUI > vtkMRMLNurbsSurfaceNode::MaxDegree     //
+      || degreeVI < vtkMRMLNurbsSurfaceNode::MinDegree || degreeVI > vtkMRMLNurbsSurfaceNode::MaxDegree) //
+  {
+    vtkErrorMacro("ReadJsonNurbs: invalid degrees (degreeU=" << degreeUI << ", degreeV=" << degreeVI << ") in '" << filePath << "' — ADR-0022 §IVar roster admits {2, 3} only");
+    return 0;
+  }
+  if (rowsI < degreeUI + 1 || colsI < degreeVI + 1)
+  {
+    vtkErrorMacro("ReadJsonNurbs: invalid (rows=" << rowsI << ", cols=" << colsI << ") for degrees (" << degreeUI << ", " << degreeVI << ") in '" << filePath
+                                                  << "' — ADR-0022 §IVar roster requires rows >= degreeU + 1 and cols >= degreeV + 1");
+    return 0;
+  }
+  const unsigned int rows = static_cast<unsigned int>(rowsI);
+  const unsigned int cols = static_cast<unsigned int>(colsI);
+  const unsigned int degreeU = static_cast<unsigned int>(degreeUI);
+  const unsigned int degreeV = static_cast<unsigned int>(degreeVI);
+
+  // Required NURBS-specific arrays.
+  if (!root->HasMember("knotsU") || !root->HasMember("knotsV") || !root->HasMember("weights") || !root->HasMember("controlGrid"))
+  {
+    vtkErrorMacro("ReadJsonNurbs: missing one of {knotsU, knotsV, weights, controlGrid} in '" << filePath << "'");
+    return 0;
+  }
+
+  const unsigned int expectedKnotsU = rows + degreeU + 1u;
+  const unsigned int expectedKnotsV = cols + degreeV + 1u;
+  const unsigned int expectedWeights = rows * cols;
+  const unsigned int expectedControlGrid = 3u * rows * cols;
+
+  std::vector<double> knotsU(expectedKnotsU, 0.0);
+  std::vector<double> knotsV(expectedKnotsV, 0.0);
+  std::vector<double> weights(expectedWeights, 0.0);
+  std::vector<double> controlGrid(expectedControlGrid, 0.0);
+
+  if (!root->GetVectorProperty("knotsU", knotsU.data(), static_cast<int>(expectedKnotsU)))
+  {
+    vtkErrorMacro("ReadJsonNurbs: 'knotsU' must be an array of " << expectedKnotsU << " doubles (rows + degreeU + 1) in '" << filePath << "'");
+    return 0;
+  }
+  if (!root->GetVectorProperty("knotsV", knotsV.data(), static_cast<int>(expectedKnotsV)))
+  {
+    vtkErrorMacro("ReadJsonNurbs: 'knotsV' must be an array of " << expectedKnotsV << " doubles (cols + degreeV + 1) in '" << filePath << "'");
+    return 0;
+  }
+  if (!root->GetVectorProperty("weights", weights.data(), static_cast<int>(expectedWeights)))
+  {
+    vtkErrorMacro("ReadJsonNurbs: 'weights' must be an array of " << expectedWeights << " doubles (rows * cols) in '" << filePath << "'");
+    return 0;
+  }
+  if (!root->GetVectorProperty("controlGrid", controlGrid.data(), static_cast<int>(expectedControlGrid)))
+  {
+    vtkErrorMacro("ReadJsonNurbs: 'controlGrid' must be an array of " << expectedControlGrid << " doubles (3 * rows * cols) in '" << filePath << "'");
+    return 0;
+  }
+  // Weights must be strictly positive (ADR-0022 §"Validation rules
+  // per surface type").  Non-positive weights produce singular
+  // rational denominators; reject loudly.
+  for (std::size_t i = 0; i < weights.size(); ++i)
+  {
+    if (!(weights[i] > 0.0))
+    {
+      vtkErrorMacro("ReadJsonNurbs: weight[" << i << "]=" << weights[i] << " is not strictly positive in '" << filePath << "'");
+      return 0;
+    }
+  }
+
+  // All payloads validated — apply.  Drive the data node through
+  // its public setters where possible so any field-level invariant
+  // change does not need to be re-implemented here.  The
+  // ``SetDegree`` / ``SetSize`` setters regenerate dependent buffers
+  // to defaults, so the order matters: shape + degree first, then
+  // overwrite knots / weights / controlGrid from the file.
+  //
+  // To avoid the cross-IVar-invariant rejections in the public
+  // setters during the intermediate state (e.g. setting Rows before
+  // Cols when both differ), we set the IVars directly on the data
+  // node via its file-load-aware code path.  The data node's
+  // ``LoadingFromXML`` is already true via ``ScopedNurbsLoadingFrom-
+  // XML``; we route the shape change through ``SetSize`` for the
+  // square case + manual fall-through for the rectangular case.
+  //
+  // Simpler implementation: zero the IVars to a sentinel default
+  // first (4,4,3,3 — guaranteed valid), then individually grow the
+  // axes that need growing.  This avoids the cross-IVar invariant
+  // tripping at any intermediate.
+  surfaceNode->SetSize(vtkMRMLNurbsSurfaceNode::DefaultGridSize);
+  surfaceNode->SetDegree(vtkMRMLNurbsSurfaceNode::DefaultDegree);
+  // Grow Rows / Cols / degrees in an order that always keeps the
+  // cross-IVar invariant satisfied:
+  //   - Drop degrees first (DegreeU + 1 <= current Rows always
+  //     holds at default 4 + degree 2 or 3).
+  //   - Set Rows + Cols to target.
+  //   - Then raise degrees to target if needed.
+  if (degreeU < surfaceNode->GetDegreeU())
+  {
+    surfaceNode->SetDegreeU(degreeU);
+  }
+  if (degreeV < surfaceNode->GetDegreeV())
+  {
+    surfaceNode->SetDegreeV(degreeV);
+  }
+  if (rows != surfaceNode->GetRows())
+  {
+    surfaceNode->SetRows(rows);
+  }
+  if (cols != surfaceNode->GetCols())
+  {
+    surfaceNode->SetCols(cols);
+  }
+  if (degreeU > surfaceNode->GetDegreeU())
+  {
+    surfaceNode->SetDegreeU(degreeU);
+  }
+  if (degreeV > surfaceNode->GetDegreeV())
+  {
+    surfaceNode->SetDegreeV(degreeV);
+  }
+
+  // Overwrite the (now resized) IVars with the file payload.  The
+  // public setters re-validate lengths + positivity; redundant with
+  // the explicit checks above but defensive against future drift.
+  if (!surfaceNode->SetKnotsU(knotsU.data(), knotsU.size()))
+  {
+    vtkErrorMacro("ReadJsonNurbs: rejected knotsU payload (post-validation drift?) in '" << filePath << "'");
+    return 0;
+  }
+  if (!surfaceNode->SetKnotsV(knotsV.data(), knotsV.size()))
+  {
+    vtkErrorMacro("ReadJsonNurbs: rejected knotsV payload (post-validation drift?) in '" << filePath << "'");
+    return 0;
+  }
+  if (!surfaceNode->SetWeights(weights.data(), weights.size()))
+  {
+    vtkErrorMacro("ReadJsonNurbs: rejected weights payload (post-validation drift?) in '" << filePath << "'");
+    return 0;
+  }
+  if (!surfaceNode->SetControlGrid(controlGrid.data()))
+  {
+    vtkErrorMacro("ReadJsonNurbs: rejected controlGrid payload in '" << filePath << "'");
+    return 0;
+  }
+
+  // State + InitMode last — same Init-then-Planning-then-Confirmed
+  // load order as the Bezier path.
+  if (root->HasMember("state"))
+  {
+    const std::string s = root->GetStringProperty("state");
+    int code = vtkMRMLNurbsSurfaceNode::GetStateFromString(s.c_str());
+    if (code < 0)
+    {
+      // Same forward-compatible fallback as the Bezier path.
+      vtkWarningMacro("ReadJsonNurbs: unknown state name '" << s << "' in '" << filePath
+                                                            << "' — falling back to Planning"
+                                                               " (ADR-0019 forward-compatible default)");
+      code = vtkMRMLNurbsSurfaceNode::Planning;
+    }
+    surfaceNode->SetState(code);
+  }
+  if (root->HasMember("initMode"))
+  {
+    const std::string s = root->GetStringProperty("initMode");
+    const int code = vtkMRMLNurbsSurfaceNode::GetInitModeFromString(s.c_str());
+    if (code < 0)
+    {
+      vtkErrorMacro("ReadJsonNurbs: unknown initMode name '" << s << "' in '" << filePath << "'");
+      return 0;
+    }
+    surfaceNode->SetInitMode(code);
   }
   return 1;
 }

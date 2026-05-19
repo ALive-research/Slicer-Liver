@@ -238,6 +238,15 @@ void qSlicerLiverResectionsModule::setup()
                                                     QStringList() << "vtkMRMLBezierSurfaceNode",
                                                     /*supportUseCompression=*/true,
                                                     this));
+    // v2.1 NURBS sibling writer (ADR-0022 §"Decision 2 — Schema v3").
+    // Shares the schema-v3 ``.lrp.json`` on-disk format with the
+    // Bezier writer; the storage node dispatches on the data-node
+    // class to pick the surface-type-specific payload.
+    coreIOManager->registerIO(new qSlicerNodeWriter("NurbsSurface",
+                                                    QString("NurbsSurfaceFile"),
+                                                    QStringList() << "vtkMRMLNurbsSurfaceNode",
+                                                    /*supportUseCompression=*/true,
+                                                    this));
   }
 }
 
