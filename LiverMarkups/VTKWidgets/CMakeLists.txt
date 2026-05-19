@@ -51,8 +51,6 @@ set(${KIT}_SRCS
   vtkSlicerShaderHelper.cxx
   vtkOpenGLResection2DPolyDataMapper.cpp
   vtkOpenGLResection2DPolyDataMapper.h
-  vtkMultiTextureObjectHelper.cpp
-  vtkMultiTextureObjectHelper.h
   )
 
 set(${KIT}_TARGET_LIBRARIES
@@ -73,3 +71,10 @@ SlicerMacroBuildModuleLogic(
   SRCS ${${KIT}_SRCS}
   TARGET_LIBRARIES ${${KIT}_TARGET_LIBRARIES}
   )
+
+#-----------------------------------------------------------------------------
+# C++ low-level tests for the LiverMarkups VTKWidgets library
+# (ADR-0008 §2, ctkTest driver, no Slicer launch, no Qt).
+if(BUILD_TESTING)
+  add_subdirectory(Testing/Cxx)
+endif()

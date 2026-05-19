@@ -44,7 +44,6 @@
 
 // Markups VTKWidgets includes
 #include "vtkSlicerMarkupsWidgetRepresentation3D.h"
-#include "vtkMultiTextureObjectHelper.h"
 
 // MRML includes
 #include <vtkMRMLModelNode.h>
@@ -121,7 +120,7 @@ protected:
   vtkSmartPointer<vtkActor> ControlPolygonActor;
 
   // Distance mapping related elements
-  vtkSmartPointer<vtkMultiTextureObjectHelper> DistanceMapTexture;
+  vtkSmartPointer<vtkTextureObject> DistanceMapTexture;
   vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMapVolumeNode;
   vtkNew<vtkMatrix4x4> VBOShiftScale;
   vtkNew<vtkTransform> VBOInverseTransform;
@@ -129,7 +128,7 @@ protected:
   vtkSmartPointer<vtkRenderer> CoRenderer2D;
 
   // Vascular Segments related elements
-  vtkSmartPointer<vtkMultiTextureObjectHelper> VascularSegmentsTexture;
+  vtkSmartPointer<vtkTextureObject> VascularSegmentsTexture;
   vtkWeakPointer<vtkMRMLScalarVolumeNode> VascularSegmentsVolumeNode;
 
 
