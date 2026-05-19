@@ -150,6 +150,17 @@ EOF
   exit 1
 fi
 
+# DRY_RUN=1 short-circuits the destructive operations (hashing, stub
+# writes, INCOMING copies) AFTER the pre-flight passes.  Used by the
+# harness self-tests under
+# ``LiverResections/Testing/Python/test_harness/`` to characterise
+# the bundle-completeness gate without polluting the repo's
+# ``Data/Baseline/`` directory or the maintainer's INCOMING/.
+if [ "${DRY_RUN:-0}" = "1" ]; then
+  echo "dry-run: bundle complete for ${TEST_NAME}; would stage to ${ALIVE_TESTING_DATA_INCOMING}/"
+  exit 0
+fi
+
 mkdir -p "${STUB_DIR}"
 
 # --------------------------------------------------------------------------- #

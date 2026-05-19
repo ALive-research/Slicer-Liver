@@ -32,6 +32,59 @@ if(NOT BUILD_TESTING)
 endif()
 
 # ---------------------------------------------------------------------------
+# Harness self-tests (always-on)
+# ---------------------------------------------------------------------------
+#
+# Pure-Python pytest covering the visual-regression harness's own
+# helpers (``_has_baseline``, ``_resolve_baseline_png``,
+# ``_save_bundle``) and the ``upload_baseline.sh`` bundle-completeness
+# pre-flight.  Tracked separately from the visual-regression CTest
+# entries below because these tests do not need:
+#
+#   * the Slicer launcher (they stub ``slicer`` / ``qt`` / ``vtk``
+#     into ``sys.modules`` before importing ``capture_baseline``);
+#   * captured baselines on the ALiveResearchTestingData release
+#     (each test materialises its own fixture under
+#     pytest's ``tmp_path``);
+#   * the ``SlicerLiver_ENABLE_VISUAL_TESTS`` opt-in gate (which
+#     defers the full visual-regression CTest entries until
+#     baselines + launcher-exit have been confirmed on CI).
+#
+# Skipped gracefully when ``pytest`` is not importable from the
+# configured Python — same pattern as the cross-module
+# ``pytest_scaffold`` entry under ``Testing/Python/CMakeLists.txt``.
+# See ADR-0008 §"observability" + issue #387.
+
+if(DEFINED Python3_EXECUTABLE)
+  execute_process(
+    COMMAND "${Python3_EXECUTABLE}" -c "import pytest"
+    RESULT_VARIABLE _liver_resections_pytest_probe_rc
+    OUTPUT_QUIET
+    ERROR_QUIET
+  )
+  if(_liver_resections_pytest_probe_rc EQUAL 0)
+    add_test(
+      NAME LiverResections_harness_self_tests
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_harness"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_harness_self_tests PROPERTIES
+      LABELS "pytest;harness-self-tests;LiverResections"
+    )
+  else()
+    message(STATUS
+      "Slicer-Liver: pytest not importable from ${Python3_EXECUTABLE}; "
+      "skipping LiverResections harness self-tests registration.")
+  endif()
+else()
+  message(STATUS
+    "Slicer-Liver: Python3_EXECUTABLE not set; "
+    "skipping LiverResections harness self-tests registration.")
+endif()
+
+# ---------------------------------------------------------------------------
 # Opt-in gate for the visual-regression harness.
 #
 # Default OFF until two preconditions land: (a) the
