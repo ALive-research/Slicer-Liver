@@ -34,7 +34,7 @@ classDiagram
         <<v2.1 (deferred)>>
         +RepresentationKind = NURBS
         +SurfaceMath = B-spline basis + weights
-        +DegreeU, DegreeV ∈ {2, 3}  (v2.1)
+        +DegreeU and DegreeV in 2..3 (v2.1)
         +KnotsU clamped-uniform, length = Rows+DegreeU+1
         +KnotsV clamped-uniform, length = Cols+DegreeV+1
         +Weights default 1.0; storage admits non-rational
