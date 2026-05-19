@@ -946,6 +946,24 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJsonNurbs(const std::string& filePath, 
     vtkErrorMacro("ReadJsonNurbs: 'controlGrid' must be an array of " << expectedControlGrid << " doubles (3 * rows * cols) in '" << filePath << "'");
     return 0;
   }
+  // Knot-vector invariants (ADR-0022 §"Validation rules per surface
+  // type — NURBS"): non-decreasing, clamped at both ends to
+  // ``degree + 1`` equal repeats, in ``[0, 1]``.  Reject malformed
+  // knot vectors at the read boundary so a broken file does not
+  // reach the data node.
+  {
+    std::string knotError;
+    if (!vtkMRMLNurbsSurfaceNode::ValidateKnotsClampedMonotonic(knotsU, degreeU, knotError))
+    {
+      vtkErrorMacro("ReadJsonNurbs: invalid 'knotsU' in '" << filePath << "' — " << knotError);
+      return 0;
+    }
+    if (!vtkMRMLNurbsSurfaceNode::ValidateKnotsClampedMonotonic(knotsV, degreeV, knotError))
+    {
+      vtkErrorMacro("ReadJsonNurbs: invalid 'knotsV' in '" << filePath << "' — " << knotError);
+      return 0;
+    }
+  }
   // Weights must be strictly positive (ADR-0022 §"Validation rules
   // per surface type").  Non-positive weights produce singular
   // rational denominators; reject loudly.

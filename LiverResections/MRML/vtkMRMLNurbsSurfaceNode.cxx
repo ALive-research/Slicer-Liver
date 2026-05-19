@@ -341,7 +341,14 @@ bool vtkMRMLNurbsSurfaceNode::SetKnotsU(const double* values, std::size_t length
     vtkErrorMacro("SetKnotsU: length mismatch — expected " << this->GetKnotsULength() << " doubles (Rows + DegreeU + 1) but got " << length);
     return false;
   }
-  this->KnotsU.assign(values, values + length);
+  std::vector<double> candidate(values, values + length);
+  std::string error;
+  if (!ValidateKnotsClampedMonotonic(candidate, this->DegreeU, error))
+  {
+    vtkErrorMacro("SetKnotsU: " << error);
+    return false;
+  }
+  this->KnotsU = std::move(candidate);
   this->Modified();
   return true;
 }
@@ -358,8 +365,86 @@ bool vtkMRMLNurbsSurfaceNode::SetKnotsV(const double* values, std::size_t length
     vtkErrorMacro("SetKnotsV: length mismatch — expected " << this->GetKnotsVLength() << " doubles (Cols + DegreeV + 1) but got " << length);
     return false;
   }
-  this->KnotsV.assign(values, values + length);
+  std::vector<double> candidate(values, values + length);
+  std::string error;
+  if (!ValidateKnotsClampedMonotonic(candidate, this->DegreeV, error))
+  {
+    vtkErrorMacro("SetKnotsV: " << error);
+    return false;
+  }
+  this->KnotsV = std::move(candidate);
   this->Modified();
+  return true;
+}
+
+//------------------------------------------------------------------------------
+bool vtkMRMLNurbsSurfaceNode::ValidateKnotsClampedMonotonic(const std::vector<double>& knots, unsigned int degree, std::string& error)
+{
+  // ADR-0022 §"Validation rules per surface type — NURBS" pins the
+  // on-disk knot invariant: non-decreasing, clamped at both ends
+  // (``degree + 1`` equal repeats), in ``[0, 1]``.  v2.1 admits
+  // clamped-uniform only; OPEN-UNIFORM + other parameterisations are
+  // deferred (numerical-stability + clinical-demand reasons noted in
+  // the ADR's "Default degree" §).  Length is assumed to have been
+  // size-checked by the caller — only monotonicity + clamping +
+  // range are verified here.
+  const std::size_t n = knots.size();
+  const std::size_t needed = static_cast<std::size_t>(degree) + 1u;
+  if (n < 2u * needed)
+  {
+    std::ostringstream oss;
+    oss << "knot vector of length " << n << " is too short for degree " << degree << " (need at least " << (2u * needed) << " entries for the clamping repeats)";
+    error = oss.str();
+    return false;
+  }
+  // Range — first / last entries must lie in [0, 1].  Combined with
+  // the clamping + monotonicity checks below this also pins the
+  // whole vector to [0, 1].
+  if (!(knots.front() >= 0.0) || !(knots.back() <= 1.0))
+  {
+    std::ostringstream oss;
+    oss << "knot vector out of range — front=" << knots.front() << ", back=" << knots.back() << " (expected within [0, 1] per ADR-0022 §IVar roster)";
+    error = oss.str();
+    return false;
+  }
+  // Clamping — the first (degree + 1) entries must all equal
+  // knots.front(); the last (degree + 1) entries must all equal
+  // knots.back().
+  const double startValue = knots.front();
+  for (std::size_t i = 0; i < needed; ++i)
+  {
+    if (knots[i] != startValue)
+    {
+      std::ostringstream oss;
+      oss << "knot vector is not clamped at the start — knots[" << i << "]=" << knots[i] << " differs from knots[0]=" << startValue << " (need " << needed
+          << " equal repeats for degree " << degree << ")";
+      error = oss.str();
+      return false;
+    }
+  }
+  const double endValue = knots.back();
+  for (std::size_t i = n - needed; i < n; ++i)
+  {
+    if (knots[i] != endValue)
+    {
+      std::ostringstream oss;
+      oss << "knot vector is not clamped at the end — knots[" << i << "]=" << knots[i] << " differs from knots[" << (n - 1) << "]=" << endValue << " (need " << needed
+          << " equal repeats for degree " << degree << ")";
+      error = oss.str();
+      return false;
+    }
+  }
+  // Monotonicity — non-decreasing along the full sequence.
+  for (std::size_t i = 1; i < n; ++i)
+  {
+    if (knots[i] < knots[i - 1])
+    {
+      std::ostringstream oss;
+      oss << "knot vector is not non-decreasing — knots[" << i << "]=" << knots[i] << " < knots[" << (i - 1) << "]=" << knots[i - 1];
+      error = oss.str();
+      return false;
+    }
+  }
   return true;
 }
 

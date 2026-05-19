@@ -293,10 +293,13 @@ public:
   /// Set ``KnotsU`` from a flat array.  ``values`` must point at at
   /// least ``length`` doubles, and ``length`` must equal
   /// ``GetKnotsULength()`` for the current shape.  Returns true on
-  /// success; false on null pointer or length mismatch.  Does NOT
-  /// validate non-decreasing / clamped-at-ends — those are storage-
-  /// layer JSON validations (per ADR-0022 §"Validation rules per
-  /// surface type") which the data-node setter does not re-litigate.
+  /// success; false on null pointer, length mismatch, or invariant
+  /// violation.  The setter validates the on-disk invariant
+  /// (non-decreasing, clamped at both ends to ``degree + 1`` equal
+  /// repeats, in ``[0, 1]``) via ``ValidateKnotsClampedMonotonic`` —
+  /// callers passing arbitrary numeric arrays get an explicit rejection
+  /// rather than a silently-accepted malformed surface (ADR-0022
+  /// §"Validation rules per surface type — NURBS").
   bool SetKnotsU(const double* values, std::size_t length);
 
   /// Read ``KnotsU`` as a flat array; length is ``GetKnotsULength()``.
@@ -319,6 +322,26 @@ public:
   /// Read ``Weights`` as a flat array; length is ``GetWeightsLength()``.
   const double* GetWeights() const { return this->Weights.data(); }
   const std::vector<double>& GetWeightsVector() const { return this->Weights; }
+
+  /// Validate that ``knots`` describes a clamped, non-decreasing
+  /// vector with values in ``[0, 1]`` — the on-disk invariant for a
+  /// clamped-uniform NURBS knot vector per ADR-0022 §"Validation
+  /// rules per surface type — NURBS".
+  ///
+  /// Length is **not** validated here — the caller is expected to
+  /// size-check (``knots.size() == axisCount + degree + 1``) before
+  /// invoking the helper.  Validation performed:
+  ///   - clamping: the first ``degree + 1`` entries are equal AND the
+  ///     last ``degree + 1`` entries are equal.
+  ///   - monotonicity: ``knots[i] <= knots[i+1]`` for every ``i``.
+  ///   - range: ``knots.front() >= 0.0`` AND ``knots.back() <= 1.0``.
+  ///
+  /// On rejection, ``error`` carries a diagnostic; on success it is
+  /// left untouched.  Returns ``true`` iff the vector satisfies every
+  /// invariant.  v2.1 admits only clamped-uniform parameterisation
+  /// (range pinned to ``[0, 1]``); OPEN-UNIFORM and other
+  /// parameterisations are deferred to a future ADR.
+  static bool ValidateKnotsClampedMonotonic(const std::vector<double>& knots, unsigned int degree, std::string& error);
 
   /// Regenerate ``KnotsU`` and ``KnotsV`` to clamped-uniform vectors
   /// from the current ``Rows``, ``Cols``, ``DegreeU``, ``DegreeV``.
