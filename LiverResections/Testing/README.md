@@ -166,6 +166,53 @@ git commit -m "ENH: Capture BezierSurface4x4Planning visual-regression baseline"
 The CTest entry registers automatically once the scenario is listed in
 the CMake; no per-scenario CMake boilerplate.
 
+## v2.0.0 target baseline matrix
+
+The visual-regression harness scaffold landed with two scenarios
+(`BezierSurface4x4Planning`, `BezierSurface4x4Confirmed`).  The
+v2.0.0 release target is to grow this matrix to cover the
+behaviour-relevant variants surfaced by [ADR-0019](../../Docs/adr/0019-resection-state-machine.md)
+(state machine) and [ADR-0020](../../Docs/adr/0020-gpu-tessellation.md)
+(GPU tessellation rewrite gate).  Each scenario
+is a separate `Python/scenarios/<Name>.py` module plus a captured
+`.sha512` stub bundle — the harness scales by adding entries, not by
+restructuring the test driver.
+
+| Scenario                                          | Design driver                            | Status                                       |
+|---------------------------------------------------|------------------------------------------|----------------------------------------------|
+| `BezierSurface4x4Planning`                        | scaffold (this README §"Initial scope")  | scaffolded; awaiting first capture           |
+| `BezierSurface4x4Confirmed`                       | state machine per ADR-0019               | scaffolded; awaiting first capture           |
+| `BezierSurface3x3Planning`                        | variable-size enabler (ADR-0019 §"Open") | pending capture                              |
+| `BezierSurface3x3Confirmed`                       | variable-size enabler (ADR-0019 §"Open") | pending capture                              |
+| `BezierSurface4x4Planning_GridDivisions_10`       | ADR-0020 §"Rollout plan"                 | grid-divisions shader variant; pending       |
+| `BezierSurface4x4Planning_GridDivisions_40`       | ADR-0020 §"Rollout plan"                 | grid-divisions shader variant; pending       |
+| `BezierSurface4x4Planning_NarrowMargins`          | ADR-0020 §"Rollout plan"                 | margin variant; pending                      |
+| `BezierSurface4x4Planning_WideMargins`            | ADR-0020 §"Rollout plan"                 | margin variant; pending                      |
+| `BezierSurface4x4Planning_InterpolatedMargins`    | ADR-0020 §"Rollout plan"                 | interpolated-margins shader path; pending    |
+
+v2.1 scenarios (NURBS variants) are gated on the upcoming NURBS
+surface ADR (in draft, see [ADR-0018](../../Docs/adr/0018-nurbs-extension-surface.md))
+and the v2.1 mapper work per ADR-0020 §"Rollout plan"; those will
+be planned in a separate matrix section once that work begins.
+Listing them here now would imply a commitment ahead of the ADR's
+design freeze.
+
+Adding a scenario is the same 3-step recipe documented in
+§"Adding a new scenario":
+
+1. Author `LiverResections/Testing/Python/scenarios/<NewScenario>.py`
+   exposing `setup_scene`, `setup_camera`, `setup_viewport`, and
+   `describe`.  See `BezierSurface4x4Planning.py` for the canonical
+   shape.
+2. Append `<NewScenario>` to the `_visual_test_scenarios` list in
+   `Python/CMakeLists.txt`.
+3. Run the capture flow per §"Capture (developer / maintainer)";
+   commit the rotated `.sha512` stubs.
+
+The harness's CTest registration picks up new entries automatically
+once steps 1-2 are in place; step 3 populates the bundle on the
+`ALive-research/ALiveResearchTestingData` `SHA512` release.
+
 ## Bumping baselines after a Slicer/VTK/image upgrade
 
 When a Slicer / VTK / VTK-image upgrade causes legitimate visual drift
