@@ -73,3 +73,10 @@ SlicerMacroBuildModuleLogic(
   SRCS ${${KIT}_SRCS}
   TARGET_LIBRARIES ${${KIT}_TARGET_LIBRARIES}
   )
+
+#-----------------------------------------------------------------------------
+# C++ low-level tests for the widget library (ADR-0008 §2, ctkTest
+# driver, no Slicer launch, no Qt).
+if(BUILD_TESTING)
+  add_subdirectory(Testing)
+endif()

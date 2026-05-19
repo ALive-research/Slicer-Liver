@@ -2,7 +2,7 @@
 
  Distributed under the OSI-approved BSD 3-Clause License.
 
-  Copyright (c) Oslo University Hospital. All rights reserved.
+  Copyright (c) 2021-2026, Oslo University Hospital. All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -64,6 +64,7 @@
 
 // VTK includes
 #include <vtkActor.h>
+#include <vtkCellArray.h>
 #include <vtkOpenGLCamera.h>
 #include <vtkCollection.h>
 #include <vtkImageData.h>
@@ -490,27 +491,66 @@ void vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceGeometry(vtkMRML
 }
 
 //-----------------------------------------------------------------------------
+vtkSmartPointer<vtkCellArray>
+vtkSlicerBezierSurfaceRepresentation3D::BuildControlPolygonCells(unsigned int rows, unsigned int cols)
+{
+  vtkSmartPointer<vtkCellArray> planeCells = vtkSmartPointer<vtkCellArray>::New();
+
+  // ADR-0018 §1: the closed set of valid Bezier control-polygon shapes
+  // for v2.0.0 is ``{(3, 3), (4, 4)}``.  Reject everything else early
+  // — emitting a topology against an out-of-spec ``(rows, cols)``
+  // would produce a malformed control polygon at best and a heap OOB
+  // index at worst.  The legacy v1 binding path (16 control points,
+  // see ``UpdateControlPolygonGeometry`` below) only ever calls this
+  // with ``(4, 4)``; the ``(3, 3)`` branch is exercised directly by
+  // the unit test in
+  // ``LiverMarkups/VTKWidgets/Testing/Cxx/`` to pin the dimension-
+  // aware shape for the v2 binding that ADR-0018 enables.
+  const bool validShape = (rows == 3 && cols == 3) || (rows == 4 && cols == 4);
+  if (!validShape)
+    {
+    vtkGenericWarningMacro("vtkSlicerBezierSurfaceRepresentation3D::BuildControlPolygonCells:"
+                           " (rows, cols) = (" << rows << ", " << cols << ") is outside the"
+                           " ADR-0018 §1 closed set {(3, 3), (4, 4)}; returning empty cell array.");
+    return planeCells;
+    }
+
+  // Emit ``(rows - 1) * (cols - 1)`` closed quad polylines, each with
+  // five point ids (last id repeats the first to close the quad).
+  // Row-major indexing: point ``(i, j)`` has flat index ``i * cols + j``.
+  for (unsigned int i = 0; i + 1 < rows; ++i)
+    {
+    for (unsigned int j = 0; j + 1 < cols; ++j)
+      {
+      vtkSmartPointer<vtkPolyLine> polyLine = vtkSmartPointer<vtkPolyLine>::New();
+      polyLine->GetPointIds()->SetNumberOfIds(5);
+      polyLine->GetPointIds()->SetId(0, i * cols + j);
+      polyLine->GetPointIds()->SetId(1, i * cols + j + 1);
+      polyLine->GetPointIds()->SetId(2, (i + 1) * cols + j + 1);
+      polyLine->GetPointIds()->SetId(3, (i + 1) * cols + j);
+      polyLine->GetPointIds()->SetId(4, i * cols + j);
+      planeCells->InsertNextCell(polyLine);
+      }
+    }
+
+  return planeCells;
+}
+
+//-----------------------------------------------------------------------------
 void vtkSlicerBezierSurfaceRepresentation3D::UpdateControlPolygonGeometry(vtkMRMLMarkupsBezierSurfaceNode *node)
 {
+  // ``vtkMRMLMarkupsBezierSurfaceNode`` carries the legacy v1
+  // 16-point invariant (always ``(Rows, Cols) = (4, 4)`` per
+  // ADR-0018 §1 — the legacy node has no per-shape IVar).  The
+  // variable-size v2 binding lives on the sibling
+  // ``vtkLiverBezierRepresentation`` path (see
+  // ``LiverResections/VTKWidgets/``).  Keep this branch pinned to 16
+  // and defensively assert the invariant so a future drift surfaces
+  // here rather than as a malformed control polygon downstream.
   if (node->GetNumberOfControlPoints() == 16)
     {
-    //Generate topology;
     vtkSmartPointer<vtkCellArray> planeCells =
-      vtkSmartPointer<vtkCellArray>::New();
-    for(int i=0; i<3; ++i)
-      {
-      for(int j=0; j<3; ++j)
-        {
-        vtkSmartPointer<vtkPolyLine> polyLine = vtkSmartPointer<vtkPolyLine>::New();
-        polyLine->GetPointIds()->SetNumberOfIds(5);
-        polyLine->GetPointIds()->SetId(0,i*4+j);
-        polyLine->GetPointIds()->SetId(1,i*4+j+1);
-        polyLine->GetPointIds()->SetId(2,(i+1)*4+j+1);
-        polyLine->GetPointIds()->SetId(3,(i+1)*4+j);
-        polyLine->GetPointIds()->SetId(4,i*4+j);
-        planeCells->InsertNextCell(polyLine);
-        }
-      }
+      vtkSlicerBezierSurfaceRepresentation3D::BuildControlPolygonCells(4, 4);
 
     this->ControlPolygonPolyData->SetPoints(this->BezierSurfaceControlPoints);
     this->ControlPolygonPolyData->SetLines(planeCells);

@@ -2,7 +2,7 @@
 
  Distributed under the OSI-approved BSD 3-Clause License.
 
-  Copyright (c) Oslo University Hospital. All rights reserved.
+  Copyright (c) 2021-2026, Oslo University Hospital. All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -58,6 +58,7 @@
 
 //------------------------------------------------------------------------------
 class vtkBezierSurfaceSource;
+class vtkCellArray;
 class vtkOpenGLActor;
 class vtkPolyData;
 class vtkPolyDataNormals;
@@ -92,6 +93,24 @@ public:
 
   /// Return the bounds of the representation
   double *GetBounds() override;
+
+  /// Build the closed-quad ``vtkCellArray`` topology for a
+  /// ``Rows × Cols`` Bezier control polygon, indexed row-major
+  /// (``i * cols + j``).  Per ADR-0018 §1 the closed set of valid
+  /// shapes is ``{(3, 3), (4, 4)}``; any other ``(rows, cols)``
+  /// emits a ``vtkErrorMacro`` and returns an empty cell array.
+  ///
+  /// Each emitted polyline carries five point ids closing the quad
+  /// of the ``(i, j)`` lattice cell: ``[i*cols+j,
+  /// i*cols+j+1, (i+1)*cols+j+1, (i+1)*cols+j, i*cols+j]``.  The
+  /// number of cells is ``(rows - 1) * (cols - 1)`` — four for
+  /// 3×3, nine for 4×4.
+  ///
+  /// Public + static so unit tests under
+  /// ``LiverMarkups/VTKWidgets/Testing/Cxx/`` can pin the topology
+  /// without instantiating the full representation (which pulls Qt /
+  /// Slicer dependencies via the constructor).
+  static vtkSmartPointer<vtkCellArray> BuildControlPolygonCells(unsigned int rows, unsigned int cols);
 
 protected:
   /// TransferDistanceMap
