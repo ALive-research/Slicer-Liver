@@ -53,9 +53,13 @@ import sys
 import os as _os
 faulthandler.enable(file=_os.fdopen(2, "w", buffering=1, closefd=False), all_threads=True)
 
-import qt  # type: ignore[import-not-found]
-import slicer  # type: ignore[import-not-found]
-import vtk  # type: ignore[import-not-found]
+# noqa: E402 — these imports deliberately follow ``faulthandler.enable``
+# above so that any segfault thrown during Qt/Slicer/VTK module load is
+# caught by the handler and printed to stderr.  Ruff's "module imports
+# at top of file" rule does not encode this ordering requirement.
+import qt  # type: ignore[import-not-found]  # noqa: E402
+import slicer  # type: ignore[import-not-found]  # noqa: E402
+import vtk  # type: ignore[import-not-found]  # noqa: E402
 
 
 def _parse_argv() -> argparse.Namespace:
