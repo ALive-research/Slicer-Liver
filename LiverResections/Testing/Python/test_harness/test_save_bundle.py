@@ -247,10 +247,16 @@ def capture_module(monkeypatch):
 
 
 class _StubRenderer:
-    """Stub ``vtkRenderer`` — exposes the camera the test asserts against."""
+    """Stub ``vtkRenderer`` — exposes the camera and background the test
+    asserts against."""
 
     def GetActiveCamera(self):  # noqa: N802
         return _StubCamera()
+
+    def GetBackground(self):  # noqa: N802
+        # Matches the ``viewport.json`` assertion in
+        # ``test_save_bundle_viewport_json_shape``: black background.
+        return (0.0, 0.0, 0.0)
 
 
 class _StubRendererCollection:
