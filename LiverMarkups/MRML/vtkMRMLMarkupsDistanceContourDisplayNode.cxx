@@ -48,15 +48,15 @@ vtkMRMLNodeNewMacro(vtkMRMLMarkupsDistanceContourDisplayNode);
 
 //----------------------------------------------------------------------------
 vtkMRMLMarkupsDistanceContourDisplayNode::vtkMRMLMarkupsDistanceContourDisplayNode()
-  :Superclass()
+  : Superclass()
 {
 }
 
 //----------------------------------------------------------------------------
-vtkMRMLMarkupsDistanceContourDisplayNode::~vtkMRMLMarkupsDistanceContourDisplayNode()=default;
+vtkMRMLMarkupsDistanceContourDisplayNode::~vtkMRMLMarkupsDistanceContourDisplayNode() = default;
 
 //----------------------------------------------------------------------------
 void vtkMRMLMarkupsDistanceContourDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
 {
-  Superclass::PrintSelf(os,indent);
+  Superclass::PrintSelf(os, indent);
 }

@@ -44,13 +44,12 @@
 #include "vtkMRMLScalarVolumeNode.h"
 #include "vtkMRMLScene.h"
 
-
 // VTK includes
 #include <vtkNew.h>
 #include <vtkType.h>
 
 //------------------------------------------------------------------------------
-int vtkMRMLLiverResectionNodeTest1(int, char *[])
+int vtkMRMLLiverResectionNodeTest1(int, char*[])
 {
   vtkNew<vtkMRMLLiverResectionNode> node1;
   vtkNew<vtkMRMLScene> scene;
@@ -83,19 +82,19 @@ int vtkMRMLLiverResectionNodeTest1(int, char *[])
   TEST_SET_GET_VALUE(node1, InitMode, vtkMRMLLiverResectionNode::Curved);
 
   // Test value setting/getting on ClipOut
-  TEST_SET_GET_VALUE(node1, ClipOut, true );
+  TEST_SET_GET_VALUE(node1, ClipOut, true);
   TEST_SET_GET_VALUE(node1, ClipOut, false);
   TEST_SET_GET_VALUE(node1, ClipOut, 1);
   TEST_SET_GET_VALUE(node1, ClipOut, 0);
 
   // Test value setting/getting on WidgetVisibility
-  TEST_SET_GET_VALUE(node1, WidgetVisibility, true );
+  TEST_SET_GET_VALUE(node1, WidgetVisibility, true);
   TEST_SET_GET_VALUE(node1, WidgetVisibility, false);
   TEST_SET_GET_VALUE(node1, WidgetVisibility, 1);
   TEST_SET_GET_VALUE(node1, WidgetVisibility, 0);
 
   // Test value setting/getting on WidgetVisibility
-  TEST_SET_GET_VALUE(node1, InterpolatedMargins, true );
+  TEST_SET_GET_VALUE(node1, InterpolatedMargins, true);
   TEST_SET_GET_VALUE(node1, InterpolatedMargins, false);
   TEST_SET_GET_VALUE(node1, InterpolatedMargins, 1);
   TEST_SET_GET_VALUE(node1, InterpolatedMargins, 0);

@@ -48,15 +48,15 @@ vtkMRMLNodeNewMacro(vtkMRMLMarkupsSlicingContourDisplayNode);
 
 //----------------------------------------------------------------------------
 vtkMRMLMarkupsSlicingContourDisplayNode::vtkMRMLMarkupsSlicingContourDisplayNode()
-  :Superclass()
+  : Superclass()
 {
 }
 
 //----------------------------------------------------------------------------
-vtkMRMLMarkupsSlicingContourDisplayNode::~vtkMRMLMarkupsSlicingContourDisplayNode()=default;
+vtkMRMLMarkupsSlicingContourDisplayNode::~vtkMRMLMarkupsSlicingContourDisplayNode() = default;
 
 //----------------------------------------------------------------------------
 void vtkMRMLMarkupsSlicingContourDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
 {
-  Superclass::PrintSelf(os,indent);
+  Superclass::PrintSelf(os, indent);
 }

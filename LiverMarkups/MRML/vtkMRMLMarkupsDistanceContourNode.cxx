@@ -52,30 +52,31 @@ vtkMRMLNodeNewMacro(vtkMRMLMarkupsDistanceContourNode);
 
 //--------------------------------------------------------------------------------
 vtkMRMLMarkupsDistanceContourNode::vtkMRMLMarkupsDistanceContourNode()
-  :Superclass(), Target(nullptr)
+  : Superclass()
+  , Target(nullptr)
 {
 }
 
 //----------------------------------------------------------------------------
 void vtkMRMLMarkupsDistanceContourNode::PrintSelf(ostream& os, vtkIndent indent)
 {
-  Superclass::PrintSelf(os,indent);
+  Superclass::PrintSelf(os, indent);
 }
 
 void vtkMRMLMarkupsDistanceContourNode::CreateDefaultDisplayNodes()
 {
   if (vtkMRMLMarkupsDistanceContourDisplayNode::SafeDownCast(this->GetDisplayNode()))
-    {
+  {
     // display node already exists
     return;
-    }
+  }
 
   auto scene = this->GetScene();
   if (!scene)
-    {
+  {
     vtkErrorMacro("vtkMRMLMarkupsDistanceContourNode::CreateDefaultDisplayNodes failed: scene is invalid");
     return;
-    }
+  }
 
   auto dispNode = scene->AddNewNodeByClass("vtkMRMLMarkupsDistanceContourDisplayNode");
 

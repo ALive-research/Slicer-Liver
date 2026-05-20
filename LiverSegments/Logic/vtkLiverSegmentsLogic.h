@@ -37,7 +37,6 @@
 
   ===============================================================================*/
 
-
 #ifndef __vtkLiverSegmentsLogic_h
 #define __vtkLiverSegmentsLogic_h
 
@@ -58,37 +57,33 @@ class vtkMRMLColorNode;
 class vtkMRMLScalarVolumeNode;
 class vtkPolyData;
 
-
-class VTK_SLICER_LIVERSEGMENTS_MODULE_LOGIC_EXPORT
-vtkLiverSegmentsLogic : public vtkSlicerModuleLogic
+class VTK_SLICER_LIVERSEGMENTS_MODULE_LOGIC_EXPORT vtkLiverSegmentsLogic : public vtkSlicerModuleLogic
 {
- private:
-    vtkSmartPointer<vtkKdTreePointLocator> Locator;
+private:
+  vtkSmartPointer<vtkKdTreePointLocator> Locator;
 
- public:
-  static vtkLiverSegmentsLogic *New();
+public:
+  static vtkLiverSegmentsLogic* New();
   vtkTypeMacro(vtkLiverSegmentsLogic, vtkObject);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
- public:
-  void MarkSegmentWithID(vtkMRMLModelNode *segment, int segmentId);
-  void AddSegmentToCenterlineModel(vtkMRMLModelNode *summedCenterline, vtkMRMLModelNode *segmentCenterline);
-  int  SegmentClassificationProcessing(vtkMRMLModelNode *centerlineModel, vtkMRMLLabelMapVolumeNode *labelMap);
-  void InitializeCenterlineSearchModel(vtkMRMLModelNode *summedCenterline);
-  void calculateVascularTerritoryMap(vtkMRMLSegmentationNode *vascularTerritorySegmentationNode,
-                                     vtkMRMLScalarVolumeNode *refVolume,
-                                     vtkMRMLSegmentationNode *segmentation,
-                                     vtkMRMLModelNode *centerlineModel,
-                                     vtkMRMLColorNode *colormap);
-  void preprocessAndDecimate(vtkPolyData *surfacePolyData, vtkPolyData *returnPolyData);
+public:
+  void MarkSegmentWithID(vtkMRMLModelNode* segment, int segmentId);
+  void AddSegmentToCenterlineModel(vtkMRMLModelNode* summedCenterline, vtkMRMLModelNode* segmentCenterline);
+  int SegmentClassificationProcessing(vtkMRMLModelNode* centerlineModel, vtkMRMLLabelMapVolumeNode* labelMap);
+  void InitializeCenterlineSearchModel(vtkMRMLModelNode* summedCenterline);
+  void calculateVascularTerritoryMap(vtkMRMLSegmentationNode* vascularTerritorySegmentationNode,
+                                     vtkMRMLScalarVolumeNode* refVolume,
+                                     vtkMRMLSegmentationNode* segmentation,
+                                     vtkMRMLModelNode* centerlineModel,
+                                     vtkMRMLColorNode* colormap);
+  void preprocessAndDecimate(vtkPolyData* surfacePolyData, vtkPolyData* returnPolyData);
 
- protected:
+protected:
   vtkLiverSegmentsLogic();
   ~vtkLiverSegmentsLogic() override;
   vtkLiverSegmentsLogic(const vtkLiverSegmentsLogic&);
   void operator=(const vtkLiverSegmentsLogic&);
-
 };
 
 #endif
-

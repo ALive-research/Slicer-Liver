@@ -46,7 +46,7 @@
 #include <vtkOpenGLPolyDataMapper.h>
 #include <vtkRenderingOpenGL2Module.h>
 
-//STD includes
+// STD includes
 #include <memory>
 #include <array>
 
@@ -54,7 +54,7 @@
 class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLDistanceContourPolyDataMapper : public vtkOpenGLPolyDataMapper
 {
 public:
-  static vtkOpenGLDistanceContourPolyDataMapper *New();
+  static vtkOpenGLDistanceContourPolyDataMapper* New();
   vtkTypeMacro(vtkOpenGLDistanceContourPolyDataMapper, vtkOpenGLPolyDataMapper);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
@@ -89,18 +89,13 @@ protected:
   void BuildBufferObjects(vtkRenderer* ren, vtkActor* act) override;
 
   // Perform string replacements on the shader templates
-  void ReplaceShaderValues(std::map<vtkShader::Type, vtkShader*> shaders,
-                           vtkRenderer* ren,
-                           vtkActor* act) override;
+  void ReplaceShaderValues(std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer* ren, vtkActor* act) override;
 
-  void SetMapperShaderParameters(vtkOpenGLHelper& cellBO,
-                                 vtkRenderer* ren,
-                                 vtkActor* actor) override;
+  void SetMapperShaderParameters(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor) override;
 
   // Set CameraShaderParameters
-  void SetCameraShaderParameters(vtkOpenGLHelper& cellBO,
-                                 vtkRenderer* ren,
-                                 vtkActor* actor) override;
+  void SetCameraShaderParameters(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor) override;
+
 private:
   class vtkInternal;
   std::unique_ptr<vtkInternal> Impl;

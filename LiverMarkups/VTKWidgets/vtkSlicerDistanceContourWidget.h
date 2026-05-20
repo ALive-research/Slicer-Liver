@@ -43,16 +43,13 @@
 
 #include <vtkSlicerMarkupsWidget.h>
 
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerDistanceContourWidget
-: public vtkSlicerMarkupsWidget
+class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerDistanceContourWidget : public vtkSlicerMarkupsWidget
 {
 public:
-  static vtkSlicerDistanceContourWidget *New();
+  static vtkSlicerDistanceContourWidget* New();
   vtkTypeMacro(vtkSlicerDistanceContourWidget, vtkSlicerMarkupsWidget);
 
-  void CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode,
-                                  vtkMRMLAbstractViewNode* viewNode,
-                                  vtkRenderer* renderer) override;
+  void CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode, vtkMRMLAbstractViewNode* viewNode, vtkRenderer* renderer) override;
 
   /// Create instance of the markups widget
   vtkSlicerMarkupsWidget* CreateInstance() const override;

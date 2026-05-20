@@ -48,29 +48,28 @@
 #include <vtkMRMLSegmentationNode.h>
 #include <vtkMRMLScalarVolumeNode.h>
 
-//VTK includes
+// VTK includes
 #include <vtkSetGet.h>
 #include <vtkWeakPointer.h>
 #include <vtkCollection.h>
 #include <vtkPoints.h>
 
-//STD includes
+// STD includes
 #include <set>
 #include <string>
 
 //-----------------------------------------------------------------------------
-class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
-  : public vtkMRMLStorableNode
+class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode : public vtkMRMLStorableNode
 {
- public:
+public:
   static vtkMRMLLiverResectionNode* New();
- vtkTypeMacro(vtkMRMLLiverResectionNode, vtkMRMLStorableNode);
+  vtkTypeMacro(vtkMRMLLiverResectionNode, vtkMRMLStorableNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   // Possible resection states
   enum ResectionState
   {
-    Initialization=0,
+    Initialization = 0,
     Deformation,
     Completed
   };
@@ -78,7 +77,7 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   // Possible initialization modes
   enum InitializationMode
   {
-    Flat=0,
+    Flat = 0,
     Curved,
   };
 
@@ -88,14 +87,13 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   vtkMRMLNode* CreateNodeInstance() override;
 
   /// Get node XML tag name (like Volume, Model)
-  const char* GetNodeTagName() override {return "LiverResection";}
+  const char* GetNodeTagName() override { return "LiverResection"; }
 
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLLiverResectionNode);
 
   /// Create default storage node or nullptr if does not have one
   vtkMRMLStorageNode* CreateDefaultStorageNode() override;
-
 
   // TODO: Review the need for this further down the road
   /// Get target lesions identifiers
@@ -133,28 +131,34 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   vtkSetMacro(InitMode, InitializationMode);
 
   // Get Target Organ
-  vtkMRMLModelNode *GetTargetOrganModelNode() const
-  {return this->TargetOrganModelNode;}
+  vtkMRMLModelNode* GetTargetOrganModelNode() const { return this->TargetOrganModelNode; }
 
   // Set Target Organ
-  void SetTargetOrganModelNode(vtkMRMLModelNode *targetOrgan)
-  {this->TargetOrganModelNode = targetOrgan; this->Modified();}
+  void SetTargetOrganModelNode(vtkMRMLModelNode* targetOrgan)
+  {
+    this->TargetOrganModelNode = targetOrgan;
+    this->Modified();
+  }
 
   // Get Distance Map
-  vtkMRMLScalarVolumeNode*GetDistanceMapVolumeNode() const
-  {return this->DistanceMapVolumeNode;}
+  vtkMRMLScalarVolumeNode* GetDistanceMapVolumeNode() const { return this->DistanceMapVolumeNode; }
 
   // Set Distance Map
   void SetDistanceMapVolumeNode(vtkMRMLScalarVolumeNode* distanceMapVolumeNode)
-  {this->DistanceMapVolumeNode = distanceMapVolumeNode; this->Modified();}
+  {
+    this->DistanceMapVolumeNode = distanceMapVolumeNode;
+    this->Modified();
+  }
 
   // Get Vascular Segments Volume
-  vtkMRMLScalarVolumeNode *GetVascularSegmentsVolumeNode() const
-  { return this->VascularSegmentsVolumeNode; }
+  vtkMRMLScalarVolumeNode* GetVascularSegmentsVolumeNode() const { return this->VascularSegmentsVolumeNode; }
 
   // Set Vascular Segments Volume
-  void SetVascularSegmentsVolumeNode(vtkMRMLScalarVolumeNode *vascularSegmentsVolumeNode)
-  {this->VascularSegmentsVolumeNode = vascularSegmentsVolumeNode; this->Modified();}
+  void SetVascularSegmentsVolumeNode(vtkMRMLScalarVolumeNode* vascularSegmentsVolumeNode)
+  {
+    this->VascularSegmentsVolumeNode = vascularSegmentsVolumeNode;
+    this->Modified();
+  }
 
   /// This is a function to set the initialization control points as vtkPoints.
   /// Since the expected number of points for the initialization is two, the
@@ -162,11 +166,10 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   /// points are provided, the points from 2nd onwards will be ignored. The
   /// function returns true if thw points were set correctly, otherwise, it
   /// returns false.
-  bool SetInitializationControlPoints(vtkPoints *controlPoints);
+  bool SetInitializationControlPoints(vtkPoints* controlPoints);
 
   // Get initialization control points
-  vtkPoints const* GetInitializationPoints() const
-  {return const_cast<vtkPoints const*>(this->InitializationControlPoints.GetPointer());}
+  const vtkPoints* GetInitializationPoints() const { return const_cast<const vtkPoints*>(this->InitializationControlPoints.GetPointer()); }
 
   /// This is a function to set the bezier surface control points as vtkPoints.
   /// Since the expected number of points for the bezier is 16, the function
@@ -177,12 +180,10 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   bool SetBezierSurfaceControlPoints(vtkPoints* controlPoints);
 
   // Get bezier surface control points
-  vtkPoints const* GetBezierSurfacePoints() const
-  {return const_cast<vtkPoints const*>(this->InitializationControlPoints.GetPointer());}
+  const vtkPoints* GetBezierSurfacePoints() const { return const_cast<const vtkPoints*>(this->InitializationControlPoints.GetPointer()); }
 
   // Get bezier control points
-  vtkPoints const* GetBezierPoints() const
-  {return const_cast<vtkPoints const*>(this->BezierSurfaceControlPoints.GetPointer());}
+  const vtkPoints* GetBezierPoints() const { return const_cast<const vtkPoints*>(this->BezierSurfaceControlPoints.GetPointer()); }
 
   // Set the clipout state variable
   vtkSetMacro(ClipOut, bool);
@@ -332,20 +333,20 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   vtkSetMacro(TextureNumComps, int);
 
   // Get bezier surface
-  vtkMRMLMarkupsBezierSurfaceNode *GetBezierSurfaceNode() const
-  { return this->BezierSurfaceNode; }
+  vtkMRMLMarkupsBezierSurfaceNode* GetBezierSurfaceNode() const { return this->BezierSurfaceNode; }
 
   // Set bezier surface
-  void SetBezierSurfaceNode(vtkMRMLMarkupsBezierSurfaceNode *node)
-  {this->BezierSurfaceNode = node; this->Modified();}
+  void SetBezierSurfaceNode(vtkMRMLMarkupsBezierSurfaceNode* node)
+  {
+    this->BezierSurfaceNode = node;
+    this->Modified();
+  }
 
-
- protected:
+protected:
   vtkMRMLLiverResectionNode();
   ~vtkMRMLLiverResectionNode() override;
 
- private:
-
+private:
   // TODO: Review the need of this further down the road
   // std::set<vtkMRMLModelNode*> TargetTumors;
   // vtkWeakPointer<vtkMRMLSegmentationNode> SegmentationNode;
@@ -355,8 +356,8 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode> BezierSurfaceNode;
   ResectionState State;
   InitializationMode InitMode;
-  double ResectionMargin; //Resection margin in mm
-  double UncertaintyMargin; //Uncertainty margin in mm
+  double ResectionMargin;   // Resection margin in mm
+  double UncertaintyMargin; // Uncertainty margin in mm
   vtkNew<vtkPoints> InitializationControlPoints;
   // TODO: Review the need for this. We already have a pointer to the surface node
   vtkNew<vtkPoints> BezierSurfaceControlPoints;
@@ -372,8 +373,8 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   float GridDivisions;
   float GridThickness;
   bool ShowResection2D;
-  double HepaticContourThickness; //Resection margin in mm
-  double PortalContourThickness; //Uncertainty margin in mm
+  double HepaticContourThickness; // Resection margin in mm
+  double PortalContourThickness;  // Uncertainty margin in mm
   float HepaticContourColor[3];
   float PortalContourColor[3];
   int TextureNumComps;
@@ -382,7 +383,7 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionNode
   bool Grid3DVisibility;
   bool Grid2DVisibility;
 
- private:
+private:
   vtkMRMLLiverResectionNode(const vtkMRMLLiverResectionNode&);
   void operator=(const vtkMRMLLiverResectionNode&);
 };

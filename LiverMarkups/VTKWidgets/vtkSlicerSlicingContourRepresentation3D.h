@@ -57,39 +57,37 @@ class vtkOpenGLActor;
 class vtkOpenGLSlicingContourPolyDataMapper;
 
 //------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerSlicingContourRepresentation3D
-: public vtkSlicerLineRepresentation3D
+class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerSlicingContourRepresentation3D : public vtkSlicerLineRepresentation3D
 {
 public:
   static vtkSlicerSlicingContourRepresentation3D* New();
   vtkTypeMacro(vtkSlicerSlicingContourRepresentation3D, vtkSlicerLineRepresentation3D);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  void UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void* callData=nullptr) override;
+  void UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void* callData = nullptr) override;
 
 protected:
   vtkSlicerSlicingContourRepresentation3D();
   ~vtkSlicerSlicingContourRepresentation3D() override;
 
 protected:
-    void GetActors(vtkPropCollection *pc) override;
-    void ReleaseGraphicsResources(vtkWindow *win) override;
-    int RenderOverlay(vtkViewport *viewport) override;
-    int RenderOpaqueGeometry(vtkViewport *viewport) override;
-    int RenderTranslucentPolygonalGeometry(vtkViewport *viewport) override;
-    vtkTypeBool HasTranslucentPolygonalGeometry() override;
-    double *GetBounds() override;
-    void UpdateSlicingContourDisplay(vtkMRMLLiverMarkupsSlicingContourNode *node);
+  void GetActors(vtkPropCollection* pc) override;
+  void ReleaseGraphicsResources(vtkWindow* win) override;
+  int RenderOverlay(vtkViewport* viewport) override;
+  int RenderOpaqueGeometry(vtkViewport* viewport) override;
+  int RenderTranslucentPolygonalGeometry(vtkViewport* viewport) override;
+  vtkTypeBool HasTranslucentPolygonalGeometry() override;
+  double* GetBounds() override;
+  void UpdateSlicingContourDisplay(vtkMRMLLiverMarkupsSlicingContourNode* node);
 
 private:
-    vtkWeakPointer<vtkMRMLModelNode> Target;
-    vtkSmartPointer<vtkOpenGLSlicingContourPolyDataMapper> SlicingContourMapper;
-    vtkSmartPointer<vtkOpenGLActor> SlicingContourActor;
+  vtkWeakPointer<vtkMRMLModelNode> Target;
+  vtkSmartPointer<vtkOpenGLSlicingContourPolyDataMapper> SlicingContourMapper;
+  vtkSmartPointer<vtkOpenGLActor> SlicingContourActor;
 
-  private:
-    vtkSlicerSlicingContourRepresentation3D(
-        const vtkSlicerSlicingContourRepresentation3D &) = delete;
-    void operator=(const vtkSlicerSlicingContourRepresentation3D &) = delete;
+private:
+  vtkSlicerSlicingContourRepresentation3D(const vtkSlicerSlicingContourRepresentation3D&) = delete;
+  void operator=(const vtkSlicerSlicingContourRepresentation3D&) = delete;
 };
 
 #endif // __vtkslicerslicingcontourwidgetrepresentation3d_h_

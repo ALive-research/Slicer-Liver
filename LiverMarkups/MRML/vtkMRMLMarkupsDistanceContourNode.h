@@ -46,12 +46,11 @@
 #include <vtkMRMLMarkupsLineNode.h>
 #include <vtkMRMLModelNode.h>
 
-//VTK includes
+// VTK includes
 #include <vtkWeakPointer.h>
 
 //-----------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsDistanceContourNode
-: public vtkMRMLMarkupsLineNode
+class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsDistanceContourNode : public vtkMRMLMarkupsLineNode
 {
 public:
   static vtkMRMLMarkupsDistanceContourNode* New();
@@ -61,41 +60,43 @@ public:
   //--------------------------------------------------------------------------------
   // MRMLNode methods
   //--------------------------------------------------------------------------------
-  const char* GetIcon() override {return ":/Icons/MarkupsGeneric.png";}
-  const char* GetAddIcon() override {return ":/Icons/MarkupsGenericMouseModePlace.png";}
-  const char* GetPlaceAddIcon() override {return ":/Icons/MarkupsGenericMouseModePlaceAdd.png";}
+  const char* GetIcon() override { return ":/Icons/MarkupsGeneric.png"; }
+  const char* GetAddIcon() override { return ":/Icons/MarkupsGenericMouseModePlace.png"; }
+  const char* GetPlaceAddIcon() override { return ":/Icons/MarkupsGenericMouseModePlaceAdd.png"; }
 
   vtkMRMLNode* CreateNodeInstance() override;
   void CreateDefaultDisplayNodes() override;
 
   /// Get node XML tag name (like Volume, Model)
   ///
-  const char* GetNodeTagName() override {return "MarkupsDistanceContour";}
+  const char* GetNodeTagName() override { return "MarkupsDistanceContour"; }
 
   /// Get markup name
-  const char* GetMarkupType() override {return "DistanceContour";}
+  const char* GetMarkupType() override { return "DistanceContour"; }
 
   /// Get markup short name
-  std::string GetDefaultNodeNamePrefix() override {return "SC";}
+  std::string GetDefaultNodeNamePrefix() override { return "SC"; }
 
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLMarkupsDistanceContourNode);
 
-  vtkMRMLModelNode* GetTarget() const {return this->Target;}
-  void SetTarget(vtkMRMLModelNode* target) {this->Target = target; this->Modified();}
+  vtkMRMLModelNode* GetTarget() const { return this->Target; }
+  void SetTarget(vtkMRMLModelNode* target)
+  {
+    this->Target = target;
+    this->Modified();
+  }
 
 protected:
   vtkMRMLMarkupsDistanceContourNode();
   ~vtkMRMLMarkupsDistanceContourNode() override = default;
 
 private:
- vtkWeakPointer<vtkMRMLModelNode> Target;
+  vtkWeakPointer<vtkMRMLModelNode> Target;
 
 private:
- vtkMRMLMarkupsDistanceContourNode(const vtkMRMLMarkupsDistanceContourNode&);
- void operator=(const vtkMRMLMarkupsDistanceContourNode&);
-
-
+  vtkMRMLMarkupsDistanceContourNode(const vtkMRMLMarkupsDistanceContourNode&);
+  void operator=(const vtkMRMLMarkupsDistanceContourNode&);
 };
 
 #endif //__vtkmrmlmarkupsdistancecontournode_h_

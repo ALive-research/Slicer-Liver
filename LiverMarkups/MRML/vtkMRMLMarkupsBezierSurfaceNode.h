@@ -46,14 +46,13 @@
 #include <vtkMRMLMarkupsNode.h>
 #include <vtkMRMLModelNode.h>
 
-//VTK includes
+// VTK includes
 #include <vtkSetGet.h>
 #include <vtkWeakPointer.h>
 #include <vtkMRMLScalarVolumeNode.h>
 
 //-----------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsBezierSurfaceNode
-: public vtkMRMLMarkupsNode
+class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsBezierSurfaceNode : public vtkMRMLMarkupsNode
 {
 public:
   static vtkMRMLMarkupsBezierSurfaceNode* New();
@@ -63,39 +62,43 @@ public:
   //--------------------------------------------------------------------------------
   // MRMLNode methods
   //--------------------------------------------------------------------------------
-  const char* GetIcon() override {return ":/Icons/MarkupsBezierSurface.png";}
-  const char* GetAddIcon() override {return ":/Icons/MarkupsBezierSurfaceMouseModePlace.png";}
-  const char* GetPlaceAddIcon() override {return ":/Icons/MarkupsBezierSurfaceMouseModePlaceAdd.png";}
+  const char* GetIcon() override { return ":/Icons/MarkupsBezierSurface.png"; }
+  const char* GetAddIcon() override { return ":/Icons/MarkupsBezierSurfaceMouseModePlace.png"; }
+  const char* GetPlaceAddIcon() override { return ":/Icons/MarkupsBezierSurfaceMouseModePlaceAdd.png"; }
 
   vtkMRMLNode* CreateNodeInstance() override;
 
   /// Get node XML tag name (like Volume, Model)
-  const char* GetNodeTagName() override {return "MarkupsBezierSurface";}
+  const char* GetNodeTagName() override { return "MarkupsBezierSurface"; }
 
   /// Get markup name
-  const char* GetMarkupType() override {return "BezierSurface";}
+  const char* GetMarkupType() override { return "BezierSurface"; }
 
   // Get markup type GUI display name
-  std::string GetTypeDisplayName() override {return "Bezier Surface";};
+  std::string GetTypeDisplayName() override { return "Bezier Surface"; };
 
   /// Get markup short name
-  std::string GetDefaultNodeNamePrefix() override {return "BS";}
+  std::string GetDefaultNodeNamePrefix() override { return "BS"; }
 
   /// Set the distance map
   void SetDistanceMapVolumeNode(vtkMRMLScalarVolumeNode* volumeNode)
-  {this->DistanceMap = volumeNode; this->Modified();}
+  {
+    this->DistanceMap = volumeNode;
+    this->Modified();
+  }
 
   /// Get the distance map
-  vtkMRMLScalarVolumeNode* GetDistanceMapVolumeNode() const
-  {return this->DistanceMap;}
+  vtkMRMLScalarVolumeNode* GetDistanceMapVolumeNode() const { return this->DistanceMap; }
 
   /// Set the Vascular Segments
   void SetVascularSegmentsVolumeNode(vtkMRMLScalarVolumeNode* volumeNode)
-  {this->VascularSegments = volumeNode; this->Modified();}
+  {
+    this->VascularSegments = volumeNode;
+    this->Modified();
+  }
 
   /// Get the Vascular Segments
-  vtkMRMLScalarVolumeNode* GetVascularSegmentsVolumeNode() const
-  {return this->VascularSegments;}
+  vtkMRMLScalarVolumeNode* GetVascularSegmentsVolumeNode() const { return this->VascularSegments; }
 
   /// Get the distance map margin
   vtkGetMacro(ResectionMargin, double);
@@ -131,17 +134,17 @@ protected:
   ~vtkMRMLMarkupsBezierSurfaceNode() override = default;
 
 private:
- vtkWeakPointer<vtkMRMLModelNode> Target;
- vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMap;
- vtkWeakPointer<vtkMRMLScalarVolumeNode> VascularSegments;
- double ResectionMargin;
- double UncertaintyMargin;
- double HepaticContourThickness;
- double PortalContourThickness;
+  vtkWeakPointer<vtkMRMLModelNode> Target;
+  vtkWeakPointer<vtkMRMLScalarVolumeNode> DistanceMap;
+  vtkWeakPointer<vtkMRMLScalarVolumeNode> VascularSegments;
+  double ResectionMargin;
+  double UncertaintyMargin;
+  double HepaticContourThickness;
+  double PortalContourThickness;
 
 private:
- vtkMRMLMarkupsBezierSurfaceNode(const vtkMRMLMarkupsBezierSurfaceNode&);
- void operator=(const vtkMRMLMarkupsBezierSurfaceNode&);
+  vtkMRMLMarkupsBezierSurfaceNode(const vtkMRMLMarkupsBezierSurfaceNode&);
+  void operator=(const vtkMRMLMarkupsBezierSurfaceNode&);
 };
 
 #endif //__vtkmrmlmarkupsbeziersurfacenode_h_

@@ -63,7 +63,8 @@ vtkStandardNewMacro(vtkSlicerDistanceContourRepresentation3D);
 
 //------------------------------------------------------------------------------
 vtkSlicerDistanceContourRepresentation3D::vtkSlicerDistanceContourRepresentation3D()
-  :Superclass(), Target(nullptr)
+  : Superclass()
+  , Target(nullptr)
 {
   this->DistanceContourMapper = vtkSmartPointer<vtkOpenGLDistanceContourPolyDataMapper>::New();
   this->DistanceContourActor = vtkSmartPointer<vtkOpenGLActor>::New();
@@ -80,115 +81,112 @@ void vtkSlicerDistanceContourRepresentation3D::PrintSelf(ostream& os, vtkIndent 
 }
 
 //----------------------------------------------------------------------
-void vtkSlicerDistanceContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void *callData /*=nullptr*/)
+void vtkSlicerDistanceContourRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void* callData /*=nullptr*/)
 {
 
- this->Superclass::UpdateFromMRML(caller, event, callData);
+  this->Superclass::UpdateFromMRML(caller, event, callData);
 
- auto liverMarkupsDistanceContourNode =
-   vtkMRMLMarkupsDistanceContourNode::SafeDownCast(this->GetMarkupsNode());
- if (!liverMarkupsDistanceContourNode)
-   {
-   vtkWarningMacro("Invalid distance contour node.");
-   return;
-   }
+  auto liverMarkupsDistanceContourNode = vtkMRMLMarkupsDistanceContourNode::SafeDownCast(this->GetMarkupsNode());
+  if (!liverMarkupsDistanceContourNode)
+  {
+    vtkWarningMacro("Invalid distance contour node.");
+    return;
+  }
 
- auto targetModelNode = liverMarkupsDistanceContourNode->GetTarget();
+  auto targetModelNode = liverMarkupsDistanceContourNode->GetTarget();
 
- // // If the target model node has changed -> Reassign the contour shader
- if (targetModelNode != this->Target)
-   {
-   this->Target = targetModelNode;
-   if (this->Target)
-     {
-     this->DistanceContourMapper->SetInputConnection(this->Target->GetPolyDataConnection());
-     }
-   }
+  // // If the target model node has changed -> Reassign the contour shader
+  if (targetModelNode != this->Target)
+  {
+    this->Target = targetModelNode;
+    if (this->Target)
+    {
+      this->DistanceContourMapper->SetInputConnection(this->Target->GetPolyDataConnection());
+    }
+  }
 
-  auto liverMarkupsDistanceContourDisplayNode =
-      vtkMRMLMarkupsDistanceContourDisplayNode::SafeDownCast(
-          liverMarkupsDistanceContourNode->GetDisplayNode());
+  auto liverMarkupsDistanceContourDisplayNode = vtkMRMLMarkupsDistanceContourDisplayNode::SafeDownCast(liverMarkupsDistanceContourNode->GetDisplayNode());
 
-  if (!liverMarkupsDistanceContourDisplayNode) {
+  if (!liverMarkupsDistanceContourDisplayNode)
+  {
     vtkWarningMacro("Invalid vtkMRMLMarkupsDistanceContourDisplayNode.");
     return;
   }
 
- if (liverMarkupsDistanceContourNode->GetNumberOfControlPoints() != 2)
-   {
-   return;
-   }
+  if (liverMarkupsDistanceContourNode->GetNumberOfControlPoints() != 2)
+  {
+    return;
+  }
 
- // Recalculate the middle plane and update the shader parameters
- double point1Position[3] = {0.0, 0.0, 0.0};
- double point2Position[3] = {0.0, 0.0, 0.0};
+  // Recalculate the middle plane and update the shader parameters
+  double point1Position[3] = { 0.0, 0.0, 0.0 };
+  double point2Position[3] = { 0.0, 0.0, 0.0 };
 
- liverMarkupsDistanceContourNode->GetNthControlPointPosition(0, point1Position);
- liverMarkupsDistanceContourNode->GetNthControlPointPosition(1, point2Position);
+  liverMarkupsDistanceContourNode->GetNthControlPointPosition(0, point1Position);
+  liverMarkupsDistanceContourNode->GetNthControlPointPosition(1, point2Position);
 
- std::array<float, 4> externalPoint = {static_cast<float>(point1Position[0]),
-                                       static_cast<float>(point1Position[1]),
-                                       static_cast<float>(point1Position[2]), 1.0f};
+  std::array<float, 4> externalPoint = { static_cast<float>(point1Position[0]), static_cast<float>(point1Position[1]), static_cast<float>(point1Position[2]), 1.0f };
 
- std::array<float, 4> referencePoint = {static_cast<float>(point2Position[0]),
-                                        static_cast<float>(point2Position[1]),
-                                        static_cast<float>(point2Position[2]), 1.0f};
+  std::array<float, 4> referencePoint = { static_cast<float>(point2Position[0]), static_cast<float>(point2Position[1]), static_cast<float>(point2Position[2]), 1.0f };
 
- this->DistanceContourMapper->SetExternalPoint(externalPoint);
- this->DistanceContourMapper->SetReferencePoint(referencePoint);
- this->DistanceContourMapper->SetContourThickness(2.0f);
- this->DistanceContourMapper->SetContourVisibility(true);
+  this->DistanceContourMapper->SetExternalPoint(externalPoint);
+  this->DistanceContourMapper->SetReferencePoint(referencePoint);
+  this->DistanceContourMapper->SetContourThickness(2.0f);
+  this->DistanceContourMapper->SetContourVisibility(true);
 
- this->NeedToRenderOn();
+  this->NeedToRenderOn();
 }
 
 //----------------------------------------------------------------------
-void vtkSlicerDistanceContourRepresentation3D::GetActors(vtkPropCollection *pc) {
+void vtkSlicerDistanceContourRepresentation3D::GetActors(vtkPropCollection* pc)
+{
   this->Superclass::GetActors(pc);
   this->DistanceContourActor->GetActors(pc);
 }
 
 //----------------------------------------------------------------------
-void vtkSlicerDistanceContourRepresentation3D::ReleaseGraphicsResources(
-    vtkWindow *win) {
+void vtkSlicerDistanceContourRepresentation3D::ReleaseGraphicsResources(vtkWindow* win)
+{
   this->Superclass::ReleaseGraphicsResources(win);
   this->DistanceContourActor->ReleaseGraphicsResources(win);
 }
 
 //----------------------------------------------------------------------
-int vtkSlicerDistanceContourRepresentation3D::RenderOverlay(
-    vtkViewport *viewport) {
+int vtkSlicerDistanceContourRepresentation3D::RenderOverlay(vtkViewport* viewport)
+{
   int count = 0;
   count = this->Superclass::RenderOverlay(viewport);
-  if (this->DistanceContourActor->GetVisibility()) {
+  if (this->DistanceContourActor->GetVisibility())
+  {
     count += this->DistanceContourActor->RenderOverlay(viewport);
   }
   return count;
 }
 
 //-----------------------------------------------------------------------------
-int vtkSlicerDistanceContourRepresentation3D::RenderOpaqueGeometry(
-    vtkViewport *viewport) {
+int vtkSlicerDistanceContourRepresentation3D::RenderOpaqueGeometry(vtkViewport* viewport)
+{
   int count = 0;
   count = this->Superclass::RenderOpaqueGeometry(viewport);
-  if (this->DistanceContourActor->GetVisibility()) {
+  if (this->DistanceContourActor->GetVisibility())
+  {
     count += this->DistanceContourActor->RenderOpaqueGeometry(viewport);
   }
   return count;
 }
 
 //-----------------------------------------------------------------------------
-int vtkSlicerDistanceContourRepresentation3D::RenderTranslucentPolygonalGeometry(
-    vtkViewport *viewport) {
+int vtkSlicerDistanceContourRepresentation3D::RenderTranslucentPolygonalGeometry(vtkViewport* viewport)
+{
   int count = 0;
   count = this->Superclass::RenderTranslucentPolygonalGeometry(viewport);
-  if (this->DistanceContourActor->GetVisibility()) {
+  if (this->DistanceContourActor->GetVisibility())
+  {
     // The internal actor needs to share property keys.
     // This ensures the mapper state is consistent and allows depth peeling to
     // work as expected.
     this->DistanceContourActor->SetPropertyKeys(this->GetPropertyKeys());
-    count +=
-        this->DistanceContourActor->RenderTranslucentPolygonalGeometry(viewport);
+    count += this->DistanceContourActor->RenderTranslucentPolygonalGeometry(viewport);
   }
   {
     // The internal actor needs to share property keys.
@@ -199,23 +197,27 @@ int vtkSlicerDistanceContourRepresentation3D::RenderTranslucentPolygonalGeometry
 }
 
 //-----------------------------------------------------------------------------
-vtkTypeBool
-vtkSlicerDistanceContourRepresentation3D::HasTranslucentPolygonalGeometry() {
-  if (this->Superclass::HasTranslucentPolygonalGeometry()) {
+vtkTypeBool vtkSlicerDistanceContourRepresentation3D::HasTranslucentPolygonalGeometry()
+{
+  if (this->Superclass::HasTranslucentPolygonalGeometry())
+  {
     return true;
   }
-  if (this->DistanceContourActor->GetVisibility() &&
-      this->DistanceContourActor->HasTranslucentPolygonalGeometry()) {
+  if (this->DistanceContourActor->GetVisibility() && this->DistanceContourActor->HasTranslucentPolygonalGeometry())
+  {
     return true;
   }
-  { return true; }
+  {
+    return true;
+  }
   return false;
 }
 
 //----------------------------------------------------------------------
-double *vtkSlicerDistanceContourRepresentation3D::GetBounds() {
+double* vtkSlicerDistanceContourRepresentation3D::GetBounds()
+{
   vtkBoundingBox boundingBox;
-  const std::vector<vtkProp *> actors({this->DistanceContourActor});
+  const std::vector<vtkProp*> actors({ this->DistanceContourActor });
   this->AddActorsBounds(boundingBox, actors, Superclass::GetBounds());
   boundingBox.GetBounds(this->Bounds);
   return this->Bounds;
@@ -236,7 +238,4 @@ double *vtkSlicerDistanceContourRepresentation3D::GetBounds() {
 // }
 
 //----------------------------------------------------------------------
-void vtkSlicerDistanceContourRepresentation3D::UpdateDistanceContourDisplay(vtkMRMLLiverMarkupsDistanceContourNode *node)
-{
-
-}
+void vtkSlicerDistanceContourRepresentation3D::UpdateDistanceContourDisplay(vtkMRMLLiverMarkupsDistanceContourNode* node) {}

@@ -47,16 +47,13 @@
 class vtkMRMLMarkupsSlicingContourNode;
 
 //----------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerSlicingContourWidget
-: public vtkSlicerMarkupsWidget
+class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerSlicingContourWidget : public vtkSlicerMarkupsWidget
 {
 public:
-  static vtkSlicerSlicingContourWidget *New();
+  static vtkSlicerSlicingContourWidget* New();
   vtkTypeMacro(vtkSlicerSlicingContourWidget, vtkSlicerMarkupsWidget);
 
-  void CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode,
-                                  vtkMRMLAbstractViewNode* viewNode,
-                                  vtkRenderer* renderer) override;
+  void CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode, vtkMRMLAbstractViewNode* viewNode, vtkRenderer* renderer) override;
 
   /// Create instance of the markups widget
   vtkSlicerMarkupsWidget* CreateInstance() const override;

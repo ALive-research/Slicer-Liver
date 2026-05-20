@@ -24,7 +24,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-int vtkLiverSpheroidRingExtractorTest1(int, char *[])
+int vtkLiverSpheroidRingExtractorTest1(int, char*[])
 {
   // Target: unit sphere centred at origin.
   vtkNew<vtkSphereSource> sphere;
@@ -44,18 +44,17 @@ int vtkLiverSpheroidRingExtractorTest1(int, char *[])
   extractor->SetRadiusZ(1.2);
   extractor->Update();
 
-  vtkPolyData *out = extractor->GetOutput();
+  vtkPolyData* out = extractor->GetOutput();
   if (!out || !out->GetPoints() || out->GetPoints()->GetNumberOfPoints() == 0)
-    {
+  {
     std::fprintf(stderr, "[SpheroidRingExtractor] FAIL: empty output\n");
     return EXIT_FAILURE;
-    }
+  }
   if (!out->GetLines() || out->GetLines()->GetNumberOfCells() == 0)
-    {
-    std::fprintf(stderr,
-                 "[SpheroidRingExtractor] FAIL: no polyline cells in output\n");
+  {
+    std::fprintf(stderr, "[SpheroidRingExtractor] FAIL: no polyline cells in output\n");
     return EXIT_FAILURE;
-    }
+  }
 
   // Every output point should lie on the source sphere (within
   // cutter-discretisation tolerance) and on the spheroid surface
@@ -72,32 +71,31 @@ int vtkLiverSpheroidRingExtractorTest1(int, char *[])
   // the linear terms produced residuals of order 1e-1 — see the
   // companion fix to vtkLiverSpheroidRingExtractor).
   const vtkIdType n = out->GetPoints()->GetNumberOfPoints();
-  constexpr double radTol = 0.02;       // sphere discretisation noise
-  constexpr double quadricTol = 1e-2;   // cutter linear-interp residual bound
+  constexpr double radTol = 0.02;     // sphere discretisation noise
+  constexpr double quadricTol = 1e-2; // cutter linear-interp residual bound
   for (vtkIdType i = 0; i < n; ++i)
-    {
+  {
     double p[3];
     out->GetPoints()->GetPoint(i, p);
     const double rSphere = std::sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
     if (std::fabs(rSphere - 1.0) > radTol)
-      {
-      std::fprintf(stderr,
-                   "[SpheroidRingExtractor] FAIL: point %lld off sphere: r=%g\n",
-                   static_cast<long long>(i), rSphere);
+    {
+      std::fprintf(stderr, "[SpheroidRingExtractor] FAIL: point %lld off sphere: r=%g\n", static_cast<long long>(i), rSphere);
       return EXIT_FAILURE;
-      }
+    }
     const double dx = (p[0] - 0.5) / 0.8;
     const double dy = (p[1] - 0.0) / 0.8;
     const double dz = (p[2] - 0.0) / 1.2;
     const double q = dx * dx + dy * dy + dz * dz - 1.0;
     if (std::fabs(q) > quadricTol)
-      {
+    {
       std::fprintf(stderr,
                    "[SpheroidRingExtractor] FAIL: point %lld off spheroid: "
                    "quadric=%g\n",
-                   static_cast<long long>(i), q);
+                   static_cast<long long>(i),
+                   q);
       return EXIT_FAILURE;
-      }
     }
+  }
   return EXIT_SUCCESS;
 }

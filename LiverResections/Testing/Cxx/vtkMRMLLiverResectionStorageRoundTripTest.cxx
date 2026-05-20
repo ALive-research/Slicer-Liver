@@ -88,7 +88,7 @@ namespace
 {
 
 constexpr int kBezierControlPointCount = 16;
-constexpr double kCoordinateTolerance  = 1e-6;
+constexpr double kCoordinateTolerance = 1e-6;
 
 //------------------------------------------------------------------------------
 // Build a deterministic 4x4 grid of distinct control points so we can assert
@@ -98,67 +98,63 @@ vtkSmartPointer<vtkPoints> MakeDeterministicControlPoints()
   auto points = vtkSmartPointer<vtkPoints>::New();
   points->SetNumberOfPoints(kBezierControlPointCount);
   for (int row = 0; row < 4; ++row)
-    {
+  {
     for (int col = 0; col < 4; ++col)
-      {
+    {
       const vtkIdType idx = static_cast<vtkIdType>(row * 4 + col);
       // Use coordinates that cannot collide with a default-initialised point.
       const double x = 10.0 + col * 1.5;
       const double y = 20.0 + row * 1.5;
       const double z = 30.0 + (row + col) * 0.25;
       points->SetPoint(idx, x, y, z);
-      }
     }
+  }
   return points;
 }
 
 //------------------------------------------------------------------------------
 // Compare two MarkupsBezierSurface nodes by their control-point coordinates.
 // Returns true if every control point matches within `kCoordinateTolerance`.
-bool ControlPointsMatch(vtkMRMLMarkupsBezierSurfaceNode* a,
-                        vtkMRMLMarkupsBezierSurfaceNode* b,
-                        std::string& mismatchReason)
+bool ControlPointsMatch(vtkMRMLMarkupsBezierSurfaceNode* a, vtkMRMLMarkupsBezierSurfaceNode* b, std::string& mismatchReason)
 {
   if (a == nullptr || b == nullptr)
-    {
+  {
     mismatchReason = "one or both Bezier nodes are null";
     return false;
-    }
+  }
   const int countA = a->GetNumberOfControlPoints();
   const int countB = b->GetNumberOfControlPoints();
   if (countA != countB)
-    {
+  {
     std::ostringstream oss;
     oss << "control point counts differ: a=" << countA << " b=" << countB;
     mismatchReason = oss.str();
     return false;
-    }
+  }
   if (countA != kBezierControlPointCount)
-    {
+  {
     std::ostringstream oss;
-    oss << "expected " << kBezierControlPointCount
-        << " control points, got " << countA;
+    oss << "expected " << kBezierControlPointCount << " control points, got " << countA;
     mismatchReason = oss.str();
     return false;
-    }
+  }
   for (int i = 0; i < countA; ++i)
-    {
+  {
     double pa[3] = { 0.0, 0.0, 0.0 };
     double pb[3] = { 0.0, 0.0, 0.0 };
     a->GetNthControlPointPosition(i, pa);
     b->GetNthControlPointPosition(i, pb);
     for (int d = 0; d < 3; ++d)
-      {
+    {
       if (std::fabs(pa[d] - pb[d]) > kCoordinateTolerance)
-        {
+      {
         std::ostringstream oss;
-        oss << "control point " << i << " axis " << d
-            << " differs: a=" << pa[d] << " b=" << pb[d];
+        oss << "control point " << i << " axis " << d << " differs: a=" << pa[d] << " b=" << pb[d];
         mismatchReason = oss.str();
         return false;
-        }
       }
     }
+  }
   return true;
 }
 
@@ -166,32 +162,26 @@ bool ControlPointsMatch(vtkMRMLMarkupsBezierSurfaceNode* a,
 // Populate a fresh Bezier node with the deterministic 16-point grid.
 // `bezier` is expected to be a freshly-created MarkupsBezierSurface node
 // already added to a scene.
-void PopulateBezierControlPoints(vtkMRMLMarkupsBezierSurfaceNode* bezier,
-                                 vtkPoints* sourcePoints)
+void PopulateBezierControlPoints(vtkMRMLMarkupsBezierSurfaceNode* bezier, vtkPoints* sourcePoints)
 {
   // RemoveAllControlPoints is conventional for resetting before population.
   bezier->RemoveAllControlPoints();
   for (vtkIdType i = 0; i < sourcePoints->GetNumberOfPoints(); ++i)
-    {
+  {
     double p[3] = { 0.0, 0.0, 0.0 };
     sourcePoints->GetPoint(i, p);
     bezier->AddControlPoint(p[0], p[1], p[2]);
-    }
+  }
 }
 
 //------------------------------------------------------------------------------
 // Construct a resection + Bezier surface assembly in the given scene.
 // Returns the resection node; the Bezier node is reachable via
 // `resection->GetBezierSurfaceNode()`.
-vtkMRMLLiverResectionNode*
-BuildResectionAssembly(vtkMRMLScene* scene, const std::string& tag)
+vtkMRMLLiverResectionNode* BuildResectionAssembly(vtkMRMLScene* scene, const std::string& tag)
 {
-  auto resection = vtkMRMLLiverResectionNode::SafeDownCast(
-    scene->AddNewNodeByClass("vtkMRMLLiverResectionNode",
-                             std::string("Resection_") + tag));
-  auto bezier = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(
-    scene->AddNewNodeByClass("vtkMRMLMarkupsBezierSurfaceNode",
-                             std::string("Bezier_") + tag));
+  auto resection = vtkMRMLLiverResectionNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLLiverResectionNode", std::string("Resection_") + tag));
+  auto bezier = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLMarkupsBezierSurfaceNode", std::string("Bezier_") + tag));
   resection->SetBezierSurfaceNode(bezier);
   return resection;
 }
@@ -204,12 +194,8 @@ int vtkMRMLLiverResectionStorageRoundTripTest(int argc, char* argv[])
   // argv[1] is conventionally a writable temp dir; the existing CMake
   // driver passes ${Slicer_BINARY_DIR}/Testing/Temporary via TEMP.  Fall
   // back to "." so the test is still runnable manually.
-  const std::string tempDir =
-    (argc > 1 && argv[1] != nullptr && argv[1][0] != '\0')
-      ? std::string(argv[1])
-      : std::string(".");
-  const std::string filePath =
-    tempDir + "/vtkMRMLLiverResectionStorageRoundTripTest.lrp.fcsv";
+  const std::string tempDir = (argc > 1 && argv[1] != nullptr && argv[1][0] != '\0') ? std::string(argv[1]) : std::string(".");
+  const std::string filePath = tempDir + "/vtkMRMLLiverResectionStorageRoundTripTest.lrp.fcsv";
 
   // --------------------------------------------------------------------------
   // Phase 1 — populate, write
@@ -231,9 +217,7 @@ int vtkMRMLLiverResectionStorageRoundTripTest(int argc, char* argv[])
   PopulateBezierControlPoints(bezierA, sourcePoints);
   CHECK_INT(bezierA->GetNumberOfControlPoints(), kBezierControlPointCount);
 
-  auto storage = vtkMRMLLiverResectionCSVStorageNode::SafeDownCast(
-    scene->AddNewNodeByClass("vtkMRMLLiverResectionCSVStorageNode",
-                             "Storage_A"));
+  auto storage = vtkMRMLLiverResectionCSVStorageNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLLiverResectionCSVStorageNode", "Storage_A"));
   CHECK_NOT_NULL(storage);
   storage->SetFileName(filePath.c_str());
 
@@ -270,15 +254,13 @@ int vtkMRMLLiverResectionStorageRoundTripTest(int argc, char* argv[])
   // format only carries Bezier control points; resection metadata must
   // not be clobbered by a Read.  See header scope comment §3.
   constexpr double kSentinelHepaticThickness = 2.5;
-  constexpr double kSentinelPortalThickness  = 1.75;
+  constexpr double kSentinelPortalThickness = 1.75;
   const float kSentinelHepaticColor[3] = { 0.10f, 0.20f, 0.30f };
   resectionB->SetHepaticContourThickness(kSentinelHepaticThickness);
   resectionB->SetPortalContourThickness(kSentinelPortalThickness);
   resectionB->SetHepaticContourColor(const_cast<float*>(kSentinelHepaticColor));
 
-  auto storageB = vtkMRMLLiverResectionCSVStorageNode::SafeDownCast(
-    scene->AddNewNodeByClass("vtkMRMLLiverResectionCSVStorageNode",
-                             "Storage_B"));
+  auto storageB = vtkMRMLLiverResectionCSVStorageNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLLiverResectionCSVStorageNode", "Storage_B"));
   CHECK_NOT_NULL(storageB);
   storageB->SetFileName(filePath.c_str());
 
@@ -291,44 +273,36 @@ int vtkMRMLLiverResectionStorageRoundTripTest(int argc, char* argv[])
   // --------------------------------------------------------------------------
   std::string mismatch;
   if (!ControlPointsMatch(bezierA, bezierB, mismatch))
-    {
+  {
     std::cerr << "Round-trip mismatch: " << mismatch << std::endl;
     return EXIT_FAILURE;
-    }
+  }
 
   // Metadata sentinels survived the Read — the storage class is and must
   // remain scoped to the Bezier subnode.
-  CHECK_DOUBLE_TOLERANCE(resectionB->GetHepaticContourThickness(),
-                         kSentinelHepaticThickness, kCoordinateTolerance);
-  CHECK_DOUBLE_TOLERANCE(resectionB->GetPortalContourThickness(),
-                         kSentinelPortalThickness, kCoordinateTolerance);
+  CHECK_DOUBLE_TOLERANCE(resectionB->GetHepaticContourThickness(), kSentinelHepaticThickness, kCoordinateTolerance);
+  CHECK_DOUBLE_TOLERANCE(resectionB->GetPortalContourThickness(), kSentinelPortalThickness, kCoordinateTolerance);
   {
     float readBack[3] = { 0.0f, 0.0f, 0.0f };
     resectionB->GetHepaticContourColor(readBack);
     for (int d = 0; d < 3; ++d)
+    {
+      if (std::fabs(readBack[d] - kSentinelHepaticColor[d]) > kCoordinateTolerance)
       {
-      if (std::fabs(readBack[d] - kSentinelHepaticColor[d])
-          > kCoordinateTolerance)
-        {
-        std::cerr << "HepaticContourColor sentinel axis " << d
-                  << " clobbered by ReadData: got " << readBack[d]
-                  << " expected " << kSentinelHepaticColor[d] << std::endl;
+        std::cerr << "HepaticContourColor sentinel axis " << d << " clobbered by ReadData: got " << readBack[d] << " expected " << kSentinelHepaticColor[d] << std::endl;
         return EXIT_FAILURE;
-        }
       }
+    }
   }
 
   // --------------------------------------------------------------------------
   // Phase 4 — pin the failure modes the storage class guards against
   // --------------------------------------------------------------------------
   // Write must fail when the resection has no Bezier reference.
-  auto resectionC = vtkMRMLLiverResectionNode::SafeDownCast(
-    scene->AddNewNodeByClass("vtkMRMLLiverResectionNode", "Resection_C"));
+  auto resectionC = vtkMRMLLiverResectionNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLLiverResectionNode", "Resection_C"));
   CHECK_NOT_NULL(resectionC);
   // (intentionally do NOT set a Bezier surface node on resectionC)
-  auto storageC = vtkMRMLLiverResectionCSVStorageNode::SafeDownCast(
-    scene->AddNewNodeByClass("vtkMRMLLiverResectionCSVStorageNode",
-                             "Storage_C"));
+  auto storageC = vtkMRMLLiverResectionCSVStorageNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLLiverResectionCSVStorageNode", "Storage_C"));
   storageC->SetFileName(filePath.c_str());
   // Suppress the expected error output during the failure-mode probe so
   // CTest's WITH_VTK_ERROR_OUTPUT_CHECK does not flag it as unexpected.

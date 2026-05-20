@@ -56,28 +56,23 @@
 vtkStandardNewMacro(vtkSlicerBezierSurfaceWidget);
 
 //------------------------------------------------------------------------------
-vtkSlicerBezierSurfaceWidget::vtkSlicerBezierSurfaceWidget()
-{
-
-}
+vtkSlicerBezierSurfaceWidget::vtkSlicerBezierSurfaceWidget() {}
 
 //------------------------------------------------------------------------------
 vtkSlicerBezierSurfaceWidget::~vtkSlicerBezierSurfaceWidget() = default;
 
 //------------------------------------------------------------------------------
-void vtkSlicerBezierSurfaceWidget::CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode,
-                                                                vtkMRMLAbstractViewNode* viewNode,
-                                                                vtkRenderer* renderer)
+void vtkSlicerBezierSurfaceWidget::CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode, vtkMRMLAbstractViewNode* viewNode, vtkRenderer* renderer)
 {
   vtkSmartPointer<vtkSlicerMarkupsWidgetRepresentation> rep = nullptr;
   if (vtkMRMLSliceNode::SafeDownCast(viewNode))
-    {
+  {
     rep = vtkSmartPointer<vtkSlicerLineRepresentation2D>::New();
-    }
+  }
   else
-    {
+  {
     rep = vtkSmartPointer<vtkSlicerBezierSurfaceRepresentation3D>::New();
-    }
+  }
   this->SetRenderer(renderer);
   this->SetRepresentation(rep);
   rep->SetViewNode(viewNode);
@@ -89,10 +84,10 @@ void vtkSlicerBezierSurfaceWidget::CreateDefaultRepresentation(vtkMRMLMarkupsDis
 vtkSlicerMarkupsWidget* vtkSlicerBezierSurfaceWidget::CreateInstance() const
 {
   vtkObject* ret = vtkObjectFactory::CreateInstance("vtkSlcierBezierSurfaceWidget");
-  if(ret)
-    {
+  if (ret)
+  {
     return static_cast<vtkSlicerBezierSurfaceWidget*>(ret);
-    }
+  }
 
   vtkSlicerBezierSurfaceWidget* result = new vtkSlicerBezierSurfaceWidget;
 #ifdef VTK_HAS_INITIALIZE_OBJECT_BASE
@@ -111,29 +106,27 @@ bool vtkSlicerBezierSurfaceWidget::ProcessInteractionEvent(vtkMRMLInteractionEve
   bool processedEvent = false;
   switch (widgetEvent)
   {
-  case WidgetEventControlPointMoveStart:
-    this->SetWidgetState(WidgetStateTranslateControlPoint);
-    this->StartWidgetInteraction(eventData);
-    markupsNode->InvokeEvent(vtkCommand::StartInteractionEvent);
-    processedEvent = true;
-    break;
+    case WidgetEventControlPointMoveStart:
+      this->SetWidgetState(WidgetStateTranslateControlPoint);
+      this->StartWidgetInteraction(eventData);
+      markupsNode->InvokeEvent(vtkCommand::StartInteractionEvent);
+      processedEvent = true;
+      break;
 
-  case WidgetEventMouseMove:
-    processedEvent = Superclass::ProcessMouseMove(eventData);
-    break;
+    case WidgetEventMouseMove: processedEvent = Superclass::ProcessMouseMove(eventData); break;
 
-  case WidgetEventControlPointMoveEnd:
-    this->EndWidgetInteraction();
-    this->SetWidgetState(WidgetStateOnWidget);
-    markupsNode->InvokeEvent(vtkCommand::EndInteractionEvent);
-    processedEvent = true;
-    break;
+    case WidgetEventControlPointMoveEnd:
+      this->EndWidgetInteraction();
+      this->SetWidgetState(WidgetStateOnWidget);
+      markupsNode->InvokeEvent(vtkCommand::EndInteractionEvent);
+      processedEvent = true;
+      break;
   }
 
   if (!processedEvent)
-    {
+  {
     processedEvent = Superclass::ProcessInteractionEvent(eventData);
-    }
+  }
 
   return processedEvent;
 }
@@ -143,9 +136,9 @@ vtkMRMLMarkupsBezierSurfaceNode* vtkSlicerBezierSurfaceWidget::GetMRMLMarkupsNod
 {
   auto representation = this->GetMarkupsRepresentation();
   if (!representation)
-    {
+  {
     return nullptr;
-    }
+  }
 
   return vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(representation->GetMarkupsNode());
 }

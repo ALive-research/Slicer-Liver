@@ -40,10 +40,10 @@
 #ifndef SLICERLIVER_LIVERRESECTIONS_MRMLDM_VTKMRMLLIVERRESECTIONSDISPLAYABLEMANAGERHELPER2D_H_
 #define SLICERLIVER_LIVERRESECTIONS_MRMLDM_VTKMRMLLIVERRESECTIONSDISPLAYABLEMANAGERHELPER2D_H_
 
-//Liver resection module includes
+// Liver resection module includes
 #include "vtkSlicerLiverResectionsModuleMRMLDisplayableManagerExport.h"
 
-//VTK includes
+// VTK includes
 #include <vtkObject.h>
 #include <vtkNew.h>
 #include <vtkSmartPointer.h>
@@ -67,60 +67,47 @@ class vtkCallbackCommand;
 class vtkBezierSurfaceSource;
 
 //-------------------------------------------------------------------------------
-class VTK_SLICER_LIVERRESECTIONS_MODULE_MRMLDISPLAYABLEMANAGER_EXPORT
-vtkMRMLLiverResectionsDisplayableManagerHelper2D
-  :public vtkObject
+class VTK_SLICER_LIVERRESECTIONS_MODULE_MRMLDISPLAYABLEMANAGER_EXPORT vtkMRMLLiverResectionsDisplayableManagerHelper2D : public vtkObject
 {
- public:
+public:
+  // Description:
+  // VTK-specific functions for object creation and class hierarchy
+  static vtkMRMLLiverResectionsDisplayableManagerHelper2D* New();
+  vtkTypeMacro(vtkMRMLLiverResectionsDisplayableManagerHelper2D, vtkObject);
 
-// Description:
-// VTK-specific functions for object creation and class hierarchy
-  static vtkMRMLLiverResectionsDisplayableManagerHelper2D *New();
- vtkTypeMacro(vtkMRMLLiverResectionsDisplayableManagerHelper2D, vtkObject);
+  // Description:
+  // VTK-specific function for printing information
+  void PrintSelf(ostream& os, vtkIndent indent) override;
 
-// Description:
-// VTK-specific function for printing information
-  void PrintSelf(ostream &os, vtkIndent indent) override;
+  // Description:
+  // Add surface contour to the 2D views
+  void DisplaySurfaceContour(vtkMRMLMarkupsBezierSurfaceNode* node, vtkMRMLSliceNode* sliceNode, vtkRenderer* renderer);
 
-// Description:
-// Add surface contour to the 2D views
-  void DisplaySurfaceContour(vtkMRMLMarkupsBezierSurfaceNode *node,
-                             vtkMRMLSliceNode *sliceNode,
-                             vtkRenderer *renderer);
+  void UpdateSurfaceContour(vtkMRMLMarkupsBezierSurfaceNode* node);
 
-  void UpdateSurfaceContour(vtkMRMLMarkupsBezierSurfaceNode *node);
+  // Description:
+  // Remove surface contour from the 2D views
+  void RemoveSurfaceContour(vtkMRMLMarkupsBezierSurfaceNode* node, vtkRenderer* renderer);
+  // Description:
+  // Remove all surface contours from the 2D views
+  void RemoveAllSurfacesContours(vtkRenderer* renderer, vtkRenderWindowInteractor* interactor);
 
-// Description:
-// Remove surface contour from the 2D views
-  void RemoveSurfaceContour(vtkMRMLMarkupsBezierSurfaceNode *node,
-                            vtkRenderer *renderer);
-// Description:
-// Remove all surface contours from the 2D views
-  void RemoveAllSurfacesContours(vtkRenderer *renderer,
-                                 vtkRenderWindowInteractor *interactor);
+  void ChangeSurfaceVisibility(vtkMRMLMarkupsBezierSurfaceNode* node, vtkRenderer* renderer);
+  void GetBezierSurfaceControlPoints(vtkMRMLMarkupsBezierSurfaceNode* node);
 
-  void ChangeSurfaceVisibility(vtkMRMLMarkupsBezierSurfaceNode *node,
-                               vtkRenderer *renderer);
-  void GetBezierSurfaceControlPoints(vtkMRMLMarkupsBezierSurfaceNode *node);
-
-
- protected:
-
-// Description:
-// Constructor & destructor
+protected:
+  // Description:
+  // Constructor & destructor
   vtkMRMLLiverResectionsDisplayableManagerHelper2D();
   virtual ~vtkMRMLLiverResectionsDisplayableManagerHelper2D();
 
-// Description:
-// Callback function to update the surface contour
-  static void UpdateSurfaceContour(vtkObject *object,
-                                   unsigned long int id,
-                                   void *clientData,
-                                   void *callerData);
- protected:
+  // Description:
+  // Callback function to update the surface contour
+  static void UpdateSurfaceContour(vtkObject* object, unsigned long int id, void* clientData, void* callerData);
 
-// Description:
-// Class member variables.
+protected:
+  // Description:
+  // Class member variables.
   vtkWeakPointer<vtkMRMLSliceNode> SliceNode;
   vtkSmartPointer<vtkCutter> Cutter;
   vtkSmartPointer<vtkActor2D> ContourActor;
@@ -132,4 +119,4 @@ vtkMRMLLiverResectionsDisplayableManagerHelper2D
   vtkSmartPointer<vtkPoints> BezierSurfaceControlPoints;
 };
 
-#endif //SLICERLIVER_LIVERRESECTIONS_MRMLDM_VTKMRMLLIVERRESECTIONSDISPLAYABLEMANAGERHELPER2D_H_
+#endif // SLICERLIVER_LIVERRESECTIONS_MRMLDM_VTKMRMLLIVERRESECTIONSDISPLAYABLEMANAGERHELPER2D_H_

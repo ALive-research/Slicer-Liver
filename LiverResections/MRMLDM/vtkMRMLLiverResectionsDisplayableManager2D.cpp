@@ -37,7 +37,6 @@
 
   ==============================================================================*/
 
-
 #include "vtkMRMLLiverResectionsDisplayableManager2D.h"
 #include "vtkMRMLAbstractSliceViewDisplayableManager.h"
 
@@ -63,101 +62,92 @@
 vtkStandardNewMacro(vtkMRMLLiverResectionsDisplayableManager2D);
 
 //-------------------------------------------------------------------------------
-vtkMRMLLiverResectionsDisplayableManager2D::
-vtkMRMLLiverResectionsDisplayableManager2D() {
-}
+vtkMRMLLiverResectionsDisplayableManager2D::vtkMRMLLiverResectionsDisplayableManager2D() {}
 
 //-------------------------------------------------------------------------------
-vtkMRMLLiverResectionsDisplayableManager2D::
-~vtkMRMLLiverResectionsDisplayableManager2D() {
-
-}
+vtkMRMLLiverResectionsDisplayableManager2D::~vtkMRMLLiverResectionsDisplayableManager2D() {}
 
 //-------------------------------------------------------------------------------
-void vtkMRMLLiverResectionsDisplayableManager2D::PrintSelf(ostream &os,
-                                                           vtkIndent indent) {
+void vtkMRMLLiverResectionsDisplayableManager2D::PrintSelf(ostream& os, vtkIndent indent)
+{
   this->Superclass::PrintSelf(os, indent);
 }
 
 //-------------------------------------------------------------------------------
-void vtkMRMLLiverResectionsDisplayableManager2D::
-ProcessMRMLNodesEvents(vtkObject *caller,
-                       unsigned long event,
-                       void *callData) {
+void vtkMRMLLiverResectionsDisplayableManager2D::ProcessMRMLNodesEvents(vtkObject* caller, unsigned long event, void* callData)
+{
 
   auto BezierSurfaceNode = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(caller);
 
   if (BezierSurfaceNode)
-    {
+  {
     if (BezierSurfaceNode->GetNumberOfControlPoints() != 16)
-      {
-//      vtkErrorMacro("BezierSurfaceNode not ready");
+    {
+      //      vtkErrorMacro("BezierSurfaceNode not ready");
       return;
-      }
+    }
 
     auto BezierSurfaceNodeIDC = BezierSurfaceNode->GetID();
 
     if (event == vtkMRMLMarkupsBezierSurfaceNode::PointModifiedEvent)
-      {
+    {
       if (BezierSurfaceNode->GetDisplayVisibility())
-        {
+      {
         auto helper = this->ResectionNodeHelperMap[BezierSurfaceNodeIDC];
         helper->UpdateSurfaceContour(BezierSurfaceNode);
-        }
       }
+    }
 
     if (event == vtkCommand::ModifiedEvent)
-      {
-      if (BezierSurfaceNode->GetDisplayVisibility())
-        {
-        this->OnMRMLNodeModified(BezierSurfaceNode);
-        }
-      }
-    } else
     {
-    Superclass::ProcessMRMLNodesEvents(caller, event, callData);
+      if (BezierSurfaceNode->GetDisplayVisibility())
+      {
+        this->OnMRMLNodeModified(BezierSurfaceNode);
+      }
     }
-//
+  }
+  else
+  {
+    Superclass::ProcessMRMLNodesEvents(caller, event, callData);
+  }
+  //
   this->RequestRender();
 }
 
 //-------------------------------------------------------------------------------
-void vtkMRMLLiverResectionsDisplayableManager2D::
-SetMRMLSceneInternal(vtkMRMLScene *newScene) {
+void vtkMRMLLiverResectionsDisplayableManager2D::SetMRMLSceneInternal(vtkMRMLScene* newScene)
+{
 
   this->OnMRMLSceneEndClose();
 
   Superclass::SetMRMLSceneInternal(newScene);
 
   if (newScene)
-    {
+  {
     auto deferredNodesCallbackCommand = vtkSmartPointer<vtkCallbackCommand>::New();
     deferredNodesCallbackCommand->SetCallback(this->AddDeferredNodes);
     deferredNodesCallbackCommand->SetClientData(this);
 
-    vtkEventBroker *eventBroker = vtkEventBroker::GetInstance();
-    eventBroker->AddObservation(this->GetMRMLScene(),
-                                vtkMRMLScene::EndBatchProcessEvent,
-                                this,
-                                deferredNodesCallbackCommand);
-    }
+    vtkEventBroker* eventBroker = vtkEventBroker::GetInstance();
+    eventBroker->AddObservation(this->GetMRMLScene(), vtkMRMLScene::EndBatchProcessEvent, this, deferredNodesCallbackCommand);
+  }
 }
 
 //-------------------------------------------------------------------------------
-void vtkMRMLLiverResectionsDisplayableManager2D::
-OnMRMLNodeModified(vtkMRMLNode *node) {
+void vtkMRMLLiverResectionsDisplayableManager2D::OnMRMLNodeModified(vtkMRMLNode* node)
+{
   if (!node)
-    {
+  {
     vtkErrorMacro("OnMRMLNodeModified: no node set");
     return;
-    }
+  }
 
   auto BezierSurfaceNode = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(node);
   if (!BezierSurfaceNode)
-    {
-//    vtkErrorMacro("Could not get BezierSurfaceNode");
+  {
+    //    vtkErrorMacro("Could not get BezierSurfaceNode");
     return;
-    }
+  }
   auto BezierSurfaceNodeIDC = BezierSurfaceNode->GetID();
   auto helper = this->ResectionNodeHelperMap[BezierSurfaceNodeIDC];
   helper->ChangeSurfaceVisibility(BezierSurfaceNode, this->GetRenderer());
@@ -166,25 +156,23 @@ OnMRMLNodeModified(vtkMRMLNode *node) {
 }
 
 //-------------------------------------------------------------------------------
-void vtkMRMLLiverResectionsDisplayableManager2D::
-OnMRMLSceneNodeAdded(vtkMRMLNode *node) {
+void vtkMRMLLiverResectionsDisplayableManager2D::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
+{
   // If no node or no scene, then return
   if (!node || !this->GetMRMLScene())
-    {
+  {
     return;
-    }
+  }
   auto sliceNode = this->GetMRMLSliceNode();
   // Check whether the node is a resection node
   auto BezierSurfaceNode = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(node);
   if (!BezierSurfaceNode)
-    {
-//    vtkErrorMacro("Could not get BezierSurfaceNode");
+  {
+    //    vtkErrorMacro("Could not get BezierSurfaceNode");
     return;
-    }
+  }
 
-  std::cout << "Trying to add node to dm 2D:"
-            << BezierSurfaceNode->GetName()
-            << std::endl;
+  std::cout << "Trying to add node to dm 2D:" << BezierSurfaceNode->GetName() << std::endl;
 
   // Setup the event listening mechanism
   auto events = vtkSmartPointer<vtkIntArray>::New();
@@ -199,32 +187,32 @@ OnMRMLSceneNodeAdded(vtkMRMLNode *node) {
   this->ResectionNodeHelperMap[BezierSurfaceNodeIDC] = helper;
   helper->DisplaySurfaceContour(BezierSurfaceNode, sliceNode, this->GetRenderer());
 
-  //if the scene is still updating, jump out
+  // if the scene is still updating, jump out
   if (this->GetMRMLScene()->IsBatchProcessing())
-    {
+  {
     this->DeferredNodes->AddItem(BezierSurfaceNode);
     return;
-    }
+  }
 
   this->RequestRender();
 }
 
 //-------------------------------------------------------------------------------
-void vtkMRMLLiverResectionsDisplayableManager2D::
-OnMRMLSceneNodeRemoved(vtkMRMLNode *node) {
+void vtkMRMLLiverResectionsDisplayableManager2D::OnMRMLSceneNodeRemoved(vtkMRMLNode* node)
+{
   // Check whether the node is a resection node
   auto BezierSurfaceNode = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(node);
 
   if (!BezierSurfaceNode)
-    {
-//    vtkErrorMacro("Could not get BezierSurfaceNode");
+  {
+    //    vtkErrorMacro("Could not get BezierSurfaceNode");
     return;
-    }
+  }
   auto BezierSurfaceNodeIDC = BezierSurfaceNode->GetID();
   if (this->ResectionNodeHelperMap.find(BezierSurfaceNodeIDC) == this->ResectionNodeHelperMap.end())
-    {
+  {
     return;
-    }
+  }
 
   auto helper = this->ResectionNodeHelperMap[BezierSurfaceNodeIDC];
 
@@ -238,29 +226,24 @@ OnMRMLSceneNodeRemoved(vtkMRMLNode *node) {
 }
 
 //-------------------------------------------------------------------------------
-void vtkMRMLLiverResectionsDisplayableManager2D::OnMRMLSceneEndClose() {
-
-}
+void vtkMRMLLiverResectionsDisplayableManager2D::OnMRMLSceneEndClose() {}
 
 //-------------------------------------------------------------------------------
-void vtkMRMLLiverResectionsDisplayableManager2D::
-AddDeferredNodes(vtkObject * vtkNotUsed(caller),
-                 unsigned long vtkNotUsed(event),
-                 void *clientData,
-                 void * vtkNotUsed(callData)) {
-  auto self = static_cast<vtkMRMLLiverResectionsDisplayableManager2D *>(clientData);
+void vtkMRMLLiverResectionsDisplayableManager2D::AddDeferredNodes(vtkObject* vtkNotUsed(caller), unsigned long vtkNotUsed(event), void* clientData, void* vtkNotUsed(callData))
+{
+  auto self = static_cast<vtkMRMLLiverResectionsDisplayableManager2D*>(clientData);
 
   auto sliceNode = self->GetMRMLSliceNode();
 
   for (int i = 0; i < self->DeferredNodes->GetNumberOfItems(); i++)
-    {
-    vtkObject *object = self->DeferredNodes->GetItemAsObject(i);
+  {
+    vtkObject* object = self->DeferredNodes->GetItemAsObject(i);
     auto BezierSurfaceNode = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(object);
 
     if (!BezierSurfaceNode)
-      {
+    {
       return;
-      }
+    }
 
     auto BezierSurfaceNodeIDC = BezierSurfaceNode->GetID();
     auto helper = vtkSmartPointer<vtkMRMLLiverResectionsDisplayableManagerHelper2D>::New();
@@ -270,7 +253,7 @@ AddDeferredNodes(vtkObject * vtkNotUsed(caller),
     helper->DisplaySurfaceContour(BezierSurfaceNode, sliceNode, self->GetRenderer());
 
     self->RequestRender();
-    }
+  }
 
   self->DeferredNodes->RemoveAllItems();
 }

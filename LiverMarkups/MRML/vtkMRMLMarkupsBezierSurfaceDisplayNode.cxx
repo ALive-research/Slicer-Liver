@@ -48,18 +48,29 @@ vtkMRMLNodeNewMacro(vtkMRMLMarkupsBezierSurfaceDisplayNode);
 
 //----------------------------------------------------------------------------
 vtkMRMLMarkupsBezierSurfaceDisplayNode::vtkMRMLMarkupsBezierSurfaceDisplayNode()
-  :ClipOut(false), WidgetVisibility(true),
-   ResectionMarginColor{0.0f, 0.0f, 0.0f}, UncertaintyMarginColor{0.0f, 0.0f, 0.0f}, Grid2DVisibility(false),
-   ResectionOpacity(1.0f), GridDivisions(0.0f), GridThickness(0.0f), ShowResection2D(false), EnableFlexibleBoundary(false), MirrorDisplay(false), Grid3DVisibility(false),
-   HepaticContourColor{0.0f, 151.0/255.0f, 206.0/255.0f}, PortalContourColor{216.0/255.0f, 101.0/255.0f, 79.0/255.0f}, TextureNumComps(0)
+  : ClipOut(false)
+  , WidgetVisibility(true)
+  , ResectionMarginColor{ 0.0f, 0.0f, 0.0f }
+  , UncertaintyMarginColor{ 0.0f, 0.0f, 0.0f }
+  , Grid2DVisibility(false)
+  , ResectionOpacity(1.0f)
+  , GridDivisions(0.0f)
+  , GridThickness(0.0f)
+  , ShowResection2D(false)
+  , EnableFlexibleBoundary(false)
+  , MirrorDisplay(false)
+  , Grid3DVisibility(false)
+  , HepaticContourColor{ 0.0f, 151.0 / 255.0f, 206.0 / 255.0f }
+  , PortalContourColor{ 216.0 / 255.0f, 101.0 / 255.0f, 79.0 / 255.0f }
+  , TextureNumComps(0)
 {
 }
 
 //----------------------------------------------------------------------------
-vtkMRMLMarkupsBezierSurfaceDisplayNode::~vtkMRMLMarkupsBezierSurfaceDisplayNode()=default;
+vtkMRMLMarkupsBezierSurfaceDisplayNode::~vtkMRMLMarkupsBezierSurfaceDisplayNode() = default;
 
 //----------------------------------------------------------------------------
 void vtkMRMLMarkupsBezierSurfaceDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
 {
-  Superclass::PrintSelf(os,indent);
+  Superclass::PrintSelf(os, indent);
 }

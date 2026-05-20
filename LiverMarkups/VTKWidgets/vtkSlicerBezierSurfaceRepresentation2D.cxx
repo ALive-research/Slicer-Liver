@@ -43,10 +43,7 @@
 vtkStandardNewMacro(vtkSlicerBezierSurfaceRepresentation2D);
 
 //------------------------------------------------------------------------------
-vtkSlicerBezierSurfaceRepresentation2D::vtkSlicerBezierSurfaceRepresentation2D()
-{
-
-}
+vtkSlicerBezierSurfaceRepresentation2D::vtkSlicerBezierSurfaceRepresentation2D() {}
 
 //------------------------------------------------------------------------------
 vtkSlicerBezierSurfaceRepresentation2D::~vtkSlicerBezierSurfaceRepresentation2D() = default;

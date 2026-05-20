@@ -39,17 +39,16 @@
 
 #include "vtkMRMLLiverResectionsDisplayableManagerHelper2D.h"
 
-
-//Liver resection module includes
+// Liver resection module includes
 #include <vtkMRMLLiverResectionNode.h>
 #include <vtkMRMLMarkupsBezierSurfaceNode.h>
 #include <vtkMRMLMarkupsBezierSurfaceDisplayNode.h>
 #include "vtkBezierSurfaceSource.h"
 
-//MRMLNodes
+// MRMLNodes
 #include <vtkMRMLSliceNode.h>
 
-//VTK includes
+// VTK includes
 #include <vtkObjectFactory.h>
 #include <vtkRenderWindowInteractor.h>
 #include <vtkRenderer.h>
@@ -67,60 +66,48 @@
 #include <vtkDistancePolyDataFilter.h>
 #include <vtkPoints.h>
 
-vtkStandardNewMacro (vtkMRMLLiverResectionsDisplayableManagerHelper2D);
+vtkStandardNewMacro(vtkMRMLLiverResectionsDisplayableManagerHelper2D);
 
 //---------------------------------------------------------------------------
-vtkMRMLLiverResectionsDisplayableManagerHelper2D::
-vtkMRMLLiverResectionsDisplayableManagerHelper2D()
+vtkMRMLLiverResectionsDisplayableManagerHelper2D::vtkMRMLLiverResectionsDisplayableManagerHelper2D()
 {
   SliceNode = nullptr;
 }
 
 //---------------------------------------------------------------------------
-vtkMRMLLiverResectionsDisplayableManagerHelper2D::
-~vtkMRMLLiverResectionsDisplayableManagerHelper2D()
-{
-
-}
-
+vtkMRMLLiverResectionsDisplayableManagerHelper2D::~vtkMRMLLiverResectionsDisplayableManagerHelper2D() {}
 
 //---------------------------------------------------------------------------
-void vtkMRMLLiverResectionsDisplayableManagerHelper2D::
-PrintSelf(ostream &os,
-          vtkIndent indent)
+void vtkMRMLLiverResectionsDisplayableManagerHelper2D::PrintSelf(ostream& os, vtkIndent indent)
 {
-    this->vtkObject::PrintSelf(os, indent);
+  this->vtkObject::PrintSelf(os, indent);
 }
 
 //---------------------------------------------------------------------------
-void vtkMRMLLiverResectionsDisplayableManagerHelper2D
-::DisplaySurfaceContour(vtkMRMLMarkupsBezierSurfaceNode *node,
-                        vtkMRMLSliceNode *sliceNode,
-                        vtkRenderer *renderer)
+void vtkMRMLLiverResectionsDisplayableManagerHelper2D ::DisplaySurfaceContour(vtkMRMLMarkupsBezierSurfaceNode* node, vtkMRMLSliceNode* sliceNode, vtkRenderer* renderer)
 
 {
-  if(node == 0 || renderer == 0)
-    {
+  if (node == 0 || renderer == 0)
+  {
     return;
-    }
+  }
 
   this->SliceNode = sliceNode;
 
   // Compute the slice normal
   auto sliceToRASMatrix = sliceNode->GetSliceToRAS();
   double slicePlaneNormal[3];
-  slicePlaneNormal[0] = sliceToRASMatrix->GetElement(0,2);
-  slicePlaneNormal[1] = sliceToRASMatrix->GetElement(1,2);
-  slicePlaneNormal[2] = sliceToRASMatrix->GetElement(2,2);
+  slicePlaneNormal[0] = sliceToRASMatrix->GetElement(0, 2);
+  slicePlaneNormal[1] = sliceToRASMatrix->GetElement(1, 2);
+  slicePlaneNormal[2] = sliceToRASMatrix->GetElement(2, 2);
 
-  //Set up the cutter
+  // Set up the cutter
 
-  vtkSmartPointer<vtkPlane> cutPlane =
-    vtkSmartPointer<vtkPlane>::New();
+  vtkSmartPointer<vtkPlane> cutPlane = vtkSmartPointer<vtkPlane>::New();
   cutPlane->SetNormal(slicePlaneNormal);
 
   this->BezierSource = vtkSmartPointer<vtkBezierSurfaceSource>::New();
-  this->BezierSource->SetResolution(20,20);
+  this->BezierSource->SetResolution(20, 20);
   this->BezierSurfaceControlPoints = vtkSmartPointer<vtkPoints>::New();
   this->BezierSurfaceControlPoints->SetNumberOfPoints(16);
   GetBezierSurfaceControlPoints(node);
@@ -130,47 +117,45 @@ void vtkMRMLLiverResectionsDisplayableManagerHelper2D
   this->Cutter = vtkSmartPointer<vtkCutter>::New();
   this->Cutter->SetInputConnection(this->BezierSource->GetOutputPort());
   this->Cutter->SetCutFunction(cutPlane);
-  this->Cutter->GenerateValues(1,
-                               this->SliceNode->GetSliceOffset(),
-                               this->SliceNode->GetSliceOffset());
+  this->Cutter->GenerateValues(1, this->SliceNode->GetSliceOffset(), this->SliceNode->GetSliceOffset());
   this->Cutter->GenerateCutScalarsOff();
   this->Cutter->GenerateTrianglesOn();
 
-  //Set up transformation (3d to 2d)
+  // Set up transformation (3d to 2d)
   this->InvertedRASToXYMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
   this->InvertedRASToXYMatrix->DeepCopy(sliceNode->GetXYToRAS());
   this->InvertedRASToXYMatrix->Invert();
   this->RASToXYTransform = vtkSmartPointer<vtkTransform>::New();
   this->RASToXYTransform->SetMatrix(this->InvertedRASToXYMatrix.GetPointer());
 
-  //Set up transformation filter (3d to 2d)
+  // Set up transformation filter (3d to 2d)
   auto transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
   transformFilter->SetInputConnection(this->Cutter->GetOutputPort());
   transformFilter->SetTransform(this->RASToXYTransform.GetPointer());
 
-  //Set up the color transfer function
-  // vtkSmartPointer<vtkColorTransferFunction> colorTable =
-  //   vtkSmartPointer<vtkColorTransferFunction>::New();
-  // colorTable->AddRGBPoint(0.0, 1.0, 0.0, 0.0);
-  // colorTable->AddRGBPoint(node->GetSafetyMargin(), 1.0, 0.0, 0.0);
-  // colorTable->AddRGBPoint(node->GetSafetyMargin() + 0.00001, 0.7, 0.7, 1.0);
-  // colorTable->AddRGBPoint(100.0, 0.7, 0.7, 1.0);
+  // Set up the color transfer function
+  //  vtkSmartPointer<vtkColorTransferFunction> colorTable =
+  //    vtkSmartPointer<vtkColorTransferFunction>::New();
+  //  colorTable->AddRGBPoint(0.0, 1.0, 0.0, 0.0);
+  //  colorTable->AddRGBPoint(node->GetSafetyMargin(), 1.0, 0.0, 0.0);
+  //  colorTable->AddRGBPoint(node->GetSafetyMargin() + 0.00001, 0.7, 0.7, 1.0);
+  //  colorTable->AddRGBPoint(100.0, 0.7, 0.7, 1.0);
 
-  //Set up mapper and actor for the contour
+  // Set up mapper and actor for the contour
   vtkSmartPointer<vtkPolyDataMapper2D> mapper = vtkSmartPointer<vtkPolyDataMapper2D>::New();
   mapper->SetInputConnection(transformFilter->GetOutputPort());
   // mapper->SetLookupTable(colorTable);
   // mapper->ScalarVisibilityOn();
-  //mapper->SetScalarModeToUsePointData();
-  //mapper->SetColorModeToMapScalars();
-  //mapper->SetScalarRange(0,100);
+  // mapper->SetScalarModeToUsePointData();
+  // mapper->SetColorModeToMapScalars();
+  // mapper->SetScalarRange(0,100);
 
   this->ContourActor = vtkSmartPointer<vtkActor2D>::New();
   this->ContourActor->SetMapper(mapper);
   this->ContourActor->GetProperty()->SetLineWidth(3);
-  //actor->GetProperty()->SetLineWidth(2.0);
+  // actor->GetProperty()->SetLineWidth(2.0);
   renderer->AddActor2D(this->ContourActor.GetPointer());
-  std::cout<<"Add actor: "<<this->ContourActor.GetPointer()<<endl;
+  std::cout << "Add actor: " << this->ContourActor.GetPointer() << endl;
 
   this->UpdateCommand = vtkSmartPointer<vtkCallbackCommand>::New();
   this->UpdateCommand->SetCallback(vtkMRMLLiverResectionsDisplayableManagerHelper2D::UpdateSurfaceContour);
@@ -179,108 +164,90 @@ void vtkMRMLLiverResectionsDisplayableManagerHelper2D
 }
 
 //---------------------------------------------------------------------------
-void vtkMRMLLiverResectionsDisplayableManagerHelper2D
-::UpdateSurfaceContour(vtkMRMLMarkupsBezierSurfaceNode *node)
+void vtkMRMLLiverResectionsDisplayableManagerHelper2D ::UpdateSurfaceContour(vtkMRMLMarkupsBezierSurfaceNode* node)
 {
   GetBezierSurfaceControlPoints(node);
   this->BezierSource->SetControlPoints(this->BezierSurfaceControlPoints);
   this->BezierSource->Update();
 }
 
-
-
 //---------------------------------------------------------------------------
-void vtkMRMLLiverResectionsDisplayableManagerHelper2D
-::RemoveSurfaceContour(vtkMRMLMarkupsBezierSurfaceNode *node,
-                       vtkRenderer *renderer)
+void vtkMRMLLiverResectionsDisplayableManagerHelper2D ::RemoveSurfaceContour(vtkMRMLMarkupsBezierSurfaceNode* node, vtkRenderer* renderer)
 {
-  if(!node || !renderer)
-    {
+  if (!node || !renderer)
+  {
     return;
-    }
+  }
 
   if (this->SliceNode != nullptr)
-    {
+  {
     this->Cutter->SetInputData(nullptr);
     this->SliceNode->RemoveObserver(this->UpdateCommand.GetPointer());
     renderer->RemoveActor(this->ContourActor.GetPointer());
-    }
+  }
 }
 
 //---------------------------------------------------------------------------
-void vtkMRMLLiverResectionsDisplayableManagerHelper2D
-::RemoveAllSurfacesContours(vtkRenderer *renderer,
-                            vtkRenderWindowInteractor *interactor)
+void vtkMRMLLiverResectionsDisplayableManagerHelper2D ::RemoveAllSurfacesContours(vtkRenderer* renderer, vtkRenderWindowInteractor* interactor)
 {
-  if(!renderer || !interactor)
-    {
+  if (!renderer || !interactor)
+  {
     return;
-    }
+  }
 }
 
 //---------------------------------------------------------------------------
-void vtkMRMLLiverResectionsDisplayableManagerHelper2D
-::UpdateSurfaceContour(vtkObject* vtkNotUsed(object),
-                       unsigned long int vtkNotUsed(id),
-                       void *clientData,
-                       void *vtkNotUsed(callData))
+void vtkMRMLLiverResectionsDisplayableManagerHelper2D ::UpdateSurfaceContour(vtkObject* vtkNotUsed(object),
+                                                                             unsigned long int vtkNotUsed(id),
+                                                                             void* clientData,
+                                                                             void* vtkNotUsed(callData))
 {
 
-  vtkMRMLLiverResectionsDisplayableManagerHelper2D *self =
-    static_cast<vtkMRMLLiverResectionsDisplayableManagerHelper2D*>
-    (clientData);
+  vtkMRMLLiverResectionsDisplayableManagerHelper2D* self = static_cast<vtkMRMLLiverResectionsDisplayableManagerHelper2D*>(clientData);
 
   self->InvertedRASToXYMatrix->DeepCopy(self->SliceNode->GetXYToRAS());
   self->InvertedRASToXYMatrix->Invert();
   self->RASToXYTransform->SetMatrix(self->InvertedRASToXYMatrix.GetPointer());
-  self->Cutter->GenerateValues(1,
-                               self->SliceNode->GetSliceOffset(),
-                               self->SliceNode->GetSliceOffset());
+  self->Cutter->GenerateValues(1, self->SliceNode->GetSliceOffset(), self->SliceNode->GetSliceOffset());
 }
 
-void vtkMRMLLiverResectionsDisplayableManagerHelper2D
-::ChangeSurfaceVisibility(vtkMRMLMarkupsBezierSurfaceNode *node,
-                          vtkRenderer *renderer)
+void vtkMRMLLiverResectionsDisplayableManagerHelper2D ::ChangeSurfaceVisibility(vtkMRMLMarkupsBezierSurfaceNode* node, vtkRenderer* renderer)
 {
-  if(!node || !renderer)
-    {
+  if (!node || !renderer)
+  {
     return;
-    }
+  }
 
   if (node->GetDisplayVisibility())
-    {
+  {
     this->UpdateCommand->SetCallback(vtkMRMLLiverResectionsDisplayableManagerHelper2D::UpdateSurfaceContour);
     this->UpdateCommand->SetClientData(this);
     this->SliceNode->AddObserver(vtkCommand::ModifiedEvent, this->UpdateCommand.GetPointer());
     renderer->AddActor(this->ContourActor.GetPointer());
-    }
+  }
   else
-    {
+  {
     this->SliceNode->RemoveObserver(this->UpdateCommand.GetPointer());
     renderer->RemoveActor(this->ContourActor.GetPointer());
-    std::cout<<node->GetID()<<endl;
-    std::cout<<"remove actor: "<<this->ContourActor.GetPointer()<<endl;
-    }
-
+    std::cout << node->GetID() << endl;
+    std::cout << "remove actor: " << this->ContourActor.GetPointer() << endl;
+  }
 }
 
-void vtkMRMLLiverResectionsDisplayableManagerHelper2D::GetBezierSurfaceControlPoints(vtkMRMLMarkupsBezierSurfaceNode *node){
+void vtkMRMLLiverResectionsDisplayableManagerHelper2D::GetBezierSurfaceControlPoints(vtkMRMLMarkupsBezierSurfaceNode* node)
+{
   if (!node)
-    {
+  {
     return;
-    }
+  }
 
   if (node->GetNumberOfControlPoints() == 16)
-    {
+  {
     for (int i = 0; i < 16; i++)
-      {
+    {
       double point[3];
       node->GetNthControlPointPosition(i, point);
-      this->BezierSurfaceControlPoints->SetPoint(i,
-                                                 static_cast<float>(point[0]),
-                                                 static_cast<float>(point[1]),
-                                                 static_cast<float>(point[2]));
-      }
+      this->BezierSurfaceControlPoints->SetPoint(i, static_cast<float>(point[0]), static_cast<float>(point[1]), static_cast<float>(point[2]));
     }
+  }
 }
-
