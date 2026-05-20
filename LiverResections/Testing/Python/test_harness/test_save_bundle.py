@@ -246,9 +246,32 @@ def capture_module(monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
+class _StubRenderer:
+    """Stub ``vtkRenderer`` — exposes the camera the test asserts against."""
+
+    def GetActiveCamera(self):  # noqa: N802
+        return _StubCamera()
+
+
+class _StubRendererCollection:
+    """Stub ``vtkRendererCollection`` returned by
+    ``_StubRenderWindow.GetRenderers``."""
+
+    def GetFirstRenderer(self):  # noqa: N802
+        return _StubRenderer()
+
+
 class _StubRenderWindow:
     def GetMultiSamples(self) -> int:  # noqa: N802
         return 0
+
+    def GetRenderers(self):  # noqa: N802
+        """Stub ``vtkRenderWindow.GetRenderers`` — the harness reaches the
+        live ``vtkRenderer`` via
+        ``renderWindow().GetRenderers().GetFirstRenderer()`` because
+        ``qMRMLThreeDView.renderer()`` is C++-only and not exposed via
+        PythonQt (see ``capture_baseline._live_renderer``)."""
+        return _StubRendererCollection()
 
 
 class _StubThreeDView:
