@@ -441,8 +441,18 @@ jobs:
           # Cobertura output (Codecov auto-detects).  Excludes Testing
           # subtrees + system headers; the path filter list mirrors
           # `ignore:` in .codecov.yml so the two views agree.
+          #
+          # `--root` must be the absolute workspace path: gcov records
+          # absolute source paths in the .gcno/.gcda metadata
+          # (``/__w/Slicer-Liver/Slicer-Liver/...`` inside the GitHub
+          # Actions container), and gcovr's source-path filtering
+          # only matches when ``--root`` is an absolute prefix of those
+          # recorded paths.  Using ``--root .`` left every source file
+          # outside the resolved root and gcovr filtered everything out
+          # with ``All coverage data is filtered out``, falling through
+          # to the empty-skeleton heredoc below.
           gcovr \
-            --root . \
+            --root "$GITHUB_WORKSPACE" \
             --xml --output coverage-cxx.xml \
             --exclude '.*Testing.*' \
             --exclude '.*CMakeFiles.*' \
@@ -467,18 +477,31 @@ jobs:
           # Per ADR-0021 §"Out of scope", Slicer-launcher Python
           # coverage (wrapped MRML bindings) is opt-in per test and may
           # not be reachable from a plain pytest invocation in the
-          # image.  Run what we can: collect any importable pytest
-          # roots under LiverResectionsLib/ and emit a Cobertura XML.
-          # If nothing collects, write an empty skeleton so the upload
-          # step has a file.
-          if find LiverResectionsLib -name 'test_*.py' -o -name '*_test.py' | grep -q .; then
-            python3 -m pytest LiverResectionsLib \
-              --cov=LiverResectionsLib \
+          # image.  Run what we can: discover the two pytest roots
+          # (``Testing/Python/`` declared in pytest.ini as the project
+          # default, plus ``LiverResections/Testing/Python/`` for the
+          # module-local test_harness suite) and emit a Cobertura XML
+          # measuring the actual Python source module
+          # ``LiverResections/LiverResectionsLib``.
+          #
+          # The earlier discovery path (``LiverResectionsLib`` from the
+          # repo root) matched no directory: the module lives at
+          # ``LiverResections/LiverResectionsLib`` and the tests live
+          # under ``Testing/Python/`` and ``LiverResections/Testing/Python/``.
+          # ``find`` returned nothing, the ``else`` branch fired, and an
+          # empty coverage-py.xml shipped to Codecov.
+          test_roots=()
+          [ -d Testing/Python ] && test_roots+=(Testing/Python)
+          [ -d LiverResections/Testing/Python ] && test_roots+=(LiverResections/Testing/Python)
+          if [ ${#test_roots[@]} -gt 0 ] && \
+             find "${test_roots[@]}" \( -name 'test_*.py' -o -name '*_test.py' \) -print -quit | grep -q .; then
+            python3 -m pytest "${test_roots[@]}" \
+              --cov=LiverResections/LiverResectionsLib \
               --cov-report=xml:coverage-py.xml \
               --cov-report=term \
               || true
           else
-            echo "::notice::No pytest tests discovered under LiverResectionsLib/ — emitting empty coverage-py.xml."
+            echo "::notice::No pytest tests discovered under Testing/Python or LiverResections/Testing/Python — emitting empty coverage-py.xml."
             cat > coverage-py.xml <<'XML'
           <?xml version="1.0" ?>
           <coverage version="0"><sources/><packages/></coverage>
