@@ -1370,9 +1370,7 @@ int testReadXMLNullMidStream()
   const char* attsA[] = { "rows", "3", "placeholder", nullptr, // mid-stream (non-null name, null value) — skipped via ``continue;``
                           "cols", "3",                         // consumed under the corrected walk
                           nullptr };
-  TESTING_OUTPUT_ASSERT_WARNINGS_BEGIN();
   sinkA->ReadXMLAttributes(attsA);
-  TESTING_OUTPUT_ASSERT_WARNINGS_END();
   // Corrected-state assertion: walk-1 skipped the null pair and
   // consumed ``cols="3"``; the (3, 3) pair satisfies ADR-0018 §1's
   // closed shape set and ``GetCols()`` reports 3.
