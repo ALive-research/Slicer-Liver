@@ -21,6 +21,8 @@
 // This module MRML includes
 #include "vtkMRMLBezierSurfaceNode.h"
 #include "vtkMRMLBezierSurfaceStorageNode.h"
+#include "vtkMRMLNurbsSurfaceNode.h"
+#include "vtkMRMLNurbsSurfaceStorageNode.h"
 
 // MRML includes
 #include "vtkMRMLCoreTestingMacros.h"
@@ -426,15 +428,22 @@ int testJsonRoundTrip3x3()
     CHECK_DOUBLE_TOLERANCE(sink->GetControlGrid()[i], grid33[i], 1e-9);
   }
 
-  // Spot-check the on-disk JSON carries the explicit shape — a
-  // schema-v2 file MUST emit rows + cols + schemaVersion = 2.
+  // Spot-check the on-disk JSON carries the explicit shape +
+  // discriminator — per ADR-0022 §"Decision 2 — Schema v3" the
+  // writer always emits ``schemaVersion: 3`` + ``surfaceType:
+  // "Bezier"`` + explicit ``rows`` / ``cols``.
   std::ifstream f(path);
   std::stringstream ss;
   ss << f.rdbuf();
   const std::string contents = ss.str();
-  if (contents.find("\"schemaVersion\":2") == std::string::npos && contents.find("\"schemaVersion\": 2") == std::string::npos)
+  if (contents.find("\"schemaVersion\":3") == std::string::npos && contents.find("\"schemaVersion\": 3") == std::string::npos)
   {
-    std::cerr << "Expected schemaVersion: 2 in output JSON\n" << contents << "\n";
+    std::cerr << "Expected schemaVersion: 3 in output JSON\n" << contents << "\n";
+    return EXIT_FAILURE;
+  }
+  if (contents.find("\"surfaceType\":\"Bezier\"") == std::string::npos && contents.find("\"surfaceType\": \"Bezier\"") == std::string::npos)
+  {
+    std::cerr << "Expected surfaceType: \"Bezier\" in output JSON\n" << contents << "\n";
     return EXIT_FAILURE;
   }
   if (contents.find("\"rows\":3") == std::string::npos && contents.find("\"rows\": 3") == std::string::npos)
@@ -687,6 +696,755 @@ int testLegacyFcsvFixture()
   return EXIT_SUCCESS;
 }
 
+//==============================================================================
+// v2.1 NURBS sibling tests (ADR-0022 §"Decision 2 — Schema v3" /
+// §"Reader compat matrix" / §"Validation rules per surface type").
+//==============================================================================
+
+/// Populate a NURBS surface node with deterministic, distinctive
+/// values touching every IVar the storage path round-trips.  The
+/// shape is rectangular + degrees asymmetric so the test catches any
+/// (rows ↔ cols) or (degreeU ↔ degreeV) swap in the read/write path.
+void populateNurbs(vtkMRMLNurbsSurfaceNode* node)
+{
+  // Drop degrees to (2, 3) so the (5, 4) shape is legal — need
+  // rows >= degreeU + 1 (5 >= 3) AND cols >= degreeV + 1 (4 >= 4).
+  node->SetDegreeU(2);
+  // DegreeV stays at default 3.
+  node->SetRows(5);
+  // SetCols(4) would be the default; do not assert here (this
+  // helper is ``void`` — callers check the round-trip post-condition
+  // via the public sink getters).
+
+  // Control grid — 3 * 5 * 4 = 60 doubles.
+  double grid[60];
+  for (int i = 0; i < 60; ++i)
+  {
+    grid[i] = static_cast<double>(i) * 0.125 + 0.0625;
+  }
+  node->SetControlGrid(grid);
+
+  // Weights — 5 * 4 = 20 doubles, all positive.
+  double weights[20];
+  for (int i = 0; i < 20; ++i)
+  {
+    weights[i] = 0.5 + static_cast<double>(i) * 0.05;
+  }
+  node->SetWeights(weights, 20);
+
+  // Hand-rolled knot vectors — overwrite the clamped-uniform
+  // defaults with a slightly different valid clamped vector to
+  // catch any "writer ignores knot edits + emits defaults" bug.
+  // KnotsU: length 5 + 2 + 1 = 8.  Clamped at both ends with
+  // three interior knots.
+  double knotsU[8] = { 0.0, 0.0, 0.0, 0.25, 0.6, 1.0, 1.0, 1.0 };
+  node->SetKnotsU(knotsU, 8);
+  // KnotsV: length 4 + 3 + 1 = 8.  Clamped at both ends with no
+  // interior knots (the degree-3, rows=degree+1 degenerate case).
+  double knotsV[8] = { 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0 };
+  node->SetKnotsV(knotsV, 8);
+
+  node->SetInitMode(vtkMRMLNurbsSurfaceNode::DistanceSpheroid);
+  node->SetState(vtkMRMLNurbsSurfaceNode::Planning);
+}
+
+int testJsonRoundTripNurbs()
+{
+  vtkNew<vtkMRMLNurbsSurfaceNode> source;
+  populateNurbs(source.GetPointer());
+
+  const std::string path = makeTempPath("lrp.json");
+  vtkNew<vtkMRMLNurbsSurfaceStorageNode> writeStorage;
+  writeStorage->SetFileName(path.c_str());
+  CHECK_INT(writeStorage->WriteData(source.GetPointer()), 1);
+
+  vtkNew<vtkMRMLNurbsSurfaceNode> sink;
+  vtkNew<vtkMRMLNurbsSurfaceStorageNode> readStorage;
+  readStorage->SetFileName(path.c_str());
+  CHECK_INT(readStorage->ReadData(sink.GetPointer()), 1);
+
+  // Shape + degrees round-trip.
+  CHECK_INT(static_cast<int>(sink->GetRows()), 5);
+  CHECK_INT(static_cast<int>(sink->GetCols()), 4);
+  CHECK_INT(static_cast<int>(sink->GetDegreeU()), 2);
+  CHECK_INT(static_cast<int>(sink->GetDegreeV()), 3);
+  CHECK_INT(sink->GetState(), vtkMRMLNurbsSurfaceNode::Planning);
+  CHECK_INT(sink->GetInitMode(), vtkMRMLNurbsSurfaceNode::DistanceSpheroid);
+
+  // Control grid round-trip (3 * 5 * 4 = 60 doubles).
+  for (int i = 0; i < 60; ++i)
+  {
+    CHECK_DOUBLE_TOLERANCE(sink->GetControlGrid()[i], source->GetControlGrid()[i], 1e-9);
+  }
+
+  // Knots + weights round-trip.
+  for (unsigned int i = 0; i < sink->GetKnotsULength(); ++i)
+  {
+    CHECK_DOUBLE_TOLERANCE(sink->GetKnotsU()[i], source->GetKnotsU()[i], 1e-9);
+  }
+  for (unsigned int i = 0; i < sink->GetKnotsVLength(); ++i)
+  {
+    CHECK_DOUBLE_TOLERANCE(sink->GetKnotsV()[i], source->GetKnotsV()[i], 1e-9);
+  }
+  for (unsigned int i = 0; i < sink->GetWeightsLength(); ++i)
+  {
+    CHECK_DOUBLE_TOLERANCE(sink->GetWeights()[i], source->GetWeights()[i], 1e-9);
+  }
+
+  // Spot-check the on-disk JSON for the v3 markers.
+  std::ifstream f(path);
+  std::stringstream ss;
+  ss << f.rdbuf();
+  const std::string contents = ss.str();
+  if (contents.find("\"schemaVersion\":3") == std::string::npos && contents.find("\"schemaVersion\": 3") == std::string::npos)
+  {
+    std::cerr << "Expected schemaVersion: 3 in NURBS output JSON\n" << contents << "\n";
+    return EXIT_FAILURE;
+  }
+  if (contents.find("\"surfaceType\":\"NURBS\"") == std::string::npos && contents.find("\"surfaceType\": \"NURBS\"") == std::string::npos)
+  {
+    std::cerr << "Expected surfaceType: \"NURBS\" in output JSON\n" << contents << "\n";
+    return EXIT_FAILURE;
+  }
+  if (contents.find("\"degreeU\":2") == std::string::npos && contents.find("\"degreeU\": 2") == std::string::npos)
+  {
+    std::cerr << "Expected degreeU: 2 in output JSON\n" << contents << "\n";
+    return EXIT_FAILURE;
+  }
+  if (contents.find("\"weights\"") == std::string::npos)
+  {
+    std::cerr << "Expected weights field in output JSON\n" << contents << "\n";
+    return EXIT_FAILURE;
+  }
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+int testJsonReadV3BezierExplicit()
+{
+  // ADR-0022 §"Reader compat matrix": v3 + surfaceType "Bezier"
+  // loads via the Bezier path the same as v2 with the discriminator
+  // made explicit.  Synthesize a minimal v3 Bezier file and
+  // validate.
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 3,\n";
+    ofs << "  \"surfaceType\": \"Bezier\",\n";
+    ofs << "  \"state\": \"Planning\",\n";
+    ofs << "  \"initMode\": \"SlicingPlane\",\n";
+    ofs << "  \"rows\": 4,\n";
+    ofs << "  \"cols\": 4,\n";
+    ofs << "  \"controlGrid\": [";
+    for (int i = 0; i < 48; ++i)
+    {
+      if (i > 0)
+      {
+        ofs << ", ";
+      }
+      ofs << (static_cast<double>(i) * 0.25);
+    }
+    ofs << "]\n";
+    ofs << "}\n";
+  }
+
+  vtkNew<vtkMRMLBezierSurfaceNode> sink;
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
+  storage->SetFileName(path.c_str());
+  CHECK_INT(storage->ReadData(sink.GetPointer()), 1);
+
+  CHECK_INT(static_cast<int>(sink->GetRows()), 4);
+  CHECK_INT(static_cast<int>(sink->GetCols()), 4);
+  CHECK_INT(sink->GetState(), vtkMRMLBezierSurfaceNode::Planning);
+  for (int i = 0; i < 48; ++i)
+  {
+    CHECK_DOUBLE_TOLERANCE(sink->GetControlGrid()[i], static_cast<double>(i) * 0.25, 1e-9);
+  }
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+int testJsonReadV3NurbsInvalidDegree()
+{
+  // ADR-0022 §"Validation rules per surface type — NURBS": degree
+  // out of {2, 3} is rejected with vtkErrorMacro.  Cover both
+  // edges: degreeU=1 and degreeU=4.
+  auto write = [](const std::string& p, int degreeU)
+  {
+    std::ofstream ofs(p);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 3,\n";
+    ofs << "  \"surfaceType\": \"NURBS\",\n";
+    ofs << "  \"state\": \"Init\",\n";
+    ofs << "  \"initMode\": \"SlicingPlane\",\n";
+    ofs << "  \"rows\": 4,\n";
+    ofs << "  \"cols\": 4,\n";
+    ofs << "  \"degreeU\": " << degreeU << ",\n";
+    ofs << "  \"degreeV\": 3,\n";
+    ofs << "  \"knotsU\": [0,0,0,0,1,1,1,1],\n";
+    ofs << "  \"knotsV\": [0,0,0,0,1,1,1,1],\n";
+    ofs << "  \"weights\": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],\n";
+    ofs << "  \"controlGrid\": [";
+    for (int i = 0; i < 48; ++i)
+    {
+      if (i > 0)
+      {
+        ofs << ", ";
+      }
+      ofs << static_cast<double>(i);
+    }
+    ofs << "]\n";
+    ofs << "}\n";
+  };
+
+  for (int badDegree : { 1, 4 })
+  {
+    const std::string path = makeTempPath("lrp.json");
+    write(path, badDegree);
+
+    vtkNew<vtkMRMLNurbsSurfaceNode> sink;
+    vtkNew<vtkMRMLNurbsSurfaceStorageNode> storage;
+    storage->SetFileName(path.c_str());
+    TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+    CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+    TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+    vtksys::SystemTools::RemoveFile(path);
+  }
+  return EXIT_SUCCESS;
+}
+
+int testJsonReadV3NurbsInvalidKnotsLength()
+{
+  // ADR-0022 §"Validation rules per surface type — NURBS":
+  // ``len(knotsU) == rows + degreeU + 1`` (8 for the 4×4 / deg 3
+  // case).  Send a too-short knotsU and confirm rejection.
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 3,\n";
+    ofs << "  \"surfaceType\": \"NURBS\",\n";
+    ofs << "  \"state\": \"Init\",\n";
+    ofs << "  \"initMode\": \"SlicingPlane\",\n";
+    ofs << "  \"rows\": 4,\n";
+    ofs << "  \"cols\": 4,\n";
+    ofs << "  \"degreeU\": 3,\n";
+    ofs << "  \"degreeV\": 3,\n";
+    ofs << "  \"knotsU\": [0,0,0,1,1,1],\n"; // length 6, not 8
+    ofs << "  \"knotsV\": [0,0,0,0,1,1,1,1],\n";
+    ofs << "  \"weights\": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],\n";
+    ofs << "  \"controlGrid\": [";
+    for (int i = 0; i < 48; ++i)
+    {
+      if (i > 0)
+      {
+        ofs << ", ";
+      }
+      ofs << static_cast<double>(i);
+    }
+    ofs << "]\n";
+    ofs << "}\n";
+  }
+
+  vtkNew<vtkMRMLNurbsSurfaceNode> sink;
+  vtkNew<vtkMRMLNurbsSurfaceStorageNode> storage;
+  storage->SetFileName(path.c_str());
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+int testJsonReadV3NurbsInvalidWeights()
+{
+  // ADR-0022 §"Validation rules per surface type — NURBS":
+  // - weight must be strictly positive
+  // - len(weights) == rows * cols
+  // Cover both: a zero / negative entry + a wrong-length array.
+
+  // Sub-case (a): one zero weight.
+  {
+    const std::string path = makeTempPath("lrp.json");
+    {
+      std::ofstream ofs(path);
+      ofs << "{\n";
+      ofs << "  \"schemaVersion\": 3,\n";
+      ofs << "  \"surfaceType\": \"NURBS\",\n";
+      ofs << "  \"state\": \"Init\",\n";
+      ofs << "  \"initMode\": \"SlicingPlane\",\n";
+      ofs << "  \"rows\": 4,\n";
+      ofs << "  \"cols\": 4,\n";
+      ofs << "  \"degreeU\": 3,\n";
+      ofs << "  \"degreeV\": 3,\n";
+      ofs << "  \"knotsU\": [0,0,0,0,1,1,1,1],\n";
+      ofs << "  \"knotsV\": [0,0,0,0,1,1,1,1],\n";
+      // Index 7 is zero — a singular weight in NURBS.
+      ofs << "  \"weights\": [1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1],\n";
+      ofs << "  \"controlGrid\": [";
+      for (int i = 0; i < 48; ++i)
+      {
+        if (i > 0)
+        {
+          ofs << ", ";
+        }
+        ofs << static_cast<double>(i);
+      }
+      ofs << "]\n";
+      ofs << "}\n";
+    }
+
+    vtkNew<vtkMRMLNurbsSurfaceNode> sink;
+    vtkNew<vtkMRMLNurbsSurfaceStorageNode> storage;
+    storage->SetFileName(path.c_str());
+    TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+    CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+    TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+    vtksys::SystemTools::RemoveFile(path);
+  }
+
+  // Sub-case (b): negative weight.
+  {
+    const std::string path = makeTempPath("lrp.json");
+    {
+      std::ofstream ofs(path);
+      ofs << "{\n";
+      ofs << "  \"schemaVersion\": 3,\n";
+      ofs << "  \"surfaceType\": \"NURBS\",\n";
+      ofs << "  \"state\": \"Init\",\n";
+      ofs << "  \"initMode\": \"SlicingPlane\",\n";
+      ofs << "  \"rows\": 4,\n";
+      ofs << "  \"cols\": 4,\n";
+      ofs << "  \"degreeU\": 3,\n";
+      ofs << "  \"degreeV\": 3,\n";
+      ofs << "  \"knotsU\": [0,0,0,0,1,1,1,1],\n";
+      ofs << "  \"knotsV\": [0,0,0,0,1,1,1,1],\n";
+      ofs << "  \"weights\": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,-0.5],\n";
+      ofs << "  \"controlGrid\": [";
+      for (int i = 0; i < 48; ++i)
+      {
+        if (i > 0)
+        {
+          ofs << ", ";
+        }
+        ofs << static_cast<double>(i);
+      }
+      ofs << "]\n";
+      ofs << "}\n";
+    }
+
+    vtkNew<vtkMRMLNurbsSurfaceNode> sink;
+    vtkNew<vtkMRMLNurbsSurfaceStorageNode> storage;
+    storage->SetFileName(path.c_str());
+    TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+    CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+    TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+    vtksys::SystemTools::RemoveFile(path);
+  }
+
+  // Sub-case (c): wrong length (8 instead of 16).
+  {
+    const std::string path = makeTempPath("lrp.json");
+    {
+      std::ofstream ofs(path);
+      ofs << "{\n";
+      ofs << "  \"schemaVersion\": 3,\n";
+      ofs << "  \"surfaceType\": \"NURBS\",\n";
+      ofs << "  \"state\": \"Init\",\n";
+      ofs << "  \"initMode\": \"SlicingPlane\",\n";
+      ofs << "  \"rows\": 4,\n";
+      ofs << "  \"cols\": 4,\n";
+      ofs << "  \"degreeU\": 3,\n";
+      ofs << "  \"degreeV\": 3,\n";
+      ofs << "  \"knotsU\": [0,0,0,0,1,1,1,1],\n";
+      ofs << "  \"knotsV\": [0,0,0,0,1,1,1,1],\n";
+      ofs << "  \"weights\": [1,1,1,1,1,1,1,1],\n"; // length 8, not 16
+      ofs << "  \"controlGrid\": [";
+      for (int i = 0; i < 48; ++i)
+      {
+        if (i > 0)
+        {
+          ofs << ", ";
+        }
+        ofs << static_cast<double>(i);
+      }
+      ofs << "]\n";
+      ofs << "}\n";
+    }
+
+    vtkNew<vtkMRMLNurbsSurfaceNode> sink;
+    vtkNew<vtkMRMLNurbsSurfaceStorageNode> storage;
+    storage->SetFileName(path.c_str());
+    TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+    CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+    TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+    vtksys::SystemTools::RemoveFile(path);
+  }
+  return EXIT_SUCCESS;
+}
+
+int testJsonReadV3NurbsInvalidShape()
+{
+  // ADR-0022 §"Validation rules per surface type — NURBS":
+  // rows < degreeU + 1 (or cols < degreeV + 1) leaves the basis
+  // empty — rejected.
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 3,\n";
+    ofs << "  \"surfaceType\": \"NURBS\",\n";
+    ofs << "  \"state\": \"Init\",\n";
+    ofs << "  \"initMode\": \"SlicingPlane\",\n";
+    ofs << "  \"rows\": 3,\n"; // < degreeU + 1 = 4 → invalid
+    ofs << "  \"cols\": 4,\n";
+    ofs << "  \"degreeU\": 3,\n";
+    ofs << "  \"degreeV\": 3,\n";
+    ofs << "  \"knotsU\": [0,0,0,0,1,1,1],\n";
+    ofs << "  \"knotsV\": [0,0,0,0,1,1,1,1],\n";
+    ofs << "  \"weights\": [1,1,1,1,1,1,1,1,1,1,1,1],\n";
+    ofs << "  \"controlGrid\": [";
+    for (int i = 0; i < 36; ++i)
+    {
+      if (i > 0)
+      {
+        ofs << ", ";
+      }
+      ofs << static_cast<double>(i);
+    }
+    ofs << "]\n";
+    ofs << "}\n";
+  }
+
+  vtkNew<vtkMRMLNurbsSurfaceNode> sink;
+  vtkNew<vtkMRMLNurbsSurfaceStorageNode> storage;
+  storage->SetFileName(path.c_str());
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+int testWriterAlwaysEmitsV3Bezier()
+{
+  // ADR-0022 §"Decision 2 — Schema v3": writer always emits v3 +
+  // ``surfaceType`` even for the (legacy) 4×4 Bezier case.  Round-
+  // trip a default-populated Bezier surface and assert the v3
+  // markers are present on disk.
+  vtkNew<vtkMRMLBezierSurfaceNode> source;
+  source->SetState(vtkMRMLBezierSurfaceNode::Planning);
+  double grid[48];
+  for (int i = 0; i < 48; ++i)
+  {
+    grid[i] = static_cast<double>(i);
+  }
+  source->SetControlGrid(grid);
+
+  const std::string path = makeTempPath("lrp.json");
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
+  storage->SetFileName(path.c_str());
+  CHECK_INT(storage->WriteData(source.GetPointer()), 1);
+
+  std::ifstream f(path);
+  std::stringstream ss;
+  ss << f.rdbuf();
+  const std::string contents = ss.str();
+  if (contents.find("\"schemaVersion\":3") == std::string::npos && contents.find("\"schemaVersion\": 3") == std::string::npos)
+  {
+    std::cerr << "Expected schemaVersion: 3 in writer output\n" << contents << "\n";
+    return EXIT_FAILURE;
+  }
+  if (contents.find("\"surfaceType\":\"Bezier\"") == std::string::npos && contents.find("\"surfaceType\": \"Bezier\"") == std::string::npos)
+  {
+    std::cerr << "Expected surfaceType: \"Bezier\" in writer output\n" << contents << "\n";
+    return EXIT_FAILURE;
+  }
+  // NURBS-only fields are absent.
+  if (contents.find("degreeU") != std::string::npos)
+  {
+    std::cerr << "Bezier writer output should NOT contain 'degreeU'\n" << contents << "\n";
+    return EXIT_FAILURE;
+  }
+  if (contents.find("\"weights\"") != std::string::npos)
+  {
+    std::cerr << "Bezier writer output should NOT contain 'weights'\n" << contents << "\n";
+    return EXIT_FAILURE;
+  }
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+int testJsonReadInvalidSurfaceType()
+{
+  // ADR-0022 §"Decision 2 — Schema v3": ``surfaceType`` is closed at
+  // {"Bezier", "NURBS"}.  An unrecognised value (e.g. "Catmull"
+  // emitted by a future / third-party tool) must be rejected at the
+  // read boundary so the data node never sees a malformed file.
+  // ``ReadDataInternal`` dispatches on the reference-node type — both
+  // dispatch arms (Bezier path + NURBS path) check the discriminator
+  // and reject the foreign value.
+
+  // Sub-case (a): NURBS reference + "Catmull" surfaceType → reject
+  // (ReadJsonNurbs rejects any non-"NURBS" value).
+  {
+    const std::string path = makeTempPath("lrp.json");
+    {
+      std::ofstream ofs(path);
+      ofs << "{\n";
+      ofs << "  \"schemaVersion\": 3,\n";
+      ofs << "  \"surfaceType\": \"Catmull\",\n";
+      ofs << "  \"state\": \"Init\",\n";
+      ofs << "  \"initMode\": \"SlicingPlane\",\n";
+      ofs << "  \"rows\": 4,\n";
+      ofs << "  \"cols\": 4,\n";
+      ofs << "  \"degreeU\": 3,\n";
+      ofs << "  \"degreeV\": 3,\n";
+      ofs << "  \"knotsU\": [0,0,0,0,1,1,1,1],\n";
+      ofs << "  \"knotsV\": [0,0,0,0,1,1,1,1],\n";
+      ofs << "  \"weights\": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],\n";
+      ofs << "  \"controlGrid\": [";
+      for (int i = 0; i < 48; ++i)
+      {
+        if (i > 0)
+        {
+          ofs << ", ";
+        }
+        ofs << static_cast<double>(i);
+      }
+      ofs << "]\n";
+      ofs << "}\n";
+    }
+
+    vtkNew<vtkMRMLNurbsSurfaceNode> sink;
+    vtkNew<vtkMRMLNurbsSurfaceStorageNode> storage;
+    storage->SetFileName(path.c_str());
+    TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+    CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+    TESTING_OUTPUT_ASSERT_ERRORS_END();
+    vtksys::SystemTools::RemoveFile(path);
+  }
+
+  // Sub-case (b): Bezier reference + "Catmull" surfaceType → reject
+  // (ReadJsonBezier rejects any non-"Bezier" value).
+  {
+    const std::string path = makeTempPath("lrp.json");
+    {
+      std::ofstream ofs(path);
+      ofs << "{\n";
+      ofs << "  \"schemaVersion\": 3,\n";
+      ofs << "  \"surfaceType\": \"Catmull\",\n";
+      ofs << "  \"state\": \"Init\",\n";
+      ofs << "  \"initMode\": \"SlicingPlane\",\n";
+      ofs << "  \"rows\": 4,\n";
+      ofs << "  \"cols\": 4,\n";
+      ofs << "  \"controlGrid\": [";
+      for (int i = 0; i < 48; ++i)
+      {
+        if (i > 0)
+        {
+          ofs << ", ";
+        }
+        ofs << static_cast<double>(i);
+      }
+      ofs << "]\n";
+      ofs << "}\n";
+    }
+
+    vtkNew<vtkMRMLBezierSurfaceNode> sink;
+    vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
+    storage->SetFileName(path.c_str());
+    TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+    CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+    TESTING_OUTPUT_ASSERT_ERRORS_END();
+    vtksys::SystemTools::RemoveFile(path);
+  }
+
+  // Sub-case (c): missing surfaceType on a v3 file.  Characterises
+  // current behaviour — the Bezier path tolerates the absent
+  // discriminator and falls through to Bezier-shaped parsing (this
+  // matches the legacy v2 path where there was no discriminator at
+  // all).  The NURBS path requires the discriminator and rejects.
+  {
+    const std::string path = makeTempPath("lrp.json");
+    {
+      std::ofstream ofs(path);
+      ofs << "{\n";
+      ofs << "  \"schemaVersion\": 3,\n";
+      // No "surfaceType" field.
+      ofs << "  \"state\": \"Init\",\n";
+      ofs << "  \"initMode\": \"SlicingPlane\",\n";
+      ofs << "  \"rows\": 4,\n";
+      ofs << "  \"cols\": 4,\n";
+      ofs << "  \"controlGrid\": [";
+      for (int i = 0; i < 48; ++i)
+      {
+        if (i > 0)
+        {
+          ofs << ", ";
+        }
+        ofs << static_cast<double>(i);
+      }
+      ofs << "]\n";
+      ofs << "}\n";
+    }
+
+    // Bezier reference — accepted (falls back to Bezier parsing).
+    {
+      vtkNew<vtkMRMLBezierSurfaceNode> sink;
+      vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
+      storage->SetFileName(path.c_str());
+      CHECK_INT(storage->ReadData(sink.GetPointer()), 1);
+      CHECK_INT(static_cast<int>(sink->GetRows()), 4);
+      CHECK_INT(static_cast<int>(sink->GetCols()), 4);
+    }
+    // NURBS reference — rejected (v3 NURBS files require the
+    // discriminator).
+    {
+      vtkNew<vtkMRMLNurbsSurfaceNode> sink;
+      vtkNew<vtkMRMLNurbsSurfaceStorageNode> storage;
+      storage->SetFileName(path.c_str());
+      TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+      CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+      TESTING_OUTPUT_ASSERT_ERRORS_END();
+    }
+    vtksys::SystemTools::RemoveFile(path);
+  }
+  return EXIT_SUCCESS;
+}
+
+int testJsonReadV3NurbsControlGridLengthMismatch()
+{
+  // ADR-0022 §"Validation rules per surface type — NURBS":
+  // ``len(controlGrid) == 3 * rows * cols``.  Send a NURBS file with
+  // a correctly-sized {rows, cols, degrees, knots, weights} block
+  // but a controlGrid of wrong length — must be rejected at the
+  // read boundary.  Pairs ``testJsonReadV3NurbsInvalidKnotsLength``
+  // (knot length mismatch) + ``testJsonReadV3NurbsInvalidWeights``
+  // (weights length / positivity) to cover the third length-mismatch
+  // axis the NURBS payload exposes.
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 3,\n";
+    ofs << "  \"surfaceType\": \"NURBS\",\n";
+    ofs << "  \"state\": \"Init\",\n";
+    ofs << "  \"initMode\": \"SlicingPlane\",\n";
+    ofs << "  \"rows\": 4,\n";
+    ofs << "  \"cols\": 4,\n";
+    ofs << "  \"degreeU\": 3,\n";
+    ofs << "  \"degreeV\": 3,\n";
+    ofs << "  \"knotsU\": [0,0,0,0,1,1,1,1],\n";
+    ofs << "  \"knotsV\": [0,0,0,0,1,1,1,1],\n";
+    ofs << "  \"weights\": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],\n";
+    // controlGrid of length 27 (a 3×3 grid) instead of the expected
+    // 48 (a 4×4 grid).
+    ofs << "  \"controlGrid\": [";
+    for (int i = 0; i < 27; ++i)
+    {
+      if (i > 0)
+      {
+        ofs << ", ";
+      }
+      ofs << static_cast<double>(i);
+    }
+    ofs << "]\n";
+    ofs << "}\n";
+  }
+
+  vtkNew<vtkMRMLNurbsSurfaceNode> sink;
+  vtkNew<vtkMRMLNurbsSurfaceStorageNode> storage;
+  storage->SetFileName(path.c_str());
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+int testJsonReadV3NurbsInvalidKnotsContent()
+{
+  // ADR-0022 §"Validation rules per surface type — NURBS": knot
+  // vectors must be clamped + monotonic + within ``[0, 1]``.  Pair
+  // ``testJsonReadV3NurbsInvalidKnotsLength`` (length) by covering
+  // the content invariants — synthesise a length-correct but
+  // non-monotonic knotsU and confirm rejection at the read boundary.
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 3,\n";
+    ofs << "  \"surfaceType\": \"NURBS\",\n";
+    ofs << "  \"state\": \"Init\",\n";
+    ofs << "  \"initMode\": \"SlicingPlane\",\n";
+    ofs << "  \"rows\": 4,\n";
+    ofs << "  \"cols\": 4,\n";
+    ofs << "  \"degreeU\": 3,\n";
+    ofs << "  \"degreeV\": 3,\n";
+    // Length-correct (8) but non-monotonic: a 0.7 followed by 0.3
+    // in the middle of the (admittedly degenerate, no-interior)
+    // knot region.  Also clamping-violating — degree=3 expects 4
+    // equal repeats on each end.
+    ofs << "  \"knotsU\": [0,0,0,0.7,0.3,1,1,1],\n";
+    ofs << "  \"knotsV\": [0,0,0,0,1,1,1,1],\n";
+    ofs << "  \"weights\": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],\n";
+    ofs << "  \"controlGrid\": [";
+    for (int i = 0; i < 48; ++i)
+    {
+      if (i > 0)
+      {
+        ofs << ", ";
+      }
+      ofs << static_cast<double>(i);
+    }
+    ofs << "]\n";
+    ofs << "}\n";
+  }
+
+  vtkNew<vtkMRMLNurbsSurfaceNode> sink;
+  vtkNew<vtkMRMLNurbsSurfaceStorageNode> storage;
+  storage->SetFileName(path.c_str());
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+int testNurbsStorageCanReadDiscrimination()
+{
+  // The NURBS subclass inherits the base's CanRead/CanWrite
+  // predicates — both should accept either surface-type reference
+  // node (the storage class is unified per ADR-0022; the subclass
+  // just changes the node tag name + factory method).
+  vtkNew<vtkMRMLNurbsSurfaceStorageNode> storage;
+  vtkNew<vtkMRMLNurbsSurfaceNode> nurbs;
+  vtkNew<vtkMRMLBezierSurfaceNode> bezier;
+
+  CHECK_BOOL(storage->CanReadInReferenceNode(nurbs.GetPointer()), true);
+  CHECK_BOOL(storage->CanWriteFromReferenceNode(nurbs.GetPointer()), true);
+  // The base storage class accepts Bezier too — the subclass does
+  // not narrow the predicate.  Document this here so future drift
+  // is intentional.
+  CHECK_BOOL(storage->CanReadInReferenceNode(bezier.GetPointer()), true);
+  CHECK_BOOL(storage->CanWriteFromReferenceNode(bezier.GetPointer()), true);
+  CHECK_STRING(storage->GetNodeTagName(), "NurbsSurfaceStorage");
+  return EXIT_SUCCESS;
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -714,6 +1472,19 @@ int vtkMRMLBezierSurfaceStorageNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testJsonReadV2InvalidShape());
   CHECK_EXIT_SUCCESS(testJsonReadV2OutOfRange());
   CHECK_EXIT_SUCCESS(testJsonReadV2ControlGridLengthMismatch());
+
+  // v2.1 NURBS sibling — schema v3 (ADR-0022 §"Decision 2").
+  CHECK_EXIT_SUCCESS(testJsonRoundTripNurbs());
+  CHECK_EXIT_SUCCESS(testJsonReadV3BezierExplicit());
+  CHECK_EXIT_SUCCESS(testJsonReadV3NurbsInvalidDegree());
+  CHECK_EXIT_SUCCESS(testJsonReadV3NurbsInvalidKnotsLength());
+  CHECK_EXIT_SUCCESS(testJsonReadV3NurbsInvalidWeights());
+  CHECK_EXIT_SUCCESS(testJsonReadV3NurbsInvalidShape());
+  CHECK_EXIT_SUCCESS(testJsonReadInvalidSurfaceType());
+  CHECK_EXIT_SUCCESS(testJsonReadV3NurbsControlGridLengthMismatch());
+  CHECK_EXIT_SUCCESS(testJsonReadV3NurbsInvalidKnotsContent());
+  CHECK_EXIT_SUCCESS(testWriterAlwaysEmitsV3Bezier());
+  CHECK_EXIT_SUCCESS(testNurbsStorageCanReadDiscrimination());
 
   std::cout << "vtkMRMLBezierSurfaceStorageNodeTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;

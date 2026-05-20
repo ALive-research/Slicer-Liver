@@ -75,33 +75,56 @@
  * ADR-0007's D-class compatibility-break category, the
  * ``.lrp.fcsv`` deprecation is part of the v2.0.0 MAJOR bump.
  *
- * \par JSON schema (v2 — ADR-0018 §1)
+ * \par JSON schema (v3 — ADR-0022 §"Decision 2 — Schema v3")
  *
  * See the in-source documentation at the top of
  * ``vtkMRMLBezierSurfaceStorageNode.cxx`` for the canonical
  * schema description.  Briefly:
  *
- *   - ``schemaVersion``: int, currently 2 (writer); reader accepts
- *     v1 + v2.
- *   - ``state``: "Init" | "Planning"
+ *   - ``schemaVersion``: int, currently 3 (writer); reader accepts
+ *     v1 + v2 + v3.
+ *   - ``surfaceType``: ``"Bezier"`` or ``"NURBS"`` (v3 only; absent
+ *     in v1 / v2 → implicit ``"Bezier"``).
+ *   - ``state``: "Init" | "Planning" | "Confirmed"
  *   - ``initMode``: "SlicingPlane" | "DistanceSpheroid"
- *   - ``rows`` / ``cols``: control-polygon shape (v2 only; in v1
- *     these are implicit 4×4).  Per ADR-0018 §1, square only and
- *     in ``{(3, 3), (4, 4)}``.
+ *   - ``rows`` / ``cols``: control-polygon shape (v2+; v1 implicit
+ *     4×4).  For Bezier per ADR-0018 §1 square + in
+ *     ``{(3, 3), (4, 4)}``; for NURBS per ADR-0022 §"IVar roster"
+ *     ``rows >= degreeU + 1`` and ``cols >= degreeV + 1``.
  *   - ``controlGrid``: array of ``3 * rows * cols`` doubles
- *     (row-major; 27 for 3×3, 48 for 4×4).
- *   - ``slicingPlane``: {origin, normal, initPoints}
+ *     (row-major).
+ *   - ``slicingPlane``: {origin, normal, initPoints} (Bezier only).
  *   - ``distanceSpheroid``: {center, radius{x,y,z}, initPoints}
- *   - ``metadata``: object (empty in v1; reserved for v2's
- *     timestamps + surgeon ID per ADR-0014 §5)
+ *     (Bezier only).
+ *   - NURBS-only: ``degreeU``, ``degreeV`` (int), ``knotsU``,
+ *     ``knotsV`` (double arrays), ``weights`` (double array,
+ *     all positive).
+ *   - ``metadata``: object.
  *
- * \par v1 → v2 migration
+ * \par v1 → v2 → v3 migration
  *
- * The reader infers ``rows = cols = 4`` for v1 files (no ``rows`` /
- * ``cols`` fields) and validates the ``controlGrid`` array length
- * is 48.  The writer always emits v2 with explicit ``rows`` +
- * ``cols``.  Round-trip of a v1 file produces a v2 file on the
- * next save.
+ * - v1 (no ``rows`` / ``cols`` / ``surfaceType``) — implicit 4×4
+ *   Bezier per ADR-0018 §1.
+ * - v2 (``rows`` + ``cols`` present, no ``surfaceType``) — explicit
+ *   Bezier shape.
+ * - v3 (``surfaceType`` present) — dispatch on ``Bezier`` vs
+ *   ``NURBS``.  Bezier writes include none of the NURBS-only fields;
+ *   NURBS writes include all of them.
+ *
+ * The writer always emits v3 with the most-specific ``surfaceType``
+ * and the minimum redundant fields.  Round-trip of a v1 / v2 file
+ * produces a v3 file on the next save.
+ *
+ * \par Sharing the storage class between Bezier and NURBS
+ *
+ * Per ADR-0022 §"Decision 2 — Schema v3" + the NURBS-1 design note,
+ * a single storage class handles both surface types — dispatched on
+ * ``surfaceType`` at read time and on the concrete reference-node
+ * class at write time.  ``vtkMRMLNurbsSurfaceStorageNode`` is a
+ * thin subclass that exists so each data-node family has a
+ * dedicated default-storage class (matching Slicer-core's
+ * ``CreateDefaultStorageNode`` lookup convention) while sharing the
+ * read / write implementation here.
  *
  * \par See also
  *
@@ -124,14 +147,15 @@ public:
   /// Current JSON schema version emitted by ``WriteDataInternal``.
   /// Bump this integer in lock-step with any documented schema
   /// extension; ``ReadDataInternal`` MUST grow an explicit branch
-  /// for every old version it intends to keep loading.  Per ADR-0018
-  /// §1 the reader accepts both v1 (implicit 4×4 control polygon)
-  /// and v2 (explicit ``rows`` / ``cols``).
-  static constexpr int SchemaVersion = 2;
+  /// for every old version it intends to keep loading.  Per
+  /// ADR-0022 §"Decision 2 — Schema v3" the reader accepts v1
+  /// (implicit 4×4 Bezier), v2 (explicit Bezier shape), and v3
+  /// (explicit ``surfaceType`` discriminator).
+  static constexpr int SchemaVersion = 3;
 
   /// Lowest schema version the reader admits.  v1 files (no
-  /// ``rows`` / ``cols``) load with an inferred 4×4 control polygon
-  /// per the ADR-0018 §1 migration path.
+  /// ``rows`` / ``cols`` / ``surfaceType``) load as 4×4 Bezier per
+  /// the ADR-0018 §1 migration path.
   static constexpr int MinReadableSchemaVersion = 1;
 
   vtkMRMLNode* CreateNodeInstance() override;
@@ -141,10 +165,16 @@ public:
   /// node family (vtkMRMLBezierSurfaceNode / DisplayNode).
   const char* GetNodeTagName() override { return "BezierSurfaceStorage"; }
 
-  /// Returns true iff ``refNode`` is a ``vtkMRMLBezierSurfaceNode``.
+  /// Returns true iff ``refNode`` is a ``vtkMRMLBezierSurfaceNode``
+  /// or a ``vtkMRMLNurbsSurfaceNode`` (per ADR-0022 §"Decision 2 —
+  /// Schema v3" the storage class serves both surface types; the
+  /// schema-v3 ``surfaceType`` discriminator picks the right read
+  /// path).
   bool CanReadInReferenceNode(vtkMRMLNode* refNode) override;
 
-  /// Returns true iff ``refNode`` is a ``vtkMRMLBezierSurfaceNode``.
+  /// Returns true iff ``refNode`` is a ``vtkMRMLBezierSurfaceNode``
+  /// or a ``vtkMRMLNurbsSurfaceNode``.  Same dispatch as
+  /// ``CanReadInReferenceNode``.
   bool CanWriteFromReferenceNode(vtkMRMLNode* refNode) override;
 
   /// Return the default extension emitted by ``WriteDataInternal``
@@ -179,21 +209,38 @@ private:
   vtkMRMLBezierSurfaceStorageNode(const vtkMRMLBezierSurfaceStorageNode&) = delete;
   void operator=(const vtkMRMLBezierSurfaceStorageNode&) = delete;
 
-  /// Read the new-format ``.lrp.json`` from ``filePath`` into
-  /// ``surfaceNode``.  Returns 1 on success, 0 on failure (with
-  /// errors routed through the storage node's user-messages
-  /// collection).
-  int ReadJson(const std::string& filePath, class vtkMRMLBezierSurfaceNode* surfaceNode);
+  /// Read a Bezier-typed ``.lrp.json`` from ``filePath`` into
+  /// ``surfaceNode``.  Returns 1 on success, 0 on failure.  Used
+  /// for v1 / v2 files (implicit Bezier) and for v3 files with
+  /// ``surfaceType: "Bezier"``.
+  int ReadJsonBezier(const std::string& filePath, class vtkMRMLBezierSurfaceNode* surfaceNode);
+
+  /// Read a NURBS-typed ``.lrp.json`` from ``filePath`` into
+  /// ``surfaceNode``.  Returns 1 on success, 0 on failure.  Used
+  /// for v3 files with ``surfaceType: "NURBS"``.  Per ADR-0022
+  /// §"Validation rules per surface type", validates degree range,
+  /// knot lengths, weights positivity, controlGrid length; any
+  /// violation aborts with ``vtkErrorMacro``.
+  int ReadJsonNurbs(const std::string& filePath, class vtkMRMLNurbsSurfaceNode* surfaceNode);
 
   /// Read the legacy ``.lrp.fcsv`` from ``filePath`` into
   /// ``surfaceNode``.  Returns 1 on success, 0 on failure.  See
   /// the implementation for the legacy-field → new-field mapping
-  /// table.
+  /// table.  Legacy CSV is Bezier-only — NURBS predates no legacy
+  /// format and the path returns 0 for NURBS sinks.
   int ReadLegacyFcsv(const std::string& filePath, class vtkMRMLBezierSurfaceNode* surfaceNode);
 
-  /// Write the new-format ``.lrp.json`` for ``surfaceNode`` to
-  /// ``filePath``.  Returns 1 on success, 0 on failure.
-  int WriteJson(const std::string& filePath, class vtkMRMLBezierSurfaceNode* surfaceNode);
+  /// Write the Bezier-typed ``.lrp.json`` for ``surfaceNode`` to
+  /// ``filePath``.  Returns 1 on success, 0 on failure.  Always
+  /// emits ``schemaVersion: 3`` + ``surfaceType: "Bezier"``.
+  int WriteJsonBezier(const std::string& filePath, class vtkMRMLBezierSurfaceNode* surfaceNode);
+
+  /// Write the NURBS-typed ``.lrp.json`` for ``surfaceNode`` to
+  /// ``filePath``.  Returns 1 on success, 0 on failure.  Always
+  /// emits ``schemaVersion: 3`` + ``surfaceType: "NURBS"`` plus the
+  /// NURBS-specific fields (``degreeU``, ``degreeV``, ``knotsU``,
+  /// ``knotsV``, ``weights``).
+  int WriteJsonNurbs(const std::string& filePath, class vtkMRMLNurbsSurfaceNode* surfaceNode);
 };
 
 #endif //__vtkmrmlbeziersurfacestoragenode_h_
