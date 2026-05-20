@@ -24,3 +24,6 @@
 
 # 2026-05-20: bulk clang-format of 72 files alongside copyright-header migration (issue #338).
 9c396d1432135457606fecbf72c8a46cdf653d95
+
+# 2026-05-20: ruff/pyupgrade auto-fixes + Slicer-idiom noqa (PR #403, issue #338).
+7f59d22a87bee9e1ab8a5279165c518f8d02ce4c
