@@ -60,20 +60,26 @@
 //------------------------------------------------------------------------------
 class vtkOpenGLResection2DPolyDataMapper::vtkInternal
 {
- public:
+public:
   vtkInternal(vtkOpenGLResection2DPolyDataMapper* parent)
-    : Parent(parent), DistanceMapTextureObject(nullptr), VascularSegmentsTextureObject(nullptr),
-      RasToIjkMatrixT(nullptr), IjkToTextureMatrixT(nullptr),
-      ResectionMargin(0.0f), UncertaintyMargin(0.0f),
-      ResectionMarginColor{1.0f, 0.0f, 0.0f},
-      UncertaintyMarginColor{1.0f, 1.0f, 0.0f},
-      ResectionColor{1.0f,1.0f, 1.0f},
-      ResectionGridColor{0.0f,0.0f, 0.0f},
-      InterpolatedMargins(false), ShowResection2D(false),
-      PortalContourThickness(0.3f), HepaticContourThickness(0.3f),
-      PortalContourColor{216.0/255.0f, 101.0/255.0f, 79.0/255.0f},
-      HepaticContourColor{0.0f, 151.0/255.0f, 206.0/255.0f},
-      TextureNumComps(0)
+    : Parent(parent)
+    , DistanceMapTextureObject(nullptr)
+    , VascularSegmentsTextureObject(nullptr)
+    , RasToIjkMatrixT(nullptr)
+    , IjkToTextureMatrixT(nullptr)
+    , ResectionMargin(0.0f)
+    , UncertaintyMargin(0.0f)
+    , ResectionMarginColor{ 1.0f, 0.0f, 0.0f }
+    , UncertaintyMarginColor{ 1.0f, 1.0f, 0.0f }
+    , ResectionColor{ 1.0f, 1.0f, 1.0f }
+    , ResectionGridColor{ 0.0f, 0.0f, 0.0f }
+    , InterpolatedMargins(false)
+    , ShowResection2D(false)
+    , PortalContourThickness(0.3f)
+    , HepaticContourThickness(0.3f)
+    , PortalContourColor{ 216.0 / 255.0f, 101.0 / 255.0f, 79.0 / 255.0f }
+    , HepaticContourColor{ 0.0f, 151.0 / 255.0f, 206.0 / 255.0f }
+    , TextureNumComps(0)
   {
     this->RasToIjkMatrixT = vtkSmartPointer<vtkMatrix4x4>::New();
     this->IjkToTextureMatrixT = vtkSmartPointer<vtkMatrix4x4>::New();
@@ -90,7 +96,7 @@ class vtkOpenGLResection2DPolyDataMapper::vtkInternal
   float UncertaintyMarginColor[3];
   float ResectionColor[3];
   float ResectionGridColor[3];
-  bool  InterpolatedMargins;
+  bool InterpolatedMargins;
   unsigned int GridDivisions;
   float GridThicknessFactor;
   bool ShowResection2D;
@@ -105,16 +111,15 @@ class vtkOpenGLResection2DPolyDataMapper::vtkInternal
 //------------------------------------------------------------------------------
 vtkStandardNewMacro(vtkOpenGLResection2DPolyDataMapper);
 
-
 //------------------------------------------------------------------------------
 vtkOpenGLResection2DPolyDataMapper::vtkOpenGLResection2DPolyDataMapper()
-  :Impl(nullptr)
+  : Impl(nullptr)
 {
   this->Impl = std::make_unique<vtkInternal>(this);
 }
 
 //------------------------------------------------------------------------------
-vtkOpenGLResection2DPolyDataMapper::~vtkOpenGLResection2DPolyDataMapper(){}
+vtkOpenGLResection2DPolyDataMapper::~vtkOpenGLResection2DPolyDataMapper() {}
 
 //------------------------------------------------------------------------------
 void vtkOpenGLResection2DPolyDataMapper::PrintSelf(ostream& os, vtkIndent indent)
@@ -126,98 +131,101 @@ void vtkOpenGLResection2DPolyDataMapper::PrintSelf(ostream& os, vtkIndent indent
 void vtkOpenGLResection2DPolyDataMapper::BuildBufferObjects(vtkRenderer* ren, vtkActor* act)
 {
   if (this->CurrentInput && this->HaveTCoords(this->CurrentInput))
-    {
+  {
     auto renWin = vtkOpenGLRenderWindow::SafeDownCast(ren->GetRenderWindow());
     vtkOpenGLVertexBufferObjectCache* cache = renWin->GetVBOCache();
     auto tcoords = this->CurrentInput->GetPointData()->GetTCoords();
     this->VBOs->CacheDataArray("uvCoords", tcoords, cache, VTK_FLOAT);
-    if(this->CurrentInput->GetPointData()->GetArray("BSPoints")){
+    if (this->CurrentInput->GetPointData()->GetArray("BSPoints"))
+    {
       auto vertexMCBS = this->CurrentInput->GetPointData()->GetArray("BSPoints");
       this->VBOs->CacheDataArray("vertexMCBS", vertexMCBS, cache, VTK_FLOAT);
-      }else{
+    }
+    else
+    {
       auto vertexMCBS = this->CurrentInput->GetPoints()->GetData();
       this->VBOs->CacheDataArray("vertexMCBS", vertexMCBS, cache, VTK_FLOAT);
-      }
     }
+  }
   Superclass::BuildBufferObjects(ren, act);
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
-  std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer* ren, vtkActor* actor)
+void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer* ren, vtkActor* actor)
 {
   std::string VSSource = shaders[vtkShader::Vertex]->GetSource();
   std::string FSSource = shaders[vtkShader::Fragment]->GetSource();
-  vtkShaderProgram::Substitute(
-    VSSource, "//VTK::PositionVC::Dec",
-    "//VTK::PositionVC::Dec\n"
-    "out vec4 vertexMCVSOutput;\n"
-    "out vec4 vertexWCVSOutput;\n"
-    "in vec2 uvCoords;\n"
-    "out vec2 uvCoordsOutput;\n"
+  vtkShaderProgram::Substitute(VSSource,
+                               "//VTK::PositionVC::Dec",
+                               "//VTK::PositionVC::Dec\n"
+                               "out vec4 vertexMCVSOutput;\n"
+                               "out vec4 vertexWCVSOutput;\n"
+                               "in vec2 uvCoords;\n"
+                               "out vec2 uvCoordsOutput;\n"
 
-    "uniform mat4 uShiftScaleBS;\n"
-    "uniform mat4 uShiftScale;\n"
-    "uniform mat4 uRasToIjk;\n"
-    "uniform mat4 uIjkToTexture;\n"
-    "uniform vec2 uMatRatio;\n"
-    "in vec4 vertexMCBS;\n"
-    "out vec4 vertexMCVSOutputBS;\n"
-    "out vec4 vertexWCVSOutputBS;\n");
+                               "uniform mat4 uShiftScaleBS;\n"
+                               "uniform mat4 uShiftScale;\n"
+                               "uniform mat4 uRasToIjk;\n"
+                               "uniform mat4 uIjkToTexture;\n"
+                               "uniform vec2 uMatRatio;\n"
+                               "in vec4 vertexMCBS;\n"
+                               "out vec4 vertexMCVSOutputBS;\n"
+                               "out vec4 vertexWCVSOutputBS;\n");
+
+  vtkShaderProgram::Substitute(VSSource,
+                               "//VTK::PositionVC::Impl",
+                               "//VTK::PositionVC::Impl\n"
+                               "vertexMCVSOutput = vertexMC;\n"
+                               "uvCoordsOutput = uvCoords;\n"
+                               "vertexWCVSOutput = uIjkToTexture*uRasToIjk*uShiftScale*vertexMC;\n"
+                               "vertexMCVSOutputBS = vertexMCBS;\n"
+                               "vertexWCVSOutputBS = uIjkToTexture*uRasToIjk*uShiftScaleBS*vertexMCBS;\n"
+                               "mat4 m = mat4(1.0);\n"
+                               "m[2][2] = 0.0;\n"
+                               "m[0][0] = uMatRatio[0];\n"
+                               "m[1][1] = uMatRatio[1];\n"
+                               "gl_Position = m * MCDCMatrix * vertexMC;\n");
+
+  vtkShaderProgram::Substitute(FSSource,
+                               "//VTK::PositionVC::Dec",
+                               "//VTK::PositionVC::Dec\n"
+                               "#define M_PI 3.1415926535897932384626433832795\n"
+                               "uniform sampler3D distanceTexture;\n"
+                               "uniform sampler3D vesselSegTexture;\n"
+                               "//vec4 fragPositionMC = vertexWCVSOutput;\n");
+
+  vtkShaderProgram::Substitute(FSSource,
+                               "//VTK::Color::Dec",
+                               "//VTK::Color::Dec\n"
+                               "uniform vec4 colorChart[8];\n"
+                               "uniform float uResectionMargin;\n"
+                               "uniform float uUncertaintyMargin;\n"
+                               "uniform vec3 uResectionMarginColor;\n"
+                               "uniform vec3 uUncertaintyMarginColor;\n"
+                               "uniform vec3 uResectionColor;\n"
+                               "uniform int uInterpolatedMargins;\n"
+                               "uniform vec3 uResectionGridColor;\n"
+                               "uniform int uGridDivisions;\n"
+                               "uniform float uGridThickness;\n"
+                               "in vec2 uvCoordsOutput;\n"
+                               "in vec4 vertexWCVSOutputBS;\n"
+                               "vec4 fragPositionMCBS = vertexWCVSOutputBS;\n"
+                               "uniform vec3 uPortalContourColor;\n"
+                               "uniform vec3 uHepaticContourColor;\n"
+                               "uniform int uTextureNumComps;\n"
+                               "uniform float uPortalContourThickness;\n"
+                               "uniform float uHepaticContourThickness;\n");
 
   vtkShaderProgram::Substitute(
-    VSSource, "//VTK::PositionVC::Impl",
-    "//VTK::PositionVC::Impl\n"
-    "vertexMCVSOutput = vertexMC;\n"
-    "uvCoordsOutput = uvCoords;\n"
-    "vertexWCVSOutput = uIjkToTexture*uRasToIjk*uShiftScale*vertexMC;\n"
-    "vertexMCVSOutputBS = vertexMCBS;\n"
-    "vertexWCVSOutputBS = uIjkToTexture*uRasToIjk*uShiftScaleBS*vertexMCBS;\n"
-    "mat4 m = mat4(1.0);\n"
-    "m[2][2] = 0.0;\n"
-    "m[0][0] = uMatRatio[0];\n"
-    "m[1][1] = uMatRatio[1];\n"
-    "gl_Position = m * MCDCMatrix * vertexMC;\n");
-
-  vtkShaderProgram::Substitute(
-    FSSource, "//VTK::PositionVC::Dec",
-    "//VTK::PositionVC::Dec\n"
-    "#define M_PI 3.1415926535897932384626433832795\n"
-    "uniform sampler3D distanceTexture;\n"
-    "uniform sampler3D vesselSegTexture;\n"
-    "//vec4 fragPositionMC = vertexWCVSOutput;\n");
-
-  vtkShaderProgram::Substitute(
-    FSSource, "//VTK::Color::Dec",
-    "//VTK::Color::Dec\n"
-    "uniform vec4 colorChart[8];\n"
-    "uniform float uResectionMargin;\n"
-    "uniform float uUncertaintyMargin;\n"
-    "uniform vec3 uResectionMarginColor;\n"
-    "uniform vec3 uUncertaintyMarginColor;\n"
-    "uniform vec3 uResectionColor;\n"
-    "uniform int uInterpolatedMargins;\n"
-    "uniform vec3 uResectionGridColor;\n"
-    "uniform int uGridDivisions;\n"
-    "uniform float uGridThickness;\n"
-    "in vec2 uvCoordsOutput;\n"
-    "in vec4 vertexWCVSOutputBS;\n"
-    "vec4 fragPositionMCBS = vertexWCVSOutputBS;\n"
-    "uniform vec3 uPortalContourColor;\n"
-    "uniform vec3 uHepaticContourColor;\n"
-    "uniform int uTextureNumComps;\n"
-    "uniform float uPortalContourThickness;\n"
-    "uniform float uHepaticContourThickness;\n");
-
-  vtkShaderProgram::Substitute(
-    FSSource, "//VTK::Color::Impl",
+    FSSource,
+    "//VTK::Color::Impl",
     "//VTK::Color::Impl\n"
     "vec4 dist = texture(distanceTexture, fragPositionMCBS.xyz);\n"
     "vec4 vesselBg = texture(vesselSegTexture, fragPositionMCBS.xyz);\n"
     "float lowMargin = uResectionMargin - uUncertaintyMargin;\n"
     "float highMargin = uResectionMargin + uUncertaintyMargin;\n"
 
-    //hardcode 8 labels color
+    // hardcode 8 labels color
     "if(vesselBg[0] == 0){\n"
     "  ambientColor = vec3(1.0);\n"
     "  diffuseColor = vec3(0.0);\n"
@@ -314,13 +322,11 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
     "} else if ((uvCoordsOutput.x > 0.5 && uvCoordsOutput.y < borderSize) || (uvCoordsOutput.x > 1.0 - borderSize && uvCoordsOutput.y < 0.5) ) {\n"
     "  ambientColor = topRightColor;\n"
     "  diffuseColor = vec3(0.0);\n"
-    "}\n"
-    );
-  vtkShaderProgram::Substitute(
-    FSSource, "//VTK::Light::Impl",
-    "//VTK::Light::Impl\n"
-    "fragOutput0 = vec4(ambientColor+vec3(uvCoordsOutput,0.0)*0.00001 + diffuse + specular, 1.0);\n");
-
+    "}\n");
+  vtkShaderProgram::Substitute(FSSource,
+                               "//VTK::Light::Impl",
+                               "//VTK::Light::Impl\n"
+                               "fragOutput0 = vec4(ambientColor+vec3(uvCoordsOutput,0.0)*0.00001 + diffuse + specular, 1.0);\n");
 
   shaders[vtkShader::Vertex]->SetSource(VSSource);
   shaders[vtkShader::Fragment]->SetSource(FSSource);
@@ -328,8 +334,7 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLResection2DPolyDataMapper::SetCameraShaderParameters(
-  vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor)
+void vtkOpenGLResection2DPolyDataMapper::SetCameraShaderParameters(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor)
 {
   vtkOpenGLVertexBufferObject* vvbo = this->VBOs->GetVBO("vertexMC");
 
@@ -339,18 +344,18 @@ void vtkOpenGLResection2DPolyDataMapper::SetCameraShaderParameters(
   auto transformMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
 
   if (vvbo && vvbo->GetCoordShiftAndScaleEnabled())
-    {
+  {
     auto shift = vvbo->GetShift();
     auto scale = vvbo->GetScale();
     transform->Translate(shift[0], shift[1], shift[2]);
-    transform->Scale(1.0/scale[0], 1.0/scale[1], 1.0/scale[2]);
+    transform->Scale(1.0 / scale[0], 1.0 / scale[1], 1.0 / scale[2]);
     transform->GetTranspose(transformMatrix);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uShiftScale"))
-    {
+  {
     cellBO.Program->SetUniformMatrix("uShiftScale", transformMatrix);
-    }
+  }
 
   vtkOpenGLVertexBufferObject* vvbobs = this->VBOs->GetVBO("vertexMCBS");
 
@@ -360,121 +365,119 @@ void vtkOpenGLResection2DPolyDataMapper::SetCameraShaderParameters(
   auto transformMatrixBS = vtkSmartPointer<vtkMatrix4x4>::New();
 
   if (vvbobs && vvbobs->GetCoordShiftAndScaleEnabled())
-    {
+  {
     auto shift = vvbobs->GetShift();
     auto scale = vvbobs->GetScale();
     transformBS->Translate(shift[0], shift[1], shift[2]);
-    transformBS->Scale(1.0/scale[0], 1.0/scale[1], 1.0/scale[2]);
+    transformBS->Scale(1.0 / scale[0], 1.0 / scale[1], 1.0 / scale[2]);
     transformBS->GetTranspose(transformMatrixBS);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uShiftScaleBS"))
-    {
+  {
     cellBO.Program->SetUniformMatrix("uShiftScaleBS", transformMatrixBS);
-    }
-
+  }
 
   Superclass::SetCameraShaderParameters(cellBO, ren, actor);
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLResection2DPolyDataMapper::SetMapperShaderParameters(
-  vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor)
+void vtkOpenGLResection2DPolyDataMapper::SetMapperShaderParameters(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor)
 {
   if (cellBO.Program->IsUniformUsed("distanceTexture"))
-    {
+  {
     cellBO.Program->SetUniformi("distanceTexture", 0);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("vesselSegTexture"))
-    {
+  {
     cellBO.Program->SetUniformi("vesselSegTexture", 1);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uRasToIjk"))
-    {
+  {
     cellBO.Program->SetUniformMatrix("uRasToIjk", this->Impl->RasToIjkMatrixT);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uIjkToTexture"))
-    {
+  {
     cellBO.Program->SetUniformMatrix("uIjkToTexture", this->Impl->IjkToTextureMatrixT);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uResectionMargin"))
-    {
+  {
     cellBO.Program->SetUniformf("uResectionMargin", this->Impl->ResectionMargin);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uUncertaintyMargin"))
-    {
+  {
     cellBO.Program->SetUniformf("uUncertaintyMargin", this->Impl->UncertaintyMargin);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uInterpolatedMargins"))
-    {
+  {
     cellBO.Program->SetUniformi("uInterpolatedMargins", this->Impl->InterpolatedMargins);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uResectionMarginColor"))
-    {
+  {
     cellBO.Program->SetUniform3f("uResectionMarginColor", this->Impl->ResectionMarginColor);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uUncertaintyMarginColor"))
-    {
+  {
     cellBO.Program->SetUniform3f("uUncertaintyMarginColor", this->Impl->UncertaintyMarginColor);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uResectionColor"))
-    {
+  {
     cellBO.Program->SetUniform3f("uResectionColor", this->Impl->ResectionColor);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uResectionGridColor"))
-    {
+  {
     cellBO.Program->SetUniform3f("uResectionGridColor", this->Impl->ResectionGridColor);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uGridDivisions"))
-    {
+  {
     cellBO.Program->SetUniformi("uGridDivisions", this->Impl->GridDivisions);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uGridThickness"))
-    {
+  {
     cellBO.Program->SetUniformf("uGridThickness", this->Impl->GridThicknessFactor);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uHepaticContourColor"))
-    {
+  {
     cellBO.Program->SetUniform3f("uHepaticContourColor", this->Impl->HepaticContourColor);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uPortalContourColor"))
-    {
+  {
     cellBO.Program->SetUniform3f("uPortalContourColor", this->Impl->PortalContourColor);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uTextureNumComps"))
-    {
+  {
     cellBO.Program->SetUniformi("uTextureNumComps", this->Impl->TextureNumComps);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uPortalContourThickness"))
-    {
+  {
     cellBO.Program->SetUniformf("uPortalContourThickness", this->Impl->PortalContourThickness);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uHepaticContourThickness"))
-    {
+  {
     cellBO.Program->SetUniformf("uHepaticContourThickness", this->Impl->HepaticContourThickness);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uMatRatio"))
-    {
+  {
     cellBO.Program->SetUniform2f("uMatRatio", this->Impl->MatRatio);
-    }
+  }
 
   Superclass::SetMapperShaderParameters(cellBO, ren, actor);
 }
@@ -489,15 +492,15 @@ vtkTextureObject* vtkOpenGLResection2DPolyDataMapper::GetDistanceMapTextureObjec
 void vtkOpenGLResection2DPolyDataMapper::SetDistanceMapTextureObject(vtkTextureObject* object)
 {
   if (this->Impl->DistanceMapTextureObject == object)
-    {
+  {
     return;
-    }
+  }
 
   this->Impl->DistanceMapTextureObject = object;
   if (object)
-    {
+  {
     object->Register(this);
-    }
+  }
 
   this->Modified();
 }
@@ -512,21 +515,21 @@ vtkTextureObject* vtkOpenGLResection2DPolyDataMapper::GetVascularSegmentsTexture
 void vtkOpenGLResection2DPolyDataMapper::SetVascularSegmentsTextureObject(vtkTextureObject* object)
 {
   if (this->Impl->VascularSegmentsTextureObject == object)
-    {
+  {
     return;
-    }
+  }
 
   this->Impl->VascularSegmentsTextureObject = object;
   if (object)
-    {
+  {
     object->Register(this);
-    }
+  }
 
   this->Modified();
 }
 
 //------------------------------------------------------------------------------
-vtkMatrix4x4 const* vtkOpenGLResection2DPolyDataMapper::GetRasToIjkMatrixT() const
+const vtkMatrix4x4* vtkOpenGLResection2DPolyDataMapper::GetRasToIjkMatrixT() const
 {
   return this->Impl->RasToIjkMatrixT;
 }
@@ -535,9 +538,9 @@ vtkMatrix4x4 const* vtkOpenGLResection2DPolyDataMapper::GetRasToIjkMatrixT() con
 void vtkOpenGLResection2DPolyDataMapper::SetRasToIjkMatrixT(const vtkMatrix4x4* matrix)
 {
   if (matrix == nullptr)
-    {
+  {
     return;
-    }
+  }
 
   this->Impl->RasToIjkMatrixT->DeepCopy(matrix);
   this->Modified();
@@ -547,9 +550,9 @@ void vtkOpenGLResection2DPolyDataMapper::SetRasToIjkMatrixT(const vtkMatrix4x4* 
 void vtkOpenGLResection2DPolyDataMapper::SetRasToIjkMatrix(const vtkMatrix4x4* matrix)
 {
   if (matrix == nullptr)
-    {
+  {
     return;
-    }
+  }
 
   this->Impl->RasToIjkMatrixT->DeepCopy(matrix);
   this->Impl->RasToIjkMatrixT->Transpose();
@@ -557,7 +560,7 @@ void vtkOpenGLResection2DPolyDataMapper::SetRasToIjkMatrix(const vtkMatrix4x4* m
 }
 
 //------------------------------------------------------------------------------
-vtkMatrix4x4 const* vtkOpenGLResection2DPolyDataMapper::GetIjkToTextureMatrixT() const
+const vtkMatrix4x4* vtkOpenGLResection2DPolyDataMapper::GetIjkToTextureMatrixT() const
 {
   return this->Impl->IjkToTextureMatrixT;
 }
@@ -566,9 +569,9 @@ vtkMatrix4x4 const* vtkOpenGLResection2DPolyDataMapper::GetIjkToTextureMatrixT()
 void vtkOpenGLResection2DPolyDataMapper::SetIjkToTextureMatrixT(const vtkMatrix4x4* matrix)
 {
   if (matrix == nullptr)
-    {
+  {
     return;
-    }
+  }
 
   this->Impl->IjkToTextureMatrixT->DeepCopy(matrix);
   this->Modified();
@@ -578,9 +581,9 @@ void vtkOpenGLResection2DPolyDataMapper::SetIjkToTextureMatrixT(const vtkMatrix4
 void vtkOpenGLResection2DPolyDataMapper::SetIjkToTextureMatrix(const vtkMatrix4x4* matrix)
 {
   if (matrix == nullptr)
-    {
+  {
     return;
-    }
+  }
 
   this->Impl->IjkToTextureMatrixT->DeepCopy(matrix);
   this->Impl->IjkToTextureMatrixT->Transpose();
@@ -612,9 +615,8 @@ void vtkOpenGLResection2DPolyDataMapper::SetUncertaintyMargin(float margin)
   this->Modified();
 }
 
-
 //------------------------------------------------------------------------------
-float const* vtkOpenGLResection2DPolyDataMapper::GetResectionMarginColor() const
+const float* vtkOpenGLResection2DPolyDataMapper::GetResectionMarginColor() const
 {
   return this->Impl->ResectionMarginColor;
 }
@@ -638,7 +640,7 @@ void vtkOpenGLResection2DPolyDataMapper::SetResectionMarginColor(float red, floa
 }
 
 //------------------------------------------------------------------------------
-float const* vtkOpenGLResection2DPolyDataMapper::GetUncertaintyMarginColor() const
+const float* vtkOpenGLResection2DPolyDataMapper::GetUncertaintyMarginColor() const
 {
   return this->Impl->UncertaintyMarginColor;
 }
@@ -662,7 +664,7 @@ void vtkOpenGLResection2DPolyDataMapper::SetUncertaintyMarginColor(float red, fl
 }
 
 //------------------------------------------------------------------------------
-float const* vtkOpenGLResection2DPolyDataMapper::GetResectionColor() const
+const float* vtkOpenGLResection2DPolyDataMapper::GetResectionColor() const
 {
   return this->Impl->ResectionColor;
 }
@@ -686,7 +688,7 @@ void vtkOpenGLResection2DPolyDataMapper::SetResectionColor(float red, float gree
 }
 
 //------------------------------------------------------------------------------
-float const* vtkOpenGLResection2DPolyDataMapper::GetResectionGridColor() const
+const float* vtkOpenGLResection2DPolyDataMapper::GetResectionGridColor() const
 {
   return this->Impl->ResectionGridColor;
 }
@@ -749,7 +751,7 @@ void vtkOpenGLResection2DPolyDataMapper::SetGridThicknessFactor(float thickness)
 }
 
 //------------------------------------------------------------------------------
-float const* vtkOpenGLResection2DPolyDataMapper::GetHepaticContourColor() const
+const float* vtkOpenGLResection2DPolyDataMapper::GetHepaticContourColor() const
 {
   return this->Impl->HepaticContourColor;
 }
@@ -773,7 +775,7 @@ void vtkOpenGLResection2DPolyDataMapper::SetHepaticContourColor(float red, float
 }
 
 //------------------------------------------------------------------------------
-float const* vtkOpenGLResection2DPolyDataMapper::GetPortalContourColor() const
+const float* vtkOpenGLResection2DPolyDataMapper::GetPortalContourColor() const
 {
   return this->Impl->PortalContourColor;
 }
@@ -836,7 +838,7 @@ void vtkOpenGLResection2DPolyDataMapper::SetTextureNumComps(int numComps)
 }
 
 //------------------------------------------------------------------------------
-float const* vtkOpenGLResection2DPolyDataMapper::GetMatRatio() const
+const float* vtkOpenGLResection2DPolyDataMapper::GetMatRatio() const
 {
   return this->Impl->MatRatio;
 }
