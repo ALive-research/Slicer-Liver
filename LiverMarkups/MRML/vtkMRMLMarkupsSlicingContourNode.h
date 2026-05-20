@@ -46,12 +46,11 @@
 #include <vtkMRMLMarkupsLineNode.h>
 #include <vtkMRMLModelNode.h>
 
-//VTK includes
+// VTK includes
 #include <vtkWeakPointer.h>
 
 //-----------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsSlicingContourNode
-: public vtkMRMLMarkupsLineNode
+class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsSlicingContourNode : public vtkMRMLMarkupsLineNode
 {
 public:
   static vtkMRMLMarkupsSlicingContourNode* New();
@@ -61,41 +60,43 @@ public:
   //--------------------------------------------------------------------------------
   // MRMLNode methods
   //--------------------------------------------------------------------------------
-  const char* GetIcon() override {return ":/Icons/MarkupsGeneric.png";}
-  const char* GetAddIcon() override {return ":/Icons/MarkupsGenericMouseModePlace.png";}
-  const char* GetPlaceAddIcon() override {return ":/Icons/MarkupsGenericMouseModePlaceAdd.png";}
+  const char* GetIcon() override { return ":/Icons/MarkupsGeneric.png"; }
+  const char* GetAddIcon() override { return ":/Icons/MarkupsGenericMouseModePlace.png"; }
+  const char* GetPlaceAddIcon() override { return ":/Icons/MarkupsGenericMouseModePlaceAdd.png"; }
 
   vtkMRMLNode* CreateNodeInstance() override;
   void CreateDefaultDisplayNodes() override;
 
   /// Get node XML tag name (like Volume, Model)
   ///
-  const char* GetNodeTagName() override {return "MarkupsSlicingContour";}
+  const char* GetNodeTagName() override { return "MarkupsSlicingContour"; }
 
   /// Get markup name
-  const char* GetMarkupType() override {return "SlicingContour";}
+  const char* GetMarkupType() override { return "SlicingContour"; }
 
   /// Get markup short name
-  std::string GetDefaultNodeNamePrefix() override {return "SC";}
+  std::string GetDefaultNodeNamePrefix() override { return "SC"; }
 
   /// \sa vtkMRMLNode::CopyContent
   vtkMRMLCopyContentDefaultMacro(vtkMRMLMarkupsSlicingContourNode);
 
-  vtkMRMLModelNode* GetTarget() const {return this->Target;}
-  void SetTarget(vtkMRMLModelNode* target) {this->Target = target; this->Modified();}
+  vtkMRMLModelNode* GetTarget() const { return this->Target; }
+  void SetTarget(vtkMRMLModelNode* target)
+  {
+    this->Target = target;
+    this->Modified();
+  }
 
 protected:
   vtkMRMLMarkupsSlicingContourNode();
   ~vtkMRMLMarkupsSlicingContourNode() override = default;
 
 private:
- vtkWeakPointer<vtkMRMLModelNode> Target;
+  vtkWeakPointer<vtkMRMLModelNode> Target;
 
 private:
- vtkMRMLMarkupsSlicingContourNode(const vtkMRMLMarkupsSlicingContourNode&);
- void operator=(const vtkMRMLMarkupsSlicingContourNode&);
-
-
+  vtkMRMLMarkupsSlicingContourNode(const vtkMRMLMarkupsSlicingContourNode&);
+  void operator=(const vtkMRMLMarkupsSlicingContourNode&);
 };
 
 #endif //__vtkmrmlmarkupsslicingcontournode_h_

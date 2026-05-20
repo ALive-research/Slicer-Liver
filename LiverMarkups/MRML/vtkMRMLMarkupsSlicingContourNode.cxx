@@ -52,31 +52,32 @@ vtkMRMLNodeNewMacro(vtkMRMLMarkupsSlicingContourNode);
 
 //--------------------------------------------------------------------------------
 vtkMRMLMarkupsSlicingContourNode::vtkMRMLMarkupsSlicingContourNode()
-  :Superclass(), Target(nullptr)
+  : Superclass()
+  , Target(nullptr)
 {
 }
 
 //----------------------------------------------------------------------------
 void vtkMRMLMarkupsSlicingContourNode::PrintSelf(ostream& os, vtkIndent indent)
 {
-  Superclass::PrintSelf(os,indent);
+  Superclass::PrintSelf(os, indent);
 }
 
 //----------------------------------------------------------------------------
 void vtkMRMLMarkupsSlicingContourNode::CreateDefaultDisplayNodes()
 {
   if (vtkMRMLMarkupsSlicingContourDisplayNode::SafeDownCast(this->GetDisplayNode()))
-    {
+  {
     // display node already exists
     return;
-    }
+  }
 
   auto scene = this->GetScene();
   if (!scene)
-    {
+  {
     vtkErrorMacro("vtkMRMLMarkupsSlicingContourNode::CreateDefaultDisplayNodes failed: scene is invalid");
     return;
-    }
+  }
 
   auto dispNode = scene->AddNewNodeByClass("vtkMRMLMarkupsSlicingContourDisplayNode");
 

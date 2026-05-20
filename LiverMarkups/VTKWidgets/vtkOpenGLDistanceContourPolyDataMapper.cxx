@@ -64,11 +64,13 @@ class vtkOpenGLDistanceContourPolyDataMapper::vtkInternal
 {
 public:
   vtkInternal(vtkOpenGLDistanceContourPolyDataMapper* parent)
-  : Parent(parent),
-    ExternalPoint{0.0f, 0.0f, 0.0f, 1.0f},
-    ReferencePoint{1.0f, 0.0f, 0.0f, 1.0f},
-    ContourThickness(0.05), ContourVisibility(false)
-  { }
+    : Parent(parent)
+    , ExternalPoint{ 0.0f, 0.0f, 0.0f, 1.0f }
+    , ReferencePoint{ 1.0f, 0.0f, 0.0f, 1.0f }
+    , ContourThickness(0.05)
+    , ContourVisibility(false)
+  {
+  }
 
   vtkWeakPointer<vtkOpenGLDistanceContourPolyDataMapper> Parent;
   std::array<float, 4> ExternalPoint;
@@ -82,18 +84,18 @@ vtkStandardNewMacro(vtkOpenGLDistanceContourPolyDataMapper);
 
 //------------------------------------------------------------------------------
 vtkOpenGLDistanceContourPolyDataMapper::vtkOpenGLDistanceContourPolyDataMapper()
-  :Impl(nullptr)
+  : Impl(nullptr)
 {
   this->Impl = std::make_unique<vtkInternal>(this);
 }
 
 //------------------------------------------------------------------------------
-vtkOpenGLDistanceContourPolyDataMapper::~vtkOpenGLDistanceContourPolyDataMapper(){}
+vtkOpenGLDistanceContourPolyDataMapper::~vtkOpenGLDistanceContourPolyDataMapper() {}
 
 //------------------------------------------------------------------------------
 void vtkOpenGLDistanceContourPolyDataMapper::PrintSelf(ostream& os, vtkIndent indent)
 {
-   Superclass::PrintSelf(os, indent);
+  Superclass::PrintSelf(os, indent);
 }
 
 //------------------------------------------------------------------------------
@@ -103,55 +105,52 @@ void vtkOpenGLDistanceContourPolyDataMapper::BuildBufferObjects(vtkRenderer* ren
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLDistanceContourPolyDataMapper::ReplaceShaderValues(
-  std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer* ren, vtkActor* actor)
+void vtkOpenGLDistanceContourPolyDataMapper::ReplaceShaderValues(std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer* ren, vtkActor* actor)
 {
   std::string VSSource = shaders[vtkShader::Vertex]->GetSource();
   std::string FSSource = shaders[vtkShader::Fragment]->GetSource();
 
-  vtkShaderProgram::Substitute(
-    VSSource, "//VTK::PositionVC::Dec",
-    "//VTK::PositionVC::Dec\n"
-    "out vec4 vertexMCVSOutput;\n"
-    "out vec4 vertexWCVSOutput;\n"
-    "uniform mat4 uShiftScale;\n");
+  vtkShaderProgram::Substitute(VSSource,
+                               "//VTK::PositionVC::Dec",
+                               "//VTK::PositionVC::Dec\n"
+                               "out vec4 vertexMCVSOutput;\n"
+                               "out vec4 vertexWCVSOutput;\n"
+                               "uniform mat4 uShiftScale;\n");
 
-  vtkShaderProgram::Substitute(
-    VSSource, "//VTK::PositionVC::Impl",
-    "//VTK::PositionVC::Impl\n"
-    "vertexMCVSOutput = vertexMC;\n"
-    "vertexWCVSOutput = uShiftScale*vertexMC;\n");
+  vtkShaderProgram::Substitute(VSSource,
+                               "//VTK::PositionVC::Impl",
+                               "//VTK::PositionVC::Impl\n"
+                               "vertexMCVSOutput = vertexMC;\n"
+                               "vertexWCVSOutput = uShiftScale*vertexMC;\n");
 
-  vtkShaderProgram::Substitute(
-    FSSource, "//VTK::PositionVC::Dec",
-    "//VTK::PositionVC::Dec\n"
-    "in vec4 vertexWCVSOutput;"
-    "vec4 fragPositionMC = vertexWCVSOutput;\n");
+  vtkShaderProgram::Substitute(FSSource,
+                               "//VTK::PositionVC::Dec",
+                               "//VTK::PositionVC::Dec\n"
+                               "in vec4 vertexWCVSOutput;"
+                               "vec4 fragPositionMC = vertexWCVSOutput;\n");
 
-  vtkShaderProgram::Substitute(
-    FSSource, "//VTK::Color::Dec",
-    "//VTK::Color::Dec\n"
-    "uniform float uContourThickness;\n"
-    "uniform int uContourVisibility;\n"
-    "uniform vec4 uExternalPointMC;\n"
-    "uniform vec4 uReferencePointMC;\n"
-    );
+  vtkShaderProgram::Substitute(FSSource,
+                               "//VTK::Color::Dec",
+                               "//VTK::Color::Dec\n"
+                               "uniform float uContourThickness;\n"
+                               "uniform int uContourVisibility;\n"
+                               "uniform vec4 uExternalPointMC;\n"
+                               "uniform vec4 uReferencePointMC;\n");
 
-  vtkShaderProgram::Substitute(
-      FSSource, "//VTK::Color::Impl",
-      "//VTK::Color::Impl\n"
-      "  vec3 contourColor= vec3(1.0, 1.0 ,1.0);\n"
-      "  float refDist= distance(uExternalPointMC, uReferencePointMC);\n"
-      "  float dist = distance(uReferencePointMC, fragPositionMC);\n"
-      "  if(abs(dist-refDist) < uContourThickness && uContourVisibility != 0){\n"
-      "     ambientColor = contourColor;\n"
-      "     diffuseColor = contourColor;\n"
-      "     opacity = 1.0;\n"
-      "  }\n"
-      "  else{\n"
-      "  discard;\n"
-      "  }\n");
-
+  vtkShaderProgram::Substitute(FSSource,
+                               "//VTK::Color::Impl",
+                               "//VTK::Color::Impl\n"
+                               "  vec3 contourColor= vec3(1.0, 1.0 ,1.0);\n"
+                               "  float refDist= distance(uExternalPointMC, uReferencePointMC);\n"
+                               "  float dist = distance(uReferencePointMC, fragPositionMC);\n"
+                               "  if(abs(dist-refDist) < uContourThickness && uContourVisibility != 0){\n"
+                               "     ambientColor = contourColor;\n"
+                               "     diffuseColor = contourColor;\n"
+                               "     opacity = 1.0;\n"
+                               "  }\n"
+                               "  else{\n"
+                               "  discard;\n"
+                               "  }\n");
 
   shaders[vtkShader::Vertex]->SetSource(VSSource);
   shaders[vtkShader::Fragment]->SetSource(FSSource);
@@ -159,16 +158,17 @@ void vtkOpenGLDistanceContourPolyDataMapper::ReplaceShaderValues(
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLDistanceContourPolyDataMapper::SetCameraShaderParameters(
-    vtkOpenGLHelper &cellBO, vtkRenderer *ren, vtkActor *actor) {
-  vtkOpenGLVertexBufferObject *vvbo = this->VBOs->GetVBO("vertexMC");
+void vtkOpenGLDistanceContourPolyDataMapper::SetCameraShaderParameters(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor)
+{
+  vtkOpenGLVertexBufferObject* vvbo = this->VBOs->GetVBO("vertexMC");
 
   // TODO: maybe cache this?
   auto transform = vtkSmartPointer<vtkTransform>::New();
   transform->Identity();
   auto transformMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
 
-  if (vvbo && vvbo->GetCoordShiftAndScaleEnabled()) {
+  if (vvbo && vvbo->GetCoordShiftAndScaleEnabled())
+  {
     auto shift = vvbo->GetShift();
     auto scale = vvbo->GetScale();
     transform->Translate(shift[0], shift[1], shift[2]);
@@ -176,7 +176,8 @@ void vtkOpenGLDistanceContourPolyDataMapper::SetCameraShaderParameters(
     transform->GetTranspose(transformMatrix);
   }
 
-  if (cellBO.Program->IsUniformUsed("uShiftScale")) {
+  if (cellBO.Program->IsUniformUsed("uShiftScale"))
+  {
     cellBO.Program->SetUniformMatrix("uShiftScale", transformMatrix);
   }
 
@@ -184,29 +185,28 @@ void vtkOpenGLDistanceContourPolyDataMapper::SetCameraShaderParameters(
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLDistanceContourPolyDataMapper::SetMapperShaderParameters(
-    vtkOpenGLHelper &cellBO, vtkRenderer *ren, vtkActor *actor) {
+void vtkOpenGLDistanceContourPolyDataMapper::SetMapperShaderParameters(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor)
+{
 
   if (cellBO.Program->IsUniformUsed("uExternalPointMC"))
-    {
+  {
     cellBO.Program->SetUniform4f("uExternalPointMC", this->Impl->ExternalPoint.data());
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uReferencePointMC"))
-    {
+  {
     cellBO.Program->SetUniform4f("uReferencePointMC", this->Impl->ReferencePoint.data());
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uContourThickness"))
-    {
+  {
     cellBO.Program->SetUniformf("uContourThickness", this->Impl->ContourThickness);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uContourVisibility"))
-    {
-      cellBO.Program->SetUniformi("uContourVisibility",
-                                  static_cast<int>(this->Impl->ContourVisibility));
-    }
+  {
+    cellBO.Program->SetUniformi("uContourVisibility", static_cast<int>(this->Impl->ContourVisibility));
+  }
 
   Superclass::SetMapperShaderParameters(cellBO, ren, actor);
 }
@@ -218,7 +218,8 @@ std::array<float, 4> vtkOpenGLDistanceContourPolyDataMapper::GetExternalPoint() 
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLDistanceContourPolyDataMapper::SetExternalPoint(const std::array<float, 4> &externalPoint) {
+void vtkOpenGLDistanceContourPolyDataMapper::SetExternalPoint(const std::array<float, 4>& externalPoint)
+{
   this->Impl->ExternalPoint = externalPoint;
   this->Modified();
 }
@@ -230,25 +231,34 @@ std::array<float, 4> vtkOpenGLDistanceContourPolyDataMapper::GetReferencePoint()
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLDistanceContourPolyDataMapper::SetReferencePoint(const std::array<float, 4> &referencePoint) {
+void vtkOpenGLDistanceContourPolyDataMapper::SetReferencePoint(const std::array<float, 4>& referencePoint)
+{
   this->Impl->ReferencePoint = referencePoint;
   this->Modified();
 }
 
 //------------------------------------------------------------------------------
-float vtkOpenGLDistanceContourPolyDataMapper::GetContourThickness() const { return this->Impl->ContourThickness; }
+float vtkOpenGLDistanceContourPolyDataMapper::GetContourThickness() const
+{
+  return this->Impl->ContourThickness;
+}
 
 //------------------------------------------------------------------------------
-void vtkOpenGLDistanceContourPolyDataMapper::SetContourThickness(float contourThickness) {
+void vtkOpenGLDistanceContourPolyDataMapper::SetContourThickness(float contourThickness)
+{
   this->Impl->ContourThickness = contourThickness;
   this->Modified();
 }
 
 //------------------------------------------------------------------------------
-bool vtkOpenGLDistanceContourPolyDataMapper::GetContourVisibility() const { return this->Impl->ContourVisibility; }
+bool vtkOpenGLDistanceContourPolyDataMapper::GetContourVisibility() const
+{
+  return this->Impl->ContourVisibility;
+}
 
 //------------------------------------------------------------------------------
-void vtkOpenGLDistanceContourPolyDataMapper::SetContourVisibility(bool contourVisibility) {
+void vtkOpenGLDistanceContourPolyDataMapper::SetContourVisibility(bool contourVisibility)
+{
   this->Impl->ContourVisibility = contourVisibility;
   this->Modified();
 }

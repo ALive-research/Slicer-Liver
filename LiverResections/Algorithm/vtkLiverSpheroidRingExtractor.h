@@ -90,13 +90,12 @@
  * \par MRML invariant
  *  No ``vtkMRMLNode`` references.  Per ADR-0015.
  */
-class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverSpheroidRingExtractor
-  : public vtkPolyDataAlgorithm
+class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverSpheroidRingExtractor : public vtkPolyDataAlgorithm
 {
- public:
-  static vtkLiverSpheroidRingExtractor *New();
+public:
+  static vtkLiverSpheroidRingExtractor* New();
   vtkTypeMacro(vtkLiverSpheroidRingExtractor, vtkPolyDataAlgorithm);
-  void PrintSelf(ostream &os, vtkIndent indent) override;
+  void PrintSelf(ostream& os, vtkIndent indent) override;
 
   vtkSetVector3Macro(Center, double);
   vtkGetVector3Macro(Center, double);
@@ -108,18 +107,16 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverSpheroidRingExt
   vtkSetMacro(RadiusZ, double);
   vtkGetMacro(RadiusZ, double);
 
- protected:
+protected:
   vtkLiverSpheroidRingExtractor();
   ~vtkLiverSpheroidRingExtractor() override;
 
-  int FillInputPortInformation(int port, vtkInformation *info) override;
-  int RequestData(vtkInformation *,
-                  vtkInformationVector **,
-                  vtkInformationVector *) override;
+  int FillInputPortInformation(int port, vtkInformation* info) override;
+  int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
- private:
-  vtkLiverSpheroidRingExtractor(const vtkLiverSpheroidRingExtractor &) = delete;
-  void operator=(const vtkLiverSpheroidRingExtractor &) = delete;
+private:
+  vtkLiverSpheroidRingExtractor(const vtkLiverSpheroidRingExtractor&) = delete;
+  void operator=(const vtkLiverSpheroidRingExtractor&) = delete;
 
   double Center[3];
   double RadiusX;
@@ -127,4 +124,4 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverSpheroidRingExt
   double RadiusZ;
 };
 
-#endif  // __vtkLiverSpheroidRingExtractor_h_
+#endif // __vtkLiverSpheroidRingExtractor_h_

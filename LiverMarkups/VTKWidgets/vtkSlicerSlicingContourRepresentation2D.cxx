@@ -43,10 +43,7 @@
 vtkStandardNewMacro(vtkSlicerSlicingContourRepresentation2D);
 
 //------------------------------------------------------------------------------
-vtkSlicerSlicingContourRepresentation2D::vtkSlicerSlicingContourRepresentation2D()
-{
-
-}
+vtkSlicerSlicingContourRepresentation2D::vtkSlicerSlicingContourRepresentation2D() {}
 
 //------------------------------------------------------------------------------
 vtkSlicerSlicingContourRepresentation2D::~vtkSlicerSlicingContourRepresentation2D() = default;

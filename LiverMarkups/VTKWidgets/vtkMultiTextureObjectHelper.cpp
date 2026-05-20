@@ -64,8 +64,7 @@ void vtkMultiTextureObjectHelper::PrintSelf(ostream& os, vtkIndent indent)
 }
 vtkStandardNewMacro(vtkMultiTextureObjectHelper);
 
-bool vtkMultiTextureObjectHelper::CreateSeq2DFromRaw(
-  unsigned int width, unsigned int height, int numComps, int dataType, void* data,  int texSeq)
+bool vtkMultiTextureObjectHelper::CreateSeq2DFromRaw(unsigned int width, unsigned int height, int numComps, int dataType, void* data, int texSeq)
 {
   assert(this->Context);
 
@@ -75,11 +74,10 @@ bool vtkMultiTextureObjectHelper::CreateSeq2DFromRaw(
   this->GetFormat(dataType, numComps, false);
 
   if (!this->InternalFormat || !this->Format || !this->Type)
-    {
-    vtkErrorMacro("Failed to determine texture parameters. IF="
-                    << this->InternalFormat << " F=" << this->Format << " T=" << this->Type);
+  {
+    vtkErrorMacro("Failed to determine texture parameters. IF=" << this->InternalFormat << " F=" << this->Format << " T=" << this->Type);
     return false;
-    }
+  }
 
   GLenum target = GL_TEXTURE_2D;
   this->Target = target;
@@ -90,25 +88,22 @@ bool vtkMultiTextureObjectHelper::CreateSeq2DFromRaw(
   this->NumberOfDimensions = 2;
 
   GLint texunit = texSeq;
-  this->Context->GetState()->vtkglActiveTexture(GL_TEXTURE0+texunit);
+  this->Context->GetState()->vtkglActiveTexture(GL_TEXTURE0 + texunit);
   this->CreateSeqTexture(texSeq);
   this->Bind();
 
   // Source texture data from the PBO.
   this->Context->GetState()->vtkglPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-  glTexStorage2D(GL_TEXTURE_2D, 1, this->InternalFormat, static_cast<GLsizei>(this->Width),
-                 static_cast<GLsizei>(this->Height));
-  glTexSubImage2D(this->Target, 0,0,0, static_cast<GLsizei>(this->Width),
-                  static_cast<GLsizei>(this->Height), this->Format, this->Type,
-                  static_cast<const GLvoid*>(data));
+  glTexStorage2D(GL_TEXTURE_2D, 1, this->InternalFormat, static_cast<GLsizei>(this->Width), static_cast<GLsizei>(this->Height));
+  glTexSubImage2D(this->Target, 0, 0, 0, static_cast<GLsizei>(this->Width), static_cast<GLsizei>(this->Height), this->Format, this->Type, static_cast<const GLvoid*>(data));
   vtkOpenGLCheckErrorMacro("failed at glTexImage2D");
 
   this->Deactivate();
   return true;
 }
 
-bool vtkMultiTextureObjectHelper::CreateSeq3DFromRaw(unsigned int width, unsigned int height, unsigned int depth,
-                                                     int numComps, int dataType, void* data, int texSeq) {
+bool vtkMultiTextureObjectHelper::CreateSeq3DFromRaw(unsigned int width, unsigned int height, unsigned int depth, int numComps, int dataType, void* data, int texSeq)
+{
 
   assert(this->Context);
   vtkOpenGLClearErrorMacro();
@@ -119,10 +114,10 @@ bool vtkMultiTextureObjectHelper::CreateSeq3DFromRaw(unsigned int width, unsigne
   this->GetFormat(dataType, numComps, false);
 
   if (!this->InternalFormat || !this->Format || !this->Type)
-    {
+  {
     vtkErrorMacro("Failed to determine texture parameters.");
     return false;
-    }
+  }
 
   this->Target = GL_TEXTURE_3D;
   this->Components = numComps;
@@ -132,16 +127,23 @@ bool vtkMultiTextureObjectHelper::CreateSeq3DFromRaw(unsigned int width, unsigne
   this->NumberOfDimensions = 3;
 
   GLint texunit = texSeq;
-  this->Context->GetState()->vtkglActiveTexture(GL_TEXTURE0+texunit);
+  this->Context->GetState()->vtkglActiveTexture(GL_TEXTURE0 + texunit);
   this->CreateSeqTexture(texSeq);
   this->Bind();
 
   // Source texture data from the PBO.
   this->Context->GetState()->vtkglPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-  glTexImage3D(this->Target, 0, this->InternalFormat, static_cast<GLsizei>(this->Width),
-               static_cast<GLsizei>(this->Height), static_cast<GLsizei>(this->Depth), 0, this->Format,
-               this->Type, static_cast<const GLvoid*>(data));
+  glTexImage3D(this->Target,
+               0,
+               this->InternalFormat,
+               static_cast<GLsizei>(this->Width),
+               static_cast<GLsizei>(this->Height),
+               static_cast<GLsizei>(this->Depth),
+               0,
+               this->Format,
+               this->Type,
+               static_cast<const GLvoid*>(data));
 
   this->Deactivate();
 
@@ -156,7 +158,7 @@ void vtkMultiTextureObjectHelper::CreateSeqTexture(int texSeq)
 
   // reuse the existing handle if we have one
   if (!this->Handle)
-    {
+  {
     GLuint tex = texSeq;
     glGenTextures(1, &tex);
     this->OwnHandle = true;
@@ -166,9 +168,9 @@ void vtkMultiTextureObjectHelper::CreateSeqTexture(int texSeq)
 #if defined(GL_TEXTURE_BUFFER)
     if (this->Target && this->Target != GL_TEXTURE_BUFFER)
 #else
-      if (this->Target)
+    if (this->Target)
 #endif
-      {
+    {
       glBindTexture(this->Target, this->Handle);
       vtkOpenGLCheckErrorMacro("failed at glBindTexture");
 
@@ -178,30 +180,28 @@ void vtkMultiTextureObjectHelper::CreateSeqTexture(int texSeq)
 #ifdef GL_TEXTURE_2D_MULTISAMPLE
       if (this->Target != GL_TEXTURE_2D_MULTISAMPLE)
 #endif
-        {
-        glTexParameteri(this->Target, GL_TEXTURE_MIN_FILTER,
-                        this->GetMinificationFilterMode(this->MinificationFilter));
-        glTexParameteri(this->Target, GL_TEXTURE_MAG_FILTER,
-                        this->GetMagnificationFilterMode(this->MagnificationFilter));
+      {
+        glTexParameteri(this->Target, GL_TEXTURE_MIN_FILTER, this->GetMinificationFilterMode(this->MinificationFilter));
+        glTexParameteri(this->Target, GL_TEXTURE_MAG_FILTER, this->GetMagnificationFilterMode(this->MagnificationFilter));
 
         glTexParameteri(this->Target, GL_TEXTURE_WRAP_S, this->GetWrapSMode(this->WrapS));
         glTexParameteri(this->Target, GL_TEXTURE_WRAP_T, this->GetWrapTMode(this->WrapT));
 
 #if defined(GL_TEXTURE_3D)
         if (this->Target == GL_TEXTURE_3D)
-          {
+        {
           glTexParameteri(this->Target, GL_TEXTURE_WRAP_R, this->GetWrapRMode(this->WrapR));
-          }
-#endif
         }
+#endif
+      }
 
       if (this->Target == GL_TEXTURE_2D) // maybe expand later on
-        {
+      {
         glTexParameteri(this->Target, GL_TEXTURE_BASE_LEVEL, this->BaseLevel);
         glTexParameteri(this->Target, GL_TEXTURE_MAX_LEVEL, this->MaxLevel);
-        }
+      }
 
       glBindTexture(this->Target, 0);
-      }
     }
+  }
 }

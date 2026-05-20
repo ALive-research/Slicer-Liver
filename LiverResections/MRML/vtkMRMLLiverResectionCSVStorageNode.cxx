@@ -61,11 +61,11 @@ vtkMRMLLiverResectionCSVStorageNode::~vtkMRMLLiverResectionCSVStorageNode() = de
 //----------------------------------------------------------------------------
 void vtkMRMLLiverResectionCSVStorageNode::PrintSelf(ostream& os, vtkIndent indent)
 {
-  Superclass::PrintSelf(os,indent);
+  Superclass::PrintSelf(os, indent);
 }
 
 //----------------------------------------------------------------------------
-bool vtkMRMLLiverResectionCSVStorageNode::CanReadInReferenceNode(vtkMRMLNode *refNode)
+bool vtkMRMLLiverResectionCSVStorageNode::CanReadInReferenceNode(vtkMRMLNode* refNode)
 {
   return refNode->IsA("vtkMRMLLiverResectionNode");
 }
@@ -83,56 +83,56 @@ void vtkMRMLLiverResectionCSVStorageNode::InitializeSupportedWriteFileTypes()
 }
 
 //----------------------------------------------------------------------------
-int vtkMRMLLiverResectionCSVStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
+int vtkMRMLLiverResectionCSVStorageNode::WriteDataInternal(vtkMRMLNode* refNode)
 {
   auto resectionNode = vtkMRMLLiverResectionNode::SafeDownCast(refNode);
 
   if (resectionNode == nullptr)
-    {
+  {
     vtkErrorMacro("WriteDataInternal: input node is not a vtkMRMLLiverResectionNode:" << refNode->GetID());
     return 0;
-    }
+  }
 
   auto bezierSurfaceNode = resectionNode->GetBezierSurfaceNode();
   if (bezierSurfaceNode == nullptr)
-    {
+  {
     vtkErrorMacro("WriteDataInternal: input node does not reference a valid bezier surface node" << refNode->GetID());
     return 0;
-    }
+  }
 
   return Superclass::WriteDataInternal(bezierSurfaceNode);
 }
 
 //----------------------------------------------------------------------------
-int vtkMRMLLiverResectionCSVStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
+int vtkMRMLLiverResectionCSVStorageNode::ReadDataInternal(vtkMRMLNode* refNode)
 {
   if (!refNode)
-    {
+  {
     vtkErrorMacro("ReadDataInternal: null reference node!");
     return 0;
-    }
+  }
 
   std::string fullName = this->GetFullNameFromFileName();
 
   if (fullName.empty())
-    {
+  {
     vtkErrorMacro("vtkMRMLLiverResectionsFiducialStorageNode: File name not specified");
     return 0;
-    }
+  }
 
   // cast the input node
   auto resectionNode = vtkMRMLLiverResectionNode::SafeDownCast(refNode);
   if (!resectionNode)
-    {
+  {
     return 0;
-    }
+  }
 
   auto bezierSurfaceNode = resectionNode->GetBezierSurfaceNode();
-  if(!bezierSurfaceNode)
-    {
+  if (!bezierSurfaceNode)
+  {
     vtkErrorMacro("vtkMRMLLiverResectionCSVStorageNode: resection node does not have a valid bezier surface node associated.");
     return 0;
-    }
+  }
 
   return Superclass::ReadDataInternal(bezierSurfaceNode);
 }

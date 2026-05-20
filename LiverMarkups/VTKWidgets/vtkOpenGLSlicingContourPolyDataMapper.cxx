@@ -64,11 +64,13 @@ class vtkOpenGLSlicingContourPolyDataMapper::vtkInternal
 {
 public:
   vtkInternal(vtkOpenGLSlicingContourPolyDataMapper* parent)
-  : Parent(parent),
-    PlanePosition{0.0f, 0.0f, 0.0f, 1.0f},
-    PlaneNormal{1.0f, 0.0f, 0.0f, 1.0f},
-    ContourThickness(0.05), ContourVisibility(false)
-  { }
+    : Parent(parent)
+    , PlanePosition{ 0.0f, 0.0f, 0.0f, 1.0f }
+    , PlaneNormal{ 1.0f, 0.0f, 0.0f, 1.0f }
+    , ContourThickness(0.05)
+    , ContourVisibility(false)
+  {
+  }
 
   vtkWeakPointer<vtkOpenGLSlicingContourPolyDataMapper> Parent;
   std::array<float, 4> PlanePosition;
@@ -82,18 +84,18 @@ vtkStandardNewMacro(vtkOpenGLSlicingContourPolyDataMapper);
 
 //------------------------------------------------------------------------------
 vtkOpenGLSlicingContourPolyDataMapper::vtkOpenGLSlicingContourPolyDataMapper()
-  :Impl(nullptr)
+  : Impl(nullptr)
 {
   this->Impl = std::make_unique<vtkInternal>(this);
 }
 
 //------------------------------------------------------------------------------
-vtkOpenGLSlicingContourPolyDataMapper::~vtkOpenGLSlicingContourPolyDataMapper(){}
+vtkOpenGLSlicingContourPolyDataMapper::~vtkOpenGLSlicingContourPolyDataMapper() {}
 
 //------------------------------------------------------------------------------
 void vtkOpenGLSlicingContourPolyDataMapper::PrintSelf(ostream& os, vtkIndent indent)
 {
-   Superclass::PrintSelf(os, indent);
+  Superclass::PrintSelf(os, indent);
 }
 
 //------------------------------------------------------------------------------
@@ -103,57 +105,55 @@ void vtkOpenGLSlicingContourPolyDataMapper::BuildBufferObjects(vtkRenderer* ren,
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLSlicingContourPolyDataMapper::ReplaceShaderValues(
-  std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer* ren, vtkActor* actor)
+void vtkOpenGLSlicingContourPolyDataMapper::ReplaceShaderValues(std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer* ren, vtkActor* actor)
 {
   std::string VSSource = shaders[vtkShader::Vertex]->GetSource();
   std::string FSSource = shaders[vtkShader::Fragment]->GetSource();
 
-  vtkShaderProgram::Substitute(
-    VSSource, "//VTK::PositionVC::Dec",
-    "//VTK::PositionVC::Dec\n"
-    "out vec4 vertexMCVSOutput;\n"
-    "out vec4 vertexWCVSOutput;\n"
-    "uniform mat4 uShiftScale;\n");
+  vtkShaderProgram::Substitute(VSSource,
+                               "//VTK::PositionVC::Dec",
+                               "//VTK::PositionVC::Dec\n"
+                               "out vec4 vertexMCVSOutput;\n"
+                               "out vec4 vertexWCVSOutput;\n"
+                               "uniform mat4 uShiftScale;\n");
 
-  vtkShaderProgram::Substitute(
-    VSSource, "//VTK::PositionVC::Impl",
-    "//VTK::PositionVC::Impl\n"
-    "vertexMCVSOutput = vertexMC;\n"
-    "vertexWCVSOutput = uShiftScale*vertexMC;\n");
+  vtkShaderProgram::Substitute(VSSource,
+                               "//VTK::PositionVC::Impl",
+                               "//VTK::PositionVC::Impl\n"
+                               "vertexMCVSOutput = vertexMC;\n"
+                               "vertexWCVSOutput = uShiftScale*vertexMC;\n");
 
-  vtkShaderProgram::Substitute(
-    FSSource, "//VTK::PositionVC::Dec",
-    "//VTK::PositionVC::Dec\n"
-    "in vec4 vertexWCVSOutput;"
-    "vec4 fragPositionMC = vertexWCVSOutput;\n");
+  vtkShaderProgram::Substitute(FSSource,
+                               "//VTK::PositionVC::Dec",
+                               "//VTK::PositionVC::Dec\n"
+                               "in vec4 vertexWCVSOutput;"
+                               "vec4 fragPositionMC = vertexWCVSOutput;\n");
 
-  vtkShaderProgram::Substitute(
-    FSSource, "//VTK::Color::Dec",
-    "//VTK::Color::Dec\n"
-    "uniform float uContourThickness;\n"
-    "uniform int uContourVisibility;\n"
-    "uniform vec4 uPlanePositionMC;\n"
-    "uniform vec4 uPlaneNormalMC;\n"
-    );
+  vtkShaderProgram::Substitute(FSSource,
+                               "//VTK::Color::Dec",
+                               "//VTK::Color::Dec\n"
+                               "uniform float uContourThickness;\n"
+                               "uniform int uContourVisibility;\n"
+                               "uniform vec4 uPlanePositionMC;\n"
+                               "uniform vec4 uPlaneNormalMC;\n");
 
-  vtkShaderProgram::Substitute(
-      FSSource, "//VTK::Color::Impl",
-      "//VTK::Color::Impl\n"
-      "  vec3 contourColor= vec3(1.0, 1.0 ,1.0);\n"
-      "  vec3 w = -(uPlanePositionMC.xyz*fragPositionMC.w - "
-      "fragPositionMC.xyz);\n"
-      "  float dist = (uPlaneNormalMC.x * w.x + uPlaneNormalMC.y * w.y + "
-      "uPlaneNormalMC.z * w.z) / sqrt( pow(uPlaneNormalMC.x,2) + "
-      "pow(uPlaneNormalMC.y,2)+ pow(uPlaneNormalMC.z,2));\n"
-      "  if(abs(dist) < uContourThickness && uContourVisibility != 0){\n"
-      "     ambientColor = contourColor;\n"
-      "     diffuseColor = contourColor;\n"
-      "     opacity = 1.0;\n"
-      "  }\n"
-      "  else{\n"
-      "  discard;\n"
-      "  }\n");
+  vtkShaderProgram::Substitute(FSSource,
+                               "//VTK::Color::Impl",
+                               "//VTK::Color::Impl\n"
+                               "  vec3 contourColor= vec3(1.0, 1.0 ,1.0);\n"
+                               "  vec3 w = -(uPlanePositionMC.xyz*fragPositionMC.w - "
+                               "fragPositionMC.xyz);\n"
+                               "  float dist = (uPlaneNormalMC.x * w.x + uPlaneNormalMC.y * w.y + "
+                               "uPlaneNormalMC.z * w.z) / sqrt( pow(uPlaneNormalMC.x,2) + "
+                               "pow(uPlaneNormalMC.y,2)+ pow(uPlaneNormalMC.z,2));\n"
+                               "  if(abs(dist) < uContourThickness && uContourVisibility != 0){\n"
+                               "     ambientColor = contourColor;\n"
+                               "     diffuseColor = contourColor;\n"
+                               "     opacity = 1.0;\n"
+                               "  }\n"
+                               "  else{\n"
+                               "  discard;\n"
+                               "  }\n");
 
   shaders[vtkShader::Vertex]->SetSource(VSSource);
   shaders[vtkShader::Fragment]->SetSource(FSSource);
@@ -161,16 +161,17 @@ void vtkOpenGLSlicingContourPolyDataMapper::ReplaceShaderValues(
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLSlicingContourPolyDataMapper::SetCameraShaderParameters(
-    vtkOpenGLHelper &cellBO, vtkRenderer *ren, vtkActor *actor) {
-  vtkOpenGLVertexBufferObject *vvbo = this->VBOs->GetVBO("vertexMC");
+void vtkOpenGLSlicingContourPolyDataMapper::SetCameraShaderParameters(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor)
+{
+  vtkOpenGLVertexBufferObject* vvbo = this->VBOs->GetVBO("vertexMC");
 
   // TODO: maybe cache this?
   auto transform = vtkSmartPointer<vtkTransform>::New();
   transform->Identity();
   auto transformMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
 
-  if (vvbo && vvbo->GetCoordShiftAndScaleEnabled()) {
+  if (vvbo && vvbo->GetCoordShiftAndScaleEnabled())
+  {
     auto shift = vvbo->GetShift();
     auto scale = vvbo->GetScale();
     transform->Translate(shift[0], shift[1], shift[2]);
@@ -178,7 +179,8 @@ void vtkOpenGLSlicingContourPolyDataMapper::SetCameraShaderParameters(
     transform->GetTranspose(transformMatrix);
   }
 
-  if (cellBO.Program->IsUniformUsed("uShiftScale")) {
+  if (cellBO.Program->IsUniformUsed("uShiftScale"))
+  {
     cellBO.Program->SetUniformMatrix("uShiftScale", transformMatrix);
   }
 
@@ -186,29 +188,28 @@ void vtkOpenGLSlicingContourPolyDataMapper::SetCameraShaderParameters(
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLSlicingContourPolyDataMapper::SetMapperShaderParameters(
-    vtkOpenGLHelper &cellBO, vtkRenderer *ren, vtkActor *actor) {
+void vtkOpenGLSlicingContourPolyDataMapper::SetMapperShaderParameters(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor)
+{
 
   if (cellBO.Program->IsUniformUsed("uPlanePositionMC"))
-    {
+  {
     cellBO.Program->SetUniform4f("uPlanePositionMC", this->Impl->PlanePosition.data());
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uPlaneNormalMC"))
-    {
+  {
     cellBO.Program->SetUniform4f("uPlaneNormalMC", this->Impl->PlaneNormal.data());
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uContourThickness"))
-    {
+  {
     cellBO.Program->SetUniformf("uContourThickness", this->Impl->ContourThickness);
-    }
+  }
 
   if (cellBO.Program->IsUniformUsed("uContourVisibility"))
-    {
-      cellBO.Program->SetUniformi("uContourVisibility",
-                                  static_cast<int>(this->Impl->ContourVisibility));
-    }
+  {
+    cellBO.Program->SetUniformi("uContourVisibility", static_cast<int>(this->Impl->ContourVisibility));
+  }
 
   Superclass::SetMapperShaderParameters(cellBO, ren, actor);
 }
@@ -220,7 +221,8 @@ std::array<float, 4> vtkOpenGLSlicingContourPolyDataMapper::GetPlanePosition() c
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLSlicingContourPolyDataMapper::SetPlanePosition(const std::array<float, 4> &planePosition) {
+void vtkOpenGLSlicingContourPolyDataMapper::SetPlanePosition(const std::array<float, 4>& planePosition)
+{
   this->Impl->PlanePosition = planePosition;
   this->Modified();
 }
@@ -232,25 +234,34 @@ std::array<float, 4> vtkOpenGLSlicingContourPolyDataMapper::GetPlaneNormal() con
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLSlicingContourPolyDataMapper::SetPlaneNormal(const std::array<float, 4> &planeNormal) {
+void vtkOpenGLSlicingContourPolyDataMapper::SetPlaneNormal(const std::array<float, 4>& planeNormal)
+{
   this->Impl->PlaneNormal = planeNormal;
   this->Modified();
 }
 
 //------------------------------------------------------------------------------
-float vtkOpenGLSlicingContourPolyDataMapper::GetContourThickness() const { return this->Impl->ContourThickness; }
+float vtkOpenGLSlicingContourPolyDataMapper::GetContourThickness() const
+{
+  return this->Impl->ContourThickness;
+}
 
 //------------------------------------------------------------------------------
-void vtkOpenGLSlicingContourPolyDataMapper::SetContourThickness(float contourThickness) {
+void vtkOpenGLSlicingContourPolyDataMapper::SetContourThickness(float contourThickness)
+{
   this->Impl->ContourThickness = contourThickness;
   this->Modified();
 }
 
 //------------------------------------------------------------------------------
-bool vtkOpenGLSlicingContourPolyDataMapper::GetContourVisibility() const { return this->Impl->ContourVisibility; }
+bool vtkOpenGLSlicingContourPolyDataMapper::GetContourVisibility() const
+{
+  return this->Impl->ContourVisibility;
+}
 
 //------------------------------------------------------------------------------
-void vtkOpenGLSlicingContourPolyDataMapper::SetContourVisibility(bool contourVisibility) {
+void vtkOpenGLSlicingContourPolyDataMapper::SetContourVisibility(bool contourVisibility)
+{
   this->Impl->ContourVisibility = contourVisibility;
   this->Modified();
 }

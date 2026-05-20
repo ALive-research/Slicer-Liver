@@ -59,29 +59,28 @@ class vtkOpenGLActor;
 class vtkOpenGLDistanceContourPolyDataMapper;
 
 //------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerDistanceContourRepresentation3D
-: public vtkSlicerLineRepresentation3D
+class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerDistanceContourRepresentation3D : public vtkSlicerLineRepresentation3D
 {
 public:
   static vtkSlicerDistanceContourRepresentation3D* New();
   vtkTypeMacro(vtkSlicerDistanceContourRepresentation3D, vtkSlicerLineRepresentation3D);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  void UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void* callData=nullptr) override;
+  void UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void* callData = nullptr) override;
 
 protected:
   vtkSlicerDistanceContourRepresentation3D();
   ~vtkSlicerDistanceContourRepresentation3D() override;
 
 protected:
-    void GetActors(vtkPropCollection *pc) override;
-    void ReleaseGraphicsResources(vtkWindow *win) override;
-    int RenderOverlay(vtkViewport *viewport) override ;
-    int RenderOpaqueGeometry(vtkViewport *viewport) override;
-    int RenderTranslucentPolygonalGeometry(vtkViewport *viewport) override;
-    vtkTypeBool HasTranslucentPolygonalGeometry() override;
-    double *GetBounds() override;
-    void UpdateDistanceContourDisplay(vtkMRMLLiverMarkupsDistanceContourNode *node);
+  void GetActors(vtkPropCollection* pc) override;
+  void ReleaseGraphicsResources(vtkWindow* win) override;
+  int RenderOverlay(vtkViewport* viewport) override;
+  int RenderOpaqueGeometry(vtkViewport* viewport) override;
+  int RenderTranslucentPolygonalGeometry(vtkViewport* viewport) override;
+  vtkTypeBool HasTranslucentPolygonalGeometry() override;
+  double* GetBounds() override;
+  void UpdateDistanceContourDisplay(vtkMRMLLiverMarkupsDistanceContourNode* node);
 
 private:
   vtkWeakPointer<vtkMRMLModelNode> Target;

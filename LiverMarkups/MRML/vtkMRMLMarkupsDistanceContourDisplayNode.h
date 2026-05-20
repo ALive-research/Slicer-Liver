@@ -45,10 +45,9 @@
 #include <vtkMRMLMarkupsDisplayNode.h>
 
 //-----------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsDistanceContourDisplayNode
-: public vtkMRMLMarkupsDisplayNode
+class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsDistanceContourDisplayNode : public vtkMRMLMarkupsDisplayNode
 {
- public:
+public:
   static vtkMRMLMarkupsDistanceContourDisplayNode* New();
   vtkTypeMacro(vtkMRMLMarkupsDistanceContourDisplayNode, vtkMRMLMarkupsDisplayNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
@@ -65,9 +64,8 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsDistanceContourDi
 protected:
   vtkMRMLMarkupsDistanceContourDisplayNode();
   ~vtkMRMLMarkupsDistanceContourDisplayNode() override;
-  vtkMRMLMarkupsDistanceContourDisplayNode( const vtkMRMLMarkupsDistanceContourDisplayNode& );
-  void operator= ( const vtkMRMLMarkupsDistanceContourDisplayNode& );
+  vtkMRMLMarkupsDistanceContourDisplayNode(const vtkMRMLMarkupsDistanceContourDisplayNode&);
+  void operator=(const vtkMRMLMarkupsDistanceContourDisplayNode&);
 };
-
 
 #endif // __vtkmrmlmarkupsdistancecontourdisplaynode_h_

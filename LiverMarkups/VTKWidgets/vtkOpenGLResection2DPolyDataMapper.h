@@ -46,7 +46,7 @@
 #include <vtkOpenGLPolyDataMapper.h>
 #include <vtkRenderingOpenGL2Module.h>
 
-//STD includes
+// STD includes
 #include <memory>
 
 //-------------------------------------------------------------------------------
@@ -55,9 +55,9 @@ class vtkTextureObject;
 //-------------------------------------------------------------------------------
 class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLResection2DPolyDataMapper : public vtkOpenGLPolyDataMapper
 {
- public:
-  static vtkOpenGLResection2DPolyDataMapper *New();
- vtkTypeMacro(vtkOpenGLResection2DPolyDataMapper, vtkOpenGLPolyDataMapper);
+public:
+  static vtkOpenGLResection2DPolyDataMapper* New();
+  vtkTypeMacro(vtkOpenGLResection2DPolyDataMapper, vtkOpenGLPolyDataMapper);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   /// Get distance map
@@ -76,14 +76,14 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLResection2DPolyD
   /// Set RAS - IKJ matrix transposed
   void SetRasToIjkMatrixT(const vtkMatrix4x4*);
   /// Get RAS - IJK matrix transposed
-  vtkMatrix4x4 const* GetRasToIjkMatrixT() const;
+  const vtkMatrix4x4* GetRasToIjkMatrixT() const;
 
   /// Set IKJ - Texture space matrix
   void SetIjkToTextureMatrix(const vtkMatrix4x4*);
   /// Set IJK - Texture space matrix transposed
   void SetIjkToTextureMatrixT(const vtkMatrix4x4*);
   /// Get IJK - Texture matrixj
-  vtkMatrix4x4 const* GetIjkToTextureMatrixT() const;
+  const vtkMatrix4x4* GetIjkToTextureMatrixT() const;
 
   /// Get the resection margin
   float GetResectionMargin() const;
@@ -96,28 +96,28 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLResection2DPolyD
   void SetUncertaintyMargin(float margin);
 
   /// Get the interpolated margin
-  float const* GetResectionMarginColor() const;
+  const float* GetResectionMarginColor() const;
   /// Set the resection margin
   void SetResectionMarginColor(float color[3]);
   /// Set the resection margin
   void SetResectionMarginColor(float red, float green, float blue);
 
   /// Get the interpolated margin
-  float const* GetUncertaintyMarginColor() const;
+  const float* GetUncertaintyMarginColor() const;
   /// Set the resection margin
   void SetUncertaintyMarginColor(float color[3]);
   /// Set the resection margin
   void SetUncertaintyMarginColor(float red, float green, float blue);
 
   /// Get the resection color
-  float const* GetResectionColor() const;
+  const float* GetResectionColor() const;
   /// Set the resection color
   void SetResectionColor(float color[3]);
   /// Set the resection color
   void SetResectionColor(float red, float green, float blue);
 
   /// Get the resection grid color
-  float const* GetResectionGridColor() const;
+  const float* GetResectionGridColor() const;
   /// Set the resection gird color
   void SetResectionGridColor(float color[3]);
   /// Set the resection grid color
@@ -149,14 +149,14 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLResection2DPolyD
   void SetPortalContourThickness(float margin);
 
   /// Get the portal contour color
-  float const* GetPortalContourColor() const;
+  const float* GetPortalContourColor() const;
   /// Set the portal contour color
   void SetPortalContourColor(float color[3]);
   /// Set the portal contour color
   void SetPortalContourColor(float red, float green, float blue);
 
   /// Get the hepatic contour color
-  float const* GetHepaticContourColor() const;
+  const float* GetHepaticContourColor() const;
   /// Set the hepatic contour color
   void SetHepaticContourColor(float color[3]);
   /// Set the hepatic contour color
@@ -168,36 +168,29 @@ class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLResection2DPolyD
 
   // Get and Set Ratio
   void SetMatRatio(float matR[2]);
-  float const*  GetMatRatio() const;
+  const float* GetMatRatio() const;
 
- protected:
+protected:
   vtkOpenGLResection2DPolyDataMapper();
   ~vtkOpenGLResection2DPolyDataMapper();
 
   void BuildBufferObjects(vtkRenderer* ren, vtkActor* act) override;
 
   // Perform string replacements on the shader templates
-  void ReplaceShaderValues(std::map<vtkShader::Type, vtkShader*> shaders,
-                           vtkRenderer* ren,
-                           vtkActor* act) override;
+  void ReplaceShaderValues(std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer* ren, vtkActor* act) override;
 
-  void SetMapperShaderParameters(vtkOpenGLHelper& cellBO,
-                                 vtkRenderer* ren,
-                                 vtkActor* actor) override;
+  void SetMapperShaderParameters(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor) override;
 
   // Set CameraShaderParameters
-  void SetCameraShaderParameters(vtkOpenGLHelper& cellBO,
-                                 vtkRenderer* ren,
-                                 vtkActor* actor) override;
- private:
+  void SetCameraShaderParameters(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor) override;
+
+private:
   class vtkInternal;
   std::unique_ptr<vtkInternal> Impl;
 
- private:
+private:
   vtkOpenGLResection2DPolyDataMapper(const vtkOpenGLResection2DPolyDataMapper&) = delete;
   void operator=(const vtkOpenGLResection2DPolyDataMapper&) = delete;
 };
 
-
-
-#endif //SLICERLIVER_VTKOPENGLRESECTION2DPOLYDATAMAPPER_H
+#endif // SLICERLIVER_VTKOPENGLRESECTION2DPOLYDATAMAPPER_H

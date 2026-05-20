@@ -44,8 +44,7 @@
 
 #include "vtkSlicerLiverMarkupsModuleLogicExport.h"
 
-class VTK_SLICER_LIVERMARKUPS_MODULE_LOGIC_EXPORT vtkSlicerLiverMarkupsLogic:
-  public vtkSlicerMarkupsLogic
+class VTK_SLICER_LIVERMARKUPS_MODULE_LOGIC_EXPORT vtkSlicerLiverMarkupsLogic : public vtkSlicerMarkupsLogic
 {
 public:
   static vtkSlicerLiverMarkupsLogic* New();

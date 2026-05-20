@@ -63,13 +63,12 @@
  *  No ``vtkMRMLNode`` references.  Per ADR-0015 the algorithm library
  *  is pure VTK; MRML lives in the Python orchestration layer.
  */
-class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverPlaneRingExtractor
-  : public vtkPolyDataAlgorithm
+class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverPlaneRingExtractor : public vtkPolyDataAlgorithm
 {
- public:
-  static vtkLiverPlaneRingExtractor *New();
+public:
+  static vtkLiverPlaneRingExtractor* New();
   vtkTypeMacro(vtkLiverPlaneRingExtractor, vtkPolyDataAlgorithm);
-  void PrintSelf(ostream &os, vtkIndent indent) override;
+  void PrintSelf(ostream& os, vtkIndent indent) override;
 
   vtkSetVector3Macro(Origin, double);
   vtkGetVector3Macro(Origin, double);
@@ -77,21 +76,19 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_ALGORITHM_EXPORT vtkLiverPlaneRingExtrac
   vtkSetVector3Macro(Normal, double);
   vtkGetVector3Macro(Normal, double);
 
- protected:
+protected:
   vtkLiverPlaneRingExtractor();
   ~vtkLiverPlaneRingExtractor() override;
 
-  int FillInputPortInformation(int port, vtkInformation *info) override;
-  int RequestData(vtkInformation *,
-                  vtkInformationVector **,
-                  vtkInformationVector *) override;
+  int FillInputPortInformation(int port, vtkInformation* info) override;
+  int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
- private:
-  vtkLiverPlaneRingExtractor(const vtkLiverPlaneRingExtractor &) = delete;
-  void operator=(const vtkLiverPlaneRingExtractor &) = delete;
+private:
+  vtkLiverPlaneRingExtractor(const vtkLiverPlaneRingExtractor&) = delete;
+  void operator=(const vtkLiverPlaneRingExtractor&) = delete;
 
   double Origin[3];
   double Normal[3];
 };
 
-#endif  // __vtkLiverPlaneRingExtractor_h_
+#endif // __vtkLiverPlaneRingExtractor_h_

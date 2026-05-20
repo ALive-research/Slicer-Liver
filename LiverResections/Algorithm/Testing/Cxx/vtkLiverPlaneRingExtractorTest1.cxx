@@ -24,7 +24,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-int vtkLiverPlaneRingExtractorTest1(int, char *[])
+int vtkLiverPlaneRingExtractorTest1(int, char*[])
 {
   vtkNew<vtkSphereSource> sphere;
   sphere->SetRadius(1.0);
@@ -39,18 +39,17 @@ int vtkLiverPlaneRingExtractorTest1(int, char *[])
   extractor->SetNormal(0.0, 0.0, 1.0);
   extractor->Update();
 
-  vtkPolyData *out = extractor->GetOutput();
+  vtkPolyData* out = extractor->GetOutput();
   if (!out || !out->GetPoints() || out->GetPoints()->GetNumberOfPoints() == 0)
-    {
+  {
     std::fprintf(stderr, "[PlaneRingExtractor] FAIL: empty output\n");
     return EXIT_FAILURE;
-    }
+  }
   if (!out->GetLines() || out->GetLines()->GetNumberOfCells() == 0)
-    {
-    std::fprintf(stderr,
-                 "[PlaneRingExtractor] FAIL: no polyline cells in output\n");
+  {
+    std::fprintf(stderr, "[PlaneRingExtractor] FAIL: no polyline cells in output\n");
     return EXIT_FAILURE;
-    }
+  }
 
   // Every point should sit on the z=0 plane and on the unit sphere.
   const vtkIdType n = out->GetPoints()->GetNumberOfPoints();
@@ -62,24 +61,20 @@ int vtkLiverPlaneRingExtractorTest1(int, char *[])
   // segment endpoints; ~1e-10 leaves headroom over float32 dust.
   constexpr double planeTol = 1e-10;
   for (vtkIdType i = 0; i < n; ++i)
-    {
+  {
     double p[3];
     out->GetPoints()->GetPoint(i, p);
     if (std::fabs(p[2]) > planeTol)
-      {
-      std::fprintf(stderr,
-                   "[PlaneRingExtractor] FAIL: point %lld off plane: z=%g\n",
-                   static_cast<long long>(i), p[2]);
+    {
+      std::fprintf(stderr, "[PlaneRingExtractor] FAIL: point %lld off plane: z=%g\n", static_cast<long long>(i), p[2]);
       return EXIT_FAILURE;
-      }
+    }
     const double r = std::sqrt(p[0] * p[0] + p[1] * p[1]);
     if (std::fabs(r - 1.0) > radTol)
-      {
-      std::fprintf(stderr,
-                   "[PlaneRingExtractor] FAIL: point %lld off circle: r=%g\n",
-                   static_cast<long long>(i), r);
+    {
+      std::fprintf(stderr, "[PlaneRingExtractor] FAIL: point %lld off circle: r=%g\n", static_cast<long long>(i), r);
       return EXIT_FAILURE;
-      }
     }
+  }
   return EXIT_SUCCESS;
 }

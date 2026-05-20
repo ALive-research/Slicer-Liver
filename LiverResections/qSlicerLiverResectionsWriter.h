@@ -42,7 +42,6 @@
 #ifndef __qslicerliverresectionswriter_h
 #define __qslicerliverresectionswriter_h
 
-
 // QtCore includes
 #include "qSlicerLiverResectionsModuleExport.h"
 #include "qSlicerNodeWriter.h"
@@ -51,8 +50,7 @@ class vtkMRMLNode;
 class vtkMRMLStorableNode;
 
 /// Utility class that offers writing of markups in both json format, regardless of the current storage node.
-class Q_SLICER_QTMODULES_LIVERRESECTIONS_EXPORT qSlicerLiverResectionsWriter
-  : public qSlicerNodeWriter
+class Q_SLICER_QTMODULES_LIVERRESECTIONS_EXPORT qSlicerLiverResectionsWriter : public qSlicerNodeWriter
 {
   Q_OBJECT
 public:
@@ -60,7 +58,7 @@ public:
   qSlicerLiverResectionsWriter(QObject* parent);
   ~qSlicerLiverResectionsWriter() override;
 
-  QStringList extensions(vtkObject* object)const override;
+  QStringList extensions(vtkObject* object) const override;
 
   bool write(const qSlicerIO::IOProperties& properties) override;
 

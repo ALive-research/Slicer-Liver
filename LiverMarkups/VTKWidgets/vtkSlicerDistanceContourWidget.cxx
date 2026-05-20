@@ -52,28 +52,23 @@
 vtkStandardNewMacro(vtkSlicerDistanceContourWidget);
 
 //------------------------------------------------------------------------------
-vtkSlicerDistanceContourWidget::vtkSlicerDistanceContourWidget()
-{
-
-}
+vtkSlicerDistanceContourWidget::vtkSlicerDistanceContourWidget() {}
 
 //------------------------------------------------------------------------------
 vtkSlicerDistanceContourWidget::~vtkSlicerDistanceContourWidget() = default;
 
 //------------------------------------------------------------------------------
-void vtkSlicerDistanceContourWidget::CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode,
-                                                                vtkMRMLAbstractViewNode* viewNode,
-                                                                vtkRenderer* renderer)
+void vtkSlicerDistanceContourWidget::CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode, vtkMRMLAbstractViewNode* viewNode, vtkRenderer* renderer)
 {
   vtkSmartPointer<vtkSlicerMarkupsWidgetRepresentation> rep = nullptr;
   if (vtkMRMLSliceNode::SafeDownCast(viewNode))
-    {
+  {
     rep = vtkSmartPointer<vtkSlicerLineRepresentation2D>::New();
-    }
+  }
   else
-    {
+  {
     rep = vtkSmartPointer<vtkSlicerDistanceContourRepresentation3D>::New();
-    }
+  }
   this->SetRenderer(renderer);
   this->SetRepresentation(rep);
   rep->SetViewNode(viewNode);
@@ -85,10 +80,10 @@ void vtkSlicerDistanceContourWidget::CreateDefaultRepresentation(vtkMRMLMarkupsD
 vtkSlicerMarkupsWidget* vtkSlicerDistanceContourWidget::CreateInstance() const
 {
   vtkObject* ret = vtkObjectFactory::CreateInstance("vtkSlcierDistanceContourWidget");
-  if(ret)
-    {
+  if (ret)
+  {
     return static_cast<vtkSlicerDistanceContourWidget*>(ret);
-    }
+  }
 
   vtkSlicerDistanceContourWidget* result = new vtkSlicerDistanceContourWidget;
 #ifdef VTK_HAS_INITIALIZE_OBJECT_BASE

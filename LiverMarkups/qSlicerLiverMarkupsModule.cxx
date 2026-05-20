@@ -81,9 +81,7 @@ public:
 // qSlicerLiverMarkupsModulePrivate methods
 
 //-----------------------------------------------------------------------------
-qSlicerLiverMarkupsModulePrivate::qSlicerLiverMarkupsModulePrivate()
-{
-}
+qSlicerLiverMarkupsModulePrivate::qSlicerLiverMarkupsModulePrivate() {}
 
 //-----------------------------------------------------------------------------
 // qSlicerLiverMarkupsModule methods
@@ -96,13 +94,11 @@ qSlicerLiverMarkupsModule::qSlicerLiverMarkupsModule(QObject* _parent)
 }
 
 //-----------------------------------------------------------------------------
-qSlicerLiverMarkupsModule::~qSlicerLiverMarkupsModule()
-{
-}
+qSlicerLiverMarkupsModule::~qSlicerLiverMarkupsModule() {}
 
 bool qSlicerLiverMarkupsModule::isHidden() const
 {
-    return true;
+  return true;
 }
 
 //-----------------------------------------------------------------------------
@@ -150,24 +146,25 @@ void qSlicerLiverMarkupsModule::setup()
 {
   this->Superclass::setup();
 
-  vtkSlicerApplicationLogic *appLogic = this->appLogic();
-  if (!appLogic) {
+  vtkSlicerApplicationLogic* appLogic = this->appLogic();
+  if (!appLogic)
+  {
     qCritical() << Q_FUNC_INFO << " : invalid application logic.";
     return;
   }
 
-  auto markupsLogic =
-      vtkSlicerMarkupsLogic::SafeDownCast(appLogic->GetModuleLogic("Markups"));
-  if (!markupsLogic) {
+  auto markupsLogic = vtkSlicerMarkupsLogic::SafeDownCast(appLogic->GetModuleLogic("Markups"));
+  if (!markupsLogic)
+  {
     qCritical() << Q_FUNC_INFO << " : invalid markups logic.";
     return;
   }
 
   bool createPushButton = false;
-  if (qSlicerApplication::application()->userSettings()->value("Developer/DeveloperMode") .toBool())
-    {
+  if (qSlicerApplication::application()->userSettings()->value("Developer/DeveloperMode").toBool())
+  {
     createPushButton = true; // Ephimeral markups should not create a push button unless in developer mode.
-    }
+  }
 
   // Register markups
   vtkNew<vtkMRMLMarkupsSlicingContourNode> slicingContourNode;
@@ -184,10 +181,9 @@ void qSlicerLiverMarkupsModule::setup()
 }
 
 //-----------------------------------------------------------------------------
-qSlicerAbstractModuleRepresentation* qSlicerLiverMarkupsModule
-::createWidgetRepresentation()
+qSlicerAbstractModuleRepresentation* qSlicerLiverMarkupsModule ::createWidgetRepresentation()
 {
-    return nullptr;
+  return nullptr;
 }
 
 //-----------------------------------------------------------------------------
@@ -199,21 +195,19 @@ vtkMRMLAbstractLogic* qSlicerLiverMarkupsModule::createLogic()
 //-----------------------------------------------------------------------------
 QStringList qSlicerLiverMarkupsModule::associatedNodeTypes() const
 {
-  return QStringList()
-    << "vtkMRMLMarkupsSlicingContourNode"
-    << "vtkMRMLMarkupsDistanceContourNode"
-    << "vtkMRMLMarkupsBezierSurfaceNode";
+  return QStringList() << "vtkMRMLMarkupsSlicingContourNode"
+                       << "vtkMRMLMarkupsDistanceContourNode"
+                       << "vtkMRMLMarkupsBezierSurfaceNode";
 }
 
 //-----------------------------------------------------------------------------
 void qSlicerLiverMarkupsModule::setMRMLScene(vtkMRMLScene* scene)
 {
   Superclass::setMRMLScene(scene);
-  vtkSlicerLiverMarkupsLogic* logic =
-    vtkSlicerLiverMarkupsLogic::SafeDownCast(this->logic());
+  vtkSlicerLiverMarkupsLogic* logic = vtkSlicerLiverMarkupsLogic::SafeDownCast(this->logic());
   if (!logic)
-    {
+  {
     qCritical() << Q_FUNC_INFO << " failed: logic is invalid";
     return;
-    }
+  }
 }

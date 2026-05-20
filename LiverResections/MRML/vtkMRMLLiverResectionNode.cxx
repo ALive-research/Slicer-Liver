@@ -54,14 +54,32 @@ vtkMRMLNodeNewMacro(vtkMRMLLiverResectionNode);
 
 //--------------------------------------------------------------------------------
 vtkMRMLLiverResectionNode::vtkMRMLLiverResectionNode()
-  :TargetOrganModelNode(nullptr), DistanceMapVolumeNode(nullptr), VascularSegmentsVolumeNode(nullptr),
-   State(ResectionState::Initialization), InitMode(InitializationMode::Flat),
-   ResectionMargin(0.0), UncertaintyMargin(0.0), ClipOut(false), WidgetVisibility(true),
-   InterpolatedMargins(false), ResectionColor{1.0f, 1.0f, 1.0f},
-   ResectionMarginColor{1.0f, 0.0f, 0.0f}, UncertaintyMarginColor{1.0f, 1.0f, 0.0f},
-   ResectionOpacity(1.0f), GridVisibility(false), GridThickness(0.0f), ShowResection2D(false), HepaticContourThickness(0.3f), PortalContourThickness(0.3f),
-   HepaticContourColor{0.0f, 151.0/255.0f, 206.0/255.0f}, PortalContourColor{216.0/255.0f, 101.0/255.0f, 79.0/255.0f},
-   TextureNumComps(0), EnableFlexibleBoundary(false), MirrorDisplay(false), Grid3DVisibility(true), Grid2DVisibility(false)
+  : TargetOrganModelNode(nullptr)
+  , DistanceMapVolumeNode(nullptr)
+  , VascularSegmentsVolumeNode(nullptr)
+  , State(ResectionState::Initialization)
+  , InitMode(InitializationMode::Flat)
+  , ResectionMargin(0.0)
+  , UncertaintyMargin(0.0)
+  , ClipOut(false)
+  , WidgetVisibility(true)
+  , InterpolatedMargins(false)
+  , ResectionColor{ 1.0f, 1.0f, 1.0f }
+  , ResectionMarginColor{ 1.0f, 0.0f, 0.0f }
+  , UncertaintyMarginColor{ 1.0f, 1.0f, 0.0f }
+  , ResectionOpacity(1.0f)
+  , GridVisibility(false)
+  , GridThickness(0.0f)
+  , ShowResection2D(false)
+  , HepaticContourThickness(0.3f)
+  , PortalContourThickness(0.3f)
+  , HepaticContourColor{ 0.0f, 151.0 / 255.0f, 206.0 / 255.0f }
+  , PortalContourColor{ 216.0 / 255.0f, 101.0 / 255.0f, 79.0 / 255.0f }
+  , TextureNumComps(0)
+  , EnableFlexibleBoundary(false)
+  , MirrorDisplay(false)
+  , Grid3DVisibility(true)
+  , Grid2DVisibility(false)
 {
 }
 
@@ -71,7 +89,7 @@ vtkMRMLLiverResectionNode::~vtkMRMLLiverResectionNode() = default;
 //----------------------------------------------------------------------------
 void vtkMRMLLiverResectionNode::PrintSelf(ostream& os, vtkIndent indent)
 {
-  Superclass::PrintSelf(os,indent);
+  Superclass::PrintSelf(os, indent);
 }
 
 //-------------------------------------------------------------------------
@@ -79,21 +97,20 @@ vtkMRMLStorageNode* vtkMRMLLiverResectionNode::CreateDefaultStorageNode()
 {
   vtkMRMLScene* scene = this->GetScene();
   if (scene == nullptr)
-    {
+  {
     vtkErrorMacro("CreateDefaultStorageNode failed: scene is invalid");
     return nullptr;
-    }
-  return vtkMRMLStorageNode::SafeDownCast(
-    scene->CreateNodeByClass("vtkMRMLLiverResectionCSVStorageNode"));
+  }
+  return vtkMRMLStorageNode::SafeDownCast(scene->CreateNodeByClass("vtkMRMLLiverResectionCSVStorageNode"));
 }
 
 //----------------------------------------------------------------------------
 bool vtkMRMLLiverResectionNode::SetInitializationControlPoints(vtkPoints* controlPoints)
 {
   if (!controlPoints || controlPoints->GetNumberOfPoints() < 2)
-    {
+  {
     return false;
-    }
+  }
 
   this->InitializationControlPoints->SetPoint(0, controlPoints->GetPoint(0));
   this->InitializationControlPoints->SetPoint(1, controlPoints->GetPoint(1));
@@ -106,14 +123,14 @@ bool vtkMRMLLiverResectionNode::SetInitializationControlPoints(vtkPoints* contro
 bool vtkMRMLLiverResectionNode::SetBezierSurfaceControlPoints(vtkPoints* controlPoints)
 {
   if (!controlPoints || controlPoints->GetNumberOfPoints() < 16)
-    {
+  {
     return false;
-    }
+  }
 
-  for (int i=0; i<16; ++i)
-    {
+  for (int i = 0; i < 16; ++i)
+  {
     this->InitializationControlPoints->SetPoint(i, controlPoints->GetPoint(i));
-    }
+  }
   this->Modified();
 
   return true;

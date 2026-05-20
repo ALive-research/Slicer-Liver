@@ -52,11 +52,11 @@
 // VTK includes
 #include <vtkSlicerMarkupsWidget.h>
 
-//VTK includes
+// VTK includes
 #include <vtkNew.h>
 #include <vtkSmartPointer.h>
 
-//STD includes
+// STD includes
 #include <map>
 #include <vector>
 
@@ -66,58 +66,49 @@ class vtkMRMLLiverResectionsDisplayableManagerHelper2D;
 class vtkCollection;
 
 //-------------------------------------------------------------------------------
-class VTK_SLICER_LIVERRESECTIONS_MODULE_MRMLDISPLAYABLEMANAGER_EXPORT
-vtkMRMLLiverResectionsDisplayableManager2D
-  :public vtkMRMLAbstractSliceViewDisplayableManager
+class VTK_SLICER_LIVERRESECTIONS_MODULE_MRMLDISPLAYABLEMANAGER_EXPORT vtkMRMLLiverResectionsDisplayableManager2D : public vtkMRMLAbstractSliceViewDisplayableManager
 {
- public:
+public:
+  // Description:
+  // VTK-specific functions for object creation and class hierarchy
+  static vtkMRMLLiverResectionsDisplayableManager2D* New();
+  vtkTypeMacro(vtkMRMLLiverResectionsDisplayableManager2D, vtkMRMLAbstractSliceViewDisplayableManager);
 
-// Description:
-// VTK-specific functions for object creation and class hierarchy
-  static vtkMRMLLiverResectionsDisplayableManager2D *New();
- vtkTypeMacro(vtkMRMLLiverResectionsDisplayableManager2D,
-              vtkMRMLAbstractSliceViewDisplayableManager);
-
-// Description:
-// VTK-specific function for print out information
+  // Description:
+  // VTK-specific function for print out information
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
- protected:
-
-// Description:
-// Constructor & destructor
+protected:
+  // Description:
+  // Constructor & destructor
   vtkMRMLLiverResectionsDisplayableManager2D();
   virtual ~vtkMRMLLiverResectionsDisplayableManager2D();
 
-
-// Description:
-// MRML virtual functions
-  virtual void SetMRMLSceneInternal(vtkMRMLScene *newScene) override;
-  virtual void ProcessMRMLNodesEvents(vtkObject *caller, unsigned long event, void *callData) override;
-  virtual void OnMRMLSceneNodeAdded(vtkMRMLNode *node) override;
-  virtual void OnMRMLNodeModified(vtkMRMLNode *node) override;
-  virtual void OnMRMLSceneNodeRemoved(vtkMRMLNode *node) override;
+  // Description:
+  // MRML virtual functions
+  virtual void SetMRMLSceneInternal(vtkMRMLScene* newScene) override;
+  virtual void ProcessMRMLNodesEvents(vtkObject* caller, unsigned long event, void* callData) override;
+  virtual void OnMRMLSceneNodeAdded(vtkMRMLNode* node) override;
+  virtual void OnMRMLNodeModified(vtkMRMLNode* node) override;
+  virtual void OnMRMLSceneNodeRemoved(vtkMRMLNode* node) override;
   virtual void OnMRMLSceneEndClose() override;
 
- protected:
-
-// Description:
-// Copy constructor and assignment operator
+protected:
+  // Description:
+  // Copy constructor and assignment operator
   vtkMRMLLiverResectionsDisplayableManager2D(const vtkMRMLLiverResectionsDisplayableManager2D&);
-//Not implemented
+  // Not implemented
   void operator=(const vtkMRMLLiverResectionsDisplayableManager2D&);
-//Not implemented
+  // Not implemented
 
-
-// Description:
-// Map relating resection nodes with helpers
+  // Description:
+  // Map relating resection nodes with helpers
   std::map<char*, vtkSmartPointer<vtkMRMLLiverResectionsDisplayableManagerHelper2D>> ResectionNodeHelperMap;
-// Description:
-// Deferred nodes
+  // Description:
+  // Deferred nodes
   vtkNew<vtkCollection> DeferredNodes;
 
-  static void AddDeferredNodes(vtkObject *caller, unsigned long event, void *clientData, void *callData);
-
+  static void AddDeferredNodes(vtkObject* caller, unsigned long event, void* clientData, void* callData);
 };
 
 #endif

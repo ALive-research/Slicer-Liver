@@ -49,16 +49,13 @@
 class vtkMRMLMarkupsBezierSurfaceNode;
 
 //------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerBezierSurfaceWidget
-: public vtkSlicerMarkupsWidget
+class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerBezierSurfaceWidget : public vtkSlicerMarkupsWidget
 {
 public:
-  static vtkSlicerBezierSurfaceWidget *New();
+  static vtkSlicerBezierSurfaceWidget* New();
   vtkTypeMacro(vtkSlicerBezierSurfaceWidget, vtkSlicerMarkupsWidget);
 
-  void CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode,
-                                  vtkMRMLAbstractViewNode* viewNode,
-                                  vtkRenderer* renderer) override;
+  void CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode, vtkMRMLAbstractViewNode* viewNode, vtkRenderer* renderer) override;
 
   /// Create instance of the markups widget
   vtkSlicerMarkupsWidget* CreateInstance() const override;

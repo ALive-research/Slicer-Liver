@@ -40,36 +40,30 @@ vtkLiverPlaneRingExtractor::vtkLiverPlaneRingExtractor()
 vtkLiverPlaneRingExtractor::~vtkLiverPlaneRingExtractor() = default;
 
 //------------------------------------------------------------------------------
-void vtkLiverPlaneRingExtractor::PrintSelf(ostream &os, vtkIndent indent)
+void vtkLiverPlaneRingExtractor::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
-  os << indent << "Origin: (" << this->Origin[0] << ", "
-     << this->Origin[1] << ", " << this->Origin[2] << ")\n";
-  os << indent << "Normal: (" << this->Normal[0] << ", "
-     << this->Normal[1] << ", " << this->Normal[2] << ")\n";
+  os << indent << "Origin: (" << this->Origin[0] << ", " << this->Origin[1] << ", " << this->Origin[2] << ")\n";
+  os << indent << "Normal: (" << this->Normal[0] << ", " << this->Normal[1] << ", " << this->Normal[2] << ")\n";
 }
 
 //------------------------------------------------------------------------------
-int vtkLiverPlaneRingExtractor::FillInputPortInformation(int /*port*/,
-                                                          vtkInformation *info)
+int vtkLiverPlaneRingExtractor::FillInputPortInformation(int /*port*/, vtkInformation* info)
 {
   info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkPolyData");
   return 1;
 }
 
 //------------------------------------------------------------------------------
-int vtkLiverPlaneRingExtractor::RequestData(vtkInformation *,
-                                             vtkInformationVector **inputVector,
-                                             vtkInformationVector *outputVector)
+int vtkLiverPlaneRingExtractor::RequestData(vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
-  vtkInformation *inInfo = inputVector[0]->GetInformationObject(0);
-  vtkPolyData *target = vtkPolyData::SafeDownCast(
-    inInfo->Get(vtkDataObject::DATA_OBJECT()));
+  vtkInformation* inInfo = inputVector[0]->GetInformationObject(0);
+  vtkPolyData* target = vtkPolyData::SafeDownCast(inInfo->Get(vtkDataObject::DATA_OBJECT()));
   if (!target)
-    {
+  {
     vtkErrorMacro(<< "Input target mesh is required.");
     return 0;
-    }
+  }
 
   vtkNew<vtkPlane> plane;
   plane->SetOrigin(this->Origin);
@@ -87,10 +81,9 @@ int vtkLiverPlaneRingExtractor::RequestData(vtkInformation *,
   stripper->JoinContiguousSegmentsOn();
   stripper->Update();
 
-  vtkInformation *outInfo = outputVector->GetInformationObject(0);
-  vtkPolyData *out = vtkPolyData::SafeDownCast(
-    outInfo->Get(vtkDataObject::DATA_OBJECT()));
-  vtkPolyData *strippedPoly = stripper->GetOutput();
+  vtkInformation* outInfo = outputVector->GetInformationObject(0);
+  vtkPolyData* out = vtkPolyData::SafeDownCast(outInfo->Get(vtkDataObject::DATA_OBJECT()));
+  vtkPolyData* strippedPoly = stripper->GetOutput();
   out->SetPoints(strippedPoly->GetPoints());
   out->SetLines(strippedPoly->GetLines());
   return 1;

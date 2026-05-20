@@ -69,19 +69,17 @@ vtkSlicerSlicingContourWidget::vtkSlicerSlicingContourWidget()
 vtkSlicerSlicingContourWidget::~vtkSlicerSlicingContourWidget() = default;
 
 //------------------------------------------------------------------------------
-void vtkSlicerSlicingContourWidget::CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode,
-                                                                vtkMRMLAbstractViewNode* viewNode,
-                                                                vtkRenderer* renderer)
+void vtkSlicerSlicingContourWidget::CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode, vtkMRMLAbstractViewNode* viewNode, vtkRenderer* renderer)
 {
   vtkSmartPointer<vtkSlicerMarkupsWidgetRepresentation> rep = nullptr;
   if (vtkMRMLSliceNode::SafeDownCast(viewNode))
-    {
+  {
     rep = vtkSmartPointer<vtkSlicerLineRepresentation2D>::New();
-    }
+  }
   else
-    {
+  {
     rep = vtkSmartPointer<vtkSlicerSlicingContourRepresentation3D>::New();
-    }
+  }
   this->SetRenderer(renderer);
   this->SetRepresentation(rep);
   rep->SetViewNode(viewNode);
@@ -93,10 +91,10 @@ void vtkSlicerSlicingContourWidget::CreateDefaultRepresentation(vtkMRMLMarkupsDi
 vtkSlicerMarkupsWidget* vtkSlicerSlicingContourWidget::CreateInstance() const
 {
   vtkObject* ret = vtkObjectFactory::CreateInstance("vtkSlcierSlicingContourWidget");
-  if(ret)
-    {
+  if (ret)
+  {
     return static_cast<vtkSlicerSlicingContourWidget*>(ret);
-    }
+  }
 
   vtkSlicerSlicingContourWidget* result = new vtkSlicerSlicingContourWidget;
 #ifdef VTK_HAS_INITIALIZE_OBJECT_BASE
@@ -106,8 +104,8 @@ vtkSlicerMarkupsWidget* vtkSlicerSlicingContourWidget::CreateInstance() const
 }
 
 //------------------------------------------------------------------------------
- bool vtkSlicerSlicingContourWidget::ProcessInteractionEvent(vtkMRMLInteractionEventData* eventData)
- {
+bool vtkSlicerSlicingContourWidget::ProcessInteractionEvent(vtkMRMLInteractionEventData* eventData)
+{
   vtkMRMLMarkupsSlicingContourNode* markupsNode = this->GetMRMLMarkupsNode();
 
   unsigned long widgetEvent = this->TranslateInteractionEventToWidgetEvent(eventData);
@@ -115,42 +113,39 @@ vtkSlicerMarkupsWidget* vtkSlicerSlicingContourWidget::CreateInstance() const
   bool processedEvent = false;
   switch (widgetEvent)
   {
-  case WidgetEventControlPointMoveStart:
-    this->SetWidgetState(WidgetStateTranslateControlPoint);
-    this->StartWidgetInteraction(eventData);
-    markupsNode->InvokeEvent(vtkCommand::StartInteractionEvent);
-    processedEvent = true;
-    break;
+    case WidgetEventControlPointMoveStart:
+      this->SetWidgetState(WidgetStateTranslateControlPoint);
+      this->StartWidgetInteraction(eventData);
+      markupsNode->InvokeEvent(vtkCommand::StartInteractionEvent);
+      processedEvent = true;
+      break;
 
-  case WidgetEventMouseMove:
-    processedEvent = Superclass::ProcessMouseMove(eventData);
-    break;
+    case WidgetEventMouseMove: processedEvent = Superclass::ProcessMouseMove(eventData); break;
 
-  case WidgetEventControlPointMoveEnd:
-    this->EndWidgetInteraction();
-    this->SetWidgetState(WidgetStateOnWidget);
-    markupsNode->InvokeEvent(vtkCommand::EndInteractionEvent);
-    processedEvent = true;
-    break;
+    case WidgetEventControlPointMoveEnd:
+      this->EndWidgetInteraction();
+      this->SetWidgetState(WidgetStateOnWidget);
+      markupsNode->InvokeEvent(vtkCommand::EndInteractionEvent);
+      processedEvent = true;
+      break;
   }
 
   if (!processedEvent)
-    {
+  {
     processedEvent = Superclass::ProcessInteractionEvent(eventData);
-    }
+  }
 
   return processedEvent;
-
- }
+}
 
 //----------------------------------------------------------------------
 vtkMRMLMarkupsSlicingContourNode* vtkSlicerSlicingContourWidget::GetMRMLMarkupsNode()
 {
   vtkSlicerMarkupsWidgetRepresentation* rep = this->GetMarkupsRepresentation();
   if (!rep)
-    {
+  {
     return nullptr;
-    }
+  }
 
   return vtkMRMLMarkupsSlicingContourNode::SafeDownCast(rep->GetMarkupsNode());
 }

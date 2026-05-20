@@ -47,8 +47,8 @@
 class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionCSVStorageNode : public vtkMRMLMarkupsFiducialStorageNode
 {
 
-  public:
-  static vtkMRMLLiverResectionCSVStorageNode *New();
+public:
+  static vtkMRMLLiverResectionCSVStorageNode* New();
   vtkTypeMacro(vtkMRMLLiverResectionCSVStorageNode, vtkMRMLMarkupsFiducialStorageNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
@@ -56,9 +56,9 @@ class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionCSVStor
 
   ///
   /// Get node XML tag name (like Storage, Model)
-  const char* GetNodeTagName() override {return "LiverResectionFiducialStorage";};
+  const char* GetNodeTagName() override { return "LiverResectionFiducialStorage"; };
 
-  bool CanReadInReferenceNode(vtkMRMLNode *refNode) override;
+  bool CanReadInReferenceNode(vtkMRMLNode* refNode) override;
 
 protected:
   /// Initialize all the supported write file types
@@ -67,8 +67,8 @@ protected:
   /// Initialize all the supported write file types
   void InitializeSupportedWriteFileTypes() override;
 
-  int WriteDataInternal(vtkMRMLNode *refNode) override;
-  int ReadDataInternal(vtkMRMLNode *refNode) override;
+  int WriteDataInternal(vtkMRMLNode* refNode) override;
+  int ReadDataInternal(vtkMRMLNode* refNode) override;
 
 protected:
   vtkMRMLLiverResectionCSVStorageNode();
@@ -76,6 +76,5 @@ protected:
   vtkMRMLLiverResectionCSVStorageNode(const vtkMRMLLiverResectionCSVStorageNode&);
   void operator=(const vtkMRMLLiverResectionCSVStorageNode&);
 };
-
 
 #endif // __vtkmrmlliverresectionsfiducialstoragenode_h_

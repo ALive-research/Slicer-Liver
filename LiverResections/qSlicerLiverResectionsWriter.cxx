@@ -70,7 +70,7 @@ qSlicerLiverResectionsWriter::qSlicerLiverResectionsWriter(QObject* parentObject
 qSlicerLiverResectionsWriter::~qSlicerLiverResectionsWriter() = default;
 
 //----------------------------------------------------------------------------
-QStringList qSlicerLiverResectionsWriter::extensions(vtkObject* vtkNotUsed(object))const
+QStringList qSlicerLiverResectionsWriter::extensions(vtkObject* vtkNotUsed(object)) const
 {
   QStringList supportedExtensions;
 
@@ -85,10 +85,10 @@ QStringList qSlicerLiverResectionsWriter::extensions(vtkObject* vtkNotUsed(objec
   vtkNew<vtkMRMLLiverResectionCSVStorageNode> fcsvStorageNode;
   const int fidsFormatCount = fcsvStorageNode->GetSupportedWriteFileTypes()->GetNumberOfValues();
   for (int formatIt = 0; formatIt < fidsFormatCount; ++formatIt)
-    {
+  {
     vtkStdString format = fcsvStorageNode->GetSupportedWriteFileTypes()->GetValue(formatIt);
     supportedExtensions << QString::fromStdString(format);
-    }
+  }
 
   return supportedExtensions;
 }
@@ -97,39 +97,39 @@ QStringList qSlicerLiverResectionsWriter::extensions(vtkObject* vtkNotUsed(objec
 void qSlicerLiverResectionsWriter::setStorageNodeClass(vtkMRMLStorableNode* storableNode, const QString& storageNodeClassName)
 {
   if (!storableNode)
-    {
+  {
     qCritical() << Q_FUNC_INFO << " failed: invalid storable node";
     return;
-    }
+  }
   vtkMRMLScene* scene = storableNode->GetScene();
   if (!scene)
-    {
+  {
     qCritical() << Q_FUNC_INFO << " failed: invalid scene";
     return;
-    }
+  }
 
   vtkMRMLStorageNode* currentStorageNode = storableNode->GetStorageNode();
   std::string storageNodeClassNameStr = storageNodeClassName.toStdString();
   if (currentStorageNode != nullptr && currentStorageNode->IsA(storageNodeClassNameStr.c_str()))
-    {
+  {
     // requested storage node class is the same as current class, there is nothing to do
     return;
-    }
+  }
 
   // Create and use new storage node of the correct class
   vtkMRMLStorageNode* newStorageNode = vtkMRMLStorageNode::SafeDownCast(scene->AddNewNodeByClass(storageNodeClassNameStr));
   if (!newStorageNode)
-    {
+  {
     qCritical() << Q_FUNC_INFO << " failed: cannot create new storage node of class " << storageNodeClassName;
     return;
-    }
+  }
   storableNode->SetAndObserveStorageNodeID(newStorageNode->GetID());
 
   // Remove old storage node
   if (currentStorageNode)
-    {
+  {
     scene->RemoveNode(currentStorageNode);
-    }
+  }
 }
 
 //----------------------------------------------------------------------------
@@ -141,10 +141,10 @@ bool qSlicerLiverResectionsWriter::write(const qSlicerIO::IOProperties& properti
   vtkNew<vtkMRMLLiverResectionCSVStorageNode> fcsvStorageNode;
   std::string fcsvCompatibleFileExtension = fcsvStorageNode->GetSupportedFileExtension(fileName.c_str(), false, true);
   if (!fcsvCompatibleFileExtension.empty())
-    {
+  {
     // fcsv file needs to be written
     this->setStorageNodeClass(node, "vtkMRMLLiverResectionCSVStorageNode");
-    }
+  }
   // else
   //   {
   //   // json file needs to be written

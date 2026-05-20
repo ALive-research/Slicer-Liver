@@ -52,7 +52,13 @@ vtkMRMLNodeNewMacro(vtkMRMLMarkupsBezierSurfaceNode);
 
 //--------------------------------------------------------------------------------
 vtkMRMLMarkupsBezierSurfaceNode::vtkMRMLMarkupsBezierSurfaceNode()
-  :Target(nullptr), DistanceMap(nullptr), VascularSegments(nullptr), ResectionMargin(0.0), UncertaintyMargin(0.0), HepaticContourThickness(0.3f), PortalContourThickness(0.3f)
+  : Target(nullptr)
+  , DistanceMap(nullptr)
+  , VascularSegments(nullptr)
+  , ResectionMargin(0.0)
+  , UncertaintyMargin(0.0)
+  , HepaticContourThickness(0.3f)
+  , PortalContourThickness(0.3f)
 {
   this->MaximumNumberOfControlPoints = 16;
   this->RequiredNumberOfControlPoints = 16;
@@ -61,26 +67,26 @@ vtkMRMLMarkupsBezierSurfaceNode::vtkMRMLMarkupsBezierSurfaceNode()
 //----------------------------------------------------------------------------
 void vtkMRMLMarkupsBezierSurfaceNode::PrintSelf(ostream& os, vtkIndent indent)
 {
-  Superclass::PrintSelf(os,indent);
+  Superclass::PrintSelf(os, indent);
 }
 
 //----------------------------------------------------------------------------
 void vtkMRMLMarkupsBezierSurfaceNode::CreateDefaultDisplayNodes()
 {
   if (vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(this->GetDisplayNode()))
-    {
+  {
     // display node already exists
     return;
-    }
+  }
 
   auto scene = this->GetScene();
   if (scene == nullptr)
-    {
+  {
     vtkErrorMacro("vtkMRMLMarkupsBezierSurfaceNode::CreateDefaultDisplayNodes failed: scene is invalid");
     return;
-    }
+  }
 
   auto dispNode = scene->AddNewNodeByClass("vtkMRMLMarkupsBezierSurfaceDisplayNode");
 
-  this->SetAndObserveDisplayNodeID( dispNode->GetID() );
+  this->SetAndObserveDisplayNodeID(dispNode->GetID());
 }

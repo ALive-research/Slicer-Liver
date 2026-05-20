@@ -57,42 +57,42 @@ class vtkMRMLTableNode;
 class vtkMRMLScalarVolumeNode;
 class vtkOrientedImageData;
 
-class VTK_SLICER_LIVERVOLUMETRY_MODULE_LOGIC_EXPORT
-vtkLiverVolumetryLogic : public vtkObject {
- private:
+class VTK_SLICER_LIVERVOLUMETRY_MODULE_LOGIC_EXPORT vtkLiverVolumetryLogic : public vtkObject
+{
+private:
+public:
+  static vtkLiverVolumetryLogic* New();
+  vtkTypeMacro(vtkLiverVolumetryLogic, vtkObject);
+  void PrintSelf(ostream& os, vtkIndent indent) override;
 
- public:
-  static vtkLiverVolumetryLogic *New();
- vtkTypeMacro(vtkLiverVolumetryLogic, vtkObject);
-  void PrintSelf(ostream &os, vtkIndent indent) override;
-
- public:
-
-  void ComputeAdvancedPlanningVolumetry(vtkMRMLLabelMapVolumeNode *TargetSegmentLabelMap,
-                        vtkMRMLTableNode *OutputTableNode,
-                        vtkMRMLMarkupsFiducialNode *ROIMarkersList,
-                        vtkCollection *resectionNodes,
-                        double TargetSegmentationVolume = 0.0);
-  int GetSegmentVoxels(vtkOrientedImageData *TargetSegmentLabelMap);
+public:
+  void ComputeAdvancedPlanningVolumetry(vtkMRMLLabelMapVolumeNode* TargetSegmentLabelMap,
+                                        vtkMRMLTableNode* OutputTableNode,
+                                        vtkMRMLMarkupsFiducialNode* ROIMarkersList,
+                                        vtkCollection* resectionNodes,
+                                        double TargetSegmentationVolume = 0.0);
+  int GetSegmentVoxels(vtkOrientedImageData* TargetSegmentLabelMap);
   std::vector<int> GetROIPointsLabelValue(vtkMRMLLabelMapVolumeNode* TargetSegmentsLabelMap, vtkMRMLMarkupsFiducialNode* ROIMarkersList);
-  vtkSmartPointer<vtkBezierSurfaceSource> GenerateBezierSurface(int Res, vtkMRMLMarkupsBezierSurfaceNode *bezierSurfaceNode);
-  itk::Index<3> GetITKRGSeedIndex(double *ROISeedPoint, itk::SmartPointer<itk::Image<short, 3>> SourceImage);
-  void VolumetryTable(std::string Properties, double TargetSegmentationVolume, int ROIVoxels, double ROIVolume, vtkMRMLTableNode *OutputTableNode);
-  int GetRes(vtkMRMLMarkupsBezierSurfaceNode *bezierSurfaceNode, double space[3], int Steps);
-  void GetResectionsProjectionITKImage(vtkMRMLLabelMapVolumeNode* SelectedSegmentsLabelMap,vtkCollection* ResectionNodes, int baseValue);
-  void GenerateSegmentsLabelMap(vtkMRMLLabelMapVolumeNode* TargetSegmentLabelMapCopy, vtkMRMLLabelMapVolumeNode* newLabelMap,vtkCollection* ResectionNodes, vtkMRMLMarkupsFiducialNode* ROIMarkersList);
+  vtkSmartPointer<vtkBezierSurfaceSource> GenerateBezierSurface(int Res, vtkMRMLMarkupsBezierSurfaceNode* bezierSurfaceNode);
+  itk::Index<3> GetITKRGSeedIndex(double* ROISeedPoint, itk::SmartPointer<itk::Image<short, 3>> SourceImage);
+  void VolumetryTable(std::string Properties, double TargetSegmentationVolume, int ROIVoxels, double ROIVolume, vtkMRMLTableNode* OutputTableNode);
+  int GetRes(vtkMRMLMarkupsBezierSurfaceNode* bezierSurfaceNode, double space[3], int Steps);
+  void GetResectionsProjectionITKImage(vtkMRMLLabelMapVolumeNode* SelectedSegmentsLabelMap, vtkCollection* ResectionNodes, int baseValue);
+  void GenerateSegmentsLabelMap(vtkMRMLLabelMapVolumeNode* TargetSegmentLabelMapCopy,
+                                vtkMRMLLabelMapVolumeNode* newLabelMap,
+                                vtkCollection* ResectionNodes,
+                                vtkMRMLMarkupsFiducialNode* ROIMarkersList);
 
- protected:
+protected:
   itk::SmartPointer<itk::Image<short, 3>> ProjectedTargetSegmentImage;
   itk::SmartPointer<itk::Image<short, 3>> connectedThreshold;
   vtkSmartPointer<vtkCollection> resectionNodes;
 
- protected:
+protected:
   vtkLiverVolumetryLogic();
   ~vtkLiverVolumetryLogic() override;
-  vtkLiverVolumetryLogic(const vtkLiverVolumetryLogic &);
-  void operator=(const vtkLiverVolumetryLogic &);
-
+  vtkLiverVolumetryLogic(const vtkLiverVolumetryLogic&);
+  void operator=(const vtkLiverVolumetryLogic&);
 };
 
-#endif //SLICERLIVER_LIVERVOLUMETRY_LOGIC_VTKLIVERVOLUMETRYLOGIC_H_
+#endif // SLICERLIVER_LIVERVOLUMETRY_LOGIC_VTKLIVERVOLUMETRYLOGIC_H_

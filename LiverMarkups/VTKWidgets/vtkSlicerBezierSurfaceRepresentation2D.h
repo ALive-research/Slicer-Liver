@@ -44,8 +44,7 @@
 // Markups VTKWidgets includes
 #include "vtkSlicerLineRepresentation2D.h"
 
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerBezierSurfaceRepresentation2D
-: public vtkSlicerLineRepresentation2D
+class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerBezierSurfaceRepresentation2D : public vtkSlicerLineRepresentation2D
 {
 public:
   static vtkSlicerBezierSurfaceRepresentation2D* New();

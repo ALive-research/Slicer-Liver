@@ -50,8 +50,7 @@ class vtkSlicerLiverResectionsLogic;
 
 //----------------------------------------------------------------------------
 /// \ingroup Slicer_QtModules_LiverResections
-class qSlicerLiverResectionsReader
-  : public qSlicerFileReader
+class qSlicerLiverResectionsReader : public qSlicerFileReader
 {
   Q_OBJECT
 public:
@@ -60,12 +59,12 @@ public:
   qSlicerLiverResectionsReader(vtkSlicerLiverResectionsLogic* logic, QObject* parent = nullptr);
   ~qSlicerLiverResectionsReader() override;
 
-  vtkSlicerLiverResectionsLogic* liverResectionsLogic()const;
+  vtkSlicerLiverResectionsLogic* liverResectionsLogic() const;
   void setLiverResectionsLogic(vtkSlicerLiverResectionsLogic* logic);
 
-  QString description()const override;
-  IOFileType fileType()const override;
-  QStringList extensions()const override;
+  QString description() const override;
+  IOFileType fileType() const override;
+  QStringList extensions() const override;
 
   bool load(const IOProperties& properties) override;
 
@@ -76,6 +75,5 @@ private:
   Q_DECLARE_PRIVATE(qSlicerLiverResectionsReader);
   Q_DISABLE_COPY(qSlicerLiverResectionsReader);
 };
-
 
 #endif // _qSlicerLiverResectionsReader_h_
