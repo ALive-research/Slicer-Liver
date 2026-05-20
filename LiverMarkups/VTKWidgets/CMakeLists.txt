@@ -1,3 +1,7 @@
+#-----------------------------------------------------------------------------
+# Copyright (c) 2021-2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
+# Distributed under the OSI-approved BSD 3-Clause License.
+
 project(vtkSlicer${MODULE_NAME}ModuleVTKWidgets)
 
 set(KIT ${PROJECT_NAME})
@@ -86,4 +90,3 @@ SlicerMacroBuildModuleLogic(
   SRCS ${${KIT}_SRCS}
   TARGET_LIBRARIES ${${KIT}_TARGET_LIBRARIES}
   )
-
