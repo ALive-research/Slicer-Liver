@@ -1,3 +1,6 @@
+# Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
+# Distributed under the OSI-approved BSD 3-Clause License.
+
 """Python wrapper tests for ``vtkMRMLBezierSurfaceStorageNode``.
 
 ADR-0008 §3 dual-mode discipline: every C++ class reachable from

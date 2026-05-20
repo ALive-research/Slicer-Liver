@@ -2,7 +2,7 @@
 
  Distributed under the OSI-approved BSD 3-Clause License.
 
-  Copyright (c) Oslo University Hospital. All rights reserved.
+  Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
   Shared helpers for the edge-case stress tests (issue #335).  These
   are deliberately separate from vtkLiverAlgorithmTestFixtures.h so the

@@ -1,3 +1,6 @@
+# Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
+# Distributed under the OSI-approved BSD 3-Clause License.
+
 """Tests for the SCT terminology assets shipped per ADR-0011.
 
 Verifies four invariants:
