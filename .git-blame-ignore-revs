@@ -21,3 +21,6 @@
 
 # 2026-05-20: clang-format vtkOpenGLResection2DPolyDataMapper.cpp per ADR-0016 (PR #399).
 2fc56b0e9c5f926c5b9d83293fdf6a68317c4eaf
+
+# 2026-05-20: bulk clang-format of 72 files alongside copyright-header migration (issue #338).
+9c396d1432135457606fecbf72c8a46cdf653d95
