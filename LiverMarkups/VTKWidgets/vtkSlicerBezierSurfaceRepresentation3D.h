@@ -72,36 +72,35 @@ class vtkMRMLMarkupsBezierSurfaceNode;
 class vtkMRMLScalarVolumeNode;
 
 //------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerBezierSurfaceRepresentation3D
-: public vtkSlicerMarkupsWidgetRepresentation3D
+class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerBezierSurfaceRepresentation3D : public vtkSlicerMarkupsWidgetRepresentation3D
 {
 public:
   static vtkSlicerBezierSurfaceRepresentation3D* New();
   vtkTypeMacro(vtkSlicerBezierSurfaceRepresentation3D, vtkSlicerMarkupsWidgetRepresentation3D);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  void UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void* callData=nullptr) override;
+  void UpdateFromMRML(vtkMRMLNode* caller, unsigned long event, void* callData = nullptr) override;
 
   /// Methods to make this class behave as a vtkProp.
-  void GetActors(vtkPropCollection *) override;
-  void ReleaseGraphicsResources(vtkWindow *) override;
-  int RenderOverlay(vtkViewport *viewport) override;
-  int RenderOpaqueGeometry(vtkViewport *viewport) override;
-  int RenderTranslucentPolygonalGeometry(vtkViewport *viewport) override;
+  void GetActors(vtkPropCollection*) override;
+  void ReleaseGraphicsResources(vtkWindow*) override;
+  int RenderOverlay(vtkViewport* viewport) override;
+  int RenderOpaqueGeometry(vtkViewport* viewport) override;
+  int RenderTranslucentPolygonalGeometry(vtkViewport* viewport) override;
   vtkTypeBool HasTranslucentPolygonalGeometry() override;
 
   /// Return the bounds of the representation
-  double *GetBounds() override;
+  double* GetBounds() override;
 
 protected:
   /// TransferDistanceMap
   void CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode* node, int numComps);
-  void CreateAndTransferVascularSegmentsTexture(vtkMRMLScalarVolumeNode *node);
+  void CreateAndTransferVascularSegmentsTexture(vtkMRMLScalarVolumeNode* node);
   void Ratio(bool flexibleBoundery);
   void ResectogramPlaneCenter(bool mirror);
 
- protected:
-  //k Bezier surface releated elements
+protected:
+  // k Bezier surface releated elements
   vtkSmartPointer<vtkBezierSurfaceSource> BezierSurfaceSource;
   vtkSmartPointer<vtkPoints> BezierSurfaceControlPoints;
   vtkSmartPointer<vtkOpenGLBezierResectionPolyDataMapper> BezierSurfaceResectionMapper;
@@ -112,7 +111,6 @@ protected:
   vtkSmartPointer<vtkBezierSurfaceSource> BezierPlane;
   vtkSmartPointer<vtkDataArray> BezierSurfaceSourcePoints;
   vtkSmartPointer<vtkCamera> ResectogramCamera;
-
 
   // Control polygon related elements
   vtkSmartPointer<vtkPolyData> ControlPolygonPolyData;
@@ -131,7 +129,6 @@ protected:
   // Vascular Segments related elements
   vtkSmartPointer<vtkMultiTextureObjectHelper> VascularSegmentsTexture;
   vtkWeakPointer<vtkMRMLScalarVolumeNode> VascularSegmentsVolumeNode;
-
 
 protected:
   vtkSlicerBezierSurfaceRepresentation3D();
