@@ -13,7 +13,7 @@
     - [Compilation](#compilation)
     - [Testing](#testing)
     - [Contributing](#Contributing)
-    
+
 ## Introduction
 
 SlicerLiver is an extension for the medical research software [3D Slicer](https://slicer.org "3D Slicer") providing tools for analysis, quantification and therapy planning for hepatic interventions.
@@ -79,7 +79,7 @@ Follow these steps to compute the Distance Map:
    - Adjust the downsampling rate if needed (default is 1.00).
 9. **Compute Distance Map**:
    - Click the `Compute Distance Maps` button to start the computation.
-   
+
 Ensure all required fields are filled; otherwise, the `Compute Distance Maps` button will remain inactive.
 
 ### Resections
@@ -108,7 +108,7 @@ There are multiple options to create visualizations for the resection (color, op
 
 As introduced before, we have three contour initialization methods: `Flat`, `Curved`, or `MarkupClosedCurve`.
 
-- The initialization process for both `Flat` and `Curved` methods is similar in usage. In both cases, a guiding stick and a white cutting contour are displayed on the liver model. By moving the guiding stick, the contour’s position can be adjusted to align with the desired operation area. 
+- The initialization process for both `Flat` and `Curved` methods is similar in usage. In both cases, a guiding stick and a white cutting contour are displayed on the liver model. By moving the guiding stick, the contour’s position can be adjusted to align with the desired operation area.
 
    The key difference lies in the type of resection surface generated:
 
@@ -135,21 +135,21 @@ As introduced before, we have three contour initialization methods: `Flat`, `Cur
 ### Resectogram
 The Resectogram section in Slicer-Liver allows users to configure various options for visualizing the resectogram. Below are the available settings and their descriptions:
 
-1. **Enable Resectogram:** 
+1. **Enable Resectogram:**
    - Check this box to enable the resectogram visualization.
 2. **Mirror Resectogram Display**:
    - Check this box to mirror the display of the resectogram.
-3. **Enable Flexible Boundary:** 
+3. **Enable Flexible Boundary:**
    - Check this box to enable a flexible boundary for the resectogram.
-4. **Resectogram Size Scale:** 
+4. **Resectogram Size Scale:**
    - Use the slider or the input box to adjust the size scale of the resectogram. The value can be set between 0 and 1.
-5. **Hepatic Contour Size (in mm):** 
+5. **Hepatic Contour Size (in mm):**
    - Adjust the size of the hepatic contour by using the input box. The size can be configured in millimeters.
-6. **Color Picker:** 
+6. **Color Picker:**
    - Click on the color box to choose a different color for the hepatic contour.
-7. **Portal resection contour size (in mm):** 
+7. **Portal resection contour size (in mm):**
    - Adjust the size of the portal resection contour by using the input box. The size can be configured in millimeters.
-8. **Color Picker:** 
+8. **Color Picker:**
    - Click on the color box to choose a different color for the portal resection contour.
 9. **Vascular Segments Volume:**
    - Use the dropdown menu to select the vascular segments volume. The available options depend on the pre-loaded volumes in the software.
@@ -183,17 +183,17 @@ Our method for liver segment classification involves defining segments using cen
 ![Slicer-Liver_screenshot_18.jpg](Screenshots_tutorial/Slicer-Liver_screenshot_18.jpg)
 
 ### Resection Volumetry
-1. **Volumetry Output Table:** 
+1. **Volumetry Output Table:**
    - Select or create an output table. You can rename the table or switch between different tables.
-2. **Reference Volume:** 
+2. **Reference Volume:**
    - Select a liver volume node.
-3. **Segmentation:** 
+3. **Segmentation:**
    - Select a liver segmentation node (Labelmap node). This can be liver segmentation (vessel, tumor, liver), liver anatomy segments, or self-defined liver segments (adapted from the vessel segments module). You can select all segments in the dataset or only those of interest.
-4. **Total Volume:** 
+4. **Total Volume:**
    - Define the total volume by selecting the segments you wish to count (optional; by default, it is the sum of all segments in the data).
-5. **ROI Marker List:** 
+5. **ROI Marker List:**
    - Select or create a points list. You can place points onto 2D slices or 3D models to mark the area you want to measure. If no point list is provided, the volume of all segments will be calculated.
-6. **Resection (Optional):** 
+6. **Resection (Optional):**
    - Choose one or more resections for the same liver model and calculate the remnant/resected volume by placing marker points onto these areas.
    - This can be combined with liver anatomy segments or self-defined liver segments to gain a deeper understanding of liver volumetry after different resection approaches (anatomical, atypical, etc.).
    - It can also be used to compare different resection plans for the same tumor or to provide a combined view for one surgery with multiple resections.
@@ -203,7 +203,7 @@ Our method for liver segment classification involves defining segments using cen
 ![Slicer-Liver_screenshot_19.png](Screenshots_tutorial/Slicer-Liver_screenshot_19.png)
 ![Slicer-Liver_screenshot_23.png](Screenshots_tutorial/Slicer-Liver_screenshot_23.png)
 
- 
+
 ## Video Tutorial
 [Slicer-Liver tutorial](https://www.youtube.com/watch?v=oRu624mtQZE)
 
@@ -227,13 +227,13 @@ Slicer-Liver depends on the VMTK, it can be installed in Slicer3D using the [ext
 
 -  To enable the developer mode go to :
     - Edit > Application Settings > Developer
-    
+
 - Then check the `Enable developer mode` check box. The application may need to be restarted for this modification to be taken into account.
-    
+
 - To run the unit tests, open the Slicer-Liver extension, expand the `Reload & Test` menu and click on the `Reload and Test` button.
-    
+
 - To visualize the test results, open the Python console by going to: View > Python Interactor.
-    
+
 - The number and the result of the tests will be displayed in the console. Should any of the test fail, please don't hesitate to [open an issue](https://github.com/ALive-research/Slicer-Liver/issues/new/choose) or contact us through the [Slicer forum](https://discourse.slicer.org).
 
 ### Contributing
@@ -246,7 +246,7 @@ Slicer-Liver welcomes any and all contributions in the way of new tools/scripts,
 - `main` is the stable branch served to end-users via the Slicer Extension Manager on the current Slicer stable release.  It receives periodic cherry-pick backports from `preview`.
 
 See [ADR-0006](Docs/adr/0006-branch-model.md) for the full rationale and the day-to-day workflow.
-    
+
 ## Authors
 
 - Rafael Palomar (Oslo University Hospital / NTNU, Norway)

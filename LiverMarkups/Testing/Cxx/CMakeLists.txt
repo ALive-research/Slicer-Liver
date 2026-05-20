@@ -35,4 +35,3 @@ foreach(test ${KIT_TESTS_TO_RUN})
       #-V Baseline/${testname}.png
     )
 endforeach()
-

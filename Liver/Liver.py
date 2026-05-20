@@ -37,11 +37,15 @@
 #
 # ==============================================================================
 
+# ruff: noqa: F403, F405  # standard Slicer scripted-module wildcard-import pattern
+
+
 import os
-import unittest
 import logging
-import vtk, qt, ctk, slicer
-from vtk.util.numpy_support import vtk_to_numpy, numpy_to_vtk
+import vtk
+import qt
+import slicer
+from vtk.util.numpy_support import vtk_to_numpy
 from slicer.ScriptedLoadableModule import *
 import numpy as np
 from numpy import size
@@ -175,7 +179,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     ScriptedLoadableModuleWidget.__init__(self, parent)
 
     self.logic = None
-    self._uiLoader = loader = qt.QUiLoader()
+    self._uiLoader = qt.QUiLoader()
     self._currentResectionNode = None
     self.numComps = 0
     self._distanceContourNode = None
@@ -203,7 +207,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectogramWidget = slicer.util.childWidgetVariables(resectogramUI)
 
     iconsPath = os.path.join(os.path.dirname(__file__), 'Resources/Icons')
-    iconStyle = "QCheckBox::indicator:unchecked {{ image: url({0}/SlicerInvisible.png);}}\n QCheckBox::indicator:checked {{ image: url({1}/SlicerVisible.png);}}".format(iconsPath,iconsPath)
+    iconStyle = f"QCheckBox::indicator:unchecked {{ image: url({iconsPath}/SlicerInvisible.png);}}\n QCheckBox::indicator:checked {{ image: url({iconsPath}/SlicerVisible.png);}}"
     self.resectogramWidget.Grid2DVisibility.setStyleSheet(iconStyle)
     self.resectionsWidget.Grid3DVisibility.setStyleSheet(iconStyle)
 
@@ -665,7 +669,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
   def updateTotalMargin(self):
     uncertainty = self._currentResectionNode.GetUncertaintyMargin()
     resection = self._currentResectionNode.GetResectionMargin()
-    self.resectionsWidget.TotalMarginLabel.setText('{:.2f} mm'.format(resection + uncertainty))
+    self.resectionsWidget.TotalMarginLabel.setText(f'{resection + uncertainty:.2f} mm')
 
   def onResectionLockChanged(self):
     """
@@ -990,6 +994,7 @@ Uses ScriptedLoadableModuleLogic base class, available at:
 https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
 """
 
+
   def __init__(self):
     """
     Called when the logic class is instantiated. Can be used for initializing member variables.
@@ -1008,27 +1013,27 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
       portalDistanceImage = None
 
       # Compute tumor distance map
-      if tumorNode != None:
+      if tumorNode is not None:
         tumorImage = sitkUtils.PullVolumeFromSlicer(tumorNode)
         tumorDistanceImage = sitk.SignedMaurerDistanceMap(tumorImage, False, False, True)
         logging.debug("Computing Tumor Distance Map...")
         # tumorDistanceImageDown =  self.imageResample( tumorDistanceImage, [150,150,150], "linear")
 
       # Compute parenchyma distance map
-      if parenchymaNode != None:
+      if parenchymaNode is not None:
         parenchymaImage = sitkUtils.PullVolumeFromSlicer(parenchymaNode)
         parenchymaDistanceImage = sitk.SignedMaurerDistanceMap(parenchymaImage, False, False, True)
         logging.debug("Computing Parenchyma Distance Map...")
         # parenchymaDistanceImageDown = self.imageResample( parenchymaDistanceImage, [150,150,150], "linear")
 
       # Compute hepatic distance map
-      if hepaticNode != None:
+      if hepaticNode is not None:
         hepaticImage = sitkUtils.PullVolumeFromSlicer(hepaticNode)
         hepaticDistanceImage = sitk.SignedMaurerDistanceMap(hepaticImage, False, False, True)
         logging.debug("Computing Hepatic Distance Map...")
 
       # Compute portal distance map
-      if portalNode != None:
+      if portalNode is not None:
         portalImage = sitkUtils.PullVolumeFromSlicer(portalNode)
         portalDistanceImage = sitk.SignedMaurerDistanceMap(portalImage, False, False, True)
         logging.debug("Computing Portal Distance Map...")
@@ -1046,8 +1051,8 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
         compositeDistanceMap = sitk.Compose(*[i for i in [tumorDistanceImage, parenchymaDistanceImage, hepaticDistanceImage, portalDistanceImage] if i])
 
       sitkUtils.PushVolumeToSlicer(compositeDistanceMap, targetNode = outputNode, className='vtkMRMLVectorVolumeNode')
-      outputNode.SetAttribute('DistanceMap', "True");
-      outputNode.SetAttribute('Computed', "True");
+      outputNode.SetAttribute('DistanceMap', "True")
+      outputNode.SetAttribute('Computed', "True")
 
   def imageResample(self, inputImage, resampledSize, interpolatorType):
     """
@@ -1070,9 +1075,9 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     outputSpacing[2] = inputSize[2] / float(resampledSize[2])
 
     NewOutputOrigin = [0.0, 0.0, 0.0]
-    NewOutputOrigin[0] = outputOrigin[0] + (outputSpacing[0] / 2.0 - inputSpacing[0] / 2.0) * outputDirection[0];
-    NewOutputOrigin[1] = outputOrigin[1] + (outputSpacing[1] / 2.0 - inputSpacing[1] / 2.0) * outputDirection[4];
-    NewOutputOrigin[2] = outputOrigin[2] + (outputSpacing[2] / 2.0 - inputSpacing[2] / 2.0) * outputDirection[8];
+    NewOutputOrigin[0] = outputOrigin[0] + (outputSpacing[0] / 2.0 - inputSpacing[0] / 2.0) * outputDirection[0]
+    NewOutputOrigin[1] = outputOrigin[1] + (outputSpacing[1] / 2.0 - inputSpacing[1] / 2.0) * outputDirection[4]
+    NewOutputOrigin[2] = outputOrigin[2] + (outputSpacing[2] / 2.0 - inputSpacing[2] / 2.0) * outputDirection[8]
 
     if interpolatorType == "linear":
       interpolator = sitk.sitkLinear
@@ -1837,7 +1842,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     spline_lines = appendFilter.GetOutput()
     points = spline_lines.GetPoints().GetData()
     points_array = vtk_to_numpy(points)
-    print("Number of points in the mask: {}".format(spline_lines.GetNumberOfPoints()))
+    print(f"Number of points in the mask: {spline_lines.GetNumberOfPoints()}")
 
     return points_array, spline_lines
 
@@ -2113,7 +2118,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     # create the extent
     origin = np.mean(points_array[0], axis=0)
     euclidian_distance = np.linalg.norm(points_array[0] - origin, axis=1)
-    extent = np.max(euclidian_distance)
+    np.max(euclidian_distance)
 
     # create the extent with pca
     splines_poly = points_array[1]
@@ -2134,8 +2139,8 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     eigen_average_center = np.average(np.vstack(sub_pca_dict['eigen_vector'][4:46]), axis=0)
 
     # TODo: the slops of the superior and inferior part of the point cloud could affect bezier Surface
-    eigen_average_start = np.average(np.vstack(sub_pca_dict['eigen_vector'][:4]), axis=0)
-    eigen_average_end = np.average(np.vstack(sub_pca_dict['eigen_vector'][46:50]), axis=0)
+    np.average(np.vstack(sub_pca_dict['eigen_vector'][:4]), axis=0)
+    np.average(np.vstack(sub_pca_dict['eigen_vector'][46:50]), axis=0)
 
     # ToDO: Review the need for this: maybe check if there is a resampling function for vtk Spline
     center = sub_pca_dict['center']
@@ -2270,12 +2275,12 @@ class LiverTest(ScriptedLoadableModuleTest):
 
     self.delayDisplay("Test passed!")
 
-  def setUp(self):
+  def setUp(self):  # noqa: F811
     slicer.mrmlScene.Clear()
 
     # Get/create input data
     import SampleData
     registerSampleData()
-    inputSegmentation = SampleData.downloadSample('LiverSegmentation000')
-    inputVolume = SampleData.downloadSample('LiverVolume000')
+    SampleData.downloadSample('LiverSegmentation000')
+    SampleData.downloadSample('LiverVolume000')
     self.delayDisplay('Loaded test data set')

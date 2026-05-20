@@ -36,11 +36,14 @@
 #
 # ==============================================================================
 
+# ruff: noqa: F403, F405  # standard Slicer scripted-module wildcard-import pattern
 
-import os
-import unittest
+
+
 import logging
-import vtk, qt, ctk, slicer
+import vtk
+import qt
+import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
@@ -151,7 +154,8 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     node3 = self.ui.ReferenceVolumeSelector.currentNode()
     node4 = self.ui.InputSegmentationSelector.currentNode()
     node5 = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
-    if len(self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()) == 0: node5 = None
+    if len(self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()) == 0:
+      node5 = None
     self.ui.GenerateSegmentsPushButton.setEnabled(None not in [ node2, node3, node4, node5])
 
   def onGenerateSegmentsButtonClicked(self):
@@ -173,7 +177,8 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     node2 = self.ui.ReferenceVolumeSelector.currentNode()
     node3 = self.ui.InputSegmentationSelector.currentNode()
     node4 = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
-    if len(self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()) == 0: node4 = None
+    if len(self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()) == 0:
+      node4 = None
     self.ui.ComputeVolumePushButton.setEnabled(None not in [ node2, node3, node4])
 
   def getResectionNodes(self):
@@ -407,8 +412,9 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
       raise ValueError("Missing outputTable")
 
     targetSegmentVolume = 0.0
-    if targetSegmentVolumeNode != None:
-      import vtk, numpy
+    if targetSegmentVolumeNode is not None:
+      import vtk
+      import numpy
       scalars = vtk.util.numpy_support.vtk_to_numpy(targetSegmentVolumeNode.GetImageData().GetPointData().GetScalars())
       spacing = targetSegmentVolumeNode.GetSpacing()
       voxel_count = numpy.count_nonzero(scalars)
@@ -434,7 +440,8 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
           statistics[segmentId] = [segmentName, voxel_count, volume_cm3]
           self.scl.VolumetryTable(segmentName, targetSegmentVolume, voxel_count, volume_cm3,outputTable)
       else:
-        import vtk, numpy
+        import vtk
+        import numpy
         ROIvalues = self.scl.GetROIPointsLabelValue(segmentsVolumeNode, ROIMarkersList)
         scalars = vtk.util.numpy_support.vtk_to_numpy(segmentsVolumeNode.GetImageData().GetPointData().GetScalars())
         spacing = segmentsVolumeNode.GetSpacing()
