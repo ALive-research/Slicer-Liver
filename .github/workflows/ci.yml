@@ -387,7 +387,15 @@ jobs:
           # python3-pytest-cov in the base image).
           python3 -m venv /tmp/coverage-venv
           /tmp/coverage-venv/bin/pip install --upgrade pip
-          /tmp/coverage-venv/bin/pip install 'gcovr>=7' 'pytest-cov>=5' 'pytest>=8'
+          # ``numpy`` is required by ``Testing/Python/unit/test_bezier_characterization.py``
+          # (it imports ``numpy as np`` at module load).  Without it
+          # pytest's collection phase errors with
+          # ``ModuleNotFoundError: No module named 'numpy'`` and the
+          # full session is interrupted before pytest-cov can emit the
+          # Cobertura XML — symptom: ``coverage-py.xml`` never appears
+          # at the workspace root and Codecov's upload arrives without
+          # any Python coverage data.
+          /tmp/coverage-venv/bin/pip install 'gcovr>=7' 'pytest-cov>=5' 'pytest>=8' 'numpy>=1.24'
           echo "/tmp/coverage-venv/bin" >> "$GITHUB_PATH"
 
       - name: Verify Slicer build tree
@@ -451,13 +459,18 @@ jobs:
           # outside the resolved root and gcovr filtered everything out
           # with ``All coverage data is filtered out``, falling through
           # to the empty-skeleton heredoc below.
+          # ``--exclude '.*/build-coverage/.*'`` removed: gcovr applies
+          # filters to the gcov *data file* paths it discovers, not just
+          # source-file paths.  Every .gcda lives under build-coverage/
+          # by design; the exclude was matching them all and pruning the
+          # real coverage data out before source-path resolution.
+          # Symptom: ``(WARNING) All coverage data is filtered out``.
           gcovr \
             --root "$GITHUB_WORKSPACE" \
             --xml --output coverage-cxx.xml \
             --exclude '.*Testing.*' \
             --exclude '.*CMakeFiles.*' \
             --exclude '/usr/.*' \
-            --exclude '.*/build-coverage/.*' \
             --print-summary \
             build-coverage || {
               echo "::warning::gcovr produced no usable data — coverage upload will be partial."
@@ -495,7 +508,16 @@ jobs:
           [ -d LiverResections/Testing/Python ] && test_roots+=(LiverResections/Testing/Python)
           if [ ${#test_roots[@]} -gt 0 ] && \
              find "${test_roots[@]}" \( -name 'test_*.py' -o -name '*_test.py' \) -print -quit | grep -q .; then
+            # ``--continue-on-collection-errors``: one bad module
+            # (e.g. a missing optional dep) shouldn't abort the
+            # entire session and prevent pytest-cov from writing the
+            # XML for the modules that DO collect.  Belt-and-braces
+            # alongside the numpy install above — there will always
+            # be a future test module that imports something opt-
+            # ional, and we want partial Python coverage rather than
+            # none in that case.
             python3 -m pytest "${test_roots[@]}" \
+              --continue-on-collection-errors \
               --cov=LiverResections/LiverResectionsLib \
               --cov-report=xml:coverage-py.xml \
               --cov-report=term \
