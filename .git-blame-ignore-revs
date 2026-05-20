@@ -15,3 +15,6 @@
 # References:
 #   - Slicer's .git-blame-ignore-revs (the upstream pattern this mirrors)
 #   - ADR-0016 — Code style discipline and CI enforcement
+
+# clang-format vtkSlicerBezierSurfaceRepresentation3D (PR #397)
+91ec664d3eb374dba26c3e2bf1da69cc30ada0f7
