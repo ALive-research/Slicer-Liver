@@ -2,7 +2,7 @@
 
  Distributed under the OSI-approved BSD 3-Clause License.
 
-  Copyright (c) Oslo University Hospital. All rights reserved.
+  Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
   Smoke test for vtkLiverPlaneRingExtractor: cut a unit sphere with the
   z=0 plane, assert the output is a non-empty closed polyline whose

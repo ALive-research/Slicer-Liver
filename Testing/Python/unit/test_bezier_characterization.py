@@ -1,3 +1,6 @@
+# Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
+# Distributed under the OSI-approved BSD 3-Clause License.
+
 """Characterisation tests for the Bezier-fitting and EFD Python math in
 ``Liver/Liver.py`` (task T1-A).
 
