@@ -1418,23 +1418,36 @@ int testReadXMLNullMidStream()
 }
 
 // ----------------------------------------------------------------------------
-// testCopyContentCarriesDisplayNodeRef
+// testCopyCarriesDisplayNodeRef
 //
 // Pins the existing correct behaviour: after the data-node reparent to
 // ``vtkMRMLDisplayableNode`` (ADR-0013 §8 — display-node-reference role
-// belongs on the data side of the Pipeline split), the inherited
-// ``Superclass::CopyContent`` carries the display-node-reference role
-// from source to sink.  Two layers:
+// belongs on the data side of the Pipeline split), the high-level
+// ``vtkMRMLNode::Copy`` carries the display-node-reference role from
+// source to sink.  Two layers:
 //
 //   1. Scene-less: the reference *string* survives (no scene-side
-//      resolution involved — this isolates the CopyContent contract).
+//      resolution involved — this isolates the CopyReferences half
+//      of Copy()).
 //   2. With scene: the reference resolves to a real
 //      ``vtkMRMLBezierSurfaceDisplayNode`` of the right class — the
 //      end-to-end structural guarantee.
 //
-// Companion to ``testDisplayNodeAttachedSceneRoundTrip`` (which pins the
-// XML round-trip path); this sub-test pins the CopyContent path.
-int testCopyContentCarriesDisplayNodeRef()
+// Implementation note: ``CopyContent`` alone does NOT copy node
+// references — its inherited body in ``vtkMRMLNode::CopyContent``
+// copies Description / Selectable / Attributes only.  References are
+// copied by ``vtkMRMLNode::CopyReferences``, which ``Copy()`` calls
+// alongside ``CopyContent()``.  An earlier draft of this sub-test
+// asserted the role survived ``CopyContent`` directly; CI surfaced
+// the assertion as broken and Slicer's ``vtkMRMLNode.cxx`` confirms
+// the layering.  The Copy() path is the one users actually invoke
+// when copying a node (scenes use it via vtkMRMLScene::CopyNode),
+// so it is the right invariant to pin here.
+//
+// Companion to ``testDisplayNodeAttachedSceneRoundTrip`` (which pins
+// the XML round-trip path); this sub-test pins the in-memory Copy
+// path.
+int testCopyCarriesDisplayNodeRef()
 {
   // ---- Layer 1: Scene-less reference-string survival ----
   {
@@ -1445,7 +1458,7 @@ int testCopyContentCarriesDisplayNodeRef()
     // is what we want to assert survives the copy.
     const char* displayId = "vtkMRMLBezierSurfaceDisplayNode1";
     source->AddAndObserveDisplayNodeID(displayId);
-    sink->CopyContent(source.GetPointer(), /*deepCopy=*/true);
+    sink->Copy(source.GetPointer());
     const char* sinkId = sink->GetNthDisplayNodeID(0);
     CHECK_NOT_NULL(sinkId);
     CHECK_STRING(sinkId, displayId);
@@ -1465,7 +1478,7 @@ int testCopyContentCarriesDisplayNodeRef()
     scene->AddNode(display.GetPointer());
     source->AddAndObserveDisplayNodeID(display->GetID());
 
-    sink->CopyContent(source.GetPointer(), /*deepCopy=*/true);
+    sink->Copy(source.GetPointer());
 
     // The reference must resolve scene-side to the same display node
     // (or at least a node of the right class — Pipeline-pattern
@@ -1544,7 +1557,7 @@ int vtkMRMLBezierSurfaceNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testSizeSettersFireModifiedOnce());
   CHECK_EXIT_SUCCESS(testXMLRoundTrip3x3());
   CHECK_EXIT_SUCCESS(testReadXMLNullMidStream());
-  CHECK_EXIT_SUCCESS(testCopyContentCarriesDisplayNodeRef());
+  CHECK_EXIT_SUCCESS(testCopyCarriesDisplayNodeRef());
   CHECK_EXIT_SUCCESS(testReadXMLTruncatedControlGridWarns());
 
   std::cout << "vtkMRMLBezierSurfaceNodeTest1 completed successfully" << std::endl;
