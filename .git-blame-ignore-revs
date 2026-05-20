@@ -18,3 +18,6 @@
 
 # clang-format vtkSlicerBezierSurfaceRepresentation3D (PR #397)
 91ec664d3eb374dba26c3e2bf1da69cc30ada0f7
+
+# 2026-05-20: clang-format vtkOpenGLResection2DPolyDataMapper.cpp per ADR-0016 (PR #399).
+2fc56b0e9c5f926c5b9d83293fdf6a68317c4eaf
