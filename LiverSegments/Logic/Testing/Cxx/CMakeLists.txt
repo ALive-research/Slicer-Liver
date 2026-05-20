@@ -54,4 +54,3 @@ slicerMacroConfigureModuleCxxTestDriver(
 
 #-----------------------------------------------------------------------------
 simple_test(vtkSlicerLiverSegmentsLogicTest1)
-

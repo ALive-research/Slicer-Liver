@@ -37,10 +37,14 @@
 #
 # ==============================================================================
 
+# ruff: noqa: F403, F405  # standard Slicer scripted-module wildcard-import pattern
+
+
 import os
-import unittest
 import logging
-import vtk, qt, ctk, slicer
+import vtk
+import qt
+import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
@@ -314,7 +318,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._updatingGUIFromSegmentationNode = False
     for node in segmentationNodes:
       attribute = node.GetAttribute("LiverSegments.SegmentationId")
-      if attribute != None:
+      if attribute is not None:
         if node.GetDisplayNode():
           node.GetDisplayNode().SetAllSegmentsVisibility(False)
     self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
@@ -567,7 +571,7 @@ class LiverSegmentsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     vascularTerrSegmNode = self.ui.selectedVascularTerritorySegmId.currentNode()
     VascSegmIdno = vascularTerrSegmNode.GetAttribute("LiverSegments.SegmentationId")
     # If the GUI is updating - No action
-    if  self._updatingGUIFromSegmentationNode == True:
+    if  self._updatingGUIFromSegmentationNode:
       return
     #Add new vascular territory ID
     if(index == 0):
@@ -837,6 +841,6 @@ class LiverSegmentsTest(ScriptedLoadableModuleTest):
 
     # Test the module logic
 
-    logic = LiverSegmentsLogic()
+    LiverSegmentsLogic()
 
     self.delayDisplay('Test passed')

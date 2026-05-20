@@ -1,14 +1,15 @@
 # Copyright (c) 2022-2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 
+# ruff: noqa: F403, F405  # standard Slicer scripted-module wildcard-import pattern
 
-import logging
-import vtk, slicer
+
+
+import vtk
+import slicer
 from slicer.ScriptedLoadableModule import *
 #from slicer.util import TESTING_DATA_URL
-import LiverSegments
 from LiverSegments import LiverSegmentsLogic
-from LiverSegments import LiverSegmentsWidget
 
 class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
 
@@ -51,12 +52,12 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
     logic.preprocessAndDecimate(vtk.vtkPolyData())
     logic.decimateLine(vtk.vtkPolyData())
     logic.polyDataFromNode(None, segmentationId)
-    
+
   def vtkLogicFunctions(self):
     from vtkSlicerLiverSegmentsModuleLogicPython import vtkLiverSegmentsLogic
     vtkLogic = vtkLiverSegmentsLogic()
     vtkLogic.SetMRMLScene(slicer.mrmlScene)
-    
+
     segmentationVascular = self.createEmptyvtkMRMLSegmentationNode()
     segmentation = self.createEmptyvtkMRMLSegmentationNode()
     refVolume = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
@@ -104,4 +105,3 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
       self.assertIsNotNone(modelNodeDict)
       counter = counter + 1
     self.assertEqual(counter, 3)
-

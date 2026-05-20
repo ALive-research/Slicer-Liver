@@ -31,7 +31,7 @@ affiliations:
    index: 1
  - name: Department of Computer Science, The Norwegian University of Science and Technology, Gjøvik, Norway.
    index: 2
- - name: Department of Health Research, SINTEF Digital, Trondheim, Norway 
+ - name: Department of Health Research, SINTEF Digital, Trondheim, Norway
    index: 3
 date: 03 April 2024
 bibliography: bibliography.bib
@@ -43,7 +43,7 @@ This article introduces Slicer-Liver, an extension for the 3D Slicer image compu
 
 # Statement of need
 
-Liver cancer, both primary and metastatic (e.g., from colorectal cancer), is a global health concern with increasing incidence rates [@Siegel:2023] and surgical resection remains the most potentially curative treatment for some of these patients [@Petrowsky2020]. The evolution of computer-assisted surgical systems over the past two decades has significantly improved tumor localization and surgeons' confidence during surgery [@Hansen:2014; @Lamata:2010]. Despite these advances, systematic use of computer-assisted systems for planning liver resections remains a challenge. 
+Liver cancer, both primary and metastatic (e.g., from colorectal cancer), is a global health concern with increasing incidence rates [@Siegel:2023] and surgical resection remains the most potentially curative treatment for some of these patients [@Petrowsky2020]. The evolution of computer-assisted surgical systems over the past two decades has significantly improved tumor localization and surgeons' confidence during surgery [@Hansen:2014; @Lamata:2010]. Despite these advances, systematic use of computer-assisted systems for planning liver resections remains a challenge.
 
 Recent innovations in artificial intelligence have brought 3D patient-specific models closer to routine clinical use. However, surgical planning with the use of these models remains a complex and manual process. Planning of surgery is particularly important for complex cases (e.g., those presenting multiple tumors or those where the location and size of the tumor pose a challenge for the surgical practice). Furthermore, precise surgical planning should not only account for the liver geometry, but also for the blood supply to various liver regions (segments) [@Warmann:2016; @Bismuth:2013]. Furthermore, visualization of 3D liver models and resections is a difficult task, where occlusions can prevent the effective understanding of the surgical plan. In addition, there is no broad consensus on the definition of a good resection plan, which is partly due to the lack of formal methods to specify and communicate resection plans, and partly due to the different surgery cultures and practices in different hospitals.
 
@@ -51,7 +51,7 @@ All these challenges support the advancement of the integration of computer-aide
 
 # Overview of Slicer-Liver
 
-Slicer-Liver is a 3D Slicer extension that can be installed directly through the 3D Slicer Extension Manager [@3DSlicerExtensionsManager:2024]. Slicer-Liver is intended for research purposes and is distributed through an MIT license. The software architecture is based on 3D Slicer modules (both C++ and Python) and follows common patterns found in other 3D Slicer extensions. The software provides four bodies of functionality that can be used independently or in conjunction, as described in the following. 
+Slicer-Liver is a 3D Slicer extension that can be installed directly through the 3D Slicer Extension Manager [@3DSlicerExtensionsManager:2024]. Slicer-Liver is intended for research purposes and is distributed through an MIT license. The software architecture is based on 3D Slicer modules (both C++ and Python) and follows common patterns found in other 3D Slicer extensions. The software provides four bodies of functionality that can be used independently or in conjunction, as described in the following.
 
 **Definition of Virtual Resections**
 Slicer-Liver has integrated different geometric modeling techniques to model virtual resections: Deformable Bézier with planar initialization [@Palomar:2017], NURBS (Non-Uniform Rational B-Spline), and contour-initialized resections. The implementation of these methods includes visualization of the resection margin, adaptive grid visualization, and clipping of the resection excess. Thanks to the computation of distance maps between anatomical structures, resection margin visualization operates in real-time as the user modifies the resection.
@@ -75,7 +75,7 @@ Slicer-Liver provides computer-aided preoperative planning systems, streamlining
 ![3D Planning of Atypical vs Anatomical resections.\label{fig:atypical_vs_anatomical}](Figures/atypical_vs_anatomical_resection.svg)
 
 **Visualization of Virtual Resections Using Resectograms**
-Adding resectograms to Slicer-Liver, allows a real-time 2D representation of resections as shown in \autoref{fig:resection_resectogram}, where the resectogram provides an intuitive and occlusion-free visualization of the virtual resection with three components: resection intersection with liver, vessels and anatomical segments, as well as safety margins. The use of resectograms enables an effective identification and characterization of invalid resection types due to inadequate visualization in the 3D view during planning. 
+Adding resectograms to Slicer-Liver, allows a real-time 2D representation of resections as shown in \autoref{fig:resection_resectogram}, where the resectogram provides an intuitive and occlusion-free visualization of the virtual resection with three components: resection intersection with liver, vessels and anatomical segments, as well as safety margins. The use of resectograms enables an effective identification and characterization of invalid resection types due to inadequate visualization in the 3D view during planning.
 
 ![Virtual 3D resection with corresponding 2D resectogram.\label{fig:resection_resectogram}](Figures/resectograms_overview.svg){ width=100% }
 
