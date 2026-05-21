@@ -99,12 +99,21 @@ not** pass through `tr()`.
 
 ### 3. Per-tool label bridge
 
-Each upstream-tool integration ships a `LabelToSCT.json` file mapping
+Each upstream-tool integration ships a per-tool bridge JSON mapping
 its native labels to SCT triples:
 
-- `Modules/Segmentation/Resources/TotalSegmentator/LabelToSCT.json`
-- `Modules/Segmentation/Resources/MONAILabel/LabelToSCT.json`
-- `Modules/Segmentation/Resources/KumarOram/LabelToSCT.json`
+- `Resources/Terminology/LabelToSCT/TotalSegmentator.json`
+- `Resources/Terminology/LabelToSCT/MONAILabel.json`
+- `Resources/Terminology/LabelToSCT/KumarOram.json`
+
+(Initial drafts of this ADR placed the bridge files under
+`Modules/Segmentation/Resources/<Tool>/LabelToSCT.json`; the
+implementation chose extension-root-level
+`Resources/Terminology/LabelToSCT/<Tool>.json` to keep all
+terminology assets co-located and avoid pre-committing to a
+specific module's ownership of the bridges.  The paths above
+reflect the actual implementation in
+[PR #315](https://github.com/ALive-research/Slicer-Liver/pull/315).)
 
 Tool wrappers consult the bridge file at the boundary, attach the SCT
 triple to the segment, and emit `Unknown` for outputs they cannot
