@@ -15,7 +15,7 @@ Which stages are gated on which. Drives the per-stage state
 indicators (✓ done / ● current / ○ pending) in the vertical sidebar
 of the Liver shell.
 
-```{mermaid}
+```mermaid
 flowchart TD
     S1["Stage 1<br/>Case Setup"]
     S2["Stage 2<br/>Anatomy Definition<br/>(LiverSegmentation/)"]
@@ -80,7 +80,7 @@ Auto path or the Manual path (or both — they coexist as separate
 
 What flows between stages.
 
-```{mermaid}
+```mermaid
 flowchart LR
     V1["Volume(s)<br/>(role-tagged)"]
     SEG["Canonical<br/>vtkMRMLSegmentationNode<br/>(liver, portal, hepatic, tumors)"]
