@@ -3,7 +3,7 @@
 - **Status:** Proposed
 - **Date:** 2026-05-21
 - **Deciders:** R. Palomar
-- **Diagrams:** [`Docs/architecture/gui-stage-flow.md`](../architecture/gui-stage-flow.md), [`Docs/architecture/territories-class-hierarchy.md`](../architecture/territories-class-hierarchy.md)
+- **Diagrams:** [`Docs/architecture/gui-stage-flow.md`](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/architecture/gui-stage-flow.md), [`Docs/architecture/territories-class-hierarchy.md`](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/architecture/territories-class-hierarchy.md)
 - **PR:** <filled on merge>
 
 ## Context
@@ -14,7 +14,7 @@ major leap. The maintainer's framing: *"the v1→v2 transition is the
 natural place to introduce user-visible UX change; spreading UX leaps
 across v2.0→v2.1 minors understates the version jump from the surgeon's
 standpoint."* This is a scheduling discipline, not a versioning-policy
-amendment to [ADR-0007](0007-version-numbering-policy.md) — backend-only
+amendment to [ADR-0007](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0007-version-numbering-policy.md) — backend-only
 majors remain legitimate.
 
 ADR-0009 commits per-PR UX discipline (Mermaid state-machine diagrams +
@@ -55,7 +55,7 @@ six stages are:
 1. **Case Setup** — load DICOM and non-DICOM volumes; assign per-volume role tags (Portal venous, Arterial, Native, Delayed, Other); optional inter-phase registration; arrange the canonical Slicer layout.
 2. **Anatomy Definition** (`LiverSegmentation/` — new module) — segment liver, portal vein, hepatic vein, and tumors using per-structure micro-workflows that orchestrate TotalSegmentator + Kumar-Oram (vessels) + MONAILabel-DeepGrow (tumors); scratch-and-accept pattern produces a single canonical Segmentation node.
 3. **Vascular Territories** (`VascularTerritories/` — renamed from `LiverSegments/`) — two-tab structure: *Couinaud (automatic)* one-shot AI compute, and *Custom segments* flexible builder.
-4. **Resection Planning** (`LiverResections/`) — resection table with per-row state machine (Init → Planning → Confirmed per [ADR-0019](0019-resection-state-machine.md)); active-resection detail panel; classification overlay; resectogram view invoked from per-resection detail.
+4. **Resection Planning** (`LiverResections/`) — resection table with per-row state machine (Init → Planning → Confirmed per [ADR-0019](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0019-resection-state-machine.md)); active-resection detail panel; classification overlay; resectogram view invoked from per-resection detail.
 5. **Volumetry** (`LiverVolumetry/`) — flexible seed-and-category partition workbench consuming Confirmed resections as barriers; pure analytical tool, no verification card.
 6. **Export** — `.lrp.json` sidecar save via the existing storage node ([T2.5](https://github.com/ALive-research/Slicer-Liver/pull/361)) plus delegation to Slicer's stock `File ▸ Save Data` and `ScreenCapture`. Implemented as a section under the Liver shell, not a separate module.
 
@@ -83,7 +83,7 @@ The earlier 2026-05-15 volumetry-framework note's claim that "the current resect
 
 - **`qMRMLNodeComboBox` is the binding primitive** for every node-management surface (classifications, volumetry partitions, etc.). Slicer-native; provides create/select/rename/delete for free.
 - **Hierarchical table + master-detail endpoints sub-table** for Stage 3 Manual (groupings → centerlines → endpoints). Reuses `qMRMLMarkupsControlPointTableWidget` from Slicer-core for the endpoints panel.
-- **`ctkCollapsibleButton`-organised module widgets**, compact density (Slicer-native), no parallel palette/theme (per [ADR-0010](0010-accessibility-and-i18n.md)).
+- **`ctkCollapsibleButton`-organised module widgets**, compact density (Slicer-native), no parallel palette/theme (per [ADR-0010](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0010-accessibility-and-i18n.md)).
 - **No custom Slicer layouts** in v2.0 except the resectogram view (registered by `LiverResections/`, invoked from Stage 4).
 
 ### Cross-stage dependencies
@@ -165,7 +165,7 @@ Six horizontal tabs at the top of the Liver shell, only the active tab's content
 
 Dissolve `LiverSegmentation/`, `VascularTerritories/`, `LiverResections/`, `LiverVolumetry/` as independently-selectable modules; only the `Liver` shell module appears in Slicer's browser.
 
-**Rejected because** it forces surgeons through the shell for tasks that may be more naturally invoked standalone (e.g., a researcher computing Couinaud on a dataset without planning any resection). Per [ADR-0007](0007-version-numbering-policy.md), removing an independently-selectable module is a MAJOR-version-breaking compatibility surface change — already triggered by the v1→v2 jump on other surfaces, but adds an unnecessary one.
+**Rejected because** it forces surgeons through the shell for tasks that may be more naturally invoked standalone (e.g., a researcher computing Couinaud on a dataset without planning any resection). Per [ADR-0007](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0007-version-numbering-policy.md), removing an independently-selectable module is a MAJOR-version-breaking compatibility surface change — already triggered by the v1→v2 jump on other surfaces, but adds an unnecessary one.
 
 ### Alternative E — Verification card retained in Stage 5
 
@@ -194,7 +194,7 @@ Force Stage 3 Auto and Manual to share the framework's `vtkMRMLLiverVolumetryNod
 
 - The Liver shell now owns a non-trivial navigation widget — implementation cost.
 - Per-stage state-indicator logic must compute correctness (e.g., "has Stage 2 produced a canonical Segmentation?"). Each module exposes a `isComplete()`-like query for the sidebar.
-- Two `vtkMRMLAbstractTerritoriesNode` subclasses + a base imply C++ MRML node hierarchy work (per [ADR-0004](0004-python-cpp-boundary.md) — data nodes are C++).
+- Two `vtkMRMLAbstractTerritoriesNode` subclasses + a base imply C++ MRML node hierarchy work (per [ADR-0004](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0004-python-cpp-boundary.md) — data nodes are C++).
 - `.lrp.json` schema v3 needs a migration loader from v2; load-time fallbacks for missing fields.
 - Subject Hierarchy management code must be wired across every node-creating module — a per-module discipline gate.
 - The resectogram custom layout registration is a new mechanism in `LiverResections/`.
@@ -229,14 +229,14 @@ Reviewable invariants that signal this decision is honoured:
 
 ## References
 
-- [ADR-0007 — Version numbering policy](0007-version-numbering-policy.md). v2.0 is feature-driven, no calendar floor. UX-grouping is scheduling discipline, not a versioning amendment.
-- [ADR-0009 — UX and design discipline](0009-ux-and-design-discipline.md). Per-PR Mermaid + design rationale stays in force; this ADR adds the extension-wide target shape.
-- [ADR-0010 — Accessibility and i18n](0010-accessibility-and-i18n.md). No parallel palette/theme; align with Slicer + contribute upstream.
-- [ADR-0011 — SCT terminology dispatch](0011-sct-terminology-dispatch.md). Per-tool LabelToSCT.json bridges remain the dispatch alphabet. §3 path examples need a small amendment against `Resources/Terminology/LabelToSCT/` actual location.
-- [ADR-0012 — LayerDM migration v2.0 scope](0012-layerdm-migration-v2-scope.md). LiverSegments / LiverVolumetry / Modeling LayerDM migration remains deferred to v2.1.0.
-- [ADR-0013 — LayerDM Pipeline pattern](0013-layerdm-pipeline-pattern.md). Stage 4's resection surfaces and the resectogram each have their own Pipelines.
-- [ADR-0014 — LiverMarkups dissolution](0014-livermarkups-dissolution.md). LiverMarkups module is removed; Bezier-surface widget lives in `LiverResections/`.
-- [ADR-0019 — Resection state machine](0019-resection-state-machine.md). Stage 4's Init → Planning → Confirmed per resection.
+- [ADR-0007 — Version numbering policy](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0007-version-numbering-policy.md). v2.0 is feature-driven, no calendar floor. UX-grouping is scheduling discipline, not a versioning amendment.
+- [ADR-0009 — UX and design discipline](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0009-ux-and-design-discipline.md). Per-PR Mermaid + design rationale stays in force; this ADR adds the extension-wide target shape.
+- [ADR-0010 — Accessibility and i18n](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0010-accessibility-and-i18n.md). No parallel palette/theme; align with Slicer + contribute upstream.
+- [ADR-0011 — SCT terminology dispatch](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0011-sct-terminology-dispatch.md). Per-tool LabelToSCT.json bridges remain the dispatch alphabet. §3 path examples need a small amendment against `Resources/Terminology/LabelToSCT/` actual location.
+- [ADR-0012 — LayerDM migration v2.0 scope](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0012-layerdm-migration-v2-scope.md). LiverSegments / LiverVolumetry / Modeling LayerDM migration remains deferred to v2.1.0.
+- [ADR-0013 — LayerDM Pipeline pattern](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0013-layerdm-pipeline-pattern.md). Stage 4's resection surfaces and the resectogram each have their own Pipelines.
+- [ADR-0014 — LiverMarkups dissolution](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0014-livermarkups-dissolution.md). LiverMarkups module is removed; Bezier-surface widget lives in `LiverResections/`.
+- [ADR-0019 — Resection state machine](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0019-resection-state-machine.md). Stage 4's Init → Planning → Confirmed per resection.
 - Tracker [issue #305](https://github.com/ALive-research/Slicer-Liver/issues/305) — v2.0.0 release tracker, scope-expansion section.
 - The maintainer's design conversation 2026-05-21 (stage-by-stage walkthrough + grilling pass) — captured in the PKS project log [[denote:20260507T130427]].
 - The forthcoming **ADR-0024** (Segmentation Orchestration) and **ADR-0025** (Locator Architecture) cover Stage 2 and the resectogram hover/click interactions respectively.
