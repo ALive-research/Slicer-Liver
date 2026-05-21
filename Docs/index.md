@@ -42,4 +42,5 @@ adr/0020-gpu-tessellation.md
 adr/0021-coverage-measurement.md
 adr/0022-nurbs-v2-1-design.md
 adr/0023-unified-gui-stage-workflow.md
+adr/0024-segmentation-orchestration.md
 ```
