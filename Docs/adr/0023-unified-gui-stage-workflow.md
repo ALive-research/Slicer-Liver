@@ -3,7 +3,7 @@
 - **Status:** Proposed
 - **Date:** 2026-05-21
 - **Deciders:** R. Palomar
-- **Diagrams:** `Docs/architecture/gui-stage-flow.md` (forthcoming), `Docs/architecture/territories-class-hierarchy.md` (forthcoming)
+- **Diagrams:** [`Docs/architecture/gui-stage-flow.md`](../architecture/gui-stage-flow.md), [`Docs/architecture/territories-class-hierarchy.md`](../architecture/territories-class-hierarchy.md)
 - **PR:** <filled on merge>
 
 ## Context
