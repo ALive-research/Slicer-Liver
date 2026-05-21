@@ -13,7 +13,7 @@ model.
 
 ## Class diagram
 
-```{mermaid}
+```mermaid
 classDiagram
     direction TB
 
