@@ -39,10 +39,16 @@
 
 #include "vtkSlicerVascularTerritoriesLogic.h"
 
+// VascularTerritories MRML includes
+#include "vtkMRMLAbstractTerritoriesNode.h"
+#include "vtkMRMLCustomTerritoriesNode.h"
+#include "vtkMRMLStdCouinaudTerritoriesNode.h"
+
 #include <vtkMRMLLabelMapVolumeNode.h>
 #include <vtkMRMLSegmentationNode.h>
 #include <vtkMRMLModelNode.h>
 #include <vtkMRMLDisplayNode.h>
+#include <vtkMRMLSubjectHierarchyNode.h>
 
 #include <vtkMRMLScene.h>
 #include <vtkSlicerSegmentationsModuleLogic.h>
@@ -82,6 +88,75 @@ vtkSlicerVascularTerritoriesLogic::~vtkSlicerVascularTerritoriesLogic() {}
 void vtkSlicerVascularTerritoriesLogic::PrintSelf(ostream& os, vtkIndent indent)
 {
   Superclass::PrintSelf(os, indent);
+}
+
+//------------------------------------------------------------------------------
+void vtkSlicerVascularTerritoriesLogic::RegisterNodes()
+{
+  vtkMRMLScene* scene = this->GetMRMLScene();
+  if (!scene)
+  {
+    vtkErrorMacro("RegisterNodes: no MRML scene attached to the logic.");
+    return;
+  }
+
+  // ADR-0023 §"Class abstraction for territories" — the abstract base
+  // is registered so ``GetNodesByClass("vtkMRMLAbstractTerritoriesNode")``
+  // returns instances of both concrete subclasses (the polymorphic
+  // node-class filter consumers rely on, per the architecture-doc
+  // "Polymorphic interface" section).  The base ``New()`` returns
+  // ``nullptr`` by design, but ``RegisterNodeClass`` accepts a
+  // pre-constructed sentinel instance built via the concrete subclass.
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLStdCouinaudTerritoriesNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLCustomTerritoriesNode>::New());
+}
+
+//------------------------------------------------------------------------------
+void vtkSlicerVascularTerritoriesLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
+{
+  this->Superclass::OnMRMLSceneNodeAdded(node);
+
+  auto territoryNode = vtkMRMLAbstractTerritoriesNode::SafeDownCast(node);
+  if (!territoryNode)
+  {
+    return;
+  }
+
+  vtkMRMLScene* scene = this->GetMRMLScene();
+  if (!scene)
+  {
+    return;
+  }
+
+  vtkMRMLSubjectHierarchyNode* shNode =
+    vtkMRMLSubjectHierarchyNode::GetSubjectHierarchyNode(scene);
+  if (!shNode)
+  {
+    return;
+  }
+
+  // ADR-0023 §"MRML scene organisation" — territory nodes live under
+  // the "Vascular Territories" Subject Hierarchy folder.  Created
+  // lazily on first arrival; reused thereafter.
+  vtkIdType folderItem = shNode->GetItemByName("Vascular Territories");
+  if (folderItem == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID || folderItem == 0)
+  {
+    folderItem = shNode->CreateFolderItem(shNode->GetSceneItemID(),
+                                          "Vascular Territories");
+  }
+
+  vtkIdType nodeItem = shNode->GetItemByDataNode(territoryNode);
+  if (nodeItem == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID || nodeItem == 0)
+  {
+    // SH auto-creates an item the first time GetItemByDataNode is
+    // called for a newly-added node; if SH hasn't yet, force it via
+    // CreateItem so the parent re-parenting below has a target.
+    nodeItem = shNode->CreateItem(folderItem, territoryNode);
+  }
+  else
+  {
+    shNode->SetItemParent(nodeItem, folderItem);
+  }
 }
 
 void vtkSlicerVascularTerritoriesLogic::MarkSegmentWithID(vtkMRMLModelNode* segment, int segmentId)

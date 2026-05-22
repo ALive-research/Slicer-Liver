@@ -44,6 +44,7 @@
 // VTK includes
 #include <vtkNew.h>
 #include <vtkSetGet.h>
+#include <vtkSmartPointer.h>
 
 // STD includes
 #include <map>
@@ -149,6 +150,12 @@ protected:
 
   std::map<std::string, std::string> Groupings;
   std::map<int, std::string> OptInSCTCodes;
+
+  /// Surgeon-defined segment-label list.  Owned by the node; written
+  /// to / read from MRML XML via the ``segmentNames`` attribute.
+  /// Always non-null per the abstract-base contract; empty when the
+  /// surgeon has not yet named any segments.
+  vtkSmartPointer<vtkStringArray> SegmentNames;
 };
 
 #endif // __vtkmrmlcustomterritoriesnode_h_
