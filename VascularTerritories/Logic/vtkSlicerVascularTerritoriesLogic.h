@@ -51,6 +51,7 @@
 // Forward delcarations
 class vtkKdTreePointLocator;
 class vtkMRMLLabelMapVolumeNode;
+class vtkMRMLNode;
 class vtkMRMLSegmentationNode;
 class vtkMRMLModelNode;
 class vtkMRMLColorNode;
@@ -66,6 +67,17 @@ public:
   static vtkSlicerVascularTerritoriesLogic* New();
   vtkTypeMacro(vtkSlicerVascularTerritoriesLogic, vtkSlicerModuleLogic);
   void PrintSelf(ostream& os, vtkIndent indent) override;
+
+  /// Register the v2.0.0 territories MRML node family with the scene
+  /// so scene save/load and ``AddNewNodeByClass`` resolve the class
+  /// names per ADR-0023 §"Class abstraction for territories".
+  void RegisterNodes() override;
+
+  /// Place newly added territory nodes under the "Vascular
+  /// Territories" Subject Hierarchy folder (per ADR-0023 §"MRML
+  /// scene organisation").  Folder is created lazily on first
+  /// territory-node arrival.
+  void OnMRMLSceneNodeAdded(vtkMRMLNode* node) override;
 
 public:
   void MarkSegmentWithID(vtkMRMLModelNode* segment, int segmentId);

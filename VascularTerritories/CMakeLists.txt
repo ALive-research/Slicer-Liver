@@ -10,6 +10,7 @@ string(TOUPPER ${MODULE_NAME} MODULE_NAME_UPPER)
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
   ${MODULE_NAME}.py
+  ${MODULE_NAME}Logic.py
   )
 
 set(MODULE_PYTHON_RESOURCES
@@ -18,13 +19,13 @@ set(MODULE_PYTHON_RESOURCES
   Resources/SlicerLiverColorMap.ctbl
   )
 
-add_subdirectory(Logic)
-
 # v2.0.0 MRML kit -- vtkMRMLAbstractTerritoriesNode hierarchy per
 # ADR-0023 §"Class abstraction for territories".  Library name is
 # ``vtkSlicerVascularTerritoriesModuleMRML`` (matches the parent
-# module's MODULE_NAME after the rename).
+# module's MODULE_NAME after the rename).  Built first so the Logic
+# can link against it (mirrors LiverResections/CMakeLists.txt).
 add_subdirectory(MRML)
+add_subdirectory(Logic)
 
 #-----------------------------------------------------------------------------
 slicerMacroBuildScriptedModule(

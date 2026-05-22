@@ -16,7 +16,9 @@
 
   Invariants pinned:
 
-    1. Abstract base non-instantiable (intrinsic to the missing New()).
+    1. Abstract base non-instantiable via a runtime sentinel New() that
+       returns nullptr (chosen over the no-New()/link-error variant to
+       keep the class wrappable by VTK's Python pipeline).
     2. Both concrete subclasses instantiate via vtkStandardNewMacro.
     3. Polymorphic GetMethod() dispatch via base pointer.
     4. Std-Couinaud SCT codes pinned to the 10-code ADR-0011 table.
@@ -46,13 +48,84 @@
 #include <vtkSmartPointer.h>
 
 // STD includes
+#include <cctype>
 #include <cstring>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace
 {
+
+//------------------------------------------------------------------------------
+// Naive ``name="value"`` walker mirroring the
+// vtkMRMLBezierSurfaceNodeTest1 round-trip pattern.  Production load
+// goes through libxml2, which is not linked into the ctkTest driver.
+// Returns the storage vector by reference so the c_str() pointers in
+// ``atts`` stay alive for the duration of the caller's
+// ReadXMLAttributes call.
+std::vector<const char*> buildAttsFromXML(const std::string& xml,
+                                          std::vector<std::string>& storage)
+{
+  std::size_t pos = 0;
+  while (pos < xml.size())
+  {
+    while (pos < xml.size() && std::isspace(static_cast<unsigned char>(xml[pos])))
+    {
+      ++pos;
+    }
+    if (pos >= xml.size())
+    {
+      break;
+    }
+    const std::size_t eq = xml.find('=', pos);
+    if (eq == std::string::npos)
+    {
+      break;
+    }
+    std::string name = xml.substr(pos, eq - pos);
+    if (eq + 1 >= xml.size() || xml[eq + 1] != '"')
+    {
+      break;
+    }
+    const std::size_t valStart = eq + 2;
+    const std::size_t valEnd = xml.find('"', valStart);
+    if (valEnd == std::string::npos)
+    {
+      break;
+    }
+    storage.push_back(std::move(name));
+    storage.push_back(xml.substr(valStart, valEnd - valStart));
+    pos = valEnd + 1;
+  }
+  std::vector<const char*> atts;
+  atts.reserve(storage.size() + 1);
+  for (const auto& s : storage)
+  {
+    atts.push_back(s.c_str());
+  }
+  atts.push_back(nullptr);
+  return atts;
+}
+
+//------------------------------------------------------------------------------
+// Invariant 1 -- Abstract base is non-instantiable via a runtime
+// sentinel.  ``vtkMRMLAbstractTerritoriesNode::New()`` is intentionally
+// overridden to return nullptr; a caller that forgets to pick a
+// concrete subclass crashes loudly on dereference rather than silently
+// constructing a partially-initialised territories node.  The runtime
+// sentinel was chosen over the no-New()/link-error variant of the
+// idiom because VTK's Python wrapping pipeline expects every exported
+// concrete vtkObject subclass to resolve a New symbol -- see the
+// header rationale on vtkMRMLAbstractTerritoriesNode.
+int testAbstractBaseNotInstantiable()
+{
+  vtkMRMLAbstractTerritoriesNode* sentinel =
+    vtkMRMLAbstractTerritoriesNode::New();
+  CHECK_NULL(sentinel);
+  return EXIT_SUCCESS;
+}
 
 //------------------------------------------------------------------------------
 // Invariant 2 -- Concrete subclasses instantiate cleanly.  Smoke test
@@ -242,27 +315,20 @@ int testStdCouinaudXMLRoundTrip()
   vtkNew<vtkMRMLStdCouinaudTerritoriesNode> sink;
   sink->SetScene(scene.GetPointer());
 
-  // Sink round-trip: feed the source's attributes into the sink via
-  // ReadXMLAttributes.  The implementer pins the exact attribute
-  // names; the test does NOT hard-code them (just checks key state
-  // survives).  For the stub, this is a no-op and the assertions
-  // below fail red.
-  CHECK_STRING(sink->GetMethod(), "standard-couinaud"); // pure-class invariant
+  // Feed the source's attributes into the sink via ReadXMLAttributes.
+  // The walker mirrors the vtkMRMLBezierSurfaceNodeTest1 pattern --
+  // libxml2 is not linked into the ctkTest driver, so we parse the
+  // emitted name="value" stream ourselves.
+  std::vector<std::string> storage;
+  std::vector<const char*> atts = buildAttsFromXML(xml, storage);
+  sink->ReadXMLAttributes(atts.data());
 
-  // The implementer must make Subdivision survive WriteXML/ReadXMLAttributes.
-  // Stub state on a fresh node defaults to I_VIII; after a real round-trip
-  // from the source (set to I_VIII_with_IVab) the sink must match.
-  // TODO(impl): supply the parsed atts[] array (mirror the
-  //             vtkMRMLBezierSurfaceNodeTest1::testXMLRoundTrip walker)
-  //             once WriteXML emits stable attribute names.
-  // For now we assert the strong post-condition: sink's Subdivision
-  // matches source's after a notional round-trip.  Until the
-  // implementer wires WriteXML/ReadXMLAttributes, this comparison
-  // exercises only the default ctor state and the test passes
-  // trivially -- so we additionally check the source state did not
-  // collapse during WriteXML, which would be a different bug.
-  CHECK_INT(source->GetSubdivision(),
-            vtkMRMLStdCouinaudTerritoriesNode::I_VIII_with_IVab);
+  // Strong round-trip invariants: subtype discriminator + key state
+  // survive write/read.
+  CHECK_STRING(sink->GetMethod(), "standard-couinaud");
+  CHECK_INT(sink->GetSubdivision(), source->GetSubdivision());
+  CHECK_STRING(sink->GetAIBackendIdentifier(), source->GetAIBackendIdentifier());
+  CHECK_STRING(sink->GetComputedAt(), source->GetComputedAt());
   return EXIT_SUCCESS;
 }
 
@@ -309,20 +375,20 @@ int testCustomGroupingsRoundTrip()
              xml.find("grouping") != std::string::npos,
              true);
 
-  // Sink round-trip with the source's attribute array.  The exact
-  // ReadXMLAttributes attribute-name parsing is implementer-specified;
-  // the strong invariant is "groupings count survives".  Until the
-  // implementer wires it, the sink starts empty and the assertion
-  // fails red.
+  // Sink round-trip with the source's attribute array, using the same
+  // name="value" walker as testStdCouinaudXMLRoundTrip.
   vtkNew<vtkMRMLCustomTerritoriesNode> sink;
   sink->SetScene(scene.GetPointer());
-  // TODO(impl): mirror the vtkMRMLBezierSurfaceNodeTest1 XML attribute
-  //             walker pattern -- parse `xml` back into a const char**
-  //             attribute array and feed sink->ReadXMLAttributes(...).
-  //             Once WriteXML emits a stable serialisation the parser
-  //             can be a one-line plumbing.
+  std::vector<std::string> storage;
+  std::vector<const char*> atts = buildAttsFromXML(xml, storage);
+  sink->ReadXMLAttributes(atts.data());
+
   CHECK_INT(static_cast<int>(sink->GetNumberOfGroupings()),
             static_cast<int>(source->GetNumberOfGroupings()));
+  // Spot-check that the individual centerline→segment mappings survive.
+  CHECK_STD_STRING(sink->GetGrouping("centerline-A"), "segment-RAS-1");
+  CHECK_STD_STRING(sink->GetGrouping("centerline-B"), "segment-RAS-2");
+  CHECK_STD_STRING(sink->GetGrouping("centerline-C"), "segment-RAS-1");
   return EXIT_SUCCESS;
 }
 
@@ -332,17 +398,16 @@ int testCustomGroupingsRoundTrip()
 int vtkMRMLAbstractTerritoriesNodeTest1(int, char*[])
 {
   // Invariant 1 -- the abstract base class is intentionally not
-  // instantiable; vtkMRMLAbstractTerritoriesNode declares no
-  // ``New()``.  This invariant is enforced at compile-time: trying
-  // to instantiate via ``vtkNew<vtkMRMLAbstractTerritoriesNode>``
-  // would fail to link against ``vtkMRMLAbstractTerritoriesNode::New``.
-  // We assert the invariant indirectly: the concrete subclasses are
-  // the only entry points to the hierarchy.
+  // instantiable.  ``vtkMRMLAbstractTerritoriesNode::New()`` is a
+  // runtime sentinel that returns nullptr; concrete subclasses are
+  // the only entry points to the hierarchy.  See
+  // testAbstractBaseNotInstantiable below.
   vtkNew<vtkMRMLScene> scene;
   vtkNew<vtkMRMLStdCouinaudTerritoriesNode> exerciseNode;
   exerciseNode->SetScene(scene.GetPointer());
   EXERCISE_ALL_BASIC_MRML_METHODS(exerciseNode.GetPointer());
 
+  CHECK_EXIT_SUCCESS(testAbstractBaseNotInstantiable());
   CHECK_EXIT_SUCCESS(testConcreteSubclassesInstantiate());
   CHECK_EXIT_SUCCESS(testPolymorphicMethodDispatch());
   CHECK_EXIT_SUCCESS(testStdCouinaudSCTCodes_IVIII());

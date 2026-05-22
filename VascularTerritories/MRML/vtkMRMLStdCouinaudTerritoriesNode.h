@@ -44,6 +44,7 @@
 // VTK includes
 #include <vtkNew.h>
 #include <vtkSetGet.h>
+#include <vtkSmartPointer.h>
 
 // STD includes
 #include <string>
@@ -176,6 +177,13 @@ protected:
   int Subdivision{ I_VIII };
   char* AIBackendIdentifier{ nullptr };
   char* ComputedAt{ nullptr };
+
+  /// Cached segment-name array — owned by the node, rebuilt by
+  /// ``GetSegments()`` from the canonical ``Subdivision``-keyed name
+  /// table.  Kept as a smart pointer so the returned raw pointer
+  /// stays valid for the node's lifetime per the abstract-base
+  /// contract.
+  vtkSmartPointer<vtkStringArray> Segments;
 };
 
 #endif // __vtkmrmlstdcouinaudterritoriesnode_h_

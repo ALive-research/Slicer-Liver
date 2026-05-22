@@ -86,10 +86,16 @@ class vtkStringArray;
  *
  * \par Abstract-ness
  *
- * The class is abstract by construction: it has no
- * ``vtkStandardNewMacro``/``vtkMRMLNodeNewMacro`` definition.  Direct
- * instantiation is forbidden — callers must use the concrete subclass.
- * The base-class ``New()`` is intentionally not exposed.
+ * The class is abstract by construction: ``New()`` is overridden to
+ * return ``nullptr`` (a runtime sentinel) and the polymorphic methods
+ * are pure-virtual.  Direct instantiation via
+ * ``vtkMRMLAbstractTerritoriesNode::New()`` produces ``nullptr`` so a
+ * caller that forgets to pick a concrete subclass crashes loudly
+ * rather than silently constructing a partially-initialised node.  We
+ * intentionally do not use the no-``New()`` link-error variant of the
+ * idiom — VTK's Python wrapping pipeline expects every exported
+ * concrete ``vtkObject`` subclass to resolve a ``New`` symbol, and the
+ * runtime sentinel keeps the class wrappable.
  *
  * \par Python / C++ boundary
  *
@@ -108,6 +114,14 @@ class VTK_SLICER_VASCULARTERRITORIES_MODULE_MRML_EXPORT vtkMRMLAbstractTerritori
   : public vtkMRMLDisplayableNode
 {
 public:
+  /// Runtime sentinel: returns ``nullptr``.  The class is abstract,
+  /// but a ``New()`` symbol is still defined so VTK's Python wrapping
+  /// machinery resolves it for the exported class (it never invokes
+  /// the result).  Concrete subclasses ``vtkMRMLStdCouinaudTerritoriesNode``
+  /// and ``vtkMRMLCustomTerritoriesNode`` supply real ``New()``
+  /// implementations via ``vtkStandardNewMacro``.
+  static vtkMRMLAbstractTerritoriesNode* New();
+
   vtkTypeMacro(vtkMRMLAbstractTerritoriesNode, vtkMRMLDisplayableNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 

@@ -4,11 +4,10 @@
 
   Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
-  Stub translation unit for the v2.0.0 territories node base class
-  (ADR-0023 §"Class abstraction for territories").  Lives alongside
-  the header so the MRML library has something to link against from
-  the moment the test-first scaffolding lands; the real method bodies
-  are filled in by the follow-up implementer commit per ADR-0027.
+  Implementation of the abstract territories base class (ADR-0023
+  §"Class abstraction for territories" + the architecture-doc UML at
+  Docs/architecture/territories-class-hierarchy.md).  ``New()``
+  intentionally returns ``nullptr`` — see the header rationale.
 
 ==============================================================================*/
 
@@ -19,10 +18,18 @@
 #include <vtkObjectFactory.h>
 
 //------------------------------------------------------------------------------
-// No vtkStandardNewMacro / vtkMRMLNodeNewMacro: the class is abstract.
-// Subclasses ``vtkMRMLStdCouinaudTerritoriesNode`` and
-// ``vtkMRMLCustomTerritoriesNode`` supply their own ``New()``.
+// Runtime sentinel: the abstract base provides a ``New()`` symbol so
+// VTK's Python wrapping pipeline resolves it for the exported class,
+// but it returns ``nullptr`` to prevent callers from accidentally
+// instantiating a partially-initialised territories node.  Concrete
+// subclasses ``vtkMRMLStdCouinaudTerritoriesNode`` and
+// ``vtkMRMLCustomTerritoriesNode`` supply real ``New()`` bodies via
+// ``vtkStandardNewMacro``.
 //------------------------------------------------------------------------------
+vtkMRMLAbstractTerritoriesNode* vtkMRMLAbstractTerritoriesNode::New()
+{
+  return nullptr;
+}
 
 //------------------------------------------------------------------------------
 vtkMRMLAbstractTerritoriesNode::vtkMRMLAbstractTerritoriesNode() = default;

@@ -1,3 +1,6 @@
+# Copyright (c) 2022-2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
+# Distributed under the OSI-approved BSD 3-Clause License.
+
 project(vtkSlicer${MODULE_NAME}ModuleLogic)
 
 set(KIT ${PROJECT_NAME})
@@ -19,6 +22,7 @@ set(${KIT}_TARGET_LIBRARIES
   MRMLCore
 #  MRMLLogic
   vtkSlicerSegmentationsModuleLogic
+  vtkSlicerVascularTerritoriesModuleMRML
   )
 
 #---------------------------------
