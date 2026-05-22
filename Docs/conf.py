@@ -128,7 +128,24 @@ exclude_patterns = [
     "_build",
     "Thumbs.db",
     ".DS_Store",
-    "architecture/**",
+    # Architecture docs are admitted individually via the index
+    # toctree as they get touched up to compile under -W (per
+    # ADR-0017's rollout plan).  Pre-existing docs that still ship
+    # raw `{mermaid}` fences and cross-repo-root links are listed
+    # by name so newly-authored, convention-compliant docs (e.g.
+    # the `ui-stage-*` set from the 2026-05-21 design push) can
+    # join the toctree without dragging the pre-existing files in.
+    "architecture/README.md",
+    "architecture/control-grid-grouping.md",
+    "architecture/current-mrml-node-hierarchy.md",
+    "architecture/gui-stage-flow.md",
+    "architecture/rendering-pipeline.md",
+    "architecture/resection-state-machine.md",
+    "architecture/slicer-host-accessibility-survey.md",
+    "architecture/surface-representation-taxonomy.md",
+    "architecture/target-mrml-node-hierarchy.md",
+    "architecture/territories-class-hierarchy.md",
+    "architecture/ui/**",
     "dependencies/**",
     # ADRs are admitted *individually* via the index toctree so the
     # scaffold compiles without dragging in unmigrated cross-refs.
