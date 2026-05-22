@@ -85,8 +85,7 @@ class vtkStringArray;
  * tab's ``[⋯ → Tag with SCT…]`` action (per ADR-0011 §2 + the
  * architecture doc's "SCT terminology binding" section).
  */
-class VTK_SLICER_VASCULARTERRITORIES_MODULE_MRML_EXPORT vtkMRMLCustomTerritoriesNode
-  : public vtkMRMLAbstractTerritoriesNode
+class VTK_SLICER_VASCULARTERRITORIES_MODULE_MRML_EXPORT vtkMRMLCustomTerritoriesNode : public vtkMRMLAbstractTerritoriesNode
 {
 public:
   static vtkMRMLCustomTerritoriesNode* New();

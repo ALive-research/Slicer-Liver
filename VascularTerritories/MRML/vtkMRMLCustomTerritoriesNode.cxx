@@ -71,8 +71,7 @@ void walkEncodedMap(const std::string& encoded, OnPair&& onPair)
     auto sep = encoded.find(kFieldDelimiter, cursor);
     if (sep != std::string::npos && sep < end)
     {
-      onPair(encoded.substr(cursor, sep - cursor),
-             encoded.substr(sep + 1, end - sep - 1));
+      onPair(encoded.substr(cursor, sep - cursor), encoded.substr(sep + 1, end - sep - 1));
     }
     cursor = end + 1;
   }
@@ -121,23 +120,23 @@ void vtkMRMLCustomTerritoriesNode::ReadXMLAttributes(const char** atts)
     if (!std::strcmp(attName, "groupings"))
     {
       this->Groupings.clear();
-      walkEncodedMap(attValue, [this](std::string key, std::string value) {
-        this->Groupings[std::move(key)] = std::move(value);
-      });
+      walkEncodedMap(attValue, [this](std::string key, std::string value) { this->Groupings[std::move(key)] = std::move(value); });
     }
     else if (!std::strcmp(attName, "optInSCTCodes"))
     {
       this->OptInSCTCodes.clear();
-      walkEncodedMap(attValue, [this](const std::string& key, std::string value) {
-        try
-        {
-          this->OptInSCTCodes[std::stoi(key)] = std::move(value);
-        }
-        catch (const std::exception&)
-        {
-          // Malformed numeric key — skip silently.
-        }
-      });
+      walkEncodedMap(attValue,
+                     [this](const std::string& key, std::string value)
+                     {
+                       try
+                       {
+                         this->OptInSCTCodes[std::stoi(key)] = std::move(value);
+                       }
+                       catch (const std::exception&)
+                       {
+                         // Malformed numeric key — skip silently.
+                       }
+                     });
     }
     else if (!std::strcmp(attName, "segmentNames"))
     {
@@ -151,8 +150,7 @@ void vtkMRMLCustomTerritoriesNode::ReadXMLAttributes(const char** atts)
         {
           end = encoded.size();
         }
-        this->SegmentNames->InsertNextValue(
-          encoded.substr(cursor, end - cursor));
+        this->SegmentNames->InsertNextValue(encoded.substr(cursor, end - cursor));
         cursor = end + 1;
       }
     }
@@ -172,15 +170,11 @@ void vtkMRMLCustomTerritoriesNode::WriteXML(ostream& of, int nIndent)
   // JSON.
   if (!this->Groupings.empty())
   {
-    of << " groupings=\""
-       << this->XMLAttributeEncodeString(encodeMap(this->Groupings).c_str())
-       << "\"";
+    of << " groupings=\"" << this->XMLAttributeEncodeString(encodeMap(this->Groupings).c_str()) << "\"";
   }
   if (!this->OptInSCTCodes.empty())
   {
-    of << " optInSCTCodes=\""
-       << this->XMLAttributeEncodeString(encodeMap(this->OptInSCTCodes).c_str())
-       << "\"";
+    of << " optInSCTCodes=\"" << this->XMLAttributeEncodeString(encodeMap(this->OptInSCTCodes).c_str()) << "\"";
   }
   if (this->SegmentNames && this->SegmentNames->GetNumberOfValues() > 0)
   {
@@ -193,9 +187,7 @@ void vtkMRMLCustomTerritoriesNode::WriteXML(ostream& of, int nIndent)
       }
       names << this->SegmentNames->GetValue(i);
     }
-    of << " segmentNames=\""
-       << this->XMLAttributeEncodeString(names.str().c_str())
-       << "\"";
+    of << " segmentNames=\"" << this->XMLAttributeEncodeString(names.str().c_str()) << "\"";
   }
 }
 
@@ -270,8 +262,7 @@ const char* vtkMRMLCustomTerritoriesNode::GetSCTCode(int index)
 }
 
 //------------------------------------------------------------------------------
-void vtkMRMLCustomTerritoriesNode::SetGrouping(const std::string& centerlineId,
-                                               const std::string& segmentId)
+void vtkMRMLCustomTerritoriesNode::SetGrouping(const std::string& centerlineId, const std::string& segmentId)
 {
   this->Groupings[centerlineId] = segmentId;
   this->Modified();

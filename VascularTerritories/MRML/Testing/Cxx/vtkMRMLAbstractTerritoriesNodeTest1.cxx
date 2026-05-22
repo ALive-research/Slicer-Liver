@@ -28,7 +28,7 @@
     7. Subject Hierarchy folder placement -- module-logic concern;
        skipped here, exercised by the Python wrapper test.
     8. MRML XML round-trip of Method + key references.
-    9. Subdivision enum on Std drives GetNumberOfSegments() (8 vs 10).
+    9. Subdivision enum on Std drives GetNumberOfSegments() (8 vs 9).
     10. Custom-territories Groupings map round-trips through XML.
 
 ==============================================================================*/
@@ -65,8 +65,7 @@ namespace
 // Returns the storage vector by reference so the c_str() pointers in
 // ``atts`` stay alive for the duration of the caller's
 // ReadXMLAttributes call.
-std::vector<const char*> buildAttsFromXML(const std::string& xml,
-                                          std::vector<std::string>& storage)
+std::vector<const char*> buildAttsFromXML(const std::string& xml, std::vector<std::string>& storage)
 {
   std::size_t pos = 0;
   while (pos < xml.size())
@@ -121,8 +120,7 @@ std::vector<const char*> buildAttsFromXML(const std::string& xml,
 // header rationale on vtkMRMLAbstractTerritoriesNode.
 int testAbstractBaseNotInstantiable()
 {
-  vtkMRMLAbstractTerritoriesNode* sentinel =
-    vtkMRMLAbstractTerritoriesNode::New();
+  vtkMRMLAbstractTerritoriesNode* sentinel = vtkMRMLAbstractTerritoriesNode::New();
   CHECK_NULL(sentinel);
   return EXIT_SUCCESS;
 }
@@ -175,7 +173,7 @@ int testPolymorphicMethodDispatch()
 //   index 6 -> VII 277961009
 //   index 7 -> VIII 277962002
 //
-// I_VIII_with_IVab (10 segments) splits IV into IVa/IVb at indices 3/4
+// I_VIII_with_IVab (9 segments) splits IV into IVa/IVb at indices 3/4
 // and shifts V..VIII to 5..8:
 //   index 3 -> IVa  871688003
 //   index 4 -> IVb  871689006
@@ -216,7 +214,7 @@ int testStdCouinaudSCTCodes_IVIII_with_IVab()
   CHECK_STRING(node->GetSCTCode(6), "277960005"); // VI
   CHECK_STRING(node->GetSCTCode(7), "277961009"); // VII
   CHECK_STRING(node->GetSCTCode(8), "277962002"); // VIII
-  CHECK_STRING(node->GetSCTCode(9), ""); // out of range
+  CHECK_STRING(node->GetSCTCode(9), "");          // out of range
   return EXIT_SUCCESS;
 }
 
@@ -262,22 +260,16 @@ int testPolymorphicNodeClassFilter()
   scene->AddNode(custom.GetPointer());
 
   // Direct subclass queries -- one instance each.
-  vtkSmartPointer<vtkCollection> stdNodes =
-    vtkSmartPointer<vtkCollection>::Take(
-      scene->GetNodesByClass("vtkMRMLStdCouinaudTerritoriesNode"));
+  vtkSmartPointer<vtkCollection> stdNodes = vtkSmartPointer<vtkCollection>::Take(scene->GetNodesByClass("vtkMRMLStdCouinaudTerritoriesNode"));
   CHECK_INT(stdNodes->GetNumberOfItems(), 1);
 
-  vtkSmartPointer<vtkCollection> customNodes =
-    vtkSmartPointer<vtkCollection>::Take(
-      scene->GetNodesByClass("vtkMRMLCustomTerritoriesNode"));
+  vtkSmartPointer<vtkCollection> customNodes = vtkSmartPointer<vtkCollection>::Take(scene->GetNodesByClass("vtkMRMLCustomTerritoriesNode"));
   CHECK_INT(customNodes->GetNumberOfItems(), 1);
 
   // Base-class query -- both subclasses match.  This is the strong
   // polymorphic-filter invariant; relies on
   // vtkMRMLScene::IsNodeClassRegistered + IsA traversal.
-  vtkSmartPointer<vtkCollection> baseNodes =
-    vtkSmartPointer<vtkCollection>::Take(
-      scene->GetNodesByClass("vtkMRMLAbstractTerritoriesNode"));
+  vtkSmartPointer<vtkCollection> baseNodes = vtkSmartPointer<vtkCollection>::Take(scene->GetNodesByClass("vtkMRMLAbstractTerritoriesNode"));
   CHECK_INT(baseNodes->GetNumberOfItems(), 2);
   return EXIT_SUCCESS;
 }
@@ -308,9 +300,7 @@ int testStdCouinaudXMLRoundTrip()
   // acceptable; the round-trip itself is the strong invariant.
   // (The stub WriteXML emits only the Superclass payload, so this
   // check fails red until the implementer adds the IVar emission.)
-  CHECK_BOOL(xml.find("Subdivision") != std::string::npos ||
-             xml.find("AIBackendIdentifier") != std::string::npos,
-             true);
+  CHECK_BOOL(xml.find("Subdivision") != std::string::npos || xml.find("AIBackendIdentifier") != std::string::npos, true);
 
   vtkNew<vtkMRMLStdCouinaudTerritoriesNode> sink;
   sink->SetScene(scene.GetPointer());
@@ -335,7 +325,7 @@ int testStdCouinaudXMLRoundTrip()
 //------------------------------------------------------------------------------
 // Invariant 9 -- Subdivision enum drives GetNumberOfSegments().
 //   I_VIII           -> 8
-//   I_VIII_with_IVab -> 10
+//   I_VIII_with_IVab -> 9 (IVa + IVb replace IV; V..VIII shift to 5..8)
 int testSubdivisionSegmentCount()
 {
   vtkNew<vtkMRMLStdCouinaudTerritoriesNode> node;
@@ -343,7 +333,7 @@ int testSubdivisionSegmentCount()
   CHECK_INT(node->GetNumberOfSegments(), 8);
 
   node->SetSubdivision(vtkMRMLStdCouinaudTerritoriesNode::I_VIII_with_IVab);
-  CHECK_INT(node->GetNumberOfSegments(), 10);
+  CHECK_INT(node->GetNumberOfSegments(), 9);
   return EXIT_SUCCESS;
 }
 
@@ -371,9 +361,7 @@ int testCustomGroupingsRoundTrip()
 
   // Implementer-pinned attribute name; stub does not emit, so the
   // assertion fails red until the implementer commit.
-  CHECK_BOOL(xml.find("Groupings") != std::string::npos ||
-             xml.find("grouping") != std::string::npos,
-             true);
+  CHECK_BOOL(xml.find("Groupings") != std::string::npos || xml.find("grouping") != std::string::npos, true);
 
   // Sink round-trip with the source's attribute array, using the same
   // name="value" walker as testStdCouinaudXMLRoundTrip.
@@ -383,8 +371,7 @@ int testCustomGroupingsRoundTrip()
   std::vector<const char*> atts = buildAttsFromXML(xml, storage);
   sink->ReadXMLAttributes(atts.data());
 
-  CHECK_INT(static_cast<int>(sink->GetNumberOfGroupings()),
-            static_cast<int>(source->GetNumberOfGroupings()));
+  CHECK_INT(static_cast<int>(sink->GetNumberOfGroupings()), static_cast<int>(source->GetNumberOfGroupings()));
   // Spot-check that the individual centerline→segment mappings survive.
   CHECK_STD_STRING(sink->GetGrouping("centerline-A"), "segment-RAS-1");
   CHECK_STD_STRING(sink->GetGrouping("centerline-B"), "segment-RAS-2");
@@ -418,7 +405,6 @@ int vtkMRMLAbstractTerritoriesNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testSubdivisionSegmentCount());
   CHECK_EXIT_SUCCESS(testCustomGroupingsRoundTrip());
 
-  std::cout << "vtkMRMLAbstractTerritoriesNodeTest1 completed successfully"
-            << std::endl;
+  std::cout << "vtkMRMLAbstractTerritoriesNodeTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;
 }
