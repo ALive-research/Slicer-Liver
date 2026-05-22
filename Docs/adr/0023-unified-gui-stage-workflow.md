@@ -35,7 +35,7 @@ language, so per-module UI evolves without a shared target.
 Module names changed during the v2.0 scope discussion: existing
 `LiverSegments/` (Couinaud-territory module) is renamed to
 `VascularTerritories/`; a new `LiverSegmentation/` module hosts
-TotalSegmentator + MONAILabel + Kumar-Oram orchestration. `Modeling/`
+TotalSegmentator + Kumar-Oram orchestration. `Modeling/`
 is dropped as a top-level module — Poisson Surface Reconstruction (PSR)
 ships as a Superbuild external project exposed to Python.
 
@@ -53,7 +53,7 @@ Slicer-Liver v2.0.0 ships a **six-stage surgeon workflow** with a
 six stages are:
 
 1. **Case Setup** — load DICOM and non-DICOM volumes; assign per-volume role tags (Portal venous, Arterial, Native, Delayed, Other); optional inter-phase registration; arrange the canonical Slicer layout.
-2. **Anatomy Definition** (`LiverSegmentation/` — new module) — segment liver, portal vein, hepatic vein, and tumors using per-structure micro-workflows that orchestrate TotalSegmentator + Kumar-Oram (vessels) + MONAILabel-DeepGrow (tumors); scratch-and-accept pattern produces a single canonical Segmentation node.
+2. **Anatomy Definition** (`LiverSegmentation/` — new module) — segment liver, portal vein, hepatic vein, and tumors using per-structure micro-workflows that orchestrate TotalSegmentator + Kumar-Oram (vessels, hosted as a Segment Editor effect per [ADR-0026](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0026-segment-editor-effects.md)) + Segment Editor for manual fixes; scratch-and-accept pattern produces a single canonical Segmentation node. See [ADR-0024](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0024-segmentation-orchestration.md) for the full Stage 2 contract.
 3. **Vascular Territories** (`VascularTerritories/` — renamed from `LiverSegments/`) — two-tab structure: *Couinaud (automatic)* one-shot AI compute, and *Custom segments* flexible builder.
 4. **Resection Planning** (`LiverResections/`) — resection table with per-row state machine (Init → Planning → Confirmed per [ADR-0019](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0019-resection-state-machine.md)); active-resection detail panel; classification overlay; resectogram view invoked from per-resection detail.
 5. **Volumetry** (`LiverVolumetry/`) — flexible seed-and-category partition workbench consuming Confirmed resections as barriers; pure analytical tool, no verification card.
@@ -104,9 +104,11 @@ The sidebar's per-stage state indicators reflect this dependency map: a stage is
 
 `SlicerLayerDM` (already required per [PR #368](https://github.com/ALive-research/Slicer-Liver/pull/368)) and `SlicerVMTK` (required for centerline extraction in Stage 3 Manual) stay as hard `EXTENSION_DEPENDS`.
 
-`TotalSegmentator` and `MONAILabel` are **not** declared as `EXTENSION_DEPENDS` and are **not** in the Superbuild. They install lazily via `slicer.util.pip_install(...)` on first surgeon invocation of an AI-driven feature. First-use prompt shows the download size and asks for confirmation. Settings panel under the Liver shell exposes pre-download and re-install affordances for surgeons going offline.
+`TotalSegmentator` is **not** declared as `EXTENSION_DEPENDS` and is **not** in the Superbuild. It installs lazily via `slicer.util.pip_install(...)` on first surgeon invocation of an AI-driven feature. First-use prompt shows the download size and asks for confirmation. Settings panel under the Liver shell exposes pre-download and re-install affordances for surgeons going offline.
 
-Slicer-Liver consumes the AI packages' Python APIs directly — it does not require the TotalSegmentator or MONAILabel *Slicer extension wrappers* to be installed. Surgeon interacts via Slicer-Liver's UI, not via the upstream extensions' own widgets.
+The lazy-pip-install pattern is **only viable for AI tools that consume as a Python package with no external runtime**. Tools that require a separately-running server process — for example MONAILabel, whose Slicer-side widget is a client of a separately-installed MONAILabel server (local Docker, native install, or remote) — cannot follow this pattern. Such tools are out of v2.0 scope. See [ADR-0024](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0024-segmentation-orchestration.md) Alternative H for the MONAILabel-DeepGrow drop + three v2.1+ paths (server-less DeepGrow via pip-`monai`, custom Segment Editor effect per [ADR-0026](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0026-segment-editor-effects.md), or Slicer-stock interactive tools).
+
+Slicer-Liver consumes TotalSegmentator's Python API directly — it does not require the upstream TotalSegmentator *Slicer extension wrapper* to be installed. Surgeon interacts via Slicer-Liver's UI, not via the upstream extension's widget.
 
 ### Persistence — `.lrp.json` schema v3
 
@@ -202,12 +204,12 @@ Force Stage 3 Auto and Manual to share the framework's `vtkMRMLLiverVolumetryNod
 ### Follow-on work
 
 - **Architecture diagrams** in `Docs/architecture/` — stage flow + dependency map, territories class hierarchy, MRML node landscape.
-- **ADR-0024 — Segmentation orchestration** for Stage 2's per-structure micro-workflows (TotalSegmentator + Kumar-Oram + MONAILabel + Segment Editor orchestration).
+- **ADR-0024 — Segmentation orchestration** for Stage 2's per-structure micro-workflows (TotalSegmentator + Kumar-Oram Segment Editor effect + Segment Editor manual orchestration). Interactive tumor refinement (e.g., MONAILabel-DeepGrow) is deferred to v2.1+ per ADR-0024 Alternative H.
 - **ADR-0025 — Locator architecture** for the resectogram hover→3D + click→reslice interactions, the 1:1 (u,v) mapping insight, and the v2.0/v2.1 scope split.
 - **Schema v3 migration** PR for `vtkMRMLBezierSurfaceStorageNode` (`.lrp.json`).
 - **Class refactor** PRs for `vtkMRMLAbstractTerritoriesNode` + subclasses + Stage 3 Auto and Manual tab rewiring.
 - **`LiverSegments/` → `VascularTerritories/` rename** + content refactor into the framework.
-- **`LiverSegmentation/` new module** + lazy-install machinery for TotalSegmentator + MONAILabel.
+- **`LiverSegmentation/` new module** + lazy-install machinery for TotalSegmentator.
 - **Sidebar widget** implementation in `Liver/`.
 - **Subject Hierarchy wiring** across every module's node-creation paths.
 - **PKS amendments**: walk back the 2026-05-15 framework note's "degenerate case" claim; walk back the 2026-05-14 stitch note's Couinaud-from-Portal-commit auto-trigger.
