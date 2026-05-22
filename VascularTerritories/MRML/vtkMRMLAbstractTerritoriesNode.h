@@ -32,8 +32,8 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
   This file was originally developed for the Slicer-Liver extension as
-  part of the v2.0.0 unified surgeon workflow (ADR-0023 §"Class
-  abstraction for territories") and the associated
+  part of the unified surgeon workflow (ADR-0023 §"Class abstraction
+  for territories") and the associated
   Docs/architecture/territories-class-hierarchy.md UML.
 
 ==============================================================================*/

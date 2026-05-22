@@ -1,7 +1,8 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
-#
-# Python-wrapper test for the v2.0.0 vascular-territories node
+
+# ----------------------------------------------------------------------
+# Python-wrapper test for the vascular-territories node
 # hierarchy (ADR-0023 §"Class abstraction for territories",
 # Docs/architecture/territories-class-hierarchy.md, ADR-0004
 # Python/C++ boundary).  Test-first scaffolding landed per ADR-0027 --
@@ -9,7 +10,8 @@
 # Logic class which the implementer commit will supply.
 #
 # Run inside Slicer via ctest's slicer_add_python_unittest hook.
-#
+# ----------------------------------------------------------------------
+
 # ruff: noqa: F403, F405  # standard Slicer scripted-module wildcard-import pattern
 
 import unittest
