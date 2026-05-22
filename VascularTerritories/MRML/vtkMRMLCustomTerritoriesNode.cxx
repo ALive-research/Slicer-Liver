@@ -209,6 +209,11 @@ void vtkMRMLCustomTerritoriesNode::CopyContent(vtkMRMLNode* anode, bool deepCopy
   {
     this->SegmentNames->DeepCopy(other->SegmentNames);
   }
+  // ``std::map`` / ``std::set`` assignment does not tickle VTK's
+  // MTime; the MRMLNodeModifyBlocker therefore would not fire
+  // Modified on dtor.  Force a notification so observers of this
+  // node see the CopyContent.
+  this->Modified();
 }
 
 //------------------------------------------------------------------------------

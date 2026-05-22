@@ -136,11 +136,25 @@ void vtkSlicerVascularTerritoriesLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
 
   // ADR-0023 §"MRML scene organisation" — territory nodes live under
   // the "Vascular Territories" Subject Hierarchy folder.  Created
-  // lazily on first arrival; reused thereafter.
-  vtkIdType folderItem = shNode->GetItemByName("Vascular Territories");
-  if (folderItem == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID || folderItem == 0)
+  // lazily on first arrival; reused thereafter.  Scope the lookup to
+  // *children of the scene root* so a same-named folder anywhere
+  // else in the hierarchy (e.g. inside a Patient/Study/Series
+  // subtree) is not silently reused.
+  vtkIdType sceneItem = shNode->GetSceneItemID();
+  vtkIdType folderItem = vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID;
+  std::vector<vtkIdType> children;
+  shNode->GetItemChildren(sceneItem, children);
+  for (vtkIdType child : children)
   {
-    folderItem = shNode->CreateFolderItem(shNode->GetSceneItemID(), "Vascular Territories");
+    if (shNode->GetItemName(child) == "Vascular Territories")
+    {
+      folderItem = child;
+      break;
+    }
+  }
+  if (folderItem == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID)
+  {
+    folderItem = shNode->CreateFolderItem(sceneItem, "Vascular Territories");
   }
 
   vtkIdType nodeItem = shNode->GetItemByDataNode(territoryNode);
