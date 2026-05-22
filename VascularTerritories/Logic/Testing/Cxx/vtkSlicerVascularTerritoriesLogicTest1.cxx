@@ -40,7 +40,7 @@
 // Using vtkSlicerColorLogicTest1 as example
 
 // MRMLLogic includes
-#include "vtkLiverSegmentsLogic.h"
+#include "vtkSlicerVascularTerritoriesLogic.h"
 
 // MRML includes
 #include "vtkMRMLCoreTestingMacros.h"
@@ -58,8 +58,8 @@
 #include <vtkCellData.h>
 #include <vtkPointData.h>
 
-// LiverSegments includes
-// #include "qSlicerLiverSegmentsModule.h" //test to try to link to qSlicerLiverSegmentsModule
+// VascularTerritories includes
+// #include "qSlicerVascularTerritoriesModule.h" //test to try to link to qSlicerVascularTerritoriesModule
 
 // STD includes
 
@@ -74,7 +74,7 @@ int TestFunctionsWithNullInput();
 int TestFunctionsWithDummyData();
 } // namespace
 
-int vtkSlicerLiverSegmentsLogicTest1(int vtkNotUsed(argc), char* vtkNotUsed(argv)[])
+int vtkSlicerVascularTerritoriesLogicTest1(int vtkNotUsed(argc), char* vtkNotUsed(argv)[])
 {
   CHECK_EXIT_SUCCESS(TestDefaults());
   CHECK_EXIT_SUCCESS(TestFunctionsWithNullInput());
@@ -87,32 +87,32 @@ namespace
 //----------------------------------------------------------------------------
 int TestDefaults()
 {
-  vtkLiverSegmentsLogic* liverSegmentsLogic = vtkLiverSegmentsLogic::New();
-  liverSegmentsLogic->Delete();
+  vtkSlicerVascularTerritoriesLogic* vascularTerritoriesLogic = vtkSlicerVascularTerritoriesLogic::New();
+  vascularTerritoriesLogic->Delete();
   return EXIT_SUCCESS;
 }
 
 int TestFunctionsWithNullInput()
 {
-  vtkLiverSegmentsLogic* liverSegmentsLogic = vtkLiverSegmentsLogic::New();
+  vtkSlicerVascularTerritoriesLogic* vascularTerritoriesLogic = vtkSlicerVascularTerritoriesLogic::New();
 
-  liverSegmentsLogic->MarkSegmentWithID(nullptr, 0);
-  liverSegmentsLogic->AddSegmentToCenterlineModel(nullptr, nullptr);
-  liverSegmentsLogic->SegmentClassificationProcessing(nullptr, nullptr);
-  liverSegmentsLogic->InitializeCenterlineSearchModel(nullptr);
+  vascularTerritoriesLogic->MarkSegmentWithID(nullptr, 0);
+  vascularTerritoriesLogic->AddSegmentToCenterlineModel(nullptr, nullptr);
+  vascularTerritoriesLogic->SegmentClassificationProcessing(nullptr, nullptr);
+  vascularTerritoriesLogic->InitializeCenterlineSearchModel(nullptr);
 
   vtkNew<vtkMRMLScene> scene;
-  liverSegmentsLogic->SetMRMLScene(scene);
-  liverSegmentsLogic->calculateVascularTerritoryMap(nullptr, nullptr, nullptr, nullptr, nullptr);
-  liverSegmentsLogic->preprocessAndDecimate(nullptr, nullptr);
+  vascularTerritoriesLogic->SetMRMLScene(scene);
+  vascularTerritoriesLogic->calculateVascularTerritoryMap(nullptr, nullptr, nullptr, nullptr, nullptr);
+  vascularTerritoriesLogic->preprocessAndDecimate(nullptr, nullptr);
 
-  liverSegmentsLogic->Delete();
+  vascularTerritoriesLogic->Delete();
   return EXIT_SUCCESS;
 }
 
 int TestFunctionsWithDummyData()
 {
-  vtkLiverSegmentsLogic* liverSegmentsLogic = vtkLiverSegmentsLogic::New();
+  vtkSlicerVascularTerritoriesLogic* vascularTerritoriesLogic = vtkSlicerVascularTerritoriesLogic::New();
   int segmentId = 1;
 
   // Init segment
@@ -132,21 +132,21 @@ int TestFunctionsWithDummyData()
   vtkNew<vtkMRMLLabelMapVolumeNode> labelMap;
   labelMap->SetAndObserveImageData(dummyImageData);
 
-  liverSegmentsLogic->MarkSegmentWithID(segment, segmentId);
-  liverSegmentsLogic->AddSegmentToCenterlineModel(segment, segment);
-  liverSegmentsLogic->SegmentClassificationProcessing(segment, labelMap);
-  liverSegmentsLogic->InitializeCenterlineSearchModel(segment);
+  vascularTerritoriesLogic->MarkSegmentWithID(segment, segmentId);
+  vascularTerritoriesLogic->AddSegmentToCenterlineModel(segment, segment);
+  vascularTerritoriesLogic->SegmentClassificationProcessing(segment, labelMap);
+  vascularTerritoriesLogic->InitializeCenterlineSearchModel(segment);
 
   vtkNew<vtkMRMLScene> scene;
-  liverSegmentsLogic->SetMRMLScene(scene);
-  liverSegmentsLogic->calculateVascularTerritoryMap(nullptr, nullptr, nullptr, nullptr, nullptr);
+  vascularTerritoriesLogic->SetMRMLScene(scene);
+  vascularTerritoriesLogic->calculateVascularTerritoryMap(nullptr, nullptr, nullptr, nullptr, nullptr);
 
   vtkSmartPointer<vtkPolyData> returnPolyData = vtkSmartPointer<vtkPolyData>::New();
-  liverSegmentsLogic->preprocessAndDecimate(spherePolydata, returnPolyData);
+  vascularTerritoriesLogic->preprocessAndDecimate(spherePolydata, returnPolyData);
   CHECK_BOOL(returnPolyData->GetNumberOfPoints() < spherePolydata->GetNumberOfPoints(), true);
   CHECK_BOOL(returnPolyData->GetNumberOfPolys() < spherePolydata->GetNumberOfPolys(), true);
 
-  liverSegmentsLogic->Delete();
+  vascularTerritoriesLogic->Delete();
 
   return EXIT_SUCCESS;
 }

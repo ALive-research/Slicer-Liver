@@ -135,12 +135,12 @@ def liver_logic():
     )
 
     # Ensure the in-repo Liver/ directory is on sys.path so Liver.py's
-    # ``import LiverSegments`` / ``import LiverVolumetry`` resolve to the
-    # sibling source trees.
+    # ``import VascularTerritories`` / ``import LiverVolumetry`` resolve
+    # to the sibling source trees.
     liver_dir = str(REPO_ROOT / "Liver")
     if liver_dir not in sys.path:
         sys.path.insert(0, liver_dir)
-    for sibling in ("LiverSegments", "LiverVolumetry"):
+    for sibling in ("VascularTerritories", "LiverVolumetry"):
         sibling_dir = str(REPO_ROOT / sibling / sibling)
         if (REPO_ROOT / sibling / sibling).is_dir() and sibling_dir not in sys.path:
             sys.path.insert(0, sibling_dir)
@@ -484,7 +484,7 @@ def algorithm_module():
 
     The wrapped Python module is named with the ``Python`` suffix as
     produced by ``SlicerMacroPythonWrapModuleVTKLibrary`` (matching the
-    convention used by ``LiverSegments`` and ``LiverVolumetry``).
+    convention used by ``VascularTerritories`` and ``LiverVolumetry``).
     """
     return pytest.importorskip(
         "vtkSlicerLiverResectionsModuleAlgorithmPython",

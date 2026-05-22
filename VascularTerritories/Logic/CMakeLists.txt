@@ -9,8 +9,8 @@ set(${KIT}_INCLUDE_DIRECTORIES
    )
 
 set(${KIT}_SRCS
-  vtkLiverSegmentsLogic.h
-  vtkLiverSegmentsLogic.cxx
+  vtkSlicerVascularTerritoriesLogic.h
+  vtkSlicerVascularTerritoriesLogic.cxx
   )
 
 set(${KIT}_TARGET_LIBRARIES

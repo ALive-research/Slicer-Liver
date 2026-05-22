@@ -37,7 +37,7 @@
 
   ===============================================================================*/
 
-#include "vtkLiverSegmentsLogic.h"
+#include "vtkSlicerVascularTerritoriesLogic.h"
 
 #include <vtkMRMLLabelMapVolumeNode.h>
 #include <vtkMRMLSegmentationNode.h>
@@ -67,24 +67,24 @@
 #include <iostream>
 
 //------------------------------------------------------------------------------
-vtkStandardNewMacro(vtkLiverSegmentsLogic);
+vtkStandardNewMacro(vtkSlicerVascularTerritoriesLogic);
 
 //------------------------------------------------------------------------------
-vtkLiverSegmentsLogic::vtkLiverSegmentsLogic()
+vtkSlicerVascularTerritoriesLogic::vtkSlicerVascularTerritoriesLogic()
 {
   this->Locator = vtkSmartPointer<vtkKdTreePointLocator>::New();
 }
 
 //------------------------------------------------------------------------------
-vtkLiverSegmentsLogic::~vtkLiverSegmentsLogic() {}
+vtkSlicerVascularTerritoriesLogic::~vtkSlicerVascularTerritoriesLogic() {}
 
 //------------------------------------------------------------------------------
-void vtkLiverSegmentsLogic::PrintSelf(ostream& os, vtkIndent indent)
+void vtkSlicerVascularTerritoriesLogic::PrintSelf(ostream& os, vtkIndent indent)
 {
   Superclass::PrintSelf(os, indent);
 }
 
-void vtkLiverSegmentsLogic::MarkSegmentWithID(vtkMRMLModelNode* segment, int segmentId)
+void vtkSlicerVascularTerritoriesLogic::MarkSegmentWithID(vtkMRMLModelNode* segment, int segmentId)
 {
   auto idArray = vtkSmartPointer<vtkIntArray>::New();
   idArray->SetName("segmentId");
@@ -104,7 +104,7 @@ void vtkLiverSegmentsLogic::MarkSegmentWithID(vtkMRMLModelNode* segment, int seg
   polydata->GetPointData()->SetScalars(idArray);
 }
 
-void vtkLiverSegmentsLogic::AddSegmentToCenterlineModel(vtkMRMLModelNode* summedCenterline, vtkMRMLModelNode* segmentCenterline)
+void vtkSlicerVascularTerritoriesLogic::AddSegmentToCenterlineModel(vtkMRMLModelNode* summedCenterline, vtkMRMLModelNode* segmentCenterline)
 {
   if (!summedCenterline || !segmentCenterline) // Allow function to run with nullptr as input
   {
@@ -124,7 +124,7 @@ void vtkLiverSegmentsLogic::AddSegmentToCenterlineModel(vtkMRMLModelNode* summed
   summedCenterline->SetAndObservePolyData(summedModel);
 }
 
-int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLModelNode* centerlineModel, vtkMRMLLabelMapVolumeNode* labelMap)
+int vtkSlicerVascularTerritoriesLogic::SegmentClassificationProcessing(vtkMRMLModelNode* centerlineModel, vtkMRMLLabelMapVolumeNode* labelMap)
 {
   auto ijkToRas = vtkSmartPointer<vtkMatrix4x4>::New();
 
@@ -180,7 +180,7 @@ int vtkLiverSegmentsLogic::SegmentClassificationProcessing(vtkMRMLModelNode* cen
   return 1;
 }
 
-void vtkLiverSegmentsLogic::InitializeCenterlineSearchModel(vtkMRMLModelNode* summedCenterline)
+void vtkSlicerVascularTerritoriesLogic::InitializeCenterlineSearchModel(vtkMRMLModelNode* summedCenterline)
 {
   this->Locator->Initialize();
   if (!summedCenterline) // Allow function to run with nullptr as input
@@ -200,7 +200,7 @@ void vtkLiverSegmentsLogic::InitializeCenterlineSearchModel(vtkMRMLModelNode* su
   }
 }
 
-void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNode* vascularTerritorySegmentationNode,
+void vtkSlicerVascularTerritoriesLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNode* vascularTerritorySegmentationNode,
                                                           vtkMRMLScalarVolumeNode* refVolume,
                                                           vtkMRMLSegmentationNode* segmentation,
                                                           vtkMRMLModelNode* centerlineModel,
@@ -246,7 +246,7 @@ void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNod
   labelmapVolumeNode->GetDisplayNode()->SetAndObserveColorNodeID(colormap->GetID());
   // slicer.util.arrayFromVolumeModified(labelmapVolumeNode)
   labelmapVolumeNode->Modified(); // Is this enough, or is more of the code in arrayFromVolumeModified needed?
-  const char* segmentationId = vascularTerritorySegmentationNode->GetAttribute("LiverSegments.SegmentationId");
+  const char* segmentationId = vascularTerritorySegmentationNode->GetAttribute("VascularTerritories.SegmentationId");
   std::string segmentationIdCopy;
   if (segmentationId)
   {
@@ -254,19 +254,19 @@ void vtkLiverSegmentsLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNod
   }
 
   vascularTerritorySegmentationNode->Reset(nullptr);
-  vascularTerritorySegmentationNode->SetAttribute("LiverSegments.SegmentationId", segmentationId);
+  vascularTerritorySegmentationNode->SetAttribute("VascularTerritories.SegmentationId", segmentationId);
   vascularTerritorySegmentationNode->CreateDefaultDisplayNodes(); // only needed for display
   vtkSlicerSegmentationsModuleLogic::ImportLabelmapToSegmentationNode(labelmapVolumeNode, vascularTerritorySegmentationNode);
   vascularTerritorySegmentationNode->CreateClosedSurfaceRepresentation();
 
   if (!segmentationIdCopy.empty())
   {
-    vascularTerritorySegmentationNode->SetAttribute("LiverSegments.SegmentationId", segmentationIdCopy.c_str());
+    vascularTerritorySegmentationNode->SetAttribute("VascularTerritories.SegmentationId", segmentationIdCopy.c_str());
   }
   mrmlScene->RemoveNode(labelmapVolumeNode);
 }
 
-void vtkLiverSegmentsLogic::preprocessAndDecimate(vtkPolyData* surfacePolyData, vtkPolyData* returnPolyData)
+void vtkSlicerVascularTerritoriesLogic::preprocessAndDecimate(vtkPolyData* surfacePolyData, vtkPolyData* returnPolyData)
 {
   vtkMRMLScene* mrmlScene = this->GetMRMLScene();
   if (!mrmlScene)

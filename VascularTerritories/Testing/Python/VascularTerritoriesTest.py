@@ -9,9 +9,9 @@ import vtk
 import slicer
 from slicer.ScriptedLoadableModule import *
 #from slicer.util import TESTING_DATA_URL
-from LiverSegments import LiverSegmentsLogic
+from VascularTerritories import VascularTerritoriesLogic
 
-class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
+class VascularTerritoriesTestCase(ScriptedLoadableModuleTest):
 
   def setUp(self):
     """ Do whatever is needed to reset the state - typically a scene clear will be enough.
@@ -27,7 +27,7 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
     self.vtkLogicFunctions()
 
   def initPythonLogic(self):
-    logic = LiverSegmentsLogic()
+    logic = VascularTerritoriesLogic()
     logic.__init__()
     logic.getCenterlineLogic()
     logic.setDefaultParameters(logic.getParameterNode())
@@ -54,8 +54,8 @@ class LiverSegmentsTestCase(ScriptedLoadableModuleTest):
     logic.polyDataFromNode(None, segmentationId)
 
   def vtkLogicFunctions(self):
-    from vtkSlicerLiverSegmentsModuleLogicPython import vtkLiverSegmentsLogic
-    vtkLogic = vtkLiverSegmentsLogic()
+    from vtkSlicerVascularTerritoriesModuleLogicPython import vtkSlicerVascularTerritoriesLogic
+    vtkLogic = vtkSlicerVascularTerritoriesLogic()
     vtkLogic.SetMRMLScene(slicer.mrmlScene)
 
     segmentationVascular = self.createEmptyvtkMRMLSegmentationNode()

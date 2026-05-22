@@ -10,11 +10,9 @@
 # (ADR-0023 §"Class abstraction for territories" + the architecture
 # UML in Docs/architecture/territories-class-hierarchy.md).
 #
-# The kit name (``vtkSlicerVascularTerritoriesModuleMRML``) is
-# decoupled from the parent module's MODULE_NAME (which is still
-# ``LiverSegments`` for in-process Python compatibility); the symbol
-# rename of the parent scripted module is a separate task tracked by
-# the follow-up implementer commit.
+# The kit name ``vtkSlicerVascularTerritoriesModuleMRML`` follows the
+# project's per-module kit-library convention (matches MODULE_NAME =
+# ``VascularTerritories``).
 #
 # Sibling-of-source layout matches LiverResections/MRML/CMakeLists.txt.
 
