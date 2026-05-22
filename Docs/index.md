@@ -45,3 +45,15 @@ adr/0023-unified-gui-stage-workflow.md
 adr/0024-segmentation-orchestration.md
 adr/0026-segment-editor-effects.md
 ```
+
+```{toctree}
+:maxdepth: 1
+:caption: UI architecture (per-stage)
+
+architecture/ui-stage-1-case-setup.md
+architecture/ui-stage-2-anatomy-definition.md
+architecture/ui-stage-3-vascular-territories.md
+architecture/ui-stage-4-resection-planning.md
+architecture/ui-stage-5-volumetry.md
+architecture/ui-stage-6-export.md
+```
