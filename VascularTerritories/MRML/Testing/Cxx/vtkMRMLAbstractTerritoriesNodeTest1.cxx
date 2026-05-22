@@ -4,34 +4,42 @@
 
   Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
-  Test-first scaffolding for the v2.0.0 vascular-territories class
-  hierarchy (ADR-0023 §"Class abstraction for territories",
-  Docs/architecture/territories-class-hierarchy.md, ADR-0011 SCT
-  terminology dispatch, ADR-0004 Python/C++ boundary).  Lands per
-  ADR-0027 (test commit predates implementation).
-
-  Each test pins one architectural invariant.  Test cases that exercise
-  not-yet-implemented behaviour fail red against the stub .cxx -
-  intentional; the follow-up implementer commit flips them green.
-
-  Invariants pinned:
-
-    1. Abstract base non-instantiable via a runtime sentinel New() that
-       returns nullptr (chosen over the no-New()/link-error variant to
-       keep the class wrappable by VTK's Python pipeline).
-    2. Both concrete subclasses instantiate via vtkStandardNewMacro.
-    3. Polymorphic GetMethod() dispatch via base pointer.
-    4. Std-Couinaud SCT codes pinned to the 10-code ADR-0011 table.
-    5. Custom-territories GetSCTCode() returns "" by default; non-empty
-       only after surgeon opt-in.
-    6. RegisterNodeClass + GetNodesByClass polymorphic filter.
-    7. Subject Hierarchy folder placement -- module-logic concern;
-       skipped here, exercised by the Python wrapper test.
-    8. MRML XML round-trip of Method + key references.
-    9. Subdivision enum on Std drives GetNumberOfSegments() (8 vs 9).
-    10. Custom-territories Groupings map round-trips through XML.
-
 ==============================================================================*/
+
+/**
+ * \file vtkMRMLAbstractTerritoriesNodeTest1.cxx
+ *
+ * Test-first scaffolding for the vascular-territories class hierarchy
+ * (ADR-0023 §"Class abstraction for territories",
+ * Docs/architecture/territories-class-hierarchy.md, ADR-0011 SCT
+ * terminology dispatch, ADR-0004 Python/C++ boundary).  Lands per
+ * ADR-0027 (test commit predates implementation).
+ *
+ * Each test pins one architectural invariant.  Test cases that exercise
+ * not-yet-implemented behaviour fail red against the stub .cxx -
+ * intentional; the follow-up implementer commit flips them green.
+ *
+ * Invariants pinned:
+ *
+ *   1. Abstract base non-instantiable per vtkAbstractTypeMacro
+ *      (Slicer-core convention -- vtkMRMLAbstractViewNode,
+ *      vtkMRMLAbstractLayoutNode).  Compile-time non-instantiability;
+ *      runtime sub-test pins the polymorphic complement (concrete
+ *      SafeDownCast resolves to the abstract base).
+ *   2. Both concrete subclasses instantiate via vtkStandardNewMacro.
+ *   3. Polymorphic GetMethod() dispatch via base pointer.
+ *   4. Std-Couinaud SCT codes pinned to the ADR-0011 table:
+ *      8 codes for Subdivision == I_VIII; 9 codes for
+ *      I_VIII_with_IVab (IVa+IVb replace IV).
+ *   5. Custom-territories GetSCTCode() returns "" by default; non-empty
+ *      only after surgeon opt-in.
+ *   6. RegisterNodeClass + GetNodesByClass polymorphic filter.
+ *   7. Subject Hierarchy folder placement -- module-logic concern;
+ *      skipped here, exercised by the Python wrapper test.
+ *   8. MRML XML round-trip of Method + key references.
+ *   9. Subdivision enum on Std drives GetNumberOfSegments() (8 vs 9).
+ *  10. Custom-territories Groupings map round-trips through XML.
+ */
 
 // This module MRML includes
 #include "vtkMRMLAbstractTerritoriesNode.h"
