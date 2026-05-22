@@ -2,7 +2,7 @@
 # Distributed under the OSI-approved BSD 3-Clause License.
 
 #-----------------------------------------------------------------------------
-set(MODULE_NAME LiverSegments)
+set(MODULE_NAME VascularTerritories)
 string(TOUPPER ${MODULE_NAME} MODULE_NAME_UPPER)
 
 #-----------------------------------------------------------------------------
@@ -22,9 +22,8 @@ add_subdirectory(Logic)
 
 # v2.0.0 MRML kit -- vtkMRMLAbstractTerritoriesNode hierarchy per
 # ADR-0023 §"Class abstraction for territories".  Library name is
-# explicitly ``vtkSlicerVascularTerritoriesModuleMRML`` (decoupled from
-# the still-LiverSegments ``MODULE_NAME``); the parent module's symbol
-# rename is the follow-up implementer commit.
+# ``vtkSlicerVascularTerritoriesModuleMRML`` (matches the parent
+# module's MODULE_NAME after the rename).
 add_subdirectory(MRML)
 
 #-----------------------------------------------------------------------------

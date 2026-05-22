@@ -37,10 +37,10 @@
 
   ===============================================================================*/
 
-#ifndef __vtkLiverSegmentsLogic_h
-#define __vtkLiverSegmentsLogic_h
+#ifndef __vtkSlicerVascularTerritoriesLogic_h
+#define __vtkSlicerVascularTerritoriesLogic_h
 
-#include "vtkSlicerLiverSegmentsModuleLogicExport.h"
+#include "vtkSlicerVascularTerritoriesModuleLogicExport.h"
 
 // Slicer include
 #include <vtkSlicerModuleLogic.h>
@@ -57,14 +57,14 @@ class vtkMRMLColorNode;
 class vtkMRMLScalarVolumeNode;
 class vtkPolyData;
 
-class VTK_SLICER_LIVERSEGMENTS_MODULE_LOGIC_EXPORT vtkLiverSegmentsLogic : public vtkSlicerModuleLogic
+class VTK_SLICER_VASCULARTERRITORIES_MODULE_LOGIC_EXPORT vtkSlicerVascularTerritoriesLogic : public vtkSlicerModuleLogic
 {
 private:
   vtkSmartPointer<vtkKdTreePointLocator> Locator;
 
 public:
-  static vtkLiverSegmentsLogic* New();
-  vtkTypeMacro(vtkLiverSegmentsLogic, vtkObject);
+  static vtkSlicerVascularTerritoriesLogic* New();
+  vtkTypeMacro(vtkSlicerVascularTerritoriesLogic, vtkSlicerModuleLogic);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
 public:
@@ -80,10 +80,10 @@ public:
   void preprocessAndDecimate(vtkPolyData* surfacePolyData, vtkPolyData* returnPolyData);
 
 protected:
-  vtkLiverSegmentsLogic();
-  ~vtkLiverSegmentsLogic() override;
-  vtkLiverSegmentsLogic(const vtkLiverSegmentsLogic&);
-  void operator=(const vtkLiverSegmentsLogic&);
+  vtkSlicerVascularTerritoriesLogic();
+  ~vtkSlicerVascularTerritoriesLogic() override;
+  vtkSlicerVascularTerritoriesLogic(const vtkSlicerVascularTerritoriesLogic&);
+  void operator=(const vtkSlicerVascularTerritoriesLogic&);
 };
 
 #endif

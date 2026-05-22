@@ -7,7 +7,7 @@ set(KIT ${PROJECT_NAME})
 
 #-----------------------------------------------------------------------------
 set(KIT_TEST_SRCS
-  vtkSlicerLiverSegmentsLogicTest1.cxx
+  vtkSlicerVascularTerritoriesLogicTest1.cxx
   )
 
 #-----------------------------------------------------------------------------
@@ -25,16 +25,16 @@ slicerMacroConfigureModuleCxxTestDriver(
 #   NAME ${KIT}
 #   SOURCES ${KIT_TEST_SRCS}
 #   # INCLUDE_DIRECTORIES
-#     # ${qSlicerLiverSegmentsModule_INCLUDE_DIRS}
+#     # ${qSlicerVascularTerritoriesModule_INCLUDE_DIRS}
 #     # ${CMAKE_CURRENT_SOURCE_DIR}/../../Logic/
-#     # ${qSlicerLiverSegmentsModuleLogic_INCLUDE_DIRS}
-#     # ${vtkSlicerLiverSegmentsModuleLogic_INCLUDE_DIRS}
+#     # ${qSlicerVascularTerritoriesModuleLogic_INCLUDE_DIRS}
+#     # ${vtkSlicerVascularTerritoriesModuleLogic_INCLUDE_DIRS}
 #     # ${CMAKE_CURRENT_SOURCE_DIR}/../../
 #   TARGET_LIBRARIES
 #     # ${VTK_LIBRARIES}
 #     ${MRML_LIBRARIES}
-#     # qSlicerLiverSegmentsModule
-#     # vtkSlicerLiverSegmentsModuleLogic
+#     # qSlicerVascularTerritoriesModule
+#     # vtkSlicerVascularTerritoriesModuleLogic
 #     # qSlicer${MODULE_NAME}ModuleLogic
 #   TESTS_TO_RUN_VAR KIT_TESTS_TO_RUN
 #   WITH_VTK_DEBUG_LEAKS_CHECK
@@ -53,4 +53,4 @@ slicerMacroConfigureModuleCxxTestDriver(
 # endforeach()
 
 #-----------------------------------------------------------------------------
-simple_test(vtkSlicerLiverSegmentsLogicTest1)
+simple_test(vtkSlicerVascularTerritoriesLogicTest1)

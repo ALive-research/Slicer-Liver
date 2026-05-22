@@ -49,7 +49,7 @@ from vtk.util.numpy_support import vtk_to_numpy
 from slicer.ScriptedLoadableModule import *
 import numpy as np
 from numpy import size
-import LiverSegments
+import VascularTerritories
 import LiverVolumetry
 
 #
@@ -68,7 +68,7 @@ class Liver(ScriptedLoadableModule):
 
     self.parent.categories = ["IGT"]
 
-    self.parent.dependencies = ["LiverResections", "LiverMarkups", "LiverSegments"]
+    self.parent.dependencies = ["LiverResections", "LiverMarkups", "VascularTerritories"]
 
     self.parent.contributors = ["Rafael Palomar (Oslo University Hospital / NTNU)",
                                 "Ole Vegard Solberg (SINTEF)",
@@ -211,7 +211,7 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.resectogramWidget.Grid2DVisibility.setStyleSheet(iconStyle)
     self.resectionsWidget.Grid3DVisibility.setStyleSheet(iconStyle)
 
-    # Add LiverSegmentsWidget
+    # Add VascularTerritoriesWidget
     wrapperWidget = slicer.qMRMLWidget()
     widgetLayout = qt.QVBoxLayout()
     margins = qt.QMargins(0,0,0,0)
@@ -219,8 +219,8 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     wrapperWidget.setLayout(widgetLayout)
 
     wrapperWidget.setMRMLScene(slicer.mrmlScene)
-    segemtsWidget = LiverSegments.LiverSegmentsWidget(wrapperWidget)
-    segemtsWidget.setup()
+    territoriesWidget = VascularTerritories.VascularTerritoriesWidget(wrapperWidget)
+    territoriesWidget.setup()
     self.layout.addWidget(wrapperWidget)
 
     wrapperWidget = slicer.qMRMLWidget()
