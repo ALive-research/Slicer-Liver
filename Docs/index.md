@@ -43,4 +43,5 @@ adr/0021-coverage-measurement.md
 adr/0022-nurbs-v2-1-design.md
 adr/0023-unified-gui-stage-workflow.md
 adr/0024-segmentation-orchestration.md
+adr/0026-segment-editor-effects.md
 ```
