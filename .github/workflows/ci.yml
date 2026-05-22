@@ -426,29 +426,39 @@ jobs:
           # **0 .gcda** were written by the 30 passing tests -- the
           # Slicer-Liver loadable modules were never instrumented.
           #
-          # The fix is compiler wrappers: tiny shim scripts that
-          # prepend ``--coverage`` to every gcc/g++ invocation.  This
-          # makes the flag part of the compiler identity itself, so
-          # any Slicer macro that subsequently rewrites
-          # ``CMAKE_CXX_FLAGS`` is harmless -- the compiler still
-          # instruments.  The wrappers live under ``/tmp/cov-wrappers/``
-          # for the duration of the job.
+          # The fix uses CMake's COMPILER_LAUNCHER mechanism: a single
+          # launcher script ``/tmp/cov-launcher`` is invoked as a
+          # prefix to every compile call, taking the compiler path as
+          # ``$1`` and the rest of the args as ``$@``.  The launcher
+          # injects ``--coverage`` between them.  The actual
+          # ``CMAKE_C_COMPILER`` / ``CMAKE_CXX_COMPILER`` stays as the
+          # toolchain's ``/usr/bin/cc`` and ``/usr/bin/c++``, so
+          # SlicerConfig.cmake's strict-compiler-match check at line
+          # 967 passes (it would refuse a wrapper compiler since
+          # Slicer was pre-built with the toolchain's stock cc/c++).
+          # Launcher-based instrumentation survives any Slicer macro
+          # that rewrites ``CMAKE_CXX_FLAGS`` because the launcher
+          # operates one level below CMake's per-target flag handling.
           mkdir -p /tmp/cov-wrappers
-          cat > /tmp/cov-wrappers/cc <<'WRAP'
+          cat > /tmp/cov-wrappers/launcher <<'WRAP'
           #!/bin/sh
-          exec gcc --coverage "$@"
+          # CMake compiler launcher.  Argv pattern:
+          #   $1     -- compiler executable (cc / c++)
+          #   $2..   -- compiler arguments
+          # Inject --coverage so every translation unit gets
+          # -fprofile-arcs / -ftest-coverage regardless of what
+          # CMAKE_CXX_FLAGS the calling project chooses per-target.
+          COMPILER=$1
+          shift
+          exec "$COMPILER" --coverage "$@"
           WRAP
-          cat > /tmp/cov-wrappers/c++ <<'WRAP'
-          #!/bin/sh
-          exec g++ --coverage "$@"
-          WRAP
-          chmod +x /tmp/cov-wrappers/cc /tmp/cov-wrappers/c++
+          chmod +x /tmp/cov-wrappers/launcher
 
           cmake -S . -B build-coverage \
             -DCMAKE_BUILD_TYPE=Debug \
             -DBUILD_TESTING:BOOL=ON \
-            -DCMAKE_C_COMPILER=/tmp/cov-wrappers/cc \
-            -DCMAKE_CXX_COMPILER=/tmp/cov-wrappers/c++ \
+            -DCMAKE_C_COMPILER_LAUNCHER=/tmp/cov-wrappers/launcher \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=/tmp/cov-wrappers/launcher \
             -DCMAKE_C_FLAGS="-O0" \
             -DCMAKE_CXX_FLAGS="-O0" \
             -DCMAKE_EXE_LINKER_FLAGS="--coverage" \
