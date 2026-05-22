@@ -57,7 +57,7 @@ Load → Tag Volume Roles → (optional) Register → Layout → Hand off to Sta
 
 ### Role tagging
 
-- **Vocabulary**: `Native`, `Arterial`, `Portal venous`, `Delayed/venous`, `Other`. Stored as a scene attribute on each volume node (key TBD at implementation; suggested `LiverLiver.RoleTag`).
+- **Vocabulary**: `Native`, `Arterial`, `Portal venous`, `Delayed/venous`, `Other`. Stored as a scene attribute on each volume node (key TBD at implementation; suggested `LiverVolume.RoleTag` — parallel to the existing `LiverSegments.SegmentationId` / `LiverSegments.VascTerrId` attribute convention).
 - **Auto-tag from DICOM**: when `SeriesDescription`, `ContrastBolusAgent`, or `AcquisitionTime` headers permit inference, the manifest pre-populates the role with the heuristic guess + an asterisk badge marking it as auto-tagged. Surgeon-correctable via the dropdown.
 - **NIfTI / NRRD / MetaImage**: no header hints; role starts empty; surgeon tags manually.
 - **Re-loading a saved scene**: existing role tags persist on the volume nodes; manifest reflects them.
