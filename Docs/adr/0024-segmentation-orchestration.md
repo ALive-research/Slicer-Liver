@@ -64,7 +64,8 @@ surface class family in PRs #341/#345) that hosts a Python
 
 | Term | Definition |
 |------|------------|
-| **tool** | External or internal segmenter producing pixel masks (TotalSegmentator, MONAILabel-DeepGrow, Kumar-Oram-internal). |
+| **tool** | External segmenter consumed via a Python wrapper (TotalSegmentator, MONAILabel-DeepGrow). |
+| **effect** | Slicer Segment Editor effect (a `qSlicerSegmentEditorAbstractEffect` subclass) shipped by Slicer-Liver. v2.0 adds one: Kumar-Oram. See [ADR-0026](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0026-segment-editor-effects.md) (forthcoming). |
 | **stage** | Logical UX phase (Stage 2 = Anatomy Definition in [ADR-0023](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0023-unified-gui-stage-workflow.md)). |
 | **step** | A single tool invocation parameterised by SCT target + ROI. |
 | **Pipeline** | Reserved for LayerDM display-side classes per [ADR-0013](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0013-layerdm-pipeline-pattern.md). The orchestrator is **not** a Pipeline. |
@@ -80,25 +81,35 @@ flowchart LR
     Image["CT image<br/>(Portal-venous role,<br/>from Stage 1)"]
     Orch["LiverSegmentation/<br/>orchestrator<br/>(Python logic)"]
     TS["TotalSegmentator<br/>wrapper"]
-    KO["Kumar-Oram<br/>wrapper (internal)"]
     ML["MONAILabel-DeepGrow<br/>wrapper"]
     SE["Segment Editor<br/>(stock Slicer)"]
+    KO["Kumar-Oram<br/>(Segment Editor effect)"]
     Scratch["Scratch<br/>vtkMRMLSegmentationNode<br/>(one per tool-run)"]
     Canonical["Canonical<br/>vtkMRMLSegmentationNode<br/>(SCT-tagged segments)"]
     Stages["Stages 3 / 4 / 5"]
 
     Image --> Orch
     Orch --> TS
-    Orch --> KO
     Orch --> ML
-    Orch --> SE
+    Orch -."open Segment Editor<br/>+ activate effect".-> SE
+    SE --> KO
     TS --> Scratch
-    KO --> Scratch
     ML --> Scratch
-    SE -.direct edit.-> Canonical
+    KO -.in-place refine.-> Canonical
+    SE -.manual edit.-> Canonical
     Scratch -.surgeon Accept.-> Canonical
     Canonical --> Stages
 ```
+
+Kumar-Oram is hosted as a Slicer Segment Editor *effect* rather than
+an orchestrator-invoked Python wrapper. The orchestrator's vessel
+card surfaces a "Refine in Segment Editor with Kumar-Oram" one-click
+affordance that programmatically opens Segment Editor with the vessel
+segment selected and the effect pre-activated (hybrid pattern per
+[ADR-0026](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0026-segment-editor-effects.md) — forthcoming). The effect remains accessible
+standalone via Segment Editor's toolbar outside the orchestrated
+flow — preserving the 2026-05-15 contingency-path commitment for
+noisy-AI vessel cases.
 
 ### Per-structure micro-workflows
 
@@ -108,8 +119,8 @@ its own micro-workflow:
 | Structure | Tools (in order) | Notes |
 |-----------|-----------------|-------|
 | **Liver parenchyma** | TotalSegmentator → manual fixes (Segment Editor) → Accept | Single AI step; manual editing if AI mask is off. |
-| **Portal vein** | TotalSegmentator (`liver_vessels`) → Kumar-Oram refinement → manual fixes → Accept | Vessels uniquely benefit from Kumar-Oram's centerline-tracking refinement; the AI mask is the seed, not the answer. |
-| **Hepatic vein** | TotalSegmentator (`liver_vessels`) → Kumar-Oram refinement → manual fixes → Accept | Same chain as Portal vein, dispatched by SCT target. |
+| **Portal vein** | TotalSegmentator (`liver_vessels`) → Accept → Kumar-Oram (Segment Editor effect) → manual fixes | Vessels uniquely benefit from Kumar-Oram's centerline-tracking refinement; the AI mask is the seed, not the answer. Kumar-Oram is a Slicer Segment Editor effect per [ADR-0026](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0026-segment-editor-effects.md). The orchestrator's vessel card includes a "Refine with Kumar-Oram" button that opens Segment Editor with the segment selected + effect pre-activated. |
+| **Hepatic vein** | TotalSegmentator (`liver_vessels`) → Accept → Kumar-Oram (Segment Editor effect) → manual fixes | Same chain as Portal vein, dispatched by SCT target. |
 | **Tumors** | TotalSegmentator (tumor channel) → MONAILabel-DeepGrow refinement → manual fixes → Accept | Liver tumors are heterogeneous; DeepGrow's interactive point-click refinement earns its place. Multi-focal supported (N tumors per case). |
 
 Invocation order across structures is **hinted, not enforced**.
@@ -138,9 +149,10 @@ LiverSegmentation/
 ├── LiverSegmentation.py                  # Module + Widget + Logic (scripted module pattern)
 ├── ToolWrappers/
 │   ├── TotalSegmentator.py
-│   ├── KumarOram.py
 │   ├── MONAILabel.py
-│   └── VMTK.py                           # used by Kumar-Oram for centerline extraction
+│   └── VMTK.py                           # used by Kumar-Oram effect for centerline extraction
+├── Effects/
+│   └── SegmentEditorKumarOramEffect.py   # qSlicerSegmentEditorAbstractEffect subclass; see ADR-0026
 ├── Resources/
 │   └── UI/
 │       └── LiverSegmentation.ui          # per-structure cards
@@ -266,6 +278,33 @@ stages in one module name would confuse every contributor for years.
 [ADR-0023](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0023-unified-gui-stage-workflow.md)
 already commits the rename direction.
 
+### Alternative G — Kumar-Oram as an orchestrator-invoked Python wrapper
+
+Originally drafted as `LiverSegmentation/ToolWrappers/KumarOram.py` —
+the orchestrator's vessel card calls the wrapper directly, the wrapper
+produces a scratch node, surgeon Accepts to canonical. Mirrors the
+TotalSegmentator and MONAILabel wrapper pattern.
+
+**Rejected because** Kumar-Oram is an *interactive vessel refinement*
+algorithm that fits the Slicer Segment Editor effect contract
+(`qSlicerSegmentEditorAbstractEffect`) much more naturally than a
+one-shot wrapper: surgeon may want to iteratively place seeds, see
+the centerline track in 3D, adjust, re-run. The wrapper pattern would
+re-implement Segment Editor's existing interaction chrome (effect
+toolbar, in-progress preview, accept/cancel buttons) inside the
+orchestrator's vessel card — bespoke UX competing with the Slicer
+surface surgeons already know.
+
+The Segment Editor effect framing also opens the upstream-contribution
+path per [ADR-0010](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0010-accessibility-and-i18n.md)'s
+"align with Slicer, contribute upstream" principle: a well-designed
+Kumar-Oram effect could land in upstream Slicer's segmentation effects
+extension. The orchestrator still drives the dominant case — the
+vessel card includes a "Refine with Kumar-Oram" button that opens
+Segment Editor with the segment selected + effect pre-activated
+(hybrid pattern per [ADR-0026](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0026-segment-editor-effects.md) — forthcoming) — while the standalone-effect
+path remains available for the noisy-AI contingency.
+
 ## Consequences
 
 ### What becomes easier
@@ -330,6 +369,17 @@ Reviewable invariants that signal this decision is honoured:
   via a node attribute or hidden Subject Hierarchy folder).
 - Subject Hierarchy "Anatomy" folder (per ADR-0023's Subject Hierarchy
   convention) collects all Stage 2 nodes.
+- `LiverSegmentation/Effects/` exists and contains
+  `SegmentEditorKumarOramEffect.py` (a `qSlicerSegmentEditorAbstractEffect`
+  subclass per [ADR-0026](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0026-segment-editor-effects.md)).
+- Grep for `qSlicerSegmentEditorAbstractEffect` (or its Python wrapper
+  `AbstractScriptedSegmentEditorEffect`) under `LiverSegmentation/Effects/`
+  finds the Kumar-Oram effect class.
+- The orchestrator's vessel-card "Refine with Kumar-Oram" button
+  programmatically opens Segment Editor with the vessel segment
+  selected and the Kumar-Oram effect pre-activated — grep for the
+  effect-activation call path (`setActiveEffectByName("KumarOram")`
+  or equivalent) in `LiverSegmentation.py`.
 
 ## References
 
@@ -339,6 +389,7 @@ Reviewable invariants that signal this decision is honoured:
 - [ADR-0012 — LayerDM migration v2.0 scope](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0012-layerdm-migration-v2-scope.md). LiverSegments (now VascularTerritories) and LiverVolumetry LayerDM display-node migrations remain deferred to v2.1.0.
 - [ADR-0013 — LayerDM Pipeline pattern](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0013-layerdm-pipeline-pattern.md). Pipeline = one Python class per display-node type. The orchestrator's output is a stock Segmentation node; no per-module Pipeline.
 - [ADR-0023 — Unified GUI / six-stage surgeon workflow](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0023-unified-gui-stage-workflow.md). Stage 2 section + AI lazy-install decision + module renames.
+- [ADR-0026 — Segment Editor effects in Slicer-Liver](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0026-segment-editor-effects.md) (forthcoming). Codifies the Segment Editor effect pattern with Kumar-Oram as the first instance — and supersedes the 2026-05-15 Kumar-Oram PKS subnote's "LayerDM Pipeline + Python orchestration" framing.
 - Tracker [issue #305](https://github.com/ALive-research/Slicer-Liver/issues/305) — v2.0.0 release tracker, T5.1.
 - Issue [#413](https://github.com/ALive-research/Slicer-Liver/issues/413) — this ADR's tracking issue.
 - Issue [#409](https://github.com/ALive-research/Slicer-Liver/issues/409) — `LiverSegmentation/` module implementation.
