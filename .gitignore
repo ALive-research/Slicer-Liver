@@ -21,3 +21,11 @@ Testing/baselines-staging/
 .claude/
 .cursor/
 .aider*
+
+# Per-contributor pre-commit hook redirect scripts.  The
+# Utilities/SetupForDevelopment.sh flow writes these next to
+# .git/hooks/ with absolute paths to the contributor's local
+# pre-commit binary (e.g. Guix-profile / pip-user / Conda env);
+# they MUST NOT be committed — they are user-specific and
+# platform-specific.
+.git-local-hooks/
