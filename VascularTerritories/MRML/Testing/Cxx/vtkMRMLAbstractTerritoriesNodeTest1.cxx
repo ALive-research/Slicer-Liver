@@ -109,19 +109,23 @@ std::vector<const char*> buildAttsFromXML(const std::string& xml, std::vector<st
 }
 
 //------------------------------------------------------------------------------
-// Invariant 1 -- Abstract base is non-instantiable via a runtime
-// sentinel.  ``vtkMRMLAbstractTerritoriesNode::New()`` is intentionally
-// overridden to return nullptr; a caller that forgets to pick a
-// concrete subclass crashes loudly on dereference rather than silently
-// constructing a partially-initialised territories node.  The runtime
-// sentinel was chosen over the no-New()/link-error variant of the
-// idiom because VTK's Python wrapping pipeline expects every exported
-// concrete vtkObject subclass to resolve a New symbol -- see the
-// header rationale on vtkMRMLAbstractTerritoriesNode.
+// Invariant 1 -- Abstract base is non-instantiable, but concrete
+// subclasses ARE-A ``vtkMRMLAbstractTerritoriesNode``.  Compile-time
+// abstractness is enforced by ``vtkAbstractTypeMacro`` on the header
+// (any caller that wrote ``vtkMRMLAbstractTerritoriesNode::New()`` or
+// ``vtkNew<vtkMRMLAbstractTerritoriesNode>`` would fail to compile).
+// This runtime sub-test pins the complement: a ``SafeDownCast`` from a
+// concrete instance to the abstract base resolves, and ``IsTypeOf``
+// reports the inheritance.  Together with the compile-time guard this
+// is the equivalent of the prior runtime-sentinel ``New() -> nullptr``
+// check, modulo the abstractness being unforgeable rather than
+// trip-on-dereference.
 int testAbstractBaseNotInstantiable()
 {
-  vtkMRMLAbstractTerritoriesNode* sentinel = vtkMRMLAbstractTerritoriesNode::New();
-  CHECK_NULL(sentinel);
+  vtkNew<vtkMRMLStdCouinaudTerritoriesNode> couinaud;
+  vtkMRMLAbstractTerritoriesNode* asBase = vtkMRMLAbstractTerritoriesNode::SafeDownCast(couinaud.GetPointer());
+  CHECK_NOT_NULL(asBase);
+  CHECK_BOOL(couinaud->IsA("vtkMRMLAbstractTerritoriesNode"), true);
   return EXIT_SUCCESS;
 }
 

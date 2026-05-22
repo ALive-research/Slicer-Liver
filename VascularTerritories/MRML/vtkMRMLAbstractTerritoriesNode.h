@@ -86,16 +86,16 @@ class vtkStringArray;
  *
  * \par Abstract-ness
  *
- * The class is abstract by construction: ``New()`` is overridden to
- * return ``nullptr`` (a runtime sentinel) and the polymorphic methods
- * are pure-virtual.  Direct instantiation via
- * ``vtkMRMLAbstractTerritoriesNode::New()`` produces ``nullptr`` so a
- * caller that forgets to pick a concrete subclass crashes loudly
- * rather than silently constructing a partially-initialised node.  We
- * intentionally do not use the no-``New()`` link-error variant of the
- * idiom — VTK's Python wrapping pipeline expects every exported
- * concrete ``vtkObject`` subclass to resolve a ``New`` symbol, and the
- * runtime sentinel keeps the class wrappable.
+ * The class is abstract per the Slicer-core convention used by
+ * ``vtkMRMLAbstractViewNode``, ``vtkMRMLAbstractLayoutNode``, and
+ * other abstract MRML bases: no ``static New()`` is exposed,
+ * polymorphic methods are pure-virtual, and the constructor is
+ * ``protected``.  Callers that try to instantiate directly hit a
+ * compile-time error; the Python wrapper exports the class as an
+ * abstract base usable only via ``IsTypeOf`` / ``SafeDownCast``.
+ * ``vtkAbstractTypeMacro`` (Slicer-core uses bare ``vtkTypeMacro``
+ * but the abstract-base variant is the documented spelling) records
+ * the abstractness for any introspection callers.
  *
  * \par Python / C++ boundary
  *
@@ -113,15 +113,7 @@ class vtkStringArray;
 class VTK_SLICER_VASCULARTERRITORIES_MODULE_MRML_EXPORT vtkMRMLAbstractTerritoriesNode : public vtkMRMLDisplayableNode
 {
 public:
-  /// Runtime sentinel: returns ``nullptr``.  The class is abstract,
-  /// but a ``New()`` symbol is still defined so VTK's Python wrapping
-  /// machinery resolves it for the exported class (it never invokes
-  /// the result).  Concrete subclasses ``vtkMRMLStdCouinaudTerritoriesNode``
-  /// and ``vtkMRMLCustomTerritoriesNode`` supply real ``New()``
-  /// implementations via ``vtkStandardNewMacro``.
-  static vtkMRMLAbstractTerritoriesNode* New();
-
-  vtkTypeMacro(vtkMRMLAbstractTerritoriesNode, vtkMRMLDisplayableNode);
+  vtkAbstractTypeMacro(vtkMRMLAbstractTerritoriesNode, vtkMRMLDisplayableNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   //--------------------------------------------------------------------------

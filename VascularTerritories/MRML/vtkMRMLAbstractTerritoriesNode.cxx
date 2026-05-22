@@ -6,30 +6,14 @@
 
   Implementation of the abstract territories base class (ADR-0023
   §"Class abstraction for territories" + the architecture-doc UML at
-  Docs/architecture/territories-class-hierarchy.md).  ``New()``
-  intentionally returns ``nullptr`` — see the header rationale.
+  Docs/architecture/territories-class-hierarchy.md).  Non-instantiable
+  per ``vtkAbstractTypeMacro``; concrete subtypes supply ``New()`` via
+  ``vtkStandardNewMacro``.
 
 ==============================================================================*/
 
 // This module MRML includes
 #include "vtkMRMLAbstractTerritoriesNode.h"
-
-// VTK includes
-#include <vtkObjectFactory.h>
-
-//------------------------------------------------------------------------------
-// Runtime sentinel: the abstract base provides a ``New()`` symbol so
-// VTK's Python wrapping pipeline resolves it for the exported class,
-// but it returns ``nullptr`` to prevent callers from accidentally
-// instantiating a partially-initialised territories node.  Concrete
-// subclasses ``vtkMRMLStdCouinaudTerritoriesNode`` and
-// ``vtkMRMLCustomTerritoriesNode`` supply real ``New()`` bodies via
-// ``vtkStandardNewMacro``.
-//------------------------------------------------------------------------------
-vtkMRMLAbstractTerritoriesNode* vtkMRMLAbstractTerritoriesNode::New()
-{
-  return nullptr;
-}
 
 //------------------------------------------------------------------------------
 vtkMRMLAbstractTerritoriesNode::vtkMRMLAbstractTerritoriesNode() = default;
