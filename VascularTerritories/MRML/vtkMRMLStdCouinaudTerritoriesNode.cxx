@@ -33,37 +33,35 @@ namespace
 // Canonical Couinaud SCT codes per ADR-0011 §2.  The architecture
 // doc's Docs/architecture/territories-class-hierarchy.md "SCT
 // terminology binding" section is authoritative for the mapping.
-constexpr const char* kSCT_I    = "71133005";   // Caudate
-constexpr const char* kSCT_II   = "277956007";
-constexpr const char* kSCT_III  = "277957003";
-constexpr const char* kSCT_IV   = "277958008";
-constexpr const char* kSCT_IVa  = "871688003";
-constexpr const char* kSCT_IVb  = "871689006";
-constexpr const char* kSCT_V    = "277959000";
-constexpr const char* kSCT_VI   = "277960005";
-constexpr const char* kSCT_VII  = "277961009";
+constexpr const char* kSCT_I = "71133005"; // Caudate
+constexpr const char* kSCT_II = "277956007";
+constexpr const char* kSCT_III = "277957003";
+constexpr const char* kSCT_IV = "277958008";
+constexpr const char* kSCT_IVa = "871688003";
+constexpr const char* kSCT_IVb = "871689006";
+constexpr const char* kSCT_V = "277959000";
+constexpr const char* kSCT_VI = "277960005";
+constexpr const char* kSCT_VII = "277961009";
 constexpr const char* kSCT_VIII = "277962002";
 
 constexpr std::array<const char*, 8> kCouinaudSCT_8 = {
-  kSCT_I, kSCT_II, kSCT_III, kSCT_IV,
-  kSCT_V, kSCT_VI, kSCT_VII, kSCT_VIII,
+  kSCT_I, kSCT_II, kSCT_III, kSCT_IV, kSCT_V, kSCT_VI, kSCT_VII, kSCT_VIII,
 };
 
-constexpr std::array<const char*, 10> kCouinaudSCT_10 = {
-  kSCT_I, kSCT_II, kSCT_III,
-  kSCT_IVa, kSCT_IVb,
-  kSCT_V, kSCT_VI, kSCT_VII, kSCT_VIII,
+// IVIII_with_IVab has 9 entries — IVa and IVb *replace* IV (whole),
+// shifting V..VIII to indices 5..8.  See ADR-0023 §"Class abstraction
+// for territories" + the 2026-05-15 SCT-verification PKS subnote.
+constexpr std::array<const char*, 9> kCouinaudSCT_9 = {
+  kSCT_I,  kSCT_II, kSCT_III, kSCT_IVa, kSCT_IVb,
+  kSCT_V,  kSCT_VI, kSCT_VII, kSCT_VIII,
 };
 
 constexpr std::array<const char*, 8> kCouinaudNames_8 = {
-  "I", "II", "III", "IV",
-  "V", "VI", "VII", "VIII",
+  "I", "II", "III", "IV", "V", "VI", "VII", "VIII",
 };
 
-constexpr std::array<const char*, 10> kCouinaudNames_10 = {
-  "I", "II", "III",
-  "IVa", "IVb",
-  "V", "VI", "VII", "VIII",
+constexpr std::array<const char*, 9> kCouinaudNames_9 = {
+  "I", "II", "III", "IVa", "IVb", "V", "VI", "VII", "VIII",
 };
 
 // Deterministic default palette used when no colour map node is
@@ -111,10 +109,8 @@ void vtkMRMLStdCouinaudTerritoriesNode::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
   os << indent << "Subdivision: " << this->Subdivision << "\n";
-  os << indent
-     << "AIBackendIdentifier: " << (this->AIBackendIdentifier ? this->AIBackendIdentifier : "(none)") << "\n";
-  os << indent
-     << "ComputedAt: " << (this->ComputedAt ? this->ComputedAt : "(none)") << "\n";
+  os << indent << "AIBackendIdentifier: " << (this->AIBackendIdentifier ? this->AIBackendIdentifier : "(none)") << "\n";
+  os << indent << "ComputedAt: " << (this->ComputedAt ? this->ComputedAt : "(none)") << "\n";
 }
 
 //------------------------------------------------------------------------------
@@ -172,7 +168,7 @@ vtkStringArray* vtkMRMLStdCouinaudTerritoriesNode::GetSegments()
   this->Segments->Initialize();
   if (this->Subdivision == I_VIII_with_IVab)
   {
-    for (const char* name : kCouinaudNames_10)
+    for (const char* name : kCouinaudNames_9)
     {
       this->Segments->InsertNextValue(name);
     }
@@ -226,11 +222,11 @@ const char* vtkMRMLStdCouinaudTerritoriesNode::GetSCTCode(int index)
 {
   if (this->Subdivision == I_VIII_with_IVab)
   {
-    if (index < 0 || index >= static_cast<int>(kCouinaudSCT_10.size()))
+    if (index < 0 || index >= static_cast<int>(kCouinaudSCT_9.size()))
     {
       return "";
     }
-    return kCouinaudSCT_10[index];
+    return kCouinaudSCT_9[index];
   }
   if (index < 0 || index >= static_cast<int>(kCouinaudSCT_8.size()))
   {
@@ -242,5 +238,5 @@ const char* vtkMRMLStdCouinaudTerritoriesNode::GetSCTCode(int index)
 //------------------------------------------------------------------------------
 int vtkMRMLStdCouinaudTerritoriesNode::GetNumberOfSegments()
 {
-  return this->Subdivision == I_VIII_with_IVab ? 10 : 8;
+  return this->Subdivision == I_VIII_with_IVab ? 9 : 8;
 }

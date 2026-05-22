@@ -92,8 +92,7 @@ class vtkStringArray;
  * The exact subdivision-dependent ordering is fixed by the
  * test-skeleton invariants below; the implementer step pins it.
  */
-class VTK_SLICER_VASCULARTERRITORIES_MODULE_MRML_EXPORT vtkMRMLStdCouinaudTerritoriesNode
-  : public vtkMRMLAbstractTerritoriesNode
+class VTK_SLICER_VASCULARTERRITORIES_MODULE_MRML_EXPORT vtkMRMLStdCouinaudTerritoriesNode : public vtkMRMLAbstractTerritoriesNode
 {
 public:
   static vtkMRMLStdCouinaudTerritoriesNode* New();

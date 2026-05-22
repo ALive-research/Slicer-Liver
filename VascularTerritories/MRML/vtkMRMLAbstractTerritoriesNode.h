@@ -110,8 +110,7 @@ class vtkStringArray;
  *  - ADR-0011 (SCT terminology dispatch)
  *  - Docs/architecture/territories-class-hierarchy.md
  */
-class VTK_SLICER_VASCULARTERRITORIES_MODULE_MRML_EXPORT vtkMRMLAbstractTerritoriesNode
-  : public vtkMRMLDisplayableNode
+class VTK_SLICER_VASCULARTERRITORIES_MODULE_MRML_EXPORT vtkMRMLAbstractTerritoriesNode : public vtkMRMLDisplayableNode
 {
 public:
   /// Runtime sentinel: returns ``nullptr``.  The class is abstract,

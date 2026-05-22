@@ -98,12 +98,12 @@ class TerritoriesNodeWrapperTestCase(ScriptedLoadableModuleTest):
         # entry points (per ADR-0023's Subject Hierarchy convention),
         # replace this scaffolding with the factory call.
         try:
-            from VascularTerritoriesLogic import (  # type: ignore[import-not-found]
+            from territories_test_helpers import (  # type: ignore[import-not-found]
                 createStandardCouinaud,
             )
         except ImportError:
             self.fail(
-                "VascularTerritoriesLogic.createStandardCouinaud not "
+                "territories_test_helpers.createStandardCouinaud not "
                 "yet importable -- the implementer commit per ADR-0023 "
                 "§'MRML scene organisation' must add the Subject "
                 "Hierarchy folder convention to the module Logic.")

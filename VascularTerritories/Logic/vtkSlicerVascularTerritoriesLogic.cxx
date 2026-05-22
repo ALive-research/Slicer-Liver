@@ -128,8 +128,7 @@ void vtkSlicerVascularTerritoriesLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
     return;
   }
 
-  vtkMRMLSubjectHierarchyNode* shNode =
-    vtkMRMLSubjectHierarchyNode::GetSubjectHierarchyNode(scene);
+  vtkMRMLSubjectHierarchyNode* shNode = vtkMRMLSubjectHierarchyNode::GetSubjectHierarchyNode(scene);
   if (!shNode)
   {
     return;
@@ -141,8 +140,7 @@ void vtkSlicerVascularTerritoriesLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
   vtkIdType folderItem = shNode->GetItemByName("Vascular Territories");
   if (folderItem == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID || folderItem == 0)
   {
-    folderItem = shNode->CreateFolderItem(shNode->GetSceneItemID(),
-                                          "Vascular Territories");
+    folderItem = shNode->CreateFolderItem(shNode->GetSceneItemID(), "Vascular Territories");
   }
 
   vtkIdType nodeItem = shNode->GetItemByDataNode(territoryNode);
@@ -276,10 +274,10 @@ void vtkSlicerVascularTerritoriesLogic::InitializeCenterlineSearchModel(vtkMRMLM
 }
 
 void vtkSlicerVascularTerritoriesLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNode* vascularTerritorySegmentationNode,
-                                                          vtkMRMLScalarVolumeNode* refVolume,
-                                                          vtkMRMLSegmentationNode* segmentation,
-                                                          vtkMRMLModelNode* centerlineModel,
-                                                          vtkMRMLColorNode* colormap)
+                                                                      vtkMRMLScalarVolumeNode* refVolume,
+                                                                      vtkMRMLSegmentationNode* segmentation,
+                                                                      vtkMRMLModelNode* centerlineModel,
+                                                                      vtkMRMLColorNode* colormap)
 {
   vtkMRMLScene* mrmlScene = this->GetMRMLScene();
 
