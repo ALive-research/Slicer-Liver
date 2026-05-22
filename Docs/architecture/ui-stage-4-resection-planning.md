@@ -29,8 +29,7 @@ Module home: `LiverResections/`.
 │ └──────────────────────────────────────────────────────────────────┘  │
 │                                                                        │
 │ ┌─ Active resection: Tumor wedge ──────────────────────────────────┐  │
-│ │  [Init] ─▶ [Planning] ─▶ [Confirmed]                             │  │
-│ │              ↑ current                                           │  │
+│ │   Init  ─▶  [Planning]  ─▶  Confirmed                            │  │
 │ │  Bezier:     4×4 grid  [⋯ Change grid]                           │  │
 │ │  Editing:    drag control points in 3D                           │  │
 │ │  [◀ Unlock to Init]   [Commit Planning → Confirmed ▶]            │  │
@@ -81,11 +80,13 @@ Drag-to-reorder updates the resection list. The list order has weight:
 
 ### State breadcrumb
 
-`[Init] ─▶ [Planning] ─▶ [Confirmed]` with an indicator under the current state. Visualised as a non-interactive breadcrumb — surgeon advances via the bottom-row transition buttons (or the per-row `🔒` in the resection table). Stepping back uses `[◀ Unlock to ...]`.
+`Init ─▶ [Planning] ─▶ Confirmed` — the **bracketed** state is the current state; non-current states render as plain labels. In the actual Qt UI the indicator is a **colour code** on the current state's label (e.g. accent foreground + bracket glyph) — the ASCII mockup uses brackets `[...]` to convey the same idea without colour. No separate "↑ current" annotation line; the bracket/colour *is* the indicator.
+
+Visualised as a non-interactive breadcrumb — surgeon advances via the bottom-row transition buttons (or the per-row `🔒` in the resection table). Stepping back uses `[◀ Unlock to ...]`.
 
 ### State-specific contents
 
-**Init state:**
+**Init state** (breadcrumb: `[Init] ─▶ Planning ─▶ Confirmed`):
 
 ```
 Init mode:    ◉ Slicing Plane   ○ Distance Spheroid
@@ -94,7 +95,7 @@ Init points:  2 / 2 placed
               [Commit init → Planning ▶]
 ```
 
-**Planning state:**
+**Planning state** (breadcrumb: `Init ─▶ [Planning] ─▶ Confirmed`):
 
 ```
 Bezier:       4 × 4 grid  (per ADR-0018 — 3×3 also possible via [⋯ → Change grid])
@@ -103,7 +104,7 @@ Editing:      drag control points in 3D view (vtkLiverBezierWidget)
 [Open resectogram view ▶]
 ```
 
-**Confirmed state:**
+**Confirmed state** (breadcrumb: `Init ─▶ Planning ─▶ [Confirmed]`):
 
 ```
 Confirmed at: 2026-05-21 14:32 by current session

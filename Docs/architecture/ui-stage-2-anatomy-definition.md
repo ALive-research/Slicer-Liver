@@ -43,6 +43,14 @@ Module home: `LiverSegmentation/` (new in v2.0; see ADR-0024).
 │ │  [Edit in Segment Editor]                                    │  │
 │ └──────────────────────────────────────────────────────────────┘  │
 │                                                                    │
+│ ┌─ Hepatic vein ───────────────────────────────────────────────┐  │
+│ │  Source: [▼ Portal venous (patient_PV.nrrd)]                 │  │
+│ │  Tools:  [Run TotalSegmentator (liver_vessels)]              │  │
+│ │  Scratch: ○ not started                                      │  │
+│ │  Refinement: [Refine with Kumar-Oram] (opens Segment Editor) │  │
+│ │  [Edit in Segment Editor]                                    │  │
+│ └──────────────────────────────────────────────────────────────┘  │
+│                                                                    │
 │ ┌─ Tumors ─────────────────────────────────────────────────────┐  │
 │ │  Source: [▼ Portal venous (patient_PV.nrrd)]                 │  │
 │ │  Tumor list:                                                 │  │
@@ -57,8 +65,7 @@ Module home: `LiverSegmentation/` (new in v2.0; see ADR-0024).
 └────────────────────────────────────────────────────────────────────┘
 ```
 
-(The Hepatic vein card mirrors Portal vein structurally; collapsed
-in the sketch for brevity.)
+(All four cards are shown above. The Hepatic vein card mirrors Portal vein structurally — same tool chain, same refinement affordance — but is dispatched on a different SCT target.)
 
 ## Behaviour notes
 
