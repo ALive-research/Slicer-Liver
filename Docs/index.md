@@ -44,6 +44,7 @@ adr/0022-nurbs-v2-1-design.md
 adr/0023-unified-gui-stage-workflow.md
 adr/0024-segmentation-orchestration.md
 adr/0026-segment-editor-effects.md
+adr/0027-invariant-test-first-v2-implementation.md
 ```
 
 ```{toctree}
