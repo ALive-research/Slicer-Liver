@@ -52,14 +52,14 @@ flags:
       - LiverResections/
       - LiverResectionsLib/
       - LiverMarkups/
-      - LiverSegments/
+      - VascularTerritories/
       - LiverVolumetry/
       - Modeling/
   py:
     paths:
       - LiverResections/Testing/Python/
       - LiverResectionsLib/Testing/Python/
-      - LiverSegments/
+      - VascularTerritories/
       - LiverVolumetry/
 
 # Exclude generated, test-only, and third-party code from both
