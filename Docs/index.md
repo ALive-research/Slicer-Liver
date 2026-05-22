@@ -46,6 +46,7 @@ adr/0024-segmentation-orchestration.md
 adr/0026-segment-editor-effects.md
 adr/0027-invariant-test-first-v2-implementation.md
 adr/0028-parameter-node-wrapper.md
+adr/0029-stage1-case-setup-contract.md
 ```
 
 ```{toctree}
