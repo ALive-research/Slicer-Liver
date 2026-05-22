@@ -415,11 +415,42 @@ jobs:
           # -O0 prevents inlining that would confuse gcov line attribution.
           # --coverage is short for -fprofile-arcs -ftest-coverage and
           # implies -lgcov at link time.
+          #
+          # Slicer's CMake macros (``slicerMacroBuildLoadableModule``,
+          # ``slicerMacroBuildScriptedModule``, etc.) reset
+          # ``CMAKE_CXX_FLAGS`` per-target with their own preset, which
+          # silently drops the ``-DCMAKE_CXX_FLAGS="--coverage"`` we
+          # tried to pass through.  Diagnostic evidence from PR #427
+          # (run 26286677329): across an 89-target instrumented build
+          # only **2 .gcno files** landed in ``build-coverage`` and
+          # **0 .gcda** were written by the 30 passing tests -- the
+          # Slicer-Liver loadable modules were never instrumented.
+          #
+          # The fix is compiler wrappers: tiny shim scripts that
+          # prepend ``--coverage`` to every gcc/g++ invocation.  This
+          # makes the flag part of the compiler identity itself, so
+          # any Slicer macro that subsequently rewrites
+          # ``CMAKE_CXX_FLAGS`` is harmless -- the compiler still
+          # instruments.  The wrappers live under ``/tmp/cov-wrappers/``
+          # for the duration of the job.
+          mkdir -p /tmp/cov-wrappers
+          cat > /tmp/cov-wrappers/cc <<'WRAP'
+          #!/bin/sh
+          exec gcc --coverage "$@"
+          WRAP
+          cat > /tmp/cov-wrappers/c++ <<'WRAP'
+          #!/bin/sh
+          exec g++ --coverage "$@"
+          WRAP
+          chmod +x /tmp/cov-wrappers/cc /tmp/cov-wrappers/c++
+
           cmake -S . -B build-coverage \
             -DCMAKE_BUILD_TYPE=Debug \
             -DBUILD_TESTING:BOOL=ON \
-            -DCMAKE_C_FLAGS="-O0 --coverage" \
-            -DCMAKE_CXX_FLAGS="-O0 --coverage" \
+            -DCMAKE_C_COMPILER=/tmp/cov-wrappers/cc \
+            -DCMAKE_CXX_COMPILER=/tmp/cov-wrappers/c++ \
+            -DCMAKE_C_FLAGS="-O0" \
+            -DCMAKE_CXX_FLAGS="-O0" \
             -DCMAKE_EXE_LINKER_FLAGS="--coverage" \
             -DCMAKE_SHARED_LINKER_FLAGS="--coverage" \
             -DSlicer_DIR="${Slicer_DIR}" \
