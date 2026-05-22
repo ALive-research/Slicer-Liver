@@ -465,7 +465,27 @@ jobs:
           # by design; the exclude was matching them all and pruning the
           # real coverage data out before source-path resolution.
           # Symptom: ``(WARNING) All coverage data is filtered out``.
+          #
+          # DIAGNOSTIC RUN: ``-v`` (verbose) + the gcovr per-file
+          # filter trace via ``--print-summary`` is intentional here.
+          # The first cut of the gcovr step still emits "All coverage
+          # data is filtered out. lines: 0.0% (0 out of 0)" on every
+          # run since at least PR #405 landed; this run captures
+          # gcovr's own reasoning so the next-step fix is targeted at
+          # the actual rule that's pruning data rather than guesswork.
+          # Revert to a quiet invocation in the follow-up PR.
+          #
+          # We also ``ls`` the build-coverage tree first so the run
+          # log records whether ``.gcda`` files actually exist before
+          # gcovr runs (rules out "instrumentation never produced
+          # data" vs "data exists but is filtered").
+          echo "--- build-coverage .gcda inventory ---"
+          find build-coverage -name '*.gcda' 2>/dev/null | head -30 || true
+          echo "--- .gcda count: $(find build-coverage -name '*.gcda' 2>/dev/null | wc -l) ---"
+          echo "--- .gcno count: $(find build-coverage -name '*.gcno' 2>/dev/null | wc -l) ---"
+          echo "--- gcovr -v invocation ---"
           gcovr \
+            -v \
             --root "$GITHUB_WORKSPACE" \
             --xml --output coverage-cxx.xml \
             --exclude '.*Testing.*' \
