@@ -1,3 +1,6 @@
+# Copyright (c) 2022-2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
+# Distributed under the OSI-approved BSD 3-Clause License.
+
 #-----------------------------------------------------------------------------
 set(MODULE_NAME LiverSegments)
 string(TOUPPER ${MODULE_NAME} MODULE_NAME_UPPER)
@@ -16,6 +19,14 @@ set(MODULE_PYTHON_RESOURCES
   )
 
 add_subdirectory(Logic)
+
+# v2.0.0 MRML kit -- vtkMRMLAbstractTerritoriesNode hierarchy per
+# ADR-0023 §"Class abstraction for territories".  Library name is
+# explicitly ``vtkSlicerVascularTerritoriesModuleMRML`` (decoupled from
+# the still-LiverSegments ``MODULE_NAME``); the parent module's symbol
+# rename is the follow-up implementer commit.
+add_subdirectory(MRML)
+
 #-----------------------------------------------------------------------------
 slicerMacroBuildScriptedModule(
   NAME ${MODULE_NAME}
