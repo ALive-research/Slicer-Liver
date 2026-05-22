@@ -37,8 +37,8 @@
 
   ===============================================================================*/
 
-#ifndef __vtkSlicerVascularTerritoriesLogic_h
-#define __vtkSlicerVascularTerritoriesLogic_h
+#ifndef __vtkslicervascularterritorieslogic_h_
+#define __vtkslicervascularterritorieslogic_h_
 
 #include "vtkSlicerVascularTerritoriesModuleLogicExport.h"
 
