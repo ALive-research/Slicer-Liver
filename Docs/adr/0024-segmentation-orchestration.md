@@ -13,19 +13,20 @@ Slicer-Liver v2.0.0's Stage 2 (Anatomy Definition) per
 covers the surgeon's workflow step upstream of resection planning:
 segmenting the liver parenchyma, portal and hepatic veins, and any
 tumors. The decision *what* — stitch existing tools (TotalSegmentator,
-MONAILabel-DeepGrow, VMTK, Kumar-Oram-internal) rather than training
-new models — was settled on 2026-05-14 in the segmentation-stitch
-discussion. This ADR sharpens the contract: *which module hosts the
-orchestration, which class calls each tool, where outputs land, how
-SCT dispatch ties the stages together, and what the failure / refinement
-loops look like*.
+VMTK, Kumar-Oram-internal) rather than training new models — was
+settled on 2026-05-14 in the segmentation-stitch discussion and
+refined on 2026-05-21 (see Alternative H below for the
+MONAILabel-DeepGrow scope change). This ADR sharpens the contract:
+*which module hosts the orchestration, which class calls each tool,
+where outputs land, how SCT dispatch ties the stages together, and
+what the failure / refinement loops look like*.
 
 The constraints in play:
 
 - Multiple per-structure workflows (Liver / Portal vein / Hepatic vein /
   Tumors), each with its own backend chain (TotalSegmentator alone for
-  the liver parenchyma; TotalSegmentator + Kumar-Oram refinement for
-  vessels; TotalSegmentator + MONAILabel-DeepGrow for tumors).
+  the liver parenchyma and the tumor channel; TotalSegmentator + Kumar-
+  Oram refinement for vessels; Segment Editor for all manual fixes).
 - Downstream stages (Stages 3, 4, 5) consume a *single canonical*
   `vtkMRMLSegmentationNode` with SCT-tagged segments, not a bag of
   per-target nodes.
@@ -38,10 +39,14 @@ The constraints in play:
   rendering.
 - ADR-0013 reserves "Pipeline" for one Python class per display-node
   type. Segmentation orchestration is *not* a Pipeline in that sense.
-- AI extensions (TotalSegmentator, MONAILabel) are heavy installs
-  (multi-GB models, GPU recommended). Per ADR-0023 §"AI extension
-  dependencies — lazy install", they are pip-installed on first use,
-  not declared as `EXTENSION_DEPENDS`.
+- TotalSegmentator is a heavy install (multi-GB models, GPU
+  recommended). Per ADR-0023 §"AI extension dependencies — lazy
+  install", it is pip-installed on first use, not declared as
+  `EXTENSION_DEPENDS`. The lazy-pip-install pattern works because
+  TotalSegmentator can be consumed as a Python package directly with
+  no external runtime — server-architecture AI tools that would
+  require a separately-running process (e.g., MONAILabel) are
+  deliberately out of v2.0 scope (see Alternative H).
 - Per ADR-0009's IEC 62366 relaxation, Slicer-Liver is research-tool-
   grade; surgeon clinical training is the validation surface, not
   automated gates.
@@ -64,7 +69,7 @@ surface class family in PRs #341/#345) that hosts a Python
 
 | Term | Definition |
 |------|------------|
-| **tool** | External segmenter consumed via a Python wrapper (TotalSegmentator, MONAILabel-DeepGrow). |
+| **tool** | External segmenter consumed via a Python wrapper (currently TotalSegmentator in v2.0). |
 | **effect** | Slicer Segment Editor effect (a `qSlicerSegmentEditorAbstractEffect` subclass) shipped by Slicer-Liver. v2.0 adds one: Kumar-Oram. See [ADR-0026](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0026-segment-editor-effects.md) (forthcoming). |
 | **stage** | Logical UX phase (Stage 2 = Anatomy Definition in [ADR-0023](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0023-unified-gui-stage-workflow.md)). |
 | **step** | A single tool invocation parameterised by SCT target + ROI. |
@@ -81,7 +86,6 @@ flowchart LR
     Image["CT image<br/>(Portal-venous role,<br/>from Stage 1)"]
     Orch["LiverSegmentation/<br/>orchestrator<br/>(Python logic)"]
     TS["TotalSegmentator<br/>wrapper"]
-    ML["MONAILabel-DeepGrow<br/>wrapper"]
     SE["Segment Editor<br/>(stock Slicer)"]
     KO["Kumar-Oram<br/>(Segment Editor effect)"]
     Scratch["Scratch<br/>vtkMRMLSegmentationNode<br/>(one per tool-run)"]
@@ -90,11 +94,9 @@ flowchart LR
 
     Image --> Orch
     Orch --> TS
-    Orch --> ML
     Orch -."open Segment Editor<br/>+ activate effect".-> SE
     SE --> KO
     TS --> Scratch
-    ML --> Scratch
     KO -.in-place refine.-> Canonical
     SE -.manual edit.-> Canonical
     Scratch -.surgeon Accept.-> Canonical
@@ -121,7 +123,7 @@ its own micro-workflow:
 | **Liver parenchyma** | TotalSegmentator → manual fixes (Segment Editor) → Accept | Single AI step; manual editing if AI mask is off. |
 | **Portal vein** | TotalSegmentator (`liver_vessels`) → Accept → Kumar-Oram (Segment Editor effect) → manual fixes | Vessels uniquely benefit from Kumar-Oram's centerline-tracking refinement; the AI mask is the seed, not the answer. Kumar-Oram is a Slicer Segment Editor effect per [ADR-0026](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0026-segment-editor-effects.md). The orchestrator's vessel card includes a "Refine with Kumar-Oram" button that opens Segment Editor with the segment selected + effect pre-activated. |
 | **Hepatic vein** | TotalSegmentator (`liver_vessels`) → Accept → Kumar-Oram (Segment Editor effect) → manual fixes | Same chain as Portal vein, dispatched by SCT target. |
-| **Tumors** | TotalSegmentator (tumor channel) → MONAILabel-DeepGrow refinement → manual fixes → Accept | Liver tumors are heterogeneous; DeepGrow's interactive point-click refinement earns its place. Multi-focal supported (N tumors per case). |
+| **Tumors** | TotalSegmentator (tumor channel) → manual fixes (Segment Editor) → Accept | Multi-focal supported (N tumors per case). Interactive tumor refinement (e.g., point-click DeepGrow-style) is deferred to v2.1+ — see Alternative H for why the originally-proposed MONAILabel-DeepGrow path is dropped from v2.0. |
 
 Invocation order across structures is **hinted, not enforced**.
 TotalSegmentator-first is the default; surgeon may invoke Kumar-Oram
@@ -149,7 +151,6 @@ LiverSegmentation/
 ├── LiverSegmentation.py                  # Module + Widget + Logic (scripted module pattern)
 ├── ToolWrappers/
 │   ├── TotalSegmentator.py
-│   ├── MONAILabel.py
 │   └── VMTK.py                           # used by Kumar-Oram effect for centerline extraction
 ├── Effects/
 │   └── SegmentEditorKumarOramEffect.py   # qSlicerSegmentEditorAbstractEffect subclass; see ADR-0026
@@ -170,11 +171,11 @@ are extension-wide assets per ADR-0011 §3 (amended in PR #406).
 Per [ADR-0023](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0023-unified-gui-stage-workflow.md)
 §"AI extension dependencies — lazy install":
 
-- TotalSegmentator and MONAILabel are **not** declared as
-  `EXTENSION_DEPENDS`. They install via `slicer.util.pip_install(...)`
-  on first surgeon invocation of an AI feature.
-- Each tool wrapper checks the import succeeds before use; on
-  `ImportError`, prompts the surgeon with a confirmation dialog
+- TotalSegmentator is **not** declared as `EXTENSION_DEPENDS`. It
+  installs via `slicer.util.pip_install(...)` on first surgeon
+  invocation of an AI feature.
+- The TotalSegmentator wrapper checks the import succeeds before use;
+  on `ImportError`, prompts the surgeon with a confirmation dialog
   ("Install TotalSegmentator? ~XGB download + GPU recommended.").
 - After successful install, the wrapper proceeds and remembers the
   install for the session.
@@ -182,10 +183,15 @@ Per [ADR-0023](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/
   re-install affordances for surgeons going offline.
 - `SlicerLayerDM` and `SlicerVMTK` remain hard `EXTENSION_DEPENDS`.
 
-Slicer-Liver consumes the AI packages' Python APIs **directly** — it
-does not require the upstream Slicer extensions for TotalSegmentator
-or MONAILabel to be installed. Surgeon interacts via Slicer-Liver's
-own UI, not via the upstream extensions' widgets.
+Slicer-Liver consumes TotalSegmentator's Python API **directly** —
+it does not require the upstream Slicer TotalSegmentator extension
+to be installed. Surgeon interacts via Slicer-Liver's own UI, not
+via the upstream extension's widget.
+
+The lazy-pip-install pattern is only viable for AI tools that consume
+as a Python package with no external runtime. Tools that require a
+separately-running server process (e.g., MONAILabel) cannot follow
+this pattern and are out of v2.0 scope — see Alternative H.
 
 ### Failure paths
 
@@ -230,14 +236,14 @@ holding multiple segments). The scratch-and-Accept pattern preserves
 the per-tool lifecycle the alternative wanted, while exposing a single
 canonical node to downstream consumers.
 
-### Alternative C — Hard `EXTENSION_DEPENDS` for TotalSegmentator + MONAILabel
+### Alternative C — Hard `EXTENSION_DEPENDS` for TotalSegmentator
 
-Declare both AI extensions as required dependencies, matching the
-SlicerLayerDM precedent in PR #368.
+Declare TotalSegmentator as a required `EXTENSION_DEPENDS` entry,
+matching the SlicerLayerDM precedent in PR #368.
 
-**Rejected because** the AI packages are multi-GB and assume GPU
-availability. Forcing the install on every Slicer-Liver user
-contradicts the v2.0.0 user-facing-leap framing: many surgeons and
+**Rejected because** the TotalSegmentator install footprint is multi-GB
+and assumes GPU availability. Forcing the install on every Slicer-Liver
+user contradicts the v2.0.0 user-facing-leap framing: many surgeons and
 researchers want the planning workflow without the AI overhead.
 Lazy install preserves the AI capability for users who want it and a
 lean install for users who do not.
@@ -283,7 +289,7 @@ already commits the rename direction.
 Originally drafted as `LiverSegmentation/ToolWrappers/KumarOram.py` —
 the orchestrator's vessel card calls the wrapper directly, the wrapper
 produces a scratch node, surgeon Accepts to canonical. Mirrors the
-TotalSegmentator and MONAILabel wrapper pattern.
+TotalSegmentator wrapper pattern.
 
 **Rejected because** Kumar-Oram is an *interactive vessel refinement*
 algorithm that fits the Slicer Segment Editor effect contract
@@ -304,6 +310,40 @@ vessel card includes a "Refine with Kumar-Oram" button that opens
 Segment Editor with the segment selected + effect pre-activated
 (hybrid pattern per [ADR-0026](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0026-segment-editor-effects.md) — forthcoming) — while the standalone-effect
 path remains available for the noisy-AI contingency.
+
+### Alternative H — MONAILabel-DeepGrow for interactive tumor refinement
+
+Originally drafted: tumors get a `LiverSegmentation/ToolWrappers/MONAILabel.py`
+that invokes MONAILabel-DeepGrow for interactive point-click tumor
+refinement after TotalSegmentator's coarse tumor mask. Mirrors the
+TotalSegmentator wrapper pattern and the original 2026-05-14
+stitch-decision tool list.
+
+**Rejected because** MONAILabel is a client/server architecture: the
+Slicer extension is the client; the AI models run in a separately-
+running MONAILabel *server* process (local Docker, native install, or
+remote). Surgeon must install + run + maintain the server alongside
+Slicer — substantially heavier than the v2.0.0 lazy-pip-install
+framing was meant to support. The lazy-pip-install pattern only works
+for AI tools that consume as a Python package with no external
+runtime; MONAILabel breaks that envelope.
+
+Three v2.1+ paths remain open:
+
+- **DeepGrow inference without MONAILabel server** — pip-install
+  `monai` directly and run the DeepGrow model inline. More
+  implementation effort (no server scaffolding to lean on) but
+  preserves the server-less promise.
+- **Custom Segment Editor effect** for interactive tumor refinement —
+  similar to Kumar-Oram per [ADR-0026](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0026-segment-editor-effects.md);
+  algorithm-of-choice TBD.
+- **Slicer-stock GrowFromSeeds / Paint** — non-AI interactive refinement
+  with surgeon doing the work.
+
+v2.0 ships tumors with TotalSegmentator + Segment Editor manual fixes
+only. The interactive-refinement gap is real but small for the
+TotalSegmentator-coarse-mask-plus-manual-edit common case; surgeons
+needing more get the deferred-to-v2.1 path.
 
 ## Consequences
 
@@ -340,8 +380,9 @@ path remains available for the noisy-AI contingency.
 - **Issue [#408](https://github.com/ALive-research/Slicer-Liver/issues/408)**
   — `LiverSegments/` → `VascularTerritories/` rename clears the
   conceptual space.
-- Subsequent PRs add Kumar-Oram and MONAILabel-DeepGrow wrappers
-  iteratively.
+- Subsequent PRs add the Kumar-Oram Segment Editor effect (per ADR-0026).
+- Interactive tumor refinement (DeepGrow-without-server, custom effect,
+  or other) is a deferred v2.1+ decision per Alternative H.
 - A settings panel under the Liver shell (a sub-affordance of
   [ADR-0023](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0023-unified-gui-stage-workflow.md)
   §Stage 6) exposes installed-AI-backend status + pre-download
@@ -356,7 +397,10 @@ Reviewable invariants that signal this decision is honoured:
   orchestrator class; tool wrappers live under
   `LiverSegmentation/ToolWrappers/`.
 - Grep `EXTENSION_DEPENDS` in `LiverSegmentation/CMakeLists.txt`
-  finds no entry for `TotalSegmentator` or `MONAILabel`.
+  finds no entry for `TotalSegmentator` (and no entry for `MONAILabel`
+  either — per Alternative H, MONAILabel is out of v2.0 scope).
+- Grep `LiverSegmentation/ToolWrappers/` finds no `MONAILabel.py` —
+  the originally-drafted wrapper was retracted per Alternative H.
 - Grep for `slicer.util.pip_install` in `LiverSegmentation/ToolWrappers/`
   finds the lazy-install code paths.
 - No new `vtkMRML*DisplayNode` subclass for segmentation output;
