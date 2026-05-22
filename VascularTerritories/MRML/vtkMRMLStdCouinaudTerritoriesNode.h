@@ -151,12 +151,16 @@ public:
 
   /// Subdivision (``I_VIII`` vs ``I_VIII_with_IVab``).  Drives the
   /// segment count returned by ``GetNumberOfSegments()`` and the SCT
-  /// ordering of ``GetSCTCode(int)``.
+  /// ordering of ``GetSCTCode(int)``.  Setter clamps the input to
+  /// the enum range so a stray value from ``ReadXMLAttributes`` (or
+  /// programmatic mis-use) falls back to ``I_VIII`` deterministically
+  /// rather than silently behaving as ``I_VIII`` while reporting the
+  /// out-of-range raw integer.
   vtkGetMacro(Subdivision, int);
-  vtkSetMacro(Subdivision, int);
+  void SetSubdivision(int subdivision);
 
   /// Segment count for the current ``Subdivision``: 8 for ``I_VIII``,
-  /// 10 for ``I_VIII_with_IVab``.  Invariant 9.
+  /// 9 for ``I_VIII_with_IVab`` (IVa+IVb replace IV).  Invariant 9.
   int GetNumberOfSegments();
 
   /// AI-tool identifier string (e.g., "TotalSegmentator-2.0.0").

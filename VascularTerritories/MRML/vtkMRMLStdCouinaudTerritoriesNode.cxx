@@ -179,6 +179,10 @@ vtkStringArray* vtkMRMLStdCouinaudTerritoriesNode::GetSegments()
       this->Segments->InsertNextValue(name);
     }
   }
+  // Touch MTime so any observer of the returned array sees the
+  // rebuild — without this, downstream consumers wired with
+  // ``Segments->AddObserver`` would miss the per-call rebuild.
+  this->Segments->Modified();
   return this->Segments;
 }
 
@@ -238,4 +242,21 @@ const char* vtkMRMLStdCouinaudTerritoriesNode::GetSCTCode(int index)
 int vtkMRMLStdCouinaudTerritoriesNode::GetNumberOfSegments()
 {
   return this->Subdivision == I_VIII_with_IVab ? 9 : 8;
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLStdCouinaudTerritoriesNode::SetSubdivision(int subdivision)
+{
+  // Clamp to the enum range; a stray value from ReadXMLAttributes or
+  // programmatic mis-use falls back to I_VIII deterministically.
+  if (subdivision != I_VIII && subdivision != I_VIII_with_IVab)
+  {
+    subdivision = I_VIII;
+  }
+  if (this->Subdivision == subdivision)
+  {
+    return;
+  }
+  this->Subdivision = subdivision;
+  this->Modified();
 }
