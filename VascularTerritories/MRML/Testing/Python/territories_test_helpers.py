@@ -91,9 +91,8 @@ def createStandardCouinaud(name="Auto Couinaud"):
   ``OnMRMLSceneNodeAdded`` observer performs the placement before
   control returns to Python).
 
-  :param name: User-visible node name; e.g. ``"Auto Couinaud
-               (2026-05-22)"`` per architecture-doc §"Subject
-               Hierarchy organisation".
+  :param name: User-visible node name (e.g. ``"Auto Couinaud"``)
+               per architecture-doc §"Subject Hierarchy organisation".
   """
   _ensureLogicInstantiated()
   return slicer.mrmlScene.AddNewNodeByClass(

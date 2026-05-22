@@ -100,7 +100,7 @@ void vtkSlicerVascularTerritoriesLogic::RegisterNodes()
     return;
   }
 
-  // ADR-0023 §"Class abstraction for territories" — the abstract base
+  // ADR-0023 §"Class abstraction for territories" — only the concrete
   // is registered so ``GetNodesByClass("vtkMRMLAbstractTerritoriesNode")``
   // returns instances of both concrete subclasses (the polymorphic
   // node-class filter consumers rely on, per the architecture-doc
@@ -327,7 +327,8 @@ void vtkSlicerVascularTerritoriesLogic::calculateVascularTerritoryMap(vtkMRMLSeg
   }
 
   vascularTerritorySegmentationNode->Reset(nullptr);
-  vascularTerritorySegmentationNode->SetAttribute("VascularTerritories.SegmentationId", segmentationId);
+  // ``segmentationId`` is owned by the node's attribute table and has been
+  // cleared by Reset(); the re-set below uses the safe ``segmentationIdCopy``.
   vascularTerritorySegmentationNode->CreateDefaultDisplayNodes(); // only needed for display
   vtkSlicerSegmentationsModuleLogic::ImportLabelmapToSegmentationNode(labelmapVolumeNode, vascularTerritorySegmentationNode);
   vascularTerritorySegmentationNode->CreateClosedSurfaceRepresentation();
