@@ -52,8 +52,7 @@ constexpr std::array<const char*, 8> kCouinaudSCT_8 = {
 // shifting V..VIII to indices 5..8.  See ADR-0023 §"Class abstraction
 // for territories" + the 2026-05-15 SCT-verification PKS subnote.
 constexpr std::array<const char*, 9> kCouinaudSCT_9 = {
-  kSCT_I,  kSCT_II, kSCT_III, kSCT_IVa, kSCT_IVb,
-  kSCT_V,  kSCT_VI, kSCT_VII, kSCT_VIII,
+  kSCT_I, kSCT_II, kSCT_III, kSCT_IVa, kSCT_IVb, kSCT_V, kSCT_VI, kSCT_VII, kSCT_VIII,
 };
 
 constexpr std::array<const char*, 8> kCouinaudNames_8 = {

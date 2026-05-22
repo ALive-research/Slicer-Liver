@@ -300,7 +300,10 @@ int testStdCouinaudXMLRoundTrip()
   // acceptable; the round-trip itself is the strong invariant.
   // (The stub WriteXML emits only the Superclass payload, so this
   // check fails red until the implementer adds the IVar emission.)
-  CHECK_BOOL(xml.find("Subdivision") != std::string::npos || xml.find("AIBackendIdentifier") != std::string::npos, true);
+  // Slicer's vtkMRMLWriteXMLStringMacro / vtkMRMLWriteXMLIntMacro emit
+  // lower-camelCase XML attribute names (first macro arg), not the IVar
+  // name.  Search both possibilities for robustness.
+  CHECK_BOOL(xml.find("subdivision") != std::string::npos || xml.find("aiBackendIdentifier") != std::string::npos, true);
 
   vtkNew<vtkMRMLStdCouinaudTerritoriesNode> sink;
   sink->SetScene(scene.GetPointer());
