@@ -1,2 +1,0 @@
-#!/usr/bin/env bash
-exec /home/rafael/.guix-profile/bin/pre-commit hook-impl --config=.pre-commit-config.yaml --hook-type=commit-msg --hook-dir "$(dirname "$0")" -- "$@"
