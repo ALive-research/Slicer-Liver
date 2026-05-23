@@ -88,8 +88,6 @@ protected:
   void SetMRMLSceneInternal(vtkMRMLScene* newScene) override;
 
 public:
-
-public:
   void MarkSegmentWithID(vtkMRMLModelNode* segment, int segmentId);
   void AddSegmentToCenterlineModel(vtkMRMLModelNode* summedCenterline, vtkMRMLModelNode* segmentCenterline);
   int SegmentClassificationProcessing(vtkMRMLModelNode* centerlineModel, vtkMRMLLabelMapVolumeNode* labelMap);
