@@ -60,11 +60,37 @@ find_package(Slicer REQUIRED)
 # appended to the aggregate launcher INI list.  Pattern mirrors the
 # canonical SlicerSOFA ``SuperBuild/External_Sofa.cmake`` block
 # (PR Slicer/SlicerSOFA#43 and successors).
+# Resolve ``SlicerVMTK_DIR`` here from ``$ENV{...}`` rather than the
+# CMake cache variable: at this point in the file (BEFORE the launcher
+# block's ``find_package(SlicerVMTK QUIET)`` populates the cache var),
+# the CMake-scope ``SlicerVMTK_DIR`` is empty.  The
+# ``slicer-build-ubuntu2404`` image sets ``SlicerVMTK_DIR`` as a
+# Dockerfile ``ENV`` so any container-based CI step inherits it
+# without needing ``-DSlicerVMTK_DIR=...`` at the cmake invocation
+# (the project's CI workflow only passes ``-DSlicer_DIR`` and
+# ``-DLayerDisplayableManager_DIR`` explicitly).  If the env var is
+# unset (e.g. host-side development outside the image), the IS_DIRECTORY
+# guard below skips the patch and the launcher INI degrades to the
+# upstream broken-paths shape -- ``ExtractCenterline`` then fails at
+# runtime exactly as before this fix, surfacing the missing env.
+set(_slicervmtk_dir_from_env "$ENV{SlicerVMTK_DIR}")
+set(_slicervmtk_superbuild_lib "${_slicervmtk_dir_from_env}/../SlicerVmtk-build/${Slicer_QTLOADABLEMODULES_LIB_DIR}")
+
+if(NOT _slicervmtk_dir_from_env OR NOT IS_DIRECTORY "${_slicervmtk_superbuild_lib}")
+  message(WARNING
+    "Slicer-Liver: SlicerVMTK SuperBuild inner library directory not "
+    "found at [${_slicervmtk_superbuild_lib}] (env SlicerVMTK_DIR="
+    "[${_slicervmtk_dir_from_env}]).  The VMTK runtime path correction "
+    "for the launcher INI will be skipped; ``ExtractCenterline`` and "
+    "VMTK Python wrappers will fail to load.  This is expected when "
+    "building outside the slicer-build-ubuntu2404 CI image.")
+endif()
+
 set(SlicerVMTK_SuperBuildLib_LIBRARY_PATHS_LAUNCHER_BUILD
-  "${SlicerVMTK_DIR}/../SlicerVmtk-build/${Slicer_QTLOADABLEMODULES_LIB_DIR}"
+  "${_slicervmtk_superbuild_lib}"
   )
 set(SlicerVMTK_SuperBuildLib_PYTHONPATH_LAUNCHER_BUILD
-  "${SlicerVMTK_DIR}/../SlicerVmtk-build/${Slicer_QTLOADABLEMODULES_LIB_DIR}"
+  "${_slicervmtk_superbuild_lib}"
   )
 
 # Variable name lookup in ``SlicerBlockAdditionalLauncherSettings.cmake``
