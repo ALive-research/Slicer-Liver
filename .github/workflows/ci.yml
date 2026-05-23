@@ -454,11 +454,22 @@ jobs:
           WRAP
           chmod +x /tmp/cov-wrappers/launcher
 
+          # Both COMPILER_LAUNCHER and LINKER_LAUNCHER point at the
+          # same shim.  Without LINKER_LAUNCHER, Slicer macros that
+          # rewrite per-target ``LINK_FLAGS`` strip ``--coverage`` from
+          # the link command and the resulting .so files fail with
+          # ``undefined reference to '__gcov_init'`` because libgcov
+          # never gets pulled in (PR #428 first launcher attempt
+          # reproduced this exactly).  ``CMAKE_<LANG>_LINKER_LAUNCHER``
+          # requires CMake 3.21+; the slicer-build-ubuntu2404 image
+          # carries CMake 3.28+.
           cmake -S . -B build-coverage \
             -DCMAKE_BUILD_TYPE=Debug \
             -DBUILD_TESTING:BOOL=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=/tmp/cov-wrappers/launcher \
             -DCMAKE_CXX_COMPILER_LAUNCHER=/tmp/cov-wrappers/launcher \
+            -DCMAKE_C_LINKER_LAUNCHER=/tmp/cov-wrappers/launcher \
+            -DCMAKE_CXX_LINKER_LAUNCHER=/tmp/cov-wrappers/launcher \
             -DCMAKE_C_FLAGS="-O0" \
             -DCMAKE_CXX_FLAGS="-O0" \
             -DCMAKE_EXE_LINKER_FLAGS="--coverage" \
