@@ -5,8 +5,6 @@
 
 
 
-import logging
-
 import vtk
 import slicer
 from slicer.ScriptedLoadableModule import *
@@ -27,20 +25,22 @@ class VascularTerritoriesTestCase(ScriptedLoadableModuleTest):
     Python Logic.  It depends on SlicerExtension-VMTK's
     ``ExtractCenterline`` module (via ``getCenterlineLogic()``) and
     on remote sample data downloaded from GitHub at run-time.
-    Neither is available in the project-managed
-    ``slicer-build-ubuntu2404`` CI image, so on CI the suite is
-    skipped gracefully -- the territory MRML invariants are
-    exhaustively covered by the C++ ``vtkMRMLAbstractTerritoriesNodeTest1``
-    and the Python wrapper test ``TerritoriesNodeWrapperTest``,
-    both of which exercise the same Logic surface without external
-    dependencies.
+
+    SlicerExtension-VMTK is pre-built into the project's
+    ``slicer-build-ubuntu2404`` CI image (ALive-Docker PR #12) and
+    the consumer-side CMake injects ``${SlicerVMTK_DIR}/lib/Slicer-*``
+    paths into ``--additional-module-paths``, so the integration
+    suite is exercised on CI rather than skipped.  If
+    ``ExtractCenterline`` is somehow missing at run-time, fail loudly
+    rather than silently skip -- a missing centerline dependency is
+    a regression worth surfacing, not a quiet pass.
     """
-    if 'ExtractCenterline' not in slicer.util.moduleNames():
-      logging.warning(
-        "VascularTerritoriesTest: SlicerExtension-VMTK (ExtractCenterline) "
-        "is not loaded; skipping the integration suite.  Install the "
-        "VMTK extension to run this test locally.")
-      return
+    self.assertIn(
+      'ExtractCenterline', slicer.util.moduleNames(),
+      "SlicerExtension-VMTK (ExtractCenterline) module is not loaded; "
+      "the CI image should provide it via ${SlicerVMTK_DIR}.  See "
+      "ALive-Docker PR #12 and the SlicerVMTK injection block in "
+      "VascularTerritories/Testing/Python/CMakeLists.txt.")
     self.setUp()
     self.logicFunctionsWithEmptyParameters()
     self.downloadData()
