@@ -60,18 +60,25 @@ _fallbackLogic = None
 
 
 def _ensureLogicInstantiated():
-  """Return a Logic instance observing ``slicer.mrmlScene``.
+  """Return a specialized ``vtkSlicerVascularTerritoriesLogic``
+  instance observing ``slicer.mrmlScene``.
 
-  Prefers the bootstrapped module singleton; falls back to a cached
-  module-level instance for test contexts without the full Slicer
-  module loader.
+  Prefers the instance the Module class created at startup-completion
+  time (exposed as ``slicer.modules.vascularterritories.specializedLogic``)
+  -- that is the one whose ``OnMRMLSceneNodeAdded`` observer drives
+  Stage 4 Subject Hierarchy folder placement.  Falls back to a cached
+  module-level instance for test contexts where the Module class did
+  not run its bootstrap (e.g. when ``createStandardCouinaud`` is
+  imported standalone from pytest).
+
+  Note: ``slicer.modules.vascularterritories.logic()`` would return a
+  *generic* ``vtkSlicerScriptedLoadableModuleLogic`` because this is a
+  scripted module, so it cannot be used here -- only the specialized
+  Logic carries the territory-aware ``OnMRMLSceneNodeAdded`` override.
   """
   module = getattr(slicer.modules, "vascularterritories", None)
-  if module is not None and hasattr(module, "logic"):
-    try:
-      return module.logic()
-    except Exception:
-      pass
+  if module is not None and hasattr(module, "specializedLogic"):
+    return module.specializedLogic
   global _fallbackLogic
   if _fallbackLogic is None:
     from vtkSlicerVascularTerritoriesModuleLogicPython import (

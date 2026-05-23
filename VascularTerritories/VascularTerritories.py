@@ -72,11 +72,74 @@ class VascularTerritories(ScriptedLoadableModule):
     self.parent.acknowledgementText = """
     """  # TODO: replace with organization, grant and thanks.
 
-    # Additional initialization step after application startup is complete
-    #slicer.app.connect("startupCompleted()", registerSampleData)
+    # Register the territory MRML node classes at module-discovery time
+    # (before the widget is ever opened) so that ``slicer.mrmlScene
+    # .AddNewNodeByClass("vtkMRMLStdCouinaudTerritoriesNode", ...)``
+    # works from any test, batch-mode script, or other module's setup
+    # callback.  The previous code path created the C++ Logic only in
+    # ``VascularTerritoriesWidget.setup()`` (i.e. on first navigation
+    # to the module), so ctest Python tests that ran at startup hit
+    # "node class not registered" failures even though everything else
+    # was wired correctly.
+    #
+    # We register the class prototypes directly via the scene rather
+    # than instantiating ``vtkSlicerVascularTerritoriesLogic`` here --
+    # the Widget will create its own Logic instance later and we want
+    # to avoid two Logics both observing the scene's ``NodeAddedEvent``
+    # (which would double-process the Stage 4 Subject Hierarchy folder
+    # placement in ``OnMRMLSceneNodeAdded``).
+    if not slicer.app.commandOptions().noMainWindow:
+      slicer.app.connect("startupCompleted()", self._registerTerritoryNodeClasses)
+    else:
+      # ``--no-main-window`` skips Slicer's normal startup sequence so
+      # the ``startupCompleted`` signal never fires.  Run the
+      # registration immediately so headless / test invocations still
+      # have the classes available.
+      self._registerTerritoryNodeClasses()
 
     #Hide module, so that it only shows up in the Liver module, and not as a separate module
     parent.hidden = True
+
+  def _registerTerritoryNodeClasses(self):
+    """Instantiate the specialized C++ Logic at module-init time so
+    its scene observer is wired before any node is added.
+
+    Without this, the only territory-aware scene observer is the one
+    the widget creates in ``setup()`` (i.e. on first navigation to
+    the module), so any node added before then -- by ctest, by a
+    batch-mode script, or by another module's setup callback -- skips
+    the Stage 4 Subject Hierarchy folder placement in
+    ``vtkSlicerVascularTerritoriesLogic::OnMRMLSceneNodeAdded``.
+
+    The Logic is stored on the Module class instance to keep it alive
+    for the lifetime of the application; on Python-level garbage
+    collection the observer would auto-unregister itself.  Two
+    instances (this one + the widget's) both observing the scene is
+    safe -- ``RegisterNodes`` is idempotent and the SH placement
+    code reuses an existing 'Vascular Territories' folder rather
+    than creating a duplicate."""
+    try:
+      from vtkSlicerVascularTerritoriesModuleLogicPython import (
+        vtkSlicerVascularTerritoriesLogic,
+      )
+    except ImportError as exc:
+      logging.warning(
+        "VascularTerritories: specialized Logic unavailable -- "
+        "skipping early node-class registration (%s).  This usually "
+        "means the module Logic library failed to build or its "
+        "Python wrapping is not on the launcher's "
+        "--additional-module-paths.", exc)
+      return
+    self._cppLogic = vtkSlicerVascularTerritoriesLogic()
+    self._cppLogic.SetMRMLScene(slicer.mrmlScene)
+    # Expose the specialized Logic on ``slicer.modules.vascularterritories``
+    # so test helpers and downstream code can fetch it (the default
+    # ``slicer.modules.vascularterritories.logic()`` returns a generic
+    # ``vtkSlicerScriptedLoadableModuleLogic`` because this is a
+    # scripted module).
+    module = getattr(slicer.modules, "vascularterritories", None)
+    if module is not None:
+      module.specializedLogic = self._cppLogic
 
 #
 # Register sample data sets in Sample Data module

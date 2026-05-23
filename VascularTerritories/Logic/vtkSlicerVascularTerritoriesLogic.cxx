@@ -112,6 +112,22 @@ void vtkSlicerVascularTerritoriesLogic::RegisterNodes()
 }
 
 //------------------------------------------------------------------------------
+void vtkSlicerVascularTerritoriesLogic::SetMRMLSceneInternal(vtkMRMLScene* newScene)
+{
+  // ADR-0023 §"MRML scene organisation": territory nodes get
+  // re-parented under the "Vascular Territories" Subject Hierarchy
+  // folder in ``OnMRMLSceneNodeAdded`` below, which only fires if
+  // the logic actually observes ``NodeAddedEvent``.  The default
+  // ``vtkMRMLAbstractLogic::SetMRMLSceneInternal`` plumbs the scene
+  // pointer through ``SetObject`` (no event observation), so the SH
+  // placement never runs without this override.  Pattern mirrors
+  // ``vtkSlicerLiverResectionsLogic::SetMRMLSceneInternal``.
+  vtkNew<vtkIntArray> events;
+  events->InsertNextValue(vtkMRMLScene::NodeAddedEvent);
+  this->SetAndObserveMRMLSceneEventsInternal(newScene, events.GetPointer());
+}
+
+//------------------------------------------------------------------------------
 void vtkSlicerVascularTerritoriesLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
 {
   this->Superclass::OnMRMLSceneNodeAdded(node);

@@ -79,6 +79,16 @@ public:
   /// territory-node arrival.
   void OnMRMLSceneNodeAdded(vtkMRMLNode* node) override;
 
+protected:
+  /// Override to opt-in to ``NodeAddedEvent`` observation -- the
+  /// default ``vtkMRMLAbstractLogic::SetMRMLSceneInternal`` uses
+  /// ``SetObject`` (no event observation), so ``OnMRMLSceneNodeAdded``
+  /// would never fire without this override.  Pattern mirrors
+  /// ``vtkSlicerLiverResectionsLogic::SetMRMLSceneInternal``.
+  void SetMRMLSceneInternal(vtkMRMLScene* newScene) override;
+
+public:
+
 public:
   void MarkSegmentWithID(vtkMRMLModelNode* segment, int segmentId);
   void AddSegmentToCenterlineModel(vtkMRMLModelNode* summedCenterline, vtkMRMLModelNode* segmentCenterline);
