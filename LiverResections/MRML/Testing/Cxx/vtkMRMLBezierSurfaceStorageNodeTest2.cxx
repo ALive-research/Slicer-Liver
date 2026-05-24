@@ -31,41 +31,44 @@
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  Invariant test scaffolding for ``.lrp.json`` schema v2 — surfaces the
-  v2.0 surgeon-facing state per ADR-0023 §"Persistence".  Per ADR-0027,
-  these tests land BEFORE the implementation commit and pin the v2
-  design contract; they are expected to FAIL on the current v2 writer
-  + reader and to flip to passing once liver-implementer lands the v2
-  fields in vtkMRMLBezierSurfaceStorageNode.
-
-  Pinned invariants (ADR-0023 §"Persistence" + the schema-versioning
-  convention from the file-header comment in
-  vtkMRMLBezierSurfaceStorageNode.cxx):
-
-   - testV2RoundTripFullFields: name + Safety/Risk margins + orderIndex
-     + classification + volumetry partition references survive a
-     write → read → write cycle.
-   - testV2OptionalFieldsFallbackDefaults: v2 files load into v2-aware nodes with
-     documented defaults (name = MRML display name, margins = 0.0,
-     orderIndex = -1, classification absent, volumetry partitions
-     empty, stageSelection absent).
-   - testV2WriteEmitsSchemaVersion2: the on-disk schemaVersion is 2
-     and is not 3.
-   - testV2ClassificationSubtypeDiscriminator: scene.classification
-     .subtype matches the concrete vtkMRMLAbstractTerritoriesNode
-     subclass name (vtkMRMLStdCouinaudTerritoriesNode vs
-     vtkMRMLCustomTerritoriesNode), preserving the polymorphic-
-     interface discriminator from ADR-0023 §"Class abstraction for
-     territories".
-   - testV2ReaderRejectsV99: the reader's accepted
-     schemaVersion band is [2, 2]; v99 stays
-     rejected (the schema-versioning invariant first pinned in
-     testSchemaVersionMismatch of Test1).
-
-  ADR-0008 §2: C++ low-level tests live alongside the MRML library
-  and run under the ctkTest driver with no Slicer launch and no Qt.
-
 ==============================================================================*/
+
+/**
+ * \file vtkMRMLBezierSurfaceStorageNodeTest2.cxx
+ *
+ * Invariant test scaffolding for ``.lrp.json`` schema v2 — surfaces the
+ * v2.0 surgeon-facing state per ADR-0023 §"Persistence".  Per ADR-0027,
+ * these tests land BEFORE the implementation commit and pin the v2
+ * design contract; they are expected to FAIL on the current v2 writer
+ * + reader and to flip to passing once the v2 fields are wired in
+ * vtkMRMLBezierSurfaceStorageNode.
+ *
+ * Pinned invariants (ADR-0023 §"Persistence" + the schema-versioning
+ * convention from the file-header comment in
+ * vtkMRMLBezierSurfaceStorageNode.cxx):
+ *
+ *   - testV2RoundTripFullFields: name + Safety/Risk margins + orderIndex
+ *     + classification + volumetry partition references survive a
+ *     write → read → write cycle.
+ *   - testV2OptionalFieldsFallbackDefaults: v2 files load into v2-aware
+ *     nodes with documented defaults (name = MRML display name,
+ *     margins = 0.0, orderIndex = -1, classification absent, volumetry
+ *     partitions empty, stageSelection absent).
+ *   - testV2WriteEmitsSchemaVersion2: the on-disk schemaVersion is 2
+ *     and is not 3.
+ *   - testV2ClassificationSubtypeDiscriminator: scene.classification
+ *     .subtype matches the concrete vtkMRMLAbstractTerritoriesNode
+ *     subclass name (vtkMRMLStdCouinaudTerritoriesNode vs
+ *     vtkMRMLCustomTerritoriesNode), preserving the polymorphic-
+ *     interface discriminator from ADR-0023 §"Class abstraction for
+ *     territories".
+ *   - testV2ReaderRejectsV99: the reader's accepted schemaVersion band
+ *     is [2, 2]; v99 stays rejected (the schema-versioning invariant
+ *     first pinned in testSchemaVersionMismatch of Test1).
+ *
+ * ADR-0008 §2: C++ low-level tests live alongside the MRML library
+ * and run under the ctkTest driver with no Slicer launch and no Qt.
+ */
 
 // This module MRML includes
 #include "vtkMRMLBezierSurfaceNode.h"

@@ -4,19 +4,23 @@
 
   Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
-  Tests for vtkMRMLBezierSurfaceStorageNode — the new ``.lrp.json``
-  storage node landed by task T2.5 per ADR-0014 §5.  Exercises:
-
-   - JSON round-trip (populate → write → read → assert equality)
-   - schemaVersion mismatch rejection
-   - CanReadInReferenceNode / CanWriteFromReferenceNode discrimination
-   - Legacy .lrp.fcsv migration read path
-   - Legacy .lrp.fcsv write rejection
-
-  ADR-0008 §2: C++ low-level tests live alongside the MRML library
-  and run under the ctkTest driver with no Slicer launch and no Qt.
-
 ==============================================================================*/
+
+/**
+ * \file vtkMRMLBezierSurfaceStorageNodeTest1.cxx
+ *
+ * Tests for vtkMRMLBezierSurfaceStorageNode — the new ``.lrp.json``
+ * storage node landed by task T2.5 per ADR-0014 §5.  Exercises:
+ *
+ *   - JSON round-trip (populate → write → read → assert equality)
+ *   - schemaVersion mismatch rejection
+ *   - CanReadInReferenceNode / CanWriteFromReferenceNode discrimination
+ *   - Legacy .lrp.fcsv migration read path
+ *   - Legacy .lrp.fcsv write rejection
+ *
+ * ADR-0008 §2: C++ low-level tests live alongside the MRML library
+ * and run under the ctkTest driver with no Slicer launch and no Qt.
+ */
 
 // This module MRML includes
 #include "vtkMRMLBezierSurfaceNode.h"
