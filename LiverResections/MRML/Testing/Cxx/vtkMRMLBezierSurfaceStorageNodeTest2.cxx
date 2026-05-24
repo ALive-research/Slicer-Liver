@@ -66,6 +66,33 @@
  *     is [2, 2]; v99 stays rejected (the schema-versioning invariant
  *     first pinned in testSchemaVersionMismatch of Test1).
  *
+ * Coverage-gap follow-ups (post-T5.2-e /slicer-review):
+ *
+ *   - testV2MalformedOrderIndexAttributeFallsBackToTyped:
+ *     ``std::stoi`` exception branch in the writer's resection block
+ *     keeps the typed accessor value when the attribute override is
+ *     non-numeric.
+ *   - testV2MalformedMarginAttributeFallsBackToZero:
+ *     ``std::stod`` exception branch in the shared margin-readout
+ *     lambda falls back to the documented 0.0 default.
+ *   - testV2ClassificationEmptyStringFilter: reader's empty-string
+ *     guards on ``scene.classification.{nodeId,subtype}`` drop the
+ *     attributes rather than stashing empty strings.
+ *   - testV2ResectionNameEmptyStringSkipped: reader's
+ *     ``!name.empty()`` guard preserves the sink node's pre-load
+ *     display name.
+ *   - testV2StageSelectionWriterDropsStash: pins the documented v2.0
+ *     writer asymmetry — the reader stashes ``currentStage`` but the
+ *     writer emits ``stageSelection`` as an empty object until the
+ *     Liver-shell wiring lands.
+ *   - testV2ClassificationSceneScanSingleNode: writer's scene-scan
+ *     branch emits the concrete VTK class name + node ID when one
+ *     ``vtkMRMLAbstractTerritoriesNode`` subclass is in the scene and
+ *     no attribute override is set.
+ *   - testV2ClassificationSceneScanMultipleNodesFallback: writer
+ *     routes a multi-classification scene into the empty-placeholder
+ *     branch (the ``hits.size() == 1`` guard).
+ *
  * ADR-0008 §2: C++ low-level tests live alongside the MRML library
  * and run under the ctkTest driver with no Slicer launch and no Qt.
  */
@@ -74,12 +101,20 @@
 #include "vtkMRMLBezierSurfaceNode.h"
 #include "vtkMRMLBezierSurfaceStorageNode.h"
 
+// VascularTerritories MRML includes — exercised by Tests 8/9 to fire
+// the writer's scene-scan classification branch with a real
+// ``vtkMRMLAbstractTerritoriesNode`` subclass landed by the territories
+// class hierarchy (ADR-0023 §"Class abstraction for territories").
+#include "vtkMRMLCustomTerritoriesNode.h"
+#include "vtkMRMLStdCouinaudTerritoriesNode.h"
+
 // MRML includes
 #include "vtkMRMLCoreTestingMacros.h"
 #include "vtkMRMLScene.h"
 
 // VTK includes
 #include <vtkNew.h>
+#include <vtkSmartPointer.h>
 #include <vtksys/SystemTools.hxx>
 
 // STD includes
@@ -735,6 +770,398 @@ int testV2StageSelectionCurrentStageReader()
   return EXIT_SUCCESS;
 }
 
+//------------------------------------------------------------------------------
+// Test 8 — malformed ``orderIndex`` attribute falls back to the typed
+// accessor value.
+//
+// The writer's resection block reads ``orderIndex`` from the attribute
+// map as an override path (covers a future Liver-shell wiring that
+// stashes the field in the attribute map before a typed accessor
+// lands).  When the attribute string is non-numeric the writer's
+// ``std::stoi`` throws, the exception is caught, and the writer falls
+// back to the typed ``GetOrderIndex()`` accessor.  Pinning this branch
+// keeps the silent-corruption pathway visible on Codecov.
+//------------------------------------------------------------------------------
+int testV2MalformedOrderIndexAttributeFallsBackToTyped()
+{
+  vtkNew<vtkMRMLScene> scene;
+  vtkNew<vtkMRMLBezierSurfaceNode> source;
+  scene->AddNode(source.GetPointer());
+  populateV2Fields(source.GetPointer());
+  source->SetName("MalformedOrderIndexPlan");
+  source->SetOrderIndex(42);
+  source->SetAttribute("orderIndex", "not-an-int");
+
+  const std::string path = makeTempPath("lrp.json");
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> writeStorage;
+  writeStorage->SetFileName(path.c_str());
+  CHECK_INT(writeStorage->WriteData(source.GetPointer()), 1);
+
+  const std::string contents = slurp(path);
+  if (!contains(contents, "orderIndex", "42"))
+  {
+    std::cerr << "testV2MalformedOrderIndexAttributeFallsBackToTyped: expected typed-accessor "
+                 "value 42 to survive a malformed attribute; got:\n"
+              << contents << "\n";
+    return EXIT_FAILURE;
+  }
+  // The malformed string itself MUST NOT survive into the on-disk
+  // value position.
+  if (contents.find("\"orderIndex\":\"not-an-int\"") != std::string::npos || contents.find("\"orderIndex\": \"not-an-int\"") != std::string::npos)
+  {
+    std::cerr << "testV2MalformedOrderIndexAttributeFallsBackToTyped: malformed attribute value "
+                 "leaked into the on-disk JSON; got:\n"
+              << contents << "\n";
+    return EXIT_FAILURE;
+  }
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Test 9 — malformed margin attribute falls back to the documented
+// default (0.0).
+//
+// Same defensive-fallback branch as Test 8, applied to the
+// ``readDoubleAttr`` lambda used for both ``safetyMargin_mm`` and
+// ``riskMargin_mm``.  Pinning both keys in one test covers the
+// shared lambda's ``std::stod`` exception handler.
+//------------------------------------------------------------------------------
+int testV2MalformedMarginAttributeFallsBackToZero()
+{
+  vtkNew<vtkMRMLScene> scene;
+  vtkNew<vtkMRMLBezierSurfaceNode> source;
+  scene->AddNode(source.GetPointer());
+  populateV2Fields(source.GetPointer());
+  source->SetName("MalformedMarginPlan");
+  source->SetAttribute("safetyMargin_mm", "xyz");
+  source->SetAttribute("riskMargin_mm", "nan-not-a-double");
+
+  const std::string path = makeTempPath("lrp.json");
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> writeStorage;
+  writeStorage->SetFileName(path.c_str());
+  CHECK_INT(writeStorage->WriteData(source.GetPointer()), 1);
+
+  const std::string contents = slurp(path);
+  if (!contains(contents, "safetyMargin_mm", "0.0") && !contains(contents, "safetyMargin_mm", "0"))
+  {
+    std::cerr << "testV2MalformedMarginAttributeFallsBackToZero: expected safetyMargin_mm = 0.0 "
+                 "after malformed attribute; got:\n"
+              << contents << "\n";
+    return EXIT_FAILURE;
+  }
+  if (!contains(contents, "riskMargin_mm", "0.0") && !contains(contents, "riskMargin_mm", "0"))
+  {
+    std::cerr << "testV2MalformedMarginAttributeFallsBackToZero: expected riskMargin_mm = 0.0 "
+                 "after malformed attribute; got:\n"
+              << contents << "\n";
+    return EXIT_FAILURE;
+  }
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Test 10 — reader's empty-string filter on scene.classification.
+//
+// The reader stashes ``classification.nodeId`` and
+// ``classification.subtype`` into MRML attributes only when the values
+// are non-empty strings; empty-string entries are dropped.  This
+// invariant prevents a degenerate JSON file (a writer bug that emits
+// ``""`` for an absent reference) from corrupting the sink node's
+// attribute map.
+//------------------------------------------------------------------------------
+int testV2ClassificationEmptyStringFilter()
+{
+  const std::string v2Path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(v2Path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 2,\n";
+    ofs << "  \"state\": \"Planning\",\n";
+    ofs << "  \"initMode\": \"SlicingPlane\",\n";
+    ofs << "  \"rows\": 4,\n";
+    ofs << "  \"cols\": 4,\n";
+    ofs << "  \"controlGrid\": [";
+    for (int i = 0; i < 48; ++i)
+    {
+      if (i > 0)
+      {
+        ofs << ", ";
+      }
+      ofs << (static_cast<double>(i) * 0.0625);
+    }
+    ofs << "],\n";
+    ofs << "  \"slicingPlane\": { \"origin\": [0, 0, 0], \"normal\": [0, 0, 1], "
+           "\"initPointsFlat\": [0, 0, 0, 0, 0, 0] },\n";
+    ofs << "  \"distanceSpheroid\": { \"center\": [0, 0, 0], "
+           "\"radius\": {\"x\": 0, \"y\": 0, \"z\": 0}, "
+           "\"numberOfInitPoints\": 0, \"initPointsFlat\": [] },\n";
+    ofs << "  \"scene\": { \"classification\": { \"nodeId\": \"\", \"subtype\": \"\" }, "
+           "\"volumetryPartitions\": [], \"stageSelection\": {} },\n";
+    ofs << "  \"metadata\": {}\n";
+    ofs << "}\n";
+  }
+
+  vtkNew<vtkMRMLScene> scene;
+  vtkNew<vtkMRMLBezierSurfaceNode> sink;
+  scene->AddNode(sink.GetPointer());
+
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
+  storage->SetFileName(v2Path.c_str());
+  CHECK_INT(storage->ReadData(sink.GetPointer()), 1);
+
+  // Neither attribute should be populated — the empty-string guard in
+  // the reader drops the keys on the way through.
+  if (sink->GetAttribute("classificationNodeId") != nullptr)
+  {
+    std::cerr << "testV2ClassificationEmptyStringFilter: expected nullptr "
+                 "classificationNodeId attribute; got: "
+              << sink->GetAttribute("classificationNodeId") << "\n";
+    return EXIT_FAILURE;
+  }
+  if (sink->GetAttribute("classificationSubtype") != nullptr)
+  {
+    std::cerr << "testV2ClassificationEmptyStringFilter: expected nullptr "
+                 "classificationSubtype attribute; got: "
+              << sink->GetAttribute("classificationSubtype") << "\n";
+    return EXIT_FAILURE;
+  }
+
+  vtksys::SystemTools::RemoveFile(v2Path);
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Test 11 — reader skips an empty ``resection.name`` and preserves the
+// node's pre-load display name.
+//
+// The reader's ``!name.empty()`` guard is the defensive complement to
+// the empty-string filter on classification (Test 10).  A degenerate
+// JSON file with ``resection.name: ""`` must not erase the sink's
+// display name on load.
+//------------------------------------------------------------------------------
+int testV2ResectionNameEmptyStringSkipped()
+{
+  const std::string v2Path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(v2Path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 2,\n";
+    ofs << "  \"state\": \"Planning\",\n";
+    ofs << "  \"initMode\": \"SlicingPlane\",\n";
+    ofs << "  \"rows\": 4,\n";
+    ofs << "  \"cols\": 4,\n";
+    ofs << "  \"controlGrid\": [";
+    for (int i = 0; i < 48; ++i)
+    {
+      if (i > 0)
+      {
+        ofs << ", ";
+      }
+      ofs << (static_cast<double>(i) * 0.0625);
+    }
+    ofs << "],\n";
+    ofs << "  \"slicingPlane\": { \"origin\": [0, 0, 0], \"normal\": [0, 0, 1], "
+           "\"initPointsFlat\": [0, 0, 0, 0, 0, 0] },\n";
+    ofs << "  \"distanceSpheroid\": { \"center\": [0, 0, 0], "
+           "\"radius\": {\"x\": 0, \"y\": 0, \"z\": 0}, "
+           "\"numberOfInitPoints\": 0, \"initPointsFlat\": [] },\n";
+    ofs << "  \"resection\": { \"name\": \"\", \"safetyMargin_mm\": 0.0, "
+           "\"riskMargin_mm\": 0.0, \"orderIndex\": -1 },\n";
+    ofs << "  \"metadata\": {}\n";
+    ofs << "}\n";
+  }
+
+  vtkNew<vtkMRMLScene> scene;
+  vtkNew<vtkMRMLBezierSurfaceNode> sink;
+  scene->AddNode(sink.GetPointer());
+  sink->SetName("PreservedDisplayName");
+
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
+  storage->SetFileName(v2Path.c_str());
+  CHECK_INT(storage->ReadData(sink.GetPointer()), 1);
+
+  CHECK_NOT_NULL(sink->GetName());
+  CHECK_STRING(sink->GetName(), "PreservedDisplayName");
+
+  vtksys::SystemTools::RemoveFile(v2Path);
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Test 12 — pin the v2.0 stageSelection writer asymmetry as intended.
+//
+// The reader stashes ``scene.stageSelection.currentStage`` into a node
+// attribute (Test 7), but the v2.0 writer emits ``stageSelection`` as
+// an empty object: the Liver-shell wiring that consumes the
+// stashed attribute and re-emits the per-stage block is a v2.1+
+// follow-up to ADR-0023.  This test pins the current asymmetry so a
+// future change that flips one side without the other (e.g. landing
+// the writer wiring without updating the test) fails loudly.
+//
+// When the Liver shell wiring lands, this test should be replaced
+// with a true round-trip assertion; until then it is the
+// regression-pin on the documented v2.0 behaviour.
+//------------------------------------------------------------------------------
+int testV2StageSelectionWriterDropsStash()
+{
+  vtkNew<vtkMRMLScene> scene;
+  vtkNew<vtkMRMLBezierSurfaceNode> source;
+  scene->AddNode(source.GetPointer());
+  populateV2Fields(source.GetPointer());
+  populateV2SurgeonState(source.GetPointer());
+  source->SetAttribute("currentStage", "3");
+
+  const std::string path = makeTempPath("lrp.json");
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> writeStorage;
+  writeStorage->SetFileName(path.c_str());
+  CHECK_INT(writeStorage->WriteData(source.GetPointer()), 1);
+
+  const std::string contents = slurp(path);
+
+  // The block is emitted, but as an empty object.  Reject any
+  // ``"currentStage": 3`` literal that would indicate the writer
+  // had wired the round-trip on.
+  if (contents.find("\"stageSelection\"") == std::string::npos)
+  {
+    std::cerr << "testV2StageSelectionWriterDropsStash: expected the "
+                 "\"stageSelection\" key in the emitted JSON; got:\n"
+              << contents << "\n";
+    return EXIT_FAILURE;
+  }
+  if (contains(contents, "currentStage", "3"))
+  {
+    std::cerr << "testV2StageSelectionWriterDropsStash: writer round-trip "
+                 "appears to have landed — pin needs flipping to the "
+                 "round-trip form; got:\n"
+              << contents << "\n";
+    return EXIT_FAILURE;
+  }
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Test 13 — writer's scene-scan classification branch fires when a
+// single ``vtkMRMLAbstractTerritoriesNode`` subclass is present and no
+// attribute override is set.
+//
+// Pinned invariant (ADR-0023 §"Persistence" + §"Class abstraction for
+// territories"):
+//   When the surface node has no ``classificationSubtype`` attribute
+//   override AND the scene contains exactly one
+//   ``vtkMRMLAbstractTerritoriesNode`` subclass instance, the writer
+//   emits ``scene.classification.subtype`` = concrete VTK class name
+//   and ``scene.classification.nodeId`` = the territories node's ID.
+//
+// Complements Test 4 which exercises the attribute-override path.
+//------------------------------------------------------------------------------
+int testV2ClassificationSceneScanSingleNode()
+{
+  vtkNew<vtkMRMLScene> scene;
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLStdCouinaudTerritoriesNode>::New());
+
+  vtkNew<vtkMRMLStdCouinaudTerritoriesNode> territories;
+  scene->AddNode(territories.GetPointer());
+  CHECK_NOT_NULL(territories->GetID());
+  const std::string territoriesId = territories->GetID();
+
+  vtkNew<vtkMRMLBezierSurfaceNode> source;
+  scene->AddNode(source.GetPointer());
+  populateV2Fields(source.GetPointer());
+  source->SetName("PlanWithSceneScanClassification");
+  // Critically: no ``classificationSubtype`` attribute override — the
+  // writer must fall through to the scene-scan branch.
+
+  const std::string path = makeTempPath("lrp.json");
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> writeStorage;
+  writeStorage->SetFileName(path.c_str());
+  CHECK_INT(writeStorage->WriteData(source.GetPointer()), 1);
+
+  const std::string contents = slurp(path);
+
+  if (contents.find("\"subtype\":\"vtkMRMLStdCouinaudTerritoriesNode\"") == std::string::npos
+      && contents.find("\"subtype\": \"vtkMRMLStdCouinaudTerritoriesNode\"") == std::string::npos)
+  {
+    std::cerr << "testV2ClassificationSceneScanSingleNode: expected "
+                 "scene.classification.subtype = \"vtkMRMLStdCouinaudTerritoriesNode\" "
+                 "from scene scan; got:\n"
+              << contents << "\n";
+    return EXIT_FAILURE;
+  }
+  if (!contains(contents, "nodeId", std::string("\"") + territoriesId + "\""))
+  {
+    std::cerr << "testV2ClassificationSceneScanSingleNode: expected "
+                 "scene.classification.nodeId = \""
+              << territoriesId << "\" from scene scan; got:\n"
+              << contents << "\n";
+    return EXIT_FAILURE;
+  }
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Test 14 — writer emits an empty classification block when the scene
+// contains more than one ``vtkMRMLAbstractTerritoriesNode`` subclass
+// instance and no attribute override pins one.
+//
+// Pinned invariant (ADR-0023 §"Persistence" + the .cxx schema-header
+// "Multi-classification scenes are explicitly NOT supported in v2.0"):
+//   The ``hits.size() == 1`` guard in the scene-scan branch routes a
+//   multi-classification scene into the empty-placeholder fallback —
+//   the writer emits ``"classification": {}`` rather than picking one
+//   arbitrarily.  Multi-classification is a v2.1+ concern.
+//------------------------------------------------------------------------------
+int testV2ClassificationSceneScanMultipleNodesFallback()
+{
+  vtkNew<vtkMRMLScene> scene;
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLStdCouinaudTerritoriesNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLCustomTerritoriesNode>::New());
+
+  vtkNew<vtkMRMLStdCouinaudTerritoriesNode> couinaud;
+  scene->AddNode(couinaud.GetPointer());
+  vtkNew<vtkMRMLCustomTerritoriesNode> custom;
+  scene->AddNode(custom.GetPointer());
+
+  vtkNew<vtkMRMLBezierSurfaceNode> source;
+  scene->AddNode(source.GetPointer());
+  populateV2Fields(source.GetPointer());
+  source->SetName("PlanWithAmbiguousClassification");
+
+  const std::string path = makeTempPath("lrp.json");
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> writeStorage;
+  writeStorage->SetFileName(path.c_str());
+  CHECK_INT(writeStorage->WriteData(source.GetPointer()), 1);
+
+  const std::string contents = slurp(path);
+
+  // Empty placeholder — neither nodeId nor subtype should be emitted
+  // with a populated value.
+  if (contents.find("\"subtype\":\"vtkMRML") != std::string::npos || contents.find("\"subtype\": \"vtkMRML") != std::string::npos)
+  {
+    std::cerr << "testV2ClassificationSceneScanMultipleNodesFallback: ambiguous "
+                 "multi-classification scene leaked a subtype into the JSON; got:\n"
+              << contents << "\n";
+    return EXIT_FAILURE;
+  }
+  if (contents.find("\"nodeId\":\"vtkMRML") != std::string::npos || contents.find("\"nodeId\": \"vtkMRML") != std::string::npos)
+  {
+    std::cerr << "testV2ClassificationSceneScanMultipleNodesFallback: ambiguous "
+                 "multi-classification scene leaked a nodeId into the JSON; got:\n"
+              << contents << "\n";
+    return EXIT_FAILURE;
+  }
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -751,6 +1178,18 @@ int vtkMRMLBezierSurfaceStorageNodeTest2(int, char*[])
   CHECK_EXIT_SUCCESS(testV2ReaderRejectsV99());
   CHECK_EXIT_SUCCESS(testV2SchemaVersionBoundaryRejection());
   CHECK_EXIT_SUCCESS(testV2StageSelectionCurrentStageReader());
+
+  // Defensive-fallback + scene-scan coverage gaps surfaced by the
+  // post-fold /slicer-review of T5.2-e.  Pinning these branches keeps
+  // the storage-node patch coverage in line with ADR-0021 §"Coverage
+  // target" intent for v2.0.
+  CHECK_EXIT_SUCCESS(testV2MalformedOrderIndexAttributeFallsBackToTyped());
+  CHECK_EXIT_SUCCESS(testV2MalformedMarginAttributeFallsBackToZero());
+  CHECK_EXIT_SUCCESS(testV2ClassificationEmptyStringFilter());
+  CHECK_EXIT_SUCCESS(testV2ResectionNameEmptyStringSkipped());
+  CHECK_EXIT_SUCCESS(testV2StageSelectionWriterDropsStash());
+  CHECK_EXIT_SUCCESS(testV2ClassificationSceneScanSingleNode());
+  CHECK_EXIT_SUCCESS(testV2ClassificationSceneScanMultipleNodesFallback());
 
   std::cout << "vtkMRMLBezierSurfaceStorageNodeTest2 completed successfully" << std::endl;
   return EXIT_SUCCESS;
