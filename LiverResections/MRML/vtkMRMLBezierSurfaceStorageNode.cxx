@@ -533,7 +533,8 @@ int vtkMRMLBezierSurfaceStorageNode::WriteJson(const std::string& filePath, vtkM
   // the C++ test driver share a single override path; the typed
   // accessor on ``vtkMRMLBezierSurfaceNode`` is the canonical v2.0
   // storage when no override is set.
-  auto readDoubleAttr = [&](const char* key) -> double {
+  auto readDoubleAttr = [&](const char* key) -> double
+  {
     const char* raw = surfaceNode->GetAttribute(key);
     if (raw == nullptr)
     {
@@ -925,7 +926,8 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
           surfaceNode->SetName(name.c_str());
         }
       }
-      auto stashDoubleAttr = [&](const char* key) {
+      auto stashDoubleAttr = [&](const char* key)
+      {
         if (!resection->HasMember(key))
         {
           return;
