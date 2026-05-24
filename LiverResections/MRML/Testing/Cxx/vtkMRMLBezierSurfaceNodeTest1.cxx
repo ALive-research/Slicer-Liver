@@ -398,6 +398,12 @@ int testXMLRoundTrip()
   source->SetDistanceSpheroidRadiusY(3.0);
   source->SetDistanceSpheroidRadiusZ(4.0);
 
+  // OrderIndex (ADR-0023 §"Persistence") — resection list ordering,
+  // surgical-order + locator-precedence semantic.  Non-default value
+  // pins the XML round-trip path; the ``-1`` sentinel for unordered
+  // is covered by ``testOrderIndexDefaultSentinel`` below.
+  source->SetOrderIndex(7);
+
   // Now transition to Planning and write the Bezier grid (the only
   // mutable geometry post-transition).  Init-mode data above is now
   // read-only audit data.
@@ -527,6 +533,70 @@ int testXMLRoundTrip()
   CHECK_DOUBLE_TOLERANCE(sink->GetDistanceSpheroidRadiusX(), source->GetDistanceSpheroidRadiusX(), 1e-5);
   CHECK_DOUBLE_TOLERANCE(sink->GetDistanceSpheroidRadiusY(), source->GetDistanceSpheroidRadiusY(), 1e-5);
   CHECK_DOUBLE_TOLERANCE(sink->GetDistanceSpheroidRadiusZ(), source->GetDistanceSpheroidRadiusZ(), 1e-5);
+
+  CHECK_INT(sink->GetOrderIndex(), source->GetOrderIndex());
+
+  return EXIT_SUCCESS;
+}
+
+// ADR-0023 §"Persistence" sentinel invariant — a freshly-constructed
+// ``vtkMRMLBezierSurfaceNode`` exposes ``OrderIndex == -1`` (unordered)
+// so the ``.lrp.json`` writer can rely on the sentinel for v2-file
+// fallback semantics, and the Stage 4 resection-table sort can treat
+// ``-1`` as "place at end of list" rather than "place at position -1".
+// The XML round-trip in ``testXMLRoundTrip`` pins the non-default
+// (=7) path; this sibling pins the default.
+int testOrderIndexDefaultSentinel()
+{
+  vtkNew<vtkMRMLBezierSurfaceNode> node;
+  CHECK_INT(node->GetOrderIndex(), -1);
+
+  // Also pin that the default round-trips through XML — a v3 sidecar
+  // for a resection that has never had its surgical-order set must
+  // observe the sentinel on reload, not lose it to a zero-init.
+  vtkNew<vtkMRMLScene> scene;
+  node->SetScene(scene.GetPointer());
+  std::ostringstream out;
+  node->WriteXML(out, 0);
+  const std::string xml = out.str();
+
+  std::vector<std::string> storage;
+  std::string::size_type cursor = 0;
+  while (cursor < xml.size())
+  {
+    const auto eq = xml.find('=', cursor);
+    if (eq == std::string::npos)
+    {
+      break;
+    }
+    const auto nameStart = xml.find_last_of(" \t\n\r", eq);
+    const auto valStart = xml.find('"', eq);
+    if (valStart == std::string::npos)
+    {
+      break;
+    }
+    const auto valEnd = xml.find('"', valStart + 1);
+    if (valEnd == std::string::npos)
+    {
+      break;
+    }
+    storage.push_back(xml.substr(nameStart + 1, eq - nameStart - 1));
+    storage.push_back(xml.substr(valStart + 1, valEnd - valStart - 1));
+    cursor = valEnd + 1;
+  }
+  std::vector<const char*> atts;
+  atts.reserve(storage.size() + 1);
+  for (auto& s : storage)
+  {
+    atts.push_back(s.c_str());
+  }
+  atts.push_back(nullptr);
+
+  vtkNew<vtkMRMLBezierSurfaceNode> sink;
+  sink->SetScene(scene.GetPointer());
+  sink->ReadXMLAttributes(atts.data());
+  CHECK_INT(sink->GetOrderIndex(), -1);
+
   return EXIT_SUCCESS;
 }
 
@@ -1546,6 +1616,7 @@ int vtkMRMLBezierSurfaceNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testSlicingPlaneInit());
   CHECK_EXIT_SUCCESS(testDistanceSpheroidInit());
   CHECK_EXIT_SUCCESS(testXMLRoundTrip());
+  CHECK_EXIT_SUCCESS(testOrderIndexDefaultSentinel());
   CHECK_EXIT_SUCCESS(testCopyContent());
   CHECK_EXIT_SUCCESS(testModifiedEventsOnSetters());
   CHECK_EXIT_SUCCESS(testDisplayNodeAttachedSceneRoundTrip());
