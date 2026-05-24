@@ -81,7 +81,7 @@
 //         "subtype": string               // concrete vtkMRMLAbstractTerritoriesNode subclass name
 //       } | absent,
 //       "volumetryPartitions": [{ "nodeId": string }, …],
-//       "stageSelection": {               // ADR-0023 §"Stage transitions"
+//       "stageSelection": {               // ADR-0023 §"Persistence" — per-stage last-selection
 //         "stage1": string | null,
 //         "stage2": string | null,
 //         "stage3": string | null,
@@ -521,7 +521,7 @@ int vtkMRMLBezierSurfaceStorageNode::WriteJson(const std::string& filePath, vtkM
   writer->WriteObjectPropertyStart("metadata");
   writer->WriteObjectPropertyEnd();
 
-  // resection — v3 surgeon-facing block (ADR-0023 §"Persistence").
+  // resection — v2 surgeon-facing block (ADR-0023 §"Persistence").
   // The lookup tiers below favour the attribute map over the typed
   // accessor so the future Liver shell wiring (which will copy
   // values from the associated ``vtkMRMLLiverResectionNode``) and
@@ -580,7 +580,7 @@ int vtkMRMLBezierSurfaceStorageNode::WriteJson(const std::string& filePath, vtkM
   }
   writer->WriteObjectPropertyEnd();
 
-  // scene — v3 scene-wide context block (ADR-0023 §"Persistence").
+  // scene — v2 scene-wide context block (ADR-0023 §"Persistence").
   // Three subordinate blocks:
   //
   //   - classification: nodeId + subtype of the active territories
@@ -593,7 +593,8 @@ int vtkMRMLBezierSurfaceStorageNode::WriteJson(const std::string& filePath, vtkM
   //     does not yet exist in v2.0; the array is empty until it
   //     lands.
   //   - stageSelection: per-stage node-ID + currentStage int written
-  //     by the Liver shell (ADR-0023 §"Stage transitions").  v2.0
+  //     by the Liver shell (ADR-0023 §"Persistence" —
+  //     per-stage last-selection bullet).  v2.0
   //     emits the block as an empty object — the reader's HasMember
   //     guards keep it forward-compatible with the shell's eventual
   //     populated form.
@@ -890,11 +891,12 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
     }
   }
 
-  // v3 resection block (ADR-0023 §"Persistence").  Defensive
-  // ``HasMember`` guard — a v1 / v2 file has no block and the v3
-  // fields take documented defaults (name = MRML display name,
-  // margins = 0.0, orderIndex = -1) which are already in place by
-  // virtue of the node's default-constructed state.  Surgeon-facing
+  // v2 resection block (ADR-0023 §"Persistence").  Defensive
+  // ``HasMember`` guard — a v2 file may omit the block (e.g. a
+  // preview-tracking write before the fields were wired) and the
+  // surgeon-facing fields take documented defaults (name = MRML
+  // display name, margins = 0.0, orderIndex = -1) which are already
+  // in place by virtue of the node's default-constructed state.  Surgeon-facing
   // values are stashed both in typed members (OrderIndex) AND in the
   // attribute map (margins, name override) so the round-trip writer
   // picks them up symmetrically.  The attribute-map detour for
@@ -942,7 +944,7 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
     }
   }
 
-  // v3 scene block (ADR-0023 §"Persistence").  Defensive parsing:
+  // v2 scene block (ADR-0023 §"Persistence").  Defensive parsing:
   //   - classification: stash {nodeId, subtype} into attributes so
   //     the next write re-emits them.  When the Liver shell wiring
   //     lands, this path will set typed node references instead.

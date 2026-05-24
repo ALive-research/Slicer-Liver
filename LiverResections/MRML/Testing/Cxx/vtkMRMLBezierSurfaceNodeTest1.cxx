@@ -4,18 +4,23 @@
 
   Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
-  Tests for vtkMRMLBezierSurfaceNode — the data-only node landed by
-  ADR-0014 §1.  Exercises:
-
-   - defaults (constructor values)
-   - State / InitializationMode enum round-trip
-   - Bezier control grid round-trip
-   - SlicingPlane init-mode subordinate data
-   - DistanceSpheroid init-mode subordinate data
-   - XML serialize/deserialize via an internal scene snapshot
-   - CopyContent / DeepCopy
-
 ==============================================================================*/
+
+/**
+ * \file vtkMRMLBezierSurfaceNodeTest1.cxx
+ *
+ * Tests for vtkMRMLBezierSurfaceNode — the data-only node landed by
+ * ADR-0014 §1.  Exercises:
+ *
+ *   - defaults (constructor values)
+ *   - State / InitializationMode enum round-trip
+ *   - Bezier control grid round-trip
+ *   - SlicingPlane init-mode subordinate data
+ *   - DistanceSpheroid init-mode subordinate data
+ *   - XML serialize/deserialize via an internal scene snapshot
+ *   - CopyContent / DeepCopy
+ *   - OrderIndex default sentinel + XML round-trip
+ */
 
 // MRML includes
 #include "vtkMRMLCoreTestingMacros.h"

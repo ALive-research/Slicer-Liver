@@ -180,7 +180,7 @@ void populateV2Fields(vtkMRMLBezierSurfaceNode* node)
 /// free to migrate this populate path to typed accessors once those
 /// exist; the byte-level assertions on the emitted JSON do not
 /// change.
-void populateV3SurgeonState(vtkMRMLBezierSurfaceNode* node)
+void populateV2SurgeonState(vtkMRMLBezierSurfaceNode* node)
 {
   node->SetName("Right hemihepatectomy");
   // Attribute names match the JSON key vocabulary so the implementer's
@@ -210,7 +210,7 @@ int testV2RoundTripFullFields()
   vtkNew<vtkMRMLBezierSurfaceNode> source;
   scene->AddNode(source.GetPointer());
   populateV2Fields(source.GetPointer());
-  populateV3SurgeonState(source.GetPointer());
+  populateV2SurgeonState(source.GetPointer());
 
   // First write — source → disk.
   const std::string path1 = makeTempPath("lrp.json");
@@ -442,7 +442,7 @@ int testV2WriteEmitsSchemaVersion2()
   vtkNew<vtkMRMLBezierSurfaceNode> source;
   scene->AddNode(source.GetPointer());
   populateV2Fields(source.GetPointer());
-  populateV3SurgeonState(source.GetPointer());
+  populateV2SurgeonState(source.GetPointer());
 
   const std::string path = makeTempPath("lrp.json");
   vtkNew<vtkMRMLBezierSurfaceStorageNode> writeStorage;
@@ -502,7 +502,7 @@ int testV2ClassificationSubtypeDiscriminator()
     vtkNew<vtkMRMLBezierSurfaceNode> source;
     scene->AddNode(source.GetPointer());
     populateV2Fields(source.GetPointer());
-    populateV3SurgeonState(source.GetPointer());
+    populateV2SurgeonState(source.GetPointer());
     source->SetAttribute("classificationSubtype", "vtkMRMLStdCouinaudTerritoriesNode");
 
     const std::string path = makeTempPath("lrp.json");
@@ -528,7 +528,7 @@ int testV2ClassificationSubtypeDiscriminator()
     vtkNew<vtkMRMLBezierSurfaceNode> source;
     scene->AddNode(source.GetPointer());
     populateV2Fields(source.GetPointer());
-    populateV3SurgeonState(source.GetPointer());
+    populateV2SurgeonState(source.GetPointer());
     source->SetAttribute("classificationSubtype", "vtkMRMLCustomTerritoriesNode");
 
     const std::string path = makeTempPath("lrp.json");
@@ -591,7 +591,7 @@ int testV2ReaderRejectsV99()
 }
 
 //------------------------------------------------------------------------------
-// Invariant 6 -- schemaVersion boundary rejection (low + high side).
+// Test 6 — schemaVersion boundary rejection (low + high side).
 //
 // The reader's accepted band is [MinReadableSchemaVersion=2,
 // SchemaVersion=2] — exactly v2.  testV2ReaderRejectsV99 covers
@@ -659,7 +659,7 @@ int testV2SchemaVersionBoundaryRejection()
 }
 
 //------------------------------------------------------------------------------
-// Invariant 7 -- scene.stageSelection.currentStage round-trip.
+// Test 7 — scene.stageSelection.currentStage round-trip.
 //
 // ADR-0023 §"Persistence" claims scene.stageSelection as part of v2.
 // The Liver-shell writer for this block lands in a follow-up (T5.2-d);

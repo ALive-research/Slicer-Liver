@@ -104,7 +104,7 @@
  *     full mapping table.
  *   - ``scene``: {classification, volumetryPartitions,
  *     stageSelection} — scene-wide context the Liver shell restores
- *     on file open (ADR-0023 §"Stage transitions").
+ *     on file open (ADR-0023 §"Persistence" — per-stage last-selection).
  *
  * \par Optional-field tolerance (within v2)
  *
