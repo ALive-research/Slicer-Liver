@@ -75,33 +75,46 @@
  * ADR-0007's D-class compatibility-break category, the
  * ``.lrp.fcsv`` deprecation is part of the v2.0.0 MAJOR bump.
  *
- * \par JSON schema (v2 — ADR-0018 §1)
+ * \par JSON schema (v3 — ADR-0023 §"Persistence")
  *
  * See the in-source documentation at the top of
  * ``vtkMRMLBezierSurfaceStorageNode.cxx`` for the canonical
  * schema description.  Briefly:
  *
- *   - ``schemaVersion``: int, currently 2 (writer); reader accepts
- *     v1 + v2.
- *   - ``state``: "Init" | "Planning"
+ *   - ``schemaVersion``: int, currently 3 (writer); reader accepts
+ *     v1, v2, and v3.
+ *   - ``state``: "Init" | "Planning" | "Confirmed"
  *   - ``initMode``: "SlicingPlane" | "DistanceSpheroid"
  *   - ``rows`` / ``cols``: control-polygon shape (v2 only; in v1
  *     these are implicit 4×4).  Per ADR-0018 §1, square only and
  *     in ``{(3, 3), (4, 4)}``.
  *   - ``controlGrid``: array of ``3 * rows * cols`` doubles
  *     (row-major; 27 for 3×3, 48 for 4×4).
- *   - ``slicingPlane``: {origin, normal, initPoints}
- *   - ``distanceSpheroid``: {center, radius{x,y,z}, initPoints}
+ *   - ``slicingPlane``: {origin, normal, initPointsFlat}
+ *   - ``distanceSpheroid``: {center, radius{x,y,z}, initPointsFlat}
  *   - ``metadata``: object (empty in v1; reserved for v2's
  *     timestamps + surgeon ID per ADR-0014 §5)
+ *   - ``resection`` (v3): {name, safetyMargin_mm, riskMargin_mm,
+ *     orderIndex} — surgeon-facing field roster (ADR-0023
+ *     §"Persistence").  The on-disk margin fields source from the
+ *     existing ``vtkMRMLLiverResectionNode::ResectionMargin`` and
+ *     ``UncertaintyMargin`` members; the storage path renames them
+ *     to surgeon-facing labels without touching the in-memory MRML
+ *     class.  See the schema-header comment in the .cxx for the
+ *     full mapping table.
+ *   - ``scene`` (v3): {classification, volumetryPartitions,
+ *     stageSelection} — scene-wide context the Liver shell restores
+ *     on file open (ADR-0023 §"Stage transitions").
  *
- * \par v1 → v2 migration
+ * \par v1 / v2 → v3 migration
  *
  * The reader infers ``rows = cols = 4`` for v1 files (no ``rows`` /
  * ``cols`` fields) and validates the ``controlGrid`` array length
- * is 48.  The writer always emits v2 with explicit ``rows`` +
- * ``cols``.  Round-trip of a v1 file produces a v2 file on the
- * next save.
+ * is 48.  v2 files load with the new v3 fields taking documented
+ * defaults (name = MRML display name, margins = 0.0, orderIndex =
+ * -1, classification absent, volumetry partitions empty,
+ * stageSelection absent).  The writer always emits v3.  Round-trip
+ * of a v1 / v2 file produces a v3 file on the next save.
  *
  * \par See also
  *
@@ -124,10 +137,11 @@ public:
   /// Current JSON schema version emitted by ``WriteDataInternal``.
   /// Bump this integer in lock-step with any documented schema
   /// extension; ``ReadDataInternal`` MUST grow an explicit branch
-  /// for every old version it intends to keep loading.  Per ADR-0018
-  /// §1 the reader accepts both v1 (implicit 4×4 control polygon)
-  /// and v2 (explicit ``rows`` / ``cols``).
-  static constexpr int SchemaVersion = 2;
+  /// for every old version it intends to keep loading.  Per
+  /// ADR-0023 §"Persistence" the reader accepts v1 (implicit 4×4
+  /// control polygon), v2 (explicit ``rows`` / ``cols``), and v3
+  /// (the surgeon-facing ``resection`` + ``scene`` blocks).
+  static constexpr int SchemaVersion = 3;
 
   /// Lowest schema version the reader admits.  v1 files (no
   /// ``rows`` / ``cols``) load with an inferred 4×4 control polygon
