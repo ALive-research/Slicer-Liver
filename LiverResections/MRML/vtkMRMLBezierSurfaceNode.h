@@ -305,6 +305,24 @@ public:
   static int GetInitModeFromString(const char* name);
 
   //--------------------------------------------------------------------------
+  // Surgeon-facing ordering metadata (ADR-0023 §"Persistence").
+  //
+  // ``OrderIndex`` is the zero-based position of this resection plan in
+  // the surgeon-defined operative sequence.  A sentinel value of
+  // ``-1`` means "unordered" (the default for a freshly-created node).
+  // The field round-trips through the v3 ``.lrp.json`` storage path
+  // (see ``vtkMRMLBezierSurfaceStorageNode.cxx`` schema-header block)
+  // and through XML scene serialisation.
+  //--------------------------------------------------------------------------
+
+  /// Operative-sequence position (zero-based).  Default ``-1`` =
+  /// unordered.  No transition guard — this is an editable surgeon-
+  /// facing field independent of the ``State`` machine; the planner
+  /// can reorder resections in any state.
+  vtkGetMacro(OrderIndex, int);
+  vtkSetMacro(OrderIndex, int);
+
+  //--------------------------------------------------------------------------
   // Bezier control grid — (Rows × Cols × 3 row-major)
   //
   // Per ADR-0018 §1 the control-polygon shape is square and chosen
@@ -460,6 +478,10 @@ private:
   /// SetInitializationMode accessor pair above).
   int State;
   int InitMode;
+
+  /// Surgeon-facing operative-sequence position.  Default ``-1`` =
+  /// unordered (see the accessor docstring above).
+  int OrderIndex;
 
   /// Control-polygon shape (Rows × Cols).  Default 4×4 (the
   /// pre-ADR-0018 hard-coded case).  Per ADR-0018 §1, restricted to

@@ -394,7 +394,8 @@ int testLegacyFcsvWriteRejected()
 
 int testJsonRoundTrip3x3()
 {
-  // ADR-0018 §1 — 3×3 round-trip.  Writer always emits schema v2
+  // ADR-0018 §1 — 3×3 round-trip.  Writer always emits the current
+  // ``SchemaVersion`` (bumped to 3 per ADR-0023 §"Persistence")
   // with explicit rows + cols (3, 3) and a 27-double controlGrid.
   // Reader resolves rows/cols on parse + matches the controlGrid
   // length.  Mirrors testJsonRoundTrip for the 3×3 case.
@@ -426,15 +427,21 @@ int testJsonRoundTrip3x3()
     CHECK_DOUBLE_TOLERANCE(sink->GetControlGrid()[i], grid33[i], 1e-9);
   }
 
-  // Spot-check the on-disk JSON carries the explicit shape — a
-  // schema-v2 file MUST emit rows + cols + schemaVersion = 2.
+  // Spot-check the on-disk JSON carries the explicit shape — the
+  // writer MUST emit the current ``SchemaVersion`` literal alongside
+  // explicit rows + cols.  The literal value is queried from the
+  // class constant (rather than hard-coded) so this assertion ages
+  // forward with the next schema bump; the load-bearing invariant
+  // is "writer emits the current version", not the integer itself.
   std::ifstream f(path);
   std::stringstream ss;
   ss << f.rdbuf();
   const std::string contents = ss.str();
-  if (contents.find("\"schemaVersion\":2") == std::string::npos && contents.find("\"schemaVersion\": 2") == std::string::npos)
+  const std::string expectedCompact = std::string("\"schemaVersion\":") + std::to_string(vtkMRMLBezierSurfaceStorageNode::SchemaVersion);
+  const std::string expectedSpaced = std::string("\"schemaVersion\": ") + std::to_string(vtkMRMLBezierSurfaceStorageNode::SchemaVersion);
+  if (contents.find(expectedCompact) == std::string::npos && contents.find(expectedSpaced) == std::string::npos)
   {
-    std::cerr << "Expected schemaVersion: 2 in output JSON\n" << contents << "\n";
+    std::cerr << "Expected schemaVersion: " << vtkMRMLBezierSurfaceStorageNode::SchemaVersion << " in output JSON\n" << contents << "\n";
     return EXIT_FAILURE;
   }
   if (contents.find("\"rows\":3") == std::string::npos && contents.find("\"rows\": 3") == std::string::npos)

@@ -38,21 +38,21 @@
 ==============================================================================*/
 
 //==============================================================================
-// .lrp.json — JSON schema v2 (ADR-0018 §1)
+// .lrp.json — JSON schema v3 (ADR-0023 §"Persistence")
 //==============================================================================
 //
 // One ``.lrp.json`` document per liver resection plan (surgeon-to-
 // surgeon plan sharing per ADR-0014 §5).  Current writer
-// ``schemaVersion`` is ``2`` — bump in lock-step with any documented
+// ``schemaVersion`` is ``3`` — bump in lock-step with any documented
 // extension; the reader accepts ``MinReadableSchemaVersion``
-// (currently ``1``) through ``SchemaVersion`` (currently ``2``).
+// (currently ``1``) through ``SchemaVersion`` (currently ``3``).
 //
 //   {
-//     "schemaVersion": 2,
+//     "schemaVersion": 3,
 //     "state": "Init" | "Planning" | "Confirmed",
 //     "initMode": "SlicingPlane" | "DistanceSpheroid",
-//     "rows": int,             // v2 only — see migration below
-//     "cols": int,             // v2 only — see migration below
+//     "rows": int,             // v2+ only — see migration below
+//     "cols": int,             // v2+ only — see migration below
 //     "controlGrid": [3 * rows * cols doubles in row-major (i,j,k) order],
 //     "slicingPlane": {
 //       "origin": [3 doubles, RAS],
@@ -65,10 +65,78 @@
 //       "numberOfInitPoints": int,
 //       "initPointsFlat": [3*N doubles — N RAS triplets concat]
 //     },
-//     "metadata": {}
+//     "metadata": {},
+//     "resection": {                      // v3 only
+//       "name": string,                   // surgeon-facing plan name
+//       "safetyMargin_mm": double,        // see margin mapping below
+//       "riskMargin_mm": double,          // see margin mapping below
+//       "orderIndex": int                 // -1 = unordered (sentinel)
+//     },
+//     "scene": {                          // v3 only
+//       "classification": {
+//         "nodeId": string,
+//         "subtype": string               // concrete vtkMRMLAbstractTerritoriesNode subclass name
+//       } | absent,
+//       "volumetryPartitions": [{ "nodeId": string }, …],
+//       "stageSelection": {               // ADR-0023 §"Stage transitions"
+//         "stage1": string | null,
+//         "stage2": string | null,
+//         "stage3": string | null,
+//         "stage4": string | null,
+//         "stage5": string | null,
+//         "currentStage": int | null
+//       } | absent
+//     }
 //   }
 //
-// v1 → v2 migration:
+// v3 surgeon-facing margin mapping (ADR-0023 §"Persistence")
+// ----------------------------------------------------------
+// The on-disk ``resection.safetyMargin_mm`` and ``resection.riskMargin_mm``
+// fields use surgeon-facing labels, but their source values are the
+// existing ``vtkMRMLLiverResectionNode`` members:
+//
+//   resection.safetyMargin_mm  <->  vtkMRMLLiverResectionNode::ResectionMargin
+//   resection.riskMargin_mm    <->  vtkMRMLLiverResectionNode::UncertaintyMargin
+//
+// The MRML class members keep their pre-v3 names; the renaming is
+// strictly storage-layer.  This avoids a cross-tree MRML attribute
+// rename that would ripple through the legacy display node, Logic,
+// and Python scripting.  T2.7 (legacy retirement) is the natural
+// place to collapse the two vocabularies; until then the JSON
+// surgeon-vocabulary and the MRML developer-vocabulary coexist.
+//
+// In v2.0 the ``vtkMRMLBezierSurfaceNode`` does not yet carry a
+// node reference to its sibling ``vtkMRMLLiverResectionNode`` —
+// the storage path therefore reads the margin values from the
+// surface node's attribute map (``GetAttribute("safetyMargin_mm")``
+// etc.) when present, and falls back to ``0.0`` otherwise.  Once
+// the resection-node reference lands in a follow-up, the writer
+// gains a third lookup tier (typed accessor on the resection node)
+// ahead of the attribute-map fallback.
+//
+// v3 scene block — locating logic
+// -------------------------------
+//   - ``scene.classification``: queried via
+//     ``scene->GetNodesByClass("vtkMRMLAbstractTerritoriesNode")``.
+//     Multi-classification scenes are a v2.1+ concern; in v2.0 the
+//     writer emits the block only when exactly one such node exists.
+//     A ``classificationSubtype`` attribute on the surface node
+//     short-circuits the scene query — the Liver shell sets this
+//     when wiring the surface node to its territories partner; the
+//     test path also uses it to communicate the intended subtype
+//     without instantiating a real territories node.
+//   - ``scene.volumetryPartitions``: queried via
+//     ``scene->GetNodesByClass("vtkMRMLLiverVolumetryPartitionNode")``.
+//     That class does not yet exist in v2.0 — the query returns 0
+//     and the writer emits an empty array.  The schema is
+//     forward-compatible: when the class lands in a future PR, the
+//     writer starts populating the array automatically.
+//   - ``scene.stageSelection``: written by the Liver shell (a
+//     follow-up to ADR-0023).  v2.0 emits an empty object (all
+//     stages unset); the reader accepts both the empty / absent
+//     form and the populated form via ``HasMember`` guards.
+//
+// v1 / v2 → v3 migration:
 //   - v1 files have no ``rows`` / ``cols`` and a 48-double
 //     ``controlGrid``.  The reader infers ``rows = cols = 4`` and
 //     validates the array length.
@@ -76,8 +144,13 @@
 //     enforces ``(rows, cols) ∈ {(3, 3), (4, 4)}`` per ADR-0018 §1
 //     and validates the ``controlGrid`` length is
 //     ``3 * rows * cols``.
-//   - The writer always emits v2.  A v1 file round-tripped through
-//     load + save becomes v2 on disk.
+//   - v3 files additionally carry ``resection`` and ``scene``
+//     blocks.  A v2 file loaded by the v3 reader gets documented
+//     defaults: name = node's MRML display name, both margins = 0.0,
+//     orderIndex = -1, classification absent, volumetry partitions
+//     empty, stageSelection absent.
+//   - The writer always emits v3.  A v1 / v2 file round-tripped
+//     through load + save becomes v3 on disk.
 //
 // The ``initPointsFlat`` fields use a flat layout because the
 // in-tree ``vtkMRMLJsonWriter`` lacks a key-less nested-array entry
@@ -160,6 +233,7 @@
 // MRML includes
 #include <vtkMRMLJsonElement.h>
 #include <vtkMRMLMessageCollection.h>
+#include <vtkMRMLScene.h>
 #include <vtkMRMLStorageNode.h>
 
 // VTK includes
@@ -452,6 +526,154 @@ int vtkMRMLBezierSurfaceStorageNode::WriteJson(const std::string& filePath, vtkM
   writer->WriteObjectPropertyStart("metadata");
   writer->WriteObjectPropertyEnd();
 
+  // resection — v3 surgeon-facing block (ADR-0023 §"Persistence").
+  // The lookup tiers below favour the attribute map over the typed
+  // accessor so the future Liver shell wiring (which will copy
+  // values from the associated ``vtkMRMLLiverResectionNode``) and
+  // the C++ test driver share a single override path; the typed
+  // accessor on ``vtkMRMLBezierSurfaceNode`` is the canonical v2.0
+  // storage when no override is set.
+  auto readDoubleAttr = [&](const char* key) -> double {
+    const char* raw = surfaceNode->GetAttribute(key);
+    if (raw == nullptr)
+    {
+      return 0.0;
+    }
+    try
+    {
+      return std::stod(raw);
+    }
+    catch (const std::exception&)
+    {
+      return 0.0;
+    }
+  };
+
+  writer->WriteObjectPropertyStart("resection");
+  {
+    const char* nameAttr = surfaceNode->GetAttribute("name");
+    const char* mrmlName = surfaceNode->GetName();
+    std::string name;
+    if (nameAttr != nullptr)
+    {
+      name = nameAttr;
+    }
+    else if (mrmlName != nullptr)
+    {
+      name = mrmlName;
+    }
+    writer->WriteStringProperty("name", name);
+
+    writer->WriteDoubleProperty("safetyMargin_mm", readDoubleAttr("safetyMargin_mm"));
+    writer->WriteDoubleProperty("riskMargin_mm", readDoubleAttr("riskMargin_mm"));
+
+    int orderIndex = surfaceNode->GetOrderIndex();
+    const char* orderAttr = surfaceNode->GetAttribute("orderIndex");
+    if (orderAttr != nullptr)
+    {
+      try
+      {
+        orderIndex = std::stoi(orderAttr);
+      }
+      catch (const std::exception&)
+      {
+        // Malformed attribute — keep the typed-accessor value.
+      }
+    }
+    writer->WriteIntProperty("orderIndex", orderIndex);
+  }
+  writer->WriteObjectPropertyEnd();
+
+  // scene — v3 scene-wide context block (ADR-0023 §"Persistence").
+  // Three subordinate blocks:
+  //
+  //   - classification: nodeId + subtype of the active territories
+  //     node (a vtkMRMLAbstractTerritoriesNode subclass).  The
+  //     subtype is the concrete VTK class name so the reader can
+  //     re-instantiate the right subclass on restore.  Multi-
+  //     classification scenes are a v2.1+ concern.
+  //   - volumetryPartitions: list of {nodeId} for each
+  //     vtkMRMLLiverVolumetryPartitionNode in the scene.  That class
+  //     does not yet exist in v2.0; the array is empty until it
+  //     lands.
+  //   - stageSelection: per-stage node-ID + currentStage int written
+  //     by the Liver shell (ADR-0023 §"Stage transitions").  v2.0
+  //     emits the block as an empty object — the reader's HasMember
+  //     guards keep it forward-compatible with the shell's eventual
+  //     populated form.
+  vtkMRMLScene* scene = surfaceNode->GetScene();
+  writer->WriteObjectPropertyStart("scene");
+  {
+    // classification.  Attribute-override path first (covers the
+    // test driver + the shell's future wiring); scene-scan fall-back
+    // second.  Multi-classification scenes are explicitly NOT
+    // supported in v2.0 — if more than one territories node exists
+    // and no attribute override pins one, the block is emitted as
+    // an empty placeholder.
+    const char* subtypeAttr = surfaceNode->GetAttribute("classificationSubtype");
+    const char* nodeIdAttr = surfaceNode->GetAttribute("classificationNodeId");
+    std::string classificationSubtype;
+    std::string classificationNodeId;
+    if (subtypeAttr != nullptr && subtypeAttr[0] != '\0')
+    {
+      classificationSubtype = subtypeAttr;
+      if (nodeIdAttr != nullptr)
+      {
+        classificationNodeId = nodeIdAttr;
+      }
+    }
+    else if (scene != nullptr)
+    {
+      std::vector<vtkMRMLNode*> hits;
+      scene->GetNodesByClass("vtkMRMLAbstractTerritoriesNode", hits);
+      if (hits.size() == 1 && hits[0] != nullptr)
+      {
+        classificationSubtype = hits[0]->GetClassName();
+        if (hits[0]->GetID() != nullptr)
+        {
+          classificationNodeId = hits[0]->GetID();
+        }
+      }
+    }
+    writer->WriteObjectPropertyStart("classification");
+    if (!classificationSubtype.empty())
+    {
+      writer->WriteStringProperty("nodeId", classificationNodeId);
+      writer->WriteStringProperty("subtype", classificationSubtype);
+    }
+    writer->WriteObjectPropertyEnd();
+
+    // volumetryPartitions.  Forward-compatible scene scan: emit one
+    // ``{ "nodeId": <ID> }`` entry per
+    // ``vtkMRMLLiverVolumetryPartitionNode`` in the scene.  Class
+    // does not yet exist in v2.0 → array is empty.
+    writer->WriteArrayPropertyStart("volumetryPartitions");
+    if (scene != nullptr)
+    {
+      std::vector<vtkMRMLNode*> hits;
+      scene->GetNodesByClass("vtkMRMLLiverVolumetryPartitionNode", hits);
+      for (vtkMRMLNode* node : hits)
+      {
+        if (node == nullptr || node->GetID() == nullptr)
+        {
+          continue;
+        }
+        writer->WriteObjectStart();
+        writer->WriteStringProperty("nodeId", node->GetID());
+        writer->WriteObjectEnd();
+      }
+    }
+    writer->WriteArrayPropertyEnd();
+
+    // stageSelection.  Empty object in v2.0 — the Liver shell that
+    // restores the surgeon's stage position writes this block in a
+    // follow-up to ADR-0023.  Reader uses HasMember guards so the
+    // empty / absent form ages forward into the populated shape.
+    writer->WriteObjectPropertyStart("stageSelection");
+    writer->WriteObjectPropertyEnd();
+  }
+  writer->WriteObjectPropertyEnd();
+
   if (!writer->WriteToFileEnd())
   {
     vtkErrorMacro("WriteJson: failed to close '" << filePath << "' after write");
@@ -672,6 +894,115 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
           {
             double p[3] = { flat[static_cast<size_t>(i) * 3 + 0], flat[static_cast<size_t>(i) * 3 + 1], flat[static_cast<size_t>(i) * 3 + 2] };
             surfaceNode->SetDistanceSpheroidInitPoint(i, p);
+          }
+        }
+      }
+    }
+  }
+
+  // v3 resection block (ADR-0023 §"Persistence").  Defensive
+  // ``HasMember`` guard — a v1 / v2 file has no block and the v3
+  // fields take documented defaults (name = MRML display name,
+  // margins = 0.0, orderIndex = -1) which are already in place by
+  // virtue of the node's default-constructed state.  Surgeon-facing
+  // values are stashed both in typed members (OrderIndex) AND in the
+  // attribute map (margins, name override) so the round-trip writer
+  // picks them up symmetrically.  The attribute-map detour for
+  // margins covers the v2.0 gap that the surface node does not yet
+  // have a typed reference to its sibling ``vtkMRMLLiverResectionNode``;
+  // once that lands the reader applies the values via the typed
+  // accessor on the resection node and the attribute path retires.
+  if (root->HasMember("resection"))
+  {
+    vtkSmartPointer<vtkMRMLJsonElement> resection = vtkSmartPointer<vtkMRMLJsonElement>::Take(root->GetObjectProperty("resection"));
+    if (resection != nullptr)
+    {
+      if (resection->HasMember("name"))
+      {
+        const std::string name = resection->GetStringProperty("name");
+        if (!name.empty())
+        {
+          surfaceNode->SetName(name.c_str());
+        }
+      }
+      auto stashDoubleAttr = [&](const char* key) {
+        if (!resection->HasMember(key))
+        {
+          return;
+        }
+        double value = 0.0;
+        if (resection->GetDoubleProperty(key, value))
+        {
+          std::ostringstream oss;
+          oss << value;
+          surfaceNode->SetAttribute(key, oss.str().c_str());
+        }
+      };
+      stashDoubleAttr("safetyMargin_mm");
+      stashDoubleAttr("riskMargin_mm");
+      if (resection->HasMember("orderIndex"))
+      {
+        int orderIndex = -1;
+        if (resection->GetIntProperty("orderIndex", orderIndex))
+        {
+          surfaceNode->SetOrderIndex(orderIndex);
+        }
+      }
+    }
+  }
+
+  // v3 scene block (ADR-0023 §"Persistence").  Defensive parsing:
+  //   - classification: stash {nodeId, subtype} into attributes so
+  //     the next write re-emits them.  When the Liver shell wiring
+  //     lands, this path will set typed node references instead.
+  //   - volumetryPartitions: writer re-derives from the scene on
+  //     save, so the reader ignores the on-disk entries.
+  //   - stageSelection: stash currentStage (if present) so the
+  //     follow-up shell can restore the surgeon position; v2.0
+  //     does not yet consume the per-stage node IDs.
+  if (root->HasMember("scene"))
+  {
+    vtkSmartPointer<vtkMRMLJsonElement> sceneBlock = vtkSmartPointer<vtkMRMLJsonElement>::Take(root->GetObjectProperty("scene"));
+    if (sceneBlock != nullptr)
+    {
+      if (sceneBlock->HasMember("classification"))
+      {
+        vtkSmartPointer<vtkMRMLJsonElement> classification = vtkSmartPointer<vtkMRMLJsonElement>::Take(sceneBlock->GetObjectProperty("classification"));
+        if (classification != nullptr)
+        {
+          if (classification->HasMember("nodeId"))
+          {
+            const std::string nodeId = classification->GetStringProperty("nodeId");
+            if (!nodeId.empty())
+            {
+              surfaceNode->SetAttribute("classificationNodeId", nodeId.c_str());
+            }
+          }
+          if (classification->HasMember("subtype"))
+          {
+            const std::string subtype = classification->GetStringProperty("subtype");
+            if (!subtype.empty())
+            {
+              surfaceNode->SetAttribute("classificationSubtype", subtype.c_str());
+            }
+          }
+        }
+      }
+      // volumetryPartitions: not yet routed into anything in v2.0 —
+      // the writer re-derives the array from the scene on the next
+      // save, so the reader can ignore the on-disk entries.  Wiring
+      // into a typed list lands with ``vtkMRMLLiverVolumetryPartitionNode``.
+      if (sceneBlock->HasMember("stageSelection"))
+      {
+        vtkSmartPointer<vtkMRMLJsonElement> stageSelection = vtkSmartPointer<vtkMRMLJsonElement>::Take(sceneBlock->GetObjectProperty("stageSelection"));
+        if (stageSelection != nullptr && stageSelection->HasMember("currentStage"))
+        {
+          int currentStage = 0;
+          if (stageSelection->GetIntProperty("currentStage", currentStage))
+          {
+            std::ostringstream oss;
+            oss << currentStage;
+            surfaceNode->SetAttribute("currentStage", oss.str().c_str());
           }
         }
       }

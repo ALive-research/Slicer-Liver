@@ -94,6 +94,7 @@ vtkMRMLNodeNewMacro(vtkMRMLBezierSurfaceNode);
 vtkMRMLBezierSurfaceNode::vtkMRMLBezierSurfaceNode()
   : State(ResectionState::Init)
   , InitMode(InitializationMode::SlicingPlane)
+  , OrderIndex(-1)
   , Rows(DefaultGridSize)
   , Cols(DefaultGridSize)
   , NumberOfDistanceSpheroidInitPoints(0)
@@ -570,6 +571,7 @@ void vtkMRMLBezierSurfaceNode::WriteXML(ostream& of, int nIndent)
   vtkMRMLWriteXMLBeginMacro(of);
   vtkMRMLWriteXMLEnumMacro(state, State);
   vtkMRMLWriteXMLEnumMacro(initMode, InitMode);
+  vtkMRMLWriteXMLIntMacro(orderIndex, OrderIndex);
   vtkMRMLWriteXMLIntMacro(rows, Rows);
   vtkMRMLWriteXMLIntMacro(cols, Cols);
   vtkMRMLWriteXMLVectorMacro(slicingPlaneOrigin, SlicingPlaneOrigin, double, 3);
@@ -618,6 +620,7 @@ void vtkMRMLBezierSurfaceNode::ReadXMLAttributes(const char** atts)
   vtkMRMLReadXMLBeginMacro(atts);
   vtkMRMLReadXMLEnumMacro(state, State);
   vtkMRMLReadXMLEnumMacro(initMode, InitMode);
+  vtkMRMLReadXMLIntMacro(orderIndex, OrderIndex);
   vtkMRMLReadXMLVectorMacro(slicingPlaneOrigin, SlicingPlaneOrigin, double, 3);
   vtkMRMLReadXMLVectorMacro(slicingPlaneNormal, SlicingPlaneNormal, double, 3);
   vtkMRMLReadXMLVectorMacro(distanceSpheroidCenter, DistanceSpheroidCenter, double, 3);
@@ -760,6 +763,7 @@ void vtkMRMLBezierSurfaceNode::CopyContent(vtkMRMLNode* anode, bool deepCopy /*=
 
   this->State = other->State;
   this->InitMode = other->InitMode;
+  this->OrderIndex = other->OrderIndex;
   // Shape + buffer in one assignment — ADR-0018 §1.  std::vector
   // copy handles the resize automatically.
   this->Rows = other->Rows;
@@ -813,6 +817,7 @@ void vtkMRMLBezierSurfaceNode::PrintSelf(ostream& os, vtkIndent indent)
   vtkMRMLPrintBeginMacro(os, indent);
   vtkMRMLPrintEnumMacro(State);
   vtkMRMLPrintEnumMacro(InitMode);
+  vtkMRMLPrintIntMacro(OrderIndex);
   vtkMRMLPrintIntMacro(Rows);
   vtkMRMLPrintIntMacro(Cols);
   vtkMRMLPrintVectorMacro(SlicingPlaneOrigin, double, 3);
