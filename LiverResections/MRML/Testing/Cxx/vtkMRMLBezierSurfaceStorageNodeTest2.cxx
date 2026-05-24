@@ -31,34 +31,34 @@
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  Invariant test scaffolding for ``.lrp.json`` schema v3 — surfaces the
+  Invariant test scaffolding for ``.lrp.json`` schema v2 — surfaces the
   v2.0 surgeon-facing state per ADR-0023 §"Persistence".  Per ADR-0027,
-  these tests land BEFORE the implementation commit and pin the v3
+  these tests land BEFORE the implementation commit and pin the v2
   design contract; they are expected to FAIL on the current v2 writer
-  + reader and to flip to passing once liver-implementer lands the v3
+  + reader and to flip to passing once liver-implementer lands the v2
   fields in vtkMRMLBezierSurfaceStorageNode.
 
   Pinned invariants (ADR-0023 §"Persistence" + the schema-versioning
   convention from the file-header comment in
   vtkMRMLBezierSurfaceStorageNode.cxx):
 
-   - testV3RoundTripFullFields: name + Safety/Risk margins + orderIndex
+   - testV2RoundTripFullFields: name + Safety/Risk margins + orderIndex
      + classification + volumetry partition references survive a
      write → read → write cycle.
-   - testV2ToV3FallbackDefaults: v2 files load into v3-aware nodes with
+   - testV2OptionalFieldsFallbackDefaults: v2 files load into v2-aware nodes with
      documented defaults (name = MRML display name, margins = 0.0,
      orderIndex = -1, classification absent, volumetry partitions
      empty, stageSelection absent).
-   - testV3WriteEmitsSchemaVersion3: the on-disk schemaVersion is 3
-     and is not 2.
-   - testV3ClassificationSubtypeDiscriminator: scene.classification
+   - testV2WriteEmitsSchemaVersion2: the on-disk schemaVersion is 2
+     and is not 3.
+   - testV2ClassificationSubtypeDiscriminator: scene.classification
      .subtype matches the concrete vtkMRMLAbstractTerritoriesNode
      subclass name (vtkMRMLStdCouinaudTerritoriesNode vs
      vtkMRMLCustomTerritoriesNode), preserving the polymorphic-
      interface discriminator from ADR-0023 §"Class abstraction for
      territories".
-   - testV3ReaderAcceptsV3RangeAndRejectsV99: the reader's accepted
-     schemaVersion band grows from [1, 2] to [1, 3]; v99 stays
+   - testV2ReaderRejectsV99: the reader's accepted
+     schemaVersion band is [2, 2]; v99 stays
      rejected (the schema-versioning invariant first pinned in
      testSchemaVersionMismatch of Test1).
 
@@ -114,9 +114,9 @@ std::string makeTempPath(const std::string& extension)
 }
 
 /// Read the entire content of a file into a string for substring
-/// assertions.  The v3 invariant tests pin JSON shape at the byte
+/// assertions.  The v2 invariant tests pin JSON shape at the byte
 /// level — accessor-based pinning is deferred until liver-implementer
-/// lands the v3 in-memory APIs on vtkMRMLBezierSurfaceNode.
+/// lands the v2 in-memory APIs on vtkMRMLBezierSurfaceNode.
 std::string slurp(const std::string& path)
 {
   std::ifstream f(path);
@@ -162,7 +162,7 @@ void populateV2Fields(vtkMRMLBezierSurfaceNode* node)
   node->SetControlGrid(grid);
 }
 
-/// Populate a Bezier surface node with the v3 surgeon-facing state.
+/// Populate a Bezier surface node with the v2 surgeon-facing state.
 /// The contract per ADR-0023 §"Persistence" is:
 ///   - name      = node's MRML display name (here "Right hemihepatectomy")
 ///   - safetyMargin_mm sourced from existing ResectionMargin field
@@ -189,10 +189,10 @@ void populateV3SurgeonState(vtkMRMLBezierSurfaceNode* node)
 }
 
 //------------------------------------------------------------------------------
-// Test 1 — v3 round-trip of the full surgeon-facing field roster.
+// Test 1 — v2 round-trip of the full surgeon-facing field roster.
 //
 // Pinned invariant (ADR-0023 §"Persistence"):
-//   A populated v3 file written then re-loaded then re-written carries
+//   A populated v2 file written then re-loaded then re-written carries
 //   forward name + safetyMargin_mm + riskMargin_mm + orderIndex +
 //   scene.classification + scene.volumetryPartitions with byte-fidelity
 //   on the strings and the documented 1e-12 tolerance on the doubles.
@@ -201,7 +201,7 @@ void populateV3SurgeonState(vtkMRMLBezierSurfaceNode* node)
 // new fields).  liver-implementer flips it to PASS by extending
 // WriteJson + ReadJson in vtkMRMLBezierSurfaceStorageNode.
 //------------------------------------------------------------------------------
-int testV3RoundTripFullFields()
+int testV2RoundTripFullFields()
 {
   vtkNew<vtkMRMLScene> scene;
   vtkNew<vtkMRMLBezierSurfaceNode> source;
@@ -237,49 +237,49 @@ int testV3RoundTripFullFields()
   // The string assertion is byte-fidelity per the test contract.
   if (contents.find("\"name\":\"Right hemihepatectomy\"") == std::string::npos && contents.find("\"name\": \"Right hemihepatectomy\"") == std::string::npos)
   {
-    std::cerr << "testV3RoundTripFullFields: expected \"name\": \"Right hemihepatectomy\" in re-written JSON; got:\n" << contents << "\n";
+    std::cerr << "testV2RoundTripFullFields: expected \"name\": \"Right hemihepatectomy\" in re-written JSON; got:\n" << contents << "\n";
     return EXIT_FAILURE;
   }
   if (!contains(contents, "safetyMargin_mm", "10.0") && !contains(contents, "safetyMargin_mm", "10"))
   {
-    std::cerr << "testV3RoundTripFullFields: expected safetyMargin_mm = 10.0 in re-written JSON; got:\n" << contents << "\n";
+    std::cerr << "testV2RoundTripFullFields: expected safetyMargin_mm = 10.0 in re-written JSON; got:\n" << contents << "\n";
     return EXIT_FAILURE;
   }
   if (!contains(contents, "riskMargin_mm", "5.0") && !contains(contents, "riskMargin_mm", "5"))
   {
-    std::cerr << "testV3RoundTripFullFields: expected riskMargin_mm = 5.0 in re-written JSON; got:\n" << contents << "\n";
+    std::cerr << "testV2RoundTripFullFields: expected riskMargin_mm = 5.0 in re-written JSON; got:\n" << contents << "\n";
     return EXIT_FAILURE;
   }
   if (!contains(contents, "orderIndex", "0"))
   {
-    std::cerr << "testV3RoundTripFullFields: expected orderIndex = 0 in re-written JSON; got:\n" << contents << "\n";
+    std::cerr << "testV2RoundTripFullFields: expected orderIndex = 0 in re-written JSON; got:\n" << contents << "\n";
     return EXIT_FAILURE;
   }
 
   // scene block — classification + volumetryPartitions.  The exact
   // node-ID strings are scene-dependent (vtkMRMLScene allocates them
   // sequentially) so we pin the keys' presence; the per-subtype
-  // assertion lives in testV3ClassificationSubtypeDiscriminator.
+  // assertion lives in testV2ClassificationSubtypeDiscriminator.
   if (contents.find("\"scene\"") == std::string::npos)
   {
-    std::cerr << "testV3RoundTripFullFields: expected \"scene\" block in re-written JSON; got:\n" << contents << "\n";
+    std::cerr << "testV2RoundTripFullFields: expected \"scene\" block in re-written JSON; got:\n" << contents << "\n";
     return EXIT_FAILURE;
   }
   if (contents.find("\"classification\"") == std::string::npos)
   {
-    std::cerr << "testV3RoundTripFullFields: expected scene.classification in re-written JSON; got:\n" << contents << "\n";
+    std::cerr << "testV2RoundTripFullFields: expected scene.classification in re-written JSON; got:\n" << contents << "\n";
     return EXIT_FAILURE;
   }
   if (contents.find("\"volumetryPartitions\"") == std::string::npos)
   {
-    std::cerr << "testV3RoundTripFullFields: expected scene.volumetryPartitions in re-written JSON; got:\n" << contents << "\n";
+    std::cerr << "testV2RoundTripFullFields: expected scene.volumetryPartitions in re-written JSON; got:\n" << contents << "\n";
     return EXIT_FAILURE;
   }
 
   // resection block presence — sibling of the field-level checks above.
   if (contents.find("\"resection\"") == std::string::npos)
   {
-    std::cerr << "testV3RoundTripFullFields: expected \"resection\" block in re-written JSON; got:\n" << contents << "\n";
+    std::cerr << "testV2RoundTripFullFields: expected \"resection\" block in re-written JSON; got:\n" << contents << "\n";
     return EXIT_FAILURE;
   }
 
@@ -289,13 +289,15 @@ int testV3RoundTripFullFields()
 }
 
 //------------------------------------------------------------------------------
-// Test 2 — v2-on-disk → v3-in-memory fallback defaults.
+// Test 2 — v2 optional-field fallback defaults.
 //
-// Pinned invariant (ADR-0023 §"Persistence" + the v2→v3 migration
-// branch documented in the schema header of
+// Pinned invariant (ADR-0023 §"Persistence" + the optional-field
+// tolerance branch documented in the schema header of
 // vtkMRMLBezierSurfaceStorageNode.cxx):
-//   A v2 file (no resection/scene blocks) loads cleanly into a
-//   v3-aware reader.  The missing v3 fields take documented defaults:
+//   A v2 file written before the surgeon-state fields were wired
+//   (preview-tracking deployments only — v2 has never been released)
+//   loads cleanly into the v2 reader.  The missing optional fields
+//   take documented defaults:
 //
 //     name                          = the node's MRML display name
 //     resection.safetyMargin_mm     = 0.0
@@ -305,16 +307,13 @@ int testV3RoundTripFullFields()
 //     scene.volumetryPartitions     = empty array
 //     scene.stageSelection          = absent
 //
-// The defaults are pinned via a re-write round-trip: after loading the
-// v2 file the test re-writes the (now v3-aware) node and asserts the
+// The defaults are pinned via a re-write round-trip: after loading
+// the minimal v2 file the test re-writes the node and asserts the
 // emitted JSON carries the documented defaults.  This bypasses the
 // need for new in-memory accessors on vtkMRMLBezierSurfaceNode and
 // keeps the test focused on the storage-node contract.
-//
-// This test must FAIL on the current writer (the re-written file is a
-// v2 file, not v3; the defaults block is absent).
 //------------------------------------------------------------------------------
-int testV2ToV3FallbackDefaults()
+int testV2OptionalFieldsFallbackDefaults()
 {
   // Synthesise a minimal valid v2 .lrp.json with no resection/scene
   // blocks — i.e. exactly what the schema-v2 writer (current
@@ -356,7 +355,7 @@ int testV2ToV3FallbackDefaults()
   storage->SetFileName(v2Path.c_str());
   CHECK_INT(storage->ReadData(sink.GetPointer()), 1);
 
-  // Re-write and inspect the emitted JSON for the v3 defaults.
+  // Re-write and inspect the emitted JSON for the v2 defaults.
   const std::string rewritePath = makeTempPath("lrp.json");
   vtkNew<vtkMRMLBezierSurfaceStorageNode> rewriteStorage;
   rewriteStorage->SetFileName(rewritePath.c_str());
@@ -367,7 +366,7 @@ int testV2ToV3FallbackDefaults()
   // Default name = MRML display name.
   if (contents.find("\"name\":\"LegacyPlanFromV2\"") == std::string::npos && contents.find("\"name\": \"LegacyPlanFromV2\"") == std::string::npos)
   {
-    std::cerr << "testV2ToV3FallbackDefaults: expected name default = MRML display name "
+    std::cerr << "testV2OptionalFieldsFallbackDefaults: expected name default = MRML display name "
                  "(\"LegacyPlanFromV2\") in re-written JSON; got:\n"
               << contents << "\n";
     return EXIT_FAILURE;
@@ -375,25 +374,25 @@ int testV2ToV3FallbackDefaults()
   // Default margins = 0.0.
   if (!contains(contents, "safetyMargin_mm", "0.0") && !contains(contents, "safetyMargin_mm", "0"))
   {
-    std::cerr << "testV2ToV3FallbackDefaults: expected safetyMargin_mm default = 0.0; got:\n" << contents << "\n";
+    std::cerr << "testV2OptionalFieldsFallbackDefaults: expected safetyMargin_mm default = 0.0; got:\n" << contents << "\n";
     return EXIT_FAILURE;
   }
   if (!contains(contents, "riskMargin_mm", "0.0") && !contains(contents, "riskMargin_mm", "0"))
   {
-    std::cerr << "testV2ToV3FallbackDefaults: expected riskMargin_mm default = 0.0; got:\n" << contents << "\n";
+    std::cerr << "testV2OptionalFieldsFallbackDefaults: expected riskMargin_mm default = 0.0; got:\n" << contents << "\n";
     return EXIT_FAILURE;
   }
   // Default orderIndex = -1 (sentinel: unordered).
   if (!contains(contents, "orderIndex", "-1"))
   {
-    std::cerr << "testV2ToV3FallbackDefaults: expected orderIndex default = -1 (sentinel); got:\n" << contents << "\n";
+    std::cerr << "testV2OptionalFieldsFallbackDefaults: expected orderIndex default = -1 (sentinel); got:\n" << contents << "\n";
     return EXIT_FAILURE;
   }
   // scene.classification absent (no nodeId emitted).  We tolerate a
-  // null-valued classification block as a valid v3 shape too — the
+  // null-valued classification block as a valid v2 shape too — the
   // Liver shell that writes the scene.stageSelection block lands in
-  // a follow-up; until then a v3 file with all-null stageSelection +
-  // absent classification is a valid v3 shape per ADR-0023
+  // a follow-up; until then a v2 file with all-null stageSelection +
+  // absent classification is a valid v2 shape per ADR-0023
   // §"Persistence".
   const bool classificationAbsent = contents.find("\"classification\":null") != std::string::npos || contents.find("\"classification\": null") != std::string::npos
                                     || contents.find("\"classification\"") == std::string::npos;
@@ -403,7 +402,7 @@ int testV2ToV3FallbackDefaults()
     // (the sink was loaded from a v2 file with no classification).
     if (contents.find("\"nodeId\":\"vtkMRML") != std::string::npos || contents.find("\"nodeId\": \"vtkMRML") != std::string::npos)
     {
-      std::cerr << "testV2ToV3FallbackDefaults: expected absent / null classification "
+      std::cerr << "testV2OptionalFieldsFallbackDefaults: expected absent / null classification "
                    "block (no classification was set); got:\n"
                 << contents << "\n";
       return EXIT_FAILURE;
@@ -416,7 +415,7 @@ int testV2ToV3FallbackDefaults()
       && contents.find("\"volumetryPartitions\"") != std::string::npos)
   {
     // Block present but not empty — the v2 source had no partitions.
-    std::cerr << "testV2ToV3FallbackDefaults: expected empty volumetryPartitions; got:\n" << contents << "\n";
+    std::cerr << "testV2OptionalFieldsFallbackDefaults: expected empty volumetryPartitions; got:\n" << contents << "\n";
     return EXIT_FAILURE;
   }
 
@@ -426,19 +425,15 @@ int testV2ToV3FallbackDefaults()
 }
 
 //------------------------------------------------------------------------------
-// Test 3 — the writer emits schemaVersion = 3 (not 2).
+// Test 3 — the writer emits schemaVersion = 2.
 //
 // Pinned invariant (ADR-0023 §"Conformance" — "the schema header
-// reads schemaVersion: 3 on writes"):
-//   Every v3-aware write carries the literal "schemaVersion": 3 in
-//   the on-disk JSON.  The v2 marker "schemaVersion": 2 is absent.
-//
-// This test must FAIL on the current writer (which emits
-// "schemaVersion": 2 unconditionally).  liver-implementer flips it
-// to PASS by bumping
-// vtkMRMLBezierSurfaceStorageNode::SchemaVersion from 2 to 3.
+// reads schemaVersion: 2 on writes"):
+//   Every v2-aware write carries the literal "schemaVersion": 2 in
+//   the on-disk JSON.  Guards against an accidental partial bump
+//   to a future version that doesn't match the reader-band update.
 //------------------------------------------------------------------------------
-int testV3WriteEmitsSchemaVersion3()
+int testV2WriteEmitsSchemaVersion2()
 {
   vtkNew<vtkMRMLScene> scene;
   vtkNew<vtkMRMLBezierSurfaceNode> source;
@@ -453,17 +448,19 @@ int testV3WriteEmitsSchemaVersion3()
 
   const std::string contents = slurp(path);
 
-  // Positive — schemaVersion is 3.
-  if (contents.find("\"schemaVersion\":3") == std::string::npos && contents.find("\"schemaVersion\": 3") == std::string::npos)
+  // Positive — schemaVersion is 2.
+  if (contents.find("\"schemaVersion\":2") == std::string::npos && contents.find("\"schemaVersion\": 2") == std::string::npos)
   {
-    std::cerr << "testV3WriteEmitsSchemaVersion3: expected \"schemaVersion\": 3 in JSON; got:\n" << contents << "\n";
+    std::cerr << "testV2WriteEmitsSchemaVersion2: expected \"schemaVersion\": 2 in JSON; got:\n" << contents << "\n";
     return EXIT_FAILURE;
   }
-  // Negative — schemaVersion is NOT 2.  Pins the "writer always
-  // emits the current schema" half of the invariant.
-  if (contents.find("\"schemaVersion\":2") != std::string::npos || contents.find("\"schemaVersion\": 2") != std::string::npos)
+  // Negative — schemaVersion is NOT 3.  Pins the "writer always
+  // emits the current schema" half of the invariant: a future
+  // partial bump that changes the writer back to 3 without a
+  // matching reader-band update fails loudly here.
+  if (contents.find("\"schemaVersion\":3") != std::string::npos || contents.find("\"schemaVersion\": 3") != std::string::npos)
   {
-    std::cerr << "testV3WriteEmitsSchemaVersion3: unexpected \"schemaVersion\": 2 in JSON; got:\n" << contents << "\n";
+    std::cerr << "testV2WriteEmitsSchemaVersion2: unexpected \"schemaVersion\": 3 in JSON; got:\n" << contents << "\n";
     return EXIT_FAILURE;
   }
 
@@ -494,7 +491,7 @@ int testV3WriteEmitsSchemaVersion3()
 //
 // This test must FAIL on the current writer (no scene block).
 //------------------------------------------------------------------------------
-int testV3ClassificationSubtypeDiscriminator()
+int testV2ClassificationSubtypeDiscriminator()
 {
   // Sub-case A — standard Couinaud (Auto path).
   {
@@ -514,7 +511,7 @@ int testV3ClassificationSubtypeDiscriminator()
     if (contents.find("\"subtype\":\"vtkMRMLStdCouinaudTerritoriesNode\"") == std::string::npos
         && contents.find("\"subtype\": \"vtkMRMLStdCouinaudTerritoriesNode\"") == std::string::npos)
     {
-      std::cerr << "testV3ClassificationSubtypeDiscriminator (Auto path): expected "
+      std::cerr << "testV2ClassificationSubtypeDiscriminator (Auto path): expected "
                    "scene.classification.subtype = \"vtkMRMLStdCouinaudTerritoriesNode\"; got:\n"
                 << contents << "\n";
       return EXIT_FAILURE;
@@ -539,7 +536,7 @@ int testV3ClassificationSubtypeDiscriminator()
     const std::string contents = slurp(path);
     if (contents.find("\"subtype\":\"vtkMRMLCustomTerritoriesNode\"") == std::string::npos && contents.find("\"subtype\": \"vtkMRMLCustomTerritoriesNode\"") == std::string::npos)
     {
-      std::cerr << "testV3ClassificationSubtypeDiscriminator (Custom path): expected "
+      std::cerr << "testV2ClassificationSubtypeDiscriminator (Custom path): expected "
                    "scene.classification.subtype = \"vtkMRMLCustomTerritoriesNode\"; got:\n"
                 << contents << "\n";
       return EXIT_FAILURE;
@@ -550,72 +547,21 @@ int testV3ClassificationSubtypeDiscriminator()
 }
 
 //------------------------------------------------------------------------------
-// Test 5 — the schemaVersion-acceptance band is [1, 3]; v99 still
-// rejected.
+// Test 5 — schemaVersion 99 stays rejected after the v2.0 fold.
 //
 // Pinned invariant (the schema-versioning convention in the file
 // header of vtkMRMLBezierSurfaceStorageNode.cxx — the
 // MinReadableSchemaVersion / SchemaVersion constants):
 //   The reader admits files with schemaVersion in
-//   [MinReadableSchemaVersion, SchemaVersion].  After v3 lands the
-//   upper bound is 3; v99 (or any other out-of-band value) is
-//   rejected with a vtkErrorMacro.
-//
-// This is the v3 extension of testSchemaVersionMismatch from Test1
-// (which exercises the v99 rejection against the [1, 2] band).  The
-// v99-rejection half of this test passes against the current writer
-// (99 is outside both [1, 2] and [1, 3]); the v3-acceptance half
-// fails until liver-implementer bumps the SchemaVersion constant.
+//   [MinReadableSchemaVersion, SchemaVersion] — currently [2, 2].
+//   v99 (or any other out-of-band value) is rejected with a
+//   vtkErrorMacro.  Sibling of testSchemaVersionMismatch in Test1
+//   (which historically exercised the v99 rejection against the
+//   [1, 2] band).  The boundary-immediate neighbours (v1 and v3)
+//   are covered by testV2SchemaVersionBoundaryRejection.
 //------------------------------------------------------------------------------
-int testV3ReaderAcceptsV3RangeAndRejectsV99()
+int testV2ReaderRejectsV99()
 {
-  // Half (a) — synthesise a v3 file with the minimal v3 shape and
-  // assert the reader accepts it.  Pre-implementation this assertion
-  // fails because the reader's upper bound is still 2.
-  {
-    const std::string path = makeTempPath("lrp.json");
-    {
-      std::ofstream ofs(path);
-      ofs << "{\n";
-      ofs << "  \"schemaVersion\": 3,\n";
-      ofs << "  \"state\": \"Planning\",\n";
-      ofs << "  \"initMode\": \"SlicingPlane\",\n";
-      ofs << "  \"rows\": 4,\n";
-      ofs << "  \"cols\": 4,\n";
-      ofs << "  \"controlGrid\": [";
-      for (int i = 0; i < 48; ++i)
-      {
-        if (i > 0)
-        {
-          ofs << ", ";
-        }
-        ofs << "0.0";
-      }
-      ofs << "],\n";
-      ofs << "  \"slicingPlane\": { \"origin\": [0, 0, 0], \"normal\": [0, 0, 1], "
-             "\"initPointsFlat\": [0, 0, 0, 0, 0, 0] },\n";
-      ofs << "  \"distanceSpheroid\": { \"center\": [0, 0, 0], "
-             "\"radius\": {\"x\": 0, \"y\": 0, \"z\": 0}, "
-             "\"numberOfInitPoints\": 0, \"initPointsFlat\": [] },\n";
-      ofs << "  \"resection\": { \"name\": \"\", \"safetyMargin_mm\": 0.0, "
-             "\"riskMargin_mm\": 0.0, \"orderIndex\": -1 },\n";
-      ofs << "  \"scene\": { \"volumetryPartitions\": [] },\n";
-      ofs << "  \"metadata\": {}\n";
-      ofs << "}\n";
-    }
-    vtkNew<vtkMRMLScene> scene;
-    vtkNew<vtkMRMLBezierSurfaceNode> sink;
-    scene->AddNode(sink.GetPointer());
-    vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
-    storage->SetFileName(path.c_str());
-    CHECK_INT(storage->ReadData(sink.GetPointer()), 1);
-    vtksys::SystemTools::RemoveFile(path);
-  }
-
-  // Half (b) — v99 stays rejected (regression-pin of the invariant
-  // first established by testSchemaVersionMismatch in Test1).  This
-  // passes today; the assertion is here so that the test guards the
-  // negative side of the [1, 3] band after the v3 bump too.
   {
     const std::string path = makeTempPath("lrp.json");
     {
@@ -644,21 +590,22 @@ int testV3ReaderAcceptsV3RangeAndRejectsV99()
 //------------------------------------------------------------------------------
 // Invariant 6 -- schemaVersion boundary rejection (low + high side).
 //
-// The reader's accepted band is [MinReadableSchemaVersion=1,
-// SchemaVersion=3].  testV3ReaderAcceptsV3RangeAndRejectsV99 covers
-// the far-out v99 case as a regression-pin of the v2 behaviour, but
-// does not exercise the immediate boundaries on either side.  This
-// test pins both:
+// The reader's accepted band is [MinReadableSchemaVersion=2,
+// SchemaVersion=2] — exactly v2.  testV2ReaderRejectsV99 covers
+// the far-out v99 case as a regression-pin of the v2.0 behaviour,
+// but does not exercise the immediate boundaries on either side.
+// This test pins both:
 //
-//   - schemaVersion = 0  is below MinReadableSchemaVersion -> rejected
-//   - schemaVersion = 4  is above SchemaVersion             -> rejected
+//   - schemaVersion = 1  is below MinReadableSchemaVersion -> rejected
+//   - schemaVersion = 3  is above SchemaVersion             -> rejected
 //
-// Without these, a future writer bumped from 3 -> 4 without a matching
-// reader-band update would silently emit unreadable files; and a
-// stray 0-valued schemaVersion (e.g. from a half-initialised v0 file)
-// would surface as a confusing parse failure deeper in the reader.
+// The v1 rejection is the post-fold behaviour: v1 was preview-only
+// and not part of the released contract (ADR-0023 §"Persistence";
+// see also the schema-header comment in the .cxx).  The v3
+// rejection is a defensive guard so a future writer bumped from
+// v2 -> v3 without a matching reader-band update fails loudly.
 //------------------------------------------------------------------------------
-int testV3SchemaVersionBoundaryRejection()
+int testV2SchemaVersionBoundaryRejection()
 {
   auto writeMinimal = [&](const std::string& path, int versionLiteral)
   {
@@ -670,10 +617,10 @@ int testV3SchemaVersionBoundaryRejection()
     ofs << "}\n";
   };
 
-  // Low-side boundary: 0 < MinReadableSchemaVersion=1.
+  // Low-side boundary: 1 < MinReadableSchemaVersion=2.
   {
     const std::string path = makeTempPath("lrp.json");
-    writeMinimal(path, 0);
+    writeMinimal(path, 1);
     vtkNew<vtkMRMLScene> scene;
     vtkNew<vtkMRMLBezierSurfaceNode> sink;
     scene->AddNode(sink.GetPointer());
@@ -687,11 +634,11 @@ int testV3SchemaVersionBoundaryRejection()
     vtksys::SystemTools::RemoveFile(path);
   }
 
-  // High-side boundary: 4 > SchemaVersion=3.  Defensive guard so a
-  // future v4 bump without a matching reader update fails loudly.
+  // High-side boundary: 3 > SchemaVersion=2.  Defensive guard so a
+  // future v3 bump without a matching reader update fails loudly.
   {
     const std::string path = makeTempPath("lrp.json");
-    writeMinimal(path, 4);
+    writeMinimal(path, 3);
     vtkNew<vtkMRMLScene> scene;
     vtkNew<vtkMRMLBezierSurfaceNode> sink;
     scene->AddNode(sink.GetPointer());
@@ -711,7 +658,7 @@ int testV3SchemaVersionBoundaryRejection()
 //------------------------------------------------------------------------------
 // Invariant 7 -- scene.stageSelection.currentStage round-trip.
 //
-// ADR-0023 §"Persistence" claims scene.stageSelection as part of v3.
+// ADR-0023 §"Persistence" claims scene.stageSelection as part of v2.
 // The Liver-shell writer for this block lands in a follow-up (T5.2-d);
 // however the storage *reader* already stashes the surgeon's last
 // currentStage into a node attribute on load.  Without this test the
@@ -719,18 +666,18 @@ int testV3SchemaVersionBoundaryRejection()
 // ``currentStage`` keys is dead-uncovered on Codecov, and a future
 // writer regression that drops the field would silently pass.
 //
-// Synthesise a minimal valid v3 .lrp.json with
+// Synthesise a minimal valid v2 .lrp.json with
 // scene.stageSelection.currentStage = 3, load it through the
 // storage-node reader, and assert the node carries the
 // ``currentStage`` attribute equal to "3".
 //------------------------------------------------------------------------------
-int testV3StageSelectionCurrentStageReader()
+int testV2StageSelectionCurrentStageReader()
 {
-  const std::string v3Path = makeTempPath("lrp.json");
+  const std::string v2Path = makeTempPath("lrp.json");
   {
-    std::ofstream ofs(v3Path);
+    std::ofstream ofs(v2Path);
     ofs << "{\n";
-    ofs << "  \"schemaVersion\": 3,\n";
+    ofs << "  \"schemaVersion\": 2,\n";
     ofs << "  \"state\": \"Planning\",\n";
     ofs << "  \"initMode\": \"SlicingPlane\",\n";
     ofs << "  \"rows\": 4,\n";
@@ -752,7 +699,7 @@ int testV3StageSelectionCurrentStageReader()
            "\"numberOfInitPoints\": 0, \"initPointsFlat\": [] },\n";
     ofs << "  \"resection\": { \"name\": \"PlanWithStageSelection\", "
            "\"safetyMargin_mm\": 0.0, \"riskMargin_mm\": 0.0, \"orderIndex\": -1 },\n";
-    // ``classification`` is omitted (matches what the v3 writer emits
+    // ``classification`` is omitted (matches what the v2 writer emits
     // when no ``vtkMRMLAbstractTerritoriesNode`` is present in the
     // scene -- the writer skips the key rather than emitting null,
     // and the reader's ``HasMember("classification")`` guard handles
@@ -772,7 +719,7 @@ int testV3StageSelectionCurrentStageReader()
   scene->AddNode(sink.GetPointer());
 
   vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
-  storage->SetFileName(v3Path.c_str());
+  storage->SetFileName(v2Path.c_str());
   CHECK_INT(storage->ReadData(sink.GetPointer()), 1);
 
   // The reader stashes currentStage as a node attribute keyed by the
@@ -781,7 +728,7 @@ int testV3StageSelectionCurrentStageReader()
   CHECK_NOT_NULL(observed);
   CHECK_STRING(observed, "3");
 
-  vtksys::SystemTools::RemoveFile(v3Path);
+  vtksys::SystemTools::RemoveFile(v2Path);
   return EXIT_SUCCESS;
 }
 
@@ -791,16 +738,16 @@ int testV3StageSelectionCurrentStageReader()
 int vtkMRMLBezierSurfaceStorageNodeTest2(int, char*[])
 {
   // ADR-0027 §"Test target — v2.0 design, not v1 behaviour": these
-  // tests pin the v3 design contract from ADR-0023 §"Persistence".
-  // They are expected to FAIL until liver-implementer lands the v3
+  // tests pin the v2 design contract from ADR-0023 §"Persistence".
+  // They are expected to FAIL until liver-implementer lands the v2
   // writer + reader; they pass after that.
-  CHECK_EXIT_SUCCESS(testV3WriteEmitsSchemaVersion3());
-  CHECK_EXIT_SUCCESS(testV3RoundTripFullFields());
-  CHECK_EXIT_SUCCESS(testV2ToV3FallbackDefaults());
-  CHECK_EXIT_SUCCESS(testV3ClassificationSubtypeDiscriminator());
-  CHECK_EXIT_SUCCESS(testV3ReaderAcceptsV3RangeAndRejectsV99());
-  CHECK_EXIT_SUCCESS(testV3SchemaVersionBoundaryRejection());
-  CHECK_EXIT_SUCCESS(testV3StageSelectionCurrentStageReader());
+  CHECK_EXIT_SUCCESS(testV2WriteEmitsSchemaVersion2());
+  CHECK_EXIT_SUCCESS(testV2RoundTripFullFields());
+  CHECK_EXIT_SUCCESS(testV2OptionalFieldsFallbackDefaults());
+  CHECK_EXIT_SUCCESS(testV2ClassificationSubtypeDiscriminator());
+  CHECK_EXIT_SUCCESS(testV2ReaderRejectsV99());
+  CHECK_EXIT_SUCCESS(testV2SchemaVersionBoundaryRejection());
+  CHECK_EXIT_SUCCESS(testV2StageSelectionCurrentStageReader());
 
   std::cout << "vtkMRMLBezierSurfaceStorageNodeTest2 completed successfully" << std::endl;
   return EXIT_SUCCESS;

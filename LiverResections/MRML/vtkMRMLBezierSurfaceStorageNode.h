@@ -75,26 +75,26 @@
  * ADR-0007's D-class compatibility-break category, the
  * ``.lrp.fcsv`` deprecation is part of the v2.0.0 MAJOR bump.
  *
- * \par JSON schema (v3 — ADR-0023 §"Persistence")
+ * \par JSON schema (v2 — ADR-0023 §"Persistence")
  *
  * See the in-source documentation at the top of
  * ``vtkMRMLBezierSurfaceStorageNode.cxx`` for the canonical
  * schema description.  Briefly:
  *
- *   - ``schemaVersion``: int, currently 3 (writer); reader accepts
- *     v1, v2, and v3.
+ *   - ``schemaVersion``: int, currently 2 (writer + reader).  v1
+ *     was preview-only and never shipped; the reader rejects it.
  *   - ``state``: "Init" | "Planning" | "Confirmed"
  *   - ``initMode``: "SlicingPlane" | "DistanceSpheroid"
- *   - ``rows`` / ``cols``: control-polygon shape (v2 only; in v1
- *     these are implicit 4×4).  Per ADR-0018 §1, square only and
- *     in ``{(3, 3), (4, 4)}``.
+ *   - ``rows`` / ``cols``: control-polygon shape per ADR-0018 §1
+ *     (square only; in ``{(3, 3), (4, 4)}``).
  *   - ``controlGrid``: array of ``3 * rows * cols`` doubles
  *     (row-major; 27 for 3×3, 48 for 4×4).
  *   - ``slicingPlane``: {origin, normal, initPointsFlat}
  *   - ``distanceSpheroid``: {center, radius{x,y,z}, initPointsFlat}
- *   - ``metadata``: object (empty in v1; reserved for v2's
- *     timestamps + surgeon ID per ADR-0014 §5)
- *   - ``resection`` (v3): {name, safetyMargin_mm, riskMargin_mm,
+ *   - ``metadata``: object (empty for v2.0; reserved for richer
+ *     metadata — timestamps, surgeon ID — in a later schema
+ *     revision per ADR-0014 §5).
+ *   - ``resection``: {name, safetyMargin_mm, riskMargin_mm,
  *     orderIndex} — surgeon-facing field roster (ADR-0023
  *     §"Persistence").  The on-disk margin fields source from the
  *     existing ``vtkMRMLLiverResectionNode::ResectionMargin`` and
@@ -102,19 +102,19 @@
  *     to surgeon-facing labels without touching the in-memory MRML
  *     class.  See the schema-header comment in the .cxx for the
  *     full mapping table.
- *   - ``scene`` (v3): {classification, volumetryPartitions,
+ *   - ``scene``: {classification, volumetryPartitions,
  *     stageSelection} — scene-wide context the Liver shell restores
  *     on file open (ADR-0023 §"Stage transitions").
  *
- * \par v1 / v2 → v3 migration
+ * \par Optional-field tolerance (within v2)
  *
- * The reader infers ``rows = cols = 4`` for v1 files (no ``rows`` /
- * ``cols`` fields) and validates the ``controlGrid`` array length
- * is 48.  v2 files load with the new v3 fields taking documented
- * defaults (name = MRML display name, margins = 0.0, orderIndex =
- * -1, classification absent, volumetry partitions empty,
- * stageSelection absent).  The writer always emits v3.  Round-trip
- * of a v1 / v2 file produces a v3 file on the next save.
+ * The ``resection`` and ``scene`` blocks are optional on read.  A
+ * preview-tracking v2 file written before the surgeon-state fields
+ * were wired (no such files in the public release contract) loads
+ * with documented defaults: name = MRML display name, margins =
+ * 0.0, orderIndex = -1, classification absent, volumetry partitions
+ * empty, stageSelection absent.  The writer always emits the full
+ * v2 shape.
  *
  * \par See also
  *
@@ -138,15 +138,20 @@ public:
   /// Bump this integer in lock-step with any documented schema
   /// extension; ``ReadDataInternal`` MUST grow an explicit branch
   /// for every old version it intends to keep loading.  Per
-  /// ADR-0023 §"Persistence" the reader accepts v1 (implicit 4×4
-  /// control polygon), v2 (explicit ``rows`` / ``cols``), and v3
-  /// (the surgeon-facing ``resection`` + ``scene`` blocks).
-  static constexpr int SchemaVersion = 3;
+  /// ADR-0023 §"Persistence" v2 is the unified schema for the
+  /// 2026 v2.0.0 release — it carries the variable-size Bezier
+  /// shape (``rows`` / ``cols``), the surgeon-facing ``resection``
+  /// block (name + Safety/Risk margins + orderIndex), and the
+  /// scene-wide ``scene`` block (classification, volumetry
+  /// partitions, stage selection).  v1 was preview-only and never
+  /// shipped; the reader rejects it.
+  static constexpr int SchemaVersion = 2;
 
-  /// Lowest schema version the reader admits.  v1 files (no
-  /// ``rows`` / ``cols``) load with an inferred 4×4 control polygon
-  /// per the ADR-0018 §1 migration path.
-  static constexpr int MinReadableSchemaVersion = 1;
+  /// Lowest schema version the reader admits.  Equal to
+  /// ``SchemaVersion`` for v2.0.0 since v1 was preview-only and is
+  /// not part of the released contract.  A future v3 bump should
+  /// widen this band to keep v2 files readable.
+  static constexpr int MinReadableSchemaVersion = 2;
 
   vtkMRMLNode* CreateNodeInstance() override;
 

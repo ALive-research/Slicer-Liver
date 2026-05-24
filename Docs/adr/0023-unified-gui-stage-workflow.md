@@ -110,9 +110,9 @@ The lazy-pip-install pattern is **only viable for AI tools that consume as a Pyt
 
 Slicer-Liver consumes TotalSegmentator's Python API directly — it does not require the upstream TotalSegmentator *Slicer extension wrapper* to be installed. Surgeon interacts via Slicer-Liver's UI, not via the upstream extension's widget.
 
-### Persistence — `.lrp.json` schema v3
+### Persistence — `.lrp.json` schema v2
 
-The existing `.lrp.json` storage (schema v2 from [PR #383](https://github.com/ALive-research/Slicer-Liver/pull/383)) bumps to v3 to capture v2.0's surgeon-facing state:
+The `.lrp.json` storage (introduced in [PR #361](https://github.com/ALive-research/Slicer-Liver/pull/361), extended for variable-size Bezier in [PR #383](https://github.com/ALive-research/Slicer-Liver/pull/383)) lands a unified schema v2 for the 2026 v2.0.0 release. v1 was preview-only and is not part of the released contract; the reader rejects it. v2 captures v2.0's surgeon-facing state:
 
 - Per-resection name + Safety + Risk margin values.
 - Resection list ordering (the surgical-order + locator-precedence semantic).
@@ -197,7 +197,7 @@ Force Stage 3 Auto and Manual to share the framework's `vtkMRMLLiverVolumetryNod
 - The Liver shell now owns a non-trivial navigation widget — implementation cost.
 - Per-stage state-indicator logic must compute correctness (e.g., "has Stage 2 produced a canonical Segmentation?"). Each module exposes a `isComplete()`-like query for the sidebar.
 - Two `vtkMRMLAbstractTerritoriesNode` subclasses + a base imply C++ MRML node hierarchy work (per [ADR-0004](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0004-python-cpp-boundary.md) — data nodes are C++).
-- `.lrp.json` schema v3 needs a migration loader from v2; load-time fallbacks for missing fields.
+- `.lrp.json` schema v2 carries the surgeon-facing state in a `resection` block + a scene-wide `scene` block; reader rejects v1 (preview-only, not part of the released contract).
 - Subject Hierarchy management code must be wired across every node-creating module — a per-module discipline gate.
 - The resectogram custom layout registration is a new mechanism in `LiverResections/`.
 
@@ -206,7 +206,7 @@ Force Stage 3 Auto and Manual to share the framework's `vtkMRMLLiverVolumetryNod
 - **Architecture diagrams** in `Docs/architecture/` — stage flow + dependency map, territories class hierarchy, MRML node landscape.
 - **ADR-0024 — Segmentation orchestration** for Stage 2's per-structure micro-workflows (TotalSegmentator + Kumar-Oram Segment Editor effect + Segment Editor manual orchestration). Interactive tumor refinement (e.g., MONAILabel-DeepGrow) is deferred to v2.1+ per ADR-0024 Alternative H.
 - **ADR-0025 — Locator architecture** for the resectogram hover→3D + click→reslice interactions, the 1:1 (u,v) mapping insight, and the v2.0/v2.1 scope split.
-- **Schema v3 migration** PR for `vtkMRMLBezierSurfaceStorageNode` (`.lrp.json`).
+- **Schema v2 unified surgeon-state** PR for `vtkMRMLBezierSurfaceStorageNode` (`.lrp.json`).
 - **Class refactor** PRs for `vtkMRMLAbstractTerritoriesNode` + subclasses + Stage 3 Auto and Manual tab rewiring.
 - **`LiverSegments/` → `VascularTerritories/` rename** + content refactor into the framework.
 - **`LiverSegmentation/` new module** + lazy-install machinery for TotalSegmentator.
@@ -225,7 +225,7 @@ Reviewable invariants that signal this decision is honoured:
 - `LiverResections/` registers a custom Slicer layout for the resectogram view.
 - The sidebar's per-stage state indicators are driven by a per-stage `isComplete()` query (or equivalent) defined by each stage's module.
 - No new module declares `TotalSegmentator` or `MONAILabel` as `EXTENSION_DEPENDS`. The first-use install path is implemented in `LiverSegmentation/Logic/` (and any other AI-consuming module).
-- `.lrp.json` schema header reads `"schemaVersion": 3` on writes; reader supports v2-to-v3 fallback loading.
+- `.lrp.json` schema header reads `"schemaVersion": 2` on writes; reader rejects v1 outright and tolerates absent surgeon-state blocks within v2 via documented defaults.
 - Subject Hierarchy folder names "Anatomy", "Vascular Territories", "Resections", "Volumetry" exist after typical workflow use. Grep for `SubjectHierarchyCreateFolder` (or upstream equivalent) in each module's logic.
 - The 2026-05-14 stitch and 2026-05-15 framework PKS notes carry "Superseded by ADR-0023" annotations on the relevant claims.
 

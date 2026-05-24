@@ -232,16 +232,28 @@ int testUnknownStateFallback()
   // ADR-0019 §"Storage / persistence": an unknown ``state`` value
   // falls back to ``Planning`` gracefully — exercises the forward-
   // compatible default for scenes authored by a future build that
-  // adds a fourth state (or a build that pre-dates this PR loading
-  // a v3-authored "Confirmed" scene, which the test simulates by
-  // writing an unknown name directly).
+  // adds a fourth state.
   const std::string path = makeTempPath("lrp.json");
   {
     std::ofstream ofs(path);
     ofs << "{\n";
-    ofs << "  \"schemaVersion\": 1,\n";
+    ofs << "  \"schemaVersion\": 2,\n";
     ofs << "  \"state\": \"Approved\",\n";
-    ofs << "  \"initMode\": \"SlicingPlane\"\n";
+    ofs << "  \"initMode\": \"SlicingPlane\",\n";
+    ofs << "  \"rows\": 4,\n";
+    ofs << "  \"cols\": 4,\n";
+    ofs << "  \"controlGrid\": [";
+    for (int i = 0; i < 48; ++i)
+    {
+      if (i > 0)
+      {
+        ofs << ", ";
+      }
+      ofs << "0.0";
+    }
+    ofs << "],\n";
+    ofs << "  \"slicingPlane\": { \"origin\": [0, 0, 0], \"normal\": [0, 0, 1], \"initPointsFlat\": [0, 0, 0, 0, 0, 0] },\n";
+    ofs << "  \"distanceSpheroid\": { \"center\": [0, 0, 0], \"radius\": {\"x\": 0, \"y\": 0, \"z\": 0}, \"numberOfInitPoints\": 0, \"initPointsFlat\": [] }\n";
     ofs << "}\n";
   }
 
@@ -454,11 +466,13 @@ int testJsonRoundTrip3x3()
   return EXIT_SUCCESS;
 }
 
-int testJsonReadV1Implicit4x4()
+int testJsonReadV1Rejected()
 {
-  // ADR-0018 §1 — Reader must accept v1 files (no rows / cols
-  // fields; implicit 4×4 control polygon) and load them as a 4×4
-  // node.  This is the migration path for existing on-disk plans.
+  // ADR-0023 §"Persistence" — v1 was preview-only and not part of
+  // the v2.0.0 released contract.  ``MinReadableSchemaVersion`` is
+  // ``2`` and the reader rejects v1 files outright.  This test
+  // pins that rejection so a future writer regression (e.g. a
+  // partial-bump that lowers ``SchemaVersion`` back to 1) is caught.
   const std::string path = makeTempPath("lrp.json");
   {
     std::ofstream ofs(path);
@@ -475,26 +489,17 @@ int testJsonReadV1Implicit4x4()
       }
       ofs << (static_cast<double>(i) * 0.0625);
     }
-    ofs << "],\n";
-    ofs << "  \"slicingPlane\": { \"origin\": [0, 0, 0], \"normal\": [0, 0, 1], \"initPointsFlat\": [0, 0, 0, 0, 0, 0] },\n";
-    ofs << "  \"distanceSpheroid\": { \"center\": [0, 0, 0], \"radius\": {\"x\": 0, \"y\": 0, \"z\": 0}, \"numberOfInitPoints\": 0, \"initPointsFlat\": [] },\n";
-    ofs << "  \"metadata\": {}\n";
+    ofs << "]\n";
     ofs << "}\n";
   }
 
   vtkNew<vtkMRMLBezierSurfaceNode> sink;
   vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
   storage->SetFileName(path.c_str());
-  CHECK_INT(storage->ReadData(sink.GetPointer()), 1);
 
-  // v1 → 4×4 inference.
-  CHECK_INT(static_cast<int>(sink->GetRows()), 4);
-  CHECK_INT(static_cast<int>(sink->GetCols()), 4);
-  CHECK_INT(static_cast<int>(sink->GetControlGridLength()), 48);
-  for (int i = 0; i < 48; ++i)
-  {
-    CHECK_DOUBLE_TOLERANCE(sink->GetControlGrid()[i], static_cast<double>(i) * 0.0625, 1e-9);
-  }
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
 
   vtksys::SystemTools::RemoveFile(path);
   return EXIT_SUCCESS;
@@ -717,7 +722,7 @@ int vtkMRMLBezierSurfaceStorageNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testLegacyFcsvWriteRejected());
   CHECK_EXIT_SUCCESS(testLegacyFcsvFixture());
   CHECK_EXIT_SUCCESS(testJsonRoundTrip3x3());
-  CHECK_EXIT_SUCCESS(testJsonReadV1Implicit4x4());
+  CHECK_EXIT_SUCCESS(testJsonReadV1Rejected());
   CHECK_EXIT_SUCCESS(testJsonReadV2InvalidShape());
   CHECK_EXIT_SUCCESS(testJsonReadV2OutOfRange());
   CHECK_EXIT_SUCCESS(testJsonReadV2ControlGridLengthMismatch());

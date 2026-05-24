@@ -38,21 +38,24 @@
 ==============================================================================*/
 
 //==============================================================================
-// .lrp.json — JSON schema v3 (ADR-0023 §"Persistence")
+// .lrp.json — JSON schema v2 (ADR-0023 §"Persistence")
 //==============================================================================
 //
 // One ``.lrp.json`` document per liver resection plan (surgeon-to-
 // surgeon plan sharing per ADR-0014 §5).  Current writer
-// ``schemaVersion`` is ``3`` — bump in lock-step with any documented
-// extension; the reader accepts ``MinReadableSchemaVersion``
-// (currently ``1``) through ``SchemaVersion`` (currently ``3``).
+// ``schemaVersion`` is ``2`` (the unified schema for the 2026 v2.0.0
+// release); the reader accepts only v2 — v1 was preview-only and
+// is not part of the released contract.  Bump ``SchemaVersion`` in
+// lock-step with any documented extension; widen
+// ``MinReadableSchemaVersion`` only when an older version is part
+// of the public release contract.
 //
 //   {
-//     "schemaVersion": 3,
+//     "schemaVersion": 2,
 //     "state": "Init" | "Planning" | "Confirmed",
 //     "initMode": "SlicingPlane" | "DistanceSpheroid",
-//     "rows": int,             // v2+ only — see migration below
-//     "cols": int,             // v2+ only — see migration below
+//     "rows": int,             // 3 or 4 per ADR-0018 §1
+//     "cols": int,             // same as rows (square admitted)
 //     "controlGrid": [3 * rows * cols doubles in row-major (i,j,k) order],
 //     "slicingPlane": {
 //       "origin": [3 doubles, RAS],
@@ -66,13 +69,13 @@
 //       "initPointsFlat": [3*N doubles — N RAS triplets concat]
 //     },
 //     "metadata": {},
-//     "resection": {                      // v3 only
+//     "resection": {
 //       "name": string,                   // surgeon-facing plan name
 //       "safetyMargin_mm": double,        // see margin mapping below
 //       "riskMargin_mm": double,          // see margin mapping below
 //       "orderIndex": int                 // -1 = unordered (sentinel)
 //     },
-//     "scene": {                          // v3 only
+//     "scene": {
 //       "classification": {
 //         "nodeId": string,
 //         "subtype": string               // concrete vtkMRMLAbstractTerritoriesNode subclass name
@@ -89,8 +92,8 @@
 //     }
 //   }
 //
-// v3 surgeon-facing margin mapping (ADR-0023 §"Persistence")
-// ----------------------------------------------------------
+// Surgeon-facing margin mapping (ADR-0023 §"Persistence")
+// -------------------------------------------------------
 // The on-disk ``resection.safetyMargin_mm`` and ``resection.riskMargin_mm``
 // fields use surgeon-facing labels, but their source values are the
 // existing ``vtkMRMLLiverResectionNode`` members:
@@ -98,12 +101,13 @@
 //   resection.safetyMargin_mm  <->  vtkMRMLLiverResectionNode::ResectionMargin
 //   resection.riskMargin_mm    <->  vtkMRMLLiverResectionNode::UncertaintyMargin
 //
-// The MRML class members keep their pre-v3 names; the renaming is
-// strictly storage-layer.  This avoids a cross-tree MRML attribute
-// rename that would ripple through the legacy display node, Logic,
-// and Python scripting.  T2.7 (legacy retirement) is the natural
-// place to collapse the two vocabularies; until then the JSON
-// surgeon-vocabulary and the MRML developer-vocabulary coexist.
+// The MRML class members keep their developer-facing names; the
+// renaming is strictly storage-layer.  This avoids a cross-tree
+// MRML attribute rename that would ripple through the legacy
+// display node, Logic, and Python scripting.  T2.7 (legacy
+// retirement) is the natural place to collapse the two vocabularies;
+// until then the JSON surgeon-vocabulary and the MRML
+// developer-vocabulary coexist.
 //
 // In v2.0 the ``vtkMRMLBezierSurfaceNode`` does not yet carry a
 // node reference to its sibling ``vtkMRMLLiverResectionNode`` —
@@ -114,8 +118,8 @@
 // gains a third lookup tier (typed accessor on the resection node)
 // ahead of the attribute-map fallback.
 //
-// v3 scene block — locating logic
-// -------------------------------
+// scene block — locating logic
+// ----------------------------
 //   - ``scene.classification``: queried via
 //     ``scene->GetNodesByClass("vtkMRMLAbstractTerritoriesNode")``.
 //     Multi-classification scenes are a v2.1+ concern; in v2.0 the
@@ -136,31 +140,24 @@
 //     stages unset); the reader accepts both the empty / absent
 //     form and the populated form via ``HasMember`` guards.
 //
-// v1 / v2 → v3 migration:
-//   - v1 files have no ``rows`` / ``cols`` and a 48-double
-//     ``controlGrid``.  The reader infers ``rows = cols = 4`` and
-//     validates the array length.
-//   - v2 files carry explicit ``rows`` and ``cols``.  The reader
-//     enforces ``(rows, cols) ∈ {(3, 3), (4, 4)}`` per ADR-0018 §1
-//     and validates the ``controlGrid`` length is
-//     ``3 * rows * cols``.
-//   - v3 files additionally carry ``resection`` and ``scene``
-//     blocks.  A v2 file loaded by the v3 reader gets documented
-//     defaults: name = node's MRML display name, both margins = 0.0,
-//     orderIndex = -1, classification absent, volumetry partitions
-//     empty, stageSelection absent.
-//   - The writer always emits v3.  A v1 / v2 file round-tripped
-//     through load + save becomes v3 on disk.
+// Optional-field tolerance (within v2):
+//   - ``resection`` and ``scene`` blocks are optional on read.  A
+//     v2 file written before the surgeon-state fields were wired
+//     (preview-tracking deployments only — v2 was not yet released)
+//     gets documented defaults on load: name = node's MRML display
+//     name, both margins = 0.0, orderIndex = -1, classification
+//     absent, volumetry partitions empty, stageSelection absent.
+//   - v1 is rejected at the schema-version gate — there are no
+//     released v1 files to migrate.
 //
 // The ``initPointsFlat`` fields use a flat layout because the
 // in-tree ``vtkMRMLJsonWriter`` lacks a key-less nested-array entry
 // point.  See the implementation of ``WriteJson`` below for the
-// rationale and a ``TODO(T2.5 lrp-json-v2-nested-init-points)``
-// marker.
+// rationale.
 //
-// The ``metadata`` object is intentionally empty in v1 and reserved
-// for v2's "richer metadata" allowance (timestamps, surgeon ID, …)
-// per ADR-0014 §5.
+// The ``metadata`` object is intentionally empty for v2.0 and
+// reserved for richer metadata (timestamps, surgeon ID, …) in a
+// future schema revision per ADR-0014 §5.
 //
 //==============================================================================
 // Legacy ``.lrp.fcsv`` migration (load-only)
@@ -433,9 +430,7 @@ int vtkMRMLBezierSurfaceStorageNode::WriteJson(const std::string& filePath, vtkM
   writer->WriteStringProperty("state", vtkMRMLBezierSurfaceNode::GetStateAsString(surfaceNode->GetState()));
   writer->WriteStringProperty("initMode", vtkMRMLBezierSurfaceNode::GetInitModeAsString(surfaceNode->GetInitMode()));
 
-  // rows + cols — schema v2 explicit shape (ADR-0018 §1).  v1
-  // implicit-4×4 files load via the migration branch in ReadJson;
-  // the writer always emits v2.
+  // rows + cols — explicit control-polygon shape per ADR-0018 §1.
   writer->WriteIntProperty("rows", static_cast<int>(surfaceNode->GetRows()));
   writer->WriteIntProperty("cols", static_cast<int>(surfaceNode->GetCols()));
 
@@ -749,21 +744,15 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
   }
 
   // Control-polygon shape (ADR-0018 §1).  v2 files carry explicit
-  // ``rows`` + ``cols``; v1 files have neither and the shape is
-  // implicit-4×4.  Resolve both schemas to a (rows, cols) pair, then
-  // apply via SetSize after validating square + admitted-size.
-  unsigned int rows = vtkMRMLBezierSurfaceNode::DefaultGridSize;
-  unsigned int cols = vtkMRMLBezierSurfaceNode::DefaultGridSize;
-  if (schemaVersion >= 2)
+  // ``rows`` + ``cols``; both are required.  Apply via ``SetSize``
+  // after validating square + admitted-size.
+  if (!root->HasMember("rows") || !root->HasMember("cols"))
   {
-    if (!root->HasMember("rows") || !root->HasMember("cols"))
-    {
-      vtkErrorMacro("ReadJson: schemaVersion " << schemaVersion << " requires 'rows' and 'cols' fields in '" << filePath << "'");
-      return 0;
-    }
-    rows = static_cast<unsigned int>(root->GetIntProperty("rows"));
-    cols = static_cast<unsigned int>(root->GetIntProperty("cols"));
+    vtkErrorMacro("ReadJson: schemaVersion " << schemaVersion << " requires 'rows' and 'cols' fields in '" << filePath << "'");
+    return 0;
   }
+  const unsigned int rows = static_cast<unsigned int>(root->GetIntProperty("rows"));
+  const unsigned int cols = static_cast<unsigned int>(root->GetIntProperty("cols"));
   if (rows != cols || static_cast<int>(rows) < vtkMRMLBezierSurfaceNode::MinGridSize || static_cast<int>(rows) > vtkMRMLBezierSurfaceNode::MaxGridSize)
   {
     vtkErrorMacro("ReadJson: invalid (rows=" << rows << ", cols=" << cols << ") in '" << filePath << "' — ADR-0018 §1 admits {(3, 3), (4, 4)} only");
@@ -791,11 +780,11 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
       // back to "Planning" gracefully so a scene authored by a future
       // build that adds a fourth state (e.g. "Approved") still opens
       // in older builds with the surface visible and editable.  The
-      // fallback also covers the symmetric forward-compat case for the
-      // existing readership: a v3-authored "Confirmed" scene loaded by
-      // a build that pre-dates this PR would have read as unknown;
-      // adding the fallback here means the same loader behaviour ages
-      // gracefully into the next schema bump.
+      // fallback also covers the symmetric forward-compat case for
+      // the existing readership: a scene authored by a future build
+      // that adds a new state (e.g. "Approved") loaded by an older
+      // build reads as unknown; the fallback keeps the surface
+      // visible and editable rather than failing the load.
       vtkWarningMacro("ReadJson: unknown state name '" << s << "' in '" << filePath
                                                        << "' — falling back to Planning"
                                                           " (ADR-0019 forward-compatible default)");
