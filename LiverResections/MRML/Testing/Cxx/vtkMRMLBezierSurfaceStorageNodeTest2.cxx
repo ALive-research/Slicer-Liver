@@ -835,8 +835,14 @@ int testV2MalformedMarginAttributeFallsBackToZero()
   scene->AddNode(source.GetPointer());
   populateV2Fields(source.GetPointer());
   source->SetName("MalformedMarginPlan");
+  // Both fixtures must be unambiguously non-numeric.  ``std::stod``
+  // accepts strings that begin with ``nan`` / ``inf`` (case-insensitive)
+  // and returns the corresponding floating-point value without
+  // throwing — a string like ``"nan-foo"`` parses as NaN and bypasses
+  // the exception branch this test is meant to pin.  ``"xyz"`` and
+  // ``"qrs"`` are safely outside the std::stod-recognised prefixes.
   source->SetAttribute("safetyMargin_mm", "xyz");
-  source->SetAttribute("riskMargin_mm", "nan-not-a-double");
+  source->SetAttribute("riskMargin_mm", "qrs");
 
   const std::string path = makeTempPath("lrp.json");
   vtkNew<vtkMRMLBezierSurfaceStorageNode> writeStorage;
