@@ -31,6 +31,16 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/Testing/Temporary)
 add_definitions(-DLIVER_BEZIER_STORAGE_TEST_TEMP_DIR=\"${CMAKE_BINARY_DIR}/Testing/Temporary\")
 
 #-----------------------------------------------------------------------------
+#-----------------------------------------------------------------------------
+# Test-driver-only cross-link to the VascularTerritories MRML kit so
+# the scene-scan classification subtests in
+# vtkMRMLBezierSurfaceStorageNodeTest2.cxx can instantiate
+# ``vtkMRMLStdCouinaudTerritoriesNode`` / ``vtkMRMLCustomTerritoriesNode``
+# directly.  The production storage node never link-time-depends on
+# the territories kit — it discovers subclasses via the string-based
+# ``vtkMRMLScene::GetNodesByClass("vtkMRMLAbstractTerritoriesNode")``.
+# Per ADR-0008 §2, the dep is constrained to the C++ low-level test
+# driver.
 slicerMacroConfigureModuleCxxTestDriver(
   NAME ${KIT}
   SOURCES ${KIT_TEST_SRCS}
@@ -38,6 +48,10 @@ slicerMacroConfigureModuleCxxTestDriver(
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_BINARY_DIR}/..
+    ${CMAKE_SOURCE_DIR}/VascularTerritories/MRML
+    ${CMAKE_BINARY_DIR}/VascularTerritories/MRML
+  TARGET_LIBRARIES
+    vtkSlicerVascularTerritoriesModuleMRML
   WITH_VTK_DEBUG_LEAKS_CHECK
   WITH_VTK_ERROR_OUTPUT_CHECK
   )
