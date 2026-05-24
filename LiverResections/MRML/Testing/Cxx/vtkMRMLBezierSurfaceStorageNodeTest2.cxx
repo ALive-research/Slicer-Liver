@@ -642,7 +642,74 @@ int testV3ReaderAcceptsV3RangeAndRejectsV99()
 }
 
 //------------------------------------------------------------------------------
-// Invariant 6 -- scene.stageSelection.currentStage round-trip.
+// Invariant 6 -- schemaVersion boundary rejection (low + high side).
+//
+// The reader's accepted band is [MinReadableSchemaVersion=1,
+// SchemaVersion=3].  testV3ReaderAcceptsV3RangeAndRejectsV99 covers
+// the far-out v99 case as a regression-pin of the v2 behaviour, but
+// does not exercise the immediate boundaries on either side.  This
+// test pins both:
+//
+//   - schemaVersion = 0  is below MinReadableSchemaVersion -> rejected
+//   - schemaVersion = 4  is above SchemaVersion             -> rejected
+//
+// Without these, a future writer bumped from 3 -> 4 without a matching
+// reader-band update would silently emit unreadable files; and a
+// stray 0-valued schemaVersion (e.g. from a half-initialised v0 file)
+// would surface as a confusing parse failure deeper in the reader.
+//------------------------------------------------------------------------------
+int testV3SchemaVersionBoundaryRejection()
+{
+  auto writeMinimal = [&](const std::string& path, int versionLiteral)
+  {
+    std::ofstream ofs(path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": " << versionLiteral << ",\n";
+    ofs << "  \"state\": \"Init\",\n";
+    ofs << "  \"initMode\": \"SlicingPlane\"\n";
+    ofs << "}\n";
+  };
+
+  // Low-side boundary: 0 < MinReadableSchemaVersion=1.
+  {
+    const std::string path = makeTempPath("lrp.json");
+    writeMinimal(path, 0);
+    vtkNew<vtkMRMLScene> scene;
+    vtkNew<vtkMRMLBezierSurfaceNode> sink;
+    scene->AddNode(sink.GetPointer());
+    vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
+    storage->SetFileName(path.c_str());
+
+    TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+    CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+    TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+    vtksys::SystemTools::RemoveFile(path);
+  }
+
+  // High-side boundary: 4 > SchemaVersion=3.  Defensive guard so a
+  // future v4 bump without a matching reader update fails loudly.
+  {
+    const std::string path = makeTempPath("lrp.json");
+    writeMinimal(path, 4);
+    vtkNew<vtkMRMLScene> scene;
+    vtkNew<vtkMRMLBezierSurfaceNode> sink;
+    scene->AddNode(sink.GetPointer());
+    vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
+    storage->SetFileName(path.c_str());
+
+    TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+    CHECK_INT(storage->ReadData(sink.GetPointer()), 0);
+    TESTING_OUTPUT_ASSERT_ERRORS_END();
+
+    vtksys::SystemTools::RemoveFile(path);
+  }
+
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Invariant 7 -- scene.stageSelection.currentStage round-trip.
 //
 // ADR-0023 §"Persistence" claims scene.stageSelection as part of v3.
 // The Liver-shell writer for this block lands in a follow-up (T5.2-d);
@@ -732,6 +799,7 @@ int vtkMRMLBezierSurfaceStorageNodeTest2(int, char*[])
   CHECK_EXIT_SUCCESS(testV2ToV3FallbackDefaults());
   CHECK_EXIT_SUCCESS(testV3ClassificationSubtypeDiscriminator());
   CHECK_EXIT_SUCCESS(testV3ReaderAcceptsV3RangeAndRejectsV99());
+  CHECK_EXIT_SUCCESS(testV3SchemaVersionBoundaryRejection());
   CHECK_EXIT_SUCCESS(testV3StageSelectionCurrentStageReader());
 
   std::cout << "vtkMRMLBezierSurfaceStorageNodeTest2 completed successfully" << std::endl;
