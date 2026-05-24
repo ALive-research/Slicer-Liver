@@ -310,7 +310,7 @@ public:
   // ``OrderIndex`` is the zero-based position of this resection plan in
   // the surgeon-defined operative sequence.  A sentinel value of
   // ``-1`` means "unordered" (the default for a freshly-created node).
-  // The field round-trips through the v3 ``.lrp.json`` storage path
+  // The field round-trips through the v2 ``.lrp.json`` storage path
   // (see ``vtkMRMLBezierSurfaceStorageNode.cxx`` schema-header block)
   // and through XML scene serialisation.
   //--------------------------------------------------------------------------
