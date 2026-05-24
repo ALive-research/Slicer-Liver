@@ -641,6 +641,83 @@ int testV3ReaderAcceptsV3RangeAndRejectsV99()
   return EXIT_SUCCESS;
 }
 
+//------------------------------------------------------------------------------
+// Invariant 6 -- scene.stageSelection.currentStage round-trip.
+//
+// ADR-0023 §"Persistence" claims scene.stageSelection as part of v3.
+// The Liver-shell writer for this block lands in a follow-up (T5.2-d);
+// however the storage *reader* already stashes the surgeon's last
+// currentStage into a node attribute on load.  Without this test the
+// reader branch in ReadJson around the ``stageSelection`` /
+// ``currentStage`` keys is dead-uncovered on Codecov, and a future
+// writer regression that drops the field would silently pass.
+//
+// Synthesise a minimal valid v3 .lrp.json with
+// scene.stageSelection.currentStage = 3, load it through the
+// storage-node reader, and assert the node carries the
+// ``currentStage`` attribute equal to "3".
+//------------------------------------------------------------------------------
+int testV3StageSelectionCurrentStageReader()
+{
+  const std::string v3Path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(v3Path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 3,\n";
+    ofs << "  \"state\": \"Planning\",\n";
+    ofs << "  \"initMode\": \"SlicingPlane\",\n";
+    ofs << "  \"rows\": 4,\n";
+    ofs << "  \"cols\": 4,\n";
+    ofs << "  \"controlGrid\": [";
+    for (int i = 0; i < 48; ++i)
+    {
+      if (i > 0)
+      {
+        ofs << ", ";
+      }
+      ofs << (static_cast<double>(i) * 0.0625);
+    }
+    ofs << "],\n";
+    ofs << "  \"slicingPlane\": { \"origin\": [0, 0, 0], \"normal\": [0, 0, 1], "
+           "\"initPointsFlat\": [0, 0, 0, 0, 0, 0] },\n";
+    ofs << "  \"distanceSpheroid\": { \"center\": [0, 0, 0], "
+           "\"radius\": {\"x\": 0, \"y\": 0, \"z\": 0}, "
+           "\"numberOfInitPoints\": 0, \"initPointsFlat\": [] },\n";
+    ofs << "  \"resection\": { \"name\": \"PlanWithStageSelection\", "
+           "\"safetyMargin_mm\": 0.0, \"riskMargin_mm\": 0.0, \"orderIndex\": -1 },\n";
+    // ``classification`` is omitted (matches what the v3 writer emits
+    // when no ``vtkMRMLAbstractTerritoriesNode`` is present in the
+    // scene -- the writer skips the key rather than emitting null,
+    // and the reader's ``HasMember("classification")`` guard handles
+    // the absence cleanly).  ``volumetryPartitions`` stays empty and
+    // ``stageSelection.currentStage`` carries the value the reader
+    // must stash as a node attribute.
+    ofs << "  \"scene\": { \"volumetryPartitions\": [], "
+           "\"stageSelection\": { \"stage1\": null, \"stage2\": null, "
+           "\"stage3\": null, \"stage4\": null, \"stage5\": null, "
+           "\"currentStage\": 3 } },\n";
+    ofs << "  \"metadata\": {}\n";
+    ofs << "}\n";
+  }
+
+  vtkNew<vtkMRMLScene> scene;
+  vtkNew<vtkMRMLBezierSurfaceNode> sink;
+  scene->AddNode(sink.GetPointer());
+
+  vtkNew<vtkMRMLBezierSurfaceStorageNode> storage;
+  storage->SetFileName(v3Path.c_str());
+  CHECK_INT(storage->ReadData(sink.GetPointer()), 1);
+
+  // The reader stashes currentStage as a node attribute keyed by the
+  // schema field name; the Liver shell consumes this on next launch.
+  const char* observed = sink->GetAttribute("currentStage");
+  CHECK_NOT_NULL(observed);
+  CHECK_STRING(observed, "3");
+
+  vtksys::SystemTools::RemoveFile(v3Path);
+  return EXIT_SUCCESS;
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -655,6 +732,7 @@ int vtkMRMLBezierSurfaceStorageNodeTest2(int, char*[])
   CHECK_EXIT_SUCCESS(testV2ToV3FallbackDefaults());
   CHECK_EXIT_SUCCESS(testV3ClassificationSubtypeDiscriminator());
   CHECK_EXIT_SUCCESS(testV3ReaderAcceptsV3RangeAndRejectsV99());
+  CHECK_EXIT_SUCCESS(testV3StageSelectionCurrentStageReader());
 
   std::cout << "vtkMRMLBezierSurfaceStorageNodeTest2 completed successfully" << std::endl;
   return EXIT_SUCCESS;
