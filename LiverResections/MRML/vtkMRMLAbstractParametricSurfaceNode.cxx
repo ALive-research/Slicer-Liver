@@ -28,7 +28,6 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
-#include <sstream>
 #include <string>
 
 //------------------------------------------------------------------------------
@@ -349,66 +348,25 @@ void vtkMRMLAbstractParametricSurfaceNode::SetDistanceSpheroidRadiusZ(double r)
 }
 
 //------------------------------------------------------------------------------
-namespace
-{
-/// Helper: serialise N doubles to a space-separated string.
-std::string writeDoubles(const double* values, std::size_t n)
-{
-  std::stringstream ss;
-  for (std::size_t i = 0; i < n; ++i)
-  {
-    if (i > 0)
-    {
-      ss << " ";
-    }
-    ss << values[i];
-  }
-  return ss.str();
-}
-
-/// Helper: parse N doubles from a space-separated string.
-void readDoubles(const char* text, std::vector<double>& out)
-{
-  out.clear();
-  if (text == nullptr)
-  {
-    return;
-  }
-  std::stringstream ss(text);
-  double v;
-  while (ss >> v)
-  {
-    out.push_back(v);
-  }
-}
-} // namespace
-
-//------------------------------------------------------------------------------
 void vtkMRMLAbstractParametricSurfaceNode::WriteXML(ostream& of, int nIndent)
 {
+  // Slim WriteXML per the design's storage-ownership table
+  // (``Docs/design/resection-plan-architecture/03-storage-ownership.md``)
+  // and the Markups precedent (``vtkMRMLMarkupsNode::WriteXML`` emits
+  // three lightweight scalars only).  Bulk fields (``ControlGrid``,
+  // ``InitMode``, slicing-plane + spheroid subordinates) persist via
+  // the parent plan's storage path (``.lrp.json``); the ``.mrml``
+  // carries only the scene-relevant identity metadata.
+  //
+  // Scene-load without a paired ``.lrp.json`` recovers the surface
+  // with default bulk state — degraded but non-crashing, per
+  // ``04-save-load-flows.md`` §"Failure modes".
   Superclass::WriteXML(of, nIndent);
 
   vtkMRMLWriteXMLBeginMacro(of);
-  vtkMRMLWriteXMLEnumMacro(initMode, InitMode);
   vtkMRMLWriteXMLIntMacro(rows, Rows);
   vtkMRMLWriteXMLIntMacro(cols, Cols);
-  vtkMRMLWriteXMLVectorMacro(slicingPlaneOrigin, SlicingPlaneOrigin, double, 3);
-  vtkMRMLWriteXMLVectorMacro(slicingPlaneNormal, SlicingPlaneNormal, double, 3);
-  vtkMRMLWriteXMLVectorMacro(distanceSpheroidCenter, DistanceSpheroidCenter, double, 3);
-  vtkMRMLWriteXMLFloatMacro(distanceSpheroidRadiusX, DistanceSpheroidRadiusX);
-  vtkMRMLWriteXMLFloatMacro(distanceSpheroidRadiusY, DistanceSpheroidRadiusY);
-  vtkMRMLWriteXMLFloatMacro(distanceSpheroidRadiusZ, DistanceSpheroidRadiusZ);
-  vtkMRMLWriteXMLIntMacro(numberOfDistanceSpheroidInitPoints, NumberOfDistanceSpheroidInitPoints);
   vtkMRMLWriteXMLEndMacro();
-
-  of << " controlGrid=\"" << this->XMLAttributeEncodeString(writeDoubles(this->ControlGrid.data(), this->ControlGrid.size())) << "\"";
-  of << " slicingPlaneInitPoint0=\"" << this->XMLAttributeEncodeString(writeDoubles(this->SlicingPlaneInitPoints[0], 3)) << "\"";
-  of << " slicingPlaneInitPoint1=\"" << this->XMLAttributeEncodeString(writeDoubles(this->SlicingPlaneInitPoints[1], 3)) << "\"";
-  if (!this->DistanceSpheroidInitPoints.empty())
-  {
-    of << " distanceSpheroidInitPoints=\"" << this->XMLAttributeEncodeString(writeDoubles(this->DistanceSpheroidInitPoints.data(), this->DistanceSpheroidInitPoints.size()))
-       << "\"";
-  }
 }
 
 //------------------------------------------------------------------------------
@@ -418,20 +376,11 @@ void vtkMRMLAbstractParametricSurfaceNode::ReadXMLAttributes(const char** atts)
 
   Superclass::ReadXMLAttributes(atts);
 
-  vtkMRMLReadXMLBeginMacro(atts);
-  vtkMRMLReadXMLEnumMacro(initMode, InitMode);
-  vtkMRMLReadXMLVectorMacro(slicingPlaneOrigin, SlicingPlaneOrigin, double, 3);
-  vtkMRMLReadXMLVectorMacro(slicingPlaneNormal, SlicingPlaneNormal, double, 3);
-  vtkMRMLReadXMLVectorMacro(distanceSpheroidCenter, DistanceSpheroidCenter, double, 3);
-  vtkMRMLReadXMLFloatMacro(distanceSpheroidRadiusX, DistanceSpheroidRadiusX);
-  vtkMRMLReadXMLFloatMacro(distanceSpheroidRadiusY, DistanceSpheroidRadiusY);
-  vtkMRMLReadXMLFloatMacro(distanceSpheroidRadiusZ, DistanceSpheroidRadiusZ);
-  vtkMRMLReadXMLIntMacro(numberOfDistanceSpheroidInitPoints, NumberOfDistanceSpheroidInitPoints);
-  vtkMRMLReadXMLEndMacro();
-
-  // Rows / cols read manually + validated as a pair (the public
-  // SetRows / SetCols reject non-square intermediate states; XML
-  // load is exempt from the public-API guard).
+  // Read only the slim WriteXML companion: ``rows`` + ``cols``.  All
+  // other fields are populated by the storage node when the
+  // ``.lrp.json`` loads.  Rows / cols read manually + validated as a
+  // pair (the public ``SetRows`` / ``SetCols`` reject non-square
+  // intermediate states; XML load is exempt from the public-API guard).
   unsigned int parsedRows = this->Rows;
   unsigned int parsedCols = this->Cols;
   for (const char** att = atts; att && *att; att += 2)
@@ -461,59 +410,6 @@ void vtkMRMLAbstractParametricSurfaceNode::ReadXMLAttributes(const char** atts)
   this->Rows = parsedRows;
   this->Cols = parsedCols;
   this->ControlGrid.assign(static_cast<size_t>(3u) * this->Rows * this->Cols, 0.0);
-
-  // Free-form payloads — replay the attribute stream a second time so
-  // the order of declarations does not matter.
-  for (const char** att = atts; att && *att; att += 2)
-  {
-    const char* name = att[0];
-    const char* value = att[1];
-    if (value == nullptr)
-    {
-      continue;
-    }
-    if (std::strcmp(name, "controlGrid") == 0)
-    {
-      std::vector<double> values;
-      const std::string decoded = this->XMLAttributeDecodeString(value);
-      readDoubles(decoded.c_str(), values);
-      const std::size_t expected = this->ControlGrid.size();
-      if (values.size() >= expected)
-      {
-        std::copy_n(values.begin(), expected, this->ControlGrid.begin());
-      }
-      else
-      {
-        vtkWarningMacro("Truncated controlGrid attribute; expected " << expected << " doubles (3 * Rows * Cols), got " << values.size() << " — leaving at default");
-      }
-    }
-    else if (std::strcmp(name, "slicingPlaneInitPoint0") == 0 || std::strcmp(name, "slicingPlaneInitPoint1") == 0)
-    {
-      const int idx = (name[strlen("slicingPlaneInitPoint")] == '0') ? 0 : 1;
-      std::vector<double> values;
-      const std::string decoded = this->XMLAttributeDecodeString(value);
-      readDoubles(decoded.c_str(), values);
-      if (values.size() >= 3)
-      {
-        this->SlicingPlaneInitPoints[idx][0] = values[0];
-        this->SlicingPlaneInitPoints[idx][1] = values[1];
-        this->SlicingPlaneInitPoints[idx][2] = values[2];
-      }
-    }
-    else if (std::strcmp(name, "distanceSpheroidInitPoints") == 0)
-    {
-      std::vector<double> values;
-      const std::string decoded = this->XMLAttributeDecodeString(value);
-      readDoubles(decoded.c_str(), values);
-      this->DistanceSpheroidInitPoints = values;
-      this->NumberOfDistanceSpheroidInitPoints = static_cast<int>(values.size() / 3);
-    }
-  }
-
-  if (static_cast<size_t>(this->NumberOfDistanceSpheroidInitPoints) * 3 != this->DistanceSpheroidInitPoints.size())
-  {
-    this->NumberOfDistanceSpheroidInitPoints = static_cast<int>(this->DistanceSpheroidInitPoints.size() / 3);
-  }
 
   this->EndModify(disabledModify);
 }
