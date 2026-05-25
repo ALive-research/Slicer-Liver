@@ -264,22 +264,30 @@ int testPolymorphicEvaluateSurface()
 }
 
 //------------------------------------------------------------------------------
-// Invariant 5 -- Shared field roster round-trips through the
-// inheritance chain.  The fields ``Rows``, ``Cols``, ``ControlGrid``,
-// ``InitMode``, and the slicing-plane / spheroid subordinates have
-// moved UP to the abstract base per the design's class diagram.  The
-// concrete Bezier subclass's WriteXML / ReadXMLAttributes chain
-// (through Superclass) must still serialise the full set.  The
-// invariant is "no field drops out when the field-move-up lands".
+// Invariant 5 -- Slim WriteXML emits only ``Rows`` + ``Cols``; bulk
+// fields persist via the parent plan's storage path (``.lrp.json``).
 //
-// Verifies the round-trip via the same name="value" walker the other
-// MRML tests use.  Doubles tolerance: 1e-9 (matches storage-node
-// tests).
-// (Design doc 01-class-hierarchy.md class diagram --
-// ``vtkMRMLAbstractParametricSurfaceNode`` field roster; ADR-0014
-// amendment 2026-05-25 §"Consequences" -- surface keeps geometry +
-// state.)
-int testSharedFieldRosterXMLRoundTrip()
+// The design's storage-ownership table
+// (``Docs/design/resection-plan-architecture/03-storage-ownership.md``)
+// and the Markups precedent (``vtkMRMLMarkupsNode::WriteXML`` carries
+// only three lightweight scalars; the JSON storage carries the
+// payload) commit the surface's ``WriteXML`` to identity metadata
+// only.  This test pins both halves of the invariant:
+//   - rows / cols **do** round-trip through XML (scene-relevant for
+//     tooltip / scene-level introspection).
+//   - heavy fields (``ControlGrid``, ``InitMode``, slicing-plane
+//     origin/normal/initPoints, spheroid center/radii/initPoints)
+//     are **not** serialised by ``WriteXML``; the emitted attribute
+//     stream does not carry them.  Scene reload without a paired
+//     ``.lrp.json`` returns these to documented defaults per
+//     ``04-save-load-flows.md`` §"Failure modes".
+//
+// The full bulk-data round-trip lives in
+// ``vtkMRMLResectionPlanStorageNodeTest1`` which exercises the
+// canonical plan-rooted persistence path.
+// (Design doc 03-storage-ownership.md storage-ownership table;
+// ADR-0014 amendment 2026-05-25 §"Fourth layer".)
+int testSlimWriteXMLOnlyEmitsRowsAndCols()
 {
   vtkNew<vtkMRMLScene> scene;
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
@@ -288,8 +296,6 @@ int testSharedFieldRosterXMLRoundTrip()
   source->SetScene(scene.GetPointer());
   source->SetInitMode(vtkMRMLBezierSurfaceNode::DistanceSpheroid);
 
-  // Populate a structured grid so any layout / serialisation bug
-  // shows up.
   double grid[vtkMRMLBezierSurfaceNode::ControlGridSize];
   for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
   {
@@ -297,13 +303,10 @@ int testSharedFieldRosterXMLRoundTrip()
   }
   source->SetControlGrid(grid);
 
-  // SlicingPlane subordinate.
   double origin[3] = { 1.0, 2.0, 3.0 };
   source->SetSlicingPlaneOrigin(origin);
   double normal[3] = { 0.0, 1.0, 0.0 };
   source->SetSlicingPlaneNormal(normal);
-
-  // DistanceSpheroid subordinate.
   source->SetNumberOfDistanceSpheroidInitPoints(2);
   double center[3] = { 11.0, 12.0, 13.0 };
   source->SetDistanceSpheroidCenter(center);
@@ -315,53 +318,31 @@ int testSharedFieldRosterXMLRoundTrip()
   source->WriteXML(out, 0);
   const std::string xml = out.str();
 
+  // Slim invariant: the heavy field names do NOT appear in the
+  // emitted attribute stream.  ``rows`` and ``cols`` DO.
+  CHECK_BOOL(xml.find("rows=\"") != std::string::npos, true);
+  CHECK_BOOL(xml.find("cols=\"") != std::string::npos, true);
+  CHECK_BOOL(xml.find("controlGrid=") == std::string::npos, true);
+  CHECK_BOOL(xml.find("initMode=") == std::string::npos, true);
+  CHECK_BOOL(xml.find("slicingPlaneOrigin=") == std::string::npos, true);
+  CHECK_BOOL(xml.find("slicingPlaneNormal=") == std::string::npos, true);
+  CHECK_BOOL(xml.find("slicingPlaneInitPoint") == std::string::npos, true);
+  CHECK_BOOL(xml.find("distanceSpheroidCenter=") == std::string::npos, true);
+  CHECK_BOOL(xml.find("distanceSpheroidRadius") == std::string::npos, true);
+  CHECK_BOOL(xml.find("distanceSpheroidInitPoints=") == std::string::npos, true);
+  CHECK_BOOL(xml.find("numberOfDistanceSpheroidInitPoints=") == std::string::npos, true);
+
+  // Reload-side complement: a sink populated only from the slim XML
+  // recovers ``Rows`` / ``Cols`` but leaves the heavy fields at
+  // default state.  Storage path covers the heavy round-trip.
   vtkNew<vtkMRMLBezierSurfaceNode> sink;
   sink->SetScene(scene.GetPointer());
   std::vector<std::string> storage;
   std::vector<const char*> atts = buildAttsFromXML(xml, storage);
   sink->ReadXMLAttributes(atts.data());
 
-  // Shape fields -- new on the abstract base.
   CHECK_INT(static_cast<int>(sink->GetRows()), static_cast<int>(source->GetRows()));
   CHECK_INT(static_cast<int>(sink->GetCols()), static_cast<int>(source->GetCols()));
-
-  // InitMode round-trip.
-  CHECK_INT(sink->GetInitMode(), source->GetInitMode());
-
-  // SlicingPlane subordinate round-trip.
-  double a3[3], b3[3];
-  sink->GetSlicingPlaneOrigin(a3);
-  source->GetSlicingPlaneOrigin(b3);
-  for (int j = 0; j < 3; ++j)
-  {
-    CHECK_DOUBLE_TOLERANCE(a3[j], b3[j], 1e-9);
-  }
-  sink->GetSlicingPlaneNormal(a3);
-  source->GetSlicingPlaneNormal(b3);
-  for (int j = 0; j < 3; ++j)
-  {
-    CHECK_DOUBLE_TOLERANCE(a3[j], b3[j], 1e-9);
-  }
-
-  // DistanceSpheroid subordinate round-trip.
-  CHECK_INT(sink->GetNumberOfDistanceSpheroidInitPoints(), source->GetNumberOfDistanceSpheroidInitPoints());
-  sink->GetDistanceSpheroidCenter(a3);
-  source->GetDistanceSpheroidCenter(b3);
-  for (int j = 0; j < 3; ++j)
-  {
-    CHECK_DOUBLE_TOLERANCE(a3[j], b3[j], 1e-9);
-  }
-  CHECK_DOUBLE_TOLERANCE(sink->GetDistanceSpheroidRadiusX(), source->GetDistanceSpheroidRadiusX(), 1e-9);
-  CHECK_DOUBLE_TOLERANCE(sink->GetDistanceSpheroidRadiusY(), source->GetDistanceSpheroidRadiusY(), 1e-9);
-  CHECK_DOUBLE_TOLERANCE(sink->GetDistanceSpheroidRadiusZ(), source->GetDistanceSpheroidRadiusZ(), 1e-9);
-
-  // ControlGrid -- the heavy field.  XML round-trip is not the
-  // canonical persistence path (storage node carries it) but the
-  // WriteXML chain still emits it so the .mrml-only round-trip
-  // works for scene snapshots taken mid-edit.  Pin a spot-check on
-  // a few entries; the storage-node test pins the full grid.
-  CHECK_DOUBLE_TOLERANCE(sink->GetControlGrid()[0], source->GetControlGrid()[0], 1e-9);
-  CHECK_DOUBLE_TOLERANCE(sink->GetControlGrid()[vtkMRMLBezierSurfaceNode::ControlGridSize - 1], source->GetControlGrid()[vtkMRMLBezierSurfaceNode::ControlGridSize - 1], 1e-9);
   return EXIT_SUCCESS;
 }
 
@@ -411,7 +392,7 @@ int vtkMRMLAbstractParametricSurfaceNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testSurfaceIsNonStorable());
   CHECK_EXIT_SUCCESS(testPolymorphicSurfaceTypeDispatch());
   CHECK_EXIT_SUCCESS(testPolymorphicEvaluateSurface());
-  CHECK_EXIT_SUCCESS(testSharedFieldRosterXMLRoundTrip());
+  CHECK_EXIT_SUCCESS(testSlimWriteXMLOnlyEmitsRowsAndCols());
   CHECK_EXIT_SUCCESS(testPolymorphicNodeClassFilter());
 
   std::cout << "vtkMRMLAbstractParametricSurfaceNodeTest1 completed successfully" << std::endl;

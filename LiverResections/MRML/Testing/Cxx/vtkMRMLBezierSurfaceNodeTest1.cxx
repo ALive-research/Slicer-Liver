@@ -376,48 +376,27 @@ int testDistanceSpheroidInit()
 
 int testXMLRoundTrip()
 {
+  // Per the 2026-05-25 wrapper-vs-carrier amendment to ADR-0014 and
+  // the design's storage-ownership table
+  // (``Docs/design/resection-plan-architecture/03-storage-ownership.md``),
+  // Bezier surface's ``WriteXML`` emits only the slim identity
+  // metadata: ``rows`` + ``cols`` (from the abstract base) +
+  // ``state`` (Bezier-specific).  The heavy bulk fields
+  // (``ControlGrid``, ``InitMode``, slicing-plane + spheroid
+  // subordinates) persist via the parent plan's storage path
+  // (``.lrp.json``); the full heavy round-trip is pinned by
+  // ``vtkMRMLResectionPlanStorageNodeTest1``.
+  //
+  // This test verifies the slim Bezier XML contract end-to-end.
   vtkNew<vtkMRMLBezierSurfaceNode> source;
   vtkNew<vtkMRMLScene> scene;
   source->SetScene(scene.GetPointer());
 
-  // Populate Init-mode subordinate data BEFORE transitioning to
-  // Planning — per ADR-0014 §4, that data is read-only after the
-  // transition and the per-setter guards reject post-Planning
-  // mutation.  This test exercises the round-trip; the order matches
-  // the production Init→Planning lifecycle.
+  // Set state -- the only Bezier-specific WriteXML scalar.  Init-mode
+  // / control-grid / init-point setters are exercised to populate the
+  // source node; their values do NOT round-trip via XML by design.
   source->SetInitMode(vtkMRMLBezierSurfaceNode::DistanceSpheroid);
-
-  double p0[3] = { 1.0, 2.0, 3.0 };
-  double p1[3] = { -4.0, 5.0, -6.0 };
-  source->SetSlicingPlaneInitPoint(0, p0);
-  source->SetSlicingPlaneInitPoint(1, p1);
-  double origin[3] = { 7.5, 8.5, 9.5 };
-  double normal[3] = { 0.0, 0.0, -1.0 };
-  source->SetSlicingPlaneOrigin(origin);
-  source->SetSlicingPlaneNormal(normal);
-
-  source->SetNumberOfDistanceSpheroidInitPoints(2);
-  double q0[3] = { 11.0, 12.0, 13.0 };
-  double q1[3] = { 14.0, 15.0, 16.0 };
-  source->SetDistanceSpheroidInitPoint(0, q0);
-  source->SetDistanceSpheroidInitPoint(1, q1);
-  double center[3] = { 17.0, 18.0, 19.0 };
-  source->SetDistanceSpheroidCenter(center);
-  source->SetDistanceSpheroidRadiusX(2.0);
-  source->SetDistanceSpheroidRadiusY(3.0);
-  source->SetDistanceSpheroidRadiusZ(4.0);
-
-  // Now transition to Planning and write the Bezier grid (the only
-  // mutable geometry post-transition).  Init-mode data above is now
-  // read-only audit data.
   source->SetState(vtkMRMLBezierSurfaceNode::Planning);
-
-  double values[vtkMRMLBezierSurfaceNode::ControlGridSize];
-  for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
-  {
-    values[i] = std::sin(static_cast<double>(i) * 0.1);
-  }
-  source->SetControlGrid(values);
 
   // Serialize to a string buffer.
   std::ostringstream out;
@@ -425,11 +404,7 @@ int testXMLRoundTrip()
   const std::string xml = out.str();
 
   // Parse the attribute string back into a name=value pointer array.
-  // WriteXML emits attributes as `name="value"` separated by spaces.
-  std::vector<std::string> storage; // owns the parsed strings
-  // Naive parser: walks the XML attribute list emitted by WriteXML.
-  // This is good enough for the round-trip test; the production load
-  // path goes through libxml2, which is not linked into this test.
+  std::vector<std::string> storage;
   std::size_t pos = 0;
   while (pos < xml.size())
   {
@@ -475,67 +450,18 @@ int testXMLRoundTrip()
   sink->SetScene(scene.GetPointer());
   sink->ReadXMLAttributes(atts.data());
 
+  // Slim WriteXML invariant: state + rows + cols round-trip.
   CHECK_INT(sink->GetState(), source->GetState());
-  CHECK_INT(sink->GetInitMode(), source->GetInitMode());
+  CHECK_INT(static_cast<int>(sink->GetRows()), static_cast<int>(source->GetRows()));
+  CHECK_INT(static_cast<int>(sink->GetCols()), static_cast<int>(source->GetCols()));
 
-  for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
-  {
-    // Bit-equivalence is not guaranteed across decimal round-trip
-    // (ostream<< double uses default precision); a tight tolerance
-    // tracks the worst case.  This is the same trade-off Slicer's
-    // own vtkMRMLPlotSeriesNode XML serialisation accepts.
-    CHECK_DOUBLE_TOLERANCE(sink->GetControlGrid()[i], source->GetControlGrid()[i], 1e-5);
-  }
-
-  for (int i = 0; i < 2; ++i)
-  {
-    const double* a = sink->GetSlicingPlaneInitPoint(i);
-    const double* b = source->GetSlicingPlaneInitPoint(i);
-    CHECK_NOT_NULL(a);
-    CHECK_NOT_NULL(b);
-    for (int j = 0; j < 3; ++j)
-    {
-      CHECK_DOUBLE_TOLERANCE(a[j], b[j], 1e-5);
-    }
-  }
-
-  double a3[3], b3[3];
-  sink->GetSlicingPlaneOrigin(a3);
-  source->GetSlicingPlaneOrigin(b3);
-  for (int j = 0; j < 3; ++j)
-  {
-    CHECK_DOUBLE_TOLERANCE(a3[j], b3[j], 1e-5);
-  }
-  sink->GetSlicingPlaneNormal(a3);
-  source->GetSlicingPlaneNormal(b3);
-  for (int j = 0; j < 3; ++j)
-  {
-    CHECK_DOUBLE_TOLERANCE(a3[j], b3[j], 1e-5);
-  }
-
-  CHECK_INT(sink->GetNumberOfDistanceSpheroidInitPoints(), source->GetNumberOfDistanceSpheroidInitPoints());
-  for (int i = 0; i < sink->GetNumberOfDistanceSpheroidInitPoints(); ++i)
-  {
-    const double* a = sink->GetDistanceSpheroidInitPoint(i);
-    const double* b = source->GetDistanceSpheroidInitPoint(i);
-    CHECK_NOT_NULL(a);
-    CHECK_NOT_NULL(b);
-    for (int j = 0; j < 3; ++j)
-    {
-      CHECK_DOUBLE_TOLERANCE(a[j], b[j], 1e-5);
-    }
-  }
-
-  sink->GetDistanceSpheroidCenter(a3);
-  source->GetDistanceSpheroidCenter(b3);
-  for (int j = 0; j < 3; ++j)
-  {
-    CHECK_DOUBLE_TOLERANCE(a3[j], b3[j], 1e-5);
-  }
-
-  CHECK_DOUBLE_TOLERANCE(sink->GetDistanceSpheroidRadiusX(), source->GetDistanceSpheroidRadiusX(), 1e-5);
-  CHECK_DOUBLE_TOLERANCE(sink->GetDistanceSpheroidRadiusY(), source->GetDistanceSpheroidRadiusY(), 1e-5);
-  CHECK_DOUBLE_TOLERANCE(sink->GetDistanceSpheroidRadiusZ(), source->GetDistanceSpheroidRadiusZ(), 1e-5);
+  // Heavy fields are NOT in the XML stream -- assert their attribute
+  // names are absent.  The storage path covers the bulk round-trip
+  // separately (vtkMRMLResectionPlanStorageNodeTest1).
+  CHECK_BOOL(xml.find("controlGrid=") == std::string::npos, true);
+  CHECK_BOOL(xml.find("initMode=") == std::string::npos, true);
+  CHECK_BOOL(xml.find("slicingPlane") == std::string::npos, true);
+  CHECK_BOOL(xml.find("distanceSpheroid") == std::string::npos, true);
 
   return EXIT_SUCCESS;
 }
@@ -597,12 +523,12 @@ int testDisplayNodeAttachedSceneRoundTrip()
 
   auto* sinkData = vtkMRMLBezierSurfaceNode::SafeDownCast(sinkScene->GetFirstNodeByClass("vtkMRMLBezierSurfaceNode"));
   CHECK_NOT_NULL(sinkData);
+  // Per the slim-WriteXML invariant (design 03-storage-ownership.md),
+  // ``state`` round-trips through the .mrml scene; ``InitMode`` and
+  // ``ControlGrid`` go through ``.lrp.json`` (covered by
+  // vtkMRMLResectionPlanStorageNodeTest1).  Scene-only round-trip
+  // here pins the display-node reference + state.
   CHECK_INT(sinkData->GetState(), vtkMRMLBezierSurfaceNode::Planning);
-  CHECK_INT(sinkData->GetInitMode(), vtkMRMLBezierSurfaceNode::DistanceSpheroid);
-  for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
-  {
-    CHECK_DOUBLE_TOLERANCE(sinkData->GetControlGrid()[i], values[i], 1e-5);
-  }
 
   // The display-node reference must have round-tripped through the
   // scene — this is the structural assertion that the reparent
