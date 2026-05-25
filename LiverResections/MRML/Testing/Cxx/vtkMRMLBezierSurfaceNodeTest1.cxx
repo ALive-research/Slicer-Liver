@@ -1292,71 +1292,31 @@ int testXMLRoundTrip3x3()
 // the fix visible as a test diff.
 int testReadXMLNullMidStream()
 {
-  // The ``ReadXMLAttributes`` walks iterate with the outer condition
+  // The ``ReadXMLAttributes`` walk iterates with the outer condition
   // ``att && *att`` (i.e. terminate when the *name* slot is null —
   // that is the libxml2 sentinel).  The mid-stream-null trigger fires
   // on the *value* slot: a (non-null name, null value) pair must be
   // skipped without aborting the walk so downstream attributes remain
-  // observable.  The trigger pattern is therefore
-  // ``{"someName", nullptr, "rows", "3", nullptr}`` — name is
-  // non-null, value is null, and a valid attribute follows.
-
-  // ---- Walk-1: rows/cols extraction ----
+  // observable.  Pattern: ``{"someName", nullptr, "rows", "3", ...}``
+  // — name is non-null, value is null, and a valid attribute follows.
   //
-  // Constructor default for ``Cols`` is ``DefaultGridSize == 4``.  We
-  // place a (non-null name, null value) pair *before* the ``cols``
-  // attribute.  Under the corrected ``continue;`` walk-1 consumes
-  // both ``rows="3"`` and ``cols="3"``; the (3, 3) pair passes the
-  // ADR-0018 §1 square-shape check and is accepted as-is, so no
-  // warning is emitted.
+  // Per the 2026-05-25 slim WriteXML invariant
+  // (``Docs/design/resection-plan-architecture/03-storage-ownership.md``),
+  // the only attributes the abstract base ``ReadXMLAttributes`` walks
+  // are ``rows`` and ``cols``; the historical "Walk-2 free-form
+  // payload" pass for ``controlGrid`` + ``slicingPlaneInitPoint*`` +
+  // ``distanceSpheroid*`` is gone.  This test pins the null-skip
+  // invariant for the slim walk that remains.
+
   vtkNew<vtkMRMLBezierSurfaceNode> sinkA;
   const char* attsA[] = { "rows", "3", "placeholder", nullptr, // mid-stream (non-null name, null value) — skipped via ``continue;``
                           "cols", "3",                         // consumed under the corrected walk
                           nullptr };
   sinkA->ReadXMLAttributes(attsA);
-  // Corrected-state assertion: walk-1 skipped the null pair and
-  // consumed ``cols="3"``; the (3, 3) pair satisfies ADR-0018 §1's
-  // closed shape set and ``GetCols()`` reports 3.
+  // The walk skipped the null pair and consumed ``cols="3"``; the
+  // (3, 3) pair satisfies ADR-0018 §1's closed shape set.
+  CHECK_INT(static_cast<int>(sinkA->GetRows()), 3);
   CHECK_INT(static_cast<int>(sinkA->GetCols()), 3);
-
-  // ---- Walk-2: free-form payload ----
-  //
-  // Same (non-null name, null value) pattern, but placed before
-  // ``slicingPlaneInitPoint0``.  Constructor default for
-  // ``SlicingPlaneInitPoints[0]`` is ``{0.0, 0.0, 0.0}``.  Under the
-  // corrected walk-2 ``continue;`` the init point is read from the
-  // post-null attribute.
-  vtkNew<vtkMRMLBezierSurfaceNode> sinkB;
-  // Build a well-formed 48-double controlGrid payload so the
-  // truncated-controlGrid branch does not muddy the assertion —
-  // this isolates the mid-stream-null skip as the sole determinant
-  // of whether ``slicingPlaneInitPoint0`` is observed post-parse.
-  std::ostringstream gridSs;
-  for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
-  {
-    if (i > 0)
-    {
-      gridSs << " ";
-    }
-    gridSs << "0.0";
-  }
-  const std::string gridStr = gridSs.str();
-  const std::string initPt = "1.0 2.0 3.0";
-  const char* attsB[] = { "controlGrid",
-                          gridStr.c_str(),
-                          "placeholder",
-                          nullptr, // mid-stream (non-null name, null value) — skipped via ``continue;``
-                          "slicingPlaneInitPoint0",
-                          initPt.c_str(), // consumed under the corrected walk
-                          nullptr };
-  sinkB->ReadXMLAttributes(attsB);
-  // Corrected-state assertion: walk-2 skipped the null pair and
-  // consumed ``slicingPlaneInitPoint0="1.0 2.0 3.0"``.
-  const double* pt = sinkB->GetSlicingPlaneInitPoint(0);
-  CHECK_NOT_NULL(pt);
-  CHECK_DOUBLE(pt[0], 1.0);
-  CHECK_DOUBLE(pt[1], 2.0);
-  CHECK_DOUBLE(pt[2], 3.0);
   return EXIT_SUCCESS;
 }
 
@@ -1446,22 +1406,27 @@ int testCopyCarriesDisplayNodeRef()
 // vtkMRMLBezierSurfaceNode.cxx:701-710.  The shape of the warning
 // mirrors ``vtkMRMLPlotSeriesNode``'s truncated-array handling — see
 // the ADR-0014 §1 data-shape contract.
-int testReadXMLTruncatedControlGridWarns()
+int testReadXMLIgnoresControlGrid()
 {
+  // Per the 2026-05-25 slim WriteXML invariant
+  // (``Docs/design/resection-plan-architecture/03-storage-ownership.md``),
+  // ``ReadXMLAttributes`` ignores any historical ``controlGrid``
+  // attribute -- bulk data is sourced via the parent plan's
+  // ``.lrp.json`` storage path.  This test replaces the prior
+  // ``testReadXMLTruncatedControlGridWarns`` (which pinned a
+  // truncation-warning behaviour from the legacy free-form payload
+  // walk that no longer exists).
   vtkNew<vtkMRMLBezierSurfaceNode> sink;
-  // 10 doubles < 48 expected (3 * 4 * 4); the reader must warn and
-  // leave the grid alone.
+  // 10 doubles in a "controlGrid" attribute -- ignored by the slim
+  // walk.  rows / cols ARE consumed; grid stays at default zeros.
   const char* atts[] = { "rows", "4", "cols", "4", "controlGrid", "0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0", nullptr };
-  TESTING_OUTPUT_ASSERT_WARNINGS_BEGIN();
   sink->ReadXMLAttributes(atts);
-  TESTING_OUTPUT_ASSERT_WARNINGS_END();
 
-  // Per the constructor (vtkMRMLBezierSurfaceNode.cxx:108) the
-  // default-init ControlGrid is 48 zero-doubles.  A truncated payload
-  // must not overwrite any slot.
   CHECK_INT(static_cast<int>(sink->GetRows()), 4);
   CHECK_INT(static_cast<int>(sink->GetCols()), 4);
   CHECK_INT(static_cast<int>(sink->GetControlGridLength()), vtkMRMLBezierSurfaceNode::ControlGridSize);
+  // Default-init ControlGrid is 48 zeros (constructor); the
+  // ``controlGrid`` attribute is ignored by the slim walk.
   const double* grid = sink->GetControlGrid();
   for (int i = 0; i < vtkMRMLBezierSurfaceNode::ControlGridSize; ++i)
   {
@@ -1501,7 +1466,7 @@ int vtkMRMLBezierSurfaceNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testXMLRoundTrip3x3());
   CHECK_EXIT_SUCCESS(testReadXMLNullMidStream());
   CHECK_EXIT_SUCCESS(testCopyCarriesDisplayNodeRef());
-  CHECK_EXIT_SUCCESS(testReadXMLTruncatedControlGridWarns());
+  CHECK_EXIT_SUCCESS(testReadXMLIgnoresControlGrid());
 
   std::cout << "vtkMRMLBezierSurfaceNodeTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;
