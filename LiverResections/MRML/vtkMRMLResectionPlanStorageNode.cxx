@@ -200,7 +200,7 @@ int vtkMRMLResectionPlanStorageNode::WriteJson(const std::string& filePath, vtkM
         writer->WriteVectorProperty("origin", v, 3);
         surface->GetSlicingPlaneNormal(v);
         writer->WriteVectorProperty("normal", v, 3);
-        double initPointsFlat[6];
+        double initPointsFlat[6] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
         for (int i = 0; i < 2; ++i)
         {
           const double* p = surface->GetSlicingPlaneInitPoint(i);
