@@ -74,7 +74,7 @@ class vtkMRMLAbstractParametricSurfaceNode;
  *   "surface": {
  *     "type": "Bezier",
  *     "rows": 4, "cols": 4,
- *     "controlGrid": [/* 48 doubles */],
+ *     "controlGrid": [<48 doubles>],
  *     "initMode": "SlicingPlane",
  *     "slicingPlane": { "origin": [...], "normal": [...], "initPointsFlat": [...] },
  *     "distanceSpheroid": { "center": [...], "radius": {"x":...,"y":...,"z":...},
