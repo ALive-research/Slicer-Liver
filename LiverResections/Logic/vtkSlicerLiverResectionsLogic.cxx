@@ -50,6 +50,8 @@
 #include "vtkMRMLBezierSurfaceNode.h"
 #include "vtkMRMLBezierSurfaceDisplayNode.h"
 #include "vtkMRMLBezierSurfaceStorageNode.h"
+#include "vtkMRMLResectionPlanNode.h"
+#include "vtkMRMLResectionPlanStorageNode.h"
 
 #include <vtkCommand.h>
 #include <vtkMRMLMarkupsSlicingContourNode.h>
@@ -123,6 +125,13 @@ void vtkSlicerLiverResectionsLogic::RegisterNodes()
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceDisplayNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceStorageNode>::New());
+
+  // Resection-plan family (2026-05-25 wrapper-vs-carrier amendment to
+  // ADR-0014 §"Fourth layer" + ADR-0023 §"Persistence").  The plan
+  // node is the clinical wrapper; the storage node is the rooted
+  // .lrp.json persistence target.
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLResectionPlanNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLResectionPlanStorageNode>::New());
 }
 
 //---------------------------------------------------------------------------
