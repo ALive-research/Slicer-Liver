@@ -1114,10 +1114,16 @@ int testSizeSettersFireModifiedOnce()
 
 int testXMLRoundTrip3x3()
 {
-  // ADR-0018 §1 — Rows / Cols round-trip through XML attributes,
-  // controlGrid serialises ``3 * Rows * Cols`` doubles.  Mirrors
-  // testXMLRoundTrip for the 3×3 case.  Also exercises the v1
-  // migration: a serialised attribute stream that omits ``rows`` /
+  // ADR-0018 §1 — Rows / Cols round-trip through XML attributes.
+  // Per the 2026-05-25 slim WriteXML invariant
+  // (``Docs/design/resection-plan-architecture/03-storage-ownership.md``),
+  // the surface's ``WriteXML`` carries only ``rows`` + ``cols``; the
+  // ``controlGrid`` and other heavy fields persist via the parent
+  // plan's ``.lrp.json`` storage (covered by
+  // ``vtkMRMLResectionPlanStorageNodeTest1``).
+  //
+  // Mirrors testXMLRoundTrip for the 3×3 case.  Also exercises the
+  // v1 migration: a serialised attribute stream that omits ``rows`` /
   // ``cols`` defaults to 4×4 on parse.
   vtkNew<vtkMRMLBezierSurfaceNode> source;
   vtkNew<vtkMRMLScene> scene;
@@ -1196,10 +1202,10 @@ int testXMLRoundTrip3x3()
   CHECK_INT(static_cast<int>(sink->GetRows()), 3);
   CHECK_INT(static_cast<int>(sink->GetCols()), 3);
   CHECK_INT(static_cast<int>(sink->GetControlGridLength()), 27);
-  for (int i = 0; i < 27; ++i)
-  {
-    CHECK_DOUBLE_TOLERANCE(sink->GetControlGrid()[i], grid33[i], 1e-5);
-  }
+  // controlGrid values do NOT round-trip via XML per the slim
+  // WriteXML invariant; the storage path covers it.  Pin the
+  // absence as a defensive check.
+  CHECK_BOOL(xml.find("controlGrid=") == std::string::npos, true);
 
   // Legacy-XML migration: synthesise an attribute stream with no
   // ``rows`` / ``cols`` (the pre-ADR-0018 baseline) + a 48-double
@@ -1258,8 +1264,9 @@ int testXMLRoundTrip3x3()
   legacySink->ReadXMLAttributes(legacyAtts.data());
   CHECK_INT(static_cast<int>(legacySink->GetRows()), 4);
   CHECK_INT(static_cast<int>(legacySink->GetCols()), 4);
-  CHECK_DOUBLE_TOLERANCE(legacySink->GetControlGrid()[0], 0.0, 1e-5);
-  CHECK_DOUBLE_TOLERANCE(legacySink->GetControlGrid()[47], 0.47, 1e-5);
+  // Legacy controlGrid values don't survive the slim ReadXML --
+  // historical attribute is ignored; values come from storage on
+  // real loads.  Pin only the shape default (4×4).
   return EXIT_SUCCESS;
 }
 
