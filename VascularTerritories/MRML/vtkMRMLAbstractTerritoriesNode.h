@@ -79,10 +79,24 @@ class vtkStringArray;
  *
  *   - ``GetSegments()``         — segment-name list for the active subtype.
  *   - ``GetSegmentColor(int)``  — RGB triple per segment index.
- *   - ``GetLabelMap()``         — territories labelmap (subtype-specific source).
- *   - ``GetSegmentationNode()`` — companion segmentation-node reference.
+ *   - ``GetSegmentationNode()`` — companion segmentation-node reference
+ *                                  resolved through the typed ``segments``
+ *                                  node-reference role.
  *   - ``GetMethod()``           — discriminator: "standard-couinaud" or "custom".
  *   - ``GetSCTCode(int)``       — SCT triple per segment (ADR-0011).
+ *
+ * \par Wrapper-vs-carrier pattern (2026-05-25 amendment to ADR-0023)
+ *
+ * Per the 2026-05-25 amendment to ADR-0023 §"Class abstraction for
+ * territories", the territories node is a *method wrapper*; the
+ * canonical *data carrier* is a referenced ``vtkMRMLSegmentationNode``
+ * (Slicer-core).  The wrapper carries method-specific inputs +
+ * metadata (subdivision enum, AI backend identifier, centerline +
+ * grouping references); the segmentation carrier carries the binary
+ * labelmap and per-segment terminology entries.  ``GetLabelMap()``
+ * is dropped from the polymorphic interface — callers reach a
+ * labelmap representation through ``GetSegmentationNode()`` and
+ * Slicer-core's segmentation-representation conversion machinery.
  *
  * \par Abstract-ness
  *
@@ -134,14 +148,18 @@ public:
   /// the surgeon opts in.
   virtual void GetSegmentColor(int index, double rgb[3]) = 0;
 
-  /// Territories labelmap.  Source differs by subtype: Auto stores it
-  /// directly (AI output); Custom computes it from the groupings.
-  /// Subclasses may return nullptr while uninitialised.
-  virtual vtkImageData* GetLabelMap() = 0;
+  /// Companion segmentation node — the canonical data carrier for
+  /// the binary labelmap and per-segment terminology.  Resolved
+  /// through the typed ``segments`` node-reference role on the
+  /// abstract base; returns nullptr when no carrier is wired.  Per
+  /// the 2026-05-25 wrapper-vs-carrier amendment, this replaces the
+  /// retired ``GetLabelMap()`` interface entry — callers reach a
+  /// labelmap representation through Slicer-core's
+  /// segmentation-representation machinery on the returned carrier.
+  virtual vtkMRMLSegmentationNode* GetSegmentationNode();
 
-  /// Companion segmentation node (for the Stage 4 overlay that renders
-  /// in 3D + slice views).  Created and maintained by the module Logic.
-  virtual vtkMRMLSegmentationNode* GetSegmentationNode() = 0;
+  /// Reference role name for the canonical segmentation carrier.
+  static const char* GetSegmentsReferenceRole() { return "segments"; }
 
   /// Discriminator string per ADR-0023's `.lrp.json` schema v3 +
   /// territories-class-hierarchy.md.  Returns ``"standard-couinaud"``

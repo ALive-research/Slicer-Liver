@@ -49,9 +49,7 @@
 // STD includes
 #include <string>
 
-class vtkImageData;
 class vtkMRMLScalarVolumeNode;
-class vtkMRMLSegmentationNode;
 class vtkStringArray;
 
 /**
@@ -134,8 +132,6 @@ public:
 
   vtkStringArray* GetSegments() override;
   void GetSegmentColor(int index, double rgb[3]) override;
-  vtkImageData* GetLabelMap() override;
-  vtkMRMLSegmentationNode* GetSegmentationNode() override;
 
   /// Returns the literal ``"standard-couinaud"`` (subtype discriminator
   /// per ADR-0023 §"Persistence" + territories-class-hierarchy.md).

@@ -50,10 +50,8 @@
 #include <map>
 #include <string>
 
-class vtkImageData;
 class vtkMRMLMarkupsFiducialNode;
 class vtkMRMLModelNode;
-class vtkMRMLSegmentationNode;
 class vtkStringArray;
 
 /**
@@ -113,8 +111,6 @@ public:
 
   vtkStringArray* GetSegments() override;
   void GetSegmentColor(int index, double rgb[3]) override;
-  vtkImageData* GetLabelMap() override;
-  vtkMRMLSegmentationNode* GetSegmentationNode() override;
 
   /// Returns the literal ``"custom"`` (subtype discriminator per
   /// ADR-0023 §"Persistence").

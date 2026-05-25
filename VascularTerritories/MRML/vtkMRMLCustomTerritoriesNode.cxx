@@ -238,24 +238,6 @@ void vtkMRMLCustomTerritoriesNode::GetSegmentColor(int /*index*/, double rgb[3])
 }
 
 //------------------------------------------------------------------------------
-vtkImageData* vtkMRMLCustomTerritoriesNode::GetLabelMap()
-{
-  // The Manual path's labelmap is computed by the module Logic from
-  // centerlines + groupings.  Returns nullptr until the Logic plugs
-  // it in (subclasses-may-return-nullptr per the abstract-base
-  // contract).
-  return nullptr;
-}
-
-//------------------------------------------------------------------------------
-vtkMRMLSegmentationNode* vtkMRMLCustomTerritoriesNode::GetSegmentationNode()
-{
-  // Companion segmentation node is wired by the module Logic when it
-  // creates the visualization pipeline.  Returns nullptr until then.
-  return nullptr;
-}
-
-//------------------------------------------------------------------------------
 const char* vtkMRMLCustomTerritoriesNode::GetSCTCode(int index)
 {
   auto it = this->OptInSCTCodes.find(index);
