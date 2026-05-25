@@ -11,8 +11,191 @@ commitment + the v2.1 NURBS sibling extension surface
 [adr-0014]: ../adr/0014-livermarkups-dissolution.md
 [adr-0015]: ../adr/0015-cpp-algorithm-library.md
 [adr-0001]: ../adr/0001-resection-three-node-assembly.md
+[adr-0023]: ../adr/0023-unified-gui-stage-workflow.md
 
-## Class hierarchy
+## Amendments
+
+- **2026-05-25 — Wrapper-vs-carrier pattern; abstract parametric
+  surface base; plan node; shared display class.**  The
+  sibling-based hierarchy below is **superseded** by the diagram in
+  the next section ("Target hierarchy — 2026-05-25 amendment").  The
+  amendment lands four concurrent shifts authored in
+  [ADR-0014][adr-0014] amendment "Fourth layer: clinical/method
+  wrapper" and [ADR-0023][adr-0023] amendment "Wrapper-vs-carrier
+  pattern":
+
+  1. **Abstract parametric surface base**:
+     `vtkMRMLAbstractParametricSurfaceNode` is the carrier base; Bezier
+     and NURBS become concrete subclasses, not siblings.  ADR-0018's
+     "Why a single data type per representation kind, not a parent
+     class" framing inverts: the polymorphic substitutability the
+     plan node needs requires a shared base.
+  2. **`vtkMRMLResectionPlanNode` (NEW)**: the *clinical wrapper* that
+     holds surgeon-facing fields (name, Safety + Risk margins,
+     ordering, plan state) and references the abstract surface via
+     a typed `geometry` node-reference role.  Restores the v1
+     `vtkMRMLLiverResection*` clinical layer that T2.7's retirement
+     otherwise orphans.
+  3. **Shared display class**: `vtkMRMLBezierSurfaceDisplayNode`
+     renames to `vtkMRMLParametricSurfaceDisplayNode` and is shared
+     by both Bezier + NURBS concretes (Slicer Markups precedent).
+     **Drops** the scalar `ResectionMargin` / `UncertaintyMargin`
+     fields the v2.0 plan draft tucked there; those move to the
+     plan node.  Retains margin **colors** only.
+  4. **Plan-rooted storage**: `vtkMRMLBezierSurfaceStorageNode`
+     retires in favour of `vtkMRMLResectionPlanStorageNode` which
+     owns the `.lrp.json` file.  The abstract surface becomes
+     **non-storable** (no default storage node).
+
+  The territories family (`vtkMRMLAbstractTerritoriesNode` + two
+  concrete subclasses) follows the same wrapper-vs-carrier pattern,
+  wrapping a `vtkMRMLSegmentationNode` carrier — see
+  [`territories-class-hierarchy.md`](territories-class-hierarchy.md)
+  for the family diagram.  Both families appear in the amended
+  hierarchy below.
+
+## Target hierarchy — 2026-05-25 amendment
+
+```mermaid
+classDiagram
+    direction TB
+
+    class vtkMRMLStorableNode {
+        <<Slicer-core>>
+    }
+    class vtkMRMLDisplayableNode {
+        <<Slicer-core>>
+    }
+    class vtkMRMLDisplayNode {
+        <<Slicer-core>>
+    }
+    class vtkMRMLStorageNode {
+        <<Slicer-core>>
+    }
+    class vtkMRMLSegmentationNode {
+        <<Slicer-core, territories carrier>>
+    }
+
+    vtkMRMLStorableNode <|-- vtkMRMLDisplayableNode
+
+    class vtkMRMLResectionPlanNode {
+        <<NEW v2.0 — clinical wrapper>>
+        +string Name
+        +double SafetyMargin_mm
+        +double RiskMargin_mm
+        +int OrderIndex
+        +PlanState State : Init | Planning | Confirmed
+        --node refs--
+        +geometry → AbstractParametricSurfaceNode
+    }
+    class vtkMRMLResectionPlanStorageNode {
+        <<NEW v2.0>>
+        +.lrp.json schemaVersion = 2
+        +legacy .lrp.fcsv read-only migration
+    }
+
+    class vtkMRMLAbstractParametricSurfaceNode {
+        <<NEW abstract — carrier base>>
+        +unsigned int Rows, Cols
+        +double[3*Rows*Cols] ControlGrid
+        +InitMode : SlicingPlane | DistanceSpheroid
+        +SlicingPlane subordinate (origin, normal, init points)
+        +DistanceSpheroid subordinate (center, radii, init points)
+        +virtual GetSurfaceType() string
+        +virtual EvaluateSurface(u,v) vtkPolyData
+        +TargetOrganModelNodeID
+    }
+    class vtkMRMLBezierSurfaceNode {
+        <<v2.0 concrete>>
+        polynomial degree (Rows-1, Cols-1)
+        weights implicit 1.0
+    }
+    class vtkMRMLNurbsSurfaceNode {
+        <<v2.1 concrete sibling>>
+        +unsigned int DegreeU, DegreeV
+        +double[] KnotsU, KnotsV
+        +double[Rows*Cols] Weights
+    }
+
+    class vtkMRMLParametricSurfaceDisplayNode {
+        <<NEW shared display, concrete>>
+        +string TerminologyEntry
+        +float[3] ResectionColor, ResectionGridColor
+        +float[3] ResectionMarginColor, UncertaintyMarginColor
+        +bool GridVisibility, Grid2DVisibility, Grid3DVisibility
+        +float GridDivisions, GridThickness
+        +bool WidgetVisibility, ClipOut, InterpolatedMargins
+        +bool ShowResection2D, MirrorDisplay
+    }
+
+    class vtkMRMLAbstractTerritoriesNode {
+        <<abstract — method wrapper>>
+        +virtual GetMethod() string
+        +virtual GetSegments() vtkStringArray
+        +virtual GetSegmentColor(int) double[3]
+        +virtual GetSCTCode(int) string
+        --node refs--
+        +segments → vtkMRMLSegmentationNode
+    }
+    class vtkMRMLStdCouinaudTerritoriesNode {
+        <<v2.0 concrete>>
+        Auto path metadata + inputs
+    }
+    class vtkMRMLCustomTerritoriesNode {
+        <<v2.0 concrete>>
+        Manual path metadata + inputs (centerlines, groupings)
+    }
+
+    vtkMRMLStorableNode <|-- vtkMRMLResectionPlanNode
+    vtkMRMLStorageNode  <|-- vtkMRMLResectionPlanStorageNode
+    vtkMRMLDisplayableNode <|-- vtkMRMLAbstractParametricSurfaceNode
+    vtkMRMLAbstractParametricSurfaceNode <|-- vtkMRMLBezierSurfaceNode
+    vtkMRMLAbstractParametricSurfaceNode <|-- vtkMRMLNurbsSurfaceNode
+    vtkMRMLDisplayNode <|-- vtkMRMLParametricSurfaceDisplayNode
+    vtkMRMLDisplayableNode <|-- vtkMRMLAbstractTerritoriesNode
+    vtkMRMLAbstractTerritoriesNode <|-- vtkMRMLStdCouinaudTerritoriesNode
+    vtkMRMLAbstractTerritoriesNode <|-- vtkMRMLCustomTerritoriesNode
+
+    vtkMRMLResectionPlanNode --> vtkMRMLAbstractParametricSurfaceNode : geometry ref
+    vtkMRMLBezierSurfaceNode --> vtkMRMLParametricSurfaceDisplayNode : display ref
+    vtkMRMLNurbsSurfaceNode  --> vtkMRMLParametricSurfaceDisplayNode : display ref
+    vtkMRMLAbstractTerritoriesNode --> vtkMRMLSegmentationNode : segments ref
+    vtkMRMLResectionPlanNode --> vtkMRMLResectionPlanStorageNode : storage ref
+```
+
+### Notes — 2026-05-25 amendment
+
+- **Abstract carrier base instead of siblings.** The pre-amendment
+  diagram (preserved below for historical record) committed to
+  Bezier and NURBS as siblings without a shared parent.  The
+  wrapper-vs-carrier pattern requires the plan node to reference a
+  polymorphic surface type — that forces a shared abstract base.
+  ADR-0018's "Why a single data type per representation kind"
+  framing inverts on this point.
+- **Single shared display class** mirrors Slicer's
+  `vtkMRMLMarkupsDisplayNode` serving 8+ markup subclasses.  No
+  abstract display base until a per-surface-type display field
+  appears.
+- **Surface is non-storable.**  `CreateDefaultStorageNode()` returns
+  `nullptr` on `vtkMRMLAbstractParametricSurfaceNode`.  Surface
+  bulk data persists through `vtkMRMLResectionPlanStorageNode`
+  (the wrapper owns the storage).
+- **Margin scalars live on the plan node, not the display node.**
+  The display node carries margin **colors** only.
+- **Territories wrap a `vtkMRMLSegmentationNode`** (Slicer-core
+  carrier).  Segment masks persist through the segmentation's own
+  `.seg.nrrd` storage, not through `.lrp.json`.  See
+  [`territories-class-hierarchy.md`](territories-class-hierarchy.md).
+- **Plan ↔ Territories**: no node reference.  Per
+  [ADR-0023][adr-0023] amendment, plans do not reference
+  territories or partitions or UI stage state.  Visual co-existence
+  is the only coupling.
+
+## Pre-amendment hierarchy (historical record)
+
+The diagram + notes below predate the 2026-05-25 amendment and are
+preserved as historical record. See "Target hierarchy — 2026-05-25
+amendment" above for the current target.
 
 ```mermaid
 classDiagram

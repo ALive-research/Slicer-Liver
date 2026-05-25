@@ -84,26 +84,27 @@ What flows between stages.
 flowchart LR
     V1["Volume(s)<br/>(role-tagged)"]
     SEG["Canonical<br/>vtkMRMLSegmentationNode<br/>(liver, portal, hepatic, tumors)"]
-    TER["vtkMRMLAbstractTerritoriesNode<br/>(Std or Custom)"]
-    BEZ["vtkMRMLBezierSurfaceNode(s)<br/>(Confirmed resections)"]
-    VOL["vtkMRMLLiverVolumetryNode(s)<br/>(seed-and-category partitions)"]
-    LRP["scene.lrp.json<br/>(schema v3)"]
+    TER["vtkMRMLAbstractTerritoriesNode<br/>(Std or Custom) — wraps SEG via segments ref"]
+    PLAN["vtkMRMLResectionPlanNode(s)<br/>(clinical wrapper — name, margins, ordering, state)"]
+    SURF["vtkMRMLAbstractParametricSurfaceNode<br/>(Bezier today; NURBS v2.1)"]
+    VOL["vtkMRMLLiverVolumetryPartitionNode(s)<br/>(v2.1; seed-and-category partitions)"]
+    LRP["per-plan .lrp.json<br/>(schema v2; plan + surface only)"]
     SCN["Slicer scene<br/>(.mrml + supporting files)"]
 
     V1 --> SEG
     V1 --> TER
-    SEG --> TER
-    V1 --> BEZ
-    SEG -.distance maps.-> BEZ
-    BEZ --> VOL
+    SEG -- "segments (typed ref)" --> TER
+    V1 --> PLAN
+    PLAN -- "geometry (typed ref)" --> SURF
+    SEG -.distance maps.-> SURF
+    PLAN --> VOL
     TER -.classification analysis.-> VOL
-    BEZ --> LRP
-    TER -.refs.-> LRP
-    VOL -.refs.-> LRP
+    PLAN -- "owns storage" --> LRP
     V1 --> SCN
     SEG --> SCN
     TER --> SCN
-    BEZ --> SCN
+    PLAN --> SCN
+    SURF -.bulk data via plan storage.-> LRP
     VOL --> SCN
 ```
 
@@ -114,9 +115,18 @@ Notable flows:
   portal + hepatic structures) and produce three signed-distance
   fields used as shader uniforms on the resection surface. Not
   persisted with the scene; transient per the 2026-05-14 decision.
-- **Classification refs in `.lrp.json`** are scene-local node IDs
-  per [ADR-0023][adr-0023]'s sidecar-only stance. Cross-machine
-  resolution is v2.1+.
+- **Wrapper-vs-carrier coupling**: per [ADR-0014][adr-0014]
+  amendment "Fourth layer: clinical/method wrapper" (2026-05-25),
+  Stage 3 territories *wrap* the Stage 2 canonical segmentation via
+  the typed `segments` reference role; Stage 4 plans *wrap* their
+  geometry surface via the typed `geometry` reference role. Plans
+  do **not** reference territories or volumetry partitions or stage
+  state — those are scene-level state.
+- **`.lrp.json` content** is plan + its surface only.  Classification
+  / partition / stage-selection state lives in the scene's other
+  storage paths, not in `.lrp.json`.  See [ADR-0023][adr-0023]
+  amendment "Wrapper-vs-carrier pattern".  Cross-machine plan
+  transfer (#415) becomes trivially correct under this trim.
 
 ## Module ownership per stage
 
@@ -125,7 +135,7 @@ Notable flows:
 | 1 — Case Setup | `Liver/` (shell-level affordance) | Wraps Slicer's stock DICOM + Load Data + ScreenCapture |
 | 2 — Anatomy Definition | `LiverSegmentation/` (new module) | Orchestrates TotalSegmentator + Kumar-Oram + MONAILabel-DeepGrow + Segment Editor |
 | 3 — Vascular Territories | `VascularTerritories/` (renamed from `LiverSegments/`) | Two tabs (Auto / Manual) producing `vtkMRMLAbstractTerritoriesNode` subclass instances |
-| 4 — Resection Planning | `LiverResections/` | Resection table + state machine + Bezier widget + resectogram view registration |
+| 4 — Resection Planning | `LiverResections/` | Plan list (sidebar source: `GetNodesByClass("vtkMRMLResectionPlanNode")`) + state machine + parametric-surface widget + resectogram view registration. Each plan wraps one `vtkMRMLAbstractParametricSurfaceNode` (Bezier today, NURBS v2.1) via the `geometry` reference role |
 | 5 — Volumetry | `LiverVolumetry/` | Seed-and-category partition workbench with Confirmed resections as barriers |
 | 6 — Export | `Liver/` (section under the shell) | Wraps `.lrp.json` storage node + Slicer's File ▸ Save Data + ScreenCapture |
 
