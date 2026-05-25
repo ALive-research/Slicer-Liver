@@ -784,38 +784,13 @@ int testV2StageSelectionCurrentStageReader()
 //------------------------------------------------------------------------------
 int testV2MalformedOrderIndexAttributeFallsBackToTyped()
 {
-  vtkNew<vtkMRMLScene> scene;
-  vtkNew<vtkMRMLBezierSurfaceNode> source;
-  scene->AddNode(source.GetPointer());
-  populateV2Fields(source.GetPointer());
-  source->SetName("MalformedOrderIndexPlan");
-  source->SetOrderIndex(42);
-  source->SetAttribute("orderIndex", "not-an-int");
-
-  const std::string path = makeTempPath("lrp.json");
-  vtkNew<vtkMRMLBezierSurfaceStorageNode> writeStorage;
-  writeStorage->SetFileName(path.c_str());
-  CHECK_INT(writeStorage->WriteData(source.GetPointer()), 1);
-
-  const std::string contents = slurp(path);
-  if (!contains(contents, "orderIndex", "42"))
-  {
-    std::cerr << "testV2MalformedOrderIndexAttributeFallsBackToTyped: expected typed-accessor "
-                 "value 42 to survive a malformed attribute; got:\n"
-              << contents << "\n";
-    return EXIT_FAILURE;
-  }
-  // The malformed string itself MUST NOT survive into the on-disk
-  // value position.
-  if (contents.find("\"orderIndex\":\"not-an-int\"") != std::string::npos || contents.find("\"orderIndex\": \"not-an-int\"") != std::string::npos)
-  {
-    std::cerr << "testV2MalformedOrderIndexAttributeFallsBackToTyped: malformed attribute value "
-                 "leaked into the on-disk JSON; got:\n"
-              << contents << "\n";
-    return EXIT_FAILURE;
-  }
-
-  vtksys::SystemTools::RemoveFile(path);
+  // OrderIndex migrated to vtkMRMLResectionPlanNode per the
+  // 2026-05-25 wrapper-vs-carrier amendment to ADR-0014.  The
+  // typed-accessor-vs-attribute-map fallback this test pinned no
+  // longer exists on the surface node.  This file + this test are
+  // scheduled for deletion alongside vtkMRMLBezierSurfaceStorageNode
+  // in the same patch series; the test body is stubbed to keep the
+  // intermediate commits buildable.
   return EXIT_SUCCESS;
 }
 
