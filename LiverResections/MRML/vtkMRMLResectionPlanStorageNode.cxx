@@ -258,7 +258,8 @@ int vtkMRMLResectionPlanStorageNode::WriteJson(const std::string& filePath, vtkM
   }
   else
   {
-    vtkWarningMacro("WriteJson: plan '" << (mrmlName ? mrmlName : "<unnamed>") << "' has no geometry reference; emitting plan-only document.  The wrapper-vs-carrier pattern admits a plan without a wired surface (e.g. mid-init) -- the reader applies surface-default-construction on re-load.");
+    vtkWarningMacro("WriteJson: plan '" << (mrmlName ? mrmlName : "<unnamed>")
+                                        << "' has no geometry reference; emitting plan-only document.");
   }
 
   // Reserved-for-future metadata bag.
@@ -415,7 +416,8 @@ int vtkMRMLResectionPlanStorageNode::ReadJson(const std::string& filePath, vtkMR
   {
     if (scene == nullptr)
     {
-      vtkErrorMacro("ReadJson: plan '" << (plan->GetName() ? plan->GetName() : "<unnamed>") << "' has no scene and no wired geometry surface -- cannot instantiate one for type '" << surfaceType << "'");
+      vtkErrorMacro("ReadJson: plan '" << (plan->GetName() ? plan->GetName() : "<unnamed>")
+                                       << "' has no scene; cannot instantiate surface of type '" << surfaceType << "'");
       return 0;
     }
     if (surfaceType == "Bezier")
