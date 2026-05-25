@@ -35,8 +35,6 @@ ReadTheDocs.  Mirrors the upstream Slicer-core convention.
 :maxdepth: 1
 :caption: Scaffold
 
-adr/0011-sct-terminology-dispatch.md
-adr/0014-livermarkups-dissolution.md
 adr/0017-sphinx-readthedocs.md
 adr/0018-nurbs-extension-surface.md
 adr/0019-resection-state-machine.md

@@ -406,8 +406,8 @@ void vtkMRMLAbstractParametricSurfaceNode::WriteXML(ostream& of, int nIndent)
   of << " slicingPlaneInitPoint1=\"" << this->XMLAttributeEncodeString(writeDoubles(this->SlicingPlaneInitPoints[1], 3)) << "\"";
   if (!this->DistanceSpheroidInitPoints.empty())
   {
-    of << " distanceSpheroidInitPoints=\""
-       << this->XMLAttributeEncodeString(writeDoubles(this->DistanceSpheroidInitPoints.data(), this->DistanceSpheroidInitPoints.size())) << "\"";
+    of << " distanceSpheroidInitPoints=\"" << this->XMLAttributeEncodeString(writeDoubles(this->DistanceSpheroidInitPoints.data(), this->DistanceSpheroidInitPoints.size()))
+       << "\"";
   }
 }
 

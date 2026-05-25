@@ -11,7 +11,7 @@
 - **2026-05-25 — Wrapper-vs-carrier pattern; `.lrp.json` content
   roster trim; territories interface tightening.**  The post-PR #430
   design review introduced the wrapper-vs-carrier pattern (see
-  [ADR-0014](0014-livermarkups-dissolution.md) amendment of the
+  [ADR-0014](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0014-livermarkups-dissolution.md) amendment of the
   same date).  This amendment applies the pattern across §"Class
   abstraction for territories", §"Persistence — `.lrp.json` schema
   v2", and §"Cross-stage dependencies"; supersedes the affected

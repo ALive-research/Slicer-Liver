@@ -148,7 +148,7 @@ Stage 3 wraps the canonical segmentation with a
 SCT codes, subdivision enum, and method-specific inputs); the wrapper
 references the segmentation via its `segments` node-reference role.
 This is the *wrapper-vs-carrier* pattern authored by
-[ADR-0014](0014-livermarkups-dissolution.md) amendment
+[ADR-0014](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0014-livermarkups-dissolution.md) amendment
 "Fourth layer: clinical/method wrapper" and applied in
 [ADR-0023](0023-unified-gui-stage-workflow.md) amendment
 "Wrapper-vs-carrier pattern".
