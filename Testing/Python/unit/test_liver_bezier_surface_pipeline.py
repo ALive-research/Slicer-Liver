@@ -74,7 +74,7 @@ def bezier_nodes():
 
     scene = slicer.mrmlScene
     data = scene.AddNewNodeByClass("vtkMRMLBezierSurfaceNode")
-    display = scene.AddNewNodeByClass("vtkMRMLBezierSurfaceDisplayNode")
+    display = scene.AddNewNodeByClass("vtkMRMLParametricSurfaceDisplayNode")
     data.AddAndObserveDisplayNodeID(display.GetID())
     try:
         yield data, display

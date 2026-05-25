@@ -10,7 +10,7 @@ set(KIT vtkSlicer${MODULE_NAME}ModuleMRML)
 #-----------------------------------------------------------------------------
 set(KIT_TEST_SRCS
   vtkMRMLBezierSurfaceNodeTest1.cxx
-  vtkMRMLBezierSurfaceDisplayNodeTest1.cxx
+  vtkMRMLParametricSurfaceDisplayNodeTest1.cxx
   vtkMRMLBezierSurfaceStorageNodeTest1.cxx
   vtkMRMLBezierSurfaceStorageNodeTest2.cxx
   vtkMRMLAbstractParametricSurfaceNodeTest1.cxx
@@ -60,7 +60,7 @@ slicerMacroConfigureModuleCxxTestDriver(
   )
 
 SIMPLE_TEST(vtkMRMLBezierSurfaceNodeTest1)
-SIMPLE_TEST(vtkMRMLBezierSurfaceDisplayNodeTest1)
+SIMPLE_TEST(vtkMRMLParametricSurfaceDisplayNodeTest1)
 SIMPLE_TEST(vtkMRMLBezierSurfaceStorageNodeTest1)
 SIMPLE_TEST(vtkMRMLBezierSurfaceStorageNodeTest2)
 # Test-first scaffolding (ADR-0027) for the wrapper-vs-carrier

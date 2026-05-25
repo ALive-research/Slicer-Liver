@@ -6,7 +6,7 @@ This is the first concrete instantiation of the LayerDM Pipeline
 pattern committed by `ADR-0013`_ §4 and the LiverMarkups dissolution
 named by `ADR-0014`_ §2.  One Pipeline observes a
 ``vtkMRMLBezierSurfaceNode`` (data, ADR-0014 §1), its paired
-``vtkMRMLBezierSurfaceDisplayNode`` (decoration, ADR-0013 §8) and —
+``vtkMRMLParametricSurfaceDisplayNode`` (decoration, ADR-0013 §8) and —
 when wired — the orchestrating ``vtkMRMLLiverResectionNode``'s
 ``ResectionState`` / ``InitializationMode`` enums (per ADR-0013 §4).
 The Pipeline owns three Representations keyed on the
@@ -52,7 +52,7 @@ The Pipeline attaches three ``vtkCommand::ModifiedEvent`` observers:
 
 * On the **data node** — ``vtkMRMLBezierSurfaceNode`` —
   geometry / state-machine mutations.
-* On the **display node** — ``vtkMRMLBezierSurfaceDisplayNode`` —
+* On the **display node** — ``vtkMRMLParametricSurfaceDisplayNode`` —
   decoration mutations.
 * On the **orchestrating-state node** (optional, when wired) —
   ``vtkMRMLLiverResectionNode`` — coarse-grained workflow state
@@ -597,7 +597,7 @@ def registerPipelineCreator() -> None:
 
     The creator returns a fresh ``LiverBezierSurfacePipeline``
     instance only when the (viewNode, node) pair matches
-    ``(vtkMRMLViewNode, vtkMRMLBezierSurfaceDisplayNode)``.  Other
+    ``(vtkMRMLViewNode, vtkMRMLParametricSurfaceDisplayNode)``.  Other
     combinations short-circuit to ``None`` so subsequent registered
     creators get a chance to handle them.
     """
@@ -610,7 +610,7 @@ def registerPipelineCreator() -> None:
     # the additional ``slicer``-prefixed symbols below are only
     # reachable inside a Slicer process).
     from slicer import (  # type: ignore[import-not-found]
-        vtkMRMLBezierSurfaceDisplayNode,
+        vtkMRMLParametricSurfaceDisplayNode,
         vtkMRMLLayerDMPipelineFactory,
         vtkMRMLLayerDMPipelineScriptedCreator,
         vtkMRMLViewNode,
@@ -629,7 +629,7 @@ def registerPipelineCreator() -> None:
         # handle the slice path.
         if not isinstance(viewNode, vtkMRMLViewNode):
             return None
-        if not isinstance(node, vtkMRMLBezierSurfaceDisplayNode):
+        if not isinstance(node, vtkMRMLParametricSurfaceDisplayNode):
             return None
         return LiverBezierSurfacePipeline()
 

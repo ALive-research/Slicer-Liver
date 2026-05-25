@@ -119,7 +119,7 @@ QStringList qSlicerLiverResectionsReader::extensions() const
   // ``.lrp.json`` is the v1 schema landed by the prior T2.5 commit
   // (ADR-0014 §5).  The Add Data filter entry was previously
   // withheld pending T2.6-LayerDM — without a Pipeline registered
-  // for ``vtkMRMLBezierSurfaceDisplayNode``, a user-driven Add Data
+  // for ``vtkMRMLParametricSurfaceDisplayNode``, a user-driven Add Data
   // → ``.lrp.json`` would load silently with no rendering.  T2.6-
   // LayerDM closes that gap: ``qSlicerLiverResectionsModule::setup()``
   // now performs ADR-0013 §5's three-call contract, so the upstream

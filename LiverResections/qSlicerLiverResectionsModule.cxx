@@ -170,7 +170,7 @@ void qSlicerLiverResectionsModule::setup()
   vtkMRMLLayerDisplayableManager::RegisterInDefaultViews();
 
   // ADR-0013 §5 call 3 — register the LayerDM Pipeline creator for
-  // ``vtkMRMLBezierSurfaceDisplayNode`` via the
+  // ``vtkMRMLParametricSurfaceDisplayNode`` via the
   // scripted-creator bridge.  The creator lambda is defined in
   // ``LiverResectionsLib.LiverBezierSurfacePipeline`` (per ADR-0004
   // §1 the Pipeline class is Python; per ADR-0013 §1 there is exactly

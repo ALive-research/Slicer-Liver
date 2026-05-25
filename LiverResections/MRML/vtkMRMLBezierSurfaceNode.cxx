@@ -39,7 +39,7 @@
 
 // This module MRML includes
 #include "vtkMRMLBezierSurfaceNode.h"
-#include "vtkMRMLBezierSurfaceDisplayNode.h"
+#include "vtkMRMLParametricSurfaceDisplayNode.h"
 
 // MRML includes
 #include <vtkMRMLNodePropertyMacros.h>
@@ -357,7 +357,7 @@ void vtkMRMLBezierSurfaceNode::CopyContent(vtkMRMLNode* anode, bool deepCopy /*=
 //------------------------------------------------------------------------------
 void vtkMRMLBezierSurfaceNode::CreateDefaultDisplayNodes()
 {
-  if (vtkMRMLBezierSurfaceDisplayNode::SafeDownCast(this->GetDisplayNode()) != nullptr)
+  if (vtkMRMLParametricSurfaceDisplayNode::SafeDownCast(this->GetDisplayNode()) != nullptr)
   {
     // Display node already exists.
     return;
@@ -368,7 +368,7 @@ void vtkMRMLBezierSurfaceNode::CreateDefaultDisplayNodes()
                   " failed: scene is invalid");
     return;
   }
-  auto displayNode = vtkSmartPointer<vtkMRMLBezierSurfaceDisplayNode>::New();
+  auto displayNode = vtkSmartPointer<vtkMRMLParametricSurfaceDisplayNode>::New();
   this->GetScene()->AddNode(displayNode);
   this->SetAndObserveDisplayNodeID(displayNode->GetID());
 }

@@ -4,7 +4,7 @@
 
   Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
-  Tests for vtkMRMLBezierSurfaceDisplayNode — the display-only
+  Tests for vtkMRMLParametricSurfaceDisplayNode — the display-only
   node landed by ADR-0013 §8.  Exercises:
 
    - defaults (colours, flags) match the legacy ResectionNode baseline
@@ -18,7 +18,7 @@
 
 // MRML includes
 #include "vtkMRMLCoreTestingMacros.h"
-#include "vtkMRMLBezierSurfaceDisplayNode.h"
+#include "vtkMRMLParametricSurfaceDisplayNode.h"
 #include "vtkMRMLScene.h"
 
 // VTK includes
@@ -36,7 +36,7 @@ namespace
 
 int testDefaults()
 {
-  vtkNew<vtkMRMLBezierSurfaceDisplayNode> node;
+  vtkNew<vtkMRMLParametricSurfaceDisplayNode> node;
 
   // Defaults intentionally match the legacy
   // vtkMRMLLiverResectionNode constructor (ResectionNode.cxx:56-66)
@@ -87,13 +87,13 @@ int testDefaults()
   // defaults rather than dispatching off the SCT triple).
   CHECK_STRING(node->GetTerminologyEntry().c_str(), "");
 
-  CHECK_STRING(node->GetNodeTagName(), "BezierSurfaceDisplay");
+  CHECK_STRING(node->GetNodeTagName(), "ParametricSurfaceDisplay");
   return EXIT_SUCCESS;
 }
 
 int testSettersAndGetters()
 {
-  vtkNew<vtkMRMLBezierSurfaceDisplayNode> node;
+  vtkNew<vtkMRMLParametricSurfaceDisplayNode> node;
 
   float c1[3] = { 0.25f, 0.5f, 0.75f };
   node->SetResectionColor(c1);
@@ -162,7 +162,7 @@ int testSettersAndGetters()
 
 int testXMLRoundTrip()
 {
-  vtkNew<vtkMRMLBezierSurfaceDisplayNode> source;
+  vtkNew<vtkMRMLParametricSurfaceDisplayNode> source;
   vtkNew<vtkMRMLScene> scene;
   source->SetScene(scene.GetPointer());
 
@@ -232,7 +232,7 @@ int testXMLRoundTrip()
   }
   atts.push_back(nullptr);
 
-  vtkNew<vtkMRMLBezierSurfaceDisplayNode> sink;
+  vtkNew<vtkMRMLParametricSurfaceDisplayNode> sink;
   sink->SetScene(scene.GetPointer());
   sink->ReadXMLAttributes(atts.data());
 
@@ -297,7 +297,7 @@ int testModifiedEventsOnSetters()
   // public setter of the display node so a future drift fires a
   // regression here rather than silently breaking the Pipeline
   // observers downstream.
-  vtkNew<vtkMRMLBezierSurfaceDisplayNode> node;
+  vtkNew<vtkMRMLParametricSurfaceDisplayNode> node;
 
   // Colour fields (vtkSetVector3Macro).
   float c1[3] = { 0.25f, 0.5f, 0.75f };
@@ -341,7 +341,7 @@ int testTerminologyEntryRoundTrip()
   //   - WriteXML emits a ``terminologyEntry="..."`` attribute that
   //     survives XMLAttributeEncodeString on hostile XML chars
   //   - ReadXMLAttributes recovers the original value bit-exactly
-  vtkNew<vtkMRMLBezierSurfaceDisplayNode> node;
+  vtkNew<vtkMRMLParametricSurfaceDisplayNode> node;
   CHECK_STRING(node->GetTerminologyEntry().c_str(), "");
 
   // Realistic SCT terminology entry in Slicer's canonical 7-component
@@ -369,7 +369,7 @@ int testTerminologyEntryRoundTrip()
   // which are XML-safe, but ``&`` and ``<`` must round-trip too.
   // Hostile-character payload in the same 7-component form.
   const std::string hostile = "SlicerLiver-Terminology~SCT^123037004^Cat & <Type>~SCT^10200004^Liver~^^~~^^~^^";
-  vtkNew<vtkMRMLBezierSurfaceDisplayNode> source;
+  vtkNew<vtkMRMLParametricSurfaceDisplayNode> source;
   vtkNew<vtkMRMLScene> scene;
   source->SetScene(scene.GetPointer());
   source->SetTerminologyEntry(hostile);
@@ -454,13 +454,13 @@ int testTerminologyEntryRoundTrip()
   }
   atts.push_back(nullptr);
 
-  vtkNew<vtkMRMLBezierSurfaceDisplayNode> sink;
+  vtkNew<vtkMRMLParametricSurfaceDisplayNode> sink;
   sink->SetScene(scene.GetPointer());
   sink->ReadXMLAttributes(atts.data());
   CHECK_STRING(sink->GetTerminologyEntry().c_str(), hostile.c_str());
 
   // CopyContent must deep-copy the string.
-  vtkNew<vtkMRMLBezierSurfaceDisplayNode> copySink;
+  vtkNew<vtkMRMLParametricSurfaceDisplayNode> copySink;
   copySink->CopyContent(source.GetPointer(), /*deepCopy=*/true);
   CHECK_STRING(copySink->GetTerminologyEntry().c_str(), hostile.c_str());
   source->SetTerminologyEntry("");
@@ -470,7 +470,7 @@ int testTerminologyEntryRoundTrip()
 
 int testCopyContent()
 {
-  vtkNew<vtkMRMLBezierSurfaceDisplayNode> source;
+  vtkNew<vtkMRMLParametricSurfaceDisplayNode> source;
 
   float c1[3] = { 0.25f, 0.5f, 0.75f };
   source->SetResectionColor(c1);
@@ -479,7 +479,7 @@ int testCopyContent()
   source->SetClipOut(true);
   source->SetInterpolatedMargins(true);
 
-  vtkNew<vtkMRMLBezierSurfaceDisplayNode> sink;
+  vtkNew<vtkMRMLParametricSurfaceDisplayNode> sink;
   sink->CopyContent(source.GetPointer(), /*deepCopy=*/true);
 
   float back[3];
@@ -503,10 +503,10 @@ int testCopyContent()
 } // namespace
 
 //------------------------------------------------------------------------------
-int vtkMRMLBezierSurfaceDisplayNodeTest1(int, char*[])
+int vtkMRMLParametricSurfaceDisplayNodeTest1(int, char*[])
 {
   vtkNew<vtkMRMLScene> scene;
-  vtkNew<vtkMRMLBezierSurfaceDisplayNode> exerciseNode;
+  vtkNew<vtkMRMLParametricSurfaceDisplayNode> exerciseNode;
   exerciseNode->SetScene(scene.GetPointer());
   EXERCISE_ALL_BASIC_MRML_METHODS(exerciseNode.GetPointer());
 
@@ -517,6 +517,6 @@ int vtkMRMLBezierSurfaceDisplayNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testModifiedEventsOnSetters());
   CHECK_EXIT_SUCCESS(testTerminologyEntryRoundTrip());
 
-  std::cout << "vtkMRMLBezierSurfaceDisplayNodeTest1 completed successfully" << std::endl;
+  std::cout << "vtkMRMLParametricSurfaceDisplayNodeTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;
 }

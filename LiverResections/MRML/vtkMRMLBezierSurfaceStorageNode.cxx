@@ -183,7 +183,7 @@
 //   - Legacy ``ResectionMargin``, ``UncertaintyMargin``
 //        → DROPPED.  These are display-side fields per ADR-0013 §8
 //          (display-node split — the new geometry/decoration split
-//          carries margins on ``vtkMRMLBezierSurfaceDisplayNode``).
+//          carries margins on ``vtkMRMLParametricSurfaceDisplayNode``).
 //          They were never serialised by ``vtkMRMLLiverResectionCSVStorageNode``
 //          anyway — the CSV only contains the geometry.  Listed here
 //          for completeness because the *XML* serialisation of

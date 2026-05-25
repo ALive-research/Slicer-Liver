@@ -37,8 +37,8 @@
 
 ==============================================================================*/
 
-#ifndef __vtkmrmlbeziersurfacedisplaynode_h_
-#define __vtkmrmlbeziersurfacedisplaynode_h_
+#ifndef __vtkmrmlparametricsurfacedisplaynode_h_
+#define __vtkmrmlparametricsurfacedisplaynode_h_
 
 #include "vtkSlicerLiverResectionsModuleMRMLExport.h"
 
@@ -52,7 +52,7 @@
 #include <string>
 
 /**
- * \class vtkMRMLBezierSurfaceDisplayNode
+ * \class vtkMRMLParametricSurfaceDisplayNode
  *
  * \brief Display-only MRML node carrying decoration state for a
  *        ``vtkMRMLBezierSurfaceNode``.
@@ -69,7 +69,7 @@
  *
  *   - ``vtkMRMLBezierSurfaceNode`` — \b data: geometry + state
  *     machine + init-mode audit trail.
- *   - ``vtkMRMLBezierSurfaceDisplayNode`` (this class) —
+ *   - ``vtkMRMLParametricSurfaceDisplayNode`` (this class) —
  *     \b display: all decoration fields (per ADR-0013 §8).
  *
  * The field roster mirrors the display-side block of
@@ -93,11 +93,11 @@
  * which retains its display fields (T2 is *additive*).  T2.7 will
  * collapse the legacy node and retire its display fields.
  */
-class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLBezierSurfaceDisplayNode : public vtkMRMLDisplayNode
+class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLParametricSurfaceDisplayNode : public vtkMRMLDisplayNode
 {
 public:
-  static vtkMRMLBezierSurfaceDisplayNode* New();
-  vtkTypeMacro(vtkMRMLBezierSurfaceDisplayNode, vtkMRMLDisplayNode);
+  static vtkMRMLParametricSurfaceDisplayNode* New();
+  vtkTypeMacro(vtkMRMLParametricSurfaceDisplayNode, vtkMRMLDisplayNode);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   //--------------------------------------------------------------------------
@@ -106,7 +106,7 @@ public:
   vtkMRMLNode* CreateNodeInstance() override;
 
   /// Get node XML tag name (like Volume, Model).
-  const char* GetNodeTagName() override { return "BezierSurfaceDisplay"; }
+  const char* GetNodeTagName() override { return "ParametricSurfaceDisplay"; }
 
   /// Read node attributes from XML.
   void ReadXMLAttributes(const char** atts) override;
@@ -236,12 +236,12 @@ public:
   vtkGetMacro(TerminologyEntry, std::string);
 
 protected:
-  vtkMRMLBezierSurfaceDisplayNode();
-  ~vtkMRMLBezierSurfaceDisplayNode() override;
+  vtkMRMLParametricSurfaceDisplayNode();
+  ~vtkMRMLParametricSurfaceDisplayNode() override;
 
 private:
-  vtkMRMLBezierSurfaceDisplayNode(const vtkMRMLBezierSurfaceDisplayNode&) = delete;
-  void operator=(const vtkMRMLBezierSurfaceDisplayNode&) = delete;
+  vtkMRMLParametricSurfaceDisplayNode(const vtkMRMLParametricSurfaceDisplayNode&) = delete;
+  void operator=(const vtkMRMLParametricSurfaceDisplayNode&) = delete;
 
   float ResectionColor[3];
   float ResectionGridColor[3];
@@ -261,4 +261,4 @@ private:
   std::string TerminologyEntry;
 };
 
-#endif //__vtkmrmlbeziersurfacedisplaynode_h_
+#endif //__vtkmrmlparametricsurfacedisplaynode_h_

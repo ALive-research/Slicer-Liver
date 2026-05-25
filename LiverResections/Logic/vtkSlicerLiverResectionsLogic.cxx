@@ -48,7 +48,7 @@
 // dialogs round-trip the new ``vtkMRMLBezierSurfaceNode`` family and
 // recognise the new ``.lrp.json`` storage format.
 #include "vtkMRMLBezierSurfaceNode.h"
-#include "vtkMRMLBezierSurfaceDisplayNode.h"
+#include "vtkMRMLParametricSurfaceDisplayNode.h"
 #include "vtkMRMLBezierSurfaceStorageNode.h"
 #include "vtkMRMLResectionPlanNode.h"
 #include "vtkMRMLResectionPlanStorageNode.h"
@@ -123,7 +123,7 @@ void vtkSlicerLiverResectionsLogic::RegisterNodes()
   // registered so MRML can instantiate them by class name on scene
   // load.
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceDisplayNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLParametricSurfaceDisplayNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceStorageNode>::New());
 
   // Resection-plan family (2026-05-25 wrapper-vs-carrier amendment to

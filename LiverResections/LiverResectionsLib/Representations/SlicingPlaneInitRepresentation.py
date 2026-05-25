@@ -7,7 +7,7 @@ ADR-0014 §2: the two init points that seed the plane and the plane
 visualisation itself.  Driven by the ``vtkMRMLBezierSurfaceNode`` data
 node (geometry: ``GetSlicingPlaneOrigin``, ``GetSlicingPlaneNormal``,
 ``GetSlicingPlaneInitPoint(0|1)``) and the paired
-``vtkMRMLBezierSurfaceDisplayNode`` (decoration: ``GetResectionColor``,
+``vtkMRMLParametricSurfaceDisplayNode`` (decoration: ``GetResectionColor``,
 ``GetResectionOpacity``).
 
 Scope of this skeleton — T2.2 stack iteration 2
