@@ -378,6 +378,75 @@ int testPolymorphicNodeClassFilter()
   return EXIT_SUCCESS;
 }
 
+//------------------------------------------------------------------------------
+// Phase 2 -- abstract-surface defensive guard + enum-helper coverage.
+// Closes the codecov gaps the post-impl /slicer-review pass flagged in
+// vtkMRMLAbstractParametricSurfaceNode.cxx for the SetRows/SetCols
+// non-square guard (lines ~126-145) and the static enum string helpers
+// (lines ~78-103).
+
+//------------------------------------------------------------------------------
+// Phase 2.1 -- The SetRows / SetCols public-API guard rejects
+// non-square intermediate states; only SetSize() may change both axes
+// atomically (ADR-0018 §1 admits {(3,3), (4,4)} only).  Test pinpoint:
+// starting from the default (4,4), SetRows(3) keeps Cols at 4 and
+// would create a 3x4 non-square shape -- rejected; Rows stays at 4.
+// Exercised via the abstract-base pointer so the v2.1 NURBS sibling
+// will be governed by the same invariant.
+// (Design doc 01-class-hierarchy.md §"Key invariants" bullet 1;
+// ADR-0018 §1 grid-size invariants.)
+int testSetRowsNonSquareRejectedViaBase()
+{
+  vtkNew<vtkMRMLBezierSurfaceNode> bezier;
+  vtkMRMLAbstractParametricSurfaceNode* surface = bezier.GetPointer();
+  CHECK_NOT_NULL(surface);
+
+  // Defaults are 4x4.  SetRows(3) tries to move to (3,4) -- non-square
+  // intermediate state.  Expectation: the guard fires a vtkErrorMacro
+  // and leaves Rows at 4 (the documented "leaving Rows at" branch in
+  // SetRows).
+  const unsigned int initialRows = surface->GetRows();
+  const unsigned int initialCols = surface->GetCols();
+  CHECK_INT(static_cast<int>(initialRows), static_cast<int>(initialCols));
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  surface->SetRows(3);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  CHECK_INT(static_cast<int>(surface->GetRows()), static_cast<int>(initialRows));
+  CHECK_INT(static_cast<int>(surface->GetCols()), static_cast<int>(initialCols));
+
+  // Symmetric assertion for SetCols -- the guard is paired and the
+  // codecov pass flagged both arms.
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  surface->SetCols(3);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  CHECK_INT(static_cast<int>(surface->GetRows()), static_cast<int>(initialRows));
+  CHECK_INT(static_cast<int>(surface->GetCols()), static_cast<int>(initialCols));
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Phase 2.2 -- GetInitModeFromString defensively returns -1 on a null
+// C-string (guard at vtkMRMLAbstractParametricSurfaceNode.cxx
+// lines ~91-94).  Callers in the storage-node ReadJson path may
+// surface a missing initMode property as nullptr; the helper must
+// not crash.
+int testGetInitModeFromStringNullPtr()
+{
+  CHECK_INT(vtkMRMLAbstractParametricSurfaceNode::GetInitModeFromString(nullptr), -1);
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Phase 2.3 -- GetInitModeAsString returns the documented "Invalid"
+// sentinel for out-of-range enum codes (default arm at line ~84).
+// Pin so a regression that drops the default arm (e.g. switching to
+// a switch-without-default) is caught.
+int testGetInitModeAsStringInvalidDefault()
+{
+  CHECK_STRING(vtkMRMLAbstractParametricSurfaceNode::GetInitModeAsString(99), "Invalid");
+  return EXIT_SUCCESS;
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -394,6 +463,12 @@ int vtkMRMLAbstractParametricSurfaceNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testPolymorphicEvaluateSurface());
   CHECK_EXIT_SUCCESS(testSlimWriteXMLOnlyEmitsRowsAndCols());
   CHECK_EXIT_SUCCESS(testPolymorphicNodeClassFilter());
+
+  // Phase 2 -- abstract-surface defensive guard + enum-helper coverage
+  // (closes the codecov gaps from the post-impl /slicer-review pass).
+  CHECK_EXIT_SUCCESS(testSetRowsNonSquareRejectedViaBase());
+  CHECK_EXIT_SUCCESS(testGetInitModeFromStringNullPtr());
+  CHECK_EXIT_SUCCESS(testGetInitModeAsStringInvalidDefault());
 
   std::cout << "vtkMRMLAbstractParametricSurfaceNodeTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;
