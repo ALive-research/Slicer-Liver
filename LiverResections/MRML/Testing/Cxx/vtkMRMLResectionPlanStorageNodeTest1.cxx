@@ -117,6 +117,7 @@
 // VTK includes
 #include <vtkCollection.h>
 #include <vtkNew.h>
+#include <vtkObjectFactory.h>
 #include <vtkSmartPointer.h>
 #include <vtksys/SystemTools.hxx>
 
@@ -142,6 +143,29 @@
 
 namespace
 {
+
+/// Test-only subclass that exposes the protected ReadDataInternal /
+/// WriteDataInternal forwarders so the defensive guard branches inside
+/// each (null refNode, wrong-class refNode, empty filename, unsupported
+/// extension) can be exercised directly.  The public
+/// ``vtkMRMLStorageNode::ReadData`` / ``::WriteData`` paths catch most
+/// of these conditions before delegating; coverage of the local guards
+/// requires bypassing the base layer.  Closes the codecov gaps the
+/// post-impl /slicer-review pass flagged in vtkMRMLResectionPlanStorageNode.cxx
+/// lines 107-167.
+class ExposedStorageNode : public vtkMRMLResectionPlanStorageNode
+{
+public:
+  static ExposedStorageNode* New();
+  vtkTypeMacro(ExposedStorageNode, vtkMRMLResectionPlanStorageNode);
+  int CallReadDataInternal(vtkMRMLNode* refNode) { return this->ReadDataInternal(refNode); }
+  int CallWriteDataInternal(vtkMRMLNode* refNode) { return this->WriteDataInternal(refNode); }
+
+protected:
+  ExposedStorageNode() = default;
+  ~ExposedStorageNode() override = default;
+};
+vtkStandardNewMacro(ExposedStorageNode);
 
 /// Generate a unique temp file path with the given extension.  Rooted
 /// under ``LIVER_BEZIER_STORAGE_TEST_TEMP_DIR`` -- the CMake binary
@@ -752,6 +776,363 @@ int testSurfaceBulkDataRoundTrip()
   return EXIT_SUCCESS;
 }
 
+//------------------------------------------------------------------------------
+// Phase 1 -- storage-node defensive guard coverage.  Each subtest
+// drives one rejection branch in ReadDataInternal / WriteDataInternal
+// or the inner WriteJson / ReadJson dispatch.  Source of truth: the
+// post-impl /slicer-review synthesis cited
+// vtkMRMLResectionPlanStorageNode.cxx lines 107-486 as uncovered
+// branches; the subtests below pin each one with a 5-15 line minimum
+// reproducer.  Authoring discipline per
+// ``Docs/design/resection-plan-architecture/03-storage-ownership.md``
+// §"Plan node" (rejection invariants are part of the storage contract).
+
+//------------------------------------------------------------------------------
+// Phase 1.1 -- ReadDataInternal rejects a null refNode (defensive
+// guard at vtkMRMLResectionPlanStorageNode.cxx line ~107).  Exercised
+// via the test-only forwarder; the public ReadData layer catches null
+// earlier, so the local guard requires direct invocation.
+int testReadDataInternalNullRefNode()
+{
+  vtkNew<ExposedStorageNode> storage;
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->CallReadDataInternal(nullptr), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Phase 1.2 -- ReadDataInternal rejects a wrong-class refNode.  The
+// guard at line ~112 SafeDownCasts to vtkMRMLResectionPlanNode; a
+// vtkMRMLModelNode must fail the cast and trigger the error.
+int testReadDataInternalWrongClassRefNode()
+{
+  vtkNew<ExposedStorageNode> storage;
+  vtkNew<vtkMRMLModelNode> model;
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->CallReadDataInternal(model.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Phase 1.3 -- ReadDataInternal rejects an empty filename (guard at
+// line ~122 after GetFullNameFromFileName).
+int testReadDataInternalEmptyFileName()
+{
+  vtkNew<ExposedStorageNode> storage;
+  vtkNew<vtkMRMLResectionPlanNode> plan;
+  // Do not SetFileName -- GetFullNameFromFileName returns empty.
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->CallReadDataInternal(plan.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Phase 1.4 -- ReadDataInternal rejects an unsupported file extension
+// (guard at line ~128 -- only ``.lrp.json`` and ``.json`` admitted).
+int testReadDataInternalUnsupportedExtension()
+{
+  vtkNew<ExposedStorageNode> storage;
+  vtkNew<vtkMRMLResectionPlanNode> plan;
+  const std::string path = makeTempPath("txt");
+  storage->SetFileName(path.c_str());
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->CallReadDataInternal(plan.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Phase 1.5 -- WriteDataInternal rejects a null refNode AND a
+// wrong-class refNode (symmetric guards at lines ~141 + ~147).
+// Bundled per the planner table: both are one-line branches in the
+// same writer prologue.
+int testWriteDataInternalNullOrWrongClass()
+{
+  vtkNew<ExposedStorageNode> storage;
+  vtkNew<vtkMRMLModelNode> model;
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->CallWriteDataInternal(nullptr), 0);
+  CHECK_INT(storage->CallWriteDataInternal(model.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Phase 1.6 -- WriteDataInternal rejects an empty filename (guard at
+// line ~155, symmetric with the reader).
+int testWriteDataInternalEmptyFileName()
+{
+  vtkNew<ExposedStorageNode> storage;
+  vtkNew<vtkMRMLResectionPlanNode> plan;
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->CallWriteDataInternal(plan.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Phase 1.7 -- WriteDataInternal rejects an unsupported file extension
+// (guard at line ~161, symmetric with the reader's ext check).
+int testWriteDataInternalUnsupportedExtension()
+{
+  vtkNew<ExposedStorageNode> storage;
+  vtkNew<vtkMRMLResectionPlanNode> plan;
+  const std::string path = makeTempPath("txt");
+  storage->SetFileName(path.c_str());
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->CallWriteDataInternal(plan.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Phase 1.8 -- ReadJson rejects an unparseable JSON file (guard at
+// line ~330 -- ``reader->ReadFromFile`` returns null on syntax error).
+int testReadJsonUnparseable()
+{
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{not valid json";
+  }
+  vtkNew<vtkMRMLScene> scene;
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLResectionPlanNode>::New());
+  vtkNew<vtkMRMLResectionPlanNode> plan;
+  scene->AddNode(plan.GetPointer());
+
+  vtkNew<vtkMRMLResectionPlanStorageNode> storage;
+  storage->SetFileName(path.c_str());
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->ReadData(plan.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Phase 1.9 -- ReadJson rejects a minimal JSON document missing the
+// required ``schemaVersion`` field (guard at line ~337 -- HasMember
+// check).  Pinned per design-doc 05-lrp-json-schema.md §"Reader /
+// writer behaviour" first bullet.
+int testReadJsonMissingSchemaVersion()
+{
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{\"name\": \"x\"}\n";
+  }
+  vtkNew<vtkMRMLScene> scene;
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLResectionPlanNode>::New());
+  vtkNew<vtkMRMLResectionPlanNode> plan;
+  scene->AddNode(plan.GetPointer());
+
+  vtkNew<vtkMRMLResectionPlanStorageNode> storage;
+  storage->SetFileName(path.c_str());
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->ReadData(plan.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Phase 1.10 -- ReadJson rejects an unknown ``surface.type`` value
+// (dispatch fall-through at line ~462; admitted values are "Bezier"
+// and "NURBS" per design-doc 05-lrp-json-schema.md §"surface.type").
+int testReadJsonUnknownSurfaceType()
+{
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 2,\n";
+    ofs << "  \"surface\": { \"type\": \"Cubic\", \"rows\": 4, \"cols\": 4 }\n";
+    ofs << "}\n";
+  }
+  vtkNew<vtkMRMLScene> scene;
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLResectionPlanNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
+  vtkNew<vtkMRMLResectionPlanNode> plan;
+  scene->AddNode(plan.GetPointer());
+
+  vtkNew<vtkMRMLResectionPlanStorageNode> storage;
+  storage->SetFileName(path.c_str());
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->ReadData(plan.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Phase 1.11 -- ReadJson rejects ``surface.type: "NURBS"`` with the
+// documented v2.1 deferral message (dispatch arm at line ~452).
+// **Valuable** -- pins the explicit v2.1 deferral path; ADR-0018 §3
+// + design-doc 05-lrp-json-schema.md §"v2.1 polymorphic extension
+// preview".  Regression that ships NURBS prematurely is caught.
+int testReadJsonNurbsRejectedV20()
+{
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 2,\n";
+    ofs << "  \"surface\": { \"type\": \"NURBS\", \"rows\": 4, \"cols\": 4 }\n";
+    ofs << "}\n";
+  }
+  vtkNew<vtkMRMLScene> scene;
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLResectionPlanNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
+  vtkNew<vtkMRMLResectionPlanNode> plan;
+  scene->AddNode(plan.GetPointer());
+
+  vtkNew<vtkMRMLResectionPlanStorageNode> storage;
+  storage->SetFileName(path.c_str());
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->ReadData(plan.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Phase 1.12 -- ReadJson rejects a plan with a ``surface`` block when
+// the plan has neither an existing geometry node nor a scene to
+// instantiate one into (guard at line ~440).  Construct the plan
+// without adding it to a scene; ReadData via the storage node returns
+// 0 with an error.  The empty CanReadInReferenceNode prereq is met
+// because Slicer's storage-node base does not require a scene; only
+// our inner ReadJson does, for the surface-instantiation step.
+int testReadJsonPlanNoSceneNoSurface()
+{
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 2,\n";
+    ofs << "  \"surface\": { \"type\": \"Bezier\", \"rows\": 4, \"cols\": 4, \"controlGrid\": [";
+    for (int i = 0; i < 48; ++i)
+    {
+      if (i > 0)
+      {
+        ofs << ",";
+      }
+      ofs << "0.0";
+    }
+    ofs << "] }\n";
+    ofs << "}\n";
+  }
+  vtkNew<vtkMRMLResectionPlanNode> plan; // intentionally NOT added to any scene
+  vtkNew<ExposedStorageNode> storage;
+  storage->SetFileName(path.c_str());
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->CallReadDataInternal(plan.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Phase 1.13 -- ReadJson rejects an out-of-band or non-square
+// rows/cols shape (guard at line ~496 -- ADR-0018 §1 admits {(3,3),
+// (4,4)} only).  Use rows=5,cols=5 -- in-band integer but outside the
+// admitted set.
+int testReadJsonInvalidRowsColsShape()
+{
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 2,\n";
+    ofs << "  \"surface\": { \"type\": \"Bezier\", \"rows\": 5, \"cols\": 5, \"controlGrid\": [] }\n";
+    ofs << "}\n";
+  }
+  vtkNew<vtkMRMLScene> scene;
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLResectionPlanNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
+  vtkNew<vtkMRMLResectionPlanNode> plan;
+  scene->AddNode(plan.GetPointer());
+
+  vtkNew<vtkMRMLResectionPlanStorageNode> storage;
+  storage->SetFileName(path.c_str());
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->ReadData(plan.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Phase 1.14 -- ReadJson rejects a wrong-length ``controlGrid`` array
+// (guard at line ~522 -- expected 3 * rows * cols doubles).  Fixture
+// declares rows=4,cols=4 (expected 48 doubles) and supplies only 10.
+int testReadJsonControlGridLengthMismatch()
+{
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 2,\n";
+    ofs << "  \"surface\": { \"type\": \"Bezier\", \"rows\": 4, \"cols\": 4, "
+           "\"controlGrid\": [0,0,0,0,0,0,0,0,0,0] }\n";
+    ofs << "}\n";
+  }
+  vtkNew<vtkMRMLScene> scene;
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLResectionPlanNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
+  vtkNew<vtkMRMLResectionPlanNode> plan;
+  scene->AddNode(plan.GetPointer());
+
+  vtkNew<vtkMRMLResectionPlanStorageNode> storage;
+  storage->SetFileName(path.c_str());
+  TESTING_OUTPUT_ASSERT_ERRORS_BEGIN();
+  CHECK_INT(storage->ReadData(plan.GetPointer()), 0);
+  TESTING_OUTPUT_ASSERT_ERRORS_END();
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Phase 1.15 -- WriteJson emits a warning and a plan-only document
+// when the plan has no geometry reference (branch at line ~271 --
+// the ``surface == nullptr`` arm).  Pinned per design-doc
+// 04-save-load-flows.md §"Failure modes" -- mid-init plans without a
+// surface still serialise; reload recovers the plan with documented
+// defaults.
+int testWriteJsonPlanWithoutGeometry()
+{
+  vtkNew<vtkMRMLScene> scene;
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLResectionPlanNode>::New());
+  vtkNew<vtkMRMLResectionPlanNode> plan;
+  scene->AddNode(plan.GetPointer());
+  populatePlan(plan.GetPointer());
+  // intentionally NOT setting a geometry node
+
+  const std::string path = makeTempPath("lrp.json");
+  vtkNew<vtkMRMLResectionPlanStorageNode> storage;
+  storage->SetFileName(path.c_str());
+  // The base WriteData layer surfaces a warning for the missing
+  // geometry; the write itself still succeeds and the file lands.
+  TESTING_OUTPUT_ASSERT_WARNINGS_BEGIN();
+  CHECK_INT(storage->WriteData(plan.GetPointer()), 1);
+  TESTING_OUTPUT_ASSERT_WARNINGS_END();
+
+  std::ifstream f(path);
+  std::stringstream ss;
+  ss << f.rdbuf();
+  const std::string contents = ss.str();
+  if (contents.find("\"surface\"") != std::string::npos)
+  {
+    std::cerr << "Plan-only write regression -- surface block emitted despite no geometry node:\n" << contents << "\n";
+    return EXIT_FAILURE;
+  }
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -772,6 +1153,24 @@ int vtkMRMLResectionPlanStorageNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testOptionalFieldsDefaults());
   CHECK_EXIT_SUCCESS(testSceneBlockForwardCompat());
   CHECK_EXIT_SUCCESS(testSurfaceBulkDataRoundTrip());
+
+  // Phase 1 -- defensive guard + JSON dispatch coverage (closes the
+  // codecov gaps from the post-impl /slicer-review pass).
+  CHECK_EXIT_SUCCESS(testReadDataInternalNullRefNode());
+  CHECK_EXIT_SUCCESS(testReadDataInternalWrongClassRefNode());
+  CHECK_EXIT_SUCCESS(testReadDataInternalEmptyFileName());
+  CHECK_EXIT_SUCCESS(testReadDataInternalUnsupportedExtension());
+  CHECK_EXIT_SUCCESS(testWriteDataInternalNullOrWrongClass());
+  CHECK_EXIT_SUCCESS(testWriteDataInternalEmptyFileName());
+  CHECK_EXIT_SUCCESS(testWriteDataInternalUnsupportedExtension());
+  CHECK_EXIT_SUCCESS(testReadJsonUnparseable());
+  CHECK_EXIT_SUCCESS(testReadJsonMissingSchemaVersion());
+  CHECK_EXIT_SUCCESS(testReadJsonUnknownSurfaceType());
+  CHECK_EXIT_SUCCESS(testReadJsonNurbsRejectedV20());
+  CHECK_EXIT_SUCCESS(testReadJsonPlanNoSceneNoSurface());
+  CHECK_EXIT_SUCCESS(testReadJsonInvalidRowsColsShape());
+  CHECK_EXIT_SUCCESS(testReadJsonControlGridLengthMismatch());
+  CHECK_EXIT_SUCCESS(testWriteJsonPlanWithoutGeometry());
 
   std::cout << "vtkMRMLResectionPlanStorageNodeTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;
