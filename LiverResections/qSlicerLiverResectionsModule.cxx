@@ -222,20 +222,20 @@ void qSlicerLiverResectionsModule::setup()
   ioManager->registerIO(markupsReader);
   ioManager->registerIO(new qSlicerLiverResectionsWriter(this));
 
-  // T2 LiverResources storage I/O (ADR-0014 §5).  The new
-  // ``vtkMRMLBezierSurfaceStorageNode`` reads + writes ``.lrp.json``
-  // (and reads legacy ``.lrp.fcsv`` for migration).  A dedicated
-  // ``qSlicerNodeWriter`` registers the write path with the Save Data
-  // dialog and binds it to the new data node class.  The legacy
-  // ``qSlicerLiverResectionsReader`` (registered above) grew a
-  // ``.lrp.json`` dispatch branch so the Add Data dialog opens new
-  // plans into a ``vtkMRMLBezierSurfaceNode``.
+  // Resection-plan storage I/O (2026-05-25 wrapper-vs-carrier amendment
+  // to ADR-0014 §"Fourth layer" + ADR-0023 §"Persistence").  The plan
+  // node is the rooted storable; the storage node serialises both the
+  // plan's clinical fields AND the referenced surface's geometry in a
+  // single ``.lrp.json`` document.  A dedicated ``qSlicerNodeWriter``
+  // registers the write path with the Save Data dialog and binds it
+  // to the plan-node class.  The ``qSlicerLiverResectionsReader``
+  // (registered above) dispatches ``.lrp.json`` to the same path.
   qSlicerCoreIOManager* coreIOManager = qSlicerCoreApplication::application()->coreIOManager();
   if (coreIOManager)
   {
-    coreIOManager->registerIO(new qSlicerNodeWriter("BezierSurface",
-                                                    QString("BezierSurfaceFile"),
-                                                    QStringList() << "vtkMRMLBezierSurfaceNode",
+    coreIOManager->registerIO(new qSlicerNodeWriter("ResectionPlan",
+                                                    QString("ResectionPlanFile"),
+                                                    QStringList() << "vtkMRMLResectionPlanNode",
                                                     /*supportUseCompression=*/true,
                                                     this));
   }

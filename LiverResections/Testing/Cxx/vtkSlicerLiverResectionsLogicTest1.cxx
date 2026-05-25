@@ -86,13 +86,14 @@ int vtkSlicerLiverResectionsLogicTest1(int, char*[])
   checkAddAndGetNode(scene, "vtkMRMLLiverResectionNode");
   checkAddAndGetNode(scene, "vtkMRMLLiverResectionCSVStorageNode");
 
-  // T2.6 — new LiverResources data / display / storage nodes
-  // (ADR-0014 §1, §5) must be registered by ``RegisterNodes()``.
-  // Asserting ``scene->AddNewNodeByClass(...)`` round-trips proves
-  // ``vtkMRMLScene::RegisterNodeClass`` ran for each.
+  // New LiverResources data / display nodes (ADR-0014 §1) must be
+  // registered by ``RegisterNodes()``.  The surface is non-storable
+  // per the 2026-05-25 wrapper-vs-carrier amendment; persistence
+  // flows through the plan-rooted storage node.
   checkAddAndGetNode(scene, "vtkMRMLBezierSurfaceNode");
   checkAddAndGetNode(scene, "vtkMRMLParametricSurfaceDisplayNode");
-  checkAddAndGetNode(scene, "vtkMRMLBezierSurfaceStorageNode");
+  checkAddAndGetNode(scene, "vtkMRMLResectionPlanNode");
+  checkAddAndGetNode(scene, "vtkMRMLResectionPlanStorageNode");
 
   // T2.6-LayerDM — call 2 of ADR-0013 §5's three-call contract is
   // performed in ``qSlicerLiverResectionsModule::setup()`` rather
