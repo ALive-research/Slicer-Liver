@@ -35,6 +35,8 @@ ReadTheDocs.  Mirrors the upstream Slicer-core convention.
 :maxdepth: 1
 :caption: Scaffold
 
+adr/0011-sct-terminology-dispatch.md
+adr/0014-livermarkups-dissolution.md
 adr/0017-sphinx-readthedocs.md
 adr/0018-nurbs-extension-surface.md
 adr/0019-resection-state-machine.md
@@ -47,6 +49,19 @@ adr/0026-segment-editor-effects.md
 adr/0027-invariant-test-first-v2-implementation.md
 adr/0028-parameter-node-wrapper.md
 adr/0029-stage1-case-setup-contract.md
+```
+
+```{toctree}
+:maxdepth: 1
+:caption: Design packages
+
+design/resection-plan-architecture/00-overview.md
+design/resection-plan-architecture/01-class-hierarchy.md
+design/resection-plan-architecture/02-node-references.md
+design/resection-plan-architecture/03-storage-ownership.md
+design/resection-plan-architecture/04-save-load-flows.md
+design/resection-plan-architecture/05-lrp-json-schema.md
+design/resection-plan-architecture/06-pattern-and-audit.md
 ```
 
 ```{toctree}
