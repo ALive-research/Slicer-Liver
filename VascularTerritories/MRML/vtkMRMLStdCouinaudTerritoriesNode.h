@@ -67,7 +67,11 @@ class vtkStringArray;
  *   - ``Subdivision``          — enum: ``I_VIII`` (8 segments) or
  *                                ``I_VIII_with_IVab`` (10, splitting IVa/IVb).
  *   - ``ComputedAt``           — ISO-8601 timestamp of the AI run.
- *   - ``LabelMap``             — the AI-output labelmap (territories).
+ *
+ * Segment masks live on the referenced ``vtkMRMLSegmentationNode``
+ * (the ``segments`` node-reference role on the abstract base), not on
+ * this wrapper.  Module logic imports the AI-output labelmap into the
+ * segmentation node and assigns it to the reference.
  *
  * \par SCT codes
  *

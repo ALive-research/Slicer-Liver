@@ -89,11 +89,13 @@
  *   - CanRead / CanWrite discrimination (now plan-typed)
  *
  * Invariants intentionally DROPPED from the predecessor:
- *   - Legacy .lrp.fcsv migration -- out of scope per planner
- *     (tracked in issue #433).
- *   - The scene.* subtests from PR #431 -- obsolete after the
- *     content trim (scene.* removed from the writer; reader
- *     silently ignores).  Invariant 9 above replaces them with a
+ *   - Legacy .lrp.fcsv migration -- out of scope; tracked as a
+ *     follow-up to the resection-plan-architecture work.
+ *   - The scene.* classification + volumetry + stageSelection
+ *     subtests from the predecessor ``vtkMRMLBezierSurfaceStorageNode``
+ *     -- obsolete after the content trim (scene.* removed from the
+ *     writer; reader silently ignores).  Invariant 9 above replaces
+ *     them with a
  *     forward-compat check.
  */
 
