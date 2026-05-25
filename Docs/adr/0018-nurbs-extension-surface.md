@@ -10,6 +10,35 @@
   - `Docs/architecture/rendering-pipeline.md`
 - **PR:** _filled in on merge_
 
+## Amendments
+
+- **2026-05-25 — Data-side sibling framing superseded by a shared
+  abstract base.**  §2 of this ADR ("Single data node, parameterized
+  — NOT a parent class") argued for Bezier and NURBS as flat siblings
+  on the **data side** as well as the Pipeline side, citing
+  `vtkMRMLModelNode` (lines 139-140) — "no abstract
+  `vtkMRMLGeometryNode` parent above it" — as the Slicer-core
+  precedent.  The 2026-05-25 wrapper-vs-carrier amendment to
+  [ADR-0023](0023-unified-gui-stage-workflow.md) §"Class abstraction
+  for surfaces" introduces a shared abstract base
+  `vtkMRMLAbstractParametricSurfaceNode` carrying the field roster
+  Bezier and NURBS share (Rows, Cols, ControlGrid, InitMode,
+  SlicingPlane + DistanceSpheroid subordinates, `TargetOrganModelNodeID`
+  ref) plus a virtual `GetSurfaceType()` / `EvaluateSurface(u, v)`
+  dispatch pair.  The **data-side sibling framing in §2 is
+  superseded** by this abstraction — the field-level duplication §2
+  accepted as "clean per-type dispatch" is replaced by inheritance
+  through the abstract base.  See the design package at
+  `Docs/design/resection-plan-architecture/01-class-hierarchy.md` for
+  the resulting class diagram.
+
+  The **Pipeline-side sibling argument** (the rest of §2 + §3 — single
+  Pipeline per representation, no polymorphic Pipeline parent) **stays
+  valid**.  Pipelines still dispatch by display-node class
+  (`vtkMRMLParametricSurfaceDisplayNode` → BezierPipeline today,
+  NurbsPipeline in v2.1).  The shared abstract base lives on the
+  *data* side only.
+
 ## Context
 
 The v2.0.0 Bezier-surface family was designed around a **fixed 4×4
