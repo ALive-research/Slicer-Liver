@@ -174,9 +174,8 @@ int vtkMRMLResectionPlanStorageNode::WriteJson(const std::string& filePath, vtkM
   vtkNew<vtkMRMLJsonWriter> writer;
   if (!writer->WriteToFileBegin(filePath.c_str(), nullptr))
   {
-    vtkErrorToMessageCollectionMacro(this->GetUserMessages(),
-                                     "vtkMRMLResectionPlanStorageNode::WriteJson",
-                                     "Writing resection plan failed: failed to open '" << filePath << "' for writing");
+    vtkErrorToMessageCollectionMacro(
+      this->GetUserMessages(), "vtkMRMLResectionPlanStorageNode::WriteJson", "Writing resection plan failed: failed to open '" << filePath << "' for writing");
     return 0;
   }
 
@@ -279,9 +278,8 @@ int vtkMRMLResectionPlanStorageNode::WriteJson(const std::string& filePath, vtkM
 
   if (!writer->WriteToFileEnd())
   {
-    vtkErrorToMessageCollectionMacro(this->GetUserMessages(),
-                                     "vtkMRMLResectionPlanStorageNode::WriteJson",
-                                     "Writing resection plan failed: failed to close '" << filePath << "' after write");
+    vtkErrorToMessageCollectionMacro(
+      this->GetUserMessages(), "vtkMRMLResectionPlanStorageNode::WriteJson", "Writing resection plan failed: failed to close '" << filePath << "' after write");
     return 0;
   }
   return 1;
@@ -329,16 +327,13 @@ int vtkMRMLResectionPlanStorageNode::ReadJson(const std::string& filePath, vtkMR
   vtkSmartPointer<vtkMRMLJsonElement> root = vtkSmartPointer<vtkMRMLJsonElement>::Take(reader->ReadFromFile(filePath.c_str()));
   if (root == nullptr)
   {
-    vtkErrorToMessageCollectionMacro(this->GetUserMessages(),
-                                     "vtkMRMLResectionPlanStorageNode::ReadJson",
-                                     "Reading resection plan failed: failed to parse '" << filePath << "'");
+    vtkErrorToMessageCollectionMacro(this->GetUserMessages(), "vtkMRMLResectionPlanStorageNode::ReadJson", "Reading resection plan failed: failed to parse '" << filePath << "'");
     return 0;
   }
   if (!root->HasMember("schemaVersion"))
   {
-    vtkErrorToMessageCollectionMacro(this->GetUserMessages(),
-                                     "vtkMRMLResectionPlanStorageNode::ReadJson",
-                                     "Reading resection plan failed: missing required 'schemaVersion' field in '" << filePath << "'");
+    vtkErrorToMessageCollectionMacro(
+      this->GetUserMessages(), "vtkMRMLResectionPlanStorageNode::ReadJson", "Reading resection plan failed: missing required 'schemaVersion' field in '" << filePath << "'");
     return 0;
   }
   const int schemaVersion = root->GetIntProperty("schemaVersion");
@@ -346,8 +341,9 @@ int vtkMRMLResectionPlanStorageNode::ReadJson(const std::string& filePath, vtkMR
   {
     vtkErrorToMessageCollectionMacro(this->GetUserMessages(),
                                      "vtkMRMLResectionPlanStorageNode::ReadJson",
-                                     "Reading resection plan failed: unsupported schemaVersion " << schemaVersion << " in '" << filePath << "' (this build understands schemaVersion "
-                                                                                                 << MinReadableSchemaVersion << " through " << SchemaVersion << ")");
+                                     "Reading resection plan failed: unsupported schemaVersion "
+                                       << schemaVersion << " in '" << filePath << "' (this build understands schemaVersion " << MinReadableSchemaVersion << " through "
+                                       << SchemaVersion << ")");
     return 0;
   }
 
@@ -395,9 +391,8 @@ int vtkMRMLResectionPlanStorageNode::ReadJson(const std::string& filePath, vtkMR
     }
     else
     {
-      vtkWarningToMessageCollectionMacro(this->GetUserMessages(),
-                                         "vtkMRMLResectionPlanStorageNode::ReadJson",
-                                         "Unknown plan state '" << s << "' in '" << filePath << "' -- leaving plan state at default");
+      vtkWarningToMessageCollectionMacro(
+        this->GetUserMessages(), "vtkMRMLResectionPlanStorageNode::ReadJson", "Unknown plan state '" << s << "' in '" << filePath << "' -- leaving plan state at default");
     }
   }
 
@@ -412,9 +407,7 @@ int vtkMRMLResectionPlanStorageNode::ReadJson(const std::string& filePath, vtkMR
   vtkSmartPointer<vtkMRMLJsonElement> surfaceJson = vtkSmartPointer<vtkMRMLJsonElement>::Take(root->GetObjectProperty("surface"));
   if (surfaceJson == nullptr)
   {
-    vtkWarningToMessageCollectionMacro(this->GetUserMessages(),
-                                       "vtkMRMLResectionPlanStorageNode::ReadJson",
-                                       "'surface' block present but unreadable in '" << filePath << "'");
+    vtkWarningToMessageCollectionMacro(this->GetUserMessages(), "vtkMRMLResectionPlanStorageNode::ReadJson", "'surface' block present but unreadable in '" << filePath << "'");
     return 1;
   }
 
@@ -453,8 +446,8 @@ int vtkMRMLResectionPlanStorageNode::ReadJson(const std::string& filePath, vtkMR
     {
       vtkErrorToMessageCollectionMacro(this->GetUserMessages(),
                                        "vtkMRMLResectionPlanStorageNode::ReadJson",
-                                       "Reading resection plan failed: 'NURBS' surface type encountered in '" << filePath
-                                                                                                              << "' but the NurbsSurfaceNode class is not registered in the scene (v2.1 feature)");
+                                       "Reading resection plan failed: 'NURBS' surface type encountered in '"
+                                         << filePath << "' but the NurbsSurfaceNode class is not registered in the scene (v2.1 feature)");
       return 0;
     }
     else
@@ -592,8 +585,8 @@ int vtkMRMLResectionPlanStorageNode::ReadJson(const std::string& filePath, vtkMR
       {
         vtkErrorToMessageCollectionMacro(this->GetUserMessages(),
                                          "vtkMRMLResectionPlanStorageNode::ReadJson",
-                                         "Reading resection plan failed: 'numberOfInitPoints' = " << nPoints << " exceeds the upper bound "
-                                                                                                  << vtkMRMLAbstractParametricSurfaceNode::MaxInitPoints << " in '" << filePath << "'");
+                                         "Reading resection plan failed: 'numberOfInitPoints' = "
+                                           << nPoints << " exceeds the upper bound " << vtkMRMLAbstractParametricSurfaceNode::MaxInitPoints << " in '" << filePath << "'");
         return 0;
       }
       if (nPoints > 0)
