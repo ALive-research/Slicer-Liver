@@ -156,6 +156,14 @@ public:
   /// Backwards-compatibility alias for the v1 48-double layout.
   static constexpr int ControlGridSize = DefaultGridSize * DefaultGridSize * 3;
 
+  /// Upper bound on the number of init points (SlicingPlane and
+  /// DistanceSpheroid each stash an array of these).  Used by the
+  /// storage reader to refuse hostile / corrupt files that would
+  /// otherwise drive an unbounded allocation.  256 is well above any
+  /// real surgical-planning surface (typical values: 2 for plane,
+  /// 6-12 for spheroid).
+  static constexpr int MaxInitPoints = 256;
+
   //--------------------------------------------------------------------------
   // Polymorphic dispatch
   //--------------------------------------------------------------------------
