@@ -97,8 +97,10 @@ class vtkMRMLAbstractParametricSurfaceNode;
  *
  * \par Legacy ``.lrp.fcsv``
  *
- * Out of scope for this storage node — issue #433 tracks a separate
- * legacy migration path.
+ * Out of scope for this storage node.  v1 ``.lrp.fcsv`` files upgrade
+ * via a one-shot manual path (open in v1, save as ``.lrp.json``,
+ * re-open in v2) until a seamless migration path lands as a
+ * follow-up to the resection-plan-architecture work.
  */
 class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLResectionPlanStorageNode : public vtkMRMLStorageNode
 {

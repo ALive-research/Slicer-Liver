@@ -71,8 +71,11 @@ class vtkStringArray;
  *   - ``Groupings``       — map from centerline ID to surgeon-named
  *                            segment ID.
  *   - ``SegmentNames``    — surgeon-defined segment labels.
- *   - ``LabelMap``        — derived labelmap (computed by the module
- *                            logic from centerlines + groupings).
+ *
+ * Segment masks live on the referenced ``vtkMRMLSegmentationNode``
+ * (the ``segments`` node-reference role on the abstract base), not on
+ * this wrapper.  Module logic computes the segmentation from
+ * centerlines + groupings and assigns it to the reference.
  *
  * \par SCT codes — surgeon-opt-in only
  *

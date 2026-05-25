@@ -18,8 +18,8 @@ set(KIT_TEST_SRCS
 
 #-----------------------------------------------------------------------------
 # Pass the in-source Fixtures/ directory through to the test driver.
-# Fixtures kept available for the follow-up legacy ``.lrp.fcsv``
-# migration (issue #433); the v2 storage tests do not consume them.
+# Fixtures kept available for a follow-up legacy ``.lrp.fcsv``
+# migration; the v2 storage tests do not consume them.
 add_definitions(-DLIVER_BEZIER_STORAGE_TEST_FIXTURE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/Fixtures\")
 
 #-----------------------------------------------------------------------------

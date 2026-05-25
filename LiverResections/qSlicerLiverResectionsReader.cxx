@@ -231,8 +231,8 @@ bool qSlicerLiverResectionsReader::load(const IOProperties& properties)
 
   // Legacy ``.lrp.fcsv`` (and any other recognised extension) — delegate
   // to the existing logic-side loader (load-only migration; ADR-0014
-  // §5 retires writes of this format).  Tracked for migration to the
-  // plan-rooted path by issue #433.
+  // §5 retires writes of this format).  Migration to the plan-rooted
+  // path is a follow-up to the resection-plan-architecture work.
   char* nodeIDs = d->LiverResectionsLogic->LoadLiverResection(std::string(fileName.toUtf8()), std::string(name.toUtf8()), this->userMessages());
   if (nodeIDs)
   {
