@@ -11,6 +11,8 @@ set(${KIT}_SRCS
   vtkMRMLLiverResectionNode.cxx
   vtkMRMLLiverResectionCSVStorageNode.h
   vtkMRMLLiverResectionCSVStorageNode.cxx
+  vtkMRMLAbstractParametricSurfaceNode.h
+  vtkMRMLAbstractParametricSurfaceNode.cxx
   vtkMRMLBezierSurfaceNode.h
   vtkMRMLBezierSurfaceNode.cxx
   vtkMRMLBezierSurfaceDisplayNode.h
