@@ -11,39 +11,27 @@ set(KIT vtkSlicer${MODULE_NAME}ModuleMRML)
 set(KIT_TEST_SRCS
   vtkMRMLBezierSurfaceNodeTest1.cxx
   vtkMRMLParametricSurfaceDisplayNodeTest1.cxx
-  vtkMRMLBezierSurfaceStorageNodeTest1.cxx
-  vtkMRMLBezierSurfaceStorageNodeTest2.cxx
   vtkMRMLAbstractParametricSurfaceNodeTest1.cxx
   vtkMRMLResectionPlanNodeTest1.cxx
   vtkMRMLResectionPlanStorageNodeTest1.cxx
   )
 
 #-----------------------------------------------------------------------------
-# Pass the in-source Fixtures/ directory through to the test driver so
-# the legacy ``.lrp.fcsv`` fixture (committed under
-# Testing/Cxx/Fixtures/legacy_resection.lrp.fcsv) is locatable at run
-# time.  The macro is consumed by
-# ``vtkMRMLBezierSurfaceStorageNodeTest1.cxx`` (task T2.5).
+# Pass the in-source Fixtures/ directory through to the test driver.
+# Fixtures kept available for the follow-up legacy ``.lrp.fcsv``
+# migration (issue #433); the v2 storage tests do not consume them.
 add_definitions(-DLIVER_BEZIER_STORAGE_TEST_FIXTURE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/Fixtures\")
 
 #-----------------------------------------------------------------------------
 # Pass a writable temp dir (the standard CMake binary-tree temporary
-# directory) through to the test driver so the JSON round-trip test
-# does not depend on POSIX TMPDIR / /tmp semantics.
+# directory) through to the test driver so the JSON round-trip tests
+# do not depend on POSIX TMPDIR / /tmp semantics.  Macro name carried
+# forward from the retired vtkMRMLBezierSurfaceStorageNodeTest{1,2}
+# pair -- the new vtkMRMLResectionPlanStorageNodeTest1 consumes it.
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/Testing/Temporary)
 add_definitions(-DLIVER_BEZIER_STORAGE_TEST_TEMP_DIR=\"${CMAKE_BINARY_DIR}/Testing/Temporary\")
 
 #-----------------------------------------------------------------------------
-#-----------------------------------------------------------------------------
-# Test-driver-only cross-link to the VascularTerritories MRML kit so
-# the scene-scan classification subtests in
-# vtkMRMLBezierSurfaceStorageNodeTest2.cxx can instantiate
-# ``vtkMRMLStdCouinaudTerritoriesNode`` / ``vtkMRMLCustomTerritoriesNode``
-# directly.  The production storage node never link-time-depends on
-# the territories kit — it discovers subclasses via the string-based
-# ``vtkMRMLScene::GetNodesByClass("vtkMRMLAbstractTerritoriesNode")``.
-# Per ADR-0008 §2, the dep is constrained to the C++ low-level test
-# driver.
 slicerMacroConfigureModuleCxxTestDriver(
   NAME ${KIT}
   SOURCES ${KIT_TEST_SRCS}
@@ -51,25 +39,12 @@ slicerMacroConfigureModuleCxxTestDriver(
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_BINARY_DIR}/..
-    ${CMAKE_SOURCE_DIR}/VascularTerritories/MRML
-    ${CMAKE_BINARY_DIR}/VascularTerritories/MRML
-  TARGET_LIBRARIES
-    vtkSlicerVascularTerritoriesModuleMRML
   WITH_VTK_DEBUG_LEAKS_CHECK
   WITH_VTK_ERROR_OUTPUT_CHECK
   )
 
 SIMPLE_TEST(vtkMRMLBezierSurfaceNodeTest1)
 SIMPLE_TEST(vtkMRMLParametricSurfaceDisplayNodeTest1)
-SIMPLE_TEST(vtkMRMLBezierSurfaceStorageNodeTest1)
-SIMPLE_TEST(vtkMRMLBezierSurfaceStorageNodeTest2)
-# Test-first scaffolding (ADR-0027) for the wrapper-vs-carrier
-# resection-plan architecture (2026-05-25 amendments to ADR-0014 +
-# ADR-0023).  Red against the current tree -- forward includes of
-# vtkMRMLAbstractParametricSurfaceNode, vtkMRMLResectionPlanNode, and
-# vtkMRMLResectionPlanStorageNode fail to compile/link until the
-# implementer lands the classes.  Per ADR-0027 the test commit
-# precedes the implementation commits.
 SIMPLE_TEST(vtkMRMLAbstractParametricSurfaceNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanStorageNodeTest1)

@@ -17,8 +17,6 @@ set(${KIT}_SRCS
   vtkMRMLBezierSurfaceNode.cxx
   vtkMRMLParametricSurfaceDisplayNode.h
   vtkMRMLParametricSurfaceDisplayNode.cxx
-  vtkMRMLBezierSurfaceStorageNode.h
-  vtkMRMLBezierSurfaceStorageNode.cxx
   vtkMRMLResectionPlanNode.h
   vtkMRMLResectionPlanNode.cxx
   vtkMRMLResectionPlanStorageNode.h

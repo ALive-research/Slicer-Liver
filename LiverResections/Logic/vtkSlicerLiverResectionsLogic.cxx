@@ -49,7 +49,6 @@
 // recognise the new ``.lrp.json`` storage format.
 #include "vtkMRMLBezierSurfaceNode.h"
 #include "vtkMRMLParametricSurfaceDisplayNode.h"
-#include "vtkMRMLBezierSurfaceStorageNode.h"
 #include "vtkMRMLResectionPlanNode.h"
 #include "vtkMRMLResectionPlanStorageNode.h"
 
@@ -117,14 +116,13 @@ void vtkSlicerLiverResectionsLogic::RegisterNodes()
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLLiverResectionNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLLiverResectionCSVStorageNode>::New());
 
-  // T2 LiverResources data nodes (ADR-0014 §1, §5).  Registering the
-  // storage node here makes scene save/load round-trip the new
-  // ``.lrp.json`` format; the Bezier data + display nodes are
-  // registered so MRML can instantiate them by class name on scene
-  // load.
+  // T2 LiverResources data nodes (ADR-0014 §1, §5).  The Bezier data
+  // node + the shared parametric-surface display node are registered
+  // so MRML can instantiate them by class name on scene load.  The
+  // surface is non-storable per the wrapper-vs-carrier pattern;
+  // persistence flows through the plan storage node below.
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLParametricSurfaceDisplayNode>::New());
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceStorageNode>::New());
 
   // Resection-plan family (2026-05-25 wrapper-vs-carrier amendment to
   // ADR-0014 §"Fourth layer" + ADR-0023 §"Persistence").  The plan

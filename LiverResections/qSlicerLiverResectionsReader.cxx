@@ -51,9 +51,11 @@
 #include "vtkSlicerLiverResectionsLogic.h"
 
 // MRML includes
+#include "vtkMRMLAbstractParametricSurfaceNode.h"
 #include "vtkMRMLBezierSurfaceNode.h"
-#include "vtkMRMLBezierSurfaceStorageNode.h"
 #include "vtkMRMLMessageCollection.h"
+#include "vtkMRMLResectionPlanNode.h"
+#include "vtkMRMLResectionPlanStorageNode.h"
 #include "vtkMRMLScene.h"
 
 // VTK includes
@@ -157,11 +159,13 @@ bool qSlicerLiverResectionsReader::load(const IOProperties& properties)
 
   this->userMessages()->ClearMessages();
 
-  // Dispatch on extension.  ``.lrp.json`` is the v1 format committed by
-  // T2.5 / ADR-0014 §5; loading routes through the new
-  // ``vtkMRMLBezierSurfaceStorageNode`` directly.  ``.lrp.fcsv`` (and
-  // any other legacy extension) falls through to the existing
-  // logic-side loader that produces a ``vtkMRMLLiverResectionNode``.
+  // Dispatch on extension.  ``.lrp.json`` is the plan-rooted v2
+  // format introduced by the 2026-05-25 wrapper-vs-carrier amendment
+  // to ADR-0014 §"Fourth layer" + ADR-0023 §"Persistence"; loading
+  // creates a ``vtkMRMLResectionPlanNode`` and routes through the
+  // plan storage node.  The storage node's reader walks the
+  // ``surface.type`` discriminator and instantiates the right
+  // concrete surface subclass into the scene.
   const QString lowerName = fileName.toLower();
   if (lowerName.endsWith(".lrp.json"))
   {
@@ -176,13 +180,13 @@ bool qSlicerLiverResectionsReader::load(const IOProperties& properties)
                                       ? vtksys::SystemTools::GetFilenameWithoutExtension(vtksys::SystemTools::GetFilenameWithoutExtension(std::string(fileName.toUtf8())))
                                       : std::string(name.toUtf8());
 
-    auto surfaceNode = vtkMRMLBezierSurfaceNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLBezierSurfaceNode", nodeNameStr));
-    auto storageNode = vtkMRMLBezierSurfaceStorageNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLBezierSurfaceStorageNode"));
-    if (!surfaceNode || !storageNode)
+    auto planNode = vtkMRMLResectionPlanNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLResectionPlanNode", nodeNameStr));
+    auto storageNode = vtkMRMLResectionPlanStorageNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLResectionPlanStorageNode"));
+    if (!planNode || !storageNode)
     {
-      if (surfaceNode)
+      if (planNode)
       {
-        scene->RemoveNode(surfaceNode);
+        scene->RemoveNode(planNode);
       }
       if (storageNode)
       {
@@ -192,36 +196,43 @@ bool qSlicerLiverResectionsReader::load(const IOProperties& properties)
       return false;
     }
     storageNode->SetFileName(fileName.toUtf8().constData());
-    surfaceNode->SetAndObserveStorageNodeID(storageNode->GetID());
+    planNode->SetAndObserveStorageNodeID(storageNode->GetID());
 
-    const int readResult = storageNode->ReadData(surfaceNode);
+    const int readResult = storageNode->ReadData(planNode);
     if (!readResult)
     {
       this->userMessages()->AddMessages(storageNode->GetUserMessages());
-      scene->RemoveNode(surfaceNode);
+      vtkMRMLAbstractParametricSurfaceNode* createdSurface = planNode->GetGeometryNode();
+      if (createdSurface != nullptr)
+      {
+        scene->RemoveNode(createdSurface);
+      }
+      scene->RemoveNode(planNode);
       scene->RemoveNode(storageNode);
       this->setLoadedNodes(QStringList());
       return false;
     }
 
-    // ADR-0013 §8 — the display-side decoration (margin / grid /
-    // colour) lives on a separate display node.  Neither
-    // ``vtkMRMLBezierSurfaceStorageNode::ReadDataInternal`` nor the
-    // base ``vtkMRMLStorageNode::ReadData`` create a display node.
-    // Without this call the loaded surface lands with no display
-    // node attached; the eventual LayerDM Pipeline (registered when
-    // the SlicerLayerDM library is reachable in the build, per
-    // ADR-0013 §5's three-call registration contract) needs a
-    // display node to drive the actor pipeline from.
-    surfaceNode->CreateDefaultDisplayNodes();
+    // Display-side decoration (margin / grid / colour) lives on a
+    // separate display node per ADR-0013 §8.  The storage path does
+    // not synthesise display nodes; trigger the surface's default
+    // display-node creation now so the LayerDM Pipeline (registered
+    // in qSlicerLiverResectionsModule::setup per ADR-0013 §5) picks
+    // up the loaded surface.
+    vtkMRMLAbstractParametricSurfaceNode* surfaceNode = planNode->GetGeometryNode();
+    if (surfaceNode != nullptr)
+    {
+      surfaceNode->CreateDefaultDisplayNodes();
+    }
 
-    this->setLoadedNodes(QStringList() << QString(surfaceNode->GetID()));
+    this->setLoadedNodes(QStringList() << QString(planNode->GetID()));
     return true;
   }
 
   // Legacy ``.lrp.fcsv`` (and any other recognised extension) — delegate
   // to the existing logic-side loader (load-only migration; ADR-0014
-  // §5 retires writes of this format).
+  // §5 retires writes of this format).  Tracked for migration to the
+  // plan-rooted path by issue #433.
   char* nodeIDs = d->LiverResectionsLogic->LoadLiverResection(std::string(fileName.toUtf8()), std::string(name.toUtf8()), this->userMessages());
   if (nodeIDs)
   {
