@@ -202,25 +202,6 @@ void vtkMRMLStdCouinaudTerritoriesNode::GetSegmentColor(int index, double rgb[3]
 }
 
 //------------------------------------------------------------------------------
-vtkImageData* vtkMRMLStdCouinaudTerritoriesNode::GetLabelMap()
-{
-  // The Auto path's labelmap is the AI output stored as the node's
-  // primary displayable image.  The architecture-doc UML carries
-  // ``LabelMap vtkImageData``; until the AI-orchestration logic plugs
-  // it in, return nullptr (subclasses-may-return-nullptr is part of
-  // the abstract-base contract).
-  return nullptr;
-}
-
-//------------------------------------------------------------------------------
-vtkMRMLSegmentationNode* vtkMRMLStdCouinaudTerritoriesNode::GetSegmentationNode()
-{
-  // Companion segmentation node is wired by the module Logic when it
-  // creates the visualization pipeline.  Returns nullptr until then.
-  return nullptr;
-}
-
-//------------------------------------------------------------------------------
 const char* vtkMRMLStdCouinaudTerritoriesNode::GetSCTCode(int index)
 {
   if (this->Subdivision == I_VIII_with_IVab)
