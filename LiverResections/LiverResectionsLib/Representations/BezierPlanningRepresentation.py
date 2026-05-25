@@ -5,7 +5,7 @@
 Renders the 4×4 Bezier control grid (per ADR-0014 §3: corners 4 +
 edges 8 + interior 4) and the fitted Bezier surface, driven by the
 ``vtkMRMLBezierSurfaceNode`` data node (geometry) and the paired
-``vtkMRMLBezierSurfaceDisplayNode`` (decoration).
+``vtkMRMLParametricSurfaceDisplayNode`` (decoration).
 
 Scope of this skeleton
 ----------------------

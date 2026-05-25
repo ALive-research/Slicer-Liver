@@ -28,7 +28,7 @@
 
 // MRML includes
 #include "vtkMRMLCoreTestingMacros.h"
-#include "vtkMRMLBezierSurfaceDisplayNode.h"
+#include "vtkMRMLParametricSurfaceDisplayNode.h"
 #include "vtkMRMLBezierSurfaceNode.h"
 #include "vtkMRMLScene.h"
 
@@ -552,11 +552,11 @@ int testDisplayNodeAttachedSceneRoundTrip()
   // work once T2.2 wires it.
   vtkNew<vtkMRMLScene> scene;
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceDisplayNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLParametricSurfaceDisplayNode>::New());
 
   vtkNew<vtkMRMLBezierSurfaceNode> dataNode;
   scene->AddNode(dataNode.GetPointer());
-  vtkNew<vtkMRMLBezierSurfaceDisplayNode> displayNode;
+  vtkNew<vtkMRMLParametricSurfaceDisplayNode> displayNode;
   scene->AddNode(displayNode.GetPointer());
   dataNode->AddAndObserveDisplayNodeID(displayNode->GetID());
 
@@ -590,7 +590,7 @@ int testDisplayNodeAttachedSceneRoundTrip()
 
   vtkNew<vtkMRMLScene> sinkScene;
   sinkScene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
-  sinkScene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceDisplayNode>::New());
+  sinkScene->RegisterNodeClass(vtkSmartPointer<vtkMRMLParametricSurfaceDisplayNode>::New());
   sinkScene->SetLoadFromXMLString(1);
   sinkScene->SetSceneXMLString(xml);
   sinkScene->Connect();
@@ -607,7 +607,7 @@ int testDisplayNodeAttachedSceneRoundTrip()
   // The display-node reference must have round-tripped through the
   // scene — this is the structural assertion that the reparent
   // bought.
-  auto* sinkDisplay = vtkMRMLBezierSurfaceDisplayNode::SafeDownCast(sinkData->GetNthDisplayNode(0));
+  auto* sinkDisplay = vtkMRMLParametricSurfaceDisplayNode::SafeDownCast(sinkData->GetNthDisplayNode(0));
   CHECK_NOT_NULL(sinkDisplay);
   float rgb[3];
   sinkDisplay->GetResectionColor(rgb);
@@ -1440,7 +1440,7 @@ int testReadXMLNullMidStream()
 //      resolution involved — this isolates the CopyReferences half
 //      of Copy()).
 //   2. With scene: the reference resolves to a real
-//      ``vtkMRMLBezierSurfaceDisplayNode`` of the right class — the
+//      ``vtkMRMLParametricSurfaceDisplayNode`` of the right class — the
 //      end-to-end structural guarantee.
 //
 // Implementation note: ``CopyContent`` alone does NOT copy node
@@ -1466,7 +1466,7 @@ int testCopyCarriesDisplayNodeRef()
     // Add a literal display-node-ID string; no scene means the role
     // engine cannot resolve it to a real node, but the *role string*
     // is what we want to assert survives the copy.
-    const char* displayId = "vtkMRMLBezierSurfaceDisplayNode1";
+    const char* displayId = "vtkMRMLParametricSurfaceDisplayNode1";
     source->AddAndObserveDisplayNodeID(displayId);
     sink->Copy(source.GetPointer());
     const char* sinkId = sink->GetNthDisplayNodeID(0);
@@ -1478,11 +1478,11 @@ int testCopyCarriesDisplayNodeRef()
   {
     vtkNew<vtkMRMLScene> scene;
     scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
-    scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceDisplayNode>::New());
+    scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLParametricSurfaceDisplayNode>::New());
 
     vtkNew<vtkMRMLBezierSurfaceNode> source;
     vtkNew<vtkMRMLBezierSurfaceNode> sink;
-    vtkNew<vtkMRMLBezierSurfaceDisplayNode> display;
+    vtkNew<vtkMRMLParametricSurfaceDisplayNode> display;
     scene->AddNode(source.GetPointer());
     scene->AddNode(sink.GetPointer());
     scene->AddNode(display.GetPointer());
@@ -1495,7 +1495,7 @@ int testCopyCarriesDisplayNodeRef()
     // structural invariant per ADR-0013 §8).
     vtkMRMLNode* resolved = sink->GetNthDisplayNode(0);
     CHECK_NOT_NULL(resolved);
-    vtkMRMLBezierSurfaceDisplayNode* typed = vtkMRMLBezierSurfaceDisplayNode::SafeDownCast(resolved);
+    vtkMRMLParametricSurfaceDisplayNode* typed = vtkMRMLParametricSurfaceDisplayNode::SafeDownCast(resolved);
     CHECK_NOT_NULL(typed);
   }
   return EXIT_SUCCESS;

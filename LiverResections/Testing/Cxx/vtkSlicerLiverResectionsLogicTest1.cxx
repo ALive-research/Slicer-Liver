@@ -91,7 +91,7 @@ int vtkSlicerLiverResectionsLogicTest1(int, char*[])
   // Asserting ``scene->AddNewNodeByClass(...)`` round-trips proves
   // ``vtkMRMLScene::RegisterNodeClass`` ran for each.
   checkAddAndGetNode(scene, "vtkMRMLBezierSurfaceNode");
-  checkAddAndGetNode(scene, "vtkMRMLBezierSurfaceDisplayNode");
+  checkAddAndGetNode(scene, "vtkMRMLParametricSurfaceDisplayNode");
   checkAddAndGetNode(scene, "vtkMRMLBezierSurfaceStorageNode");
 
   // T2.6-LayerDM — call 2 of ADR-0013 §5's three-call contract is

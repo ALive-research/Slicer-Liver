@@ -116,7 +116,7 @@ public:
   void WriteXML(ostream& of, int indent) override;
   void CopyContent(vtkMRMLNode* anode, bool deepCopy = true) override;
 
-  /// Spawn a ``vtkMRMLBezierSurfaceDisplayNode`` and observe it as
+  /// Spawn a ``vtkMRMLParametricSurfaceDisplayNode`` and observe it as
   /// this data node's default display node.  No-op if a display node
   /// is already attached.
   void CreateDefaultDisplayNodes() override;

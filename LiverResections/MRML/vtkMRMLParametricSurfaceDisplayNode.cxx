@@ -38,7 +38,7 @@
 ==============================================================================*/
 
 // This module MRML includes
-#include "vtkMRMLBezierSurfaceDisplayNode.h"
+#include "vtkMRMLParametricSurfaceDisplayNode.h"
 
 // MRML includes
 #include <vtkMRMLNodePropertyMacros.h>
@@ -48,10 +48,10 @@
 #include <vtkObjectFactory.h>
 
 //------------------------------------------------------------------------------
-vtkMRMLNodeNewMacro(vtkMRMLBezierSurfaceDisplayNode);
+vtkMRMLNodeNewMacro(vtkMRMLParametricSurfaceDisplayNode);
 
 //------------------------------------------------------------------------------
-vtkMRMLBezierSurfaceDisplayNode::vtkMRMLBezierSurfaceDisplayNode()
+vtkMRMLParametricSurfaceDisplayNode::vtkMRMLParametricSurfaceDisplayNode()
   : ResectionColor{ 1.0f, 1.0f, 1.0f }
   , ResectionGridColor{ 0.0f, 0.0f, 0.0f }
   , ResectionMarginColor{ 1.0f, 0.0f, 0.0f }
@@ -72,10 +72,10 @@ vtkMRMLBezierSurfaceDisplayNode::vtkMRMLBezierSurfaceDisplayNode()
 }
 
 //------------------------------------------------------------------------------
-vtkMRMLBezierSurfaceDisplayNode::~vtkMRMLBezierSurfaceDisplayNode() = default;
+vtkMRMLParametricSurfaceDisplayNode::~vtkMRMLParametricSurfaceDisplayNode() = default;
 
 //------------------------------------------------------------------------------
-void vtkMRMLBezierSurfaceDisplayNode::WriteXML(ostream& of, int nIndent)
+void vtkMRMLParametricSurfaceDisplayNode::WriteXML(ostream& of, int nIndent)
 {
   Superclass::WriteXML(of, nIndent);
 
@@ -100,7 +100,7 @@ void vtkMRMLBezierSurfaceDisplayNode::WriteXML(ostream& of, int nIndent)
 }
 
 //------------------------------------------------------------------------------
-void vtkMRMLBezierSurfaceDisplayNode::ReadXMLAttributes(const char** atts)
+void vtkMRMLParametricSurfaceDisplayNode::ReadXMLAttributes(const char** atts)
 {
   int disabledModify = this->StartModify();
 
@@ -129,7 +129,7 @@ void vtkMRMLBezierSurfaceDisplayNode::ReadXMLAttributes(const char** atts)
 }
 
 //------------------------------------------------------------------------------
-void vtkMRMLBezierSurfaceDisplayNode::CopyContent(vtkMRMLNode* anode, bool deepCopy /*=true*/)
+void vtkMRMLParametricSurfaceDisplayNode::CopyContent(vtkMRMLNode* anode, bool deepCopy /*=true*/)
 {
   MRMLNodeModifyBlocker blocker(this);
   Superclass::CopyContent(anode, deepCopy);
@@ -155,7 +155,7 @@ void vtkMRMLBezierSurfaceDisplayNode::CopyContent(vtkMRMLNode* anode, bool deepC
 }
 
 //------------------------------------------------------------------------------
-void vtkMRMLBezierSurfaceDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
+void vtkMRMLParametricSurfaceDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
 

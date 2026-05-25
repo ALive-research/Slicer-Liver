@@ -1,7 +1,7 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 """Python unit tests for ``vtkMRMLBezierSurfaceNode`` and
-``vtkMRMLBezierSurfaceDisplayNode`` — T2 Stack 2 / T2.1.
+``vtkMRMLParametricSurfaceDisplayNode`` — T2 Stack 2 / T2.1.
 
 These tests exercise the Python-wrapped surface of the two new MRML
 node classes landed by ADR-0014 §1 (data node, init-mode subordinate
@@ -463,15 +463,15 @@ def test_node_init_data_read_only_after_planning(mrml_module):
 
 
 # --------------------------------------------------------------------------- #
-# vtkMRMLBezierSurfaceDisplayNode — display node
+# vtkMRMLParametricSurfaceDisplayNode — display node
 # --------------------------------------------------------------------------- #
 
 
 def test_display_construction_and_tag_name(mrml_module):
     """Display node instantiates and reports the expected XML tag name."""
-    node = mrml_module.vtkMRMLBezierSurfaceDisplayNode()
+    node = mrml_module.vtkMRMLParametricSurfaceDisplayNode()
     assert node is not None
-    assert node.GetNodeTagName() == "BezierSurfaceDisplay"
+    assert node.GetNodeTagName() == "ParametricSurfaceDisplay"
 
 
 def test_display_defaults(mrml_module):
@@ -480,7 +480,7 @@ def test_display_defaults(mrml_module):
     See vtkMRMLLiverResectionNode.cxx:56-66.  Any divergence is a
     review-point per ADR-0003.
     """
-    node = mrml_module.vtkMRMLBezierSurfaceDisplayNode()
+    node = mrml_module.vtkMRMLParametricSurfaceDisplayNode()
     assert list(node.GetResectionColor()) == pytest.approx([1.0, 1.0, 1.0])
     assert list(node.GetResectionMarginColor()) == pytest.approx(
         [1.0, 0.0, 0.0]
@@ -507,7 +507,7 @@ def test_display_defaults(mrml_module):
 
 def test_display_setters_and_clamps(mrml_module):
     """Every setter round-trips; ResectionOpacity clamps to [0, 1]."""
-    node = mrml_module.vtkMRMLBezierSurfaceDisplayNode()
+    node = mrml_module.vtkMRMLParametricSurfaceDisplayNode()
 
     node.SetResectionColor([0.25, 0.5, 0.75])
     assert list(node.GetResectionColor()) == pytest.approx([0.25, 0.5, 0.75])
@@ -553,12 +553,12 @@ def test_display_setters_and_clamps(mrml_module):
 
 def test_display_copy_content(mrml_module):
     """CopyContent on the display node produces an independent copy."""
-    source = mrml_module.vtkMRMLBezierSurfaceDisplayNode()
+    source = mrml_module.vtkMRMLParametricSurfaceDisplayNode()
     source.SetResectionColor([0.25, 0.5, 0.75])
     source.SetResectionOpacity(0.42)
     source.SetClipOut(True)
 
-    sink = mrml_module.vtkMRMLBezierSurfaceDisplayNode()
+    sink = mrml_module.vtkMRMLParametricSurfaceDisplayNode()
     sink.CopyContent(source, True)
 
     assert list(sink.GetResectionColor()) == pytest.approx([0.25, 0.5, 0.75])
@@ -581,10 +581,10 @@ def test_display_terminology_entry_round_trip(mrml_module):
     mutation does not leak into a previously-copied sink.
 
     The XML round-trip is covered by the C++ driver
-    (``vtkMRMLBezierSurfaceDisplayNodeTest1.cxx``); we keep this
+    (``vtkMRMLParametricSurfaceDisplayNodeTest1.cxx``); we keep this
     Python-side check focused on the wrapped Python surface.
     """
-    node = mrml_module.vtkMRMLBezierSurfaceDisplayNode()
+    node = mrml_module.vtkMRMLParametricSurfaceDisplayNode()
     assert node.GetTerminologyEntry() == ""
 
     # Slicer's canonical 7-component terminology-entry format
@@ -603,7 +603,7 @@ def test_display_terminology_entry_round_trip(mrml_module):
 
     # CopyContent: deep-copy means later source edits do not bleed
     # into the previously-copied sink.
-    sink = mrml_module.vtkMRMLBezierSurfaceDisplayNode()
+    sink = mrml_module.vtkMRMLParametricSurfaceDisplayNode()
     sink.CopyContent(node, True)
     assert sink.GetTerminologyEntry() == sct
     node.SetTerminologyEntry("")
