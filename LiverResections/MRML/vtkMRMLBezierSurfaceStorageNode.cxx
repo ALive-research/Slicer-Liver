@@ -563,7 +563,13 @@ int vtkMRMLBezierSurfaceStorageNode::WriteJson(const std::string& filePath, vtkM
     writer->WriteDoubleProperty("safetyMargin_mm", readDoubleAttr("safetyMargin_mm"));
     writer->WriteDoubleProperty("riskMargin_mm", readDoubleAttr("riskMargin_mm"));
 
-    int orderIndex = surfaceNode->GetOrderIndex();
+    // OrderIndex migrated to vtkMRMLResectionPlanNode per the
+    // 2026-05-25 wrapper-vs-carrier amendment to ADR-0014.  The
+    // surface no longer carries it.  Storage node retires in commit
+    // 7 alongside this file; the attribute-map override path keeps
+    // emitting the on-disk field for any in-flight v2 fixtures that
+    // still depend on it.
+    int orderIndex = -1;
     const char* orderAttr = surfaceNode->GetAttribute("orderIndex");
     if (orderAttr != nullptr)
     {
@@ -573,7 +579,7 @@ int vtkMRMLBezierSurfaceStorageNode::WriteJson(const std::string& filePath, vtkM
       }
       catch (const std::exception&)
       {
-        // Malformed attribute — keep the typed-accessor value.
+        // Malformed attribute — keep the sentinel.
       }
     }
     writer->WriteIntProperty("orderIndex", orderIndex);
@@ -938,7 +944,12 @@ int vtkMRMLBezierSurfaceStorageNode::ReadJson(const std::string& filePath, vtkMR
         int orderIndex = -1;
         if (resection->GetIntProperty("orderIndex", orderIndex))
         {
-          surfaceNode->SetOrderIndex(orderIndex);
+          // OrderIndex migrated to vtkMRMLResectionPlanNode per the
+          // 2026-05-25 wrapper-vs-carrier amendment.  Stash on the
+          // attribute map until commit 7 retires this storage node.
+          std::ostringstream oss;
+          oss << orderIndex;
+          surfaceNode->SetAttribute("orderIndex", oss.str().c_str());
         }
       }
     }

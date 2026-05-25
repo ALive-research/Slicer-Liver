@@ -212,7 +212,7 @@ public:
 
   /// Set both ``Rows`` and ``Cols`` atomically.  ADR-0018 §1
   /// validates the value is in ``[MinGridSize, MaxGridSize]``.
-  void SetSize(unsigned int n);
+  virtual void SetSize(unsigned int n);
 
   /// Per-node control-grid length, i.e. ``3 * Rows * Cols``.
   unsigned int GetControlGridLength() const { return 3u * this->Rows * this->Cols; }
@@ -220,7 +220,7 @@ public:
   /// Set the control grid from a flat ``3 * Rows * Cols`` array.
   /// Pointer must reference at least ``GetControlGridLength()``
   /// doubles.  Returns true on success; false on null pointer.
-  bool SetControlGrid(const double* values);
+  virtual bool SetControlGrid(const double* values);
 
   /// Read the control grid as a flat row-major array.
   const double* GetControlGrid() const { return this->ControlGrid.data(); }
@@ -232,14 +232,14 @@ public:
   // Init-mode subordinate — SlicingPlane
   //--------------------------------------------------------------------------
 
-  bool SetSlicingPlaneInitPoint(int index, const double point[3]);
+  virtual bool SetSlicingPlaneInitPoint(int index, const double point[3]);
   const double* GetSlicingPlaneInitPoint(int index) const;
 
-  void SetSlicingPlaneOrigin(double x, double y, double z);
+  virtual void SetSlicingPlaneOrigin(double x, double y, double z);
   void SetSlicingPlaneOrigin(const double xyz[3]);
   vtkGetVector3Macro(SlicingPlaneOrigin, double);
 
-  void SetSlicingPlaneNormal(double x, double y, double z);
+  virtual void SetSlicingPlaneNormal(double x, double y, double z);
   void SetSlicingPlaneNormal(const double xyz[3]);
   vtkGetVector3Macro(SlicingPlaneNormal, double);
 
@@ -248,23 +248,23 @@ public:
   //--------------------------------------------------------------------------
 
   vtkGetMacro(NumberOfDistanceSpheroidInitPoints, int);
-  void SetNumberOfDistanceSpheroidInitPoints(int n);
+  virtual void SetNumberOfDistanceSpheroidInitPoints(int n);
 
-  bool SetDistanceSpheroidInitPoint(int index, const double point[3]);
+  virtual bool SetDistanceSpheroidInitPoint(int index, const double point[3]);
   const double* GetDistanceSpheroidInitPoint(int index) const;
 
-  void SetDistanceSpheroidCenter(double x, double y, double z);
+  virtual void SetDistanceSpheroidCenter(double x, double y, double z);
   void SetDistanceSpheroidCenter(const double xyz[3]);
   vtkGetVector3Macro(DistanceSpheroidCenter, double);
 
   vtkGetMacro(DistanceSpheroidRadiusX, double);
-  void SetDistanceSpheroidRadiusX(double r);
+  virtual void SetDistanceSpheroidRadiusX(double r);
 
   vtkGetMacro(DistanceSpheroidRadiusY, double);
-  void SetDistanceSpheroidRadiusY(double r);
+  virtual void SetDistanceSpheroidRadiusY(double r);
 
   vtkGetMacro(DistanceSpheroidRadiusZ, double);
-  void SetDistanceSpheroidRadiusZ(double r);
+  virtual void SetDistanceSpheroidRadiusZ(double r);
 
   //--------------------------------------------------------------------------
   // Init-mode property
