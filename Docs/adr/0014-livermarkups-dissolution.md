@@ -63,6 +63,71 @@
   primitive MRML nodes rename.  This amendment updates every
   reference in the ADR text below.
 
+- **2026-05-25 — Fourth layer: clinical/method wrapper; wrapper-vs-carrier
+  pattern.**  §"Decision" 1-5 below split the v1 `LiverMarkups`
+  primitives into three layers — *data* (`vtkMRMLBezierSurfaceNode`),
+  *display* (`vtkMRMLBezierSurfaceDisplayNode`), *storage*
+  (`vtkMRMLBezierSurfaceStorageNode`).  The dissolution correctly
+  retired the v1 `vtkMRMLLiverResectionNode`, whose responsibilities
+  conflated those three layers with a *clinical-layer* concept that
+  has no v1 equivalent name: surgeon-facing name, Safety + Risk
+  margin scalars, surgical-list ordering, and the surgeon's
+  Init/Planning/Confirmed surgical state.  In v1 these fields lived
+  on the retiring resection node alongside grid-display parameters
+  and init-mode subordinates.  Splitting "data vs display vs storage"
+  factored out two of those concerns; the clinical concerns were
+  orphaned and tucked onto the surface node's attribute map as a
+  v2.0 stop-gap (acknowledged in `vtkMRMLBezierSurfaceStorageNode.cxx`).
+
+  The 2026-05-25 design review names the missing fourth layer
+  explicitly: **clinical/method wrapper**.  v2.0 lands
+  `vtkMRMLResectionPlanNode` as that wrapper.  It carries
+  ``Name``, ``SafetyMargin_mm``, ``RiskMargin_mm``, ``OrderIndex``,
+  ``PlanState : Init | Planning | Confirmed``, and a typed
+  ``geometry`` node-reference role to a
+  ``vtkMRMLAbstractParametricSurfaceNode`` (Bezier today, NURBS in
+  v2.1; see [ADR-0023](0023-unified-gui-stage-workflow.md)
+  amendment §"Class abstraction for surfaces" and
+  [ADR-0018](0018-nurbs-extension-surface.md)).
+
+  The pattern this amendment authors is **wrapper-vs-carrier**:
+
+  | Layer | Role | v2.0 example |
+  |---|---|---|
+  | wrapper | clinical or method metadata + path-specific inputs | `vtkMRMLResectionPlanNode` |
+  | carrier (data) | bulk content | `vtkMRMLAbstractParametricSurfaceNode` + subclasses |
+  | display | rendering parameters | `vtkMRMLParametricSurfaceDisplayNode` (shared) |
+  | storage | persistence | `vtkMRMLResectionPlanStorageNode` (wrapper-rooted) |
+
+  The wrapper references the carrier via a typed
+  ``SetAndObserveNodeReferenceID`` role; carrier persistence flows
+  through the wrapper's storage when the carrier is a project-specific
+  node, or through the carrier's own storage when the carrier is a
+  Slicer-core node (e.g. `vtkMRMLSegmentationNode` for territories,
+  see [ADR-0023](0023-unified-gui-stage-workflow.md) amendment
+  §"Class abstraction for territories" — tightened polymorphic
+  interface).
+
+  Consequences that supersede §"Decision" 1 + 5 below:
+  - `vtkMRMLBezierSurfaceNode` keeps geometry + state but **loses**
+    `OrderIndex` (moved to `vtkMRMLResectionPlanNode`).
+  - `vtkMRMLBezierSurfaceStorageNode`'s `.lrp.json` writer becomes
+    plan-rooted (`vtkMRMLResectionPlanStorageNode` reads the plan,
+    walks the `geometry` ref to the surface, emits both).  The
+    surface itself becomes **non-storable**
+    (`CreateDefaultStorageNode()` returns `nullptr`).
+  - `vtkMRMLBezierSurfaceDisplayNode` renames to
+    `vtkMRMLParametricSurfaceDisplayNode` (shared by Bezier + NURBS
+    per the Slicer Markups precedent — one display class for many
+    data subclasses).  Surgeon-facing scalar fields stay on the
+    plan node; the display node carries margin **colors** only.
+
+  The amendment is forward-compatible with the v1→v2 migration step
+  in §"Migration steps" below: the `.lrp.fcsv` load-only migration
+  produces a `vtkMRMLBezierSurfaceNode` (geometry) + a default
+  `vtkMRMLResectionPlanNode` (clinical wrapper) at load time, with
+  the surgeon-facing fields taking documented defaults.
+
 ## Context
 
 `LiverMarkups` today is a Markups-derived satellite module that hosts the

@@ -6,6 +6,136 @@
 - **Diagrams:** [`Docs/architecture/gui-stage-flow.md`](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/architecture/gui-stage-flow.md), [`Docs/architecture/territories-class-hierarchy.md`](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/architecture/territories-class-hierarchy.md)
 - **PR:** <filled on merge>
 
+## Amendments
+
+- **2026-05-25 — Wrapper-vs-carrier pattern; `.lrp.json` content
+  roster trim; territories interface tightening.**  The post-PR #430
+  design review introduced the wrapper-vs-carrier pattern (see
+  [ADR-0014](0014-livermarkups-dissolution.md) amendment of the
+  same date).  This amendment applies the pattern across §"Class
+  abstraction for territories", §"Persistence — `.lrp.json` schema
+  v2", and §"Cross-stage dependencies"; supersedes the affected
+  paragraphs as follows.
+
+  ### §"Class abstraction for territories" — polymorphic interface
+  tightening
+
+  The polymorphic interface tightens to drop the
+  `GetLabelMap()` / `GetSegmentationNode()` duality.  Per [ADR-0024](0024-segmentation-orchestration.md)
+  §"Output contract", Stage 2 publishes one canonical
+  `vtkMRMLSegmentationNode`; the v2.0 territories nodes wrap it via
+  a new typed `segments` node-reference role, not their own
+  internal labelmap.  Resulting interface:
+
+  ```
+  vtkMRMLAbstractTerritoriesNode (abstract, wrapper)
+    +virtual GetMethod() : string
+    +virtual GetSegments() : vtkStringArray
+    +virtual GetSegmentColor(int) : double[3]
+    +virtual GetSCTCode(int) : string
+    // node refs
+    segments → vtkMRMLSegmentationNode  (Slicer-core carrier)
+  ```
+
+  `GetLabelMap()` is **dropped** from the interface (callers that
+  need a binary labelmap representation reach through
+  `GetSegmentationNode()->GetBinaryLabelmapRepresentation(...)`,
+  the Slicer-core path).  The `LabelMap` field on
+  `vtkMRMLStdCouinaudTerritoriesNode` and
+  `vtkMRMLCustomTerritoriesNode` is **dropped** for the same reason.
+
+  Auto-path inputs (`SourceImageRef`, `AIBackendIdentifier`,
+  `Subdivision`, `ComputedAt`) and Manual-path inputs
+  (`CenterlineRefs`, `EndpointRefs`, `Groupings`, `SegmentNames`)
+  stay on the respective concrete subclass.  They are
+  *method-specific inputs*, not segment-mask data, and belong on
+  the wrapper.
+
+  ### §"Class abstraction for surfaces" (NEW)
+
+  The same wrapper-vs-carrier pattern lands on the resection-surface
+  side.  `vtkMRMLResectionPlanNode` is the **clinical wrapper**
+  carrying surgeon-facing fields (name, Safety + Risk margins,
+  surgical-list ordering, plan state).  The carrier is a new
+  abstract data hierarchy that admits Bezier today and NURBS in
+  v2.1 ([ADR-0018](0018-nurbs-extension-surface.md)):
+
+  ```
+  vtkMRMLAbstractParametricSurfaceNode (abstract, carrier base)
+    +unsigned int Rows, Cols
+    +double[3 * Rows * Cols] ControlGrid
+    +InitMode : SlicingPlane | DistanceSpheroid
+    +SlicingPlane subordinate (origin, normal, init points)
+    +DistanceSpheroid subordinate (center, radii, init points)
+    +virtual GetSurfaceType() : string ("Bezier" | "NURBS")
+    +virtual EvaluateSurface(u, v) : vtkPolyData
+    // node refs
+    TargetOrganModelNodeID
+    ↑ inherits
+    vtkMRMLBezierSurfaceNode (v2.0, concrete)
+    vtkMRMLNurbsSurfaceNode  (v2.1, concrete sibling)
+  ```
+
+  Display side stays **flat**: both concrete subclasses reference a
+  single shared `vtkMRMLParametricSurfaceDisplayNode` (no abstract
+  display base, no per-surface-type display subclass), mirroring the
+  Slicer-core `vtkMRMLMarkupsDisplayNode` pattern that serves 8+
+  markup data subclasses.
+
+  ### §"Persistence — `.lrp.json` schema v2" — content roster trim
+
+  The original v2 roster carried both plan-level and scene-level
+  state in one file.  The 2026-05-25 review separates these: a
+  `.lrp.json` carries **plan + its surface only**.  Three scene-level
+  entries that the original roster listed are **removed**:
+
+  | Removed from `.lrp.json` | New persistence path |
+  |---|---|
+  | Classification node reference | Scene-level state; `vtkMRMLAbstractTerritoriesNode` persists via standard MRML.  No reference from any plan |
+  | Volumetry partition node references | Scene-level state; `vtkMRMLLiverVolumetryPartitionNode` (v2.1) persists via its own MRML mechanism |
+  | Per-stage last-selection | UI state on a scene-singleton (Liver-shell parameter node) |
+
+  Replacement v2 content roster (now plan-rooted, surface-block-
+  polymorphic):
+
+  - Plan fields at JSON root: `name`, `safetyMargin_mm`,
+    `riskMargin_mm`, `orderIndex`, `state`, `schemaVersion: 2`.
+  - `surface: { type: "Bezier" | "NURBS", rows, cols, controlGrid,
+    initMode, slicingPlane, distanceSpheroid, …NURBS-only fields when
+    type=NURBS }`.
+  - `metadata: {}` (reserved for future).
+
+  The reader still admits the old `scene.*` block silently (unknown
+  fields ignored) so any test fixture or preview-tracking file
+  loads cleanly.  The writer never emits the old `scene.*` block.
+
+  Cross-machine plan transfer (#415) becomes trivially correct: a
+  `.lrp.json` carries no scene-node-ID references after this trim.
+  The v2.1+ stable-ID resolution scope shrinks from "transfer plans
+  + maintain ID stability for classification/partitions" to
+  "transfer plans alone."
+
+  ### §"Cross-stage dependencies" — Plan ↔ Territories explicit
+  non-reference
+
+  Add the row to the dependency map's narrative: **plans do not
+  reference territories or volumetry partitions or stage state**.
+  Visual co-existence in the surgeon's view is the only coupling;
+  no typed node reference links them.  Multiple plans coexist with
+  the same active classification; switching the active
+  classification leaves all plans unchanged on disk.
+
+  ### §"Decision" — surface-side data ownership
+
+  `vtkMRMLAbstractParametricSurfaceNode` is **non-storable**
+  (`CreateDefaultStorageNode()` returns `nullptr`).  Surface bulk
+  data persists through the plan's `vtkMRMLResectionPlanStorageNode`,
+  which walks the plan's `geometry` ref on write and reconstructs
+  it on read.  This mirrors the Slicer-core Segmentations pattern
+  (segments inside a segmentation file rather than per-segment
+  storage) and the Markups pattern (control points inside the
+  markups file rather than per-point storage).
+
 ## Context
 
 Slicer-Liver v2.0.0 was re-scoped on 2026-05-21 from a foundation-only

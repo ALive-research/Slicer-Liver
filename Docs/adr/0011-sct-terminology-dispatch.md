@@ -79,6 +79,15 @@ blocking issue.  String labels are permitted only at the I/O boundary
 — reading a tool's output, writing a non-DICOM file format that
 upstream consumers expect by name.
 
+The Stage 3 territories family's
+`vtkMRMLAbstractTerritoriesNode::GetSCTCode(int)` polymorphic accessor
+is the per-segment dispatch entry point for territories consumers
+(see [ADR-0023](0023-unified-gui-stage-workflow.md) §"Class
+abstraction for territories" — amended 2026-05-25).  Subclass
+`vtkMRMLStdCouinaudTerritoriesNode` returns Couinaud triples; subclass
+`vtkMRMLCustomTerritoriesNode` returns surgeon-opted-in triples or
+empty.
+
 ### 2. Private terminology file
 
 Ship `Resources/Terminology/SlicerLiver-Terminology.json` containing:
