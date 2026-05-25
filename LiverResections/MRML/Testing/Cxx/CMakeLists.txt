@@ -13,6 +13,9 @@ set(KIT_TEST_SRCS
   vtkMRMLBezierSurfaceDisplayNodeTest1.cxx
   vtkMRMLBezierSurfaceStorageNodeTest1.cxx
   vtkMRMLBezierSurfaceStorageNodeTest2.cxx
+  vtkMRMLAbstractParametricSurfaceNodeTest1.cxx
+  vtkMRMLResectionPlanNodeTest1.cxx
+  vtkMRMLResectionPlanStorageNodeTest1.cxx
   )
 
 #-----------------------------------------------------------------------------
@@ -60,3 +63,13 @@ SIMPLE_TEST(vtkMRMLBezierSurfaceNodeTest1)
 SIMPLE_TEST(vtkMRMLBezierSurfaceDisplayNodeTest1)
 SIMPLE_TEST(vtkMRMLBezierSurfaceStorageNodeTest1)
 SIMPLE_TEST(vtkMRMLBezierSurfaceStorageNodeTest2)
+# Test-first scaffolding (ADR-0027) for the wrapper-vs-carrier
+# resection-plan architecture (2026-05-25 amendments to ADR-0014 +
+# ADR-0023).  Red against the current tree -- forward includes of
+# vtkMRMLAbstractParametricSurfaceNode, vtkMRMLResectionPlanNode, and
+# vtkMRMLResectionPlanStorageNode fail to compile/link until the
+# implementer lands the classes.  Per ADR-0027 the test commit
+# precedes the implementation commits.
+SIMPLE_TEST(vtkMRMLAbstractParametricSurfaceNodeTest1)
+SIMPLE_TEST(vtkMRMLResectionPlanNodeTest1)
+SIMPLE_TEST(vtkMRMLResectionPlanStorageNodeTest1)

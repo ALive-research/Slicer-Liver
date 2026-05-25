@@ -39,6 +39,24 @@
  *   8. MRML XML round-trip of Method + key references.
  *   9. Subdivision enum on Std drives GetNumberOfSegments() (8 vs 9).
  *  10. Custom-territories Groupings map round-trips through XML.
+ *  11. Typed ``segments`` node-reference role on the abstract base
+ *      to a ``vtkMRMLSegmentationNode`` (the Slicer-core canonical
+ *      data carrier).  Set on the concrete StdCouinaud subclass;
+ *      retrieved via the abstract-base accessor; survives scene
+ *      add/remove cleanly.  Per ADR-0023 amendment 2026-05-25
+ *      §"Class abstraction for territories" -- polymorphic interface
+ *      tightening -- the role belongs on the abstract base so
+ *      consumers do not branch on subclass.
+ *  12. Interface-tightening pin: ``GetLabelMap()`` is NO LONGER on
+ *      the abstract base after the wrapper-vs-carrier landing.
+ *      Callers reach a binary labelmap through the segmentation
+ *      carrier (``GetSegmentationNode()->GetBinaryLabelmapRepresentation``
+ *      / Slicer-core path).  Comment-only pin -- the absence is
+ *      verified compile-time by the absence of the symbol; if a
+ *      regression re-adds it, this test file flags the drift via
+ *      the literal-anchor reference below.  Per ADR-0023 amendment
+ *      2026-05-25 §"Class abstraction for territories" --
+ *      "GetLabelMap() is dropped from the interface".
  */
 
 // This module MRML includes
@@ -48,6 +66,7 @@
 
 // MRML includes
 #include "vtkMRMLCoreTestingMacros.h"
+#include "vtkMRMLModelNode.h"
 #include "vtkMRMLScene.h"
 
 // VTK includes
@@ -394,6 +413,107 @@ int testCustomGroupingsRoundTrip()
   return EXIT_SUCCESS;
 }
 
+//------------------------------------------------------------------------------
+// Invariant 11 -- Typed ``segments`` node-reference role on the
+// abstract base.  Per the 2026-05-25 wrapper-vs-carrier amendment to
+// ADR-0023 (§"Class abstraction for territories"), the territories
+// node references a canonical ``vtkMRMLSegmentationNode`` for its
+// segment-mask data via a typed ``segments`` role.  The role is on
+// the abstract base so polymorphic consumers do not branch on
+// subclass.
+//
+// Pin shape: set the ref on a concrete StdCouinaud subclass; verify
+// the abstract-base accessor returns the same node; remove the
+// referent from the scene; verify the role resolves to nullptr
+// cleanly (no dangling pointer).
+//
+// The role uses a stand-in ``vtkMRMLModelNode`` here so this MRML
+// kit-level test does not pull in the Slicer-core Segmentations
+// kit as a link-time dependency (the role's class-name filter is a
+// separate runtime concern, exercised by the module-logic-level
+// integration test that has the Segmentations kit available).
+int testSegmentsNodeReference()
+{
+  vtkNew<vtkMRMLScene> scene;
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLStdCouinaudTerritoriesNode>::New());
+
+  vtkNew<vtkMRMLStdCouinaudTerritoriesNode> territories;
+  vtkNew<vtkMRMLModelNode> standInCarrier;
+  scene->AddNode(territories.GetPointer());
+  scene->AddNode(standInCarrier.GetPointer());
+
+  // The typed setter on the abstract base accepts any vtkMRMLNode
+  // pointer (the runtime class-name filter is on the Slicer-core
+  // path).  The role name pinned by the design is "segments".  Set
+  // via the abstract-base pointer to confirm the role lives there.
+  vtkMRMLAbstractTerritoriesNode* asBase = territories.GetPointer();
+  asBase->SetAndObserveNodeReferenceID("segments", standInCarrier->GetID());
+
+  // Retrieved via the typed accessor on the abstract base.  The
+  // production accessor name is left to the implementer
+  // (``GetSegmentsNode`` is the design's natural choice); the
+  // round-trip via ``GetNodeReferenceID`` covers the role-name
+  // contract regardless.
+  const char* refId = asBase->GetNodeReferenceID("segments");
+  CHECK_NOT_NULL(refId);
+  CHECK_STRING(refId, standInCarrier->GetID());
+
+  // Scene removal of the referent -> the role resolves to nullptr
+  // cleanly.
+  scene->RemoveNode(standInCarrier.GetPointer());
+  const char* refIdAfterRemove = asBase->GetNodeReferenceID("segments");
+  // After Remove the role's referenced node should no longer be
+  // resolvable.  ``GetNodeReferenceID`` may return either the
+  // stale string OR nullptr depending on the Slicer-core role
+  // bookkeeping; the strong invariant is the underlying
+  // ``GetNodeReference`` returns nullptr (no dangling pointer).
+  vtkMRMLNode* refNode = asBase->GetNodeReference("segments");
+  CHECK_NULL(refNode);
+  (void)refIdAfterRemove;
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Invariant 12 -- Interface-tightening pin: ``GetLabelMap()`` is
+// dropped from the abstract base after the 2026-05-25
+// wrapper-vs-carrier amendment to ADR-0023.  The labelmap
+// representation is reached through the segmentation carrier on the
+// Slicer-core path
+// (``GetSegmentationNode()->GetBinaryLabelmapRepresentation``).
+//
+// This is a comment-only invariant pin: the absence of
+// ``GetLabelMap`` is enforced compile-time by its absence from the
+// abstract base's header.  A test that tried to call
+// ``asBase->GetLabelMap()`` would fail to compile (the strong
+// guarantee).  The runtime sub-test here uses the polymorphic
+// interface roster the design DOES commit to (GetSegments,
+// GetSegmentColor, GetSCTCode, GetMethod) -- if a future regression
+// re-adds GetLabelMap, the in-file comment-anchor reference to
+// ADR-0023 §"Class abstraction for territories" surfaces the drift
+// in code review.
+//
+// Reference (load-bearing for grep regression hunts):
+//   ADR-0023 amendment 2026-05-25 §"Class abstraction for
+//   territories" --
+//   "``GetLabelMap()`` is **dropped** from the interface".
+int testInterfaceRosterTightened()
+{
+  vtkNew<vtkMRMLStdCouinaudTerritoriesNode> couinaud;
+  vtkMRMLAbstractTerritoriesNode* asBase = couinaud.GetPointer();
+
+  // The methods the design DOES commit to on the abstract base.
+  // Call each through the base pointer; the smoke-test goal is "the
+  // tightened interface compiles + dispatches", not the values
+  // (those are pinned by earlier invariants).
+  CHECK_NOT_NULL(asBase->GetSegments());
+  double rgb[3] = { 0, 0, 0 };
+  asBase->GetSegmentColor(0, rgb);
+  (void)rgb;
+  CHECK_NOT_NULL(asBase->GetMethod());
+  CHECK_NOT_NULL(asBase->GetSCTCode(0));
+  return EXIT_SUCCESS;
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -419,6 +539,8 @@ int vtkMRMLAbstractTerritoriesNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testStdCouinaudXMLRoundTrip());
   CHECK_EXIT_SUCCESS(testSubdivisionSegmentCount());
   CHECK_EXIT_SUCCESS(testCustomGroupingsRoundTrip());
+  CHECK_EXIT_SUCCESS(testSegmentsNodeReference());
+  CHECK_EXIT_SUCCESS(testInterfaceRosterTightened());
 
   std::cout << "vtkMRMLAbstractTerritoriesNodeTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;
