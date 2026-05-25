@@ -149,15 +149,8 @@ exclude_patterns = [
     "dependencies/**",
     # ADRs are admitted *individually* via the index toctree so the
     # scaffold compiles without dragging in unmigrated cross-refs.
-    # Per the 2026-05-25 wrapper-vs-carrier amendments, ADR-0011 and
-    # ADR-0014 are admitted (cross-referenced from ADR-0023 +
-    # ADR-0024 amendments).
     "adr/000*.md",
-    "adr/0010-*.md",
-    "adr/0012-*.md",
-    "adr/0013-*.md",
-    "adr/0015-*.md",
-    "adr/0016-*.md",
+    "adr/001[0-6]*.md",
     "adr/README.md",
 ]
 source_suffix = {
