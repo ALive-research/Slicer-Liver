@@ -83,6 +83,21 @@ public:
   /// Register module MRML nodes
   void RegisterNodes() override;
 
+  /// Stage-4 completion predicate for the Liver-shell sidebar (T5.2-d).
+  ///
+  /// Returns ``true`` once the scene carries at least one
+  /// ``vtkMRMLResectionPlanNode`` whose ``State`` reaches ``Confirmed``
+  /// (see ADR-0019 for the state machine).  The Liver shell observes
+  /// scene events via ``VTKObservationMixin`` and re-queries this
+  /// predicate to refresh its per-stage state indicator
+  /// (ADR-0023 §"Shell composition (Option H)").
+  ///
+  /// Stub: returns ``false`` and warns.  The semantics body lands as
+  /// part of T5.2-d implementation (see
+  /// ``Liver/Testing/Python/test_liver_shell_isstagecomplete.py`` —
+  /// T3 stage-4 assertions).
+  virtual bool IsStageComplete();
+
   /// Add a new resection using contour initialization using slicing contours initialization
   vtkMRMLMarkupsDistanceContourNode* AddResectionContour(vtkMRMLLiverResectionNode* resectionNode) const;
 
