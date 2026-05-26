@@ -37,6 +37,35 @@
 #
 # ==============================================================================
 
+"""Liver — Slicer-Liver shell module.
+
+The Liver scripted module is the surgeon-facing entry point for the
+Slicer-Liver extension.  Per ADR-0023 §"Shell composition (Option H)"
+it composes — but does not compute — six surgeon-facing stages on a
+vertical sidebar driving a content stack:
+
+  1. Case Setup            (shell-owned placeholder; ADR-0029)
+  2. Anatomy Definition    (LiverSegmentation; gated on #409, disabled
+                            until then per Stage 2 graceful-degradation)
+  3. Vascular Territories  (VascularTerritories.widgetRepresentation())
+  4. Resection Planning    (LiverResections.widgetRepresentation())
+  5. Volumetry             (LiverVolumetry.widgetRepresentation())
+  6. Export                (shell-owned placeholder)
+
+Per-stage completion is queried via ``IsStageComplete()`` on the C++
+logic of stages 3/4 and ``isStageComplete()`` on the Python logic of
+stage 5.  Stages 1 and 6 own their predicates on ``LiverWidget``
+itself (no companion module exists).  The shell observes MRML scene
+events via ``VTKObservationMixin`` and re-paints the sidebar
+indicators (✓ done / ● current / ○ pending) on every change.
+
+Domain algorithm bridges historically embedded here (signed-Maurer
+distance maps, Bezier surface fitting, elliptic Fourier descriptors)
+were relocated to the private sibling ``_LegacyLiverLogic`` module
+in T5.2-d; their full move to the per-stage modules they actually
+belong to is tracked in issue #437.
+"""
+
 # ruff: noqa: F403, F405  # standard Slicer scripted-module wildcard-import pattern
 
 
