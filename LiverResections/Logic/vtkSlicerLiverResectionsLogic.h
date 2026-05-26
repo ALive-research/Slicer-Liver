@@ -92,10 +92,10 @@ public:
   /// predicate to refresh its per-stage state indicator
   /// (ADR-0023 §"Shell composition (Option H)").
   ///
-  /// Stub: returns ``false`` and warns.  The semantics body lands as
-  /// part of T5.2-d implementation (see
-  /// ``Liver/Testing/Python/test_liver_shell_isstagecomplete.py`` —
-  /// T3 stage-4 assertions).
+  /// Returns ``false`` when no MRML scene is bound or no plan has
+  /// reached ``Confirmed``.  T3 stage-4 assertions in
+  /// ``Liver/Testing/Python/test_liver_shell_isstagecomplete.py``
+  /// pin this contract.
   virtual bool IsStageComplete();
 
   /// Add a new resection using contour initialization using slicing contours initialization

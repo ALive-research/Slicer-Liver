@@ -53,10 +53,11 @@ The relocation lands in two passes:
       composition role.  The leading underscore in the module name
       signals "private; awaiting full relocation to its rightful
       owner module."
-  2.  Follow-up issue #437: split the contents into the per-stage
-      modules they actually belong to (``LiverResections`` for the
-      Bezier algorithm bridges + resection helpers,
-      ``LiverDistanceMaps`` for the SignedMaurer pipeline, etc.).
+  2.  Orphaned-domain-code relocation follow-up: split the contents
+      into the per-stage modules they actually belong to
+      (``LiverResections`` for the Bezier algorithm bridges + resection
+      helpers, ``LiverDistanceMaps`` for the SignedMaurer pipeline,
+      etc.).
 
 Test coverage for the Bezier helpers lives at
 ``Testing/Python/unit/test_bezier_characterization.py`` and is

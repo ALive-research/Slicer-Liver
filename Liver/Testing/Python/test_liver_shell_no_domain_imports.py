@@ -21,9 +21,9 @@ Slicer harness needed.  It enforces two rules:
      ``vtkSlicerLiverResectionsModuleLogicPython`` C++ binding apart
      from the standard module-registration plumbing.
 
-A separate follow-up issue (#437) tracks relocating the orphaned
-domain code currently embedded in ``Liver/Liver.py`` lines 297-985 to
-its rightful owner module.  T5.2-d itself only *unwires* that code
+A separate follow-up (the orphaned-domain-code relocation tracker)
+covers moving the orphaned domain code currently embedded in
+``Liver/Liver.py`` lines 297-985 to its rightful owner module.  T5.2-d itself only *unwires* that code
 (stops invoking it from the shell composition); the actual relocation
 is out of scope.  Once the unwiring is done and the orphaned code is
 removed (or moved into a side module), this test goes green.
@@ -36,7 +36,7 @@ Red-fails on ``60c78df`` because ``Liver/Liver.py`` currently:
 
 See also:
   * Docs/adr/0023-unified-gui-stage-workflow.md §"Shell composition"
-  * Issue #437 — orphaned domain code relocation (follow-up).
+  * The orphaned-domain-code relocation follow-up tracker.
 """
 
 from __future__ import annotations
@@ -175,7 +175,7 @@ def test_t7_liver_shell_has_no_forbidden_imports():
         + "\n".join(violations)
         + "\n\nMove the offending code to the relevant domain module "
         "(LiverResections / LiverVolumetry / VascularTerritories); "
-        "see issue #437 for the orphaned-domain relocation tracker."
+        "see the orphaned-domain relocation follow-up tracker."
     )
 
 
@@ -203,5 +203,5 @@ def test_t7_liver_shell_has_no_forbidden_algorithm_calls():
         "are compute primitives that belong inside the per-stage "
         "modules.  Violations:\n"
         + "\n".join(violations)
-        + "\n\nSee issue #437 for the orphaned-domain relocation tracker."
+        + "\n\nSee the orphaned-domain relocation follow-up tracker."
     )

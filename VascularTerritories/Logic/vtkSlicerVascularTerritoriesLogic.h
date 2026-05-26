@@ -98,8 +98,8 @@ public:
   /// events and re-queries this predicate to refresh its per-stage
   /// state indicator (ADR-0023 §"Shell composition (Option H)").
   ///
-  /// Stub: returns ``false`` and warns.  The semantics body lands as
-  /// part of T5.2-d implementation.
+  /// Returns ``false`` when no MRML scene is bound or no territories
+  /// node has been registered yet.
   virtual bool IsStageComplete();
 
   void MarkSegmentWithID(vtkMRMLModelNode* segment, int segmentId);

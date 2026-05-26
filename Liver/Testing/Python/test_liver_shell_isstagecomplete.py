@@ -183,8 +183,9 @@ def test_t2_stage2_predicate_degrades_gracefully():
     assert callable(getattr(widget, "_stage2IsComplete", None)), (
         "LiverWidget._stage2IsComplete() not found."
     )
-    # In the v2.0 sidebar, LiverSegmentation module is absent (#409 is
-    # a v2.1 deliverable).  Predicate must still resolve cleanly.
+    # In the v2.0 sidebar, LiverSegmentation module is absent (the
+    # LiverSegmentation work is a v2.1 deliverable).  Predicate must
+    # still resolve cleanly.
     result = widget._stage2IsComplete()
     assert result is False, (
         "Stage 2 predicate must return False while LiverSegmentation "
