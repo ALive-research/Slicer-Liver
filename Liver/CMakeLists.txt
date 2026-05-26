@@ -1,9 +1,13 @@
+# Copyright (c) 2021-2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
+# Distributed under the OSI-approved BSD 3-Clause License.
+
 #-----------------------------------------------------------------------------
 set(MODULE_NAME Liver)
 
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
   ${MODULE_NAME}.py
+  _LegacyLiverLogic.py
   )
 
 set(MODULE_PYTHON_RESOURCES
