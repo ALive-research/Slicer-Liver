@@ -104,57 +104,58 @@ import pytest
 # --------------------------------------------------------------------------- #
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
-LIVER_PY = REPO_ROOT / "Liver" / "Liver.py"
+# ``LiverLogic`` relocated out of ``Liver/Liver.py`` into the sibling
+# ``_LegacyLiverLogic`` private module during T5.2-d (Liver-shell sidebar);
+# the shell is now compose-only.  Full relocation to per-stage modules
+# tracked in issue #437.
+LEGACY_LOGIC_PY = REPO_ROOT / "Liver" / "_LegacyLiverLogic.py"
 
 
 # --------------------------------------------------------------------------- #
 # Module-scoped fixture — load ``LiverLogic`` from source.
 #
 # We deliberately do not rely on Slicer's module-path discovery to pick up
-# ``Liver.py``: the tests run from a generic pytest invocation and may not
-# be inside a Slicer launcher.  The ``importorskip("slicer")`` gates
-# everything below it; once slicer is importable, the rest of Liver.py's
-# dependency stack (vtk, qt, ctk, ScriptedLoadableModule) is too.
+# ``_LegacyLiverLogic.py``: the tests run from a generic pytest invocation
+# and may not be inside a Slicer launcher.  The ``importorskip("slicer")``
+# gates everything below it; once slicer is importable, the rest of the
+# dependency stack (vtk, ScriptedLoadableModule) is too.
 # --------------------------------------------------------------------------- #
 
 @pytest.fixture(scope="module")
 def liver_logic():
-    """Construct ``LiverLogic`` from the in-repo ``Liver/Liver.py``.
+    """Construct ``LiverLogic`` from ``Liver/_LegacyLiverLogic.py``.
 
-    Skips if ``slicer`` (and thus the Liver module's ``import vtk, qt,
-    ctk, slicer`` line) is unavailable.  Returns a fresh ``LiverLogic()``
+    Skips if ``slicer`` (and thus the legacy module's ``import vtk,
+    slicer`` line) is unavailable.  Returns a fresh ``LiverLogic()``
     instance; the methods under test are stateless, so module scope is
     safe.
     """
     pytest.importorskip(
         "slicer",
         reason=(
-            "Liver.py imports vtk/qt/ctk/slicer at module top; "
+            "_LegacyLiverLogic.py imports vtk/slicer at module top; "
             "characterisation requires Slicer's Python."
         ),
     )
 
-    # Ensure the in-repo Liver/ directory is on sys.path so Liver.py's
-    # ``import VascularTerritories`` / ``import LiverVolumetry`` resolve
-    # to the sibling source trees.
+    # Ensure the in-repo Liver/ directory is on sys.path so the sibling
+    # source trees are visible if needed.
     liver_dir = str(REPO_ROOT / "Liver")
     if liver_dir not in sys.path:
         sys.path.insert(0, liver_dir)
-    for sibling in ("VascularTerritories", "LiverVolumetry"):
-        sibling_dir = str(REPO_ROOT / sibling / sibling)
-        if (REPO_ROOT / sibling / sibling).is_dir() and sibling_dir not in sys.path:
-            sys.path.insert(0, sibling_dir)
 
-    spec = importlib.util.spec_from_file_location("Liver", str(LIVER_PY))
+    spec = importlib.util.spec_from_file_location(
+        "_LegacyLiverLogic", str(LEGACY_LOGIC_PY)
+    )
     if spec is None or spec.loader is None:  # pragma: no cover — defensive
-        pytest.skip(f"could not build importlib spec for {LIVER_PY}")
-    Liver = importlib.util.module_from_spec(spec)
+        pytest.skip(f"could not build importlib spec for {LEGACY_LOGIC_PY}")
+    legacy = importlib.util.module_from_spec(spec)
     try:
-        spec.loader.exec_module(Liver)
+        spec.loader.exec_module(legacy)
     except Exception as exc:  # pragma: no cover — surfaces only in broken env
-        pytest.skip(f"failed to load Liver.py: {exc}")
+        pytest.skip(f"failed to load _LegacyLiverLogic.py: {exc}")
 
-    return Liver.LiverLogic()
+    return legacy.LiverLogic()
 
 
 # --------------------------------------------------------------------------- #
