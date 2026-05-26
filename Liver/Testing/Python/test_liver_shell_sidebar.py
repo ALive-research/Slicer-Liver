@@ -88,11 +88,16 @@ def _import_slicer_or_skip():
 def _instantiate_liver_widget():
     """Build a fresh ``LiverWidget`` rooted on a throwaway parent.
 
-    Returns the widget instance.  Skips the test cleanly if the Liver
-    module isn't loadable in the current environment (e.g. when the
-    test harness boots Slicer without the Liver scripted module on the
-    additional-module-paths).
+    Returns the widget instance.  Skips the test cleanly when the
+    harness can't satisfy the requirements (no ``qSlicerApplication``
+    initialised, Liver module not on additional-module-paths, etc.).
     """
+    # Widget-level tests need qt.QWidget — bare ``PythonSlicer -m pytest``
+    # leaves PythonQt's qt module importable but without QWidget.  Skip
+    # gracefully when the launched-Slicer harness isn't in play.
+    from conftest import _require_qt_widget  # type: ignore[import-not-found]
+    _require_qt_widget()
+
     _import_slicer_or_skip()
     try:
         import qt  # type: ignore[import-not-found]

@@ -7,7 +7,6 @@ set(MODULE_NAME Liver)
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
   ${MODULE_NAME}.py
-  _LegacyLiverLogic.py
   )
 
 set(MODULE_PYTHON_RESOURCES
@@ -32,6 +31,10 @@ slicerMacroBuildScriptedModule(
   RESOURCES ${MODULE_PYTHON_RESOURCES}
   WITH_GENERIC_TESTS
   )
+
+#-----------------------------------------------------------------------------
+# Python helpers (LiverLib) -- not Slicer scripted modules.
+add_subdirectory(LiverLib)
 
 #-----------------------------------------------------------------------------
 if(BUILD_TESTING)
