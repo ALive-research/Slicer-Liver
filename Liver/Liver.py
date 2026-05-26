@@ -184,6 +184,15 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     self.numComps = 0
     self._distanceContourNode = None
     self._preprocessedLiverNode = None
+    # Liver-shell sidebar (ADR-0023 Option H) — populated in
+    # ``_buildShellSidebar`` from ``setup()``.  Kept ``None`` here so
+    # any pre-setup call to ``_refreshStageIndicators`` short-circuits
+    # cleanly instead of NPE'ing.
+    self._stageSidebar = None
+    self._contentStack = None
+    self._stagePages = []
+    self._shellHost = None
+    self._injectedStageCompletion = None
 
   def setup(self):
     """
@@ -960,6 +969,325 @@ class LiverWidget(ScriptedLoadableModuleWidget):
     if self._currentResectionNode is not None:
       VascularSegmentsNode = self.resectogramWidget.VascularSegmentsNodeComboBox.currentNode()
       self._currentResectionNode.SetVascularSegmentsVolumeNode(VascularSegmentsNode)
+
+  # ------------------------------------------------------------------ #
+  # Liver-shell sidebar — composition + navigation (ADR-0023 Option H)
+  #
+  # Six stages, each one row in a QListWidget driving a QStackedWidget:
+  #
+  #   0  Case Setup            (shell-owned)
+  #   1  Anatomy Definition    (LiverSegmentation widgetRepresentation;
+  #                             gated on issue #409 — disabled until then)
+  #   2  Vascular Territories  (VascularTerritories widgetRepresentation)
+  #   3  Resection Planning    (LiverResections widgetRepresentation)
+  #   4  Volumetry             (LiverVolumetry widgetRepresentation)
+  #   5  Export                (shell-owned)
+  #
+  # Per-row state-indicator semantics (ADR-0023 §"Shell composition"):
+  #   ✓  complete  — stage's IsStageComplete() returns True
+  #   ●  current   — sidebar's selected row (overrides 'complete')
+  #   ○  pending   — neither complete nor current
+  #
+  # State source is hybrid (T5.2-d planner §"State source"): each
+  # module's logic owns the query; the shell observes scene events via
+  # VTKObservationMixin and re-runs every predicate on change.
+  # ------------------------------------------------------------------ #
+
+  _STAGE_NAMES = (
+    "Case Setup",
+    "Anatomy Definition",
+    "Vascular Territories",
+    "Resection Planning",
+    "Volumetry",
+    "Export",
+  )
+
+  _INDICATOR_COMPLETE = "✓"  # check mark
+  _INDICATOR_CURRENT = "●"   # filled circle
+  _INDICATOR_PENDING = "○"   # empty circle
+
+  def _buildShellSidebar(self):
+    """Construct the vertical-sidebar shell (QListWidget + QStackedWidget).
+
+    Idempotent — calling twice replaces the previous widgets cleanly.
+    Stages 2-5 surface the cached widgetRepresentation() of their
+    owning Slicer module; stages 1 and 6 host shell-owned placeholders.
+    Stage 2 (LiverSegmentation) degrades gracefully when the module is
+    absent (issue #409): row disabled-greyed; predicate returns False.
+    """
+    self._stageSidebar = qt.QListWidget()
+    self._stageSidebar.setObjectName("LiverShellStageSidebar")
+    self._stageSidebar.setSelectionMode(qt.QAbstractItemView.SingleSelection)
+
+    self._contentStack = qt.QStackedWidget()
+    self._contentStack.setObjectName("LiverShellContentStack")
+
+    # Reset the test-time injection bag every time we rebuild.
+    self._injectedStageCompletion = None
+    # Cached module widget references kept here so the lifetime is the
+    # shell's, not the QStackedWidget's child-ownership cycle.
+    self._stagePages = []
+
+    for index, name in enumerate(self._STAGE_NAMES):
+      page, available = self._resolveStagePage(index)
+      self._stagePages.append(page)
+      self._contentStack.addWidget(page)
+
+      item = qt.QListWidgetItem(f"{self._INDICATOR_PENDING}  {name}")
+      if not available:
+        # Greyed-disabled signals "module not registered in this build";
+        # see Stage 2 graceful-degradation contract (ADR-0023 §Stage 2).
+        item.setFlags(item.flags() & ~qt.Qt.ItemIsEnabled)
+      self._stageSidebar.addItem(item)
+
+    self._stageSidebar.connect("currentRowChanged(int)", self._onStageRowChanged)
+
+    # Compose the side-by-side layout.  Keep the sidebar narrow so the
+    # surgeon-facing content panel gets the bulk of the screen real
+    # estate.  Width tuned to fit the longest stage name at the default
+    # Slicer font; surgeons read these labels, not scan them.
+    sidebarLayout = qt.QHBoxLayout()
+    sidebarLayout.setContentsMargins(0, 0, 0, 0)
+    self._stageSidebar.setMinimumWidth(180)
+    self._stageSidebar.setMaximumWidth(220)
+    sidebarLayout.addWidget(self._stageSidebar)
+    sidebarLayout.addWidget(self._contentStack, 1)
+
+    self._shellHost = qt.QWidget()
+    self._shellHost.setLayout(sidebarLayout)
+    self.layout.addWidget(self._shellHost)
+
+    self._stageSidebar.setCurrentRow(0)
+    self._refreshStageIndicators()
+
+  def _resolveStagePage(self, index):
+    """Return ``(page_widget, is_available)`` for stage ``index``.
+
+    Stages 1 and 6 return shell-owned placeholders; stages 2-5 return
+    the cached ``widgetRepresentation()`` of the matching Slicer
+    module, or a "module not available" placeholder when the module
+    is not registered.
+    """
+    if index == 0:
+      return self._buildStage1Page(), True
+    if index == 5:
+      return self._buildStage6Page(), True
+
+    moduleName = {
+      1: "liversegmentation",
+      2: "vascularterritories",
+      3: "liverresections",
+      4: "livervolumetry",
+    }[index]
+
+    module = getattr(slicer.modules, moduleName, None)
+    if module is None or not hasattr(module, "widgetRepresentation"):
+      return self._buildUnavailablePage(self._STAGE_NAMES[index]), False
+
+    try:
+      rep = module.widgetRepresentation()
+    except Exception:  # pragma: no cover — surfaces only on broken module loads
+      return self._buildUnavailablePage(self._STAGE_NAMES[index]), False
+
+    if rep is None:
+      return self._buildUnavailablePage(self._STAGE_NAMES[index]), False
+    return rep, True
+
+  def _buildStage1Page(self):
+    """Shell-owned Case Setup placeholder (ADR-0023 §Stage 1 / ADR-0029).
+
+    The functional UI for Stage 1 lands in a follow-up task (planner
+    §"Stage 1"); for T5.2-d the shell only reserves the page so the
+    sidebar contract is satisfied.
+    """
+    page = qt.QWidget()
+    layout = qt.QVBoxLayout(page)
+    layout.addWidget(qt.QLabel("Case Setup — load volumes and tag roles (Stage 1)."))
+    layout.addStretch(1)
+    return page
+
+  def _buildStage6Page(self):
+    """Shell-owned Export placeholder (ADR-0023 §Stage 6).
+
+    Real Export UI lands in a follow-up; T5.2-d ships only the page
+    placeholder + the "last write OK" predicate.
+    """
+    page = qt.QWidget()
+    layout = qt.QVBoxLayout(page)
+    layout.addWidget(qt.QLabel("Export — save the resection plan to disk (Stage 6)."))
+    layout.addStretch(1)
+    return page
+
+  def _buildUnavailablePage(self, stageName):
+    """Placeholder shown when a stage's owning module is not registered."""
+    page = qt.QWidget()
+    layout = qt.QVBoxLayout(page)
+    layout.addWidget(qt.QLabel(
+      f"{stageName} — module not available in this build."
+    ))
+    layout.addStretch(1)
+    return page
+
+  def _onStageRowChanged(self, row):
+    """Slot for ``QListWidget.currentRowChanged(int)``.
+
+    Dispatches the content stack to the matching page and refreshes
+    the per-row indicators (the 'current' marker tracks selection).
+    """
+    if 0 <= row < self._contentStack.count():
+      self._contentStack.setCurrentIndex(row)
+    self._refreshStageIndicators()
+
+  # ------------------------------------------------------------------ #
+  # Per-stage IsStageComplete() — hybrid: module logic owns the body,
+  # the shell merely queries it.  The shell-owned predicates (Stage 1,
+  # Stage 6) live here because there is no companion module to delegate
+  # to (per planner §"IsStageComplete() contract per stage").
+  # ------------------------------------------------------------------ #
+
+  def _stage1IsComplete(self):
+    """Stage 1 — done iff at least one volume carries a ``LiverRole`` attribute.
+
+    ADR-0029 §"Stage 1 functional contract" identifies the per-volume
+    role tag as Stage 1's commit signal.  Attribute presence (not
+    value) is the gate; the surgeon's eyeball judges correctness.
+    """
+    scene = slicer.mrmlScene
+    volumes = scene.GetNodesByClass("vtkMRMLScalarVolumeNode")
+    if volumes is None:
+      return False
+    for i in range(volumes.GetNumberOfItems()):
+      node = volumes.GetItemAsObject(i)
+      if node is not None and node.GetAttribute("LiverRole"):
+        return True
+    return False
+
+  def _stage2IsComplete(self):
+    """Stage 2 — graceful-degradation stub while LiverSegmentation is absent.
+
+    Per planner §"Stage 2 stub strategy" (locked decision): the
+    LiverSegmentation module is a v2.1 deliverable (#409).  Until it
+    lands, the predicate returns ``False`` and the sidebar row is
+    disabled-greyed.
+    """
+    return False
+
+  def _stage6IsComplete(self):
+    """Stage 6 — done iff the scene has logged a successful plan write.
+
+    The shell tracks "last write OK" via a scene-level attribute
+    (``Liver.Stage6.LastWriteOK``) that the Export sub-widget sets on
+    successful serialisation.  Absence is treated as "not written
+    yet", consistent with the optimistic semantics described in
+    ADR-0023 §"Shell composition (Option H)".
+    """
+    scene = slicer.mrmlScene
+    if scene is None:
+      return False
+    flag = scene.GetAttribute("Liver.Stage6.LastWriteOK")
+    return flag == "True"
+
+  def _stageIsComplete(self, row):
+    """Return the completion bool for stage ``row``.
+
+    Routes to the per-stage owner: shell methods for rows 0/5,
+    module-logic ``IsStageComplete()`` for rows 1-4.  Test mode
+    short-circuits via ``_injectedStageCompletion`` (set by
+    ``_injectStageCompletionForTesting``).
+    """
+    injected = getattr(self, "_injectedStageCompletion", None)
+    if injected is not None and 0 <= row < len(injected):
+      return bool(injected[row])
+
+    if row == 0:
+      return self._stage1IsComplete()
+    if row == 5:
+      return self._stage6IsComplete()
+
+    moduleName = {
+      1: "liversegmentation",
+      2: "vascularterritories",
+      3: "liverresections",
+      4: "livervolumetry",
+    }.get(row)
+    if moduleName is None:
+      return False
+
+    if row == 1:
+      # Stage 2 stub — LiverSegmentation absent in v2.0.
+      return self._stage2IsComplete()
+
+    module = getattr(slicer.modules, moduleName, None)
+    if module is None:
+      return False
+    try:
+      logic = module.logic()
+    except Exception:  # pragma: no cover — defensive
+      return False
+    if logic is None:
+      return False
+
+    # C++ logic exposes ``IsStageComplete`` (VTK convention);
+    # Python logic exposes ``isStageComplete`` (Python convention).
+    for attr in ("IsStageComplete", "isStageComplete"):
+      query = getattr(logic, attr, None)
+      if callable(query):
+        try:
+          return bool(query())
+        except Exception:  # pragma: no cover — defensive
+          return False
+    return False
+
+  def _stageIndicatorState(self, row):
+    """Return ``'complete' | 'current' | 'pending'`` for stage ``row``.
+
+    'current' takes precedence over 'complete' so the surgeon always
+    sees which stage is active — even if they've revisited a stage
+    they previously completed.  Test contract pinned by
+    ``test_state_indicators_reflect_isstagecomplete``.
+    """
+    if self._stageSidebar is not None and self._stageSidebar.currentRow == row:
+      return "current"
+    if self._stageIsComplete(row):
+      return "complete"
+    return "pending"
+
+  def _indicatorGlyph(self, state):
+    return {
+      "complete": self._INDICATOR_COMPLETE,
+      "current": self._INDICATOR_CURRENT,
+      "pending": self._INDICATOR_PENDING,
+    }.get(state, self._INDICATOR_PENDING)
+
+  def _refreshStageIndicators(self):
+    """Re-read per-stage completion + repaint the sidebar labels.
+
+    Cheap to call repeatedly; the predicate side-effects (scene
+    iteration) are O(scene-size) per stage but happen at human
+    interaction rate.
+    """
+    if self._stageSidebar is None:
+      return
+    for row in range(self._stageSidebar.count()):
+      state = self._stageIndicatorState(row)
+      glyph = self._indicatorGlyph(state)
+      name = self._STAGE_NAMES[row]
+      item = self._stageSidebar.item(row)
+      if item is not None:
+        item.setText(f"{glyph}  {name}")
+
+  def _injectStageCompletionForTesting(self, pattern):
+    """Mock per-stage completion for invariant tests.
+
+    Pinned by ``test_state_indicators_reflect_isstagecomplete``:
+    ``pattern`` is a six-element iterable of booleans; the next
+    ``_refreshStageIndicators`` call uses it instead of the real
+    predicates.  Pass ``None`` to clear.
+    """
+    if pattern is None:
+      self._injectedStageCompletion = None
+      return
+    self._injectedStageCompletion = [bool(x) for x in pattern]
 
   def cleanup(self):
     """
