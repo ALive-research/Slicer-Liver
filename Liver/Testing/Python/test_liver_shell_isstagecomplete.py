@@ -60,8 +60,15 @@ def _import_slicer_or_skip():
     return slicer
 
 
+def _require_mrml_scene_or_skip():
+    """Skip when ``slicer.mrmlScene`` isn't initialised (bare PythonSlicer)."""
+    from conftest import _require_mrml_scene  # type: ignore[import-not-found]
+    _require_mrml_scene()
+
+
 def _clear_scene():
     """Empty the MRML scene; minimal-scene fixture for per-test isolation."""
+    _require_mrml_scene_or_skip()
     slicer = _import_slicer_or_skip()
     slicer.mrmlScene.Clear(0)
 
@@ -114,6 +121,9 @@ def _volumetry_logic():
 
 def _liver_widget():
     """Instantiate a fresh ``LiverWidget`` rooted on a throwaway parent."""
+    from conftest import _require_qt_widget  # type: ignore[import-not-found]
+    _require_qt_widget()
+
     _import_slicer_or_skip()
     try:
         import qt  # type: ignore[import-not-found]

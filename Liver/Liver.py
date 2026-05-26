@@ -61,9 +61,13 @@ indicators (✓ done / ● current / ○ pending) on every change.
 
 Domain algorithm bridges historically embedded here (signed-Maurer
 distance maps, Bezier surface fitting, elliptic Fourier descriptors)
-were relocated to the private sibling ``_LegacyLiverLogic`` module
-in T5.2-d; their full move to the per-stage modules they actually
-belong to is tracked in issue #437.
+were relocated to ``LiverLib/legacy_logic.py`` -- a Python sub-package
+sibling to the scripted module per the ``LiverResectionsLib/``
+convention -- in T5.2-d.  Slicer's scripted-module loader does not
+sweep subdirectories, so the sub-package is importable Python without
+being mis-instantiated as a Slicer module.  The full move to the
+per-stage modules these helpers actually belong to is tracked in
+issue #437.
 """
 
 # ruff: noqa: F403, F405  # standard Slicer scripted-module wildcard-import pattern
