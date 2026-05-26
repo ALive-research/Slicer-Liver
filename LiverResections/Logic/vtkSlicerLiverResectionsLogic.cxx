@@ -106,15 +106,30 @@ void vtkSlicerLiverResectionsLogic::PrintSelf(ostream& os, vtkIndent indent)
 //---------------------------------------------------------------------------
 bool vtkSlicerLiverResectionsLogic::IsStageComplete()
 {
-  // Stage-4 completion predicate stub (T5.2-d).  Real body iterates the
-  // scene's vtkMRMLResectionPlanNode collection and returns true when
-  // at least one node's State == vtkMRMLResectionPlanNode::Confirmed.
-  // See ADR-0023 §"Shell composition (Option H)" + ADR-0019 (Resection
-  // state machine).
-  vtkWarningMacro("vtkSlicerLiverResectionsLogic::IsStageComplete() — stub, "
-                  "always returns false.  Predicate body lands in T5.2-d "
-                  "implementation; see Liver/Testing/Python/"
-                  "test_liver_shell_isstagecomplete.py for the contract.");
+  // Stage-4 completion predicate per ADR-0023 §"Shell composition
+  // (Option H)" + ADR-0019 (Resection state machine): the stage is
+  // done iff at least one ``vtkMRMLResectionPlanNode`` in the scene
+  // reports ``State == Confirmed``.  Init / Planning keep the stage
+  // 'current' (not 'done') — surgeons must reach the locked-plan
+  // gate before Volumetry / Export light up.
+  vtkMRMLScene* scene = this->GetMRMLScene();
+  if (!scene)
+  {
+    return false;
+  }
+  vtkSmartPointer<vtkCollection> plans = vtkSmartPointer<vtkCollection>::Take(scene->GetNodesByClass("vtkMRMLResectionPlanNode"));
+  if (!plans)
+  {
+    return false;
+  }
+  for (int i = 0; i < plans->GetNumberOfItems(); ++i)
+  {
+    auto* plan = vtkMRMLResectionPlanNode::SafeDownCast(plans->GetItemAsObject(i));
+    if (plan && plan->GetState() == vtkMRMLResectionPlanNode::Confirmed)
+    {
+      return true;
+    }
+  }
   return false;
 }
 

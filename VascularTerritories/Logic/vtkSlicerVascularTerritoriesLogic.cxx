@@ -53,7 +53,9 @@
 #include <vtkMRMLScene.h>
 #include <vtkSlicerSegmentationsModuleLogic.h>
 
+#include <vtkCollection.h>
 #include <vtkObjectFactory.h>
+#include <vtkSmartPointer.h>
 #include <vtkImageData.h>
 #include <vtkImageIterator.h>
 #include <vtkKdTreePointLocator.h>
@@ -190,17 +192,20 @@ void vtkSlicerVascularTerritoriesLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
 //------------------------------------------------------------------------------
 bool vtkSlicerVascularTerritoriesLogic::IsStageComplete()
 {
-  // Stage-3 completion predicate stub (T5.2-d).  Real body iterates the
-  // scene's vtkMRMLAbstractTerritoriesNode descendants and returns true
-  // when at least one Auto-tab vtkMRMLStdCouinaudTerritoriesNode or
-  // Manual-tab vtkMRMLCustomTerritoriesNode is present.  See ADR-0023
-  // §"Class abstraction for territories" + §"Shell composition
-  // (Option H)".
-  vtkWarningMacro("vtkSlicerVascularTerritoriesLogic::IsStageComplete() — stub, "
-                  "always returns false.  Predicate body lands in T5.2-d "
-                  "implementation; see Liver/Testing/Python/"
-                  "test_liver_shell_isstagecomplete.py for the contract.");
-  return false;
+  // Stage-3 completion predicate per ADR-0023 §"Shell composition
+  // (Option H)" + §"Class abstraction for territories": the stage is
+  // done iff at least one territories node exists in the scene.  The
+  // abstract base ``vtkMRMLAbstractTerritoriesNode`` catches both the
+  // Auto-tab ``vtkMRMLStdCouinaudTerritoriesNode`` and the Manual-tab
+  // ``vtkMRMLCustomTerritoriesNode`` subclasses with a single
+  // ``GetNodesByClass`` call.
+  vtkMRMLScene* scene = this->GetMRMLScene();
+  if (!scene)
+  {
+    return false;
+  }
+  vtkSmartPointer<vtkCollection> nodes = vtkSmartPointer<vtkCollection>::Take(scene->GetNodesByClass("vtkMRMLAbstractTerritoriesNode"));
+  return nodes && nodes->GetNumberOfItems() > 0;
 }
 
 //------------------------------------------------------------------------------

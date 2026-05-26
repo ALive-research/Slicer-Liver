@@ -406,16 +406,28 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
 
     Stage 5 (Volumetry) is a pure analytical workbench with no
     verification card in v2.0 (see ADR-0023 §"Decision" item 5 +
-    §"What is NOT in v2.0").  The implementer fills the body — most
-    likely "True once at least one partition computation has been
-    executed" — once the v2.0 surgeon-facing volumetry surface
-    crystallises.
+    §"What is NOT in v2.0").  v2.0 ships the *soft* semantics:
+    Volumetry is "done" iff Stage 4 (Resection Planning) is done —
+    the prerequisites are met, so the surgeon has reached the
+    analytical workbench.  A future iteration may add a real gate
+    (e.g. "at least one partition computation has been executed")
+    once the v2.0 surgeon-facing volumetry surface crystallises.
 
-    Stub: returns ``False``.  Pinned by
+    Pinned by
     ``Liver/Testing/Python/test_liver_shell_isstagecomplete.py``
     (T2 stage-5 symbol existence + T3 semantics).
     """
-    return False
+    import slicer
+    resections = getattr(slicer.modules, "liverresections", None)
+    if resections is None:
+      return False
+    try:
+      logic = resections.logic()
+    except Exception:  # pragma: no cover — defensive
+      return False
+    if logic is None or not hasattr(logic, "IsStageComplete"):
+      return False
+    return bool(logic.IsStageComplete())
 
   def setDefaultParameters(self, parameterNode):
     """
