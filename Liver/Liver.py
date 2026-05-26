@@ -289,6 +289,18 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   _INDICATOR_CURRENT = "●"   # filled circle
   _INDICATOR_PENDING = "○"   # empty circle
 
+  # Stage index → Slicer module name owning that stage's
+  # widgetRepresentation() + IsStageComplete() query.  Stages 0 (Case
+  # Setup) and 5 (Export) are shell-owned and omitted; stage 1
+  # (LiverSegmentation) is gated on #409 and currently routed to the
+  # shell-owned graceful-degradation stub.
+  _STAGE_MODULE = {
+    1: "liversegmentation",
+    2: "vascularterritories",
+    3: "liverresections",
+    4: "livervolumetry",
+  }
+
   def _buildShellSidebar(self):
     """Construct the vertical-sidebar shell (QListWidget + QStackedWidget).
 
@@ -356,22 +368,13 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if index == 5:
       return self._buildStage6Page(), True
 
-    moduleName = {
-      1: "liversegmentation",
-      2: "vascularterritories",
-      3: "liverresections",
-      4: "livervolumetry",
-    }[index]
-
-    module = getattr(slicer.modules, moduleName, None)
-    if module is None or not hasattr(module, "widgetRepresentation"):
-      return self._buildUnavailablePage(self._STAGE_NAMES[index]), False
-
-    try:
-      rep = module.widgetRepresentation()
-    except Exception:  # pragma: no cover — surfaces only on broken module loads
-      return self._buildUnavailablePage(self._STAGE_NAMES[index]), False
-
+    module = getattr(slicer.modules, self._STAGE_MODULE[index], None)
+    rep = None
+    if module is not None and hasattr(module, "widgetRepresentation"):
+      try:
+        rep = module.widgetRepresentation()
+      except Exception:  # pragma: no cover — surfaces only on broken module loads
+        rep = None
     if rep is None:
       return self._buildUnavailablePage(self._STAGE_NAMES[index]), False
     return rep, True
@@ -473,33 +476,27 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def _stageIsComplete(self, row):
     """Return the completion bool for stage ``row``.
 
-    Routes to the per-stage owner: shell methods for rows 0/5,
-    module-logic ``IsStageComplete()`` for rows 1-4.  Test mode
+    Routes to the per-stage owner: shell methods for shell-owned
+    stages (0, 1, 5 — the last two until #409 lands segmentation),
+    module-logic ``IsStageComplete()`` for the rest.  Test mode
     short-circuits via ``_injectedStageCompletion`` (set by
     ``_injectStageCompletionForTesting``).
     """
-    injected = getattr(self, "_injectedStageCompletion", None)
+    injected = self._injectedStageCompletion
     if injected is not None and 0 <= row < len(injected):
       return bool(injected[row])
 
-    if row == 0:
-      return self._stage1IsComplete()
-    if row == 5:
-      return self._stage6IsComplete()
-
-    moduleName = {
-      1: "liversegmentation",
-      2: "vascularterritories",
-      3: "liverresections",
-      4: "livervolumetry",
+    shellPredicate = {
+      0: self._stage1IsComplete,
+      1: self._stage2IsComplete,  # Stage 2 stub — LiverSegmentation gated on #409.
+      5: self._stage6IsComplete,
     }.get(row)
+    if shellPredicate is not None:
+      return shellPredicate()
+
+    moduleName = self._STAGE_MODULE.get(row)
     if moduleName is None:
       return False
-
-    if row == 1:
-      # Stage 2 stub — LiverSegmentation absent in v2.0.
-      return self._stage2IsComplete()
-
     module = getattr(slicer.modules, moduleName, None)
     if module is None:
       return False
@@ -573,10 +570,13 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._injectedStageCompletion = [bool(x) for x in pattern]
 
   def cleanup(self):
+    """Tear down scene observers wired in ``setup()``.
+
+    Without ``removeObservers()`` the VTKObservationMixin keeps the
+    scene-change callbacks alive across module reloads, leaking one
+    observer per reload.
     """
-    Called when the application closes and the module widget is destroyed.
-    """
-    pass
+    self.removeObservers()
 
   def enter(self):
     """
