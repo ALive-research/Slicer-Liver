@@ -104,6 +104,21 @@ void vtkSlicerLiverResectionsLogic::PrintSelf(ostream& os, vtkIndent indent)
 }
 
 //---------------------------------------------------------------------------
+bool vtkSlicerLiverResectionsLogic::IsStageComplete()
+{
+  // Stage-4 completion predicate stub (T5.2-d).  Real body iterates the
+  // scene's vtkMRMLResectionPlanNode collection and returns true when
+  // at least one node's State == vtkMRMLResectionPlanNode::Confirmed.
+  // See ADR-0023 §"Shell composition (Option H)" + ADR-0019 (Resection
+  // state machine).
+  vtkWarningMacro("vtkSlicerLiverResectionsLogic::IsStageComplete() — stub, "
+                  "always returns false.  Predicate body lands in T5.2-d "
+                  "implementation; see Liver/Testing/Python/"
+                  "test_liver_shell_isstagecomplete.py for the contract.");
+  return false;
+}
+
+//---------------------------------------------------------------------------
 void vtkSlicerLiverResectionsLogic::RegisterNodes()
 {
   assert(this->GetMRMLScene() != nullptr);

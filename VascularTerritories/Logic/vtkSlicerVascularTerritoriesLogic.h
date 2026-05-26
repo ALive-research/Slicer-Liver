@@ -88,6 +88,20 @@ protected:
   void SetMRMLSceneInternal(vtkMRMLScene* newScene) override;
 
 public:
+  /// Stage-3 completion predicate for the Liver-shell sidebar (T5.2-d).
+  ///
+  /// Returns ``true`` once the scene carries at least one node
+  /// derived from ``vtkMRMLAbstractTerritoriesNode`` (Auto-tab
+  /// ``vtkMRMLStdCouinaudTerritoriesNode`` or Manual-tab
+  /// ``vtkMRMLCustomTerritoriesNode`` — see ADR-0023 §"Class
+  /// abstraction for territories").  The Liver shell observes scene
+  /// events and re-queries this predicate to refresh its per-stage
+  /// state indicator (ADR-0023 §"Shell composition (Option H)").
+  ///
+  /// Stub: returns ``false`` and warns.  The semantics body lands as
+  /// part of T5.2-d implementation.
+  virtual bool IsStageComplete();
+
   void MarkSegmentWithID(vtkMRMLModelNode* segment, int segmentId);
   void AddSegmentToCenterlineModel(vtkMRMLModelNode* summedCenterline, vtkMRMLModelNode* segmentCenterline);
   int SegmentClassificationProcessing(vtkMRMLModelNode* centerlineModel, vtkMRMLLabelMapVolumeNode* labelMap);

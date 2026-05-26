@@ -401,6 +401,22 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
     self.scl = vtkLiverVolumetryLogic()
 
 
+  def isStageComplete(self) -> bool:
+    """Stage-5 completion predicate for the Liver-shell sidebar (T5.2-d).
+
+    Stage 5 (Volumetry) is a pure analytical workbench with no
+    verification card in v2.0 (see ADR-0023 §"Decision" item 5 +
+    §"What is NOT in v2.0").  The implementer fills the body — most
+    likely "True once at least one partition computation has been
+    executed" — once the v2.0 surgeon-facing volumetry surface
+    crystallises.
+
+    Stub: returns ``False``.  Pinned by
+    ``Liver/Testing/Python/test_liver_shell_isstagecomplete.py``
+    (T2 stage-5 symbol existence + T3 semantics).
+    """
+    return False
+
   def setDefaultParameters(self, parameterNode):
     """
     Initialize parameter node with default settings.

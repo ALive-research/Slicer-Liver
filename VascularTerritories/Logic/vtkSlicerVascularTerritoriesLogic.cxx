@@ -187,6 +187,23 @@ void vtkSlicerVascularTerritoriesLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
   }
 }
 
+//------------------------------------------------------------------------------
+bool vtkSlicerVascularTerritoriesLogic::IsStageComplete()
+{
+  // Stage-3 completion predicate stub (T5.2-d).  Real body iterates the
+  // scene's vtkMRMLAbstractTerritoriesNode descendants and returns true
+  // when at least one Auto-tab vtkMRMLStdCouinaudTerritoriesNode or
+  // Manual-tab vtkMRMLCustomTerritoriesNode is present.  See ADR-0023
+  // §"Class abstraction for territories" + §"Shell composition
+  // (Option H)".
+  vtkWarningMacro("vtkSlicerVascularTerritoriesLogic::IsStageComplete() — stub, "
+                  "always returns false.  Predicate body lands in T5.2-d "
+                  "implementation; see Liver/Testing/Python/"
+                  "test_liver_shell_isstagecomplete.py for the contract.");
+  return false;
+}
+
+//------------------------------------------------------------------------------
 void vtkSlicerVascularTerritoriesLogic::MarkSegmentWithID(vtkMRMLModelNode* segment, int segmentId)
 {
   auto idArray = vtkSmartPointer<vtkIntArray>::New();
