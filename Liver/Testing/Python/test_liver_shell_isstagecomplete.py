@@ -149,10 +149,6 @@ def test_t2_stage1_predicate_exists_on_shell():
     ``_stage1IsComplete`` member.
     """
     widget = _liver_widget()
-    pytest.skip(
-        "Invariant not yet implemented — shell-owned Stage 1 predicate "
-        "lands in T5.2-d implementation."
-    )
     assert callable(getattr(widget, "_stage1IsComplete", None)), (
         "LiverWidget._stage1IsComplete() not found."
     )
@@ -174,10 +170,6 @@ def test_t2_stage2_predicate_degrades_gracefully():
     ``_stage2IsComplete`` member.
     """
     widget = _liver_widget()
-    pytest.skip(
-        "Invariant not yet implemented — Stage 2 graceful-degradation "
-        "stub lands in T5.2-d implementation."
-    )
     assert callable(getattr(widget, "_stage2IsComplete", None)), (
         "LiverWidget._stage2IsComplete() not found."
     )
@@ -201,11 +193,6 @@ def test_t2_stage3_predicate_exists_on_territories_logic():
     logic header.
     """
     logic = _territories_logic()
-    pytest.skip(
-        "Invariant not yet implemented — IsStageComplete() stub "
-        "landed by test-designer but Python bindings not regenerated "
-        "until the C++ stub builds.  Implementer rebuilds and re-tests."
-    )
     assert hasattr(logic, "IsStageComplete"), (
         "vtkSlicerVascularTerritoriesLogic::IsStageComplete() not bound."
     )
@@ -225,11 +212,6 @@ def test_t2_stage4_predicate_exists_on_resections_logic():
     logic header.
     """
     logic = _resections_logic()
-    pytest.skip(
-        "Invariant not yet implemented — IsStageComplete() stub "
-        "landed by test-designer but Python bindings not regenerated "
-        "until the C++ stub builds.  Implementer rebuilds and re-tests."
-    )
     assert hasattr(logic, "IsStageComplete"), (
         "vtkSlicerLiverResectionsLogic::IsStageComplete() not bound."
     )
@@ -249,10 +231,6 @@ def test_t2_stage5_predicate_exists_on_volumetry_logic():
     ``isStageComplete`` method.
     """
     logic = _volumetry_logic()
-    pytest.skip(
-        "Invariant not yet implemented — Python isStageComplete() stub "
-        "lands in LiverVolumetry.py via test-designer."
-    )
     assert callable(getattr(logic, "isStageComplete", None))
     result = logic.isStageComplete()
     assert isinstance(result, bool)
@@ -269,10 +247,6 @@ def test_t2_stage6_predicate_exists_on_shell():
     ``_stage6IsComplete`` member.
     """
     widget = _liver_widget()
-    pytest.skip(
-        "Invariant not yet implemented — Stage 6 'last write OK' "
-        "predicate lands in T5.2-d implementation."
-    )
     assert callable(getattr(widget, "_stage6IsComplete", None))
     result = widget._stage6IsComplete()
     assert isinstance(result, bool)
@@ -300,11 +274,6 @@ def test_t3_stage1_semantics_empty_scene_returns_false():
     """
     _clear_scene()
     widget = _liver_widget()
-    pytest.skip(
-        "Invariant not yet implemented — Stage 1 semantics require "
-        "implementer to define the LiverRole attribute convention + "
-        "predicate body."
-    )
     assert widget._stage1IsComplete() is False
 
 
@@ -319,11 +288,6 @@ def test_t3_stage1_semantics_tagged_volume_returns_true():
     slicer = _import_slicer_or_skip()
     _clear_scene()
     widget = _liver_widget()
-    pytest.skip(
-        "Invariant not yet implemented — Stage 1 semantics require "
-        "implementer to define the LiverRole attribute convention + "
-        "predicate body."
-    )
 
     volume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode")
     # ``LiverRole`` is the per-volume role tag from ADR-0023 §"Decision"
@@ -344,11 +308,6 @@ def test_t3_stage3_semantics_empty_scene_returns_false():
     """
     _clear_scene()
     logic = _territories_logic()
-    pytest.skip(
-        "Invariant not yet implemented — Stage 3 semantics require "
-        "implementer to write the IsStageComplete() body querying "
-        "GetNodesByClass('vtkMRMLAbstractTerritoriesNode')."
-    )
     assert logic.IsStageComplete() is False
 
 
@@ -363,10 +322,6 @@ def test_t3_stage3_semantics_one_stdcouinaud_returns_true():
     slicer = _import_slicer_or_skip()
     _clear_scene()
     logic = _territories_logic()
-    pytest.skip(
-        "Invariant not yet implemented — Stage 3 semantics require "
-        "implementer to write the IsStageComplete() body."
-    )
 
     slicer.mrmlScene.AddNewNodeByClass("vtkMRMLStdCouinaudTerritoriesNode")
     assert logic.IsStageComplete() is True
@@ -384,10 +339,6 @@ def test_t3_stage4_semantics_empty_scene_returns_false():
     """
     _clear_scene()
     logic = _resections_logic()
-    pytest.skip(
-        "Invariant not yet implemented — Stage 4 semantics require "
-        "implementer to write the IsStageComplete() body."
-    )
     assert logic.IsStageComplete() is False
 
 
@@ -404,10 +355,6 @@ def test_t3_stage4_semantics_init_state_returns_false():
     slicer = _import_slicer_or_skip()
     _clear_scene()
     logic = _resections_logic()
-    pytest.skip(
-        "Invariant not yet implemented — Stage 4 semantics require "
-        "implementer to write the IsStageComplete() body."
-    )
 
     plan = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLResectionPlanNode")
     # State enum: Init=0, Planning=1, Confirmed=2.  Default is Init.
@@ -427,10 +374,6 @@ def test_t3_stage4_semantics_confirmed_state_returns_true():
     slicer = _import_slicer_or_skip()
     _clear_scene()
     logic = _resections_logic()
-    pytest.skip(
-        "Invariant not yet implemented — Stage 4 semantics require "
-        "implementer to write the IsStageComplete() body."
-    )
 
     plan = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLResectionPlanNode")
     plan.SetState(2)  # Confirmed

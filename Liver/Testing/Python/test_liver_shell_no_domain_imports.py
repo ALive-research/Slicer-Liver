@@ -159,11 +159,6 @@ def test_t7_liver_shell_has_no_forbidden_imports():
     size``).
     """
     tree = _parse_liver_py()
-    pytest.skip(
-        "Invariant not yet implemented — orphaned-domain unwiring in "
-        "Liver/Liver.py lands as part of T5.2-d (planner output "
-        "§'Orphaned Liver/Liver.py domain code')."
-    )
 
     violations: list[str] = []
     for line, root in _collect_imports(tree):
@@ -197,11 +192,6 @@ def test_t7_liver_shell_has_no_forbidden_algorithm_calls():
     bridges.
     """
     tree = _parse_liver_py()
-    pytest.skip(
-        "Invariant not yet implemented — orphaned-domain unwiring in "
-        "Liver/Liver.py lands as part of T5.2-d (planner output "
-        "§'Orphaned Liver/Liver.py domain code')."
-    )
 
     violations: list[str] = []
     for line, name in _collect_call_attrs(tree):

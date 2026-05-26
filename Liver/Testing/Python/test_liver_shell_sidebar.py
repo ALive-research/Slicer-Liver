@@ -177,12 +177,6 @@ def test_sidebar_selection_switches_content_stack():
     ``_contentStack`` is not a member of ``LiverWidget``.
     """
     widget = _instantiate_liver_widget()
-    pytest.skip(
-        "Invariant not yet implemented — sidebar dispatch + "
-        "_contentStack land in T5.2-d implementation (planner §'Dispatch')."
-    )
-    # NB: Remainder kept as the executable specification for the
-    # implementer once the skip is removed.
 
     sidebar = widget._stageSidebar
     stack = widget._contentStack
@@ -220,12 +214,6 @@ def test_widget_state_survives_stage_switching():
     Red-fails on ``60c78df`` because no dispatch mechanism exists yet.
     """
     widget = _instantiate_liver_widget()
-    pytest.skip(
-        "Invariant not yet implemented — widget identity preservation "
-        "across stage switching needs the dispatch from T5.2-d."
-    )
-    # NB: Remainder kept as the executable specification for the
-    # implementer once the skip is removed.
 
     sidebar = widget._stageSidebar
     stack = widget._contentStack
@@ -271,12 +259,6 @@ def test_state_indicators_reflect_isstagecomplete():
     exists yet.
     """
     widget = _instantiate_liver_widget()
-    pytest.skip(
-        "Invariant not yet implemented — indicator-refresh mechanism + "
-        "_stageIndicatorState() accessor land in T5.2-d."
-    )
-    # NB: Remainder kept as the executable specification for the
-    # implementer once the skip is removed.
 
     sidebar = widget._stageSidebar
     completion_pattern = [True, True, False, False, False, False]
