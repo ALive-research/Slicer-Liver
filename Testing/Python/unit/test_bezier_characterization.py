@@ -104,11 +104,13 @@ import pytest
 # --------------------------------------------------------------------------- #
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
-# ``LiverLogic`` relocated out of ``Liver/Liver.py`` into the sibling
-# ``_LegacyLiverLogic`` private module during T5.2-d (Liver-shell sidebar);
-# the shell is now compose-only.  Full relocation to per-stage modules
-# tracked in issue #437.
-LEGACY_LOGIC_PY = REPO_ROOT / "Liver" / "_LegacyLiverLogic.py"
+# ``LiverLogic`` relocated out of ``Liver/Liver.py`` into the
+# ``Liver/LiverLib/legacy_logic.py`` Python sub-package during T5.2-d
+# (Liver-shell sidebar) per ADR-0023 §"Shell composition (Option H)"'s
+# no-domain-logic rule; the shell is now compose-only.  Full relocation
+# to the per-stage modules that actually own these algorithms is tracked
+# as a v2.0.0 follow-up.
+LEGACY_LOGIC_PY = REPO_ROOT / "Liver" / "LiverLib" / "legacy_logic.py"
 
 
 # --------------------------------------------------------------------------- #
@@ -123,7 +125,7 @@ LEGACY_LOGIC_PY = REPO_ROOT / "Liver" / "_LegacyLiverLogic.py"
 
 @pytest.fixture(scope="module")
 def liver_logic():
-    """Construct ``LiverLogic`` from ``Liver/_LegacyLiverLogic.py``.
+    """Construct ``LiverLogic`` from ``Liver/LiverLib/legacy_logic.py``.
 
     Skips if ``slicer`` (and thus the legacy module's ``import vtk,
     slicer`` line) is unavailable.  Returns a fresh ``LiverLogic()``
@@ -133,7 +135,7 @@ def liver_logic():
     pytest.importorskip(
         "slicer",
         reason=(
-            "_LegacyLiverLogic.py imports vtk/slicer at module top; "
+            "legacy_logic.py imports vtk/slicer at module top; "
             "characterisation requires Slicer's Python."
         ),
     )
@@ -145,7 +147,7 @@ def liver_logic():
         sys.path.insert(0, liver_dir)
 
     spec = importlib.util.spec_from_file_location(
-        "_LegacyLiverLogic", str(LEGACY_LOGIC_PY)
+        "legacy_logic", str(LEGACY_LOGIC_PY)
     )
     if spec is None or spec.loader is None:  # pragma: no cover — defensive
         pytest.skip(f"could not build importlib spec for {LEGACY_LOGIC_PY}")
@@ -153,7 +155,7 @@ def liver_logic():
     try:
         spec.loader.exec_module(legacy)
     except Exception as exc:  # pragma: no cover — surfaces only in broken env
-        pytest.skip(f"failed to load _LegacyLiverLogic.py: {exc}")
+        pytest.skip(f"failed to load legacy_logic.py: {exc}")
 
     return legacy.LiverLogic()
 
