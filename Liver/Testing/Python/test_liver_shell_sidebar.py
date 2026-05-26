@@ -93,7 +93,7 @@ def _instantiate_liver_widget():
     test harness boots Slicer without the Liver scripted module on the
     additional-module-paths).
     """
-    slicer = _import_slicer_or_skip()
+    _import_slicer_or_skip()
     try:
         import qt  # type: ignore[import-not-found]
         import Liver  # type: ignore[import-not-found]
