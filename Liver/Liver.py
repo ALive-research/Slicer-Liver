@@ -428,7 +428,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Dispatches the content stack to the matching page and refreshes
     the per-row indicators (the 'current' marker tracks selection).
     """
-    if 0 <= row < self._contentStack.count():
+    if 0 <= row < self._contentStack.count:
       self._contentStack.setCurrentIndex(row)
     self._refreshStageIndicators()
 
@@ -557,7 +557,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     if self._stageSidebar is None:
       return
-    for row in range(self._stageSidebar.count()):
+    for row in range(self._stageSidebar.count):
       state = self._stageIndicatorState(row)
       glyph = self._indicatorGlyph(state)
       name = self._STAGE_NAMES[row]
