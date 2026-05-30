@@ -138,17 +138,19 @@ def test_sidebar_exposes_six_stage_entries():
     )
     sidebar = widget._stageSidebar
 
-    # The widget must expose a row-count surface.  QListWidget.count(),
-    # QListWidget.item(i).text() is the contract per T5.2-d planner.
+    # The widget must expose a row-count surface.  Under PythonQt
+    # ``QListWidget.count`` is an int property, not a callable method,
+    # so we read it without parens.  ``QListWidget.item(i).text()`` is
+    # the rest of the contract per T5.2-d planner.
     assert hasattr(sidebar, "count"), (
-        "_stageSidebar lacks count() — expected QListWidget-shaped API "
+        "_stageSidebar lacks count — expected QListWidget-shaped API "
         "per T5.2-d planner output."
     )
-    assert sidebar.count() == 6, (
-        f"Sidebar must expose exactly 6 stage entries; got {sidebar.count()}."
+    assert sidebar.count == 6, (
+        f"Sidebar must expose exactly 6 stage entries; got {sidebar.count}."
     )
 
-    actual_names = [sidebar.item(i).text() for i in range(sidebar.count())]
+    actual_names = [sidebar.item(i).text() for i in range(sidebar.count)]
     # Implementer may decorate labels with numbering ("1. Case Setup"); we
     # accept either bare or "<n>. <name>" prefixed labels.  The substring
     # check pins the human-readable stage names without locking format.
@@ -186,9 +188,9 @@ def test_sidebar_selection_switches_content_stack():
     sidebar = widget._stageSidebar
     stack = widget._contentStack
 
-    assert stack.count() == 6, (
+    assert stack.count == 6, (
         "Content stack must expose one page per stage; "
-        f"got {stack.count()}."
+        f"got {stack.count}."
     )
 
     for row in range(6):
