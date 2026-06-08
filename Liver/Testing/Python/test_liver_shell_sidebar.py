@@ -195,9 +195,9 @@ def test_sidebar_selection_switches_content_stack():
 
     for row in range(6):
         sidebar.setCurrentRow(row)
-        assert stack.currentIndex() == row, (
+        assert stack.currentIndex == row, (
             f"Sidebar row {row} did not switch stack to index {row} "
-            f"(got {stack.currentIndex()})."
+            f"(got {stack.currentIndex})."
         )
         assert stack.currentWidget() is not None, (
             f"Row {row}: stack.currentWidget() is None."

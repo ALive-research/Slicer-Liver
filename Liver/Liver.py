@@ -535,7 +535,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     they previously completed.  Test contract pinned by
     ``test_state_indicators_reflect_isstagecomplete``.
     """
-    if self._stageSidebar is not None and self._stageSidebar.currentRow() == row:
+    if self._stageSidebar is not None and self._stageSidebar.currentRow == row:
       return "current"
     if self._stageIsComplete(row):
       return "complete"
