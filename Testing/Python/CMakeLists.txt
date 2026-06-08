@@ -1,14 +1,30 @@
 # CTest registration for the shared pytest scaffold.
 # See Docs/adr/0008-testing-strategy.md §6 (CI matrix).
 #
-# Two CTest entries register the *same* test tree twice, mirroring the
-# CI matrix described in ADR-0008 §6:
+# Two CTest entries here register the *same* test tree twice, mirroring
+# the CI matrix described in ADR-0008 §6:
 #
 #   pytest_scaffold                  — bare ``pytest`` (offscreen, fast)
 #   pytest_scaffold_render_interactive
 #                                    — ``pytest --render-interactive=0.1``
 #                                      (briefly onscreen; exercises the
 #                                      ShowWindowOn() path)
+#
+# A third matrix row lives in Liver/Testing/Python/CMakeLists.txt because
+# it depends on the Slicer launcher and the in-tree module set:
+#
+#   pytest_launched                  — the SAME test roots run inside a
+#                                      launched ``qSlicerApplication``
+#                                      (Slicer ``--python-script`` →
+#                                      ``run_pytest_launched.py``).  This
+#                                      is ADDITIVE: the widget-level
+#                                      Liver-shell tests that SKIP on the
+#                                      bare row (conftest._require_qt_widget)
+#                                      actually execute here.  pytest's exit
+#                                      code is funnelled through
+#                                      ``slicer.util.exit`` so a red run
+#                                      surfaces as a non-zero process exit
+#                                      (fail-closed; ADR-0008 §6).
 #
 # Both entries are gated on ``Python3_EXECUTABLE`` (provided by Slicer's
 # CMake macros) and on the presence of ``pytest`` in the active Python.
