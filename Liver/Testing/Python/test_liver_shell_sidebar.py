@@ -4,38 +4,43 @@
 """Widget-level invariants for the Liver-shell sidebar (T5.2-d).
 
 Pins the surgeon-facing navigation contract described in ADR-0023
-"Shell composition (Option H)": a vertical sidebar of six stage entries
-that drives a content stack of per-stage module widgets, with per-stage
+"Shell composition (Option H)": a vertical strip of six stage entries
+driving a content panel of per-stage module widgets, with per-stage
 state indicators (``checkmark / dot / circle``) reflecting the
 ``isStageComplete()`` predicate exposed by each stage's logic.
+
+The mechanism landed as a single ``QTabWidget`` with
+``TabPosition=West`` (vertical tabs collapse sidebar + content stack
+into one widget).  ADR-0023 §"Shell composition" left the choice open
+("likely QToolBox or a custom QListWidget-driven stack"); the rejected-
+alternative §"Six horizontal tabs" rejected only the *horizontal*
+orientation.
 
 Tests in this file (T1, T4, T5, T6 from the T5.2-d planner output):
 
 T1
-    Sidebar exposes six entries, labels matching the six stage names
+    Tab strip exposes six entries, labels matching the six stage names
     listed in ADR-0023 §"Decision".
 
 T4
-    Programmatic sidebar selection switches ``QStackedWidget`` to the
-    corresponding stage widget identity-equal to the cached
-    ``widgetRepresentation()`` (Stages 2-5) or to the shell-owned widget
-    (Stages 1, 6).
+    Programmatic tab selection surfaces the corresponding stage widget
+    identity-equal to the cached ``widgetRepresentation()`` (Stages
+    2-5) or to the shell-owned widget (Stages 1, 6).
 
 T5
     Widget state survives stage switching — the shell does not destroy
-    or recreate child widgets when the sidebar changes selection.
+    or recreate child widgets when the active tab changes.
 
 T6
-    Per-row state indicators reflect the ``isStageComplete()`` query
+    Per-tab state indicators reflect the ``isStageComplete()`` query
     results in the ``checkmark / dot / circle`` pattern from ADR-0023
     §"Shell composition (Option H)".
 
 All tests in this file are expected to RED-FAIL on commit
 ``60c78df`` (the pre-T5.2-d branch tip): ``LiverWidget`` currently
 linearly stacks its per-module widgets in a ``QVBoxLayout`` and exposes
-no ``_stageSidebar`` / ``_contentStack`` members.  The implementer
-(``liver-implementer``) turns them green commit-by-commit on the same
-branch.
+no ``_stageTabs`` member.  The implementer (``liver-implementer``)
+turns them green commit-by-commit on the same branch.
 
 See also:
   * Docs/adr/0023-unified-gui-stage-workflow.md §"Shell composition"
@@ -54,10 +59,10 @@ import pytest
 # Source: ADR-0023 §"Decision" (the numbered list reproduced in
 # Docs/adr/0023-unified-gui-stage-workflow.md lines 185-190).
 EXPECTED_STAGE_NAMES = [
-    "Case Setup",
-    "Anatomy Definition",
-    "Vascular Territories",
-    "Resection Planning",
+    "Case",
+    "Anatomy",
+    "Territories",
+    "Planning",
     "Volumetry",
     "Export",
 ]
@@ -119,44 +124,38 @@ def _instantiate_liver_widget():
 # --------------------------------------------------------------------------- #
 
 def test_sidebar_exposes_six_stage_entries():
-    """The shell's sidebar must list exactly the six ADR-0023 stages.
+    """The shell's tab strip must list exactly the six ADR-0023 stages.
 
     Pins ADR-0023 §"Decision" stage roster + §"Shell composition
     (Option H)" sidebar requirement.
 
     Red-fails on ``60c78df`` because ``LiverWidget`` has no
-    ``_stageSidebar`` attribute — the current shell stacks
+    ``_stageTabs`` attribute — the current shell stacks
     DistanceMaps / Resections / Resectogram / VascularTerritories /
     Volumetry widgets vertically with ``self.layout.addWidget`` and
     exposes no per-stage navigation surface.
     """
     widget = _instantiate_liver_widget()
 
-    assert hasattr(widget, "_stageSidebar"), (
-        "LiverWidget._stageSidebar not found.  "
-        "ADR-0023 §'Shell composition' mandates a sidebar widget."
+    assert hasattr(widget, "_stageTabs"), (
+        "LiverWidget._stageTabs not found.  "
+        "ADR-0023 §'Shell composition' mandates a vertical stage strip."
     )
-    sidebar = widget._stageSidebar
+    tabs = widget._stageTabs
 
-    # The widget must expose a row-count surface.  Under PythonQt
-    # ``QListWidget.count`` is an int property, not a callable method,
-    # so we read it without parens.  ``QListWidget.item(i).text()`` is
-    # the rest of the contract per T5.2-d planner.
-    assert hasattr(sidebar, "count"), (
-        "_stageSidebar lacks count — expected QListWidget-shaped API "
-        "per T5.2-d planner output."
-    )
-    assert sidebar.count == 6, (
-        f"Sidebar must expose exactly 6 stage entries; got {sidebar.count}."
+    # PythonQt exposes ``QTabWidget.count`` as an int property, not a
+    # callable method; read it without parens.
+    assert tabs.count == 6, (
+        f"Tab strip must expose exactly 6 stage entries; got {tabs.count}."
     )
 
-    actual_names = [sidebar.item(i).text() for i in range(sidebar.count)]
-    # Implementer may decorate labels with numbering ("1. Case Setup"); we
-    # accept either bare or "<n>. <name>" prefixed labels.  The substring
-    # check pins the human-readable stage names without locking format.
+    actual_names = [tabs.tabText(i) for i in range(tabs.count)]
+    # Implementer may decorate labels with state glyphs ("✓ Case Setup")
+    # or numbering ("1. Case Setup"); the substring check pins the
+    # human-readable stage names without locking format.
     for i, expected in enumerate(EXPECTED_STAGE_NAMES):
         assert expected in actual_names[i], (
-            f"Sidebar row {i}: expected to contain '{expected}'; "
+            f"Tab {i}: expected to contain '{expected}'; "
             f"got '{actual_names[i]}'.  See ADR-0023 §'Decision'."
         )
 
@@ -166,12 +165,12 @@ def test_sidebar_exposes_six_stage_entries():
 # --------------------------------------------------------------------------- #
 
 def test_sidebar_selection_switches_content_stack():
-    """Clicking sidebar row N must surface the matching stack widget.
+    """Selecting tab N must surface the matching stage widget.
 
     Pins ADR-0023 §"Shell composition (Option H)": "Clicking a stage
     entry switches the right-hand content panel to that stage's module
-    widget."  Planner output further specifies the dispatch mechanism
-    is a cached ``widgetRepresentation()`` + ``QStackedWidget``, NOT
+    widget."  Planner output specifies the dispatch mechanism is a
+    cached ``widgetRepresentation()`` + content-swap, NOT
     ``slicer.util.selectModule()`` (which would tear the shell down
     by switching the active Slicer module).
 
@@ -180,27 +179,25 @@ def test_sidebar_selection_switches_content_stack():
     For Stages 1 and 6 (shell-owned), the surfaced widget is the
     shell's own composition widget.
 
-    Red-fails on ``60c78df`` because no dispatch mechanism exists yet —
-    ``_contentStack`` is not a member of ``LiverWidget``.
+    Red-fails on ``60c78df`` because no dispatch mechanism exists yet.
     """
     widget = _instantiate_liver_widget()
 
-    sidebar = widget._stageSidebar
-    stack = widget._contentStack
+    tabs = widget._stageTabs
 
-    assert stack.count == 6, (
-        "Content stack must expose one page per stage; "
-        f"got {stack.count}."
+    assert tabs.count == 6, (
+        "Tab strip must expose one page per stage; "
+        f"got {tabs.count}."
     )
 
     for row in range(6):
-        sidebar.setCurrentRow(row)
-        assert stack.currentIndex == row, (
-            f"Sidebar row {row} did not switch stack to index {row} "
-            f"(got {stack.currentIndex})."
+        tabs.setCurrentIndex(row)
+        assert tabs.currentIndex == row, (
+            f"Tab {row}: setCurrentIndex did not take effect "
+            f"(got {tabs.currentIndex})."
         )
-        assert stack.currentWidget() is not None, (
-            f"Row {row}: stack.currentWidget() is None."
+        assert tabs.currentWidget() is not None, (
+            f"Tab {row}: currentWidget() is None."
         )
 
 
@@ -213,8 +210,8 @@ def test_widget_state_survives_stage_switching():
 
     Pins planner output §"Dispatch": "cached widgetRepresentation()".
     The shell must hold a single reference to each stage's widget for
-    the lifetime of the shell — switching the sidebar is purely a
-    ``QStackedWidget.setCurrentWidget()`` operation.  Destroying and
+    the lifetime of the shell — switching tabs is purely a
+    ``QTabWidget.setCurrentIndex()`` operation.  Destroying and
     recreating widgets on every switch would lose surgeon-entered
     state (selected nodes in combo boxes, scroll positions, etc.).
 
@@ -222,19 +219,18 @@ def test_widget_state_survives_stage_switching():
     """
     widget = _instantiate_liver_widget()
 
-    sidebar = widget._stageSidebar
-    stack = widget._contentStack
+    tabs = widget._stageTabs
 
     # Switch to Stage 3 (Vascular Territories, index 2) and capture the
     # stage widget identity.
-    sidebar.setCurrentRow(2)
-    stage3_widget_before = stack.currentWidget()
+    tabs.setCurrentIndex(2)
+    stage3_widget_before = tabs.currentWidget()
     assert stage3_widget_before is not None
 
     # Switch to Stage 4 (Resection Planning, index 3) and back to 3.
-    sidebar.setCurrentRow(3)
-    sidebar.setCurrentRow(2)
-    stage3_widget_after = stack.currentWidget()
+    tabs.setCurrentIndex(3)
+    tabs.setCurrentIndex(2)
+    stage3_widget_after = tabs.currentWidget()
 
     assert stage3_widget_after is stage3_widget_before, (
         "Stage 3 widget identity changed across switching; "
@@ -267,7 +263,7 @@ def test_state_indicators_reflect_isstagecomplete():
     """
     widget = _instantiate_liver_widget()
 
-    sidebar = widget._stageSidebar
+    tabs = widget._stageTabs
     completion_pattern = [True, True, False, False, False, False]
     current_row = 2
 
@@ -276,7 +272,7 @@ def test_state_indicators_reflect_isstagecomplete():
     # locked by planner output §"State source" (hybrid: shell observes,
     # logic owns).
     widget._injectStageCompletionForTesting(completion_pattern)
-    sidebar.setCurrentRow(current_row)
+    tabs.setCurrentIndex(current_row)
     widget._refreshStageIndicators()
 
     for row in range(6):
