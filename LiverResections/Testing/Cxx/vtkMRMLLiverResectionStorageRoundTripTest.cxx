@@ -221,7 +221,17 @@ int vtkMRMLLiverResectionStorageRoundTripTest(int argc, char* argv[])
   CHECK_NOT_NULL(storage);
   storage->SetFileName(filePath.c_str());
 
+  // The CSV storage class writes the control points through the Markups
+  // fiducial ``.fcsv`` path, which newer Slicer flags with a one-off
+  // deprecation warning ("fcsv format is deprecated ... use .mrk.json").
+  // That warning is expected for this class and orthogonal to the
+  // round-trip invariant under test, so suppress it here the same way
+  // the Phase-4 failure-mode probe does -- otherwise CTest's
+  // WITH_VTK_ERROR_OUTPUT_CHECK counts it as an unexpected message.
+  // (Migrating off fcsv is the LayerDM-migration follow-up, not this test.)
+  TESTING_OUTPUT_IGNORE_WARNINGS_ERRORS_BEGIN();
   const int writeStatus = storage->WriteData(resectionA);
+  TESTING_OUTPUT_IGNORE_WARNINGS_ERRORS_END();
   CHECK_INT(writeStatus, 1);
 
   // --------------------------------------------------------------------------
