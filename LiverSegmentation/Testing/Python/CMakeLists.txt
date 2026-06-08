@@ -1,0 +1,84 @@
+# Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
+# Distributed under the OSI-approved BSD 3-Clause License.
+#
+# Pytest registration for the LiverSegmentation Stage-2 invariant tests.
+#
+# Test-first scaffolding per Docs/adr/0027-invariant-test-first-v2-implementation.md:
+# these RED tests land before the module implementation
+# (Docs/adr/0024-segmentation-orchestration.md).  Five files, one CTest entry
+# each so failures are isolable (matches Liver/Testing/Python/CMakeLists.txt
+# and LiverResections/Testing/Python/CMakeLists.txt):
+#
+#   * test_liversegmentation_registration.py             (invariant 1)
+#     Module registers as `liversegmentation`; logic exposes a callable
+#     isStageComplete() returning bool.  Scene-needing (minimal
+#     qSlicerApplication); skips cleanly under bare PythonSlicer.
+#
+#   * test_liversegmentation_isstagecomplete_semantics.py (invariant 2)
+#     Soft Stage-2-done semantics: empty -> False; canonical + >=1 SCT
+#     segment -> True; scratch-only -> False.  Scene-needing.
+#
+#   * test_liversegmentation_single_canonical_node.py     (invariant 3)
+#     Exactly ONE canonical vtkMRMLSegmentationNode; Accept merges scratch
+#     into it.  Scene-needing.
+#
+#   * test_liversegmentation_import_purity.py             (invariant 4)
+#     No pip_install + no `import totalsegmentator` at module-import time.
+#     Pure-Python: no Slicer / Qt / network required.  This is the invariant
+#     that lets CI run the suite offline.
+#
+#   * test_liversegmentation_conformance.py               (invariant 5)
+#     Source / CMake greps (no EXTENSION_DEPENDS for TotalSegmentator /
+#     MONAILabel; no ToolWrappers/MONAILabel.py; no new vtkMRML*DisplayNode;
+#     pip_install only under ToolWrappers/).  Pure-Python.
+#
+# Same skip-if-pytest-absent pattern as Liver/Testing/Python/CMakeLists.txt
+# -- keeps the scaffolding buildable where pytest is not provisioned.
+
+if(NOT BUILD_TESTING)
+  return()
+endif()
+
+if(NOT Python3_EXECUTABLE)
+  message(STATUS
+    "Slicer-Liver: Python3_EXECUTABLE not set; "
+    "skipping LiverSegmentation pytest registration.")
+  return()
+endif()
+
+execute_process(
+  COMMAND "${Python3_EXECUTABLE}" -c "import pytest"
+  RESULT_VARIABLE _liverseg_pytest_probe_rc
+  OUTPUT_QUIET
+  ERROR_QUIET
+)
+
+if(NOT _liverseg_pytest_probe_rc EQUAL 0)
+  message(STATUS
+    "Slicer-Liver: pytest not importable from ${Python3_EXECUTABLE}; "
+    "skipping LiverSegmentation pytest registration.  Install pytest in "
+    "the Slicer Python environment to enable these tests.")
+  return()
+endif()
+
+set(_liverseg_pytest_files
+  test_liversegmentation_registration.py
+  test_liversegmentation_isstagecomplete_semantics.py
+  test_liversegmentation_single_canonical_node.py
+  test_liversegmentation_import_purity.py
+  test_liversegmentation_conformance.py
+)
+
+foreach(_pytest_file IN LISTS _liverseg_pytest_files)
+  get_filename_component(_test_basename "${_pytest_file}" NAME_WE)
+  add_test(
+    NAME ${_test_basename}
+    COMMAND "${Python3_EXECUTABLE}" -m pytest
+      -q
+      "${CMAKE_CURRENT_SOURCE_DIR}/${_pytest_file}"
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+  )
+  set_tests_properties(${_test_basename} PROPERTIES
+    LABELS "pytest;LiverSegmentation;stage2-anatomy"
+  )
+endforeach()
