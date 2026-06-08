@@ -224,8 +224,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # ``_buildShellSidebar`` from ``setup()``.  Kept ``None`` here so
     # any pre-setup call to ``_refreshStageIndicators`` short-circuits
     # cleanly instead of NPE'ing.
-    self._stageSidebar = None
-    self._contentStack = None
+    self._stageTabs = None
     self._stagePages = []
     self._shellHost = None
     self._injectedStageCompletion = None
@@ -261,7 +260,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   # ------------------------------------------------------------------ #
   # Liver-shell sidebar — composition + navigation (ADR-0023 Option H)
   #
-  # Six stages, each one row in a QListWidget driving a QStackedWidget:
+  # Six stages, each one tab in a vertical QTabWidget (TabPosition=West):
   #
   #   0  Case Setup            (shell-owned)
   #   1  Anatomy Definition    (LiverSegmentation widgetRepresentation;
@@ -282,11 +281,13 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   # VTKObservationMixin and re-runs every predicate on change.
   # ------------------------------------------------------------------ #
 
+  # Tab labels — kept short to fit the vertical tab strip without
+  # truncation.  Canonical long-form names live in ADR-0023 §"Decision".
   _STAGE_NAMES = (
-    "Case Setup",
-    "Anatomy Definition",
-    "Vascular Territories",
-    "Resection Planning",
+    "Case",
+    "Anatomy",
+    "Territories",
+    "Planning",
     "Volumetry",
     "Export",
   )
@@ -309,58 +310,50 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   }
 
   def _buildShellSidebar(self):
-    """Construct the vertical-sidebar shell (QListWidget + QStackedWidget).
+    """Construct the vertical-tab shell (single QTabWidget, TabPosition=West).
 
-    Idempotent — calling twice replaces the previous widgets cleanly.
+    Idempotent — calling twice replaces the previous widget cleanly.
     Stages 2-5 surface the cached widgetRepresentation() of their
     owning Slicer module; stages 1 and 6 host shell-owned placeholders.
     Stage 2 (LiverSegmentation) degrades gracefully when the module is
-    absent (v2.1 deliverable): row disabled-greyed; predicate returns
+    absent (v2.1 deliverable): tab disabled-greyed; predicate returns
     False.
-    """
-    self._stageSidebar = qt.QListWidget()
-    self._stageSidebar.setObjectName("LiverShellStageSidebar")
-    self._stageSidebar.setSelectionMode(qt.QAbstractItemView.SingleSelection)
 
-    self._contentStack = qt.QStackedWidget()
-    self._contentStack.setObjectName("LiverShellContentStack")
+    Mechanism choice: ADR-0023 §"Shell composition (Option H)" pinned
+    the contract (vertical strip, six stages, state indicators,
+    cached-widget content panel) but not the widget.  QTabWidget(West)
+    collapses sidebar + content stack into one widget — more compact
+    than a QListWidget + QStackedWidget split, and still a vertical
+    strip per the rejected-horizontal-tabs ADR rationale.
+    """
+    self._stageTabs = qt.QTabWidget()
+    self._stageTabs.setObjectName("LiverShellStageTabs")
+    self._stageTabs.setTabPosition(qt.QTabWidget.West)
 
     # Reset the test-time injection bag every time we rebuild.
     self._injectedStageCompletion = None
     # Cached module widget references kept here so the lifetime is the
-    # shell's, not the QStackedWidget's child-ownership cycle.
+    # shell's, not the QTabWidget's child-ownership cycle.
     self._stagePages = []
 
     for index, name in enumerate(self._STAGE_NAMES):
       page, available = self._resolveStagePage(index)
       self._stagePages.append(page)
-      self._contentStack.addWidget(page)
-
-      item = qt.QListWidgetItem(f"{self._INDICATOR_PENDING}  {name}")
+      self._stageTabs.addTab(page, f"{self._INDICATOR_PENDING}  {name}")
       if not available:
         # Greyed-disabled signals "module not registered in this build";
         # see Stage 2 graceful-degradation contract (ADR-0023 §Stage 2).
-        item.setFlags(item.flags() & ~qt.Qt.ItemIsEnabled)
-      self._stageSidebar.addItem(item)
+        self._stageTabs.setTabEnabled(index, False)
 
-    self._stageSidebar.connect("currentRowChanged(int)", self._onStageRowChanged)
-
-    # Compose the side-by-side layout.  Keep the sidebar narrow so the
-    # surgeon-facing content panel gets the bulk of the screen real
-    # estate.  Width tuned to fit the longest stage name at the default
-    # Slicer font; surgeons read these labels, not scan them.
-    sidebarLayout = qt.QHBoxLayout()
-    sidebarLayout.setContentsMargins(0, 0, 0, 0)
-    self._stageSidebar.setMinimumWidth(180)
-    self._stageSidebar.setMaximumWidth(220)
-    sidebarLayout.addWidget(self._stageSidebar)
-    sidebarLayout.addWidget(self._contentStack, 1)
+    self._stageTabs.connect("currentChanged(int)", self._onStageRowChanged)
 
     self._shellHost = qt.QWidget()
-    self._shellHost.setLayout(sidebarLayout)
+    hostLayout = qt.QHBoxLayout(self._shellHost)
+    hostLayout.setContentsMargins(0, 0, 0, 0)
+    hostLayout.addWidget(self._stageTabs, 1)
     self.layout.addWidget(self._shellHost)
 
-    self._stageSidebar.setCurrentRow(0)
+    self._stageTabs.setCurrentIndex(0)
     self._refreshStageIndicators()
 
   def _resolveStagePage(self, index):
@@ -423,13 +416,12 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return page
 
   def _onStageRowChanged(self, row):
-    """Slot for ``QListWidget.currentRowChanged(int)``.
+    """Slot for ``QTabWidget.currentChanged(int)``.
 
-    Dispatches the content stack to the matching page and refreshes
-    the per-row indicators (the 'current' marker tracks selection).
+    The QTabWidget already swaps the visible page on its own; this
+    slot only refreshes the per-tab indicators so the 'current'
+    marker tracks selection.
     """
-    if 0 <= row < self._contentStack.count:
-      self._contentStack.setCurrentIndex(row)
     self._refreshStageIndicators()
 
   # ------------------------------------------------------------------ #
@@ -541,7 +533,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     they previously completed.  Test contract pinned by
     ``test_state_indicators_reflect_isstagecomplete``.
     """
-    if self._stageSidebar is not None and self._stageSidebar.currentRow == row:
+    if self._stageTabs is not None and self._stageTabs.currentIndex == row:
       return "current"
     if self._stageIsComplete(row):
       return "complete"
@@ -555,21 +547,19 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     }.get(state, self._INDICATOR_PENDING)
 
   def _refreshStageIndicators(self):
-    """Re-read per-stage completion + repaint the sidebar labels.
+    """Re-read per-stage completion + repaint the tab labels.
 
     Cheap to call repeatedly; the predicate side-effects (scene
     iteration) are O(scene-size) per stage but happen at human
     interaction rate.
     """
-    if self._stageSidebar is None:
+    if self._stageTabs is None:
       return
-    for row in range(self._stageSidebar.count):
+    for row in range(self._stageTabs.count):
       state = self._stageIndicatorState(row)
       glyph = self._indicatorGlyph(state)
       name = self._STAGE_NAMES[row]
-      item = self._stageSidebar.item(row)
-      if item is not None:
-        item.setText(f"{glyph}  {name}")
+      self._stageTabs.setTabText(row, f"{glyph}  {name}")
 
   def _injectStageCompletionForTesting(self, pattern):
     """Mock per-stage completion for invariant tests.
