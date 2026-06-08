@@ -136,6 +136,66 @@
   storage) and the Markups pattern (control points inside the
   markups file rather than per-point storage).
 
+- **2026-06-08 — User-verified phase contracts deferred to v2.1;
+  v2.0 ships advisory indicators only.**  During T5.2-d shell
+  implementation a third gating model surfaced: each stage exposes a
+  *contract* the surgeon explicitly **verifies** (a human attestation,
+  not an automated threshold), and verification **unlocks the
+  relevant downstream stages** along the §"Cross-stage dependencies"
+  map.  Tabs carry a pass indicator once their contract is fulfilled.
+
+  This is **deferred to v2.1**; v2.0 keeps the advisory
+  `✓ / ● / ○` indicators decided in §"Shell composition (Option H)"
+  (non-blocking, computed from each stage's `isStageComplete()`
+  predicate).  The deferral is recorded here so the idea is not lost
+  and so the v2.0 indicator substrate is understood as
+  forward-compatible groundwork, not a finished feature.
+
+  ### Why a distinct alternative, not Alternative B or E
+
+  The idea is neither rejected alternative, and must not be conflated
+  with them:
+
+  - **Not Alternative B (strict linear wizard).**  B hard-disables
+    non-current stages and forces 1→6 order.  This model proposes
+    **soft gating**: downstream stages stay reachable (freeform
+    navigation, the §"Alternative B" rationale, is preserved) but an
+    unverified upstream contract surfaces a warning rather than a
+    hard lock.
+  - **Not Alternative E (verification card).**  E was rejected because
+    *automated* clinical thresholds (remnant % vs threshold, margin
+    pass/fail) imply surgical-planning-tool-grade positioning that
+    Slicer-Liver does not claim (ADR-0009 IEC 62366 relaxation).  This
+    model records a **human** attestation — the surgeon asserts the
+    stage is acceptable — making no automated clinical claim.  Whether
+    that distinction is sufficient to stay research-tool-grade, or
+    whether *any* gating signal re-opens the IEC 62366 positioning
+    question, is the central open question for the v2.1 ADR.
+
+  ### Open questions the v2.1 ADR must resolve
+
+  1. **Invalidation / staleness.**  If an upstream stage's data
+     changes after its contract was verified, the downstream pass
+     state must invalidate — a stale ✓ in a planning tool is worse
+     than none.  Requires dependency tracking + MRML observers on the
+     actual data, with a re-lock cascade; not just a persisted flag.
+  2. **Optional-stage DAG.**  "Not all stages are mandatory" (e.g.
+     Stage 3 Auto skips Stage 2 per §"Cross-stage dependencies").  The
+     unlock graph must encode skip paths; a wrong edge locks users out
+     of a valid workflow.
+  3. **Positioning.**  Does human attestation avoid the tool-grade
+     repositioning that killed Alternative E, or not?  (ADR-0009.)
+  4. **Verification fatigue.**  A per-stage sign-off that becomes a
+     rubber-stamp reflex defeats its own safety purpose.
+  5. **Persistence + discoverability.**  Where the verified state
+     lives (the §"Persistence — `.lrp.json` schema v2" per-stage
+     block is the natural home) and how a not-yet-unlocked stage
+     explains itself to the surgeon.
+
+  Tracked as [issue #440](https://github.com/ALive-research/Slicer-Liver/issues/440).
+  Supersedes nothing in v2.0; the §"What is NOT in v2.0"
+  *Verification card* bullet stands.
+
 ## Context
 
 Slicer-Liver v2.0.0 was re-scoped on 2026-05-21 from a foundation-only
