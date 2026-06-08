@@ -437,14 +437,15 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     ADR-0029 §"Stage 1 functional contract" identifies the per-volume
     role tag as Stage 1's commit signal.  Attribute presence (not
     value) is the gate; the surgeon's eyeball judges correctness.
+
+    Uses ``slicer.util.getNodesByClass`` rather than the raw
+    ``vtkMRMLScene::GetNodesByClass``: the latter returns a collection
+    the caller must ``UnRegister`` (the Python wrapper does not own
+    it), and leaking it trips Slicer's VTK_DEBUG_LEAKS gate.  The
+    helper unregisters the collection and returns a plain list.
     """
-    scene = slicer.mrmlScene
-    volumes = scene.GetNodesByClass("vtkMRMLScalarVolumeNode")
-    if volumes is None:
-      return False
-    for i in range(volumes.GetNumberOfItems()):
-      node = volumes.GetItemAsObject(i)
-      if node is not None and node.GetAttribute("LiverRole"):
+    for node in slicer.util.getNodesByClass("vtkMRMLScalarVolumeNode"):
+      if node.GetAttribute("LiverRole"):
         return True
     return False
 
@@ -469,12 +470,10 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     as "not written yet", consistent with the optimistic semantics
     described in ADR-0023 §"Shell composition (Option H)".
     """
-    scene = slicer.mrmlScene
-    if scene is None:
-      return False
-    nodes = scene.GetNodesByClass("vtkMRMLScriptedModuleNode")
-    for i in range(nodes.GetNumberOfItems()):
-      node = nodes.GetItemAsObject(i)
+    # ``slicer.util.getNodesByClass`` unregisters the underlying
+    # collection (the raw ``vtkMRMLScene::GetNodesByClass`` leaks it
+    # under the Python wrapper, tripping VTK_DEBUG_LEAKS).
+    for node in slicer.util.getNodesByClass("vtkMRMLScriptedModuleNode"):
       if node.GetModuleName() == "Liver" and node.GetName() == "LiverShellState":
         return node.GetParameter("Stage6.LastWriteOK") == "True"
     return False
