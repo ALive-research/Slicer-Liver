@@ -45,9 +45,10 @@ it composes — but does not compute — six surgeon-facing stages on a
 vertical sidebar driving a content stack:
 
   1. Case Setup            (shell-owned placeholder; ADR-0029)
-  2. Anatomy Definition    (LiverSegmentation; gated on the v2.1
-                            LiverSegmentation deliverable -- disabled
-                            until then per Stage 2 graceful-degradation)
+  2. Anatomy Definition    (LiverSegmentation.widgetRepresentation();
+                            degrades gracefully when the module is
+                            absent from the build per Stage 2
+                            graceful-degradation)
   3. Vascular Territories  (VascularTerritories.widgetRepresentation())
   4. Resection Planning    (LiverResections.widgetRepresentation())
   5. Volumetry             (LiverVolumetry.widgetRepresentation())
@@ -59,16 +60,6 @@ stage 5.  Stages 1 and 6 own their predicates on ``LiverWidget``
 itself (no companion module exists).  The shell observes MRML scene
 events via ``VTKObservationMixin`` and re-paints the sidebar
 indicators (✓ done / ● current / ○ pending) on every change.
-
-Domain algorithm bridges historically embedded here (signed-Maurer
-distance maps, Bezier surface fitting, elliptic Fourier descriptors)
-were relocated to ``LiverLib/legacy_logic.py`` -- a Python sub-package
-sibling to the scripted module per the ``LiverResectionsLib/``
-convention -- in T5.2-d.  Slicer's scripted-module loader does not
-sweep subdirectories, so the sub-package is importable Python without
-being mis-instantiated as a Slicer module.  The full move to the
-per-stage modules these helpers actually belong to is tracked as the
-orphaned-domain-code relocation follow-up.
 """
 
 # ruff: noqa: F403, F405  # standard Slicer scripted-module wildcard-import pattern
@@ -264,8 +255,8 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   #
   #   0  Case Setup            (shell-owned)
   #   1  Anatomy Definition    (LiverSegmentation widgetRepresentation;
-  #                             gated on the v2.1 LiverSegmentation
-  #                             deliverable — disabled until then)
+  #                             degrades gracefully — disabled when the
+  #                             module is absent from the build)
   #   2  Vascular Territories  (VascularTerritories widgetRepresentation)
   #   3  Resection Planning    (LiverResections widgetRepresentation)
   #   4  Volumetry             (LiverVolumetry widgetRepresentation)
@@ -299,9 +290,8 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   # Stage index → Slicer module name owning that stage's
   # widgetRepresentation() + IsStageComplete() query.  Stages 0 (Case
   # Setup) and 5 (Export) are shell-owned and omitted; stage 1
-  # (LiverSegmentation) is gated on the v2.1 LiverSegmentation
-  # deliverable and currently routed to the shell-owned graceful-
-  # degradation stub.
+  # (LiverSegmentation) is routed to the shell-owned graceful-
+  # degradation stub when the module is absent from the build.
   _STAGE_MODULE = {
     1: "liversegmentation",
     2: "vascularterritories",
@@ -316,7 +306,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Stages 2-5 surface the cached widgetRepresentation() of their
     owning Slicer module; stages 1 and 6 host shell-owned placeholders.
     Stage 2 (LiverSegmentation) degrades gracefully when the module is
-    absent (v2.1 deliverable): tab disabled-greyed; predicate returns
+    absent from the build: tab disabled-greyed; predicate returns
     False.
 
     Mechanism choice: ADR-0023 §"Shell composition (Option H)" pinned
@@ -452,10 +442,9 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def _stage2IsComplete(self):
     """Stage 2 — graceful-degradation stub while LiverSegmentation is absent.
 
-    Per planner §"Stage 2 stub strategy" (locked decision): the
-    LiverSegmentation module is a v2.1 deliverable.  Until it lands,
-    the predicate returns ``False`` and the sidebar row is
-    disabled-greyed.
+    Per planner §"Stage 2 stub strategy" (locked decision): when the
+    LiverSegmentation module is absent from the build, the predicate
+    returns ``False`` and the sidebar row is disabled-greyed.
     """
     return False
 
@@ -482,10 +471,9 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """Return the completion bool for stage ``row``.
 
     Routes to the per-stage owner: shell methods for shell-owned
-    stages (0, 1, 5 — the last two until the v2.1 LiverSegmentation
-    deliverable lands), module-logic ``IsStageComplete()`` for the
-    rest.  Test mode
-    short-circuits via ``_injectedStageCompletion`` (set by
+    stages (0, 1, 5 — stage 1 while LiverSegmentation is absent from
+    the build), module-logic ``IsStageComplete()`` for the rest.  Test
+    mode short-circuits via ``_injectedStageCompletion`` (set by
     ``_injectStageCompletionForTesting``).
     """
     injected = self._injectedStageCompletion
@@ -494,7 +482,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     shellPredicate = {
       0: self._stage1IsComplete,
-      1: self._stage2IsComplete,  # Stage 2 stub — LiverSegmentation is a v2.1 deliverable.
+      1: self._stage2IsComplete,  # Stage 2 stub — used when LiverSegmentation is absent.
       5: self._stage6IsComplete,
     }.get(row)
     if shellPredicate is not None:
