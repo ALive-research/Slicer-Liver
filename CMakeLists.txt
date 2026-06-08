@@ -113,6 +113,7 @@ include(${Slicer_USE_FILE})
 add_subdirectory(LiverMarkups)
 add_subdirectory(LiverResections)
 add_subdirectory(VascularTerritories)
+add_subdirectory(LiverSegmentation)
 add_subdirectory(LiverVolumetry)
 add_subdirectory(Liver)
 
