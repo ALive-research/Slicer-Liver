@@ -77,6 +77,51 @@ In CI inside Slicer's bundled Python (per ADR-0008 §6 and PR #316's
 ``pytest_scaffold`` CTest entry), the import succeeds, the class is
 constructed, and the assertions run.
 
+Orphaned-domain relocation — surviving invariant net (annotation only)
+----------------------------------------------------------------------
+The Bezier / EFD math characterised here lived in the orphaned
+``LiverLogic`` parked at ``Liver/LiverLib/legacy_logic.py``.  That
+Python copy is a **dead duplicate** of the C++ algorithm library
+(``LiverResections/Algorithm/``, per ADR-0015) and is being deleted
+during the orphaned-domain relocation; only the distance-maps group
+genuinely relocates (to
+``LiverResections/LiverResectionsLib/DistanceMaps.py``, gated by
+``LiverResections/Testing/Python/test_distance_maps_relocation.py``).
+
+When the implementer excises the **Python arm** of this file — the four
+``liver_logic``-fixtured tests
+(``test_fit_bezier_surface_matches_pinned_control_points``,
+``test_elliptic_fourier_descriptors_matches_pinned_coefficients``,
+``test_calculate_dc_coefficients_matches_pinned_values``,
+``test_inverse_transform_matches_pinned_reconstruction``) together with
+the ``liver_logic`` fixture and the now-unused ``_make_bezier_fixture`` /
+``_make_contour_fixture`` / ``_bernstein_degree_3`` helpers that only the
+Python arm calls — the math stays pinned by the **surviving C++ arm**
+below.
+
+The C++ arm (the ``algorithm_module``-fixtured tests) re-asserts the
+*same four* ``EXPECTED_*`` constants against the C++ implementation, so
+they MUST be kept when the Python arm is removed:
+
+* ``EXPECTED_BEZIER_CONTROL_POINTS`` (4x4x3) — pinned against
+  ``vtkLiverBezierFitter`` by
+  ``test_cxx_bezier_fitter_matches_pinned_control_points``.
+* ``EXPECTED_EFD_COEFFS`` (8x6) — pinned against
+  ``vtkLiverContourParameterizer::ComputeEFDCoefficients`` by
+  ``test_cxx_elliptic_fourier_descriptors_matches_pinned_coefficients``.
+* ``EXPECTED_DC`` (A0, C0, E0) — pinned against
+  ``vtkLiverContourParameterizer::ComputeDCCoefficients`` by
+  ``test_cxx_calculate_dc_coefficients_matches_pinned_values``.
+* ``EXPECTED_INVERSE_TRANSFORM`` (1x3x12) — pinned against
+  ``vtkLiverContourParameterizer::InverseTransform`` by
+  ``test_cxx_inverse_transform_matches_pinned_reconstruction``.
+
+The edge-case stress tests (``test_cxx_efd_*`` / ``test_cxx_bezier_*``)
+are likewise C++-arm and survive.  Net effect: removing the Python arm
+does **not** drop coverage of any pinned constant — each lives on in the
+C++ arm — so the deletion is safe.  (This is a documentation annotation
+only; the Python-arm removal itself is the implementer's edit.)
+
 References
 ----------
 * ADR-0003 — testability invariant (Docs/adr/0003-testability-invariant.md)
@@ -84,6 +129,8 @@ References
   on characterisation discipline + §2 on layered taxonomy (unit layer).
 * ADR-0015 — C++ algorithm-library lift (forthcoming).  These tests are
   the inversion target of that ADR's lift commits.
+* ADR-0023 §"Shell composition (Option H)" — the no-domain-logic rule
+  driving the orphaned-domain relocation that retires the Python arm.
 * Closes #307.
 """
 
