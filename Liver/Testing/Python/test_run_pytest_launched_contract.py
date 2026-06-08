@@ -120,11 +120,19 @@ def _run_driver(target_path: str):
     place to update.
     """
     driver = _require_driver()
+    # Force the driver's sys.exit path so the process exit code is
+    # faithful regardless of interpreter.  Under PythonSlicer (CI's
+    # sys.executable) ``slicer`` imports but there is no launched event
+    # loop, so ``slicer.util.exit`` cannot carry the code out; the real
+    # launched harness (pytest_launched) leaves this unset and relies on
+    # the event loop.  This self-test pins the propagation *logic*.
+    env = {**os.environ, "SLICER_PYTEST_LAUNCHED_FORCE_SYSEXIT": "1"}
     return subprocess.run(
         [_python_executable(), driver, "--", target_path],
         capture_output=True,
         text=True,
         timeout=300,
+        env=env,
     )
 
 
