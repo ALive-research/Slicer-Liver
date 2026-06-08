@@ -77,31 +77,25 @@ In CI inside Slicer's bundled Python (per ADR-0008 §6 and PR #316's
 ``pytest_scaffold`` CTest entry), the import succeeds, the class is
 constructed, and the assertions run.
 
-Orphaned-domain relocation — surviving invariant net (annotation only)
-----------------------------------------------------------------------
+Orphaned-domain relocation — surviving invariant net
+-----------------------------------------------------
 The Bezier / EFD math characterised here lived in the orphaned
 ``LiverLogic`` parked at ``Liver/LiverLib/legacy_logic.py``.  That
-Python copy is a **dead duplicate** of the C++ algorithm library
-(``LiverResections/Algorithm/``, per ADR-0015) and is being deleted
-during the orphaned-domain relocation; only the distance-maps group
-genuinely relocates (to
-``LiverResections/LiverResectionsLib/DistanceMaps.py``, gated by
+Python copy was a **dead duplicate** of the C++ algorithm library
+(``LiverResections/Algorithm/``, per ADR-0015) and was deleted during
+the orphaned-domain relocation; only the distance-maps group genuinely
+relocated (to ``LiverResections/LiverResectionsLib/DistanceMaps.py``,
+gated by
 ``LiverResections/Testing/Python/test_distance_maps_relocation.py``).
 
-When the implementer excises the **Python arm** of this file — the four
-``liver_logic``-fixtured tests
-(``test_fit_bezier_surface_matches_pinned_control_points``,
-``test_elliptic_fourier_descriptors_matches_pinned_coefficients``,
-``test_calculate_dc_coefficients_matches_pinned_values``,
-``test_inverse_transform_matches_pinned_reconstruction``) together with
-the ``liver_logic`` fixture and the now-unused ``_make_bezier_fixture`` /
-``_make_contour_fixture`` / ``_bernstein_degree_3`` helpers that only the
-Python arm calls — the math stays pinned by the **surviving C++ arm**
-below.
-
-The C++ arm (the ``algorithm_module``-fixtured tests) re-asserts the
-*same four* ``EXPECTED_*`` constants against the C++ implementation, so
-they MUST be kept when the Python arm is removed:
+The **Python arm** of this file — the four ``liver_logic``-fixtured
+tests and the ``liver_logic`` fixture that loaded ``LiverLogic`` from
+the deleted module — has been removed.  The math stays pinned by the
+**surviving C++ arm** below, which re-asserts the *same four*
+``EXPECTED_*`` constants against the C++ implementation.  The
+``_bernstein_degree_3`` / ``_make_bezier_fixture`` /
+``_make_contour_fixture`` helpers are retained because the C++ arm
+shares them.
 
 * ``EXPECTED_BEZIER_CONTROL_POINTS`` (4x4x3) — pinned against
   ``vtkLiverBezierFitter`` by
@@ -136,75 +130,8 @@ References
 
 from __future__ import annotations
 
-import importlib.util
-import pathlib
-import sys
-
 import numpy as np
 import pytest
-
-
-# --------------------------------------------------------------------------- #
-# Repo geometry — locate Liver/Liver.py without relying on Slicer's module
-# path setup.  ``REPO_ROOT`` matches the convention used in
-# ``test_terminology_assets.py``.
-# --------------------------------------------------------------------------- #
-
-REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
-# ``LiverLogic`` relocated out of ``Liver/Liver.py`` into the
-# ``Liver/LiverLib/legacy_logic.py`` Python sub-package during T5.2-d
-# (Liver-shell sidebar) per ADR-0023 §"Shell composition (Option H)"'s
-# no-domain-logic rule; the shell is now compose-only.  Full relocation
-# to the per-stage modules that actually own these algorithms is tracked
-# as a v2.0.0 follow-up.
-LEGACY_LOGIC_PY = REPO_ROOT / "Liver" / "LiverLib" / "legacy_logic.py"
-
-
-# --------------------------------------------------------------------------- #
-# Module-scoped fixture — load ``LiverLogic`` from source.
-#
-# We deliberately do not rely on Slicer's module-path discovery to pick up
-# ``_LegacyLiverLogic.py``: the tests run from a generic pytest invocation
-# and may not be inside a Slicer launcher.  The ``importorskip("slicer")``
-# gates everything below it; once slicer is importable, the rest of the
-# dependency stack (vtk, ScriptedLoadableModule) is too.
-# --------------------------------------------------------------------------- #
-
-@pytest.fixture(scope="module")
-def liver_logic():
-    """Construct ``LiverLogic`` from ``Liver/LiverLib/legacy_logic.py``.
-
-    Skips if ``slicer`` (and thus the legacy module's ``import vtk,
-    slicer`` line) is unavailable.  Returns a fresh ``LiverLogic()``
-    instance; the methods under test are stateless, so module scope is
-    safe.
-    """
-    pytest.importorskip(
-        "slicer",
-        reason=(
-            "legacy_logic.py imports vtk/slicer at module top; "
-            "characterisation requires Slicer's Python."
-        ),
-    )
-
-    # Ensure the in-repo Liver/ directory is on sys.path so the sibling
-    # source trees are visible if needed.
-    liver_dir = str(REPO_ROOT / "Liver")
-    if liver_dir not in sys.path:
-        sys.path.insert(0, liver_dir)
-
-    spec = importlib.util.spec_from_file_location(
-        "legacy_logic", str(LEGACY_LOGIC_PY)
-    )
-    if spec is None or spec.loader is None:  # pragma: no cover — defensive
-        pytest.skip(f"could not build importlib spec for {LEGACY_LOGIC_PY}")
-    legacy = importlib.util.module_from_spec(spec)
-    try:
-        spec.loader.exec_module(legacy)
-    except Exception as exc:  # pragma: no cover — surfaces only in broken env
-        pytest.skip(f"failed to load legacy_logic.py: {exc}")
-
-    return legacy.LiverLogic()
 
 
 # --------------------------------------------------------------------------- #
@@ -396,108 +323,6 @@ EXPECTED_INVERSE_TRANSFORM = np.array(
 
 _RTOL_TIGHT = 1e-12
 _ATOL_TIGHT = 1e-12
-
-
-# --------------------------------------------------------------------------- #
-# Tests
-# --------------------------------------------------------------------------- #
-
-
-def test_fit_bezier_surface_matches_pinned_control_points(liver_logic):
-    """``fit_bezier_surface`` round-trip on a square Bernstein basis.
-
-    With a square non-singular basis matrix the pseudo-inverse
-    formulation degenerates to an exact inverse, and the recovered
-    control points should reproduce the sampled control net.  The
-    captured EXPECTED therefore consists almost entirely of the input
-    lattice; the few ~1e-17 entries are floating-point dust from the
-    matmul.  Any drift here flags a change in NumPy's BLAS routing or
-    in the function body itself — both are exactly the regressions
-    this test exists to catch.
-    """
-    points, basis_u, basis_v = _make_bezier_fixture()
-    cps = liver_logic.fit_bezier_surface(points, basis_u, basis_v)
-
-    assert cps.shape == (4, 4, 3), (
-        f"fit_bezier_surface returned shape {cps.shape}, expected (4, 4, 3)"
-    )
-    np.testing.assert_allclose(
-        cps,
-        EXPECTED_BEZIER_CONTROL_POINTS,
-        rtol=_RTOL_TIGHT,
-        atol=_ATOL_TIGHT,
-    )
-
-
-def test_elliptic_fourier_descriptors_matches_pinned_coefficients(liver_logic):
-    """``elliptic_fourier_descriptors`` on a closed 3D contour, order=8.
-
-    Pins the unnormalised Kuhl-Giardina 3D EFD output for the synthetic
-    inclined-ellipse contour built by :func:`_make_contour_fixture`.
-    The ``normalize=False`` path is exercised so the test does not also
-    depend on ``normalize_efd3d`` — that helper deserves its own pin
-    once it has a defined contract.
-    """
-    contour = _make_contour_fixture()
-    coeffs = liver_logic.elliptic_fourier_descriptors(
-        contour, order=8, normalize=False
-    )
-    assert coeffs.shape == (8, 6), (
-        f"elliptic_fourier_descriptors returned shape {coeffs.shape}, "
-        "expected (8, 6)"
-    )
-    np.testing.assert_allclose(
-        coeffs,
-        EXPECTED_EFD_COEFFS,
-        rtol=_RTOL_TIGHT,
-        atol=_ATOL_TIGHT,
-    )
-
-
-def test_calculate_dc_coefficients_matches_pinned_values(liver_logic):
-    """``calculate_dc_coefficients`` returns the EFD DC triple ``(A0, C0, E0)``.
-
-    These are the locus offsets used by ``inverse_transform`` to place
-    the reconstructed contour back at its true centroid.  The
-    characterisation pins the exact triple for the synthetic contour.
-    """
-    contour = _make_contour_fixture()
-    a0, c0, e0 = liver_logic.calculate_dc_coefficients(contour)
-    np.testing.assert_allclose(
-        (float(a0), float(c0), float(e0)),
-        EXPECTED_DC,
-        rtol=_RTOL_TIGHT,
-        atol=_ATOL_TIGHT,
-    )
-
-
-def test_inverse_transform_matches_pinned_reconstruction(liver_logic):
-    """``inverse_transform`` reconstructs a contour from EFD coefficients.
-
-    The pinned output uses the EXPECTED EFD coefficients directly (not
-    a re-computation), so this test is independent of
-    ``elliptic_fourier_descriptors`` drift: it catches changes in the
-    inverse path alone.  A locus offset of ``(0.1, 0.2, 0.3)``
-    distinguishes "did the locus parameter get applied" from "did the
-    Fourier sum compute correctly" — both feed the same EXPECTED so a
-    bug in either path is visible.
-    """
-    coeffs = EXPECTED_EFD_COEFFS  # use the pinned coefficients, not a
-                                   # re-computation, so this test only
-                                   # exercises the inverse path.
-    recon = liver_logic.inverse_transform(
-        coeffs, locus=(0.1, 0.2, 0.3), n_coords=12, harmonic=8
-    )
-    assert recon.shape == (1, 3, 12), (
-        f"inverse_transform returned shape {recon.shape}, "
-        "expected (1, 3, 12)"
-    )
-    np.testing.assert_allclose(
-        recon,
-        EXPECTED_INVERSE_TRANSFORM,
-        rtol=_RTOL_TIGHT,
-        atol=_ATOL_TIGHT,
-    )
 
 
 # --------------------------------------------------------------------------- #
