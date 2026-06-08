@@ -253,17 +253,6 @@ jobs:
         run: |
           set -euo pipefail
           cd build
-          # `py_LiverSegmentsTest` is excluded because it hard-imports
-          # the `ExtractCenterline` module from SlicerExtension-VMTK,
-          # which is intentionally not bundled in the
-          # `slicer-build-ubuntu2404` image (see ALive-Docker PR #4 +
-          # the analysis on Slicer-Liver PR #294's discussion).
-          #
-          # The proper fix lives on the Slicer-Liver side: the test
-          # should detect VMTK absence via `slicer.modules` and skip
-          # itself rather than fail.  Tracked as a follow-up; until
-          # then, the CTest-level exclude keeps CI honestly green for
-          # what it actually covers.
           # `LiverBezierVisualTest_*` entries are excluded from the
           # mandatory run too — they fetch baseline images from
           # ALive-research/ALiveResearchTestingData via ExternalData and may
@@ -279,7 +268,7 @@ jobs:
           # CI logs are append-mostly archives and one-glance pytest
           # visibility outweighs the line count.
           ctest -V --no-tests=error \
-                --exclude-regex '^(py_LiverSegmentsTest|LiverBezierVisualTest_.*)$'
+                --exclude-regex '^LiverBezierVisualTest_.*$'
 
       # ---------------------------------------------------------------------
       # Visual-regression tests (per ADR-0020 §"Rollout plan" §7).
@@ -486,13 +475,13 @@ jobs:
         run: |
           set -euo pipefail
           cd build-coverage
-          # Same VMTK exclusion as build-test; coverage % drift between
-          # the two jobs is acceptable as long as the same set of tests
-          # actually runs in both.  fail_ci_if_error is false on the
-          # upload step so a single failed instrumented test does not
-          # block the rest of the PR.
+          # Same exclusion set as build-test (LiverBezierVisualTest_*);
+          # coverage % drift between the two jobs is acceptable as long
+          # as the same set of tests actually runs in both.
+          # fail_ci_if_error is false on the upload step so a single
+          # failed instrumented test does not block the rest of the PR.
           ctest -V --no-tests=error \
-                --exclude-regex '^py_LiverSegmentsTest$' || true
+                --exclude-regex '^LiverBezierVisualTest_.*$' || true
 
       - name: Generate coverage-cxx.xml (gcovr)
         if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
