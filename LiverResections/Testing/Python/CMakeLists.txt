@@ -73,6 +73,27 @@ if(DEFINED Python3_EXECUTABLE)
     set_tests_properties(LiverResections_harness_self_tests PROPERTIES
       LABELS "pytest;harness-self-tests;LiverResections"
     )
+
+    # Module-layer invariant test for the relocated distance-maps compute
+    # (ADR-0008 §2; ADR-0023 §"Shell composition (Option H)").  Registered
+    # as its own CTest entry rather than swept into the repo-root
+    # ``pytest_scaffold`` collection because ``pytest.ini`` scopes
+    # ``testpaths`` to ``Testing/Python`` only — ``<Module>/Testing/Python``
+    # trees need explicit registration here.  The test imports
+    # ``LiverResectionsLib.DistanceMaps`` and skips cleanly (via
+    # ``pytest.importorskip``) until the implementer ports the function
+    # out of ``Liver/LiverLib/legacy_logic.py``, so this entry is green on
+    # a build that has not yet landed the relocation.
+    add_test(
+      NAME LiverResections_distance_maps_relocation
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_distance_maps_relocation.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_distance_maps_relocation PROPERTIES
+      LABELS "pytest;module-layer;LiverResections"
+    )
   else()
     message(STATUS
       "Slicer-Liver: pytest not importable from ${Python3_EXECUTABLE}; "
