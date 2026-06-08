@@ -30,7 +30,15 @@ MODULE_NAME = "liversegmentation"
 
 
 def _liversegmentation_logic():
-    """Resolve the registered ``liversegmentation`` module's logic instance.
+    """Build a ``LiverSegmentationLogic`` Python instance.
+
+    Resolution mirrors the Liver-shell stage tests' ``_volumetry_logic()``
+    precedent (``Liver/Testing/Python/test_liver_shell_isstagecomplete.py``):
+    a scripted module's ``slicer.modules.<name>.logic()`` returns the generic
+    C++ ``vtkSlicerScriptedLoadableModuleLogic`` (Slicer does not Python-back
+    it), so the orchestrator surface is exercised by importing the module and
+    instantiating its Python logic class directly.  Registration itself is
+    asserted separately by ``test_module_registers_as_liversegmentation``.
 
     Skips when the module is not on ``--additional-module-paths`` (so the
     scaffold stays green while the implementer's module is absent).
@@ -46,7 +54,14 @@ def _liversegmentation_logic():
             "land LiverSegmentation/LiverSegmentation.py per ADR-0024 and put "
             "it on --additional-module-paths."
         )
-    return module.logic()
+    try:
+        import LiverSegmentation  # type: ignore[import-not-found]
+    except ImportError as exc:
+        pytest.skip(
+            f"LiverSegmentation not importable ({exc}); "
+            "ensure --additional-module-paths includes LiverSegmentation/."
+        )
+    return LiverSegmentation.LiverSegmentationLogic()
 
 
 def test_module_registers_as_liversegmentation():

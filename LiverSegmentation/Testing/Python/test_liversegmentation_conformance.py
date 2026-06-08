@@ -58,13 +58,19 @@ def test_cmake_has_no_totalsegmentator_or_monailabel_extension_depends():
             "Conformance pins the EXTENSION_DEPENDS exclusion for when it lands."
         )
     text = CMAKELISTS.read_text()
-    # Crude but sufficient: the forbidden tokens must not appear near
-    # EXTENSION_DEPENDS.  We assert the package names are simply absent from
-    # the CMake, which is the strong form of the invariant.
-    assert "TotalSegmentator" not in text, (
-        "LiverSegmentation/CMakeLists.txt must not name TotalSegmentator "
-        "(no EXTENSION_DEPENDS; lazy-installed per ADR-0024 §'Lazy install')."
-    )
+    # The pinned invariant (ADR-0024 §Conformance) is that neither AI backend
+    # appears as an EXTENSION_DEPENDS entry.  TotalSegmentator legitimately
+    # appears as the wrapper *script* filename (ToolWrappers/TotalSegmentator.py)
+    # that must be compiled, so a whole-file textual ban over-reaches; we scope
+    # the TotalSegmentator check to the EXTENSION_DEPENDS block.  MONAILabel has
+    # no legitimate artifact under this module (Alternative H), so it stays a
+    # whole-file ban.
+    if "EXTENSION_DEPENDS" in text:
+        depends_block = text[text.index("EXTENSION_DEPENDS"):]
+        assert "TotalSegmentator" not in depends_block, (
+            "LiverSegmentation/CMakeLists.txt must not declare TotalSegmentator "
+            "as EXTENSION_DEPENDS (lazy-installed per ADR-0024 §'Lazy install')."
+        )
     assert "MONAILabel" not in text, (
         "LiverSegmentation/CMakeLists.txt must not name MONAILabel "
         "(out of v2.0 scope per ADR-0024 Alternative H)."

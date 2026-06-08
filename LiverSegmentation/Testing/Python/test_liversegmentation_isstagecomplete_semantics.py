@@ -53,7 +53,17 @@ def _logic_or_skip():
             f"'{MODULE_NAME}' module not registered -- ADR-0024 implementer "
             "deliverable absent; predicate semantics cannot be exercised yet."
         )
-    return slicer, module.logic()
+    # ``module.logic()`` returns the generic C++ scripted logic, not the
+    # Python orchestrator; instantiate the Python logic directly (same
+    # resolution as the Liver-shell ``_volumetry_logic()`` precedent).
+    try:
+        import LiverSegmentation  # type: ignore[import-not-found]
+    except ImportError as exc:
+        pytest.skip(
+            f"LiverSegmentation not importable ({exc}); "
+            "ensure --additional-module-paths includes LiverSegmentation/."
+        )
+    return slicer, LiverSegmentation.LiverSegmentationLogic()
 
 
 def _add_segmentation_with_role(slicer, role):
