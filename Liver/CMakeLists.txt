@@ -33,10 +33,6 @@ slicerMacroBuildScriptedModule(
   )
 
 #-----------------------------------------------------------------------------
-# Python helpers (LiverLib) -- not Slicer scripted modules.
-add_subdirectory(LiverLib)
-
-#-----------------------------------------------------------------------------
 if(BUILD_TESTING)
 
   # Register the unittest subclass in the main script as a ctest.
