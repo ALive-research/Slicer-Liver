@@ -207,6 +207,13 @@ def mrml_scene_guard():
     leaking across tests when several run in the same launched Slicer.
     """
     slicer = pytest.importorskip("slicer")
+    if getattr(slicer, "mrmlScene", None) is None:
+        pytest.skip(
+            "requires a launched Slicer with an initialized MRML scene; "
+            "bare PythonSlicer pytest has no qSlicerApplication, so "
+            "scene-dependent distance-map tests run only under the "
+            "launched-Slicer pytest harness."
+        )
     slicer.mrmlScene.Clear(0)
     yield slicer.mrmlScene
     slicer.mrmlScene.Clear(0)
