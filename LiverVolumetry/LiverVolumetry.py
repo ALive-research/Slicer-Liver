@@ -388,7 +388,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.TargetSegmentationSelectorWidget.setVisible(inputSegmentation and inputSegmentation.IsA("vtkMRMLSegmentationNode"))
 
 
-# LiverSegmentsLogic
+# LiverVolumetryLogic
 #
 
 class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
