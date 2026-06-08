@@ -79,11 +79,11 @@ if(DEFINED Python3_EXECUTABLE)
     # as its own CTest entry rather than swept into the repo-root
     # ``pytest_scaffold`` collection because ``pytest.ini`` scopes
     # ``testpaths`` to ``Testing/Python`` only — ``<Module>/Testing/Python``
-    # trees need explicit registration here.  The test imports
-    # ``LiverResectionsLib.DistanceMaps`` and skips cleanly (via
-    # ``pytest.importorskip``) until the implementer ports the function
-    # out of ``Liver/LiverLib/legacy_logic.py``, so this entry is green on
-    # a build that has not yet landed the relocation.
+    # trees need explicit registration here.  The test imports the
+    # relocated ``DistanceMaps`` module and skips cleanly (via
+    # ``pytest.importorskip``) when Slicer / SimpleITK are unavailable,
+    # so this entry is green on a plain pytest run as well as inside a
+    # launched Slicer.
     add_test(
       NAME LiverResections_distance_maps_relocation
       COMMAND "${Python3_EXECUTABLE}" -m pytest
