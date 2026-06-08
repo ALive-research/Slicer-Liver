@@ -469,17 +469,23 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def _stage6IsComplete(self):
     """Stage 6 — done iff the scene has logged a successful plan write.
 
-    The shell tracks "last write OK" via a scene-level attribute
-    (``Liver.Stage6.LastWriteOK``) that the Export sub-widget sets on
-    successful serialisation.  Absence is treated as "not written
-    yet", consistent with the optimistic semantics described in
-    ADR-0023 §"Shell composition (Option H)".
+    The shell tracks "last write OK" via a ``vtkMRMLScriptedModuleNode``
+    that the Export sub-widget creates and populates on successful
+    serialisation (the standard Slicer pattern for module-owned
+    scene-level state that survives save/load).  Absence of the node
+    — or of the ``Stage6.LastWriteOK`` parameter on it — is treated
+    as "not written yet", consistent with the optimistic semantics
+    described in ADR-0023 §"Shell composition (Option H)".
     """
     scene = slicer.mrmlScene
     if scene is None:
       return False
-    flag = scene.GetAttribute("Liver.Stage6.LastWriteOK")
-    return flag == "True"
+    nodes = scene.GetNodesByClass("vtkMRMLScriptedModuleNode")
+    for i in range(nodes.GetNumberOfItems()):
+      node = nodes.GetItemAsObject(i)
+      if node.GetModuleName() == "Liver" and node.GetName() == "LiverShellState":
+        return node.GetParameter("Stage6.LastWriteOK") == "True"
+    return False
 
   def _stageIsComplete(self, row):
     """Return the completion bool for stage ``row``.
