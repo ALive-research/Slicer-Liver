@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
+Distributed under the OSI-approved BSD 3-Clause License.
+-->
+<ui version="4.0">
+ <class>LiverSegmentation</class>
+ <widget class="qMRMLWidget" name="LiverSegmentation">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>360</width>
+    <height>260</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="ctkCollapsibleButton" name="AnatomyCard">
+     <property name="text">
+      <string>Anatomy Definition</string>
+     </property>
+     <layout class="QVBoxLayout" name="anatomyLayout">
+      <item>
+       <widget class="QLabel" name="HelpLabel">
+        <property name="text">
+         <string>Segment the liver, portal vein, hepatic vein, and tumors. AI segmentation (TotalSegmentator) downloads on first use; manual Segment Editor tools are always available.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>ctkCollapsibleButton</class>
+   <extends>QWidget</extends>
+   <header>ctkCollapsibleButton.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLWidget.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>LiverSegmentation</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>AnatomyCard</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+  </connection>
+ </connections>
+</ui>
