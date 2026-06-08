@@ -52,7 +52,20 @@ See also
 
 from __future__ import annotations
 
+import os
 import sys
+
+# Test-only escape hatch.  The contract self-test
+# (test_run_pytest_launched_contract.py) drives this script as a
+# subprocess to assert exit-code propagation, but runs it WITHOUT a
+# launched QApplication event loop -- under PythonSlicer ``slicer`` is
+# importable yet ``slicer.util.exit`` cannot propagate a code with no
+# loop to quit.  When this variable is set the driver routes through
+# ``sys.exit`` (faithful in any interpreter), so the self-test checks
+# the propagation logic deterministically.  The real ``pytest_launched``
+# harness leaves it unset and uses ``slicer.util.exit`` (the launched
+# event loop carries the code out, per the replay_test precedent).
+_FORCE_SYSEXIT_ENV = "SLICER_PYTEST_LAUNCHED_FORCE_SYSEXIT"
 
 
 def _test_roots(argv: list[str]) -> list[str]:
@@ -95,6 +108,8 @@ def _exit(code: int) -> None:
     self-test in ``test_run_pytest_launched_contract.py``, or a local
     lint run).  Same shape as ``replay_test._exit``.
     """
+    if os.environ.get(_FORCE_SYSEXIT_ENV) == "1":
+        sys.exit(code)
     try:
         import slicer  # type: ignore[import-not-found]
 
