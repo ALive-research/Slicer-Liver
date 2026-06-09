@@ -24,7 +24,153 @@ Two audiences, same skip-clean discipline as the Liver-shell suite
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
+
 import pytest
+
+
+# --------------------------------------------------------------------------- #
+# Import-purity child runner: stub ``slicer`` in a subprocess, not in-process.
+# --------------------------------------------------------------------------- #
+#
+# The import-purity probes (test_liversegmentation_import_purity,
+# test_liversegmentation_backend_status_row) must replace
+# ``sys.modules['slicer']`` with a tripwire fake to prove no pip_install / no
+# ``import totalsegmentator`` fires at import time.  Doing that in-process
+# would poison the shared launched-Slicer interpreter (see the regression
+# guard below).  This helper runs the stub + import in a CHILD interpreter and
+# returns the child's structured JSON verdict, so the parent's ``sys.modules``
+# is never touched.  Both probes supply their own child program (they assert
+# different facts) but share this plumbing: module-root-on-PYTHONPATH (the same
+# import path the launched harness's ``--additional-module-paths`` supplies)
+# plus last-JSON-line parsing.
+
+#: Module source root that makes ``LiverSegmentation`` / ``LiverSegmentationLib``
+#: importable.  This conftest sits at ``LiverSegmentation/Testing/Python/`` so
+#: the module root (holding ``LiverSegmentation.py`` + the
+#: ``LiverSegmentationLib/`` package) is two parents up.
+_MODULE_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)
+)
+
+
+def run_purity_child(program: str, *args: str, timeout: float = 120.0) -> dict:
+    """Run ``program`` in a clean child interpreter; return its JSON verdict.
+
+    ``program`` is Python source executed via ``python -c`` with ``args``
+    forwarded as ``sys.argv[1:]``.  The child runs with ``_MODULE_ROOT`` on
+    ``PYTHONPATH`` so it can import the targets the same way the launched
+    harness does.  The returned dict is parsed from the child's last
+    JSON-object stdout line (the verdict), augmented with ``_returncode`` /
+    ``_stdout`` / ``_stderr`` for diagnostics.  A child that emits no parseable
+    verdict yields ``{"result": None, ...}`` so callers can fail loudly rather
+    than pass silently.
+    """
+    env = {**os.environ}
+    env["PYTHONPATH"] = os.pathsep.join(
+        [_MODULE_ROOT, env.get("PYTHONPATH", "")]
+    ).rstrip(os.pathsep)
+    proc = subprocess.run(
+        [sys.executable, "-c", program, *args],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        env=env,
+    )
+    verdict: dict = {"result": None}
+    for line in reversed(proc.stdout.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict) and "result" in parsed:
+            verdict = parsed
+            break
+    verdict["_returncode"] = proc.returncode
+    verdict["_stdout"] = proc.stdout
+    verdict["_stderr"] = proc.stderr
+    return verdict
+
+
+# --------------------------------------------------------------------------- #
+# Regression guard: no test may replace the live ``slicer`` / ``slicer.util``.
+# --------------------------------------------------------------------------- #
+#
+# The launched-Slicer harness (``Liver/Testing/Python/run_pytest_launched.py``,
+# the ``pytest_launched`` CTest row) runs the WHOLE project pytest tree inside
+# ONE long-lived ``qSlicerApplication`` interpreter.  Every test shares that
+# interpreter's ``sys.modules``.  A test that swaps a fake ``slicer`` (or
+# ``slicer.util``) into ``sys.modules`` to probe import-time behaviour and then
+# fails to restore the real module objects POISONS every subsequent test:
+#
+#   * scene tests see the stub's missing ``mrmlScene`` and skip
+#     ("slicer.mrmlScene not available"); and
+#   * the driver's ``_exit`` helper calls the stub's missing
+#     ``slicer.util.exit`` -> the launched process never quits -> CTest times
+#     out.
+#
+# An import-purity probe MUST therefore stub ``slicer`` inside a child
+# interpreter (subprocess), never in the shared parent.  This autouse fixture
+# is the tripwire that makes a violation FAIL LOUDLY in the offending test
+# instead of silently corrupting the session: it snapshots the live module
+# objects' identities before each test and asserts they are unchanged after.
+#
+# It only asserts when a REAL slicer is present (the launched harness); under
+# bare ``PythonSlicer -m pytest`` ``slicer`` may be absent or partial, so the
+# guard stands down rather than firing spuriously.
+
+
+def _looks_like_real_slicer(module) -> bool:
+    """True iff ``module`` is the genuine launched-Slicer ``slicer`` module.
+
+    A real launched ``slicer`` exposes ``mrmlScene`` (a qSlicerApplication
+    runtime attribute the import-purity stubs never carry).  Bare PythonSlicer
+    imports ``slicer`` but without ``mrmlScene``; the stubs are bare
+    ``types.ModuleType`` instances.  Keying on ``mrmlScene`` distinguishes the
+    one case the guard must protect — the shared launched interpreter — from
+    every benign case where it must stand down.
+    """
+    return module is not None and getattr(module, "mrmlScene", None) is not None
+
+
+@pytest.fixture(autouse=True)
+def _no_slicer_module_leak():
+    """Fail any test that replaces the live ``slicer`` / ``slicer.util``.
+
+    Snapshots the live module-object identities before the test and asserts
+    in teardown that the test did not swap a fake into ``sys.modules`` and
+    leave it there.  Active only when a real launched ``slicer`` is present;
+    a no-op otherwise (bare PythonSlicer, or no slicer at all).
+    """
+    slicer_before = sys.modules.get("slicer")
+    util_before = getattr(slicer_before, "util", None)
+    guard_active = _looks_like_real_slicer(slicer_before)
+
+    yield
+
+    if not guard_active:
+        return
+
+    slicer_after = sys.modules.get("slicer")
+    util_after = getattr(slicer_after, "util", None)
+    assert slicer_after is slicer_before, (
+        "this test replaced the live 'slicer' module in sys.modules and did "
+        "not restore it -- a fake-slicer leak poisons every subsequent test "
+        "in the shared launched-Slicer interpreter (scene tests skip, the "
+        "driver's exit helper cannot quit, CTest times out).  Stub 'slicer' "
+        "in a CHILD process (subprocess), never in this shared interpreter."
+    )
+    assert util_after is util_before, (
+        "this test replaced 'slicer.util' and did not restore it -- same "
+        "shared-interpreter leak hazard as a swapped 'slicer'.  Probe import "
+        "purity in a child process, not in the live interpreter."
+    )
 
 
 def _import_slicer_or_skip():

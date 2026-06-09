@@ -26,10 +26,7 @@ per ADR-0024.
 
 from __future__ import annotations
 
-import builtins
-import importlib
-import sys
-import types
+import textwrap
 
 import pytest
 
@@ -46,22 +43,32 @@ DOWNLOAD_SIZE_STRING = "~3 GB"
 # --------------------------------------------------------------------------- #
 # Pure-Python: the Pre-download hook is reachable WITHOUT triggering an install
 # at probe time.  Runs under bare pytest (no Slicer / Qt / network).
+#
+# The wrapper is imported under a fake ``slicer`` in a CHILD interpreter
+# (subprocess), never in this process: the launched-Slicer harness shares one
+# ``sys.modules`` across the whole pytest tree, and a fake ``slicer`` left
+# behind there poisons every subsequent test (scene tests lose ``mrmlScene``;
+# the driver's exit helper hangs the process to a CTest timeout).  Same
+# isolation discipline as ``test_liversegmentation_import_purity``.
 # --------------------------------------------------------------------------- #
 
+# Child program: stub ``slicer`` + poison ``totalsegmentator`` IN THE CHILD,
+# import the wrapper, and report the Pre-download-hook facts as JSON.
+_HOOK_PROBE_PROGRAM = textwrap.dedent(
+    f"""
+    import builtins
+    import importlib
+    import json
+    import sys
+    import types
 
-def _wrapper_or_skip():
-    """Import the TotalSegmentator wrapper with a fake slicer + poisoned backend.
+    WRAPPER = {WRAPPER_IMPORT!r}
 
-    Mirrors ``test_liversegmentation_import_purity`` so this pure-Python probe
-    never triggers a real ``pip_install`` or ``import totalsegmentator``.
-    """
-    calls: list = []
+    pip_calls = []
 
     def _tripwire_pip_install(*args, **kwargs):
-        calls.append((args, kwargs))
-        raise AssertionError(
-            "pip_install reached at import time -- ADR-0024 §'Lazy install'."
-        )
+        pip_calls.append((args, kwargs))
+        raise RuntimeError("pip_install called at import time")
 
     fake_util = types.ModuleType("slicer.util")
     fake_util.pip_install = _tripwire_pip_install
@@ -81,18 +88,23 @@ def _wrapper_or_skip():
     sys.modules.pop("totalsegmentator", None)
 
     try:
-        for cached in list(sys.modules):
-            if cached == WRAPPER_IMPORT or cached.startswith(WRAPPER_IMPORT + "."):
-                del sys.modules[cached]
-        module = importlib.import_module(WRAPPER_IMPORT)
+        wrapper = importlib.import_module(WRAPPER)
     except ImportError as exc:
-        pytest.skip(
-            f"{WRAPPER_IMPORT} not importable yet ({exc}) -- ADR-0024 "
-            "deliverable absent."
-        )
-    finally:
-        builtins.__import__ = real_import
-    return module, calls
+        print(json.dumps(dict(result="NOT_IMPORTABLE", error=str(exc))))
+        raise SystemExit(0)
+    except RuntimeError:
+        print(json.dumps(dict(result="PIP_INSTALL_AT_IMPORT")))
+        raise SystemExit(3)
+
+    print(json.dumps(dict(
+        result="OK",
+        has_hook=hasattr(wrapper, "ensureBackendInstalled"),
+        size=getattr(wrapper, "TOTALSEGMENTATOR_DOWNLOAD_SIZE", None),
+        pip_calls=len(pip_calls),
+    )))
+    raise SystemExit(0)
+    """
+)
 
 
 def test_predownload_hook_exposes_confirm_false_and_size_constant():
@@ -100,22 +112,42 @@ def test_predownload_hook_exposes_confirm_false_and_size_constant():
 
     ADR-0024 §"Lazy install": the settings/status row's Pre-download affordance
     reuses ``ensureBackendInstalled(confirm=False)``.  Merely *resolving* the
-    hook + the size copy must not trigger an install (import-purity).
+    hook + the size copy must not trigger an install (import-purity).  The stub
+    + import run in a child interpreter so the probe never poisons this
+    (possibly shared launched-Slicer) process.
     """
-    wrapper, pip_calls = _wrapper_or_skip()
-    assert hasattr(wrapper, "ensureBackendInstalled"), (
+    # Lazy import (inside the body) so it binds to THIS directory's conftest,
+    # not a sibling test root's same-named ``conftest`` in the launched
+    # harness.  Same idiom the scene tests use for ``_require_mrml_scene``.
+    from conftest import run_purity_child
+
+    verdict = run_purity_child(_HOOK_PROBE_PROGRAM)
+    result = verdict.get("result")
+
+    if result == "NOT_IMPORTABLE":
+        pytest.skip(
+            f"{WRAPPER_IMPORT} not importable in the child "
+            f"({verdict.get('error')}) -- ADR-0024 deliverable absent."
+        )
+
+    diag = f"\nchild stderr:\n{verdict.get('_stderr')}"
+    assert result == "OK", (
+        "resolving the Pre-download hook must not call pip_install at import "
+        f"(import-purity, ADR-0024 §'Lazy install'); child verdict {result!r}."
+        + diag
+    )
+    assert verdict.get("has_hook"), (
         "wrapper must expose the reusable ensureBackendInstalled() hook "
-        "(ADR-0024 §'Lazy install')."
+        "(ADR-0024 §'Lazy install')." + diag
     )
     # The download-size copy is a named constant in one place.
-    size = getattr(wrapper, "TOTALSEGMENTATOR_DOWNLOAD_SIZE", None)
-    assert size == DOWNLOAD_SIZE_STRING, (
+    assert verdict.get("size") == DOWNLOAD_SIZE_STRING, (
         "the download-size string must be the named wrapper constant "
-        f"'{DOWNLOAD_SIZE_STRING}' (single source of truth, ADR-0024)."
+        f"'{DOWNLOAD_SIZE_STRING}' (single source of truth, ADR-0024)." + diag
     )
-    assert not pip_calls, (
+    assert verdict.get("pip_calls") == 0, (
         "resolving the Pre-download hook must not call pip_install "
-        "(import-purity, ADR-0024 §'Lazy install')."
+        "(import-purity, ADR-0024 §'Lazy install')." + diag
     )
 
 
