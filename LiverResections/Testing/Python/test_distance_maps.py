@@ -1,80 +1,48 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital.  All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
-"""Module-layer invariant test for the relocated distance-maps compute.
+"""Module-layer invariants for the distance-map computation.
 
-Background
-----------
-The orphaned ``LiverLogic`` class historically embedded in
-``Liver/Liver.py`` was parked verbatim in
-``Liver/LiverLib/legacy_logic.py`` (T5.2-d) so the Liver shell could
-shrink to its composition-only role per ADR-0023
-§"Shell composition (Option H)" ("The Liver shell holds no domain logic
-— only composition + navigation").
+The resection stage's distance-map computation lives in
+``LiverResections/LiverResectionsLib/DistanceMaps.py``:
+``computeDistanceMaps`` (signed-Maurer distance maps composed across the
+tumour / parenchyma / hepatic / portal labels) and its helper
+``imageResample`` (SimpleITK ``SignedMaurerDistanceMap`` +
+``ResampleImageFilter``).  This test pins that computation's behaviour
+on a synthetic labelmap.
 
-Of the groups parked in ``legacy_logic.py``, exactly one genuinely
-*relocates* rather than being deleted as a dead duplicate: the
-signed-Maurer **distance-maps** group —
-``LiverLogic.computeDistanceMaps`` and its helper
-``LiverLogic.imageResample`` (SimpleITK ``SignedMaurerDistanceMap`` +
-``ResampleImageFilter``).  The Bezier / EFD / PCA / mesh-preprocessing
-groups are dead duplicates of the C++ ``LiverResections/Algorithm/``
-library (pinned by the surviving C++ arm of
-``Testing/Python/unit/test_bezier_characterization.py``) and are
-deleted, not moved.
-
-New home
---------
-Distance maps move to a dedicated Python module owned by the resection
-stage:
-
-    LiverResections/LiverResectionsLib/DistanceMaps.py
-
-This is a Module-layer test per ADR-0008 §2 (MRML scene + pipeline
+It is a Module-layer test per ADR-0008 §2 (MRML scene + pipeline
 behaviour; Slicer imported, no Qt widgets, no ``render_interactive``).
 Distance maps are pure ITK/numpy on a pushed/pulled volume node, so the
-suite is designed to run under a **minimal ``qSlicerApplication``** — the
-same wrapper-vs-carrier precedent SlicerLayerDM and trame-slicer use for
-MRML-touching system-under-test — not the full Slicer GUI.
-
-Red-state contract
-------------------
-This test is authored **test-first**.  Until the implementer ports
-``computeDistanceMaps`` / ``imageResample`` into
-``LiverResections/LiverResectionsLib/DistanceMaps.py``, the import of
-``DistanceMaps`` fails and the body skips with a clear "not yet
-relocated" reason.  Once the port lands, the import succeeds and the
-geometry + sampled-voxel assertions run.  The implementer flips this
-test green by relocating the code; no assertion in this file should
-need to change.
+suite runs under a **minimal ``qSlicerApplication``** -- the
+wrapper-vs-carrier precedent SlicerLayerDM and trame-slicer use for
+MRML-touching system-under-test -- not the full Slicer GUI.
 
 What is pinned
 --------------
 1. **Output geometry is preserved** when ``downSamplingRate == 1``: the
    composite distance-map volume has the same dimensions, spacing, and
-   origin as the input labelmap.  ``computeDistanceMaps`` runs
-   ``SignedMaurerDistanceMap`` in-place on the pulled image and composes
-   the channels without resampling on the unit-rate path
-   (``legacy_logic.py`` lines 142-143).
+   origin as the input labelmap (the unit-rate path composes the
+   per-label signed-Maurer images without resampling).
 
 2. **Signed-distance sign + magnitude at sampled voxels.**  With
-   ``squaredDistance=False`` and ``useImageSpacing=True`` (the third and
-   fourth ``SignedMaurerDistanceMap`` arguments in ``legacy_logic.py``),
-   a foreground voxel reports a **negative** signed distance (inside),
-   and a background voxel a **positive** distance equal to the Euclidean
-   gap to the nearest foreground voxel in physical (spacing-weighted)
-   units, to a tolerance.
+   ``squaredDistance=False`` and ``useImageSpacing=True``, a foreground
+   voxel reports a **negative** signed distance (inside) and a
+   background voxel a **positive** distance equal to the Euclidean gap
+   to the nearest foreground voxel in physical (spacing-weighted) units,
+   to a tolerance.
+
+3. **``imageResample`` rescales geometry** to a requested voxel count
+   while preserving the physical extent (size * spacing).
 
 References
 ----------
-* ADR-0023 §"Shell composition (Option H)" — the no-domain-logic rule
-  that motivates relocating ``computeDistanceMaps`` out of the shell.
-* ADR-0008 §2 — Module-layer taxonomy (MRML scene + pipeline; Slicer
+* ADR-0008 §2 -- Module-layer taxonomy (MRML scene + pipeline; Slicer
   imported, no Qt).
-* ``Liver/LiverLib/legacy_logic.py`` — ``LiverLogic.computeDistanceMaps``
-  / ``LiverLogic.imageResample``: the verbatim source of the behaviour
-  being relocated.
-* ``LiverResections/LiverResectionsLib/DistanceMaps.py`` — the relocation
-  target this test gates.
+* ADR-0023 §"Shell composition (Option H)" -- the no-domain-logic rule
+  under which this compute is owned by the resection module, not the
+  Liver shell.
+* ``LiverResections/LiverResectionsLib/DistanceMaps.py`` -- the module
+  under test.
 """
 
 from __future__ import annotations
@@ -86,9 +54,9 @@ import sys
 import pytest
 
 # --------------------------------------------------------------------------- #
-# Repo geometry — the relocated module lives under the ``<Module>Lib``
-# install convention (same convention as the Representations tree exercised
-# by ``Testing/Python/unit/test_distance_spheroid_init_representation.py``).
+# Repo geometry -- ``DistanceMaps`` lives under the ``<Module>Lib`` install
+# convention (same convention as the Representations tree exercised by
+# ``Testing/Python/unit/test_distance_spheroid_init_representation.py``).
 # This file sits at LiverResections/Testing/Python/, so the repo root is
 # three parents up.
 # --------------------------------------------------------------------------- #
@@ -130,7 +98,7 @@ def _make_labelmap_node():
 
     node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
 
-    # numpy array is indexed (k, j, i) — the Slicer/VTK convention that
+    # numpy array is indexed (k, j, i) -- the Slicer/VTK convention that
     # ``updateVolumeFromArray`` expects.
     arr = np.zeros((_DIMS[2], _DIMS[1], _DIMS[0]), dtype=np.int16)
     arr[_FG_IJK[2], _FG_IJK[1], _FG_IJK[0]] = 1
@@ -156,7 +124,7 @@ def _expected_distance_at(ijk):
 
 
 # --------------------------------------------------------------------------- #
-# Tolerances — the signed-Maurer transform is exact in physical units for
+# Tolerances -- the signed-Maurer transform is exact in physical units for
 # isolated foreground voxels, so the magnitude check is tight; a hair of
 # slack absorbs any float32 round-trip through the volume node.
 # --------------------------------------------------------------------------- #
@@ -170,18 +138,16 @@ _ATOL_DISTANCE = 1e-3
 
 @pytest.fixture(scope="module")
 def distance_maps_module():
-    """Import the relocated ``DistanceMaps`` module, skipping if not yet ported.
+    """Import ``DistanceMaps``, skipping cleanly when its deps are absent.
 
-    RED until the implementer relocates ``computeDistanceMaps`` /
-    ``imageResample`` from ``Liver/LiverLib/legacy_logic.py`` into
-    ``LiverResections/LiverResectionsLib/DistanceMaps.py`` per ADR-0023
-    §"Shell composition (Option H)".  The skip reason names the target
-    path so the failure is self-documenting in CTest output.
+    Skips (rather than errors) when Slicer, SimpleITK, or the
+    ``DistanceMaps`` module itself is unavailable, so the suite is a
+    no-op on a build that lacks the resection module's Python lib.
     """
     pytest.importorskip(
         "slicer",
         reason=(
-            "DistanceMaps relocation is Module-layer (ADR-0008 §2); "
+            "distance-map compute is Module-layer (ADR-0008 §2); "
             "requires a minimal qSlicerApplication / Slicer Python."
         ),
     )
@@ -192,9 +158,8 @@ def distance_maps_module():
     return pytest.importorskip(
         "DistanceMaps",
         reason=(
-            "computeDistanceMaps/imageResample not yet relocated to "
             "LiverResections/LiverResectionsLib/DistanceMaps.py "
-            "(ADR-0023 §'Shell composition (Option H)')."
+            "not importable in this build."
         ),
     )
 
@@ -228,11 +193,10 @@ def test_compute_distance_maps_preserves_output_geometry(
 ):
     """Unit-rate distance maps preserve input dims / spacing / origin.
 
-    With ``downSamplingRate == 1`` the relocated ``computeDistanceMaps``
-    composes the per-label signed-Maurer images without resampling
-    (``legacy_logic.py`` lines 142-143), so the output volume node must
-    report the same dimensions, spacing, and origin as the input
-    labelmap.
+    With ``downSamplingRate == 1`` ``computeDistanceMaps`` composes the
+    per-label signed-Maurer images without resampling, so the output
+    volume node must report the same dimensions, spacing, and origin as
+    the input labelmap.
     """
     import slicer
 
@@ -271,7 +235,7 @@ def test_compute_distance_maps_signed_distance_values(
     """Signed-Maurer sign + magnitude at sampled voxels.
 
     With ``squaredDistance=False`` and ``useImageSpacing=True`` (the third
-    and fourth args to ``SignedMaurerDistanceMap`` in ``legacy_logic.py``):
+    and fourth args to ``SignedMaurerDistanceMap``):
 
     * the lone foreground voxel reports a non-positive (inside) distance;
     * background voxels report the positive spacing-weighted Euclidean
@@ -326,10 +290,9 @@ def test_image_resample_rescales_geometry(distance_maps_module):
 
     Exercises the helper directly on a SimpleITK image (no MRML needed):
     a down-sample to a smaller size must preserve the physical extent
-    (size * spacing) while changing the per-axis spacing accordingly —
-    the contract encoded in ``legacy_logic.py`` lines 160-167.  This is
-    the second relocated function and is pinned independently so a port
-    that moves only ``computeDistanceMaps`` is caught.
+    (size * spacing) while changing the per-axis spacing accordingly.
+    Pinned independently of ``computeDistanceMaps`` so a regression in
+    either is caught.
     """
     import SimpleITK as sitk
 
