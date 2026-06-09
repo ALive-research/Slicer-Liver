@@ -56,3 +56,30 @@ def _require_mrml_scene():
             "initialise a qSlicerApplication.  Run from a launched Slicer:\n"
             "  Slicer --no-splash --python-script $(which pytest) -- <test_file>"
         )
+
+
+def _require_qt_widget():
+    """Skip the current test if ``qt.QWidget`` is not available.
+
+    The Stage-2 surgeon-UI tests construct the ``LiverSegmentationWidget``
+    (a ``QTabWidget`` of four structure cards) and therefore need a real Qt
+    widget surface.  Bare ``PythonSlicer -m pytest <file>`` loads PythonQt's
+    ``qt`` module but does NOT initialise a ``qSlicerApplication``, so
+    ``qt.QWidget`` is missing; the launched-Slicer harness from
+    ``Liver/Testing/Python/run_pytest_launched.py`` (``pytest_launched``)
+    has it.  Same shape as ``Liver/Testing/Python/conftest._require_qt_widget``.
+    """
+    try:
+        import qt  # type: ignore[import-not-found]
+    except ImportError as exc:
+        pytest.skip(
+            f"qt module not importable ({exc}); "
+            "LiverSegmentation widget tests require a launched Slicer."
+        )
+        return
+    if not hasattr(qt, "QWidget"):
+        pytest.skip(
+            "qt module is loaded but qt.QWidget is missing -- no "
+            "qSlicerApplication.  Run under the launched-Slicer harness "
+            "(pytest_launched / run_pytest_launched.py)."
+        )
