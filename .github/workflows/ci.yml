@@ -124,14 +124,24 @@ jobs:
     # project-maintained image (Ubuntu 24.04 + Qt 6.9 + Slicer main
     # pre-built); recipe and auto-build workflow live in the
     # `ALive-Docker` repository (slicer-build-ubuntu2404/Dockerfile +
-    # .github/workflows/build-image.yml).  Rebuilt weekly to track
-    # Slicer main; pin to a `:main-<sha>` tag here if reproducible
-    # builds become important.
+    # .github/workflows/build-image.yml).
+    #
+    # PINNED to a specific Slicer-main build, NOT `:latest` — see
+    # Docs/adr/0030-ci-slicer-image-pinning.md.  `:latest` is a rolling
+    # tag rebuilt from Slicer main; a moving base means every PR builds
+    # against a different, non-reproducible Slicer and a bad upstream
+    # push lands on whichever PR happens to run during the window.  The
+    # `:main-<sha>` tag below names the exact Slicer commit; bump it
+    # deliberately via a dedicated image-bump PR (which absorbs any
+    # upstream breakage in isolation), never implicitly.  Keep the two
+    # jobs (build-test + coverage) on the SAME pin.
+    #   main-4fb4ac4 = Slicer main @ 4fb4ac4
+    #   digest sha256:549a820f32d78dfb723c50cfed34519ba362ccfbae1791a6487a76cae588f756
     #
     # SlicerConfig.cmake is at /usr/src/Slicer-build/Slicer-build/
     # (the doubled `Slicer-build` is Slicer's superbuild convention).
     container:
-      image: ghcr.io/alive-research/slicer-build-ubuntu2404:latest
+      image: ghcr.io/alive-research/slicer-build-ubuntu2404:main-4fb4ac4
       options: --user root
 
     env:
@@ -228,6 +238,23 @@ jobs:
           echo "Slicer_DIR=${Slicer_DIR}"
           echo "LayerDisplayableManager_DIR=${LayerDisplayableManager_DIR}"
 
+      # Runtime-sanity smoke for the pinned image (ADR-0030).  The layout
+      # checks above catch a *build-tree* drift; this catches a *runtime*
+      # drift — a pinned image whose Slicer Python is broken/partial.
+      # That exact failure (a `slicer.util` with no `exit`) once turned the
+      # launched test harness into a 1500 s hang; fail fast here with a
+      # clear message at bump time instead.  PythonSlicer imports `slicer`
+      # as a library (no event loop, no hang risk), so this is cheap.
+      - name: Smoke-check pinned Slicer runtime
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
+        run: |
+          set -euo pipefail
+          PYTHONSLICER="${Slicer_DIR}/../python-install/bin/PythonSlicer"
+          test -x "${PYTHONSLICER}" \
+            || { echo "::error::PythonSlicer not found at ${PYTHONSLICER} — pinned image layout has drifted (ADR-0030)"; exit 1; }
+          "${PYTHONSLICER}" -c "import sys, slicer.util as u; m=[a for a in ('exit','VTKObservationMixin') if not hasattr(u,a)]; sys.exit('slicer.util is missing '+', '.join(m)+' -- pinned image runtime has drifted') if m else print('slicer.util runtime smoke OK')" \
+            || { echo "::error::Pinned Slicer image is runtime-broken (slicer.util incomplete) — bump/repin per ADR-0030 rather than debugging a downstream hang"; exit 1; }
+
       - name: Configure
         if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
         run: |
@@ -321,8 +348,13 @@ jobs:
       run:
         shell: bash
 
+    # Pinned to the SAME Slicer-main build as build-test — see
+    # Docs/adr/0030-ci-slicer-image-pinning.md.  Bump both jobs together
+    # in the image-bump PR; never let the two drift onto different Slicer
+    # commits.  main-4fb4ac4 = Slicer main @ 4fb4ac4
+    # (digest sha256:549a820f32d78dfb723c50cfed34519ba362ccfbae1791a6487a76cae588f756).
     container:
-      image: ghcr.io/alive-research/slicer-build-ubuntu2404:latest
+      image: ghcr.io/alive-research/slicer-build-ubuntu2404:main-4fb4ac4
       options: --user root
 
     env:
@@ -395,6 +427,18 @@ jobs:
             || { echo "::error::SlicerConfig.cmake missing at ${Slicer_DIR} — image layout has drifted"; exit 1; }
           test -f "${LayerDisplayableManager_DIR}/LayerDisplayableManagerConfig.cmake" \
             || { echo "::error::LayerDisplayableManagerConfig.cmake missing at ${LayerDisplayableManager_DIR} — image layout has drifted"; exit 1; }
+
+      # Runtime-sanity smoke for the pinned image (ADR-0030) — same guard
+      # as build-test; catches a runtime-broken pinned Slicer at bump time.
+      - name: Smoke-check pinned Slicer runtime
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
+        run: |
+          set -euo pipefail
+          PYTHONSLICER="${Slicer_DIR}/../python-install/bin/PythonSlicer"
+          test -x "${PYTHONSLICER}" \
+            || { echo "::error::PythonSlicer not found at ${PYTHONSLICER} — pinned image layout has drifted (ADR-0030)"; exit 1; }
+          "${PYTHONSLICER}" -c "import sys, slicer.util as u; m=[a for a in ('exit','VTKObservationMixin') if not hasattr(u,a)]; sys.exit('slicer.util is missing '+', '.join(m)+' -- pinned image runtime has drifted') if m else print('slicer.util runtime smoke OK')" \
+            || { echo "::error::Pinned Slicer image is runtime-broken (slicer.util incomplete) — bump/repin per ADR-0030 rather than debugging a downstream hang"; exit 1; }
 
       - name: Configure (Debug + --coverage)
         if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
