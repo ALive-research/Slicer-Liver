@@ -167,10 +167,13 @@ def test_isstructureaccepted_ignores_scratch_only_state():
     )
 
 
-def _build_widget_or_skip(slicer):
+def _build_widget_or_skip(slicer, registry):
     """Construct the LiverSegmentationWidget under a launched Slicer.
 
     Widget-needing: skips cleanly under bare PythonSlicer (no qt.QWidget).
+    The widget is registered with the ``qt_widgets`` fixture's ``registry``
+    so its Qt tree is disposed in teardown (otherwise it survives to process
+    shutdown and trips vtkDebugLeaks in the launched harness).
     """
     from conftest import _require_qt_widget
 
@@ -181,6 +184,7 @@ def _build_widget_or_skip(slicer):
         pytest.skip(f"LiverSegmentation not importable ({exc}).")
     widget = LiverSegmentation.LiverSegmentationWidget()
     widget.setup()
+    registry.append(widget)
     return widget
 
 
@@ -205,7 +209,7 @@ def _structure_tab_widget(widget):
     return None
 
 
-def test_structure_tabs_carry_confirmation_glyphs():
+def test_structure_tabs_carry_confirmation_glyphs(qt_widgets):
     """Four structure tabs, each label prefixed with a confirmation glyph.
 
     ADR-0024 §"Per-structure micro-workflows" surgeon UI: a QTabWidget of the
@@ -226,31 +230,28 @@ def test_structure_tabs_carry_confirmation_glyphs():
             "deliverable absent."
         )
     slicer.mrmlScene.Clear(0)
-    widget = _build_widget_or_skip(slicer)
-    try:
-        tabs = _structure_tab_widget(widget)
-        if tabs is None:
-            pytest.fail(
-                "widget must host a QTabWidget of four structure tabs "
-                "(Liver / Portal vein / Hepatic vein / Tumors) per ADR-0024 "
-                "§'Per-structure micro-workflows' -- not yet implemented."
-            )
-        # PythonQt: .count is a property, not a callable.
-        assert tabs.count == 4, (
-            f"expected 4 structure tabs, got {tabs.count} (ADR-0024 four "
-            "per-structure cards)."
+    widget = _build_widget_or_skip(slicer, qt_widgets)
+    tabs = _structure_tab_widget(widget)
+    if tabs is None:
+        pytest.fail(
+            "widget must host a QTabWidget of four structure tabs "
+            "(Liver / Portal vein / Hepatic vein / Tumors) per ADR-0024 "
+            "§'Per-structure micro-workflows' -- not yet implemented."
         )
-        for index in range(tabs.count):
-            label = tabs.tabText(index)
-            assert label.startswith(GLYPH_PENDING) or label.lstrip().startswith(
-                GLYPH_PENDING
-            ), (
-                f"tab {index} label '{label}' must carry the pending glyph "
-                f"'{GLYPH_PENDING}' pre-Accept, mirroring the Liver-shell "
-                "idiom (Liver/Liver.py _indicatorGlyph)."
-            )
-    finally:
-        widget.cleanup()
+    # PythonQt: .count is a property, not a callable.
+    assert tabs.count == 4, (
+        f"expected 4 structure tabs, got {tabs.count} (ADR-0024 four "
+        "per-structure cards)."
+    )
+    for index in range(tabs.count):
+        label = tabs.tabText(index)
+        assert label.startswith(GLYPH_PENDING) or label.lstrip().startswith(
+            GLYPH_PENDING
+        ), (
+            f"tab {index} label '{label}' must carry the pending glyph "
+            f"'{GLYPH_PENDING}' pre-Accept, mirroring the Liver-shell "
+            "idiom (Liver/Liver.py _indicatorGlyph)."
+        )
 
 
 if __name__ == "__main__":

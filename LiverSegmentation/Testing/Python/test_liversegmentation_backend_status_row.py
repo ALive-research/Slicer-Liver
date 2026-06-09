@@ -157,7 +157,7 @@ def test_predownload_hook_exposes_confirm_false_and_size_constant():
 # --------------------------------------------------------------------------- #
 
 
-def _widget_or_skip(slicer):
+def _widget_or_skip(slicer, registry):
     from conftest import _require_qt_widget
 
     _require_qt_widget()
@@ -172,10 +172,16 @@ def _widget_or_skip(slicer):
         pytest.skip(f"LiverSegmentation not importable ({exc}).")
     widget = LiverSegmentation.LiverSegmentationWidget()
     widget.setup()
+    # Register with the qt_widgets fixture so the Qt tree is disposed in
+    # teardown; an undisposed widget survives to shutdown and trips
+    # vtkDebugLeaks in the launched harness.
+    registry.append(widget)
     return widget
 
 
-def test_predownload_button_calls_ensurebackend_confirm_false_no_node(monkeypatch):
+def test_predownload_button_calls_ensurebackend_confirm_false_no_node(
+    monkeypatch, qt_widgets
+):
     """Pre-download -> ensureBackendInstalled(confirm=False); no node minted.
 
     ADR-0024 §"Lazy install": clicking Pre-download is itself the surgeon's
@@ -194,43 +200,40 @@ def test_predownload_button_calls_ensurebackend_confirm_false_no_node(monkeypatc
     _require_mrml_scene()
     slicer = _import_slicer_or_skip()
     slicer.mrmlScene.Clear(0)
-    widget = _widget_or_skip(slicer)
+    widget = _widget_or_skip(slicer, qt_widgets)
 
-    try:
-        import LiverSegmentationLib.ToolWrappers.TotalSegmentator as ts  # noqa: N813
+    import LiverSegmentationLib.ToolWrappers.TotalSegmentator as ts  # noqa: N813
 
-        recorded = {}
+    recorded = {}
 
-        def _spy(parent=None, confirm=True):
-            recorded["confirm"] = confirm
-            return True  # pretend the backend is now present
+    def _spy(parent=None, confirm=True):
+        recorded["confirm"] = confirm
+        return True  # pretend the backend is now present
 
-        monkeypatch.setattr(ts, "ensureBackendInstalled", _spy)
+    monkeypatch.setattr(ts, "ensureBackendInstalled", _spy)
 
-        trigger = None
-        for name in ("onPreDownload", "_onPreDownload", "preDownloadBackend"):
-            if hasattr(widget, name):
-                trigger = getattr(widget, name)
-                break
-        if trigger is None:
-            pytest.fail(
-                "widget must expose a Pre-download trigger reusing "
-                "ensureBackendInstalled(confirm=False) per ADR-0024 "
-                "§'Lazy install' -- not yet implemented."
-            )
-
-        trigger()
-
-        assert recorded.get("confirm") is False, (
-            "Pre-download must call ensureBackendInstalled(confirm=False) -- "
-            "the click is the opt-in, no second size dialog (ADR-0024)."
+    trigger = None
+    for name in ("onPreDownload", "_onPreDownload", "preDownloadBackend"):
+        if hasattr(widget, name):
+            trigger = getattr(widget, name)
+            break
+    if trigger is None:
+        pytest.fail(
+            "widget must expose a Pre-download trigger reusing "
+            "ensureBackendInstalled(confirm=False) per ADR-0024 "
+            "§'Lazy install' -- not yet implemented."
         )
-        assert len(slicer.util.getNodesByClass("vtkMRMLSegmentationNode")) == 0, (
-            "Pre-download must mint NO segmentation node -- downloading the "
-            "model is not a Run (ADR-0024 §'Lazy install')."
-        )
-    finally:
-        widget.cleanup()
+
+    trigger()
+
+    assert recorded.get("confirm") is False, (
+        "Pre-download must call ensureBackendInstalled(confirm=False) -- "
+        "the click is the opt-in, no second size dialog (ADR-0024)."
+    )
+    assert len(slicer.util.getNodesByClass("vtkMRMLSegmentationNode")) == 0, (
+        "Pre-download must mint NO segmentation node -- downloading the "
+        "model is not a Run (ADR-0024 §'Lazy install')."
+    )
 
 
 if __name__ == "__main__":
