@@ -44,11 +44,13 @@
 #include "vtkMRMLCustomTerritoriesNode.h"
 #include "vtkMRMLStdCouinaudTerritoriesNode.h"
 
+// SubjectHierarchyFolders utility
+#include "vtkSlicerSubjectHierarchyFolders.h"
+
 #include <vtkMRMLLabelMapVolumeNode.h>
 #include <vtkMRMLSegmentationNode.h>
 #include <vtkMRMLModelNode.h>
 #include <vtkMRMLDisplayNode.h>
-#include <vtkMRMLSubjectHierarchyNode.h>
 
 #include <vtkMRMLScene.h>
 #include <vtkSlicerSegmentationsModuleLogic.h>
@@ -146,47 +148,14 @@ void vtkSlicerVascularTerritoriesLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
     return;
   }
 
-  vtkMRMLSubjectHierarchyNode* shNode = vtkMRMLSubjectHierarchyNode::GetSubjectHierarchyNode(scene);
-  if (!shNode)
-  {
-    return;
-  }
-
-  // ADR-0023 §"MRML scene organisation" — territory nodes live under
-  // the "Vascular Territories" Subject Hierarchy folder.  Created
-  // lazily on first arrival; reused thereafter.  Scope the lookup to
-  // *children of the scene root* so a same-named folder anywhere
-  // else in the hierarchy (e.g. inside a Patient/Study/Series
-  // subtree) is not silently reused.
-  vtkIdType sceneItem = shNode->GetSceneItemID();
-  vtkIdType folderItem = vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID;
-  std::vector<vtkIdType> children;
-  shNode->GetItemChildren(sceneItem, children);
-  for (vtkIdType child : children)
-  {
-    if (shNode->GetItemName(child) == "Vascular Territories")
-    {
-      folderItem = child;
-      break;
-    }
-  }
-  if (folderItem == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID)
-  {
-    folderItem = shNode->CreateFolderItem(sceneItem, "Vascular Territories");
-  }
-
-  vtkIdType nodeItem = shNode->GetItemByDataNode(territoryNode);
-  if (nodeItem == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID || nodeItem == 0)
-  {
-    // SH auto-creates an item the first time GetItemByDataNode is
-    // called for a newly-added node; if SH hasn't yet, force it via
-    // CreateItem so the parent re-parenting below has a target.
-    nodeItem = shNode->CreateItem(folderItem, territoryNode);
-  }
-  else
-  {
-    shNode->SetItemParent(nodeItem, folderItem);
-  }
+  // ADR-0023 §"Subject Hierarchy management convention" — territory
+  // nodes live under the "Vascular Territories" Subject Hierarchy
+  // folder, created lazily on first arrival and reused thereafter.  The
+  // lookup / lazy-create / scene-root-scoped reparent dance is
+  // centralised in the shared vtkSlicerSubjectHierarchyFolders utility
+  // so the four node-creating stages stay in lockstep on one
+  // binary-identical implementation.
+  vtkSlicerSubjectHierarchyFolders::CollectUnderFolder(scene, territoryNode, vtkSlicerSubjectHierarchyFolders::GetVascularTerritoriesFolderName());
 }
 
 //------------------------------------------------------------------------------

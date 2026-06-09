@@ -20,6 +20,9 @@ set(${KIT}_TARGET_LIBRARIES
   vtkSlicerLiverResectionsModuleAlgorithm
   vtkSlicerMarkupsModuleLogic
   vtkSlicerLiverMarkupsModuleVTKWidgets
+  # ADR-0023 §"Subject Hierarchy management convention": the shared
+  # per-stage SH-folder collection utility.
+  vtkSlicerSubjectHierarchyFolders
   )
 
 #-----------------------------------------------------------------------------

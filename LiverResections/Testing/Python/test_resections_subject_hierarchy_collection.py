@@ -52,7 +52,18 @@ def _slicer_scene_sh_or_skip():
     (so the NodeAdded observer is live).  Under bare PythonSlicer there is no
     ``slicer.mrmlScene`` and the test skips.
     """
-    from conftest import _import_slicer_or_skip, _require_mrml_scene
+    # Import the launched-Slicer skip-guards from their canonical home
+    # (``Testing/Python/slicer_pytest_support`` -- on ``sys.path`` for every
+    # collection root via the ``pythonpath`` ini option).  This module's
+    # ``Testing/Python`` tree is a Python package (carries ``__init__.py``),
+    # so under bare ``PythonSlicer -m pytest`` prepend-import resolves a bare
+    # ``from conftest import`` to the cross-module root conftest (which does
+    # not re-export the guards) rather than this module's conftest -- the
+    # canonical import sidesteps that shadowing and keeps the skip clean.
+    from slicer_pytest_support import (
+        import_slicer_or_skip as _import_slicer_or_skip,
+        require_mrml_scene as _require_mrml_scene,
+    )
 
     _require_mrml_scene()
     slicer = _import_slicer_or_skip()
