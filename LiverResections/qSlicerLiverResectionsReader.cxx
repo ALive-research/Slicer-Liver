@@ -59,6 +59,7 @@
 #include "vtkMRMLScene.h"
 
 // VTK includes
+#include <vtkCommand.h>
 #include <vtkNew.h>
 #include <vtkSmartPointer.h>
 #include <vtksys/SystemTools.hxx>
@@ -166,8 +167,14 @@ bool qSlicerLiverResectionsReader::load(const IOProperties& properties)
   // plan storage node.  The storage node's reader walks the
   // ``surface.type`` discriminator and instantiates the right
   // concrete surface subclass into the scene.
+  // A legacy v1 ``.lrp.fcsv`` is migrated seamlessly through the same
+  // plan-storage path: ``vtkMRMLResectionPlanStorageNode::ReadData``
+  // detects the legacy extension and lifts the 16 Bezier control points
+  // into a v2 plan + carrier (see that node's §"Legacy `.lrp.fcsv`"
+  // and Docs/migrations/v1-to-v2.md).  Both extensions therefore yield
+  // a ``vtkMRMLResectionPlanNode`` that the LayerDM Pipeline renders.
   const QString lowerName = fileName.toLower();
-  if (lowerName.endsWith(".lrp.json"))
+  if (lowerName.endsWith(".lrp.json") || lowerName.endsWith(".lrp.fcsv"))
   {
     vtkMRMLScene* scene = d->LiverResectionsLogic->GetMRMLScene();
     if (!scene)
@@ -229,29 +236,11 @@ bool qSlicerLiverResectionsReader::load(const IOProperties& properties)
     return true;
   }
 
-  // Legacy ``.lrp.fcsv`` (and any other recognised extension) — delegate
-  // to the existing logic-side loader (load-only migration; ADR-0014
-  // §5 retires writes of this format).  Migration to the plan-rooted
-  // path is a follow-up to the resection-plan-architecture work.
-  char* nodeIDs = d->LiverResectionsLogic->LoadLiverResection(std::string(fileName.toUtf8()), std::string(name.toUtf8()), this->userMessages());
-  if (nodeIDs)
-  {
-    // returned a comma separated list of ids of the nodes that were loaded
-    QStringList nodeIDList;
-    char* ptr = strtok(nodeIDs, ",");
-
-    while (ptr)
-    {
-      nodeIDList.append(ptr);
-      ptr = strtok(nullptr, ",");
-    }
-    this->setLoadedNodes(nodeIDList);
-  }
-  else
-  {
-    this->setLoadedNodes(QStringList());
-    return false;
-  }
-
-  return nodeIDs != nullptr;
+  // No other extension is advertised by supportedFileTypes(); both the
+  // v2 ``.lrp.json`` and the legacy v1 ``.lrp.fcsv`` route through the
+  // plan-storage path above.  The old vtkMRMLLiverResectionNode-family
+  // loader is intentionally no longer reached from here.
+  this->userMessages()->AddMessage(vtkCommand::ErrorEvent, (QString("Unsupported file extension for '%1'").arg(fileName)).toUtf8().constData());
+  this->setLoadedNodes(QStringList());
+  return false;
 }
