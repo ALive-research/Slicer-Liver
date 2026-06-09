@@ -35,15 +35,20 @@ slicerMacroBuildScriptedModule(
   )
 
 #-----------------------------------------------------------------------------
-# Per-tool wrappers (ToolWrappers/) stage as an importable-but-not-swept
-# Python sub-package, mirroring the LiverLib/ convention: Slicer's scripted-
-# module factory scans only top-level .py files in qt-scripted-modules/, so
-# these helpers import as ``LiverSegmentationLib.ToolWrappers.<name>`` from a
-# launched Slicer without being mistaken for scripted modules.  The source
-# tree keeps them under LiverSegmentation/ToolWrappers/ (where the
-# conformance greps look); they stage under the LiverSegmentationLib package
-# name to avoid a top-level ``ToolWrappers`` namespace collision and to avoid
-# shadowing the LiverSegmentation.py scripted module on sys.path.
+# Per-tool wrappers live under LiverSegmentationLib/, mirroring the
+# ``<Module>Lib`` convention every sibling module uses (e.g.
+# LiverResections/LiverResectionsLib).  The module ROOT carries NO
+# __init__.py: Slicer's scripted-module factory scans the module's source
+# directory (passed on --additional-module-paths) and would try to
+# instantiate a root __init__ as a scripted module, half-initialising the
+# launched application.  Housing the package one level down keeps the module
+# root a plain directory of .py scripted-module files; the wrappers stage and
+# import as ``LiverSegmentationLib.ToolWrappers.<name>`` both in a launched
+# Slicer and under bare pytest.
+# SCRIPTS paths are package-relative (used as the staged sub-path under
+# DESTINATION_DIR); SOURCE_DIR points the macro at the LiverSegmentationLib/
+# source subdir so it resolves the moved files.  This keeps the staged layout
+# at qt-scripted-modules/LiverSegmentationLib/ToolWrappers/... unchanged.
 set(LiverSegmentationLib_PYTHON_SCRIPTS
   __init__.py
   ToolWrappers/__init__.py
@@ -54,6 +59,7 @@ ctkMacroCompilePythonScript(
   TARGET_NAME LiverSegmentationLib
   SCRIPTS "${LiverSegmentationLib_PYTHON_SCRIPTS}"
   RESOURCES ""
+  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/LiverSegmentationLib
   DESTINATION_DIR ${CMAKE_BINARY_DIR}/${Slicer_QTSCRIPTEDMODULES_LIB_DIR}/LiverSegmentationLib
   INSTALL_DIR ${Slicer_INSTALL_QTSCRIPTEDMODULES_LIB_DIR}/LiverSegmentationLib
   NO_INSTALL_SUBDIR

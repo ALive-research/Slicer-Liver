@@ -20,9 +20,9 @@ regression path:
      tempting "fix" for a missing-backend error is to hard-depend on it,
      which would break the lazy-install design (ADR-0024 §"Lazy install").
   2. ``slicer.util.pip_install`` appears ONLY under
-     ``LiverSegmentation/ToolWrappers/`` — the install code path must stay
-     isolated to the per-tool wrappers; an install call leaking into the
-     orchestrator or widget is a real regression.
+     ``LiverSegmentation/LiverSegmentationLib/ToolWrappers/`` — the install
+     code path must stay isolated to the per-tool wrappers; an install call
+     leaking into the orchestrator or widget is a real regression.
 
 Pure-Python: walks the source tree, no Slicer / Qt / network.
 """
@@ -36,7 +36,10 @@ import pytest
 # LiverSegmentation/ is two parents up from this Testing/Python/ file.
 MODULE_ROOT = pathlib.Path(__file__).resolve().parents[2]
 CMAKELISTS = MODULE_ROOT / "CMakeLists.txt"
-TOOLWRAPPERS_DIR = MODULE_ROOT / "ToolWrappers"
+# The per-tool wrappers live under the LiverSegmentationLib/ package (the
+# ``<Module>Lib`` convention every sibling module uses), not at the module
+# root (ADR-0024 §"Module layout").
+TOOLWRAPPERS_DIR = MODULE_ROOT / "LiverSegmentationLib" / "ToolWrappers"
 
 
 def _python_sources(root):
@@ -89,9 +92,9 @@ def test_pip_install_only_under_toolwrappers():
         if "pip_install" in path.read_text():
             offenders.append(str(path))
     assert not offenders, (
-        "pip_install found outside LiverSegmentation/ToolWrappers/: "
-        f"{offenders} -- the lazy-install code path belongs only under "
-        "ToolWrappers/ (ADR-0024 §Conformance)."
+        "pip_install found outside LiverSegmentation/LiverSegmentationLib/"
+        f"ToolWrappers/: {offenders} -- the lazy-install code path belongs "
+        "only under LiverSegmentationLib/ToolWrappers/ (ADR-0024 §Conformance)."
     )
 
 
