@@ -1,27 +1,30 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 
-"""Invariant 5 — source / CMake conformance greps.
+"""Lazy-install conformance — the ADR-0024 invariants that can *regress*.
 
-ADR-0024 §Conformance, pinned as static (no-Slicer) source checks:
+ADR-0024 §Conformance lists many reviewable invariants.  Only a subset is
+worth an automated test: those that can plausibly regress through ordinary
+development.  Asserting the mere *absence* of an artifact that appears only
+by deliberate action (no ``MONAILabel.py``, no custom
+``vtkMRML*DisplayNode``) is not such a case — nobody adds those by accident,
+and a contributor who adds one on purpose would just delete the guard.
+Those points are conventions checked at review, not tests (see ADR-0024
+§Conformance, which marks each point ``[test]`` or ``[review]``).
 
-  * ``LiverSegmentation/CMakeLists.txt`` declares NO ``EXTENSION_DEPENDS``
-    entry for TotalSegmentator and NONE for MONAILabel (Alternative C +
-    Alternative H rejections).
-  * ``LiverSegmentation/ToolWrappers/`` contains NO ``MONAILabel.py``
-    (Alternative H: the wrapper was retracted).
-  * NO new ``vtkMRML*DisplayNode`` subclass ships under
-    ``LiverSegmentation/`` (Stage 2 uses stock
-    ``vtkMRMLSegmentationDisplayNode``).
-  * ``slicer.util.pip_install`` appears ONLY under
-    ``LiverSegmentation/ToolWrappers/`` (the lazy-install code path lives
-    there and nowhere else in the module).
+This file pins the two lazy-install invariants that *do* have a credible
+regression path:
 
-Pure-Python: walks the source tree, no Slicer / Qt / network.  These checks
-are meaningful only once the module directory has source in it; until then
-each asserts the absence-properties hold vacuously (the module dir is the
-test's own ``Testing/`` subtree, which carries none of the forbidden
-artifacts).
+  1. ``LiverSegmentation/CMakeLists.txt`` does not declare ``TotalSegmentator``
+     as an ``EXTENSION_DEPENDS`` entry — TotalSegmentator is *used*, so the
+     tempting "fix" for a missing-backend error is to hard-depend on it,
+     which would break the lazy-install design (ADR-0024 §"Lazy install").
+  2. ``slicer.util.pip_install`` appears ONLY under
+     ``LiverSegmentation/ToolWrappers/`` — the install code path must stay
+     isolated to the per-tool wrappers; an install call leaking into the
+     orchestrator or widget is a real regression.
+
+Pure-Python: walks the source tree, no Slicer / Qt / network.
 """
 
 from __future__ import annotations
@@ -45,73 +48,29 @@ def _python_sources(root):
     ]
 
 
-def test_cmake_has_no_totalsegmentator_or_monailabel_extension_depends():
-    """No EXTENSION_DEPENDS for TotalSegmentator / MONAILabel.
+def test_cmake_does_not_hard_depend_on_totalsegmentator():
+    """TotalSegmentator must not be an ``EXTENSION_DEPENDS`` entry.
 
-    ADR-0024 §Conformance (Alternative C + Alternative H): both AI backends
-    are out of the hard-dependency set -- TotalSegmentator is lazy-installed;
-    MONAILabel is out of v2.0 scope entirely.
+    ADR-0024 §"Lazy install": TotalSegmentator is installed lazily at first
+    use, never declared as a hard extension dependency.  The plausible
+    regression this guards is a contributor "fixing" a missing-backend
+    error by adding the dependency.
     """
     if not CMAKELISTS.is_file():
         pytest.skip(
-            f"{CMAKELISTS} not present yet -- ADR-0024 module skeleton absent. "
-            "Conformance pins the EXTENSION_DEPENDS exclusion for when it lands."
+            f"{CMAKELISTS} not present yet -- ADR-0024 module skeleton absent."
         )
     text = CMAKELISTS.read_text()
-    # The pinned invariant (ADR-0024 §Conformance) is that neither AI backend
-    # appears as an EXTENSION_DEPENDS entry.  TotalSegmentator legitimately
-    # appears as the wrapper *script* filename (ToolWrappers/TotalSegmentator.py)
-    # that must be compiled, so a whole-file textual ban over-reaches; we scope
-    # the TotalSegmentator check to the EXTENSION_DEPENDS block.  MONAILabel has
-    # no legitimate artifact under this module (Alternative H), so it stays a
-    # whole-file ban.
+    # TotalSegmentator legitimately appears as the wrapper *script* filename
+    # (ToolWrappers/TotalSegmentator.py) that must be compiled, so a
+    # whole-file textual ban over-reaches; scope the check to the
+    # EXTENSION_DEPENDS block.
     if "EXTENSION_DEPENDS" in text:
         depends_block = text[text.index("EXTENSION_DEPENDS"):]
         assert "TotalSegmentator" not in depends_block, (
             "LiverSegmentation/CMakeLists.txt must not declare TotalSegmentator "
             "as EXTENSION_DEPENDS (lazy-installed per ADR-0024 §'Lazy install')."
         )
-    assert "MONAILabel" not in text, (
-        "LiverSegmentation/CMakeLists.txt must not name MONAILabel "
-        "(out of v2.0 scope per ADR-0024 Alternative H)."
-    )
-
-
-def test_no_monailabel_wrapper():
-    """No ``ToolWrappers/MONAILabel.py``.
-
-    ADR-0024 §Conformance / Alternative H: the originally-drafted MONAILabel
-    wrapper was retracted; v2.0 ships TotalSegmentator only.
-    """
-    monailabel = TOOLWRAPPERS_DIR / "MONAILabel.py"
-    assert not monailabel.exists(), (
-        f"{monailabel} must not exist -- MONAILabel is out of v2.0 scope "
-        "(ADR-0024 Alternative H)."
-    )
-
-
-def test_no_new_display_node_subclass():
-    """No new ``vtkMRML*DisplayNode`` subclass under LiverSegmentation/.
-
-    ADR-0024 §Conformance: Stage 2 renders with stock
-    ``vtkMRMLSegmentationDisplayNode`` -- no per-module display node, no
-    LayerDM Pipeline (ADR-0013 / ADR-0024 Alternative A).
-    """
-    if not MODULE_ROOT.is_dir():
-        pytest.skip(f"{MODULE_ROOT} not present yet -- ADR-0024 module absent.")
-    offenders = []
-    for path in MODULE_ROOT.rglob("*"):
-        if MODULE_ROOT / "Testing" in path.parents:
-            continue
-        name = path.name
-        # C++ display-node class file or a Python class declaring one.
-        if name.startswith("vtkMRML") and "DisplayNode" in name:
-            offenders.append(str(path))
-    assert not offenders, (
-        "new display-node subclass(es) found under LiverSegmentation/: "
-        f"{offenders} -- Stage 2 must use stock vtkMRMLSegmentationDisplayNode "
-        "(ADR-0024 §Conformance / Alternative A)."
-    )
 
 
 def test_pip_install_only_under_toolwrappers():
@@ -119,6 +78,7 @@ def test_pip_install_only_under_toolwrappers():
 
     ADR-0024 §Conformance: the lazy-install code path is isolated to the
     per-tool wrappers; the orchestrator + widget must not call pip_install.
+    A leak into either is a real regression of the import-purity boundary.
     """
     if not MODULE_ROOT.is_dir():
         pytest.skip(f"{MODULE_ROOT} not present yet -- ADR-0024 module absent.")
