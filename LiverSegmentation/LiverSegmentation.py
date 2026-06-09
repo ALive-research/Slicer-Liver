@@ -88,7 +88,15 @@ class LiverSegmentation(ScriptedLoadableModule):
 
 
 class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
-    """Stage-2 surgeon UI: per-structure cards driving the orchestrator.
+    """Stage-2 panel — placeholder host for the orchestrator.
+
+    This module currently ships the orchestrator + lazy-install backend
+    only.  The surgeon-facing per-structure cards (Liver / Portal vein /
+    Hepatic vein / Tumors) that drive ``LiverSegmentationLogic`` end to end
+    (Run TotalSegmentator -> scratch -> Accept -> canonical) are a
+    follow-up UI deliverable per ADR-0024 §"Per-structure micro-workflows".
+    ``setup`` loads the minimal panel and instantiates the logic; no cards
+    are wired yet.
 
     Uses ScriptedLoadableModuleWidget base class, available at:
     https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
