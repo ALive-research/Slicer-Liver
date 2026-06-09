@@ -14,12 +14,14 @@ set(KIT_TEST_SRCS
   vtkMRMLAbstractParametricSurfaceNodeTest1.cxx
   vtkMRMLResectionPlanNodeTest1.cxx
   vtkMRMLResectionPlanStorageNodeTest1.cxx
+  vtkMRMLResectionPlanLegacyFcsvMigrationTest.cxx
   )
 
 #-----------------------------------------------------------------------------
 # Pass the in-source Fixtures/ directory through to the test driver.
-# Fixtures kept available for a follow-up legacy ``.lrp.fcsv``
-# migration; the v2 storage tests do not consume them.
+# Consumed by vtkMRMLResectionPlanLegacyFcsvMigrationTest, which reads
+# the committed legacy ``.lrp.fcsv`` fixture through the v2 plan-storage
+# migration path.
 add_definitions(-DLIVER_BEZIER_STORAGE_TEST_FIXTURE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/Fixtures\")
 
 #-----------------------------------------------------------------------------
@@ -48,3 +50,4 @@ SIMPLE_TEST(vtkMRMLParametricSurfaceDisplayNodeTest1)
 SIMPLE_TEST(vtkMRMLAbstractParametricSurfaceNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanStorageNodeTest1)
+SIMPLE_TEST(vtkMRMLResectionPlanLegacyFcsvMigrationTest)
