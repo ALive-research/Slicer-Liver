@@ -173,6 +173,134 @@ def _no_slicer_module_leak():
     )
 
 
+# --------------------------------------------------------------------------- #
+# Launched-Slicer teardown: leave no MRML node or Qt widget alive at shutdown.
+# --------------------------------------------------------------------------- #
+#
+# The launched-Slicer harness (``Liver/Testing/Python/run_pytest_launched.py``,
+# the ``pytest_launched`` CTest row) runs the project pytest tree inside ONE
+# long-lived ``qSlicerApplication`` and then exits through ``slicer.util.exit``.
+# Slicer builds enable ``vtkDebugLeaks``: any VTK/MRML object still alive at
+# process exit prints "vtkDebugLeaks has detected LEAKS!" and forces a non-zero
+# return code, which CTest reports as a failed ``pytest_launched`` row.
+#
+# The scene-touching LiverSegmentation tests mint MRML nodes (scratch /
+# canonical ``vtkMRMLSegmentationNode`` plus their display + storage subnodes,
+# scalar volumes) via the orchestrator and the scene directly.  They each
+# ``Clear(0)`` at the START of the test, which leaves the LAST test's nodes —
+# and every node a test forgot to account for — alive at shutdown.  The
+# widget-needing tests additionally construct a ``LiverSegmentationWidget``
+# (a ``QTabWidget`` of four ``_StructureCard`` fragments); the module's
+# ``cleanup()`` only drops VTK observers, never the Qt widget tree, so the
+# whole sub-tree survives to shutdown too.
+#
+# The two fixtures below restore the same end-of-test hygiene Slicer's own
+# launched tests practise:
+#
+#   * ``_launched_scene_cleanup`` (autouse) snapshots the scene's node count,
+#     clears the scene after the test, and asserts the count returns to its
+#     pre-test baseline — the regression guard that makes a future scene-leaking
+#     test FAIL LOUDLY here instead of silently re-introducing the
+#     vtkDebugLeaks banner.  It mirrors ``_no_slicer_module_leak``.
+#
+#   * ``qt_widgets`` is an opt-in registry: a widget-building test appends its
+#     ``LiverSegmentationWidget`` and the fixture disposes the Qt tree in
+#     teardown (``cleanup()`` to drop observers, then drop the parent widget
+#     and ``deleteLater()``), matching the launched-test pattern.
+#
+# Both stand down under bare ``PythonSlicer -m pytest`` (no ``mrmlScene`` / no
+# ``qt.QWidget``): the scene cleanup becomes a no-op, and ``qt_widgets`` simply
+# has nothing registered (widget tests skip before reaching it).  Keying on
+# ``slicer.mrmlScene`` presence is the same launched-only discriminator the
+# import-purity guard uses.
+
+
+def _live_mrml_scene():
+    """Return the launched-Slicer ``mrmlScene`` or ``None`` under bare pytest."""
+    slicer = sys.modules.get("slicer")
+    if not _looks_like_real_slicer(slicer):
+        return None
+    return slicer.mrmlScene
+
+
+@pytest.fixture(autouse=True)
+def _launched_scene_cleanup():
+    """Clear the MRML scene after each launched test; assert it stays clean.
+
+    Active only under a launched Slicer (``slicer.mrmlScene`` present); a
+    no-op under bare ``PythonSlicer -m pytest``.  Snapshots the node count
+    before the test, clears the scene afterwards, then asserts the count has
+    returned to the pre-test baseline — so no scene node survives to process
+    shutdown to trip ``vtkDebugLeaks``, and any future test that leaks scene
+    nodes the clear cannot reclaim fails loudly here.
+    """
+    scene = _live_mrml_scene()
+    if scene is None:
+        yield
+        return
+
+    baseline = scene.GetNumberOfNodes()
+
+    yield
+
+    scene.Clear(0)
+    remaining = scene.GetNumberOfNodes()
+    # ``Clear(0)`` reclaims every node a test added, leaving only Slicer's
+    # singleton nodes (scene views, layout, etc.).  The regression guard is
+    # that the scene must not GROW past its pre-test baseline after the
+    # clear: a node that ``Clear()`` cannot reclaim is exactly the
+    # Clear-resistant object that survives to process shutdown and trips
+    # vtkDebugLeaks in the launched harness.  ``<=`` (not ``==``) tolerates
+    # the benign case where the test inherited and cleaned up cruft a prior
+    # test left behind (remaining < baseline), which is itself good hygiene.
+    assert remaining <= baseline, (
+        "MRML scene GREW past its pre-test baseline even after Clear(): "
+        f"{remaining} node(s) remain vs {baseline} at test start.  A node "
+        "Clear() cannot reclaim survives to process shutdown and trips "
+        "vtkDebugLeaks, failing the launched harness.  Tear down every node "
+        "(and Qt widget) the test created (ADR-0024 §'Output contract' "
+        "lifecycle)."
+    )
+
+
+@pytest.fixture
+def qt_widgets():
+    """Register launched-Slicer Qt widgets for disposal after the test.
+
+    A widget-building test appends each ``LiverSegmentationWidget`` (or other
+    top-level ``QWidget``) it constructs; teardown drops the module's VTK
+    observers via ``cleanup()`` and then disposes the Qt widget tree so no
+    widget survives to shutdown (``vtkDebugLeaks`` covers Qt-wrapped VTK
+    objects too).  Mirrors the launched-test disposal idiom.
+    """
+    registered: list = []
+
+    yield registered
+
+    for widget in registered:
+        try:
+            cleanup = getattr(widget, "cleanup", None)
+            if callable(cleanup):
+                cleanup()
+            parent = getattr(widget, "parent", None)
+            # ScriptedLoadableModuleWidget builds its own parent QWidget when
+            # constructed with parent=None; dropping + deleting it reclaims the
+            # whole tab/card sub-tree.
+            target = parent if parent is not None else widget
+            if hasattr(target, "setParent"):
+                target.setParent(None)
+            # PythonQt exposes a synchronous ``delete()``; prefer it over
+            # ``deleteLater()`` so the Qt tree is reclaimed deterministically
+            # before process exit (vtkDebugLeaks fires AT exit; a deferred
+            # delete may not have run).
+            if hasattr(target, "delete"):
+                target.delete()
+            elif hasattr(target, "deleteLater"):
+                target.deleteLater()
+        except Exception:  # noqa: BLE001 — teardown is best-effort across versions
+            pass
+
+
 def _import_slicer_or_skip():
     """Return the ``slicer`` module or skip the current test cleanly."""
     try:
