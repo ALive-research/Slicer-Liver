@@ -196,6 +196,136 @@
   Supersedes nothing in v2.0; the §"What is NOT in v2.0"
   *Verification card* bullet stands.
 
+- **2026-06-09 — Subject Hierarchy management convention.**  The
+  §"MRML scene organisation" paragraph commits Slicer-Liver to grouping
+  its node types under per-stage Subject-Hierarchy folders, but left the
+  *mechanism* implicit — each module open-coded its own
+  lookup / lazy-create / reparent dance.  This amendment makes the
+  convention explicit and names the shared utility that implements it.
+
+  ### §"Subject Hierarchy management convention" (NEW)
+
+  **Closed four-folder vocabulary.**  Slicer-Liver places its
+  programmatically-created nodes under exactly four scene-root
+  Subject-Hierarchy folders, one per node-creating stage (Stages 2–5):
+
+  | Stage | Folder name            | Node-creating module  |
+  | ----- | ---------------------- | --------------------- |
+  | 2     | `Anatomy`              | LiverSegmentation     |
+  | 3     | `Vascular Territories` | VascularTerritories   |
+  | 4     | `Resections`           | LiverResections       |
+  | 5     | `Volumetry`            | LiverVolumetry        |
+
+  The vocabulary is **closed**: the four strings above are the only
+  per-stage folder names, mirroring the closed-keyword discipline the
+  project applies elsewhere.  Each folder is a **direct child of the
+  scene root** (a per-stage folder, not nested in a Patient/Study/Series
+  subtree), **created lazily** on the first node's arrival, and **reused**
+  thereafter — never one-folder-per-call.
+
+  **Folder names as named constants — single source of truth.**  The
+  four strings live in one place: the accessors
+  `GetAnatomyFolderName()`, `GetVascularTerritoriesFolderName()`,
+  `GetResectionsFolderName()`, `GetVolumetryFolderName()` on the shared
+  utility.  Consumers reference the accessors, never string literals, so
+  the modules cannot drift apart.
+
+  **Shared utility — `vtkSlicerSubjectHierarchyFolders`.**  A standalone
+  wrapped kit `SubjectHierarchyFolders/` centralises the placement logic
+  behind one static method:
+
+  ```
+  static bool CollectUnderFolder(vtkMRMLScene* scene,
+                                 vtkMRMLNode* node,
+                                 const char* folderName);
+  ```
+
+  It links MRMLCore only (the Subject-Hierarchy node + plugin machinery
+  lives there, reachable from a plain `vtkMRMLScene` — no Qt, no
+  module-Logic dependency, honouring the
+  [ADR-0003](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0003-testability-invariant.md)
+  testability invariant and the
+  [ADR-0008](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0008-testing-strategy.md)
+  §2 "C++ low-level" row).  The kit name carries **no `Liver` prefix**,
+  per the closed-vocabulary class-naming convention (the T2.7 rename
+  family that dropped the prefix from the Bezier and resection node
+  families).  It is a pure `vtkObject` utility, **not** a `vtkMRMLNode`
+  subclass.
+
+  **Node placement convention.**  `CollectUnderFolder` is:
+
+  - *Idempotent* — a second call with the same folder name reuses the
+    one existing scene-root folder.
+  - *Headless-safe* — when the scene has no resolvable Subject-Hierarchy
+    node (a missing SH plugin in a headless context) it is a no-op
+    returning `false`, so it never breaks the caller's node creation and
+    never mints SH machinery behind the caller's back.
+  - *Null-argument-safe* — null scene / node / folder name return
+    `false` cleanly.
+
+  **Wrapper-only collection.**  Where a stage uses the wrapper-vs-carrier
+  split (the 2026-05-25 amendment;
+  [ADR-0014](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0014-livermarkups-dissolution.md)),
+  only the surgeon-facing **wrapper** node is collected.  The hidden
+  `SetHideFromEditors(true)` carriers (e.g. the Bezier/contour carriers
+  behind a `vtkMRMLLiverResectionNode`) are deliberately left
+  unparented, so the surgeon-facing Subject Hierarchy mirrors the
+  editor-visible node set.
+
+  ### ADR-0004 reasoned exception — wrapped C++, not Python-by-default
+
+  [ADR-0004](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0004-python-cpp-boundary.md)
+  makes Python the default for orchestration glue.  This utility is a
+  **reasoned exception**: it is wrapped C++ because only a wrapped C++
+  implementation gives *both* the C++ callers (the VascularTerritories
+  and LiverResections module logics, which fire from
+  `OnMRMLSceneNodeAdded` in C++) *and* the Python caller
+  (LiverSegmentation's `_collectUnderAnatomyFolder`) **one
+  binary-identical implementation**.  A Python helper would be
+  unreachable from C++, forcing either a second C++ copy (drift risk —
+  exactly what this convention exists to prevent) or a C++→Python
+  round-trip from inside a scene observer (fragile).  The kit is wrapped
+  (`vtkSlicerSubjectHierarchyFoldersPython`) so the Python caller imports
+  the same compiled method the C++ callers link.
+
+  **Scope.**  Three active consumers wired now: LiverSegmentation
+  (`Anatomy`), VascularTerritories (`Vascular Territories`),
+  LiverResections (`Resections`).  LiverVolumetry (`Volumetry`) adoption
+  is deferred — it creates no nodes today; the folder name + accessor
+  exist so the convention is complete when Stage 5 starts minting nodes.
+
+  ### §Conformance additions
+
+  - [test] The four folder-name accessors on
+    `vtkSlicerSubjectHierarchyFolders` return `Anatomy`,
+    `Vascular Territories`, `Resections`, `Volumetry` verbatim.
+    (`vtkSlicerSubjectHierarchyFoldersTest1` — folder-name constants.)
+  - [test] `CollectUnderFolder` places a node under a scene-root folder
+    of the given name, lazily created and reused on a second call
+    (one folder, not two).
+    (`vtkSlicerSubjectHierarchyFoldersTest1` — placement + reuse.)
+  - [test] `CollectUnderFolder` returns `false` with no side effect on
+    null scene / node / folder name.
+    (`vtkSlicerSubjectHierarchyFoldersTest1` — null-argument safety.)
+  - [test] The VascularTerritories logic collects territory nodes under
+    `Vascular Territories` observably-identically before and after the
+    rewrite to the shared utility.
+    (`vtkSlicerVascularTerritoriesLogicSubjectHierarchyCharacterizationTest`
+    — the equivalence oracle.)
+  - [test] The LiverResections wrapper `vtkMRMLLiverResectionNode` lands
+    under `Resections`; the hidden Bezier carrier does not.
+    (`test_resections_subject_hierarchy_collection.py`, launched-Slicer.)
+  - [test] The wrapped `vtkSlicerSubjectHierarchyFolders` is importable +
+    callable from Python and Anatomy placement is idempotent through it.
+    (`test_liversegmentation_subject_hierarchy_folders_reachability.py`,
+    launched-Slicer.)
+  - [review] Consumers reference the folder-name accessors, never string
+    literals; no module open-codes the lookup / lazy-create / reparent
+    dance after wiring.
+  - [future] LiverVolumetry adoption (`Volumetry`) lands when Stage 5
+    begins creating nodes; until then the accessor exists but no consumer
+    calls it.
+
 ## Context
 
 Slicer-Liver v2.0.0 was re-scoped on 2026-05-21 from a foundation-only
