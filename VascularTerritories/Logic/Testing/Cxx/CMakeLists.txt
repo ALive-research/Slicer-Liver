@@ -8,6 +8,13 @@ set(KIT ${PROJECT_NAME})
 #-----------------------------------------------------------------------------
 set(KIT_TEST_SRCS
   vtkSlicerVascularTerritoriesLogicTest1.cxx
+  # CHARACTERIZATION of the CURRENT Subject-Hierarchy collection
+  # behaviour (ADR-0023 §"MRML scene organisation"), landed per
+  # ADR-0003 §"refactors that preserve behaviour" / ADR-0027 BEFORE the
+  # T5.2-f rewrite swaps the inline collector for the shared
+  # vtkSlicerSubjectHierarchyFolders utility.  GREEN on the current
+  # branch; stays green after the rewrite (equivalence oracle).
+  vtkSlicerVascularTerritoriesLogicSubjectHierarchyCharacterizationTest.cxx
   )
 
 #-----------------------------------------------------------------------------
@@ -54,3 +61,4 @@ slicerMacroConfigureModuleCxxTestDriver(
 
 #-----------------------------------------------------------------------------
 simple_test(vtkSlicerVascularTerritoriesLogicTest1)
+simple_test(vtkSlicerVascularTerritoriesLogicSubjectHierarchyCharacterizationTest)

@@ -94,6 +94,26 @@ if(DEFINED Python3_EXECUTABLE)
     set_tests_properties(LiverResections_distance_maps PROPERTIES
       LABELS "pytest;module-layer;LiverResections"
     )
+
+    # T5.2-f -- Subject-Hierarchy collection invariant (ADR-0023
+    # §"MRML scene organisation"): the wrapper vtkMRMLLiverResectionNode
+    # collects under a scene-root "Resections" folder; the hidden Bezier
+    # carrier does NOT.  Scene + live-NodeAdded-observer needing, so it
+    # runs green under the launched-Slicer `pytest_launched` row
+    # (Liver/Testing/Python; this dir is already on its test roots) and
+    # SKIPS CLEANLY here under bare pytest (no slicer.mrmlScene).  RED /
+    # skip-pending until the implementer wires the logic's
+    # OnMRMLSceneNodeAdded to vtkSlicerSubjectHierarchyFolders.
+    add_test(
+      NAME LiverResections_subject_hierarchy_collection
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_resections_subject_hierarchy_collection.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_subject_hierarchy_collection PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;subject-hierarchy"
+    )
   else()
     message(STATUS
       "Slicer-Liver: pytest not importable from ${Python3_EXECUTABLE}; "

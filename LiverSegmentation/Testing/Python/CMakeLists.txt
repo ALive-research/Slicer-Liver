@@ -110,6 +110,11 @@ set(_liverseg_pytest_files
   test_liversegmentation_structure_accepted_glyph.py
   test_liversegmentation_backend_status_row.py
   test_liversegmentation_segment_input_selection.py
+  # T5.2-f -- shared Subject-Hierarchy folder utility reachability +
+  # Anatomy placement through vtkSlicerSubjectHierarchyFolders
+  # (ADR-0023 §"MRML scene organisation").  Wrapped-C++-from-Python
+  # reachability is launched-only; skips cleanly under bare pytest.
+  test_liversegmentation_subject_hierarchy_folders_reachability.py
 )
 
 foreach(_pytest_file IN LISTS _liverseg_pytest_files)
