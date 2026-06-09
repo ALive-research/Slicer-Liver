@@ -40,14 +40,12 @@ exit code -- exactly what CTest keys off.
 Per ADR-0008 §6 (CI matrix -- "every PR runs everything", non-zero on
 any failure) and the ``replay_test._exit`` exit-propagation precedent.
 
-RED STATE
----------
-Every test in this file is expected to RED-FAIL until
-``run_pytest_launched.py`` is implemented: the driver script does not
-yet exist on disk.  The tests assert its presence and fail with a clear
-message rather than skipping, so the red state is visible (a skip would
-mask the missing driver).  The implementer (``liver-implementer``) turns
-them green by landing the driver.
+Driver presence
+---------------
+``_require_driver`` hard-fails (not skips) if ``run_pytest_launched.py``
+is ever missing, so an accidentally removed or renamed driver surfaces
+as a red test rather than a silent skip (ADR-0008 §6 -- every PR runs
+everything, non-zero on any failure).
 
 See also
 --------
@@ -73,17 +71,15 @@ _DRIVER_PATH = os.path.join(os.path.dirname(__file__), "run_pytest_launched.py")
 
 
 def _require_driver() -> str:
-    """Return the driver path, hard-failing if it does not yet exist.
+    """Return the driver path, hard-failing if it is missing.
 
-    Deliberately FAILS (not skips) when the driver is absent so the RED
-    state is visible in CI.  The whole point of this file is to pin the
-    driver's contract before it is written; a skip would hide that the
-    driver has not landed.
+    FAILS (not skips) when the driver is absent so an accidentally
+    removed or renamed driver surfaces as a red test in CI rather than a
+    silent skip that would hide the gap.
     """
     assert os.path.isfile(_DRIVER_PATH), (
         f"launched-Slicer pytest driver not found at {_DRIVER_PATH}.  "
-        "This test pins the driver's exit-code contract per ADR-0008 §6; "
-        "it RED-fails until run_pytest_launched.py is implemented."
+        "This test pins the driver's exit-code contract per ADR-0008 §6."
     )
     return _DRIVER_PATH
 
@@ -145,8 +141,6 @@ def test_driver_exits_zero_on_passing_target(tmp_path):
 
     Pins ADR-0008 §6: the launched harness reports green only when the
     underlying pytest run is green.
-
-    RED-fails until run_pytest_launched.py exists.
     """
     target = _write_pytest_target(
         tmp_path,
@@ -169,8 +163,6 @@ def test_driver_exits_nonzero_on_failing_target(tmp_path):
     Pins ADR-0008 §6: a red pytest run must surface as a non-zero
     process exit so CTest / CI fail.  This is the core anti-regression
     the driver exists to guarantee.
-
-    RED-fails until run_pytest_launched.py exists.
     """
     target = _write_pytest_target(
         tmp_path,
@@ -201,8 +193,6 @@ def test_driver_fails_closed_on_collection_error(tmp_path):
 
     Pins ADR-0008 §6 fail-closed posture: a broken test tree must not
     pass CI.
-
-    RED-fails until run_pytest_launched.py exists.
     """
     target = _write_pytest_target(
         tmp_path,
@@ -234,8 +224,8 @@ def test_driver_fails_closed_when_no_tests_collected(tmp_path):
 
     Pins ADR-0008 §6 fail-closed posture.
 
-    RED-fails until run_pytest_launched.py exists.  When green, this also
-    pins that the implementer did NOT mask exit code 5 down to 0.
+    Also pins that pytest's NO_TESTS_COLLECTED (exit 5) is propagated,
+    not masked down to 0.
     """
     # An empty directory: a valid root, but pytest collects nothing.
     empty_root = tmp_path / "empty_root"
