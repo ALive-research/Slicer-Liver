@@ -23,6 +23,9 @@ set(${KIT}_TARGET_LIBRARIES
 #  MRMLLogic
   vtkSlicerSegmentationsModuleLogic
   vtkSlicerVascularTerritoriesModuleMRML
+  # ADR-0023 §"Subject Hierarchy management convention": the shared
+  # per-stage SH-folder collection utility.
+  vtkSlicerSubjectHierarchyFolders
   )
 
 #---------------------------------

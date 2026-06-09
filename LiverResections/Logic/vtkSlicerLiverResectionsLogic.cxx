@@ -43,6 +43,10 @@
 #include "vtkMRMLAbstractLogic.h"
 #include "vtkMRMLLiverResectionCSVStorageNode.h"
 
+// SubjectHierarchyFolders utility (ADR-0023 §"Subject Hierarchy
+// management convention").
+#include "vtkSlicerSubjectHierarchyFolders.h"
+
 // T2 LiverResources data nodes (ADR-0014 §1, §5).  Registered with the
 // scene in RegisterNodes() so scene save/load and the Add/Save Data
 // dialogs round-trip the new ``vtkMRMLBezierSurfaceNode`` family and
@@ -272,6 +276,14 @@ void vtkSlicerLiverResectionsLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
   {
     return;
   }
+
+  // ADR-0023 §"Subject Hierarchy management convention": collect the
+  // surgeon-facing wrapper vtkMRMLLiverResectionNode under the per-stage
+  // "Resections" Subject Hierarchy folder (lazily created, reused).  Only
+  // the wrapper is collected here; the hidden SetHideFromEditors(true)
+  // Bezier/contour carriers are deliberately left unparented per the
+  // wrapper-vs-carrier split (ADR-0014).
+  vtkSlicerSubjectHierarchyFolders::CollectUnderFolder(this->GetMRMLScene(), resectionNode, vtkSlicerSubjectHierarchyFolders::GetResectionsFolderName());
 
   // Add callbacks dealing with the modification of the resection node. Its
   // modification may trigger changes on the underlying initialization/bezier status

@@ -109,6 +109,14 @@ list(APPEND ${PROJECT_NAME}_EP_LABEL_PYTHONPATH_LAUNCHER_BUILD
 include(${Slicer_USE_FILE})
 
 #-----------------------------------------------------------------------------
+# Standalone wrapped Subject-Hierarchy folder utility kit
+# (ADR-0023 §"Subject Hierarchy management convention").  Added before
+# the consuming modules so its target exists when their Logic kits link
+# it (VascularTerritories, LiverResections) and so its wrapped Python
+# module is built for the LiverSegmentation consumer.
+add_subdirectory(SubjectHierarchyFolders)
+
+#-----------------------------------------------------------------------------
 # Extension modules
 add_subdirectory(LiverMarkups)
 add_subdirectory(LiverResections)

@@ -51,8 +51,10 @@ ROLE_SCRATCH = "scratch"
 #: The single published Stage-2 output downstream stages consume.
 ROLE_CANONICAL = "canonical"
 
-#: Subject Hierarchy folder collecting this stage's nodes (ADR-0023).
-ANATOMY_FOLDER_NAME = "Anatomy"
+# The "Anatomy" Subject Hierarchy folder name is no longer duplicated here:
+# the shared vtkSlicerSubjectHierarchyFolders.GetAnatomyFolderName() accessor
+# is the single source of truth (ADR-0023 §"Subject Hierarchy management
+# convention").
 
 #: Slicer's standard per-segment terminology tag carrying the SCT triple.
 TERMINOLOGY_ENTRY_TAG = "TerminologyEntry"
@@ -590,28 +592,29 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
     def _collectUnderAnatomyFolder(self, node):
         """Reparent ``node`` under the "Anatomy" Subject Hierarchy folder.
 
-        Per-module Subject Hierarchy discipline (ADR-0023): each stage collects
-        its nodes under a named folder.  Idempotent — reuses the folder if it
-        already exists.  Best-effort: a missing SH plugin (headless contexts)
-        must not break node creation.
+        Per-stage Subject Hierarchy discipline (ADR-0023 §"Subject Hierarchy
+        management convention"): each stage collects its nodes under a named
+        folder.  Idempotent — reuses the folder if it already exists.  The
+        lookup / lazy-create / reparent dance is centralised in the shared
+        wrapped-C++ ``vtkSlicerSubjectHierarchyFolders`` utility (ADR-0004
+        reasoned exception: wrapped C++ so the C++ module logics and this
+        Python caller share one binary-identical implementation).
+        Best-effort: a missing SH plugin (headless contexts) makes the
+        utility a no-op and must not break node creation.
         """
         try:
-            shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(
-                slicer.mrmlScene
+            from vtkSlicerSubjectHierarchyFoldersPython import (
+                vtkSlicerSubjectHierarchyFolders,
             )
-        except Exception as exc:  # noqa: BLE001 — defensive, headless contexts
-            logging.debug("Subject Hierarchy unavailable: %s", exc)
-            return
-        if shNode is None:
+        except ImportError as exc:  # noqa: BLE001 — headless / kit not loaded
+            logging.debug("Subject Hierarchy folder utility unavailable: %s", exc)
             return
 
-        sceneItem = shNode.GetSceneItemID()
-        folderItem = shNode.GetItemChildWithName(sceneItem, ANATOMY_FOLDER_NAME)
-        if not folderItem:
-            folderItem = shNode.CreateFolderItem(sceneItem, ANATOMY_FOLDER_NAME)
-        nodeItem = shNode.GetItemByDataNode(node)
-        if nodeItem:
-            shNode.SetItemParent(nodeItem, folderItem)
+        vtkSlicerSubjectHierarchyFolders.CollectUnderFolder(
+            slicer.mrmlScene,
+            node,
+            vtkSlicerSubjectHierarchyFolders.GetAnatomyFolderName(),
+        )
 
 
 class LiverSegmentationTest(ScriptedLoadableModuleTest):
