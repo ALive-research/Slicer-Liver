@@ -150,5 +150,45 @@ def test_isstagecomplete_false_for_scratch_only():
     )
 
 
+def test_isstagecomplete_flips_true_only_after_first_accept():
+    """The predicate flips true only after the first Accept lands an SCT segment.
+
+    Extends the soft-done semantics through the orchestrator's lifecycle
+    (ADR-0024 §Terminology "commit / Accept" + ADR-0023 §"Per-stage
+    state-indicator semantics"): a scratch-stage Run leaves Stage 2 NOT done;
+    the first Accept that merges an SCT-tagged segment into the canonical node
+    flips ``isStageComplete()`` true.
+
+    TODO(impl): align the accessor names with the orchestrator surface
+    (createScratchSegmentation / tagSegmentWithSct / accept).  The pinned
+    invariant is the false->true transition gated on the first Accept, not the
+    spelling.
+    """
+    slicer, logic = _logic_or_skip()
+    slicer.mrmlScene.Clear(0)
+
+    for name in ("createScratchSegmentation", "tagSegmentWithSct", "accept"):
+        if not hasattr(logic, name):
+            pytest.fail(
+                f"orchestrator missing '{name}' -- the Accept lifecycle that "
+                "ADR-0024 §Terminology defines is not yet implemented."
+            )
+
+    scratch = logic.createScratchSegmentation()
+    segId = scratch.GetSegmentation().AddEmptySegment("liver", "Liver")
+    logic.tagSegmentWithSct(scratch, segId, SCT_LIVER_CODE, "Liver")
+    assert logic.isStageComplete() is False, (
+        "isStageComplete() must stay False after a Run (scratch present, no "
+        "Accept yet) -- ADR-0023 soft-done is canonical-only."
+    )
+
+    logic.accept(scratch)
+    assert logic.isStageComplete() is True, (
+        "isStageComplete() must flip True after the first Accept lands an "
+        "SCT-tagged segment in the canonical node (ADR-0024 §Terminology / "
+        "ADR-0023 soft-done)."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

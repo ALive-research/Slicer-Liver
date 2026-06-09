@@ -128,12 +128,19 @@ set(_liver_additional_module_paths
   "${CMAKE_SOURCE_DIR}/LiverMarkups"
   "${CMAKE_SOURCE_DIR}/LiverVolumetry"
   "${CMAKE_SOURCE_DIR}/VascularTerritories"
+  # Stage-2 orchestrator + surgeon-UI module: its launched scene/widget
+  # invariant tests (LiverSegmentation/Testing/Python) need the module
+  # importable + registered as `liversegmentation` (ADR-0024).
+  "${CMAKE_SOURCE_DIR}/LiverSegmentation"
 )
 
-# Same test roots as the bare ``pytest_scaffold`` entries.
+# Same test roots as the bare ``pytest_scaffold`` entries, plus the Stage-2
+# surgeon-UI invariant tree: its scene/widget tests SKIP under bare pytest and
+# only execute meaningfully inside a launched qSlicerApplication (ADR-0024).
 set(_launched_test_roots
   "${CMAKE_SOURCE_DIR}/Testing/Python"
   "${CMAKE_SOURCE_DIR}/LiverResections/Testing/Python"
+  "${CMAKE_SOURCE_DIR}/LiverSegmentation/Testing/Python"
 )
 
 add_test(

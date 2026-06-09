@@ -32,6 +32,41 @@
 #     MONAILabel; no ToolWrappers/MONAILabel.py; no new vtkMRML*DisplayNode;
 #     pip_install only under ToolWrappers/).  Pure-Python.
 #
+# Stage-2 SURGEON-UI invariants (ADR-0024 §"Per-structure micro-workflows" +
+# §"Output contract").  These exercise the orchestrator/UI flow with the
+# TotalSegmentator backend MOCKED (a real inference needs a multi-GB model +
+# GPU, unavailable in CI), and the scene/widget tests need a launched
+# qSlicerApplication -- so they run under the launched-Slicer harness
+# (Liver/Testing/Python/run_pytest_launched.py / the `pytest_launched` CTest
+# row), NOT the bare-pytest rows.  See Liver/Testing/Python/CMakeLists.txt:
+# this module's source dir + Testing/Python root are added to that row's
+# --additional-module-paths and test roots.
+#
+#   * test_liversegmentation_card_run_produces_scratch.py
+#     Card Run (mocked backend) -> exactly one scratch node; no premature
+#     canonical.  Scene-needing.
+#
+#   * test_liversegmentation_accept_sct_and_multifocal.py
+#     Accept -> single canonical node carrying the correct SCT triple per
+#     structure; Tumors lands N separate Mass segments.  Scene-needing.
+#
+#   * test_liversegmentation_reject_discards_scratch.py
+#     Reject -> scratch removed; canonical unchanged.  Scene-needing.
+#
+#   * test_liversegmentation_structure_accepted_glyph.py
+#     isStructureAccepted(sct) (canonical-only read) + per-tab ✓/○ glyph
+#     mirroring the Liver-shell idiom.  Scene + widget-needing.
+#
+#   * test_liversegmentation_backend_status_row.py
+#     Stage-2-local backend-status row reflects ensureBackendInstalled;
+#     Pre-download calls it confirm=False + mints no node.  The Pre-download
+#     hook-purity probe is pure-Python (bare-runnable); the widget assertions
+#     are widget-needing.
+#
+#   * test_liversegmentation_segment_input_selection.py
+#     segment() reads the Stage-1 LiverRole='PortalVenous' volume (mocked
+#     backend records its volume argument).  Scene-needing.
+#
 # Same skip-if-pytest-absent pattern as Liver/Testing/Python/CMakeLists.txt
 # -- keeps the scaffolding buildable where pytest is not provisioned.
 
@@ -67,6 +102,14 @@ set(_liverseg_pytest_files
   test_liversegmentation_single_canonical_node.py
   test_liversegmentation_import_purity.py
   test_liversegmentation_conformance.py
+  # Stage-2 surgeon-UI invariants (mocked backend; scene/widget tests run
+  # green under the launched-Slicer `pytest_launched` row, skip cleanly bare).
+  test_liversegmentation_card_run_produces_scratch.py
+  test_liversegmentation_accept_sct_and_multifocal.py
+  test_liversegmentation_reject_discards_scratch.py
+  test_liversegmentation_structure_accepted_glyph.py
+  test_liversegmentation_backend_status_row.py
+  test_liversegmentation_segment_input_selection.py
 )
 
 foreach(_pytest_file IN LISTS _liverseg_pytest_files)
