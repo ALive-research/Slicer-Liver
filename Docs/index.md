@@ -73,3 +73,10 @@ architecture/ui-stage-4-resection-planning.md
 architecture/ui-stage-5-volumetry.md
 architecture/ui-stage-6-export.md
 ```
+
+```{toctree}
+:maxdepth: 1
+:caption: Migrations
+
+migrations/v1-to-v2.md
+```
