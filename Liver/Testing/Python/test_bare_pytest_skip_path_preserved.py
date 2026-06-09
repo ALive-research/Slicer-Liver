@@ -36,6 +36,7 @@ See also
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import os
 
@@ -45,13 +46,67 @@ import pytest
 _THIS_DIR = os.path.dirname(__file__)
 
 
+def _repo_root() -> str:
+    """Walk up from this file to the directory holding ``pytest.ini``.
+
+    Anchoring on the ini file (rather than a fixed ``..`` count) keeps the
+    tree scan inside *this* checkout.  In a worktree layout the parent of the
+    checkout holds sibling worktrees; a hard-coded level count would escape
+    into them and miscount guard definitions.
+    """
+    current = _THIS_DIR
+    while True:
+        if os.path.isfile(os.path.join(current, "pytest.ini")):
+            return current
+        parent = os.path.dirname(current)
+        if parent == current:  # filesystem root reached
+            raise AssertionError(
+                "pytest.ini not found walking up from "
+                f"{_THIS_DIR}; cannot anchor the dedup tree scan."
+            )
+        current = parent
+
+
+_REPO_ROOT = _repo_root()
+
+# The canonical guard names live in the shared support module; the conftests
+# re-export them under these underscore aliases.  Single source of truth for
+# the dedup invariant below.
+_CANONICAL_GUARD_NAMES = (
+    "import_slicer_or_skip",
+    "require_mrml_scene",
+    "require_qt_widget",
+)
+
+# Historical underscore aliases that previously named copy-pasted bodies.
+# ``_require_mrml_scene_or_skip`` was a thin wrapper around the scene guard.
+_GUARD_ALIASES = {
+    "_import_slicer_or_skip": "import_slicer_or_skip",
+    "_require_mrml_scene": "require_mrml_scene",
+    "_require_mrml_scene_or_skip": "require_mrml_scene",
+    "_require_qt_widget": "require_qt_widget",
+}
+
+
+def _canonical_for(func_name: str):
+    """Map a ``def`` name to its canonical guard, or ``None`` if unrelated.
+
+    Matches both the canonical public names and the historical underscore
+    aliases, so a re-definition under either spelling is flagged.
+    """
+    if func_name in _CANONICAL_GUARD_NAMES:
+        return func_name
+    return _GUARD_ALIASES.get(func_name)
+
+
 def _load_conftest():
     """Import the sibling conftest as a module for direct helper access.
 
-    The conftest defines ``_require_qt_widget`` / ``_require_mrml_scene``.
-    pytest auto-loads conftest for fixture/hook discovery, but the helpers
-    are plain functions the shell tests import explicitly -- so this file
-    loads it the same way to assert their skip contract directly.
+    The conftest re-exports ``_require_qt_widget`` / ``_require_mrml_scene``
+    from the shared ``slicer_pytest_support`` module.  pytest auto-loads
+    conftest for fixture/hook discovery, but the helpers are plain functions
+    the shell tests import explicitly -- so this file loads it the same way
+    to assert their skip contract (and the dedup identity) directly.
     """
     conftest_path = os.path.join(_THIS_DIR, "conftest.py")
     assert os.path.isfile(conftest_path), (
@@ -163,3 +218,84 @@ def test_require_mrml_scene_skips_on_bare_path_runs_on_launched():
 
     with pytest.raises(pytest.skip.Exception):
         conftest._require_mrml_scene()
+
+
+# --------------------------------------------------------------------------- #
+# Invariant -- the skip-guards are deduplicated onto one shared module.
+# --------------------------------------------------------------------------- #
+#
+# Pins the post-hoc dedup: the launched-Slicer skip-guards used to be
+# copy-pasted across the per-module conftests and a couple of test files
+# (their docstrings literally said "Same shape as
+# ``Liver/Testing/Python/conftest.py``").  These two tests fail against the
+# pre-dedup tree (multiple ``def`` bodies) and pass once the guards live in
+# ``Testing/Python/slicer_pytest_support.py`` and the conftests re-export them.
+
+
+def test_skip_guards_defined_exactly_once_in_tree():
+    """Each guard body must be defined exactly once across the test tree.
+
+    Walks every ``test_*.py`` and ``conftest.py`` under the repo, parsing
+    each for top-level ``def <guard>`` statements.  A guard may be *defined*
+    only in the shared support module; everything else must import / re-export
+    it.  The canonical names plus their historical underscore aliases are both
+    counted -- a stray re-definition under either spelling re-introduces the
+    duplication the shared ``slicer_pytest_support`` module exists to remove.
+
+    Red against the pre-dedup tree (``_require_qt_widget`` defined in two
+    conftests, ``_require_mrml_scene`` in two, ``_import_slicer_or_skip`` /
+    ``_require_mrml_scene_or_skip`` inline in two shell test files); green
+    once only ``slicer_pytest_support`` carries the bodies.
+    """
+    guard_defs = {name: [] for name in _CANONICAL_GUARD_NAMES}
+
+    for dirpath, _dirnames, filenames in os.walk(_REPO_ROOT):
+        # Skip build trees and VCS metadata.
+        if os.sep + "build" in dirpath or os.sep + ".bare" in dirpath:
+            continue
+        for filename in filenames:
+            is_scanned = (
+                filename.startswith("test_")
+                or filename == "conftest.py"
+                or filename == "slicer_pytest_support.py"
+            )
+            if not (is_scanned and filename.endswith(".py")):
+                continue
+            path = os.path.join(dirpath, filename)
+            with open(path, encoding="utf-8") as handle:
+                tree = ast.parse(handle.read(), filename=path)
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.FunctionDef):
+                    continue
+                canonical = _canonical_for(node.name)
+                if canonical is not None:
+                    guard_defs[canonical].append(os.path.relpath(path, _REPO_ROOT))
+
+    support_rel = os.path.join("Testing", "Python", "slicer_pytest_support.py")
+    for name, locations in guard_defs.items():
+        assert locations == [support_rel], (
+            f"Guard {name!r} must be defined exactly once, in "
+            f"{support_rel}; found definitions in {locations}.  The "
+            "launched-Slicer skip-guards are deduplicated onto "
+            "slicer_pytest_support; conftests re-export, tests import."
+        )
+
+
+def test_conftest_aliases_are_the_shared_objects():
+    """Each conftest alias must be the SAME object as the shared guard.
+
+    Re-export, not re-implementation: ``conftest._require_qt_widget`` must be
+    ``slicer_pytest_support.require_qt_widget`` (identity), likewise for the
+    scene + import guards.  This catches a future maintainer copy-pasting a
+    body back into a conftest "just to tweak the message" -- which would pass
+    a name-existence check but silently re-fork the contract.
+    """
+    import slicer_pytest_support  # on sys.path via pytest.ini ``pythonpath``
+
+    conftest = _load_conftest()
+    assert conftest._require_qt_widget is slicer_pytest_support.require_qt_widget
+    assert conftest._require_mrml_scene is slicer_pytest_support.require_mrml_scene
+    assert (
+        conftest._import_slicer_or_skip
+        is slicer_pytest_support.import_slicer_or_skip
+    )

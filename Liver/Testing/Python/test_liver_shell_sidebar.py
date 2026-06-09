@@ -69,26 +69,10 @@ EXPECTED_STAGE_NAMES = [
 
 
 # --------------------------------------------------------------------------- #
-# Module-scoped helpers (file-local; per feedback_agent_brief_pre_push_hygiene)
+# Module-scoped helpers — the launched-Slicer skip-guards are the shared ones
+# re-exported by the sibling conftest (canonical bodies in
+# Testing/Python/slicer_pytest_support.py).
 # --------------------------------------------------------------------------- #
-
-def _import_slicer_or_skip():
-    """Return the ``slicer`` module, skipping the test if unavailable.
-
-    The Liver shell widget is a Slicer scripted module — it cannot be
-    instantiated outside a running Slicer Python.  Tests using this
-    helper are CI-runnable under Slicer's bundled pytest invocation
-    only.
-    """
-    try:
-        import slicer  # type: ignore[import-not-found]
-    except ImportError as exc:  # pragma: no cover — exercised only outside Slicer
-        pytest.skip(
-            f"slicer module not importable ({exc}); "
-            "Liver-shell sidebar tests require Slicer's Python."
-        )
-    return slicer
-
 
 def _instantiate_liver_widget():
     """Build a fresh ``LiverWidget`` rooted on a throwaway parent.
@@ -100,7 +84,10 @@ def _instantiate_liver_widget():
     # Widget-level tests need qt.QWidget — bare ``PythonSlicer -m pytest``
     # leaves PythonQt's qt module importable but without QWidget.  Skip
     # gracefully when the launched-Slicer harness isn't in play.
-    from conftest import _require_qt_widget  # type: ignore[import-not-found]
+    from conftest import (  # type: ignore[import-not-found]
+        _import_slicer_or_skip,
+        _require_qt_widget,
+    )
     _require_qt_widget()
 
     _import_slicer_or_skip()
