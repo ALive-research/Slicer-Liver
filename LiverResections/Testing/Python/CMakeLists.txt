@@ -74,24 +74,24 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;harness-self-tests;LiverResections"
     )
 
-    # Module-layer invariant test for the relocated distance-maps compute
+    # Module-layer invariants for the distance-map computation
     # (ADR-0008 §2; ADR-0023 §"Shell composition (Option H)").  Registered
     # as its own CTest entry rather than swept into the repo-root
     # ``pytest_scaffold`` collection because ``pytest.ini`` scopes
     # ``testpaths`` to ``Testing/Python`` only — ``<Module>/Testing/Python``
     # trees need explicit registration here.  The test imports the
-    # relocated ``DistanceMaps`` module and skips cleanly (via
+    # ``DistanceMaps`` module and skips cleanly (via
     # ``pytest.importorskip``) when Slicer / SimpleITK are unavailable,
     # so this entry is green on a plain pytest run as well as inside a
     # launched Slicer.
     add_test(
-      NAME LiverResections_distance_maps_relocation
+      NAME LiverResections_distance_maps
       COMMAND "${Python3_EXECUTABLE}" -m pytest
         -q
-        "${CMAKE_CURRENT_SOURCE_DIR}/test_distance_maps_relocation.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_distance_maps.py"
       WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     )
-    set_tests_properties(LiverResections_distance_maps_relocation PROPERTIES
+    set_tests_properties(LiverResections_distance_maps PROPERTIES
       LABELS "pytest;module-layer;LiverResections"
     )
   else()
