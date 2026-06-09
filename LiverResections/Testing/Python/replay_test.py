@@ -259,13 +259,35 @@ def _exit(code: int) -> None:
     Route through ``slicer.util.exit`` when running inside Slicer; fall
     back to ``sys.exit`` for the rare standalone CPython invocation
     (e.g. local lint).
+
+    A drifted Slicer image can ship a partial ``slicer.util`` with no
+    ``exit`` attribute; routing through it inside a bare ``except
+    ImportError`` lets the ``AttributeError`` escape and the Qt loop
+    hang until the test timeout.  Degrade across the same primitive
+    ``slicer.util.exit`` uses (``app.exit`` after clearing
+    ``runPythonAndExit``), then ``sys.exit``.
     """
     try:
         import slicer  # type: ignore[import-not-found]
-
-        slicer.util.exit(code)
     except ImportError:
         sys.exit(code)
+        return
+
+    util_exit = getattr(getattr(slicer, "util", None), "exit", None)
+    if callable(util_exit):
+        util_exit(code)
+        return
+
+    app = getattr(slicer, "app", None)
+    if app is not None:
+        try:
+            app.commandOptions().runPythonAndExit = False
+        except Exception:  # noqa: BLE001 -- best-effort; still drive app.exit below
+            pass
+        app.exit(code)
+        return
+
+    sys.exit(code)
 
 
 if __name__ == "__main__":

@@ -107,15 +107,41 @@ def _exit(code: int) -> None:
     ``sys.exit`` for the standalone CPython invocation (the harness
     self-test in ``test_run_pytest_launched_contract.py``, or a local
     lint run).  Same shape as ``replay_test._exit``.
+
+    ``slicer.util.exit`` is preferred, but a drifted Slicer image has
+    been observed to ship a partial ``slicer.util`` with no ``exit``
+    attribute.  Routing the code through it inside a bare ``except
+    ImportError`` let the resulting ``AttributeError`` escape: the
+    script aborted while Slicer's Qt event loop kept running, hanging
+    until the CTest timeout fired.  So degrade across the same primitive
+    ``slicer.util.exit`` itself uses -- clear ``runPythonAndExit`` so
+    Slicer does not overwrite our code, then ``app.exit`` -- and only
+    then ``sys.exit``, so a missing API yields a coded exit, never a
+    hang.
     """
     if os.environ.get(_FORCE_SYSEXIT_ENV) == "1":
         sys.exit(code)
     try:
         import slicer  # type: ignore[import-not-found]
-
-        slicer.util.exit(code)
     except ImportError:
         sys.exit(code)
+        return
+
+    util_exit = getattr(getattr(slicer, "util", None), "exit", None)
+    if callable(util_exit):
+        util_exit(code)
+        return
+
+    app = getattr(slicer, "app", None)
+    if app is not None:
+        try:
+            app.commandOptions().runPythonAndExit = False
+        except Exception:  # noqa: BLE001 -- best-effort; still drive app.exit below
+            pass
+        app.exit(code)
+        return
+
+    sys.exit(code)
 
 
 if __name__ == "__main__":

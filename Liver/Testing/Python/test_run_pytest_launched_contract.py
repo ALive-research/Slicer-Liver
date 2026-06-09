@@ -55,10 +55,14 @@ See also
 
 from __future__ import annotations
 
+import importlib
 import os
 import subprocess
 import sys
 import textwrap
+import types
+
+import pytest
 
 
 
@@ -236,3 +240,99 @@ def test_driver_fails_closed_when_no_tests_collected(tmp_path):
         f"tests (pytest NO_TESTS_COLLECTED=5); got {result.returncode}.\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Invariant 3 -- never hang on a drifted slicer.util.
+# --------------------------------------------------------------------------- #
+#
+# Regression: ``_exit`` routed the code through ``slicer.util.exit(code)``
+# inside a bare ``except ImportError``.  A drifted Slicer image that ships
+# a partial ``slicer.util`` with no ``exit`` attribute raised
+# ``AttributeError`` -- NOT caught -- so the script aborted while Slicer's
+# Qt event loop kept running.  ``pytest_launched`` then hung until the
+# 1500 s CTest timeout and reported the wrong status.  ``_exit`` must
+# degrade to ``slicer.app.exit`` (the same primitive ``slicer.util.exit``
+# uses) so a missing API yields a coded exit, never a hang.
+
+def _import_driver_module():
+    """Import ``run_pytest_launched`` as a module (defs only; __main__ guarded)."""
+    sys.path.insert(0, os.path.dirname(_require_driver()))
+    try:
+        return importlib.import_module("run_pytest_launched")
+    finally:
+        sys.path.pop(0)
+
+
+def _fake_app():
+    """A stand-in qSlicerApplication recording ``exit`` + ``runPythonAndExit``."""
+    class _Opts:
+        runPythonAndExit = True
+
+    class _App:
+        def __init__(self):
+            self.exited_with = None
+            self.opts = _Opts()
+
+        def commandOptions(self):
+            return self.opts
+
+        def exit(self, code):
+            self.exited_with = code
+
+    return _App()
+
+
+def test_exit_uses_slicer_util_exit_when_present(monkeypatch):
+    """When ``slicer.util.exit`` exists it is the route taken (app.exit untouched)."""
+    monkeypatch.delenv("SLICER_PYTEST_LAUNCHED_FORCE_SYSEXIT", raising=False)
+    driver = _import_driver_module()
+
+    recorded = {}
+    fake = types.ModuleType("slicer")
+    fake.util = types.ModuleType("slicer.util")
+    fake.util.exit = lambda code: recorded.setdefault("util_exit", code)
+    fake.app = _fake_app()
+    monkeypatch.setitem(sys.modules, "slicer", fake)
+
+    driver._exit(0)
+
+    assert recorded.get("util_exit") == 0
+    assert fake.app.exited_with is None, "app.exit must not be used when util.exit exists"
+
+
+def test_exit_falls_back_to_app_exit_when_util_exit_missing(monkeypatch):
+    """A ``slicer.util`` with no ``exit`` must degrade, not raise/hang.
+
+    Pins the regression that timed out ``pytest_launched`` for 1500 s.
+    The fallback mirrors ``slicer.util.exit``: clear ``runPythonAndExit``
+    so Slicer cannot overwrite the code, then ``app.exit(code)``.
+    """
+    monkeypatch.delenv("SLICER_PYTEST_LAUNCHED_FORCE_SYSEXIT", raising=False)
+    driver = _import_driver_module()
+
+    fake = types.ModuleType("slicer")
+    fake.util = types.ModuleType("slicer.util")  # deliberately NO exit attribute
+    fake.app = _fake_app()
+    monkeypatch.setitem(sys.modules, "slicer", fake)
+
+    # Must NOT raise AttributeError and must NOT call sys.exit (no hang, no SystemExit).
+    driver._exit(7)
+
+    assert fake.app.exited_with == 7, "code must be carried out through app.exit"
+    assert fake.app.opts.runPythonAndExit is False, (
+        "runPythonAndExit must be cleared so Slicer does not overwrite the exit code"
+    )
+
+
+def test_exit_falls_back_to_sysexit_when_slicer_unimportable(monkeypatch):
+    """No ``slicer`` at all (standalone CPython) still yields a coded exit."""
+    monkeypatch.delenv("SLICER_PYTEST_LAUNCHED_FORCE_SYSEXIT", raising=False)
+    driver = _import_driver_module()
+
+    # Ensure `import slicer` fails inside _exit.
+    monkeypatch.setitem(sys.modules, "slicer", None)  # forces ImportError on import
+
+    with pytest.raises(SystemExit) as excinfo:
+        driver._exit(3)
+    assert excinfo.value.code == 3
