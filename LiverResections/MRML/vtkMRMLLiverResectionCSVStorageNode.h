@@ -44,6 +44,25 @@
 
 #include <vtkMRMLMarkupsFiducialStorageNode.h>
 
+/**
+ * \class vtkMRMLLiverResectionCSVStorageNode
+ *
+ * \brief Read-only parse vehicle for the legacy v1 ``.lrp.fcsv``
+ *        resection format (a 15-column Markups-fiducial CSV).
+ *
+ * This node's sole live role is the seamless v1 -> v2 migration: it
+ * parses the 16 Bezier control points off a legacy ``.lrp.fcsv`` into a
+ * ``vtkMRMLMarkupsBezierSurfaceNode`` (LPS -> the markups RAS
+ * convention), and ``vtkMRMLResectionPlanStorageNode::ReadFcsv`` lifts
+ * those points into a v2 ``vtkMRMLBezierSurfaceNode`` carrier under a
+ * ``vtkMRMLResectionPlanNode`` (wrapper-vs-carrier per ADR-0014
+ * §"Fourth layer").
+ *
+ * The write path is dead: v2 persists exclusively through
+ * ``vtkMRMLResectionPlanStorageNode`` (``.lrp.json``).  Removal of the
+ * ``WriteDataInternal`` body and the dependency on the old
+ * ``vtkMRMLLiverResectionNode`` family is a T2.7 follow-up.
+ */
 class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLLiverResectionCSVStorageNode : public vtkMRMLMarkupsFiducialStorageNode
 {
 

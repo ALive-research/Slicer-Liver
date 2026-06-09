@@ -224,8 +224,10 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.logic.computeVolume(segmentsVolumeNode, targetSegmentVolumeNode, self.ui.InputSegmentationSelector.currentNode(), outputTable, ROIMarkersList, resectionNodes)
 
+    # The wait cursor (set above) is the in-progress feedback; the
+    # populated volumetry table is the result, so no blocking completion
+    # dialog is shown (non-blocking feedback, ADR-0009 UX discipline).
     qt.QApplication.restoreOverrideCursor()
-    qt.QMessageBox.information(None, "Information", "The targeted liver volumetry was computed.")
 
     self.showTable(outputTable)
     slicer.mrmlScene.RemoveNode(segmentsVolumeNode)
