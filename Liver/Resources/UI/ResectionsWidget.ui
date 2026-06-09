@@ -113,10 +113,13 @@
               <item>
                <widget class="QRadioButton" name="ClosedCurveButton">
                 <property name="enabled">
-                 <bool>true</bool>
+                 <bool>false</bool>
                 </property>
                 <property name="text">
                  <string>MarkupClosedCurve</string>
+                </property>
+                <property name="toolTip">
+                 <string>Closed-curve initialisation is planned for v2.1.</string>
                 </property>
                </widget>
               </item>
