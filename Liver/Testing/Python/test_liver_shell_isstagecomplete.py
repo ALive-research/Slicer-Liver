@@ -45,25 +45,16 @@ import pytest
 
 
 # --------------------------------------------------------------------------- #
-# File-local helpers
+# File-local helpers — the launched-Slicer skip-guards are the shared ones
+# re-exported by the sibling conftest (canonical bodies in
+# Testing/Python/slicer_pytest_support.py).
 # --------------------------------------------------------------------------- #
 
-def _import_slicer_or_skip():
-    """Return ``slicer`` or skip the test cleanly."""
-    try:
-        import slicer  # type: ignore[import-not-found]
-    except ImportError as exc:  # pragma: no cover
-        pytest.skip(
-            f"slicer module not importable ({exc}); "
-            "IsStageComplete tests require Slicer's Python."
-        )
-    return slicer
-
-
-def _require_mrml_scene_or_skip():
-    """Skip when ``slicer.mrmlScene`` isn't initialised (bare PythonSlicer)."""
-    from conftest import _require_mrml_scene  # type: ignore[import-not-found]
-    _require_mrml_scene()
+# Re-export under the names this file's call sites already use.
+from conftest import (  # type: ignore[import-not-found]  # noqa: E402
+    _import_slicer_or_skip,
+    _require_mrml_scene as _require_mrml_scene_or_skip,
+)
 
 
 def _clear_scene():
