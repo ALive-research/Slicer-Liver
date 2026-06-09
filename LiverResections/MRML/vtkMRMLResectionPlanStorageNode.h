@@ -97,10 +97,21 @@ class vtkMRMLAbstractParametricSurfaceNode;
  *
  * \par Legacy ``.lrp.fcsv``
  *
- * Out of scope for this storage node.  v1 ``.lrp.fcsv`` files upgrade
- * via a one-shot manual path (open in v1, save as ``.lrp.json``,
- * re-open in v2) until a seamless migration path lands as a
- * follow-up to the resection-plan-architecture work.
+ * The reader migrates a v1 ``.lrp.fcsv`` seamlessly on load.  The v1
+ * format is a 15-column Markups-fiducial CSV carrying only the 16
+ * Bezier control points (LPS).  ``ReadDataInternal`` delegates such a
+ * file to ``ReadFcsv``, which parses the points through the legacy
+ * ``vtkMRMLLiverResectionCSVStorageNode`` (read-only parse vehicle;
+ * LPS -> the markups RAS convention), materialises a
+ * ``vtkMRMLBezierSurfaceNode`` carrier under the plan
+ * (wrapper-vs-carrier per ADR-0014 §"Fourth layer"), and applies the
+ * documented v2 defaults for every legacy-absent field
+ * (``safetyMargin_mm`` = 0.0, ``riskMargin_mm`` = 0.0,
+ * ``orderIndex`` = -1, ``state`` = ``Init``).  Because those defaults
+ * are not recoverable from the legacy file, the migration records a
+ * loud warning on ``GetUserMessages()`` naming the defaulted fields.
+ * The write path always emits ``.lrp.json``; ``.lrp.fcsv`` is
+ * read-only.  See ``Docs/migrations/v1-to-v2.md``.
  */
 class VTK_SLICER_LIVERRESECTIONS_MODULE_MRML_EXPORT vtkMRMLResectionPlanStorageNode : public vtkMRMLStorageNode
 {
@@ -151,6 +162,15 @@ private:
   /// Read the v2 ``.lrp.json`` from ``filePath`` into ``plan``.
   /// Returns 1 on success, 0 on failure.
   int ReadJson(const std::string& filePath, vtkMRMLResectionPlanNode* plan);
+
+  /// Migrate a legacy v1 ``.lrp.fcsv`` from ``filePath`` into ``plan``:
+  /// parse the 16 Bezier control points through the legacy CSV parse
+  /// vehicle, materialise a ``vtkMRMLBezierSurfaceNode`` carrier under
+  /// the plan, apply the documented v2 defaults for every legacy-absent
+  /// field, and record a loud user message naming the defaulted fields.
+  /// Returns 1 on success, 0 on failure.  See the class docstring
+  /// §"Legacy `.lrp.fcsv`".
+  int ReadFcsv(const std::string& filePath, vtkMRMLResectionPlanNode* plan);
 };
 
 #endif // __vtkmrmlresectionplanstoragenode_h_
