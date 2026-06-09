@@ -8,11 +8,11 @@
 
 ## Context
 
-[ADR-0005](0005-github-actions-ci.md) builds and tests every PR inside
+[ADR-0005](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0005-github-actions-ci.md) builds and tests every PR inside
 the project-maintained `ghcr.io/alive-research/slicer-build-ubuntu2404`
 image (Ubuntu 24.04 + Qt 6.9 + Slicer **main** pre-built, with
-SlicerLayerDM baked in per [ADR-0002](0002-migrate-to-slicerlayerdm.md) /
-[ADR-0013](0013-layerdm-pipeline-pattern.md)).  Until now both CI jobs
+SlicerLayerDM baked in per [ADR-0002](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0002-migrate-to-slicerlayerdm.md) /
+[ADR-0013](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0013-layerdm-pipeline-pattern.md)).  Until now both CI jobs
 (`build-test` and `coverage`) referenced that image as **`:latest`** — a
 rolling tag the `ALive-Docker` repository rebuilds to track Slicer main.
 
@@ -98,7 +98,7 @@ digest form later without revisiting this decision.
 ### Alternative C — Auto-bump on a schedule (e.g. weekly Dependabot-style PR)
 Defers the reconciliation work but does not remove it, and a scheduled
 auto-bump that goes red still blocks the cadence. A human-chosen bump is
-simpler for the current contributor base ([ADR-0004](0004-python-cpp-boundary.md))
+simpler for the current contributor base ([ADR-0004](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0004-python-cpp-boundary.md))
 and keeps the bump tied to an actual need. Revisitable if bump latency
 becomes a problem.
 
@@ -139,11 +139,11 @@ becomes a problem.
 
 ## References
 
-- [ADR-0005](0005-github-actions-ci.md) — GitHub Actions CI on every PR
-- [ADR-0002](0002-migrate-to-slicerlayerdm.md),
-  [ADR-0013](0013-layerdm-pipeline-pattern.md) — why SlicerLayerDM is
+- [ADR-0005](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0005-github-actions-ci.md) — GitHub Actions CI on every PR
+- [ADR-0002](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0002-migrate-to-slicerlayerdm.md),
+  [ADR-0013](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0013-layerdm-pipeline-pattern.md) — why SlicerLayerDM is
   baked into the image
-- [ADR-0004](0004-python-cpp-boundary.md) — researcher-heavy contributor
+- [ADR-0004](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0004-python-cpp-boundary.md) — researcher-heavy contributor
   base (informs the human-bump choice)
-- [ADR-0021](0021-coverage-measurement.md) — the non-blocking `coverage`
+- [ADR-0021](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0021-coverage-measurement.md) — the non-blocking `coverage`
   job that shares the pinned image
