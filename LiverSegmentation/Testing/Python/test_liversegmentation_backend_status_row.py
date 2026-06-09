@@ -34,7 +34,7 @@ import types
 import pytest
 
 MODULE_NAME = "liversegmentation"
-WRAPPER_IMPORT = "LiverSegmentation.ToolWrappers.TotalSegmentator"
+WRAPPER_IMPORT = "LiverSegmentationLib.ToolWrappers.TotalSegmentator"
 
 # Human-readable download-size string shown in the status row / confirm dialog.
 # Named constant per the wrapper's TOTALSEGMENTATOR_DOWNLOAD_SIZE; pinned here
@@ -165,7 +165,7 @@ def test_predownload_button_calls_ensurebackend_confirm_false_no_node(monkeypatc
     widget = _widget_or_skip(slicer)
 
     try:
-        import LiverSegmentation.ToolWrappers.TotalSegmentator as ts  # noqa: N813
+        import LiverSegmentationLib.ToolWrappers.TotalSegmentator as ts  # noqa: N813
 
         recorded = {}
 

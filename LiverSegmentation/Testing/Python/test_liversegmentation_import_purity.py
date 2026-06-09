@@ -9,7 +9,7 @@ lets CI run the suite WITHOUT network or a multi-GB model download.
 
 Two import paths must be pure at import time:
   * ``import LiverSegmentation``                      (the module)
-  * ``import LiverSegmentation.ToolWrappers.TotalSegmentator``  (the wrapper)
+  * ``import LiverSegmentationLib.ToolWrappers.TotalSegmentator``  (the wrapper)
 
 Neither may, at import time:
   * call ``slicer.util.pip_install(...)``      -- asserted via a monkeypatched
@@ -36,7 +36,7 @@ import pytest
 
 # Module-under-test import targets per ADR-0024 §"Module layout".
 MODULE_IMPORT = "LiverSegmentation"
-WRAPPER_IMPORT = "LiverSegmentation.ToolWrappers.TotalSegmentator"
+WRAPPER_IMPORT = "LiverSegmentationLib.ToolWrappers.TotalSegmentator"
 
 # The AI package that must NOT be imported at module-import time.
 FORBIDDEN_PACKAGE = "totalsegmentator"

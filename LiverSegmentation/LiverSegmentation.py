@@ -72,44 +72,25 @@ LIVER_ROLE_ATTRIBUTE = "LiverRole"
 LIVER_ROLE_PORTAL_VENOUS = "PortalVenous"
 
 
-#: Dotted names the TotalSegmentator wrapper may live under, in resolution
-#: order.  The wrapper sits in the source tree as ``LiverSegmentation``'s
-#: ``ToolWrappers`` sub-package but stages into a launched Slicer under the
-#: ``LiverSegmentationLib`` package name (CMakeLists ``ctkMacroCompilePython
-#: Script`` target) to avoid a top-level ``ToolWrappers`` namespace collision.
-#: The source-tree name is tried first because that is the name the invariant
-#: tests import and monkeypatch; the staged name is the production fallback.
-_WRAPPER_MODULE_NAMES = (
-    "LiverSegmentation.ToolWrappers.TotalSegmentator",
-    "LiverSegmentationLib.ToolWrappers.TotalSegmentator",
-)
+#: Dotted name the TotalSegmentator wrapper lives under.  The wrapper sits in
+#: the ``LiverSegmentationLib`` package — the ``<Module>Lib`` convention every
+#: sibling module uses — both in the source tree and as staged into a launched
+#: Slicer (CMakeLists ``ctkMacroCompilePythonScript`` target).  The module root
+#: carries no ``__init__.py``, so there is no package to shadow and no
+#: source-vs-staged name split: one canonical import name everywhere.
+_WRAPPER_MODULE_NAME = "LiverSegmentationLib.ToolWrappers.TotalSegmentator"
 
 
 def _totalSegmentatorWrapper():
     """Return the TotalSegmentator tool-wrapper module.
 
     Resolved on the call path only, preserving module-import purity (ADR-0024
-    §"Lazy install").  Slicer's file-based scripted-module factory caches the
-    ``LiverSegmentation.py`` file under ``sys.modules['LiverSegmentation']`` as
-    a plain module, which shadows the source ``LiverSegmentation`` *package*;
-    when that shadow is present we drop it so the dotted wrapper import can
-    resolve the package's ``ToolWrappers`` sub-package — the same module object
+    §"Lazy install").  Single canonical import name — the same module object
     the invariant tests import and monkeypatch.
     """
     import importlib
-    import sys
 
-    shadow = sys.modules.get("LiverSegmentation")
-    if shadow is not None and getattr(shadow, "__path__", None) is None:
-        del sys.modules["LiverSegmentation"]
-
-    last_exc = None
-    for name in _WRAPPER_MODULE_NAMES:
-        try:
-            return importlib.import_module(name)
-        except ImportError as exc:
-            last_exc = exc
-    raise last_exc
+    return importlib.import_module(_WRAPPER_MODULE_NAME)
 
 
 class LiverSegmentation(ScriptedLoadableModule):
