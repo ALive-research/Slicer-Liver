@@ -400,40 +400,47 @@ needing more get the deferred-to-v2.1 path.
 
 ## Conformance
 
-Reviewable invariants that signal this decision is honoured:
+Invariants that signal this decision is honoured, tagged by how each is
+enforced:
 
-- `LiverSegmentation/` exists as a scripted module under the repo root.
-- `LiverSegmentation/LiverSegmentation.py` (or equivalent) hosts the
+- **[test]** — pinned by an automated test; a regression turns CI red.
+- **[review]** — a convention upheld at code review. These are mostly
+  *absence* properties ("no X under the module"): nobody adds the artifact
+  by accident, and a contributor who adds it deliberately would simply
+  delete any guard — so an automated "X is absent" test is low-value
+  (testing the colour of the sky) and is intentionally NOT written.
+- **[future]** — belongs to a later deliverable (the Kumar-Oram effect per
+  [ADR-0026](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0026-segment-editor-effects.md));
+  not in the v2.0 module-skeleton scope.
+
+- **[test]** `LiverSegmentation/` registers as the scripted module
+  `liversegmentation` (so the Liver shell auto-discovers Stage 2) and its
+  logic exposes `isStageComplete()`.
+- **[review]** `LiverSegmentation/LiverSegmentation.py` hosts the
   orchestrator class; tool wrappers live under
   `LiverSegmentation/ToolWrappers/`.
-- Grep `EXTENSION_DEPENDS` in `LiverSegmentation/CMakeLists.txt`
-  finds no entry for `TotalSegmentator` (and no entry for `MONAILabel`
-  either — per Alternative H, MONAILabel is out of v2.0 scope).
-- Grep `LiverSegmentation/ToolWrappers/` finds no `MONAILabel.py` —
-  the originally-drafted wrapper was retracted per Alternative H.
-- Grep for `slicer.util.pip_install` in `LiverSegmentation/ToolWrappers/`
-  finds the lazy-install code paths.
-- No new `vtkMRML*DisplayNode` subclass for segmentation output;
-  Stage 2 uses stock `vtkMRMLSegmentationDisplayNode`.
-- The orchestrator's published output is a single
-  `vtkMRMLSegmentationNode` per case. Grep for orchestrator's
-  `AddNewNodeByClass("vtkMRMLSegmentationNode", ...)` should find
-  exactly one canonical-node-creation call path (scratch nodes are
-  also `vtkMRMLSegmentationNode` instances but are flagged as scratch
-  via a node attribute or hidden Subject Hierarchy folder).
-- Subject Hierarchy "Anatomy" folder (per ADR-0023's Subject Hierarchy
-  convention) collects all Stage 2 nodes.
-- `LiverSegmentation/Effects/` exists and contains
-  `SegmentEditorKumarOramEffect.py` (a `qSlicerSegmentEditorAbstractEffect`
-  subclass per [ADR-0026](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0026-segment-editor-effects.md)).
-- Grep for `qSlicerSegmentEditorAbstractEffect` (or its Python wrapper
-  `AbstractScriptedSegmentEditorEffect`) under `LiverSegmentation/Effects/`
-  finds the Kumar-Oram effect class.
-- The orchestrator's vessel-card "Refine with Kumar-Oram" button
-  programmatically opens Segment Editor with the vessel segment
-  selected and the Kumar-Oram effect pre-activated — grep for the
-  effect-activation call path (`setActiveEffectByName("KumarOram")`
-  or equivalent) in `LiverSegmentation.py`.
+- **[test]** `LiverSegmentation/CMakeLists.txt` declares no
+  `EXTENSION_DEPENDS` entry for `TotalSegmentator` — it is *used*, so
+  hard-depending on it is a plausible regression of the lazy-install design.
+- **[review]** No `MONAILabel` anywhere in the module — no
+  `EXTENSION_DEPENDS` entry and no `ToolWrappers/MONAILabel.py` (out of v2.0
+  scope per Alternative H). Pure absence; a convention, not a test.
+- **[test]** `slicer.util.pip_install` appears only under
+  `LiverSegmentation/ToolWrappers/` — an install call leaking into the
+  orchestrator or widget is a real import-purity regression.
+- **[review]** No new `vtkMRML*DisplayNode` subclass for segmentation
+  output; Stage 2 uses stock `vtkMRMLSegmentationDisplayNode`. Adding a
+  custom display node is a deliberate act caught at review.
+- **[test]** The orchestrator publishes a single `vtkMRMLSegmentationNode`
+  per case: scratch nodes are flagged via a node attribute, and `accept()`
+  merges scratch into the one canonical node rather than minting a second.
+- **[review]** A Subject Hierarchy "Anatomy" folder (per ADR-0023's Subject
+  Hierarchy convention) collects all Stage 2 nodes.
+- **[future]** `LiverSegmentation/Effects/SegmentEditorKumarOramEffect.py`
+  (a `qSlicerSegmentEditorAbstractEffect` subclass per ADR-0026) and the
+  vessel-card "Refine with Kumar-Oram" activation path
+  (`setActiveEffectByName("KumarOram")` or equivalent) — deferred to the
+  ADR-0026 effect deliverable, not the v2.0 module skeleton.
 
 ## References
 
