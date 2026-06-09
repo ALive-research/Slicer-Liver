@@ -119,7 +119,7 @@ qSlicerIO::IOFileType qSlicerLiverResectionsReader::fileType() const
 //-----------------------------------------------------------------------------
 QStringList qSlicerLiverResectionsReader::extensions() const
 {
-  // ``.lrp.json`` is the v1 schema landed by the prior T2.5 commit
+  // ``.lrp.json`` is the v2 schema landed by the prior T2.5 commit
   // (ADR-0014 §5).  The Add Data filter entry was previously
   // withheld pending T2.6-LayerDM — without a Pipeline registered
   // for ``vtkMRMLParametricSurfaceDisplayNode``, a user-driven Add Data

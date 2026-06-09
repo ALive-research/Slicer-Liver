@@ -262,6 +262,19 @@ int testLegacyFcsvMigratesToPlanWithDefaults()
   CHECK_INT(plan->GetState(), vtkMRMLResectionPlanNode::Init);
 
   // --------------------------------------------------------------------------
+  // Assertion 2b -- stray-node lifetime.  The fcsv is parsed through an
+  // off-scene vtkMRMLLiverResectionCSVStorageNode vehicle; it must NOT be
+  // added to the working scene.  The migration adds exactly one Bezier
+  // carrier (wired in Assertion 1) and one plan -- no duplicate carriers,
+  // no leaked parse vehicle.  Pins the off-scene-parse invariant so a
+  // future refactor that accidentally AddNode()s the scratch vehicles
+  // fails here.
+  // --------------------------------------------------------------------------
+  CHECK_INT(scene->GetNumberOfNodesByClass("vtkMRMLLiverResectionCSVStorageNode"), 0);
+  CHECK_INT(scene->GetNumberOfNodesByClass("vtkMRMLBezierSurfaceNode"), 1);
+  CHECK_INT(scene->GetNumberOfNodesByClass("vtkMRMLResectionPlanNode"), 1);
+
+  // --------------------------------------------------------------------------
   // Assertion 3 -- loud gap.  The storage node's OWN user-message
   // collection carries a non-empty warning naming margins AND order AND
   // state as defaulted (a loud, not silent, upgrade).  Distinct from
