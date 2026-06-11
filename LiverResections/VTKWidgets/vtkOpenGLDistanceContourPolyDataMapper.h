@@ -40,7 +40,7 @@
 #ifndef vtkopengldistancecontourpolydatamapper_h_
 #define vtkopengldistancecontourpolydatamapper_h_
 
-#include "vtkSlicerLiverMarkupsModuleVTKWidgetsExport.h"
+#include "vtkSlicerLiverResectionsModuleVTKWidgetsExport.h"
 
 // VTK includes
 #include <vtkOpenGLPolyDataMapper.h>
@@ -51,7 +51,7 @@
 #include <array>
 
 //-------------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLDistanceContourPolyDataMapper : public vtkOpenGLPolyDataMapper
+class VTK_SLICER_LIVERRESECTIONS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLDistanceContourPolyDataMapper : public vtkOpenGLPolyDataMapper
 {
 public:
   static vtkOpenGLDistanceContourPolyDataMapper* New();
@@ -105,4 +105,4 @@ private:
   void operator=(const vtkOpenGLDistanceContourPolyDataMapper&) = delete;
 };
 
-#endif // vtkopenglresectionsurfacepolydatamapper_h_
+#endif // vtkopengldistancecontourpolydatamapper_h_

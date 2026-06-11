@@ -16,13 +16,20 @@
 # ``vtkWidgetRepresentation`` subclass), which owns the interaction-
 # time actors (selection highlight, drag preview).
 #
-# Per ADR-0014 §3, ``vtkOpenGLBezierResectionPolyDataMapper`` lives in
-# this module — it relocated here from ``LiverMarkups/VTKWidgets/`` as
-# a lift-and-shift (same algorithm, same shaders, same uniforms).
+# Per ADR-0014 §3, the custom OpenGL poly-data mappers for the
+# resection-planning workflow live in this module — they relocated here
+# from ``LiverMarkups/VTKWidgets/`` as a lift-and-shift (same algorithm,
+# same shaders, same uniforms):
+#
+#   - ``vtkOpenGLBezierResectionPolyDataMapper``
+#   - ``vtkOpenGLResection2DPolyDataMapper``
+#   - ``vtkOpenGLSlicingContourPolyDataMapper``
+#   - ``vtkOpenGLDistanceContourPolyDataMapper``
+#
 # Subsequent work depends on the relocation: ADR-0019's
-# ``ConfirmedRepresentation`` consumes the mapper as-is, and the v2.1
+# ``ConfirmedRepresentation`` consumes the mappers as-is, and the v2.1
 # GPU-tessellation rewrite per ADR-0020 replaces the geometry path in
-# this same file.
+# the Bezier mapper.
 #-----------------------------------------------------------------------------
 
 project(vtkSlicer${MODULE_NAME}ModuleVTKWidgets)
@@ -43,6 +50,12 @@ set(${KIT}_SRCS
   vtkLiverBezierWidget.cxx
   vtkOpenGLBezierResectionPolyDataMapper.h
   vtkOpenGLBezierResectionPolyDataMapper.cxx
+  vtkOpenGLResection2DPolyDataMapper.h
+  vtkOpenGLResection2DPolyDataMapper.cpp
+  vtkOpenGLSlicingContourPolyDataMapper.h
+  vtkOpenGLSlicingContourPolyDataMapper.cxx
+  vtkOpenGLDistanceContourPolyDataMapper.h
+  vtkOpenGLDistanceContourPolyDataMapper.cxx
   )
 
 set(${KIT}_TARGET_LIBRARIES
