@@ -53,7 +53,7 @@
  * Behaviour pinned (matches OnMRMLSceneNodeAdded ->
  * vtkSlicerSubjectHierarchyFolders::CollectUnderFolder):
  *
- *   1. A ``vtkMRMLLiverResectionNode`` (the WRAPPER) added to the
+ *   1. A ``vtkMRMLResectionPlanNode`` (the WRAPPER) added to the
  *      logic's observed scene is re-parented under a Subject-Hierarchy
  *      folder named per ``GetResectionsFolderName()`` that is a DIRECT
  *      CHILD of the scene root (scene-root-scoped lookup).
@@ -71,7 +71,7 @@
 
 // LiverResections Logic + MRML includes
 #include "vtkMRMLBezierSurfaceNode.h"
-#include "vtkMRMLLiverResectionNode.h"
+#include "vtkMRMLResectionPlanNode.h"
 #include "vtkSlicerLiverResectionsLogic.h"
 
 // SubjectHierarchyFolders includes (single source of truth for the
@@ -127,7 +127,7 @@ int testWrapperResectionNodeCollectedUnderFolder()
 
   const std::string folderName = vtkSlicerSubjectHierarchyFolders::GetResectionsFolderName();
 
-  vtkNew<vtkMRMLLiverResectionNode> resection;
+  vtkNew<vtkMRMLResectionPlanNode> resection;
   scene->AddNode(resection.GetPointer());
 
   vtkMRMLSubjectHierarchyNode* shNode = vtkMRMLSubjectHierarchyNode::GetSubjectHierarchyNode(scene.GetPointer());
@@ -157,7 +157,7 @@ int testHiddenCarrierNotCollectedUnderFolder()
   const std::string folderName = vtkSlicerSubjectHierarchyFolders::GetResectionsFolderName();
 
   // A hidden carrier -- the kind the wrapper-vs-carrier split keeps out
-  // of the Subject-Hierarchy view.  It is not a vtkMRMLLiverResectionNode,
+  // of the Subject-Hierarchy view.  It is not a vtkMRMLResectionPlanNode,
   // so OnMRMLSceneNodeAdded's SafeDownCast guard rejects it.
   vtkNew<vtkMRMLBezierSurfaceNode> carrier;
   carrier->SetHideFromEditors(true);
@@ -191,8 +191,8 @@ int testFolderReusedAcrossTwoWrappers()
 
   const std::string folderName = vtkSlicerSubjectHierarchyFolders::GetResectionsFolderName();
 
-  vtkNew<vtkMRMLLiverResectionNode> first;
-  vtkNew<vtkMRMLLiverResectionNode> second;
+  vtkNew<vtkMRMLResectionPlanNode> first;
+  vtkNew<vtkMRMLResectionPlanNode> second;
   scene->AddNode(first.GetPointer());
   scene->AddNode(second.GetPointer());
 

@@ -269,6 +269,17 @@ void vtkSlicerLiverResectionsLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
 {
   Superclass::OnMRMLSceneNodeAdded(node);
 
+  // ADR-0023 §"Subject Hierarchy management convention": collect the
+  // surgeon-facing wrapper vtkMRMLResectionPlanNode (the node production
+  // creates per ADR-0014's wrapper-vs-carrier split) under the per-stage
+  // "Resections" Subject Hierarchy folder (lazily created, reused).  Only
+  // the wrapper is collected; the hidden SetHideFromEditors(true)
+  // Bezier/contour carriers are deliberately left unparented.
+  if (auto resectionPlanNode = vtkMRMLResectionPlanNode::SafeDownCast(node))
+  {
+    vtkSlicerSubjectHierarchyFolders::CollectUnderFolder(this->GetMRMLScene(), resectionPlanNode, vtkSlicerSubjectHierarchyFolders::GetResectionsFolderName());
+  }
+
   auto resectionNode = vtkMRMLLiverResectionNode::SafeDownCast(node);
 
   // check for nullptr and target organ
@@ -276,14 +287,6 @@ void vtkSlicerLiverResectionsLogic::OnMRMLSceneNodeAdded(vtkMRMLNode* node)
   {
     return;
   }
-
-  // ADR-0023 §"Subject Hierarchy management convention": collect the
-  // surgeon-facing wrapper vtkMRMLLiverResectionNode under the per-stage
-  // "Resections" Subject Hierarchy folder (lazily created, reused).  Only
-  // the wrapper is collected here; the hidden SetHideFromEditors(true)
-  // Bezier/contour carriers are deliberately left unparented per the
-  // wrapper-vs-carrier split (ADR-0014).
-  vtkSlicerSubjectHierarchyFolders::CollectUnderFolder(this->GetMRMLScene(), resectionNode, vtkSlicerSubjectHierarchyFolders::GetResectionsFolderName());
 
   // Add callbacks dealing with the modification of the resection node. Its
   // modification may trigger changes on the underlying initialization/bezier status
