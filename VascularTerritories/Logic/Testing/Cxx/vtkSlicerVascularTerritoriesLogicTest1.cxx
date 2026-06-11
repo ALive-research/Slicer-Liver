@@ -46,9 +46,7 @@
 #include "vtkMRMLCoreTestingMacros.h"
 #include "vtkMRMLScene.h"
 #include <vtkMRMLLabelMapVolumeNode.h>
-
-// VTKSlicer includes
-#include <vtkMRMLLiverResectionNode.h>
+#include <vtkMRMLModelNode.h>
 
 // VTK includes
 #include "qMRMLWidget.h"

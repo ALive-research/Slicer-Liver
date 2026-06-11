@@ -46,7 +46,6 @@
 #include "vtkSlicerLiverResectionsLogic.h"
 
 // Liver Resections MRML includes
-#include "qSlicerLiverResectionsWriter.h"
 #include "qSlicerLiverResectionsReader.h"
 
 // Slicer includes
@@ -58,19 +57,11 @@
 #include <qSlicerNodeWriter.h>
 #include <qSlicerPythonManager.h>
 
-// MRMLDisplayableManager includes
-#include <vtkMRMLSliceViewDisplayableManagerFactory.h>
-#include <vtkMRMLThreeDViewDisplayableManagerFactory.h>
-
 // LayerDM includes — ADR-0013 §5 calls 2 + 3 wiring.  The Pipeline
 // creator (call 3) is registered from Python — see
 // ``LiverResectionsLib.registerPipelineCreator`` — to keep the
 // scripted-pipeline class identity on the Python side per ADR-0004.
 #include <vtkMRMLLayerDisplayableManager.h>
-
-// DisplayableManager initialization
-#include <vtkAutoInit.h>
-VTK_MODULE_INIT(vtkSlicerLiverResectionsModuleMRMLDisplayableManager)
 
 //-----------------------------------------------------------------------------
 /// \ingroup Slicer_QtModules_ExtensionTemplate
@@ -155,9 +146,6 @@ void qSlicerLiverResectionsModule::setup()
     qCritical() << Q_FUNC_INFO << ": cannot get Markups logic.";
     return;
   }
-  // Register displayable managers (same displayable manager handles both slice and 3D views)
-  vtkMRMLSliceViewDisplayableManagerFactory::GetInstance()->RegisterDisplayableManager("vtkMRMLLiverResectionsDisplayableManager2D");
-
   // ADR-0013 §5 call 2 — register the upstream LayerDM-aware
   // generic displayable manager with the 2D + 3D view factories.
   // Idempotent: ``vtkMRMLLayerDisplayableManager::RegisterInFactory``
@@ -220,7 +208,6 @@ void qSlicerLiverResectionsModule::setup()
   qSlicerIOManager* ioManager = qSlicerApplication::application()->ioManager();
   qSlicerLiverResectionsReader* markupsReader = new qSlicerLiverResectionsReader(logic, this);
   ioManager->registerIO(markupsReader);
-  ioManager->registerIO(new qSlicerLiverResectionsWriter(this));
 
   // Resection-plan storage I/O (2026-05-25 wrapper-vs-carrier amendment
   // to ADR-0014 §"Fourth layer" + ADR-0023 §"Persistence").  The plan
