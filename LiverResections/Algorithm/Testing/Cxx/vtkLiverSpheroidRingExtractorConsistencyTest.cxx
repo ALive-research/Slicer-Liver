@@ -47,7 +47,7 @@
 
   Tag: ADR-0003 (algorithm library links no MRML; pure-VTK, no GL
   context needed — the consistency math is CPU-evaluable), ADR-0015
-  §Context (the off-by-2 bug-discovery motivation), issue-337
+  §Context (the off-by-2 bug-discovery motivation)
   Constraint 1 + Constraint 2.
 
   Define -DLIVER_SPHEROID_QUADRIC_SSOT once
@@ -101,7 +101,7 @@ int vtkLiverSpheroidRingExtractorConsistencyTest(int, char*[])
                "[SpheroidRingExtractor consistency] SKIP: the "
                "single-source-of-truth coefficient builder "
                "vtkLiverSpheroidRingExtractor::ComputeQuadricCoefficients() "
-               "does not exist yet.  Constraint 1 (issue-337) requires the "
+               "does not exist yet.  Constraint 1 requires the "
                "extractor's RequestData, the Stack-4 parameter->shader "
                "adapter, and this consistency test to all transcribe the "
                "spheroid implicit FROM that one accessor.  Add it and define "
