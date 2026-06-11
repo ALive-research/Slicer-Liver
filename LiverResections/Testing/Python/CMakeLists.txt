@@ -114,6 +114,27 @@ if(DEFINED Python3_EXECUTABLE)
     set_tests_properties(LiverResections_subject_hierarchy_collection PROPERTIES
       LABELS "pytest;module-layer;LiverResections;subject-hierarchy"
     )
+
+    # Stack-4 ring-extraction wiring -- Constraint 3 (issue-337): ring
+    # extraction runs ONCE on the Init->Planning commit transition
+    # (ADR-0019), NOT per drag; and the Init Representation consumes the
+    # weakref'd target mesh (ADR-0014 §1, GetTargetModelNode()).  Needs the
+    # wrapped vtkMRMLBezierSurfaceNode + a real target model + the Pipeline's
+    # commit() seam, so it runs green under the launched-Slicer
+    # `pytest_launched` row and SKIPS CLEANLY here under bare pytest (no
+    # slicer.mrmlScene / commit() seam absent).  RED / skip-pending until the
+    # implementer lands the commit boundary + the TODO(T2-target-mesh-weakref)
+    # wiring.
+    add_test(
+      NAME LiverResections_ring_extraction_on_commit
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_resections_ring_extraction_on_commit.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_ring_extraction_on_commit PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;ring-extraction"
+    )
   else()
     message(STATUS
       "Slicer-Liver: pytest not importable from ${Python3_EXECUTABLE}; "
