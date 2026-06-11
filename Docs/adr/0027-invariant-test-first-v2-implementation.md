@@ -1,6 +1,6 @@
 # 0027. Invariant-test-first discipline for v2.0 implementation
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-21
 - **Deciders:** R. Palomar
 - **Diagrams:** inline below.

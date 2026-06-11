@@ -1,6 +1,6 @@
 # 0012. Scope of LayerDM migration for v2.0.0
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-15
 - **Deciders:** Rafael Palomar
 - **Diagrams:** N/A

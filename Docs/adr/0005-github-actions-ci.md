@@ -1,6 +1,6 @@
 # 0005. CI runs on every PR via GitHub Actions
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-13
 - **Deciders:** Rafael Palomar
 - **Diagrams:** N/A

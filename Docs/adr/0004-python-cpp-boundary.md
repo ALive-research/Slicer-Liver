@@ -1,6 +1,6 @@
 # 0004. Python by default; C++ only for MRML node classes and algorithm libraries
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-13
 - **Deciders:** Rafael Palomar
 - **Diagrams:** N/A

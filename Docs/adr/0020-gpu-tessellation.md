@@ -1,6 +1,6 @@
 # 0020. GPU rendering of parametric surfaces and their widgets (v2.1 target)
 
-- **Status:** Proposed (target v2.1)
+- **Status:** Accepted (target v2.1)
 - **Date:** 2026-05-18
 - **Deciders:** Rafael Palomar
 - **Diagrams:** N/A (deferred; class diagram lands with the ADR-0020 enabler PR)

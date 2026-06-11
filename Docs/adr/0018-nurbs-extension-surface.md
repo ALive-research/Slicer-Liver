@@ -1,6 +1,6 @@
 # 0018. NURBS as a sibling representation; variable-size control polygon
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Deciders:** Rafael Palomar
 - **Diagrams:**

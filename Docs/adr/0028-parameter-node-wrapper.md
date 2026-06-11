@@ -1,6 +1,6 @@
 # 0028. Parameter node wrapper + UI custom attributes for v2.0 widgets
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-21
 - **Deciders:** R. Palomar
 - **Diagrams:** code-shape examples inline.

@@ -1,6 +1,6 @@
 # 0024. Segmentation orchestration — Stage 2 per-structure micro-workflows
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-21
 - **Deciders:** R. Palomar
 - **Diagrams:** inline below; see also [`Docs/architecture/gui-stage-flow.md`](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/architecture/gui-stage-flow.md) for the cross-stage context.
