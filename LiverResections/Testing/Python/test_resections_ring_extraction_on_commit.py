@@ -7,7 +7,7 @@ Two pinned invariants for the LayerDM Pipeline + Init Representations that
 consume the ring extractors (``vtkLiverPlaneRingExtractor`` /
 ``vtkLiverSpheroidRingExtractor``):
 
-  Constraint 3 (issue-337) -- the extractor runs ONCE on the
+  Constraint 3 -- the extractor runs ONCE on the
   ``Init -> Planning`` commit transition (ADR-0019: irreversible 2-state
   automaton; the init data freezes to read-only audit data at the
   transition), NOT on every per-drag ``Modified`` tick.  Per-drag visual
@@ -36,7 +36,7 @@ reachable under a launched Slicer.  Under bare ``PythonSlicer -m pytest``
 this SKIPS CLEANLY via the shared ``slicer_pytest_support`` guards (no
 ``slicer.mrmlScene``); the ``_launched_scene_cleanup`` fixture in this
 module's conftest tears down every minted node so the launched harness
-does not trip ``vtkDebugLeaks`` (#449 discipline -- NO in-process
+does not trip ``vtkDebugLeaks`` (launched-Slicer leak discipline -- NO in-process
 ``sys.modules['slicer']`` stubbing).
 
 -- WHY THIS IS RED NOW --
@@ -119,14 +119,14 @@ def _bezier_node_or_skip(slicer):
 def _require_commit_seam_or_skip(pipeline):
     """Skip unless the Pipeline exposes the explicit commit boundary.
 
-    Constraint 3 (issue-337) names the seam: a ``commit()`` method plus a
+    Constraint 3 names the seam: a ``commit()`` method plus a
     ``_pending_extraction`` request flag.  RED == this seam is absent now;
     the skip lifts when the implementer introduces it.
     """
     if not hasattr(pipeline, "commit"):
         pytest.skip(
             "LiverBezierSurfacePipeline has no commit() method -- Constraint 3 "
-            "(issue-337) requires the extractor to run on the Init->Planning "
+            "requires the extractor to run on the Init->Planning "
             "commit boundary, not per drag.  Skip lifts when the commit() "
             "seam + _pending_extraction flag land (ADR-0019; ADR-0027 "
             "§Conformance)."
@@ -136,7 +136,7 @@ def _require_commit_seam_or_skip(pipeline):
 def test_extractor_not_invoked_per_drag_only_on_commit(monkeypatch):
     """Ring extraction fires ONCE on Init->Planning commit, zero per drag.
 
-    Constraint 3 (issue-337) + ADR-0019: per-drag ticks must NOT re-run the
+    Constraint 3 + ADR-0019: per-drag ticks must NOT re-run the
     CPU ring extraction (that is the shader's per-frame job); the extractor
     runs exactly once at the commit transition.
 
@@ -188,7 +188,7 @@ def test_extractor_not_invoked_per_drag_only_on_commit(monkeypatch):
 
     assert count["n"] == 0, (
         f"ring extraction ran {count['n']} time(s) during {N_DRAG_TICKS} "
-        "per-drag Init ticks; Constraint 3 (issue-337) requires ZERO per-drag "
+        "per-drag Init ticks; Constraint 3 requires ZERO per-drag "
         "extractions -- per-frame feedback is the shader's job (ADR-0019)."
     )
 
@@ -197,7 +197,7 @@ def test_extractor_not_invoked_per_drag_only_on_commit(monkeypatch):
 
     assert count["n"] == 1, (
         f"ring extraction ran {count['n']} time(s) on the Init->Planning "
-        "commit; Constraint 3 (issue-337) requires EXACTLY ONE (one-shot per "
+        "commit; Constraint 3 requires EXACTLY ONE (one-shot per "
         "resection, ADR-0019)."
     )
 
