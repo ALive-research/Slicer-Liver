@@ -225,6 +225,14 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         # ``None`` before the first ``UpdatePipeline``.
         self._current_representation_name: str | None = None
 
+        # On-commit extraction boundary (ADR-0019 Init->Planning
+        # transition).  Per-drag ``UpdatePipeline`` ticks only MARK
+        # extraction pending — the per-frame visual feedback is the
+        # shader's job.  The discrete CPU ring extraction is one-shot
+        # per resection: it runs exactly once when ``commit()`` consumes
+        # the pending request on the Init->Planning transition.
+        self._pending_extraction: bool = False
+
     # ------------------------------------------------------------------ #
     # LayerDM lifecycle overrides
     # ------------------------------------------------------------------ #
@@ -300,6 +308,13 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         if active is not None:
             active.update(self._display_node, self._data_node)
 
+        # Init-mode parameter mutations only MARK extraction pending; the
+        # discrete ring extraction is debounced behind the commit
+        # boundary (ADR-0019).  Per-drag visual feedback is the shader's
+        # job — it must NOT trigger the CPU extraction here.
+        if state == STATE_INIT:
+            self._pending_extraction = True
+
         self._update_count += 1
 
     def OnRendererAdded(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
@@ -339,6 +354,79 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         if resectionNode is not None:
             self._attach_observer(resectionNode)
         self._last_update_key = None
+
+    def commit(self) -> None:
+        """Commit the Init->Planning transition (ADR-0019).
+
+        Constraint 3 (Stack-4 ring-extraction wiring): the discrete CPU
+        ring extraction is one-shot per resection.  It runs here, exactly
+        once, on the irreversible Init->Planning transition — never on
+        the per-drag ``UpdatePipeline`` ticks (those only mark
+        ``_pending_extraction``; per-frame feedback is the shader's job).
+
+        ``commit()`` resolves the weakref'd target mesh off the data node
+        (ADR-0014 §1, ``GetTargetModelNode()``) and routes it through the
+        named, test-observable ``_run_ring_extraction`` entry point.  The
+        transition is irreversible: ``commit()`` only extracts while the
+        data node is still in ``Init`` and advances it to ``Planning``,
+        so a second ``commit()`` is a no-op (one-shot per resection).
+        """
+        state = _safe_get_state(self._data_node)
+        # Tolerate stub data nodes with no state accessor (None): treat a
+        # missing state as still-in-Init so the single transition fires.
+        if state not in (None, STATE_INIT):
+            return
+
+        target_model = self._resolve_target_model()
+        self._run_ring_extraction(target_model)
+
+        # Clear the pending request and advance the state machine so the
+        # transition cannot re-fire (ADR-0019: irreversible 2-state
+        # automaton; init data freezes to read-only audit data).
+        self._pending_extraction = False
+        setter = getattr(self._data_node, "SetState", None)
+        if setter is not None:
+            try:
+                setter(STATE_PLANNING)
+            except Exception:  # pragma: no cover - defensive
+                pass
+
+    def _resolve_target_model(self) -> Any | None:
+        """Return the weakref'd target organ model node (ADR-0014 §1).
+
+        Reads ``GetTargetModelNode()`` off the data node — the canonical
+        weak ``target`` reference on ``vtkMRMLBezierSurfaceNode``.  The
+        ``TODO(T2-target-mesh-weakref)`` consume sites in the Init
+        Representations feed the extractor FROM here, not a hard-coded
+        path or a silent ``None`` no-op.
+        """
+        getter = getattr(self._data_node, "GetTargetModelNode", None)
+        if getter is None:
+            return None
+        try:
+            return getter()
+        except Exception:  # pragma: no cover - defensive
+            return None
+
+    def _run_ring_extraction(self, target_model: Any | None = None) -> None:
+        """Run the discrete ring extraction against ``target_model``.
+
+        Named, test-observable extraction entry point the commit boundary
+        routes through (Constraint 3).  Forwards the weakref'd target
+        mesh to the active Init Representation's ``run_ring_extraction``
+        (the ``TODO(T2-target-mesh-weakref)`` consume site), which owns
+        the concrete ``vtkLiver{Plane,Spheroid}RingExtractor`` wiring.
+
+        No-op when no target mesh is reachable — extraction needs a mesh
+        to cut (ADR-0014 §1).
+        """
+        if target_model is None:
+            return
+        name = self._current_representation_name
+        active = self._representations.get(name) if name else None
+        runner = getattr(active, "run_ring_extraction", None) if active is not None else None
+        if runner is not None:
+            runner(target_model)
 
     def GetResectionNode(self) -> Any | None:
         return self._resection_node

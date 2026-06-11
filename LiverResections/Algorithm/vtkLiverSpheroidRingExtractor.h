@@ -107,6 +107,21 @@ public:
   vtkSetMacro(RadiusZ, double);
   vtkGetMacro(RadiusZ, double);
 
+  /// Single source of truth for the spheroid implicit's ``vtkQuadric``
+  /// coefficient form.  Maps the axis-aligned ellipsoid
+  ///   ((x-cx)/rx)^2 + ((y-cy)/ry)^2 + ((z-cz)/rz)^2 - 1 = 0
+  /// onto the ``a0..a9`` vector ``vtkQuadric`` evaluates as
+  ///   F = a0 x^2 + a1 y^2 + a2 z^2
+  ///     + a3 xy + a4 yz + a5 xz
+  ///     + a6 x  + a7 y  + a8 z + a9
+  /// with NO implicit factor of 2 on the cross or linear terms (see
+  /// ``vtkQuadric.h``).  ``RequestData`` feeds its ``vtkQuadric`` FROM
+  /// this method, and the Stack-4 parameter->shader adapter transcribes
+  /// the same implicit FROM here — eliminating the off-by-2
+  /// transcription-drift class on the linear terms (see the class
+  /// doxygen and ADR-0015 §Context).
+  static void ComputeQuadricCoefficients(const double center[3], double rx, double ry, double rz, double a[10]);
+
 protected:
   vtkLiverSpheroidRingExtractor();
   ~vtkLiverSpheroidRingExtractor() override;

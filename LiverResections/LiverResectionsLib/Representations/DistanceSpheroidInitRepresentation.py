@@ -26,15 +26,15 @@ Three pieces of geometry per ADR-0014 §2:
    ``ZRadius`` translated to the spheroid centre).  Axis-aligned only,
    per ``vtkLiverSpheroidRingExtractor``'s header — general-orientation
    rotation is deferred and tracked as a future task.
-3. **Ring on target mesh** — **DEFERRED** at this iteration; see
-   ``TODO(T2-target-mesh-weakref)`` below.  The intersection ring
-   requires the target liver mesh, which is not yet reachable from
-   ``vtkMRMLBezierSurfaceNode`` (the weakrefs to ``TargetOrganModelNode``
-   / ``DistanceMapVolumeNode`` / ``VascularSegmentsVolumeNode`` per
-   ADR-0014 §1 have not landed yet).  Once that lands, this
-   Representation will construct a ``vtkLiverSpheroidRingExtractor``
-   fed with the target mesh + ``Center`` + ``Radii``, and render the
-   output as a ring polyline actor.
+3. **Ring on target mesh** — produced on the Init->Planning commit
+   boundary by ``run_ring_extraction``: the Pipeline's ``commit()``
+   resolves the weakref'd target liver mesh
+   (ADR-0014 §1, ``vtkMRMLBezierSurfaceNode::GetTargetModelNode()``)
+   and hands it here, where a ``vtkLiverSpheroidRingExtractor`` is fed
+   the target mesh + ``Center`` + ``Radii`` to produce the ordered
+   intersection ring.  Per-frame visual feedback during Init is the
+   shader's job; the discrete CPU ring is one-shot per resection
+   (ADR-0019).
 
 Per ADR-0014 §3 the four custom OpenGL mappers — including
 ``vtkOpenGLDistanceContourPolyDataMapper`` — relocate from
@@ -190,6 +190,15 @@ class DistanceSpheroidInitRepresentation:
         # data-node mutation bumps this counter.
         self._input_refresh_count: int = 0
 
+        # Last data node seen by ``update`` — the on-commit ring
+        # extraction reads the spheroid geometry off it
+        # (``run_ring_extraction``).
+        self._data_node: Any | None = None
+
+        # The extracted intersection ring (``vtkPolyData``) produced on
+        # the Init->Planning commit, or ``None`` before commit.
+        self._ring_polydata: Any | None = None
+
         # TODO(T2-mapper-relocation): swap ``vtk.vtkPolyDataMapper`` for
         # ``vtkOpenGLDistanceContourPolyDataMapper`` once the four
         # custom mappers are relocated from ``LiverMarkups/VTKWidgets/``
@@ -231,6 +240,56 @@ class DistanceSpheroidInitRepresentation:
         """
         self._apply_display_node(display_node)
         self._apply_data_node(data_node)
+
+    def run_ring_extraction(self, target_model: Any | None) -> Any | None:
+        """Extract the spheroid/target intersection ring on the commit boundary.
+
+        Consume site for ``TODO(T2-target-mesh-weakref)``: the Pipeline's
+        ``commit()`` resolves the weakref'd target organ model
+        (ADR-0014 §1, ``GetTargetModelNode()``) and hands it here.  This
+        constructs a ``vtkLiverSpheroidRingExtractor``, feeds it the
+        target mesh's ``vtkPolyData`` plus the axis-aligned spheroid
+        ``Center`` + ``Radii`` off the data node, and stores the ordered
+        ring.  Returns the ring ``vtkPolyData`` (or ``None`` when
+        extraction cannot run).
+        """
+        if target_model is None or not _HAS_VTK:
+            return None
+        polydata = _model_polydata(target_model)
+        if polydata is None:
+            return None
+
+        center_getter = getattr(self._data_node, "GetDistanceSpheroidCenter", None)
+        rx_getter = getattr(self._data_node, "GetDistanceSpheroidRadiusX", None)
+        ry_getter = getattr(self._data_node, "GetDistanceSpheroidRadiusY", None)
+        rz_getter = getattr(self._data_node, "GetDistanceSpheroidRadiusZ", None)
+        if None in (center_getter, rx_getter, ry_getter, rz_getter):
+            return None
+        try:
+            center = _as_xyz_tuple(center_getter())
+            rx = float(rx_getter())
+            ry = float(ry_getter())
+            rz = float(rz_getter())
+        except Exception:  # pragma: no cover — defensive
+            return None
+
+        extractor_class = _resolve_extractor_class("vtkLiverSpheroidRingExtractor")
+        if extractor_class is None:
+            return None
+        extractor = extractor_class()
+        extractor.SetInputData(polydata)
+        extractor.SetCenter(*center)
+        extractor.SetRadiusX(rx)
+        extractor.SetRadiusY(ry)
+        extractor.SetRadiusZ(rz)
+        extractor.Update()
+        self._ring_polydata = extractor.GetOutput()
+        return self._ring_polydata
+
+    def GetRingPolyData(self) -> Any | None:
+        """The intersection ring produced by the last
+        ``run_ring_extraction`` — or ``None`` before commit."""
+        return self._ring_polydata
 
     def cleanup(self) -> None:
         """Detach actors from the renderer and drop the VTK pipeline."""
@@ -450,17 +509,19 @@ class DistanceSpheroidInitRepresentation:
     def _apply_data_node(self, data_node: Any | None) -> None:
         """Push (Center, Radii, init points) onto the spheroid + markers.
 
-        TODO(T2-target-mesh-weakref): once ``vtkMRMLBezierSurfaceNode``
-        gains a weakref to ``TargetOrganModelNode`` (per ADR-0014 §1),
-        instantiate a ``vtkLiverSpheroidRingExtractor`` here, feed it
-        the target mesh + (Center, RadiusX, RadiusY, RadiusZ), and
-        render its output as a ring polyline actor.  The axis-aligned-
+        The on-commit ring extraction (``run_ring_extraction``)
+        constructs a ``vtkLiverSpheroidRingExtractor`` fed with the
+        weakref'd target mesh (ADR-0014 §1, ``GetTargetModelNode()``)
+        plus (Center, RadiusX, RadiusY, RadiusZ).  The axis-aligned-
         spheroid constraint matches the extractor's contract (its
         header notes that general-orientation rotation is deferred to
-        a later stack iteration).
+        a later stack iteration).  Per-frame visual feedback is the
+        shader's job; the discrete ring is produced once, on the
+        Init->Planning commit boundary (ADR-0019).
         """
         if data_node is None:
             return
+        self._data_node = data_node
 
         center_getter = getattr(data_node, "GetDistanceSpheroidCenter", None)
         rx_getter = getattr(data_node, "GetDistanceSpheroidRadiusX", None)
@@ -557,3 +618,40 @@ def _as_xyz_tuple(raw: Any) -> tuple[float, float, float]:
         return (float(raw[0]), float(raw[1]), float(raw[2]))
     except Exception:
         return (0.0, 0.0, 0.0)
+
+
+def _resolve_extractor_class(name: str) -> Any | None:
+    """Resolve a VTK-wrapped ring-extractor class by name.
+
+    The Algorithm-library classes are wrapped into Slicer's ``slicer``
+    namespace (``SlicerMacroBuildModuleLogic`` Python wrapping); the
+    plain ``vtk`` module is the fallback for non-Slicer VTK builds.
+    Returns ``None`` when neither namespace exposes the class.
+    """
+    for module_name in ("slicer", "vtk"):
+        try:
+            module = __import__(module_name)
+        except ImportError:
+            continue
+        cls = getattr(module, name, None)
+        if cls is not None:
+            return cls
+    return None
+
+
+def _model_polydata(target_model: Any | None) -> Any | None:
+    """Return the ``vtkPolyData`` carried by a model node, or the
+    argument itself when it is already a ``vtkPolyData``.
+
+    The weakref'd target (ADR-0014 §1) is a ``vtkMRMLModelNode``; its
+    surface mesh is reached via ``GetPolyData()``.
+    """
+    if target_model is None:
+        return None
+    getter = getattr(target_model, "GetPolyData", None)
+    if getter is None:
+        return target_model
+    try:
+        return getter()
+    except Exception:  # pragma: no cover — defensive
+        return None
