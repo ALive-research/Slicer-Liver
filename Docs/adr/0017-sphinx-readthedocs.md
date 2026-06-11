@@ -1,6 +1,6 @@
 # 0017. Sphinx + ReadTheDocs documentation infrastructure
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Deciders:** Rafael Palomar
 - **Diagrams:** N/A

@@ -1,6 +1,6 @@
 # 0016. Code style discipline and CI enforcement (adopt Slicer's infrastructure)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-16
 - **Deciders:** Rafael Palomar
 - **Diagrams:** N/A

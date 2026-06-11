@@ -1,6 +1,6 @@
 # 0013. The Slicer-Liver LayerDM Pipeline pattern
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-15
 - **Deciders:** Rafael Palomar
 - **Diagrams:** N/A (target MRML diagram and per-module UI diagrams

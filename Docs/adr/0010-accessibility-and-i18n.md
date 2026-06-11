@@ -1,6 +1,6 @@
 # 0010. Accessibility and internationalisation stance
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-15
 - **Deciders:** Rafael Palomar
 - **Diagrams:** N/A

@@ -1,6 +1,6 @@
 # 0029. Stage 1 — case-setup functional contract
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-22
 - **Deciders:** R. Palomar
 - **Diagrams:** inline below.

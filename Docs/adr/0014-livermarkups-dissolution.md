@@ -1,6 +1,6 @@
 # 0014. Dissolve LiverMarkups; fold interactive resection primitives into LiverResections
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-15
 - **Deciders:** Rafael Palomar
 - **Diagrams:** N/A (target MRML diagram and per-module UI diagrams land

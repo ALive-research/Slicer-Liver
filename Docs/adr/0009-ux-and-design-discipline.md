@@ -1,6 +1,6 @@
 # 0009. UX and design discipline
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-15
 - **Deciders:** Rafael Palomar
 - **Diagrams:** N/A (this ADR establishes the requirement for per-module

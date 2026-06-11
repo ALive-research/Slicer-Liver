@@ -1,6 +1,6 @@
 # 0022. NURBS v2.1 design (data node, schema v3, fitter library, rendering integration)
 
-- **Status:** Proposed (target v2.1)
+- **Status:** Accepted (target v2.1)
 - **Date:** 2026-05-19
 - **Deciders:** Rafael Palomar
 - **Diagrams:**

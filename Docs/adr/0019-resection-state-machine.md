@@ -1,6 +1,6 @@
 # 0019. Resection state machine: extend to a third `Confirmed` state
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Deciders:** Rafael Palomar
 - **Diagrams:** `Docs/architecture/resection-state-machine.md`

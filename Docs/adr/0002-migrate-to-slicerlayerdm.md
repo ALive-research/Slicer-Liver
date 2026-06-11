@@ -1,6 +1,6 @@
 # 0002. Migrate SlicerLiver from Markups + MRMLDM to SlicerLayerDisplayableManager
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-13
 - **Deciders:** Rafael Palomar
 - **Diagrams:** [current-mrml-node-hierarchy](../architecture/current-mrml-node-hierarchy.md)

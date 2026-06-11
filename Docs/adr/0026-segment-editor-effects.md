@@ -1,6 +1,6 @@
 # 0026. Segment Editor effects in Slicer-Liver
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-21
 - **Deciders:** R. Palomar
 - **Diagrams:** inline below.

@@ -1,6 +1,6 @@
 # 0003. Every behaviour-changing PR carries a test that pins the behaviour
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-13
 - **Deciders:** Rafael Palomar
 - **Diagrams:** N/A
