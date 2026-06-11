@@ -9,7 +9,6 @@ string(TOUPPER ${MODULE_NAME} MODULE_NAME_UPPER)
 add_subdirectory(MRML)
 add_subdirectory(Algorithm)
 add_subdirectory(Logic)
-add_subdirectory(MRMLDM)
 add_subdirectory(VTKWidgets)
 # T2.6-LayerDM — Python sub-package installed alongside the loadable
 # module.  Hosts the LayerDM Pipeline class + the
@@ -46,22 +45,18 @@ set(MODULE_INCLUDE_DIRECTORIES
 set(MODULE_SRCS
   qSlicer${MODULE_NAME}Module.cxx
   qSlicer${MODULE_NAME}Module.h
-  qSlicer${MODULE_NAME}Writer.h
-  qSlicer${MODULE_NAME}Writer.cxx
   qSlicer${MODULE_NAME}Reader.h
   qSlicer${MODULE_NAME}Reader.cxx
   )
 
 set(MODULE_MOC_SRCS
   qSlicer${MODULE_NAME}Module.h
-  qSlicer${MODULE_NAME}Writer.h
   qSlicer${MODULE_NAME}Reader.h
   )
 
 set(MODULE_TARGET_LIBRARIES
   vtkSlicer${MODULE_NAME}ModuleMRML
   vtkSlicer${MODULE_NAME}ModuleLogic
-  vtkSlicer${MODULE_NAME}ModuleMRMLDisplayableManager
   vtkSlicerLayerDMModuleMRMLDisplayableManager
   )
 

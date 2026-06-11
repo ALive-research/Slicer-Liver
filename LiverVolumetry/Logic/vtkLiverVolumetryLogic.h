@@ -52,7 +52,6 @@ class vtkMRMLModelNode;
 class vtkMRMLMarkupsBezierSurfaceNode;
 class vtkMRMLMarkupsFiducialNode;
 class vtkBezierSurfaceSource;
-class vtkMRMLLiverResectionNode;
 class vtkMRMLTableNode;
 class vtkMRMLScalarVolumeNode;
 class vtkOrientedImageData;
