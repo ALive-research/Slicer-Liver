@@ -118,20 +118,24 @@ else()
   return()
 endif()
 
-# Full in-tree module set for ``--additional-module-paths``.  Each entry is a
-# module source dir whose scripted/loadable module Slicer must discover so the
-# launched widget-level tests can import it.  Keep in sync with the top-level
-# CMakeLists.txt module list.
+# Module paths for ``--additional-module-paths``: the BUILT module
+# directories, NOT the in-tree source dirs.
+#
+# A module source dir only makes a *scripted* module's Python importable.
+# A *loadable* (C++) module's Python sub-package (e.g. ``LiverResectionsLib``,
+# which carries the LayerDM Pipelines + Representations) is staged into the
+# built ``qt-scripted-modules`` tree and only lands on ``sys.path`` when the
+# module loads from a built path — never from the source dir.  Pointing the
+# launched harness at the source dirs therefore made every test that imports
+# a loadable module's Python sub-package SKIP with ``No module named
+# 'LiverResectionsLib'`` (e.g. the resection-plan SH-collection and ring-
+# extraction-on-commit launched tests), silently under-verifying shipped
+# behaviour.  The two built module dirs below cover all six modules
+# (scripted + loadable), so their Python is uniformly importable and every
+# module registers in the launched ``qSlicerApplication``.
 set(_liver_additional_module_paths
-  "${CMAKE_SOURCE_DIR}/Liver"
-  "${CMAKE_SOURCE_DIR}/LiverResections"
-  "${CMAKE_SOURCE_DIR}/LiverMarkups"
-  "${CMAKE_SOURCE_DIR}/LiverVolumetry"
-  "${CMAKE_SOURCE_DIR}/VascularTerritories"
-  # Stage-2 orchestrator + surgeon-UI module: its launched scene/widget
-  # invariant tests (LiverSegmentation/Testing/Python) need the module
-  # importable + registered as `liversegmentation` (ADR-0024).
-  "${CMAKE_SOURCE_DIR}/LiverSegmentation"
+  "${CMAKE_BINARY_DIR}/${Slicer_QTLOADABLEMODULES_LIB_DIR}"
+  "${CMAKE_BINARY_DIR}/${Slicer_QTSCRIPTEDMODULES_LIB_DIR}"
 )
 
 # Same test roots as the bare ``pytest_scaffold`` entries, plus the Stage-2
