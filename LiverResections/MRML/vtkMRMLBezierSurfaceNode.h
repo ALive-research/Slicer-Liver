@@ -50,6 +50,7 @@
 #include <vtkSetGet.h>
 
 class vtkPolyData;
+class vtkMRMLModelNode;
 
 /**
  * \class vtkMRMLBezierSurfaceNode
@@ -164,6 +165,27 @@ public:
   void SetDistanceSpheroidRadiusX(double r) override;
   void SetDistanceSpheroidRadiusY(double r) override;
   void SetDistanceSpheroidRadiusZ(double r) override;
+
+  //--------------------------------------------------------------------------
+  // Target organ-model node reference (ADR-0014 §1)
+  //--------------------------------------------------------------------------
+
+  /// Canonical, single-source-of-truth role string for the weak
+  /// reference to the target organ (liver) model node.  Mirrors the
+  /// ``geometry`` role convention on ``vtkMRMLResectionPlanNode``
+  /// (closed-vocabulary naming — no ``Liver`` prefix).
+  static const char* GetTargetReferenceRole() { return "target"; }
+
+  /// Resolve the weakly-referenced target organ model node, or
+  /// nullptr when none is wired / the target has left the scene.
+  vtkMRMLModelNode* GetTargetModelNode();
+
+  /// Wire (or, with nullptr, clear) the weak reference to the target
+  /// organ model node.  The reference is non-owning and non-observing
+  /// per ADR-0014 §1 — see the role registration in the constructor.
+  /// The T2 ring-extraction work (TODO(T2-target-mesh-weakref)) is the
+  /// downstream consumer.
+  void SetAndObserveTargetModelNode(vtkMRMLModelNode* target);
 
 protected:
   vtkMRMLBezierSurfaceNode();

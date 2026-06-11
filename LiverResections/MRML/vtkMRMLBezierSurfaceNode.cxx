@@ -42,6 +42,7 @@
 #include "vtkMRMLParametricSurfaceDisplayNode.h"
 
 // MRML includes
+#include <vtkMRMLModelNode.h>
 #include <vtkMRMLNodePropertyMacros.h>
 #include <vtkMRMLScene.h>
 
@@ -87,10 +88,29 @@ vtkMRMLBezierSurfaceNode::vtkMRMLBezierSurfaceNode()
   : State(ResectionState::Init)
   , LoadingFromXML(false)
 {
+  // Weak reference to the target organ (liver) model node (ADR-0014
+  // §1).  Registered with no events array and no content-modified
+  // observation -- the same shape as the "geometry" role on
+  // vtkMRMLResectionPlanNode -- so mutating the target does not
+  // advance this node's MTime.  The downstream consumer is the T2
+  // ring-extraction work (TODO(T2-target-mesh-weakref)).
+  this->AddNodeReferenceRole(GetTargetReferenceRole(), GetTargetReferenceRole());
 }
 
 //------------------------------------------------------------------------------
 vtkMRMLBezierSurfaceNode::~vtkMRMLBezierSurfaceNode() = default;
+
+//------------------------------------------------------------------------------
+vtkMRMLModelNode* vtkMRMLBezierSurfaceNode::GetTargetModelNode()
+{
+  return vtkMRMLModelNode::SafeDownCast(this->GetNodeReference(GetTargetReferenceRole()));
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLBezierSurfaceNode::SetAndObserveTargetModelNode(vtkMRMLModelNode* target)
+{
+  this->SetAndObserveNodeReferenceID(GetTargetReferenceRole(), target ? target->GetID() : nullptr);
+}
 
 //------------------------------------------------------------------------------
 void vtkMRMLBezierSurfaceNode::SetState(int state)
