@@ -10,6 +10,7 @@ set(KIT vtkSlicer${MODULE_NAME}ModuleVTKWidgets)
 #-----------------------------------------------------------------------------
 set(KIT_TEST_SRCS
   vtkLiverBezierWidgetTest1.cxx
+  vtkOpenGLLiverResectionMappersRelocationTest1.cxx
   )
 
 #-----------------------------------------------------------------------------
@@ -25,3 +26,4 @@ slicerMacroConfigureModuleCxxTestDriver(
   )
 
 SIMPLE_TEST(vtkLiverBezierWidgetTest1)
+SIMPLE_TEST(vtkOpenGLLiverResectionMappersRelocationTest1)
