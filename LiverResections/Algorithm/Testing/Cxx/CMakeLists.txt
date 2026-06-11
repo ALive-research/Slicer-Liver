@@ -44,12 +44,17 @@ SIMPLE_TEST(vtkSlicerLiverBezierControlPolygonGeometryTest1)
 
 # Stack-4 ring-extraction wiring — Constraint 1 (shader/extractor
 # parameter consistency) + Constraint 2 (extraction-granularity bound).
-# RED-by-construction: skips (CTest code 125) until the implementer adds
-# vtkLiverSpheroidRingExtractor::ComputeQuadricCoefficients() (the
-# single-source-of-truth coefficient builder both the extractor and the
-# Stack-4 parameter->shader adapter transcribe FROM) and compiles this
-# test with -DLIVER_SPHEROID_QUADRIC_SSOT.  See the test file header and
-# ADR-0015 §Context.
+# The single-source-of-truth coefficient builder
+# vtkLiverSpheroidRingExtractor::ComputeQuadricCoefficients() now exists
+# (the extractor and the Stack-4 parameter->shader adapter both
+# transcribe FROM it), so enable the consistency branch via
+# -DLIVER_SPHEROID_QUADRIC_SSOT.  See the test file header and
+# ADR-0015 §Context.  SKIP_RETURN_CODE retained so a future build that
+# compiles the test without the macro degrades to a skip rather than a
+# hard failure.
+set_property(SOURCE vtkLiverSpheroidRingExtractorConsistencyTest.cxx
+  APPEND PROPERTY COMPILE_DEFINITIONS LIVER_SPHEROID_QUADRIC_SSOT
+  )
 SIMPLE_TEST(vtkLiverSpheroidRingExtractorConsistencyTest)
 set_tests_properties(vtkLiverSpheroidRingExtractorConsistencyTest PROPERTIES
   SKIP_RETURN_CODE 125

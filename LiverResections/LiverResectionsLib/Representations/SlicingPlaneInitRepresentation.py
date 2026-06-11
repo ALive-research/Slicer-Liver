@@ -32,13 +32,15 @@ Three pieces of geometry per ADR-0014 §2
    display node's ``ResectionOpacity`` is multiplied by
    ``PLANE_OPACITY_FACTOR`` so the plane reads as a transparent
    reference surface and does not occlude the underlying liver).
-3. **Ring on the target liver mesh** — DEFERRED.  The
-   ``vtkLiverPlaneRingExtractor`` consumer needs the target liver
-   mesh, which is reached through a (not-yet-landed) weakref on
-   ``vtkMRMLBezierSurfaceNode``.  See
-   ``TODO(T2-target-mesh-weakref)`` in ``_build_vtk_pipeline`` for
-   the exact wiring once the data node gains a
-   ``TargetOrganModelNode`` reference per ADR-0014 §1.
+3. **Ring on the target liver mesh** — produced on the Init->Planning
+   commit boundary by ``run_ring_extraction``: the Pipeline's
+   ``commit()`` resolves the weakref'd target liver mesh
+   (ADR-0014 §1, ``vtkMRMLBezierSurfaceNode::GetTargetModelNode()``)
+   and hands it here, where a ``vtkLiverPlaneRingExtractor`` is fed
+   the target mesh + origin + normal to produce the ordered
+   intersection ring.  Per-frame visual feedback during Init is the
+   shader's job; the discrete CPU ring is one-shot per resection
+   (ADR-0019).
 
 Mapper relocation
 -----------------
@@ -195,6 +197,15 @@ class SlicingPlaneInitRepresentation:
         # Bookkeeping for unit tests — bumped on a real refresh.
         self._input_refresh_count: int = 0
 
+        # Last data node seen by ``update`` — the on-commit ring
+        # extraction reads the SlicingPlane geometry off it
+        # (``run_ring_extraction``).
+        self._data_node: Any | None = None
+
+        # The extracted intersection ring (``vtkPolyData``) produced on
+        # the Init->Planning commit, or ``None`` before commit.
+        self._ring_polydata: Any | None = None
+
         # TODO(T2-mapper-relocation): swap the generic
         # ``vtk.vtkPolyDataMapper`` used for the plane visualisation
         # with ``vtkOpenGLSlicingContourPolyDataMapper`` once the four
@@ -203,17 +214,12 @@ class SlicingPlaneInitRepresentation:
         # public API of this Representation does not change — only
         # the plane mapper's concrete type.
         #
-        # TODO(T2-target-mesh-weakref): once ``vtkMRMLBezierSurfaceNode``
-        # gains a weakref to its ``TargetOrganModelNode`` (per ADR-0014
-        # §1's data-node design), construct a ``vtkLiverPlaneRing
-        # Extractor``, feed it the target mesh + origin + normal, and
-        # render its polyline output as a ring actor here.  The
-        # extractor already exists at
-        # ``LiverResections/Algorithm/vtkLiverPlaneRingExtractor.{h,cxx}``;
-        # only the data-node hook is missing.  Without the target
-        # mesh, this Representation cannot construct the ring; the
-        # ring slot is therefore omitted entirely in this iteration
-        # rather than left as a dangling empty actor.
+        # The on-commit ring extraction (``run_ring_extraction``)
+        # constructs a ``vtkLiverPlaneRingExtractor`` and feeds it the
+        # weakref'd target mesh (ADR-0014 §1, ``GetTargetModelNode()``)
+        # plus origin + normal.  The per-frame visual feedback is the
+        # shader's job; this Representation produces the discrete ring
+        # once, on the Init->Planning commit boundary (ADR-0019).
         if _HAS_VTK:
             self._build_vtk_pipeline()
 
@@ -245,6 +251,44 @@ class SlicingPlaneInitRepresentation:
         """
         self._apply_display_node(display_node)
         self._apply_data_node(data_node)
+
+    def run_ring_extraction(self, target_model: Any | None) -> Any | None:
+        """Extract the plane/target intersection ring on the commit boundary.
+
+        Consume site for ``TODO(T2-target-mesh-weakref)``: the Pipeline's
+        ``commit()`` resolves the weakref'd target organ model
+        (ADR-0014 §1, ``GetTargetModelNode()``) and hands it here.  This
+        constructs a ``vtkLiverPlaneRingExtractor``, feeds it the target
+        mesh's ``vtkPolyData`` plus the SlicingPlane origin + normal off
+        the data node, and stores the resulting ordered ring.  Returns
+        the ring ``vtkPolyData`` (or ``None`` when extraction cannot run).
+        """
+        if target_model is None or not _HAS_VTK:
+            return None
+        polydata = _model_polydata(target_model)
+        if polydata is None:
+            return None
+
+        origin = _read_vec3(self._data_node, "GetSlicingPlaneOrigin")
+        normal = _read_vec3(self._data_node, "GetSlicingPlaneNormal")
+        if origin is None or normal is None:
+            return None
+
+        extractor_class = _resolve_extractor_class("vtkLiverPlaneRingExtractor")
+        if extractor_class is None:
+            return None
+        extractor = extractor_class()
+        extractor.SetInputData(polydata)
+        extractor.SetOrigin(*origin)
+        extractor.SetNormal(*normal)
+        extractor.Update()
+        self._ring_polydata = extractor.GetOutput()
+        return self._ring_polydata
+
+    def GetRingPolyData(self) -> Any | None:
+        """The intersection ring produced by the last
+        ``run_ring_extraction`` — or ``None`` before commit."""
+        return self._ring_polydata
 
     def cleanup(self) -> None:
         """Detach actors from the renderer and drop the VTK pipeline."""
@@ -412,6 +456,7 @@ class SlicingPlaneInitRepresentation:
         """
         if data_node is None:
             return
+        self._data_node = data_node
 
         origin = _read_vec3(data_node, "GetSlicingPlaneOrigin")
         normal = _read_vec3(data_node, "GetSlicingPlaneNormal")
@@ -572,6 +617,47 @@ def _distance(
     dy = a[1] - b[1]
     dz = a[2] - b[2]
     return (dx * dx + dy * dy + dz * dz) ** 0.5
+
+
+def _resolve_extractor_class(name: str) -> Any | None:
+    """Resolve a VTK-wrapped ring-extractor class by name.
+
+    The Algorithm-library classes are wrapped into Slicer's ``slicer``
+    namespace (``SlicerMacroBuildModuleLogic`` Python wrapping); the
+    plain ``vtk`` module is the fallback for non-Slicer VTK builds.
+    Returns ``None`` when neither namespace exposes the class — the
+    caller then declines to extract rather than raising.
+    """
+    for module_name in ("slicer", "vtk"):
+        try:
+            module = __import__(module_name)
+        except ImportError:
+            continue
+        cls = getattr(module, name, None)
+        if cls is not None:
+            return cls
+    return None
+
+
+def _model_polydata(target_model: Any | None) -> Any | None:
+    """Return the ``vtkPolyData`` carried by a model node, or the
+    argument itself when it is already a ``vtkPolyData``.
+
+    The weakref'd target (ADR-0014 §1) is a ``vtkMRMLModelNode``; its
+    surface mesh is reached via ``GetPolyData()``.  Tolerating a bare
+    ``vtkPolyData`` keeps the consume site usable from lower-level
+    tests that hand in a mesh directly.
+    """
+    if target_model is None:
+        return None
+    getter = getattr(target_model, "GetPolyData", None)
+    if getter is None:
+        # Already a vtkPolyData (or a mesh-shaped object).
+        return target_model
+    try:
+        return getter()
+    except Exception:  # pragma: no cover — defensive
+        return None
 
 
 def _normalise(
