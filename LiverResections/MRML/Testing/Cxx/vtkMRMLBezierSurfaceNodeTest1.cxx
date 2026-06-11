@@ -1467,7 +1467,6 @@ int testTargetReferenceSetGet()
 {
   vtkNew<vtkMRMLScene> scene;
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLModelNode>::New());
 
   vtkNew<vtkMRMLBezierSurfaceNode> surface;
   vtkNew<vtkMRMLModelNode> target;
@@ -1517,7 +1516,6 @@ int testTargetReferenceWeakSemantics()
 {
   vtkNew<vtkMRMLScene> scene;
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLModelNode>::New());
 
   vtkNew<vtkMRMLBezierSurfaceNode> surface;
   vtkNew<vtkMRMLModelNode> target;
@@ -1562,7 +1560,6 @@ int testTargetReferenceSceneRoundTrip()
 {
   vtkNew<vtkMRMLScene> scene;
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLModelNode>::New());
 
   vtkNew<vtkMRMLBezierSurfaceNode> surface;
   vtkNew<vtkMRMLModelNode> target;
@@ -1583,7 +1580,6 @@ int testTargetReferenceSceneRoundTrip()
 
   vtkNew<vtkMRMLScene> sinkScene;
   sinkScene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
-  sinkScene->RegisterNodeClass(vtkSmartPointer<vtkMRMLModelNode>::New());
   sinkScene->SetLoadFromXMLString(1);
   sinkScene->SetSceneXMLString(xml);
   sinkScene->Connect();
@@ -1632,7 +1628,6 @@ int testTargetReferenceAbsentReturnsNull()
   // In a scene, set then clear — clearing returns to the absent state.
   vtkNew<vtkMRMLScene> scene;
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLModelNode>::New());
 
   vtkNew<vtkMRMLBezierSurfaceNode> sceneSurface;
   vtkNew<vtkMRMLModelNode> target;
