@@ -15,6 +15,7 @@ set(KIT_TEST_SRCS
   vtkMRMLResectionPlanNodeTest1.cxx
   vtkMRMLResectionPlanStorageNodeTest1.cxx
   vtkMRMLResectionPlanLegacyFcsvMigrationTest.cxx
+  vtkMRMLResectionPlanLegacyRetirementSafetyTest.cxx
   )
 
 #-----------------------------------------------------------------------------
@@ -51,3 +52,4 @@ SIMPLE_TEST(vtkMRMLAbstractParametricSurfaceNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanStorageNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanLegacyFcsvMigrationTest)
+SIMPLE_TEST(vtkMRMLResectionPlanLegacyRetirementSafetyTest)
