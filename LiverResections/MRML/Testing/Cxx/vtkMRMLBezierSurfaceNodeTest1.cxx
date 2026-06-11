@@ -30,6 +30,7 @@
 #include "vtkMRMLCoreTestingMacros.h"
 #include "vtkMRMLParametricSurfaceDisplayNode.h"
 #include "vtkMRMLBezierSurfaceNode.h"
+#include "vtkMRMLModelNode.h"
 #include "vtkMRMLScene.h"
 
 // VTK includes
@@ -1435,6 +1436,226 @@ int testReadXMLIgnoresControlGrid()
   return EXIT_SUCCESS;
 }
 
+// ----------------------------------------------------------------------------
+// testTargetReferenceSetGet
+//
+// RED (ADR-0027 red-then-green discipline; ADR-0008 §7) — fails until
+// the implementer adds the weak target-organ-model node reference to
+// ``vtkMRMLBezierSurfaceNode``.  Pins the basic set/get contract.
+//
+// Per ADR-0014 §1, the Bezier surface node weakrefs the target organ
+// (liver) model node — the missing prerequisite that unblocks T2 ring
+// extraction (both Init-mode Representations carry the
+// ``TODO(T2-target-mesh-weakref)`` marker).  The reference follows the
+// same typed node-reference-role convention the wrapper-vs-carrier
+// amendment fixed for the ``geometry`` role on
+// ``vtkMRMLResectionPlanNode`` (single-source-of-truth role name via a
+// static accessor; closed-vocabulary naming — no ``Liver`` prefix on
+// the new symbol).
+//
+// Single source of truth for the role name: the implementer must
+// provide ``vtkMRMLBezierSurfaceNode::GetTargetReferenceRole()`` (a
+// static accessor mirroring ``GetGeometryReferenceRole()`` on the plan
+// node).  This test references that accessor, never a string literal,
+// so the implementer's chosen role string and the test cannot drift.
+//
+// Accessor pair the implementer must provide (mirroring
+// ``GetGeometryNode`` / ``SetAndObserveGeometryNode``):
+//   - ``vtkMRMLModelNode* GetTargetModelNode();``
+//   - ``void SetAndObserveTargetModelNode(vtkMRMLModelNode* target);``
+int testTargetReferenceSetGet()
+{
+  vtkNew<vtkMRMLScene> scene;
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLModelNode>::New());
+
+  vtkNew<vtkMRMLBezierSurfaceNode> surface;
+  vtkNew<vtkMRMLModelNode> target;
+  scene->AddNode(surface.GetPointer());
+  scene->AddNode(target.GetPointer());
+
+  // The role-name accessor is the single source of truth; assert it is
+  // a usable, stable string (non-null, non-empty).  No string literal
+  // is asserted here — the role string is the implementer's choice.
+  const char* role = vtkMRMLBezierSurfaceNode::GetTargetReferenceRole();
+  CHECK_NOT_NULL(role);
+  CHECK_BOOL(role[0] != '\0', true);
+
+  // Wire via the typed setter, retrieve via the typed accessor.
+  surface->SetAndObserveTargetModelNode(target.GetPointer());
+  vtkMRMLModelNode* got = surface->GetTargetModelNode();
+  CHECK_NOT_NULL(got);
+  CHECK_POINTER(got, target.GetPointer());
+
+  // The reference must be reachable under the canonical role string too
+  // (the getter is a thin typed wrapper over GetNodeReference(role)).
+  vtkMRMLNode* viaRole = surface->GetNodeReference(role);
+  CHECK_POINTER(viaRole, target.GetPointer());
+  return EXIT_SUCCESS;
+}
+
+// ----------------------------------------------------------------------------
+// testTargetReferenceWeakSemantics
+//
+// RED — pins the "weak" half of the ADR-0014 §1 contract.  The Bezier
+// surface node *weakrefs* the target: it must not observe the target's
+// modification events.  Concretely (Slicer MRML expresses "weak" as a
+// node-reference role registered with no VTK event array and no
+// content-modified observation — the same shape as the ``geometry``
+// role, whose constructor passes neither an ``events`` array nor
+// ``observeContentModifiedEvents=true``):
+//
+//   - Mutating the target organ model node after wiring the reference
+//     must NOT advance the surface node's MTime.  An owning/observing
+//     (strong) reference would propagate the target's Modified() to the
+//     referencing node; a weak reference does not.
+//
+// This is the observable, non-invented proxy for "weak / non-owning,
+// non-observing" the ADR prescribes — it does not assert any semantics
+// beyond what ADR-0014 §1 mandates.
+int testTargetReferenceWeakSemantics()
+{
+  vtkNew<vtkMRMLScene> scene;
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLModelNode>::New());
+
+  vtkNew<vtkMRMLBezierSurfaceNode> surface;
+  vtkNew<vtkMRMLModelNode> target;
+  scene->AddNode(surface.GetPointer());
+  scene->AddNode(target.GetPointer());
+
+  surface->SetAndObserveTargetModelNode(target.GetPointer());
+
+  // Baseline the surface node's MTime, then mutate the target.  A weak
+  // (non-observing) reference must leave the surface node's MTime
+  // untouched.
+  const vtkMTimeType preMTime = surface->GetMTime();
+  target->Modified();
+  // Touch a real model-node property too, so the assertion does not
+  // rely on Modified() alone.
+  target->SetName("target-mutated");
+  if (surface->GetMTime() != preMTime)
+  {
+    std::cerr << "Target reference is observing the target's events; "
+              << "ADR-0014 §1 mandates a weak (non-observing) reference "
+              << "(surface MTime advanced from " << preMTime << " to " << surface->GetMTime() << ")\n";
+    return EXIT_FAILURE;
+  }
+  return EXIT_SUCCESS;
+}
+
+// ----------------------------------------------------------------------------
+// testTargetReferenceSceneRoundTrip
+//
+// RED — pins persistence per ADR-0014 §1.  The target reference must
+// round-trip through the .mrml scene (WriteXML → ReadXMLAttributes,
+// driven here via the in-memory scene Commit/Connect path used by
+// ``testDisplayNodeAttachedSceneRoundTrip``) and reconnect to the
+// target organ model node by ID after a scene reload.  Also exercises
+// the in-memory ``Copy`` path so the reference survives node copy.
+//
+// Node references persist as their target's ID and re-resolve scene-
+// side on load — this is the structural guarantee the T2 ring
+// extractor consumer depends on: after a save/load cycle the surface
+// node still reaches its target mesh.
+int testTargetReferenceSceneRoundTrip()
+{
+  vtkNew<vtkMRMLScene> scene;
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLModelNode>::New());
+
+  vtkNew<vtkMRMLBezierSurfaceNode> surface;
+  vtkNew<vtkMRMLModelNode> target;
+  scene->AddNode(surface.GetPointer());
+  scene->AddNode(target.GetPointer());
+  target->SetName("LiverTargetMesh");
+  surface->SetAndObserveTargetModelNode(target.GetPointer());
+
+  // Round-trip via the in-memory XML string path.
+  scene->SetSaveToXMLString(1);
+  scene->Commit();
+  const std::string xml = scene->GetSceneXMLString();
+  if (xml.empty())
+  {
+    std::cerr << "Commit produced empty XML string\n";
+    return EXIT_FAILURE;
+  }
+
+  vtkNew<vtkMRMLScene> sinkScene;
+  sinkScene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
+  sinkScene->RegisterNodeClass(vtkSmartPointer<vtkMRMLModelNode>::New());
+  sinkScene->SetLoadFromXMLString(1);
+  sinkScene->SetSceneXMLString(xml);
+  sinkScene->Connect();
+
+  auto* sinkSurface = vtkMRMLBezierSurfaceNode::SafeDownCast(sinkScene->GetFirstNodeByClass("vtkMRMLBezierSurfaceNode"));
+  CHECK_NOT_NULL(sinkSurface);
+
+  // The reference must have round-tripped and re-resolved to the
+  // reloaded target model node.
+  vtkMRMLModelNode* sinkTarget = sinkSurface->GetTargetModelNode();
+  CHECK_NOT_NULL(sinkTarget);
+  CHECK_STRING(sinkTarget->GetName(), "LiverTargetMesh");
+
+  // In-memory Copy path: the reference string survives a scene-less
+  // Copy (isolates CopyReferences from scene-side resolution), mirroring
+  // ``testCopyCarriesDisplayNodeRef``.
+  {
+    vtkNew<vtkMRMLBezierSurfaceNode> copySource;
+    vtkNew<vtkMRMLBezierSurfaceNode> copySink;
+    const char* targetId = "vtkMRMLModelNode7";
+    copySource->SetNodeReferenceID(vtkMRMLBezierSurfaceNode::GetTargetReferenceRole(), targetId);
+    copySink->Copy(copySource.GetPointer());
+    const char* sinkId = copySink->GetNodeReferenceID(vtkMRMLBezierSurfaceNode::GetTargetReferenceRole());
+    CHECK_NOT_NULL(sinkId);
+    CHECK_STRING(sinkId, targetId);
+  }
+  return EXIT_SUCCESS;
+}
+
+// ----------------------------------------------------------------------------
+// testTargetReferenceAbsentReturnsNull
+//
+// RED — pins the default-absent state per ADR-0014 §1.  With no target
+// wired, the typed getter must return nullptr cleanly (no crash).  This
+// is the state both Init-mode Representations rely on before the target
+// mesh is assigned — ``SlicingPlaneInitRepresentation`` and
+// ``DistanceSpheroidInitRepresentation`` (TODO(T2-target-mesh-weakref))
+// branch on the absence of the target.  Also pins that explicitly
+// clearing the reference (passing nullptr) returns to the absent state.
+int testTargetReferenceAbsentReturnsNull()
+{
+  // Scene-less fresh node: no target wired.
+  vtkNew<vtkMRMLBezierSurfaceNode> surface;
+  CHECK_NULL(surface->GetTargetModelNode());
+
+  // In a scene, set then clear — clearing returns to the absent state.
+  vtkNew<vtkMRMLScene> scene;
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLModelNode>::New());
+
+  vtkNew<vtkMRMLBezierSurfaceNode> sceneSurface;
+  vtkNew<vtkMRMLModelNode> target;
+  scene->AddNode(sceneSurface.GetPointer());
+  scene->AddNode(target.GetPointer());
+  CHECK_NULL(sceneSurface->GetTargetModelNode());
+
+  sceneSurface->SetAndObserveTargetModelNode(target.GetPointer());
+  CHECK_NOT_NULL(sceneSurface->GetTargetModelNode());
+
+  // Clear via nullptr — back to the absent default.
+  sceneSurface->SetAndObserveTargetModelNode(nullptr);
+  CHECK_NULL(sceneSurface->GetTargetModelNode());
+
+  // Removing the target from the scene also resolves the getter to
+  // nullptr cleanly (the weak reference does not keep a dangling
+  // pointer alive).
+  sceneSurface->SetAndObserveTargetModelNode(target.GetPointer());
+  scene->RemoveNode(target.GetPointer());
+  CHECK_NULL(sceneSurface->GetTargetModelNode());
+  return EXIT_SUCCESS;
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -1467,6 +1688,15 @@ int vtkMRMLBezierSurfaceNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testReadXMLNullMidStream());
   CHECK_EXIT_SUCCESS(testCopyCarriesDisplayNodeRef());
   CHECK_EXIT_SUCCESS(testReadXMLIgnoresControlGrid());
+
+  // ADR-0014 §1 — weak target-organ-model node reference.  RED until
+  // the implementer adds GetTargetReferenceRole() + the typed
+  // GetTargetModelNode / SetAndObserveTargetModelNode accessors.
+  // Unblocks T2 ring extraction (TODO(T2-target-mesh-weakref)).
+  CHECK_EXIT_SUCCESS(testTargetReferenceSetGet());
+  CHECK_EXIT_SUCCESS(testTargetReferenceWeakSemantics());
+  CHECK_EXIT_SUCCESS(testTargetReferenceSceneRoundTrip());
+  CHECK_EXIT_SUCCESS(testTargetReferenceAbsentReturnsNull());
 
   std::cout << "vtkMRMLBezierSurfaceNodeTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;
