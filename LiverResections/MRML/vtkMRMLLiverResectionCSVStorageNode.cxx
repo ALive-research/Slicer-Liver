@@ -38,7 +38,6 @@
 ==============================================================================*/
 
 #include "vtkMRMLLiverResectionCSVStorageNode.h"
-#include "vtkMRMLLiverResectionNode.h"
 #include "vtkMRMLMarkupsBezierSurfaceNode.h"
 
 // VTK includes
@@ -67,7 +66,7 @@ void vtkMRMLLiverResectionCSVStorageNode::PrintSelf(ostream& os, vtkIndent inden
 //----------------------------------------------------------------------------
 bool vtkMRMLLiverResectionCSVStorageNode::CanReadInReferenceNode(vtkMRMLNode* refNode)
 {
-  return refNode->IsA("vtkMRMLLiverResectionNode");
+  return refNode != nullptr && refNode->IsA("vtkMRMLMarkupsBezierSurfaceNode");
 }
 
 //----------------------------------------------------------------------------
@@ -85,18 +84,11 @@ void vtkMRMLLiverResectionCSVStorageNode::InitializeSupportedWriteFileTypes()
 //----------------------------------------------------------------------------
 int vtkMRMLLiverResectionCSVStorageNode::WriteDataInternal(vtkMRMLNode* refNode)
 {
-  auto resectionNode = vtkMRMLLiverResectionNode::SafeDownCast(refNode);
+  auto bezierSurfaceNode = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(refNode);
 
-  if (resectionNode == nullptr)
-  {
-    vtkErrorMacro("WriteDataInternal: input node is not a vtkMRMLLiverResectionNode:" << refNode->GetID());
-    return 0;
-  }
-
-  auto bezierSurfaceNode = resectionNode->GetBezierSurfaceNode();
   if (bezierSurfaceNode == nullptr)
   {
-    vtkErrorMacro("WriteDataInternal: input node does not reference a valid bezier surface node" << refNode->GetID());
+    vtkErrorMacro("WriteDataInternal: input node is not a vtkMRMLMarkupsBezierSurfaceNode");
     return 0;
   }
 
@@ -116,21 +108,19 @@ int vtkMRMLLiverResectionCSVStorageNode::ReadDataInternal(vtkMRMLNode* refNode)
 
   if (fullName.empty())
   {
-    vtkErrorMacro("vtkMRMLLiverResectionsFiducialStorageNode: File name not specified");
+    vtkErrorMacro("vtkMRMLLiverResectionCSVStorageNode: File name not specified");
     return 0;
   }
 
-  // cast the input node
-  auto resectionNode = vtkMRMLLiverResectionNode::SafeDownCast(refNode);
-  if (!resectionNode)
-  {
-    return 0;
-  }
-
-  auto bezierSurfaceNode = resectionNode->GetBezierSurfaceNode();
+  // The CSV parse vehicle operates directly on a markups Bezier-surface
+  // node -- the v1 ``.lrp.fcsv`` is a 15-column Markups-fiducial CSV, so
+  // the superclass reads the control points straight into it.  This
+  // parse seam is intentionally independent of the retired v1 resection
+  // node family (ADR-0014 §"Fourth layer").
+  auto bezierSurfaceNode = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(refNode);
   if (!bezierSurfaceNode)
   {
-    vtkErrorMacro("vtkMRMLLiverResectionCSVStorageNode: resection node does not have a valid bezier surface node associated.");
+    vtkErrorMacro("vtkMRMLLiverResectionCSVStorageNode: reference node is not a vtkMRMLMarkupsBezierSurfaceNode.");
     return 0;
   }
 

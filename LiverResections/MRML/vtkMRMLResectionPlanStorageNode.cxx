@@ -18,7 +18,6 @@
 #include "vtkMRMLAbstractParametricSurfaceNode.h"
 #include "vtkMRMLBezierSurfaceNode.h"
 #include "vtkMRMLLiverResectionCSVStorageNode.h"
-#include "vtkMRMLLiverResectionNode.h"
 
 // LiverMarkups MRML includes -- the legacy parse vehicle reads into a
 // markups Bezier-surface node (RAS control points).
@@ -354,16 +353,17 @@ int vtkMRMLResectionPlanStorageNode::ReadFcsv(const std::string& filePath, vtkMR
   // construction-time defaults (margins = 0.0, orderIndex = -1,
   // state = Init); see Docs/migrations/v1-to-v2.md.
   //
-  // The parse vehicle is built off-scene (vtkNew) so the migration
-  // does not depend on the LiverMarkups / LiverResection node classes
-  // being registered in the plan's scene.
+  // The parse vehicle is built off-scene (vtkNew) so the migration does
+  // not depend on the LiverMarkups Bezier-surface or the quarantined CSV
+  // storage node being registered in the plan's scene.  The CSV storage
+  // node reads the legacy control points directly into the markups
+  // Bezier-surface node -- no v1 resection wrapper is involved (ADR-0014
+  // §"Fourth layer").
   vtkNew<vtkMRMLMarkupsBezierSurfaceNode> parseSurface;
-  vtkNew<vtkMRMLLiverResectionNode> parseResection;
-  parseResection->SetBezierSurfaceNode(parseSurface);
 
   vtkNew<vtkMRMLLiverResectionCSVStorageNode> csvStorage;
   csvStorage->SetFileName(filePath.c_str());
-  if (!csvStorage->ReadData(parseResection))
+  if (!csvStorage->ReadData(parseSurface))
   {
     this->GetUserMessages()->AddMessages(csvStorage->GetUserMessages());
     vtkErrorToMessageCollectionMacro(
