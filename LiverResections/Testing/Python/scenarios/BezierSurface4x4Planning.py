@@ -11,9 +11,9 @@ This module exposes three setup functions consumed identically by
 ``replay_test.py`` (the CI replay flow):
 
 * :func:`setup_scene`     — populates the MRML scene with a target
-  parenchyma model, a LiverResection node, and the linked Bezier
-  surface node.  Returns the created resection node so callers can
-  drive further per-scenario state.
+  parenchyma model and a markups Bezier surface node carrying the
+  shader inputs.  Returns the created markups Bezier surface node so
+  callers can drive further per-scenario state.
 * :func:`setup_camera`    — sets the 3D view camera to a deterministic
   pose.  Replay tolerance is tight; camera drift is the most common
   source of false positives, so the pose is fixed numerically rather
@@ -22,10 +22,9 @@ This module exposes three setup functions consumed identically by
   colour, anti-aliasing.  Same rationale as the camera fixing.
 
 Designed to be importable from a pristine Slicer (``--no-main-window``)
-boot; no module GUI bring-up required.  The scene-setup code uses
-``vtkSlicerLiverResectionsLogic`` — the same logic the GUI invokes —
-rather than hand-building MRML, to ensure the test exercises the
-production code path.
+boot; no module GUI bring-up required.  The scene-setup code builds the
+markups Bezier surface node — the same node class the GUI render path
+binds — so the test exercises the production Markups render pipeline.
 
 References
 ----------
@@ -191,82 +190,64 @@ def _make_synthetic_parenchyma() -> slicer.vtkMRMLModelNode:
     return model
 
 
-def setup_scene() -> slicer.vtkMRMLLiverResectionNode:
+def setup_scene() -> slicer.vtkMRMLMarkupsBezierSurfaceNode:
     """Populate ``slicer.mrmlScene`` with the 4x4 Bezier Planning fixture.
 
     The function clears the scene first so it is idempotent under
     repeated invocation (e.g. across retries in capture_baseline.py).
 
+    The visible pixels in the ``qMRMLThreeDWidget`` replay harness come
+    from the legacy Markups render path:
+    ``vtkMRMLMarkupsBezierSurfaceNode`` (+ its display node) → the
+    upstream Markups displayable manager →
+    ``vtkSlicerBezierSurfaceRepresentation3D`` → the
+    ``vtkOpenGLBezierResectionPolyDataMapper``.  The fixture therefore
+    hand-builds the markups bezier node directly and lands the shader
+    inputs on it; the v2 resection-plan carrier is render-inert in this
+    harness and is intentionally not part of the scene.
+
     Returns
     -------
-    vtkMRMLLiverResectionNode
-        The created resection node; callers may further mutate it.
+    vtkMRMLMarkupsBezierSurfaceNode
+        The created markups Bezier surface node; callers may further
+        mutate its display node.
     """
     slicer.mrmlScene.Clear(0)
 
     # Force-load the LiverResections logic.  In ``--no-main-window``
     # boots, modules are not auto-instantiated until first reference;
     # going through ``slicer.modules`` triggers module load + logic
-    # singleton construction.
-    logic = slicer.modules.liverresections.logic()
+    # singleton construction — which is what registers the Markups
+    # bezier node + its displayable manager on the render path.
+    slicer.modules.liverresections.logic()
 
-    parenchyma = _make_synthetic_parenchyma()
+    _make_synthetic_parenchyma()
     distance_map = _make_parenchyma_distance_map(
         sphere_center=(15.0, 15.0, 0.0),
         sphere_radius=40.0,
     )
 
-    # Set the target organ BEFORE inserting the resection into the
-    # scene.  The LiverResections logic observes ``NodeAddedEvent`` and
-    # invokes the (protected) ``CreateInitializationAndResectionMarkups``
-    # only when ``GetTargetOrganModelNode()`` is non-null at scene-add
-    # time — so a node added without a target organ never gets its
-    # Bezier surface.  Driving the public scene-observer path (rather
-    # than reaching into the protected ``AddBezierSurface``) keeps the
-    # scenario aligned with the production GUI flow.
-    resection = slicer.mrmlScene.CreateNodeByClass("vtkMRMLLiverResectionNode")
-    resection.UnRegister(None)
-    resection.SetName("VisualTestResection")
-    resection.SetTargetOrganModelNode(parenchyma)
-    resection.SetResectionMargin(10.0)
-    resection.SetUncertaintyMargin(2.0)
-    # Planning state — the resection has not been Confirmed; the trim
-    # shader's ``ClipOut`` uniform is 0 and the full surface is visible.
-    resection.SetState(resection.Initialization)
-    resection.SetInitMode(resection.Flat)
-    # ClipOut on the resection node mirrors the uniform name in the
-    # legacy mapper (``uResectionClipOut``); 0 = no parenchyma discard.
-    resection.SetClipOut(False)
-    slicer.mrmlScene.AddNode(resection)
+    # Hand-build the markups Bezier surface node directly.  The
+    # representation no-ops unless the node carries exactly 16 control
+    # points, so seed 16 (mirroring the 4x4 grid the legacy
+    # ``AddBezierSurface`` laid out) before re-positioning them below.
+    bezier = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLMarkupsBezierSurfaceNode", "VisualTestBezier"
+    )
+    for _ in range(16):
+        bezier.AddControlPoint(vtk.vtkVector3d(0.0, 0.0, 0.0))
+    bezier.CreateDefaultDisplayNodes()
 
-    # Wire TextureNumComps + DistanceMapVolumeNode AFTER the node is in
-    # the scene, mirroring the production order in ``Liver.py:600``
-    # (``onResectionDistanceMapNodeChanged``).  The propagation from
-    # resection → bezier-surface display node lives in the resection
-    # node's ``ModifiedEvent`` observer (``vtkSlicerLiverResectionsLogic
-    # .cxx`` line 174 onward) — that observer is only attached at
-    # scene-add time.  Setting TextureNumComps before scene-add fires
-    # Modified into a void; the display node keeps the default
-    # ``TextureNumComps=0``, and the subsequent texture upload reads
-    # past the buffer (``glTexImage3D`` with a zero-component stride),
-    # segfaulting.
-    resection.SetTextureNumComps(4)
-    resection.SetDistanceMapVolumeNode(distance_map)
-
-    bezier = logic.GetBezierFromResection(resection)
-    if bezier is None:
-        raise RuntimeError(
-            "vtkSlicerLiverResectionsLogic::GetBezierFromResection returned "
-            "NULL; the Bezier surface node was not created by the scene-"
-            "observer side effect.  Verify the LiverResections module is "
-            "registered and the resection node had a valid target organ "
-            "set BEFORE being added to the scene."
-        )
+    # Shader inputs that live on the markups NODE (see
+    # vtkMRMLMarkupsBezierSurfaceNode.h): resection / uncertainty
+    # margins and the distance-map volume.
+    bezier.SetResectionMargin(10.0)
+    bezier.SetUncertaintyMargin(2.0)
 
     # Re-position the 16 control points so the patch fully encloses the
-    # parenchyma's z=0 disc.  ``AddBezierSurface`` lays out the default
-    # 0..30 grid; we expand to -30..60 (centred on sphere centre 15,15)
-    # so the bezier-plane / contour-band correspondence is visible.
+    # parenchyma's z=0 disc.  The legacy layout was a default 0..30
+    # grid; we expand to -30..60 (centred on sphere centre 15,15) so the
+    # bezier-plane / contour-band correspondence is visible.
     cx, cy = PATCH_CENTER_XY
     half = PATCH_HALF_EXTENT
     base_x = cx - half
@@ -281,13 +262,19 @@ def setup_scene() -> slicer.vtkMRMLLiverResectionNode:
                 0.0,
             )
 
-    # The display node carries the planning-state Bezier surface
-    # visibility; turn it on so the mapper runs.
-    bezier_display = bezier.GetDisplayNode()
-    if bezier_display is not None:
-        bezier_display.SetVisibility(True)
+    # Display-node decoration (see
+    # vtkMRMLMarkupsBezierSurfaceDisplayNode.h).  ORDER MATTERS:
+    # ``TextureNumComps`` must be set BEFORE the distance map so the
+    # subsequent texture upload reads the correct per-voxel stride
+    # rather than the default zero-component stride.  Planning state
+    # leaves ``ClipOut`` off — the full surface is visible.
+    display = bezier.GetDisplayNode()
+    display.SetTextureNumComps(4)
+    bezier.SetDistanceMapVolumeNode(distance_map)
+    display.SetClipOut(False)
+    display.SetVisibility(True)
 
-    return resection
+    return bezier
 
 
 def setup_camera(view_node: slicer.vtkMRMLViewNode | None = None) -> None:
