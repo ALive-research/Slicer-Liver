@@ -56,12 +56,7 @@
 #include "vtkMRMLResectionPlanStorageNode.h"
 
 #include <vtkCommand.h>
-#include <vtkMRMLMarkupsSlicingContourNode.h>
-#include <vtkMRMLMarkupsSlicingContourDisplayNode.h>
-#include <vtkMRMLMarkupsDistanceContourNode.h>
-#include <vtkMRMLMarkupsDisplayNode.h>
 #include <vtkMRMLMarkupsBezierSurfaceNode.h>
-#include <vtkMRMLMarkupsBezierSurfaceDisplayNode.h>
 
 // MRML includes
 #include <vtkMRMLScene.h>
@@ -74,18 +69,10 @@
 #include <vtkSetGet.h>
 #include <vtkSmartPointer.h>
 #include <vtkIntArray.h>
-#include <vtkPlane.h>
-#include <vtkCutter.h>
-#include <vtkDoubleArray.h>
-#include <vtkCenterOfMass.h>
-#include <vtkPCAStatistics.h>
-#include <vtkPlaneSource.h>
-#include <vtkTable.h>
 #include <vtkImageData.h>
 
 #include <vtkMRMLGlyphableVolumeDisplayNode.h>
 #include <itkLabelImageToLabelMapFilter.h>
-#include <vtkPath.h>
 
 //----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerLiverResectionsLogic);
