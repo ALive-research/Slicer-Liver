@@ -10,6 +10,12 @@ set(KIT_TEST_SRCS
   # (ADR-0014 §1 wrapper-vs-carrier split).  GREEN against the current
   # logic; a red run surfaces a regression in the wiring.
   vtkSlicerLiverResectionsLogicSubjectHierarchyCharacterizationTest.cxx
+  # RED test-first scaffolding (T2.7-2b): pins the surviving v2 behaviour
+  # that the legacy Deformation push in ProcessMRMLNodesEvents must be
+  # replaced by -- a Bezier-surface-carrier StartInteractionEvent advances
+  # the carrier's own ADR-0019 state machine Init->Planning.  RED against
+  # the current tree (no carrier arm); green once the 2b rewrite lands.
+  vtkSlicerLiverResectionsLogicCarrierStateAdvanceTest.cxx
   )
 
 #-----------------------------------------------------------------------------
@@ -26,3 +32,4 @@ slicerMacroConfigureModuleCxxTestDriver(
 
 #-----------------------------------------------------------------------------
 simple_test(vtkSlicerLiverResectionsLogicSubjectHierarchyCharacterizationTest)
+simple_test(vtkSlicerLiverResectionsLogicCarrierStateAdvanceTest)
