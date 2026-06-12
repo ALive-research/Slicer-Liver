@@ -1,0 +1,414 @@
+# Copyright (c) 2026, The Intervention Centre, Oslo University Hospital.  All rights reserved.
+# Distributed under the OSI-approved BSD 3-Clause License.
+"""LayerDM Pipeline for the resectogram concept.
+
+The resectogram is the flattened 2D image of the Bezier ``(u, v)``
+parameter domain (`ADR-0025`_ §Context).  Per `ADR-0013`_ §1 there is
+exactly ONE Pipeline per display-node TYPE: the 3D Bezier-surface
+Pipeline already owns ``vtkMRMLParametricSurfaceDisplayNode``, so the
+resectogram gets its own dedicated ``vtkMRMLResectogramDisplayNode``
+and the ``ResectogramPipeline`` is keyed on THAT type.  Keying a second
+Pipeline on the shared parametric-surface display node would violate
+§1; the dedicated display node is the maintainer's resolution of that
+fork.
+
+This Pipeline is the v2.0 LayerDM-bound home of the resectogram render
+path that the v1 monolith ``vtkSlicerBezierSurfaceRepresentation3D``
+currently drives.  It composes two Representations (`ADR-0013`_ §6):
+
+* ``FlattenedSurfaceRepresentation`` — the flattened-quad source, the
+  2D resection mapper + actor, the private overlay camera, the
+  distance-map texture binding, and the anisotropic ``MatRatio``
+  scaling routed through the ``vtkLiverResectogramAspectRatio`` /
+  ``vtkLiverResectogramPixelMapping`` Algorithm helpers (`ADR-0015`_
+  §1) — no re-derivation of the v1 math.
+* ``VascularContourRepresentation`` — the distance- and
+  slicing-contour overlays the surgeon reads vessel proximity from.
+
+Unlike the Bezier Pipeline there is no ``(state, initMode)`` dispatch:
+the resectogram is a single composite render path.  ``UpdatePipeline()``
+forwards the current display + data nodes to BOTH Representations and
+short-circuits when nothing has changed (`ADR-0013`_ §3 idempotency
+contract).
+
+Pipeline base class
+-------------------
+`ADR-0013`_ §5 names ``vtkMRMLLayerDMScriptedPipeline`` (imported as
+``from LayerDMLib import vtkMRMLLayerDMScriptedPipeline``) as the
+canonical base.  This module ``pytest.importorskip("LayerDMLib")`` at
+import time — it executes only inside a Slicer process where LayerDMLib
+is importable (the launched-harness path, gated on issue #460 for CI).
+
+Lifecycle (LayerDM-managed)
+---------------------------
+Mirrors the Bezier Pipeline lifecycle (`ADR-0013`_ §5): no-arg
+``__init__``; ``SetViewNode`` / ``SetDisplayNode`` assigned by the
+manager; ``UpdatePipeline()`` reconciles the Representations;
+``OnRendererAdded`` builds the Representations once a renderer is
+available; ``OnRendererRemoved`` / ``cleanup`` tear them down.
+
+Pipeline-creator registration
+-----------------------------
+``registerResectogramPipelineCreator()`` (module bottom) performs
+`ADR-0013`_ §5 call 3 — ``vtkMRMLLayerDMPipelineFactory::GetInstance()
+->AddPipelineCreator(...)`` keyed on ``vtkMRMLResectogramDisplayNode``.
+``qSlicerLiverResectionsModule::setup()`` delegates to it via the
+loadable module's ``pythonManager()->executeString(...)``, alongside
+the Bezier creator's ``registerPipelineCreator()``.
+
+References
+----------
+* `ADR-0013`_ §1, §3, §5, §6 — Pipeline pattern, idempotency, the three
+  registration calls, Representations as composable VTK pipelines.
+* `ADR-0015`_ §1 — Algorithm-library pure-VTK helpers.
+* `ADR-0025`_ §Context — the resectogram as a 1:1 image of the Bezier
+  ``(u, v)`` parameter domain.
+
+.. _ADR-0013: ../../Docs/adr/0013-layerdm-pipeline-pattern.md
+.. _ADR-0015: ../../Docs/adr/0015-cpp-algorithm-library.md
+.. _ADR-0025: ../../Docs/adr/0025-locator-architecture.md
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+# --------------------------------------------------------------------------- #
+# Pipeline base — hard-required on the upstream LayerDM library per ADR-0013
+# §5.  Importable from any Slicer process that loaded the
+# SlicerLayerDisplayableManager extension.  Tests that exercise this module
+# outside Slicer ``pytest.importorskip("LayerDMLib")`` at module level.
+# --------------------------------------------------------------------------- #
+
+from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
+
+
+class ResectogramPipeline(_PipelineBase):
+    """Composite Pipeline for the resectogram concept.
+
+    Constructed by LayerDM's ``vtkMRMLLayerDMPipelineManager`` via the
+    creator registered by ``registerResectogramPipelineCreator()`` at
+    module bottom.  No-arg constructor per the LayerDM contract.
+
+    Owns two Representations (the flattened surface + the vascular
+    contours).  ``UpdatePipeline()`` forwards the current display + data
+    nodes to both and is idempotent: it records the
+    ``(dataMTime, displayMTime)`` tuple it last ran against and
+    short-circuits when nothing has changed.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        # Node handles — populated when the manager calls the setters.
+        # ``SetDisplayNode`` derives ``_data_node`` from the display
+        # node's ``GetDisplayableNode()`` back-reference.
+        self._data_node: Any | None = None
+        self._display_node: Any | None = None
+
+        # Observer tags so ``cleanup()`` can detach precisely.  Index by
+        # ``id(node)`` because ``vtkObject`` subclasses are not
+        # universally hashable on identity.
+        self._observer_tags: dict[int, list[int]] = {}
+        self._observed_node_refs: list[Any] = []
+
+        # Memoised dispatch input — see ``UpdatePipeline``.
+        self._last_update_key: tuple | None = None
+
+        # Counter workflow tests assert idempotency against: advances
+        # only on real reconciliation work, not on short-circuits.
+        self._update_count: int = 0
+
+        # Composed Representations.  Built lazily by
+        # ``_ensure_representations()`` once a renderer is available.
+        self._flattened_surface: Any | None = None
+        self._vascular_contour: Any | None = None
+        self._representations_initialised = False
+
+    # ------------------------------------------------------------------ #
+    # LayerDM lifecycle overrides
+    # ------------------------------------------------------------------ #
+
+    def SetDisplayNode(self, displayNode: Any) -> None:  # noqa: N802 - VTK verb
+        """Attach the display node, derive the data node, wire observers.
+
+        Per `ADR-0013`_ §5 the manager calls this once after creating
+        the Pipeline.  Re-entrant: replacing an already-attached display
+        node detaches the old observers and re-derives the data node.
+        """
+        if self._display_node is not None:
+            self._detach_observer(self._display_node)
+        if self._data_node is not None:
+            self._detach_observer(self._data_node)
+
+        super().SetDisplayNode(displayNode)
+
+        self._display_node = displayNode
+        self._data_node = None
+        if displayNode is not None:
+            getter = getattr(displayNode, "GetDisplayableNode", None)
+            if getter is not None:
+                self._data_node = getter()
+            self._attach_observer(displayNode)
+            if self._data_node is not None:
+                self._attach_observer(self._data_node)
+
+        self._last_update_key = None
+
+    def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
+        """Reconcile both Representations against the current node set.
+
+        Idempotent: a second call with no intervening node mutation is a
+        no-op observationally — the memoised ``(dataMTime, displayMTime)``
+        key short-circuits the work (`ADR-0013`_ §3).
+        """
+        self._ensure_representations()
+
+        data_mtime = _safe_get_mtime(self._data_node)
+        display_mtime = _safe_get_mtime(self._display_node)
+
+        key = (data_mtime, display_mtime)
+        if key == self._last_update_key:
+            return  # idempotent short-circuit
+        self._last_update_key = key
+
+        if self._flattened_surface is not None:
+            self._flattened_surface.update(self._display_node, self._data_node)
+        if self._vascular_contour is not None:
+            self._vascular_contour.update(self._display_node, self._data_node)
+
+        self._update_count += 1
+
+    def OnRendererAdded(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
+        """Build Representations once a renderer is attached.
+
+        Per `ADR-0013`_ §5 the renderer is supplied by the manager; the
+        Pipeline cannot construct its actor-bearing Representations until
+        ``GetRenderer()`` returns a non-None value.
+        """
+        del renderer  # accessed via self.GetRenderer() inside the helper
+        self._ensure_representations()
+        # Re-emit a dispatch so the Representations re-attach their actors
+        # against the new renderer.
+        self._last_update_key = None
+        self.UpdatePipeline()
+
+    def OnRendererRemoved(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
+        """Tear down Representations when the renderer goes away."""
+        del renderer
+        self.cleanup()
+
+    # ------------------------------------------------------------------ #
+    # Introspection — used by the workflow / unit tests
+    # ------------------------------------------------------------------ #
+
+    def GetDataNode(self) -> Any | None:
+        return self._data_node
+
+    def GetFlattenedSurfaceRepresentation(self) -> Any | None:
+        return self._flattened_surface
+
+    def GetVascularContourRepresentation(self) -> Any | None:
+        return self._vascular_contour
+
+    def GetUpdateCount(self) -> int:
+        """Total ``UpdatePipeline()`` calls that did real work
+        (short-circuits do not count).  Tests assert idempotency
+        against this."""
+        return self._update_count
+
+    def cleanup(self) -> None:
+        """Detach observers and tear down Representations.
+
+        Safe to call multiple times.  Per `ADR-0013`_ §5, normally
+        invoked from ``OnRendererRemoved`` when the display node leaves
+        the scene.
+        """
+        for node in list(self._observed_node_refs):
+            self._detach_observer(node)
+        self._observer_tags.clear()
+        self._observed_node_refs.clear()
+
+        for rep in (self._flattened_surface, self._vascular_contour):
+            if rep is not None:
+                try:
+                    rep.cleanup()
+                except Exception:  # pragma: no cover - defensive
+                    pass
+
+    # ------------------------------------------------------------------ #
+    # Internal helpers
+    # ------------------------------------------------------------------ #
+
+    def _ensure_representations(self) -> None:
+        """Build the two Representations once, on first dispatch.
+
+        Lazy construction lets the Pipeline survive the LayerDM
+        lifecycle ordering (``SetDisplayNode`` may fire before
+        ``OnRendererAdded``).  Per `ADR-0013`_ §6, Representations are
+        constructed once and reused.
+        """
+        if self._representations_initialised:
+            return
+
+        renderer = self._safe_get_renderer()
+
+        # Local imports to avoid a circular import.  Two import paths
+        # supported, mirroring the Bezier Pipeline:
+        #
+        # * Package-relative — when imported as
+        #   ``LiverResectionsLib.ResectogramPipeline`` from a
+        #   Slicer-installed loadable module.
+        # * Top-level — when the directory containing this file is on
+        #   ``sys.path`` directly (the unit-layer test convention).
+        try:  # pragma: no cover - exercised once per import path
+            from .Representations.FlattenedSurfaceRepresentation import (
+                FlattenedSurfaceRepresentation,
+            )
+            from .Representations.VascularContourRepresentation import (
+                VascularContourRepresentation,
+            )
+        except ImportError:
+            from Representations.FlattenedSurfaceRepresentation import (  # type: ignore[no-redef]
+                FlattenedSurfaceRepresentation,
+            )
+            from Representations.VascularContourRepresentation import (  # type: ignore[no-redef]
+                VascularContourRepresentation,
+            )
+
+        self._flattened_surface = FlattenedSurfaceRepresentation(renderer=renderer)
+        self._vascular_contour = VascularContourRepresentation(renderer=renderer)
+
+        self._representations_initialised = True
+
+    def _safe_get_renderer(self) -> Any | None:
+        """Return ``self.GetRenderer()`` if available, else ``None``.
+
+        The base ``vtkMRMLLayerDMPipelineI::GetRenderer`` is supplied
+        once the manager attaches the Pipeline to a renderer.  Tests that
+        construct the Pipeline before a renderer is wired need the
+        ``None`` fallback.
+        """
+        getter = getattr(self, "GetRenderer", None)
+        if getter is None:
+            return None
+        try:
+            return getter()
+        except Exception:  # pragma: no cover - defensive
+            return None
+
+    def _attach_observer(self, node: Any) -> None:
+        """Add a ``vtkCommand::ModifiedEvent`` observer to ``node``.
+
+        Routes the callback into ``UpdatePipeline()``.  Stores the
+        observer tag so ``cleanup()`` / ``_detach_observer`` can detach
+        precisely.
+        """
+        if node is None or not hasattr(node, "AddObserver"):
+            return
+
+        tag = node.AddObserver("ModifiedEvent", self._on_node_modified)
+        self._observer_tags.setdefault(id(node), []).append(tag)
+        if node not in self._observed_node_refs:
+            self._observed_node_refs.append(node)
+
+    def _detach_observer(self, node: Any) -> None:
+        if node is None:
+            return
+        tags = self._observer_tags.pop(id(node), [])
+        for tag in tags:
+            try:
+                node.RemoveObserver(tag)
+            except Exception:  # pragma: no cover - defensive
+                pass
+        try:
+            self._observed_node_refs.remove(node)
+        except ValueError:
+            pass
+
+    def _on_node_modified(self, caller: Any, event: str) -> None:
+        """VTK observer callback — re-runs ``UpdatePipeline()``."""
+        del caller, event  # observers route uniformly into UpdatePipeline()
+        self.UpdatePipeline()
+
+
+# --------------------------------------------------------------------------- #
+# Safe accessors — tolerant of stub nodes that omit GetMTime etc.
+# --------------------------------------------------------------------------- #
+
+
+def _safe_get_mtime(node: Any) -> int:
+    """Read ``GetMTime()`` off ``node`` defensively; 0 when unavailable."""
+    if node is None:
+        return 0
+    getter = getattr(node, "GetMTime", None)
+    if getter is None:
+        return 0
+    try:
+        return int(getter())
+    except Exception:  # pragma: no cover - defensive
+        return 0
+
+
+# --------------------------------------------------------------------------- #
+# Pipeline-creator registration — ADR-0013 §5 call 3
+# --------------------------------------------------------------------------- #
+
+
+_REGISTERED = False
+
+
+def registerResectogramPipelineCreator() -> None:
+    """Register the ``ResectogramPipeline`` creator with LayerDM.
+
+    Performs `ADR-0013`_ §5 call 3 keyed on
+    ``vtkMRMLResectogramDisplayNode`` — the dedicated display-node type
+    that resolves the §1 one-Pipeline-per-type fork (a second creator on
+    the shared ``vtkMRMLParametricSurfaceDisplayNode`` the Bezier
+    Pipeline owns would violate §1).
+
+    Idempotent via the module-level ``_REGISTERED`` flag.  The upstream
+    ``vtkMRMLLayerDMPipelineFactory::ContainsPipelineCreator`` compares
+    creators by smart-pointer identity, and every call to this function
+    constructs a *fresh* ``vtkMRMLLayerDMPipelineScriptedCreator``;
+    without the guard a second ``setup()`` invocation (module reload,
+    Slicer restart in embedded contexts) would append a duplicate.
+
+    The creator returns a fresh ``ResectogramPipeline`` only when the
+    ``(viewNode, node)`` pair matches
+    ``(vtkMRMLViewNode, vtkMRMLResectogramDisplayNode)``.  Other
+    combinations short-circuit to ``None`` so the Bezier creator (and any
+    other registered creator) gets a chance to handle them — no
+    cross-fire (`ADR-0013`_ §1).
+    """
+    global _REGISTERED
+    if _REGISTERED:
+        return
+
+    # Imports deferred so this module stays importable in plain Python
+    # (tests ``pytest.importorskip("LayerDMLib")`` already; the
+    # ``slicer``-prefixed symbols below are only reachable inside a
+    # Slicer process).
+    from slicer import (  # type: ignore[import-not-found]
+        vtkMRMLLayerDMPipelineFactory,
+        vtkMRMLLayerDMPipelineScriptedCreator,
+        vtkMRMLResectogramDisplayNode,
+        vtkMRMLViewNode,
+    )
+
+    def tryCreate(viewNode, node):
+        # 3D-only gating: the resectogram renders into an overlay
+        # renderer of a 3D view.  ``RegisterInDefaultViews`` registers the
+        # generic LayerDM DM in both 3D and slice factories, so this
+        # creator is invoked for slice-view nodes too — short-circuit to
+        # None there so other creators (or none) handle the slice path.
+        if not isinstance(viewNode, vtkMRMLViewNode):
+            return None
+        if not isinstance(node, vtkMRMLResectogramDisplayNode):
+            return None
+        return ResectogramPipeline()
+
+    creator = vtkMRMLLayerDMPipelineScriptedCreator()
+    creator.SetPythonCallback(tryCreate)
+    vtkMRMLLayerDMPipelineFactory.GetInstance().AddPipelineCreator(creator)
+    _REGISTERED = True
