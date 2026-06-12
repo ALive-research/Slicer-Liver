@@ -41,7 +41,6 @@
 
 #include "vtkSlicerLiverResectionsLogic.h"
 #include "vtkMRMLAbstractLogic.h"
-#include "vtkMRMLLiverResectionCSVStorageNode.h"
 
 // SubjectHierarchyFolders utility (ADR-0023 §"Subject Hierarchy
 // management convention").
@@ -61,7 +60,6 @@
 #include <vtkMRMLMarkupsSlicingContourDisplayNode.h>
 #include <vtkMRMLMarkupsDistanceContourNode.h>
 #include <vtkMRMLMarkupsDisplayNode.h>
-#include <vtkMRMLLiverResectionNode.h>
 #include <vtkMRMLMarkupsBezierSurfaceNode.h>
 #include <vtkMRMLMarkupsBezierSurfaceDisplayNode.h>
 
@@ -142,13 +140,6 @@ void vtkSlicerLiverResectionsLogic::RegisterNodes()
 {
   assert(this->GetMRMLScene() != nullptr);
   vtkMRMLScene* scene = this->GetMRMLScene();
-
-  // Legacy resection node + legacy CSV storage node — still registered
-  // so scenes saved before the T2 migration continue to load.  Retired
-  // by task T2.7 alongside the resection-rename + LiverMarkups
-  // dissolution (ADR-0014).
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLLiverResectionNode>::New());
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLLiverResectionCSVStorageNode>::New());
 
   // T2 LiverResources data nodes (ADR-0014 §1, §5).  The Bezier data
   // node + the shared parametric-surface display node are registered
