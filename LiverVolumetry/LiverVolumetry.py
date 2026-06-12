@@ -184,10 +184,15 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def getResectionNodes(self):
     resectionNodes = vtk.vtkCollection()
     if not self.ui.ResectionTargetNodeComboBox.noneChecked():
-      lvLogic = slicer.modules.liverresections.logic()
       checkedNodes = self.ui.ResectionTargetNodeComboBox.checkedNodes()
       for i in checkedNodes:
-        bs = lvLogic.GetBezierFromResection(i)
+        # The checked nodes are now vtkMRMLResectionPlanNode wrappers; their
+        # parametric geometry carrier (vtkMRMLBezierSurfaceNode) is the
+        # boundary surface used for the volume computation
+        # (ADR-0014 wrapper-vs-carrier split).
+        bs = i.GetGeometryNode()
+        if bs is None:
+          continue
         resectionNodes.AddItem(bs)
     else:
       resectionNodes = None
