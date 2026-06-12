@@ -230,6 +230,14 @@ endif()
 set(_visual_test_scenarios
   BezierSurface4x4Planning
   BezierSurface4x4Confirmed
+  # DistanceSpheroid init contour (ADR-0014 §2, ADR-0015 §"Stack 4").
+  # Drives the production DistanceSpheroidInitRepresentation, which reads
+  # a vtkMRMLBezierSurfaceNode and pushes the SSOT quadric onto
+  # vtkOpenGLDistanceContourPolyDataMapper.  Both need the LiverResections
+  # module REGISTERED (the node class + the wrapped mapper), so the
+  # COMMAND below supplies --additional-module-paths rather than
+  # --disable-modules.
+  DistanceSpheroidContourShader
 )
 
 # Bundle extensions per scenario.  ``.png`` is the comparison target;
@@ -262,12 +270,18 @@ foreach(_scenario IN LISTS _visual_test_scenarios)
   endforeach()
 
   set(_testname "LiverBezierVisualTest_${_scenario}")
+  # The replay scenarios drive production code paths that need the
+  # LiverResections module REGISTERED (the resection logic singleton, the
+  # wrapped vtkMRMLBezierSurfaceNode, and the relocated contour mapper on
+  # the ``slicer`` namespace).  Supply the in-tree module path rather than
+  # ``--disable-modules`` so ``slicer.modules.liverresections`` and the
+  # node / mapper classes resolve at scenario-setup time.
   ExternalData_add_test(LiverBezierVisualTestData
     NAME ${_testname}
     COMMAND "${_slicer_launcher}"
       --no-main-window
       --no-splash
-      --disable-modules
+      --additional-module-paths "${CMAKE_SOURCE_DIR}/LiverResections"
       --python-script "${CMAKE_CURRENT_SOURCE_DIR}/replay_test.py"
       --
       --test ${_scenario}

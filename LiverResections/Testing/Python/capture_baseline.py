@@ -119,10 +119,15 @@ def _load_scenario(name: str):
     (``Slicer --python-script <abs path>``); add the package's parent
     to ``sys.path`` so the relative import succeeds.
     """
+    # This file lives at ``LiverResections/Testing/Python/``; the scenario
+    # package path is ``Python.scenarios.<name>`` (``Python/`` carries an
+    # ``__init__.py``).  For that dotted import to resolve, the directory
+    # CONTAINING ``Python/`` -- i.e. ``LiverResections/Testing`` -- must be
+    # on ``sys.path``.
     here = pathlib.Path(__file__).resolve().parent
-    parent = str(here.parent)  # LiverResections/Testing/
-    if parent not in sys.path:
-        sys.path.insert(0, parent)
+    testing_dir = str(here.parent)  # LiverResections/Testing/
+    if testing_dir not in sys.path:
+        sys.path.insert(0, testing_dir)
     return importlib.import_module(f"Python.scenarios.{name}")
 
 
@@ -355,6 +360,16 @@ def main() -> int:
     else:
         view_widget = layout_manager.threeDWidget(0)
         view_node = view_widget.mrmlViewNode()
+
+    # Scenarios driving a standalone VTK Representation (plain actors, not
+    # MRML-displayable-manager geometry) expose ``attach_to_renderer`` so
+    # their actors land in the live renderer.  The view was shown + force-
+    # rendered above, so the GL context is up before the contour mapper
+    # touches GL state.  Scenarios that render through MRML display nodes
+    # (the Bezier surfaces) omit this hook and are unaffected.
+    attach = getattr(scenario, "attach_to_renderer", None)
+    if attach is not None:
+        attach(_live_renderer(view_widget))
 
     scenario.setup_camera(view_node)
     scenario.setup_viewport(view_node)
