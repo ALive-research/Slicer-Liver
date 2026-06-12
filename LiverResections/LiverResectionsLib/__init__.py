@@ -20,8 +20,14 @@ from .LiverBezierSurfacePipeline import (
     LiverBezierSurfacePipeline,
     registerPipelineCreator,
 )
+from .ResectogramPipeline import (
+    ResectogramPipeline,
+    registerResectogramPipelineCreator,
+)
 
 __all__ = [
     "LiverBezierSurfacePipeline",
     "registerPipelineCreator",
+    "ResectogramPipeline",
+    "registerResectogramPipelineCreator",
 ]

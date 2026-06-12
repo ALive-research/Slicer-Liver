@@ -25,11 +25,14 @@ set(LiverResectionsLib_PYTHON_SCRIPTS
   __init__.py
   DistanceMaps.py
   LiverBezierSurfacePipeline.py
+  ResectogramPipeline.py
   Representations/__init__.py
   Representations/BezierPlanningRepresentation.py
   Representations/ConfirmedRepresentation.py
   Representations/DistanceSpheroidInitRepresentation.py
   Representations/SlicingPlaneInitRepresentation.py
+  Representations/FlattenedSurfaceRepresentation.py
+  Representations/VascularContourRepresentation.py
   )
 
 set(LiverResectionsLib_PYTHON_RESOURCES

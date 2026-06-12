@@ -195,6 +195,7 @@ void qSlicerLiverResectionsModule::setup()
       pythonManager->executeString("try:\n"
                                    "    import LiverResectionsLib\n"
                                    "    LiverResectionsLib.registerPipelineCreator()\n"
+                                   "    LiverResectionsLib.registerResectogramPipelineCreator()\n"
                                    "except ImportError as exc:\n"
                                    "    import logging\n"
                                    "    logging.critical('LiverResections: LayerDM Pipeline creator not registered (%s)'\n"
