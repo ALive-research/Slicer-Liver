@@ -197,69 +197,20 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject* caller, un
     }
   }
 
-  // Process slicing bezier surface
-  auto bezierSurfaceNode = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(caller);
-  if (bezierSurfaceNode && event == vtkCommand::StartInteractionEvent)
+  // Process the surface carrier interaction (ADR-0019 state machine).
+  // The data carrier vtkMRMLBezierSurfaceNode owns the resection-state
+  // machine (ADR-0014 §1 wrapper-vs-carrier split).  The first
+  // interaction advances the carrier Init -> Planning -- the v2
+  // replacement for the legacy "Deformation" push that used to land on
+  // vtkMRMLLiverResectionNode.  SetState already enforces the
+  // irreversible Init -> Planning transition (ADR-0019), so a repeat
+  // interaction is a no-op rather than a regression.
+  auto surfaceCarrier = vtkMRMLBezierSurfaceNode::SafeDownCast(caller);
+  if (surfaceCarrier && event == vtkCommand::StartInteractionEvent)
   {
-    this->HideInitializationMarkup(bezierSurfaceNode);
-    auto resectionNode = this->GetResectionFromBezier(bezierSurfaceNode);
-    if (resectionNode)
+    if (surfaceCarrier->GetState() == vtkMRMLBezierSurfaceNode::Init)
     {
-      MRMLNodeModifyBlocker blocker(resectionNode);
-      resectionNode->SetState(vtkMRMLLiverResectionNode::Deformation);
-    }
-  }
-
-  // Process resection node
-  auto resectionNode = vtkMRMLLiverResectionNode::SafeDownCast(caller);
-  if (resectionNode && event == vtkCommand::ModifiedEvent)
-  {
-    // Create the resection elements
-    if (this->ResectionToInitializationMap.find(resectionNode) == this->ResectionToInitializationMap.end())
-    {
-      this->CreateInitializationAndResectionMarkups(resectionNode);
-    }
-
-    // Update the polydata
-    auto initializationNode = vtkMRMLMarkupsSlicingContourNode::SafeDownCast(this->GetInitializationFromResection(resectionNode));
-    if (initializationNode)
-    {
-      initializationNode->SetTarget(resectionNode->GetTargetOrganModelNode());
-    }
-
-    auto bezierSurfaceNode = this->GetBezierFromResection(resectionNode);
-    if (bezierSurfaceNode)
-    {
-      bezierSurfaceNode->SetDistanceMapVolumeNode(resectionNode->GetDistanceMapVolumeNode());
-      bezierSurfaceNode->SetVascularSegmentsVolumeNode(resectionNode->GetVascularSegmentsVolumeNode());
-      bezierSurfaceNode->SetResectionMargin(resectionNode->GetResectionMargin());
-      bezierSurfaceNode->SetUncertaintyMargin(resectionNode->GetUncertaintyMargin());
-      bezierSurfaceNode->SetHepaticContourThickness(resectionNode->GetHepaticContourThickness());
-      bezierSurfaceNode->SetPortalContourThickness(resectionNode->GetPortalContourThickness());
-
-      auto bezierSurfaceDisplayNode = vtkMRMLMarkupsBezierSurfaceDisplayNode::SafeDownCast(bezierSurfaceNode->GetDisplayNode());
-      if (bezierSurfaceDisplayNode)
-      {
-        bezierSurfaceDisplayNode->SetShowResection2D(resectionNode->GetShowResection2D());
-        bezierSurfaceDisplayNode->SetMirrorDisplay(resectionNode->GetMirrorDisplay());
-        bezierSurfaceDisplayNode->SetEnableFlexibleBoundary(resectionNode->GetEnableFlexibleBoundary());
-        bezierSurfaceDisplayNode->SetGrid2DVisibility(resectionNode->GetGrid2DVisibility());
-        bezierSurfaceDisplayNode->SetTextureNumComps(resectionNode->GetTextureNumComps());
-        bezierSurfaceDisplayNode->SetClipOut(resectionNode->GetClipOut());
-        bezierSurfaceDisplayNode->SetWidgetVisibility(resectionNode->GetWidgetVisibility());
-        bezierSurfaceDisplayNode->SetInterpolatedMargins(resectionNode->GetInterpolatedMargins());
-        bezierSurfaceDisplayNode->SetResectionColor(resectionNode->GetResectionColor());
-        bezierSurfaceDisplayNode->SetResectionGridColor(resectionNode->GetResectionGridColor());
-        bezierSurfaceDisplayNode->SetResectionMarginColor(resectionNode->GetResectionMarginColor());
-        bezierSurfaceDisplayNode->SetUncertaintyMarginColor(resectionNode->GetUncertaintyMarginColor());
-        bezierSurfaceDisplayNode->SetResectionOpacity(resectionNode->GetResectionOpacity());
-        bezierSurfaceDisplayNode->SetGridDivisions(resectionNode->GetGridDivisions());
-        bezierSurfaceDisplayNode->SetGridThickness(resectionNode->GetGridThickness());
-        bezierSurfaceDisplayNode->SetGrid3DVisibility(resectionNode->GetGrid3DVisibility());
-        bezierSurfaceDisplayNode->SetHepaticContourColor(resectionNode->GetHepaticContourColor());
-        bezierSurfaceDisplayNode->SetPortalContourColor(resectionNode->GetPortalContourColor());
-      }
-      bezierSurfaceNode->SetLocked(!resectionNode->GetWidgetVisibility());
+      surfaceCarrier->SetState(vtkMRMLBezierSurfaceNode::Planning);
     }
   }
 }
