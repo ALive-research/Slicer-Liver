@@ -368,6 +368,10 @@ void vtkLiverVolumetryLogic::GetResectionsProjectionITKImage(vtkMRMLLabelMapVolu
     for (int i = 0; i < this->resectionNodes->GetNumberOfItems(); i++)
     {
       auto bezierSurfaceNode = vtkMRMLBezierSurfaceNode::SafeDownCast(this->resectionNodes->GetItemAsObject(i));
+      if (!bezierSurfaceNode)
+      {
+        continue;
+      }
       auto Res = GetRes(bezierSurfaceNode, spacing, 300);
       if (Res < 500)
       {
