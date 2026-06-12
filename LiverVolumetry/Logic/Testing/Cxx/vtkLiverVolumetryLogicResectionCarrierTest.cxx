@@ -217,27 +217,17 @@ int testProductionDowncastDropsCarrier()
 int testCarrierProducesNonEmptySurface()
 {
   vtkSmartPointer<vtkMRMLBezierSurfaceNode> carrier = makePopulatedCarrier();
-  (void)carrier;
 
-  // TODO(liver-implementer): once the carrier-accepting surface-gen seam
-  // exists, replace this deliberate failure with, e.g.:
-  //
-  //   vtkNew<vtkLiverVolumetryLogic> logic;
-  //   vtkSmartPointer<vtkBezierSurfaceSource> surface =
-  //     logic->GenerateBezierSurface(10, carrier.GetPointer());
-  //   CHECK_NOT_NULL(surface.GetPointer());
-  //   CHECK_NOT_NULL(surface->GetOutput());
-  //   CHECK_BOOL(surface->GetOutput()->GetNumberOfPoints() > 0, true);
-  //
-  // Today the seam only accepts vtkMRMLMarkupsBezierSurfaceNode*, so the
-  // carrier cannot be passed and the surface stays empty -- this test
-  // FAILS on purpose to keep the invariant RED.
-  std::cerr << "FAIL: LiverVolumetry surface-generation path does not yet accept the "
-               "vtkMRMLBezierSurfaceNode parametric carrier; the resection boundary is "
-               "never projected. Implementer must retarget the downcast and re-source "
-               "control points from GetControlGrid() (see file docstring RED hook)."
-            << std::endl;
-  return EXIT_FAILURE;
+  // The surface-generation seam now accepts the parametric carrier and
+  // re-sources its 16 control points from GetControlGrid(); the projected
+  // Bezier surface must therefore be non-empty.
+  vtkNew<vtkLiverVolumetryLogic> logic;
+  vtkSmartPointer<vtkBezierSurfaceSource> surface = logic->GenerateBezierSurface(10, carrier.GetPointer());
+  CHECK_NOT_NULL(surface.GetPointer());
+  CHECK_NOT_NULL(surface->GetOutput());
+  CHECK_BOOL(surface->GetOutput()->GetNumberOfPoints() > 0, true);
+
+  return EXIT_SUCCESS;
 }
 
 } // namespace

@@ -47,7 +47,7 @@
 #include <vtkMRMLLabelMapVolumeNode.h>
 #include <vtkMRMLScene.h>
 #include <vtkMRMLScalarVolumeNode.h>
-#include <vtkMRMLMarkupsBezierSurfaceNode.h>
+#include <vtkMRMLBezierSurfaceNode.h>
 
 #include <vtkImageToImageStencil.h>
 #include <vtkObjectFactory.h>
@@ -154,7 +154,7 @@ void vtkLiverVolumetryLogic::ComputeAdvancedPlanningVolumetry(vtkMRMLLabelMapVol
   }
 }
 
-vtkSmartPointer<vtkBezierSurfaceSource> vtkLiverVolumetryLogic::GenerateBezierSurface(int Res, vtkMRMLMarkupsBezierSurfaceNode* bezierSurfaceNode)
+vtkSmartPointer<vtkBezierSurfaceSource> vtkLiverVolumetryLogic::GenerateBezierSurface(int Res, vtkMRMLBezierSurfaceNode* bezierSurfaceNode)
 {
   if (!bezierSurfaceNode)
   {
@@ -163,14 +163,16 @@ vtkSmartPointer<vtkBezierSurfaceSource> vtkLiverVolumetryLogic::GenerateBezierSu
   auto Bezier = vtkSmartPointer<vtkBezierSurfaceSource>::New();
   Bezier->SetResolution(Res, Res);
   Bezier->SetNumberOfControlPoints(4, 4);
-  if (bezierSurfaceNode->GetNumberOfControlPoints() == 16)
+  // The resection-plan geometry carrier stores its 16 control points in the
+  // flat row-major control grid (ADR-0014 §"Fourth layer" wrapper-vs-carrier
+  // split); a 4x4 grid is GetControlGridLength() == 48 doubles.
+  if (bezierSurfaceNode->GetControlGridLength() == 48)
   {
+    const double* grid = bezierSurfaceNode->GetControlGrid();
     auto BezierSurfaceControlPoints = vtkSmartPointer<vtkPoints>::New();
     for (int i = 0; i < 16; i++)
     {
-      double point[3];
-      bezierSurfaceNode->GetNthControlPointPosition(i, point);
-      BezierSurfaceControlPoints->InsertNextPoint(static_cast<float>(point[0]), static_cast<float>(point[1]), static_cast<float>(point[2]));
+      BezierSurfaceControlPoints->InsertNextPoint(static_cast<float>(grid[i * 3 + 0]), static_cast<float>(grid[i * 3 + 1]), static_cast<float>(grid[i * 3 + 2]));
     }
     Bezier->SetControlPoints(BezierSurfaceControlPoints);
     Bezier->Update();
@@ -234,10 +236,11 @@ void vtkLiverVolumetryLogic::VolumetryTable(std::string Properties, double Targe
   }
 }
 
-int vtkLiverVolumetryLogic::GetRes(vtkMRMLMarkupsBezierSurfaceNode* bezierSurfaceNode, double space[3], int Steps)
+int vtkLiverVolumetryLogic::GetRes(vtkMRMLBezierSurfaceNode* bezierSurfaceNode, double space[3], int Steps)
 {
   // BezierCurve computation inspired from https://medium.com/geekculture/2d-and-3d-b%C3%A9zier-curves-in-c-499093ef45a9
 
+  const double* grid = bezierSurfaceNode->GetControlGrid();
   std::vector<std::vector<int>> ControlPointsIndexs{ { 3, 6, 9, 12 }, { 0, 5, 10, 15 } };
   double ArcLength[2];
 
@@ -256,11 +259,10 @@ int vtkLiverVolumetryLogic::GetRes(vtkMRMLMarkupsBezierSurfaceNode* bezierSurfac
 
     for (unsigned int p = 0; p < ControlPointsIndexs[l].size(); p++)
     {
-      double point[3];
-      bezierSurfaceNode->GetNthControlPointPosition(ControlPointsIndexs[l][p], point);
-      ControlPointsX.push_back(point[0]);
-      ControlPointsY.push_back(point[1]);
-      ControlPointsZ.push_back(point[2]);
+      const int base = ControlPointsIndexs[l][p] * 3;
+      ControlPointsX.push_back(grid[base + 0]);
+      ControlPointsY.push_back(grid[base + 1]);
+      ControlPointsZ.push_back(grid[base + 2]);
     }
 
     for (int i = 0; i < Steps; i++)
@@ -365,7 +367,7 @@ void vtkLiverVolumetryLogic::GetResectionsProjectionITKImage(vtkMRMLLabelMapVolu
     this->resectionNodes = ResectionNodes;
     for (int i = 0; i < this->resectionNodes->GetNumberOfItems(); i++)
     {
-      auto bezierSurfaceNode = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(this->resectionNodes->GetItemAsObject(i));
+      auto bezierSurfaceNode = vtkMRMLBezierSurfaceNode::SafeDownCast(this->resectionNodes->GetItemAsObject(i));
       auto Res = GetRes(bezierSurfaceNode, spacing, 300);
       if (Res < 500)
       {

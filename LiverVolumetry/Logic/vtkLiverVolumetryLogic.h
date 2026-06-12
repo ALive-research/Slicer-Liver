@@ -49,7 +49,7 @@
 
 class vtkMRMLLabelMapVolumeNode;
 class vtkMRMLModelNode;
-class vtkMRMLMarkupsBezierSurfaceNode;
+class vtkMRMLBezierSurfaceNode;
 class vtkMRMLMarkupsFiducialNode;
 class vtkBezierSurfaceSource;
 class vtkMRMLTableNode;
@@ -72,10 +72,10 @@ public:
                                         double TargetSegmentationVolume = 0.0);
   int GetSegmentVoxels(vtkOrientedImageData* TargetSegmentLabelMap);
   std::vector<int> GetROIPointsLabelValue(vtkMRMLLabelMapVolumeNode* TargetSegmentsLabelMap, vtkMRMLMarkupsFiducialNode* ROIMarkersList);
-  vtkSmartPointer<vtkBezierSurfaceSource> GenerateBezierSurface(int Res, vtkMRMLMarkupsBezierSurfaceNode* bezierSurfaceNode);
+  vtkSmartPointer<vtkBezierSurfaceSource> GenerateBezierSurface(int Res, vtkMRMLBezierSurfaceNode* bezierSurfaceNode);
   itk::Index<3> GetITKRGSeedIndex(double* ROISeedPoint, itk::SmartPointer<itk::Image<short, 3>> SourceImage);
   void VolumetryTable(std::string Properties, double TargetSegmentationVolume, int ROIVoxels, double ROIVolume, vtkMRMLTableNode* OutputTableNode);
-  int GetRes(vtkMRMLMarkupsBezierSurfaceNode* bezierSurfaceNode, double space[3], int Steps);
+  int GetRes(vtkMRMLBezierSurfaceNode* bezierSurfaceNode, double space[3], int Steps);
   void GetResectionsProjectionITKImage(vtkMRMLLabelMapVolumeNode* SelectedSegmentsLabelMap, vtkCollection* ResectionNodes, int baseValue);
   void GenerateSegmentsLabelMap(vtkMRMLLabelMapVolumeNode* TargetSegmentLabelMapCopy,
                                 vtkMRMLLabelMapVolumeNode* newLabelMap,
