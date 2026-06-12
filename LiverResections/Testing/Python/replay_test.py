@@ -74,9 +74,14 @@ def _parse_argv() -> argparse.Namespace:
 
 
 def _load_scenario(scenarios_dir: str, name: str):
-    parent = str(pathlib.Path(scenarios_dir).parent)
-    if parent not in sys.path:
-        sys.path.insert(0, parent)
+    # The scenarios live at ``LiverResections/Testing/Python/scenarios/``;
+    # the package path is ``Python.scenarios.<name>`` (``Python/`` carries
+    # an ``__init__.py``).  For that dotted import to resolve, the
+    # directory CONTAINING ``Python/`` -- i.e. ``LiverResections/Testing``
+    # -- must be on ``sys.path`` (two levels up from ``scenarios/``).
+    testing_dir = str(pathlib.Path(scenarios_dir).resolve().parents[1])
+    if testing_dir not in sys.path:
+        sys.path.insert(0, testing_dir)
     return importlib.import_module(f"Python.scenarios.{name}")
 
 
@@ -132,13 +137,30 @@ def _render_scenario(scenario, width: int, height: int):
         view_widget = layout_manager.threeDWidget(0)
         view_node = view_widget.mrmlViewNode()
 
-    scenario.setup_camera(view_node)
-    scenario.setup_viewport(view_node)
-
     view_widget.resize(width, height)
     three_d_view = view_widget.threeDView()
     three_d_view.renderWindow().SetSize(width, height)
     three_d_view.renderWindow().SetMultiSamples(0)
+
+    # Scenarios that drive a standalone VTK Representation (plain actors,
+    # not MRML-displayable-manager geometry) expose ``attach_to_renderer``
+    # so their actors can be added to the live renderer.  Attach AFTER a
+    # first ``forceRender`` so the GL context + extension loader are up
+    # before the contour mapper touches GL state (see capture_baseline.py
+    # for the same first-render-before-bind rationale).  Scenarios that
+    # render purely through MRML display nodes (e.g. the Bezier surfaces)
+    # do not define this hook and are unaffected.
+    attach = getattr(scenario, "attach_to_renderer", None)
+    if attach is not None:
+        three_d_view.forceRender()
+        renderer = (
+            three_d_view.renderWindow().GetRenderers().GetFirstRenderer()
+        )
+        attach(renderer)
+
+    scenario.setup_camera(view_node)
+    scenario.setup_viewport(view_node)
+
     three_d_view.forceRender()
 
     w2i = vtk.vtkWindowToImageFilter()
