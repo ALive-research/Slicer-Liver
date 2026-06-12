@@ -56,3 +56,8 @@ SIMPLE_TEST(vtkOpenGLDistanceContourMapperSpheroidSSOTTest)
 set_tests_properties(vtkOpenGLDistanceContourMapperSpheroidSSOTTest PROPERTIES
   SKIP_RETURN_CODE 125
   )
+# The mapper seam SetSpheroid(...) / GetSpheroidQuadricCoefficients(...)
+# now exists and derives the quadric from the SSOT, and the Algorithm
+# library is linked into VTKWidgets — lift the skip so the consistency
+# check (mapper coeffs == SSOT) compiles in and the test runs for real.
+set_property(SOURCE vtkOpenGLDistanceContourMapperSpheroidSSOTTest.cxx APPEND PROPERTY COMPILE_DEFINITIONS LIVER_SPHEROID_GPU_QUADRIC_SSOT)
