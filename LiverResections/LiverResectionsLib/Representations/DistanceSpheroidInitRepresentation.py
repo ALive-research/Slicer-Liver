@@ -606,6 +606,16 @@ class DistanceSpheroidInitRepresentation:
         if set_spheroid is not None:
             set_spheroid(list(center), rx, ry, rz)
 
+        # Make the banded contour visible.  The mapper defaults to hidden
+        # and its fragment shader discards every fragment while visibility
+        # is off, so without this the placed spheroid never renders.
+        # Enabling it here -- once the representation has a spheroid to
+        # show -- is what actually draws the triaxial ellipsoid.  No-op on
+        # the generic fallback mapper.
+        set_contour_visibility = getattr(self._spheroid_mapper, "SetContourVisibility", None)
+        if set_contour_visibility is not None:
+            set_contour_visibility(True)
+
         # Markers: resize the actor list, then update each sphere's
         # centre.
         self._resize_markers(len(init_points))

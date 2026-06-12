@@ -88,6 +88,30 @@ def _first_renderer(view_widget):
     return view_widget.threeDView().renderWindow().GetRenderers().GetFirstRenderer()
 
 
+def _visible_pixel_count(view_widget) -> int:
+    """Count non-background pixels in the view's rendered back buffer.
+
+    Snapshots the GL back buffer with ``vtkWindowToImageFilter`` (the same
+    pixel source ``capture_baseline.py`` / ``replay_test.py`` use, so this
+    counts exactly the pixels the visual-regression baseline pins) and
+    returns how many are non-black (the scenario background is ``(0,0,0)``;
+    the contour band is white at opacity 1).  Channel value > 8 tolerates
+    only single-LSB dithering, not a lit fragment.
+    """
+    import vtk  # type: ignore[import-not-found]
+    from vtk.util import numpy_support  # type: ignore[import-not-found]
+
+    w2i = vtk.vtkWindowToImageFilter()
+    w2i.SetInput(view_widget.threeDView().renderWindow())
+    w2i.SetInputBufferTypeToRGB()
+    w2i.ReadFrontBufferOff()
+    w2i.SetShouldRerender(0)  # already-rendered back buffer
+    w2i.Update()
+    scalars = w2i.GetOutput().GetPointData().GetScalars()
+    arr = numpy_support.vtk_to_numpy(scalars)
+    return int((arr.max(axis=1) > 8).sum())
+
+
 def test_distance_spheroid_contour_arena(render_interactive: float) -> None:
     """Render the production DistanceSpheroid contour; interactive or offscreen.
 
@@ -143,11 +167,18 @@ def test_distance_spheroid_contour_arena(render_interactive: float) -> None:
             "DistanceSpheroidInitRepresentation handle."
         )
 
-        # First render brings up the GL context + extension loader before
-        # the contour mapper touches GL state (capture_baseline.py notes
-        # the NULL-glGetError segfault when this ordering is violated).
-        if render_interactive:
-            view_widget.show()
+        # Map the view's GL surface BEFORE the first render.  Under
+        # ``QT_QPA_PLATFORM=offscreen`` (CI + launched harness) ``show()``
+        # is visually a no-op but still maps the OpenGL surface + creates
+        # the default light; without it the offscreen back buffer renders
+        # empty (no light, unmapped swapchain), which is why the pixel
+        # assertion below would otherwise see zero lit fragments.  This is
+        # the same show()-then-render ordering capture_baseline.py uses.
+        # First render also brings up the GL context + extension loader
+        # before the contour mapper touches GL state (capture_baseline.py
+        # notes the NULL-glGetError segfault when this ordering is
+        # violated).
+        view_widget.show()
         view_widget.threeDView().forceRender()
         view_widget.setMRMLViewNode(view_node)
 
@@ -158,6 +189,29 @@ def test_distance_spheroid_contour_arena(render_interactive: float) -> None:
         scenario.setup_camera(view_node)
         scenario.setup_viewport(view_node)
 
+        # The standalone qMRMLThreeDWidget (no layout manager in
+        # --no-main-window) does not honour the orphan MRML camera/view
+        # nodes the scenario just configured, so the live VTK camera keeps
+        # its default pose + the renderer keeps its default GRADIENT
+        # background.  Push the scenario's deterministic camera pose and a
+        # flat black background straight onto the live renderer -- the same
+        # thing capture_baseline.py / replay do -- so (a) the offscreen
+        # frame matches the captured baseline pixel-for-pixel and (b) the
+        # visible-pixel count below reflects the lit contour fragments, not
+        # a non-black gradient that would pass the assertion trivially.
+        meta = scenario.describe()
+        renderer = _first_renderer(view_widget)
+        camera = renderer.GetActiveCamera()
+        camera_spec = meta["camera"]
+        camera.SetPosition(*camera_spec["position"])
+        camera.SetFocalPoint(*camera_spec["focal_point"])
+        camera.SetViewUp(*camera_spec["view_up"])
+        camera.SetViewAngle(camera_spec["view_angle"])
+        camera.SetClippingRange(*camera_spec["clipping_range"])
+        background = meta["viewport"]["background"]
+        renderer.SetBackground(*background)
+        renderer.SetBackground2(*background)
+
         view_widget.resize(width, height)
         view_widget.threeDView().renderWindow().SetSize(width, height)
         view_widget.threeDView().renderWindow().SetMultiSamples(0)
@@ -167,7 +221,6 @@ def test_distance_spheroid_contour_arena(render_interactive: float) -> None:
         # requested size with the Representation's spheroid actor attached.
         # This is the "renders without crashing" gate the CI mode needs;
         # the pixel-level comparison is the replay_test.py CTest's job.
-        renderer = _first_renderer(view_widget)
         assert renderer is not None, "no live renderer on the view widget"
         spheroid_actor = representation.GetSpheroidActor()
         assert spheroid_actor is not None, (
@@ -189,6 +242,39 @@ def test_distance_spheroid_contour_arena(render_interactive: float) -> None:
             "the Representation's spheroid mapper is the generic fallback, "
             "not vtkOpenGLDistanceContourPolyDataMapper -- the relocated "
             "mapper is not wrapped onto the slicer namespace in this build."
+        )
+
+        # Visible-pixel assertion: the contour band must actually draw.
+        # The production Representation enables ``ContourVisibility`` once it
+        # has a spheroid to show (ADR-0014 §2); the mapper's fragment shader
+        # discards every fragment while visibility is off, so a regression
+        # that drops the visibility toggle -- or breaks the SSOT quadric so
+        # ``abs(F) >= thickness`` everywhere -- renders an all-black frame.
+        # Count the lit pixels off the same back buffer the visual baseline
+        # pins and require a non-trivial fraction of the triaxial ellipsoid
+        # to be banded.  ``numpy`` ships with Slicer; guard the rare absence
+        # with an explicit, greppable ``[arena-skip]`` reason (per this
+        # module's greppable-skip-reasons convention) rather than a silent
+        # pass.
+        try:
+            import numpy  # type: ignore[import-not-found]  # noqa: F401
+            from vtk.util import numpy_support  # type: ignore[import-not-found]  # noqa: F401
+        except ImportError:
+            pytest.skip(
+                "[arena-skip] numpy / vtk.util.numpy_support unavailable -- "
+                "cannot read the rendered back buffer for the visible-pixel "
+                "assertion.  Pipeline wiring above already passed."
+            )
+        visible = _visible_pixel_count(view_widget)
+        # ~8-9 % of the 800x600 frame is the ellipsoid silhouette at the
+        # scenario's fixed camera pose; 1 % (4800 px) is a generous floor
+        # that still fails hard on an all-black frame (the pre-fix state).
+        min_visible = int(0.01 * width * height)
+        assert visible >= min_visible, (
+            f"the contour band rendered only {visible} lit pixels "
+            f"(< {min_visible}) -- the triaxial ellipsoid is not visibly "
+            "drawn.  Expected the production Representation to enable "
+            "ContourVisibility and the SSOT quadric to band the surface."
         )
 
         if render_interactive:
