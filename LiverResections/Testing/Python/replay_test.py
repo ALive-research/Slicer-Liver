@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import os
 import pathlib
 import sys
 
@@ -233,24 +234,33 @@ def main() -> int:
     baseline_dir = pathlib.Path(args.baseline_dir)
     scenario = _load_scenario(args.scenarios_dir, args.test)
 
-    if not _has_baseline(baseline_dir, args.test):
-        # No captured baseline yet — the maintainer's interactive
-        # capture session has not landed.  Exit 0 with a clear log
-        # message; CTest treats 0 as pass.  When the maintainer
-        # commits the first .sha512 stubs the test will start running
-        # the real comparison.
-        print(
-            f"[skip] no baseline captured for {args.test}; "
-            f"run capture_baseline.py and "
-            f"./LiverResections/Testing/Scripts/upload_baseline.sh {args.test} "
-            f"to land one.  Skipping the comparison."
-        )
-        return 0
+    # When the visual-regression suite is explicitly enabled (the CI
+    # hard-gate sets LIVER_RUN_VISUAL_TESTS=1), a registered scenario
+    # whose baseline does not resolve is a real failure, NOT a silent
+    # skip -- otherwise the gate could be defeated simply by never
+    # uploading the blob.  Render FIRST regardless, so the offscreen-GL
+    # path is exercised and the log proves whether GL came up before any
+    # baseline check.
+    enabled = os.environ.get("LIVER_RUN_VISUAL_TESTS") == "1"
+    have_baseline = _has_baseline(baseline_dir, args.test)
 
     meta = scenario.describe()
     width, height = meta["viewport"]["size"]
-
     rendered = _render_scenario(scenario, width, height)
+
+    if not have_baseline:
+        message = (
+            f"no baseline blob resolved for {args.test}; capture with "
+            f"capture_baseline.py and upload via "
+            f"./LiverResections/Testing/Scripts/upload_baseline.sh {args.test} "
+            f"to ALiveResearchTestingData so ExternalData can fetch it."
+        )
+        if enabled:
+            print(f"[FAIL] visual tests are enabled but {message}")
+            return 1
+        print(f"[skip] {message}  Skipping the comparison.")
+        return 0
+
     baseline_png = _resolve_baseline_png(baseline_dir, args.test)
     baseline = _load_png(baseline_png)
 
