@@ -339,12 +339,20 @@ class DistanceSpheroidInitRepresentation:
         Marker actors are built lazily on demand (the count is data-
         driven; see ``_resize_markers``).
 
-        TODO(T2-mapper-relocation): swap the generic ``vtkPolyDataMapper``
-        for ``vtkOpenGLDistanceContourPolyDataMapper`` per ADR-0014 §3.
-        The relocated mapper computes the spheroid-vs-target-mesh
-        contour as a fragment-shader feature; this skeleton renders
-        the parametric spheroid surface itself as a stand-in until
-        that relocation lands.
+        The spheroid surface is rendered by
+        ``vtkOpenGLDistanceContourPolyDataMapper`` (relocated to
+        ``LiverResections/VTKWidgets/`` per ADR-0014 §3).  Its fragment
+        shader bands the triaxial-ellipsoid implicit whose quadric
+        coefficients are derived from the single source of truth
+        (``vtkLiverSpheroidRingExtractor::ComputeQuadricCoefficients``,
+        ADR-0015 §"Stack 4") so the rendered surface matches the
+        on-commit CPU-extracted ring.  ``_apply_data_node`` pushes the
+        (centre, radii) onto the mapper via ``SetSpheroid``.
+
+        When the relocated mapper is not on the path (a plain non-Slicer
+        VTK build used by the unit-layer tests) the pipeline falls back
+        to a generic ``vtkPolyDataMapper`` so the Representation still
+        constructs and the marker/colour bookkeeping stays testable.
         """
         assert vtk is not None  # for the type-checker — gated by _HAS_VTK
 
@@ -373,7 +381,17 @@ class DistanceSpheroidInitRepresentation:
             self._parametric_function_source.GetOutputPort()
         )
 
-        self._spheroid_mapper = vtk.vtkPolyDataMapper()
+        mapper_class = _resolve_extractor_class(
+            "vtkOpenGLDistanceContourPolyDataMapper"
+        )
+        if mapper_class is not None:
+            self._spheroid_mapper = mapper_class()
+        else:
+            # Non-Slicer VTK build (unit-layer tests): the relocated
+            # mapper is not wrapped onto the path.  A generic mapper keeps
+            # the pipeline constructible; the triaxial banding is a no-op
+            # there but the marker/colour bookkeeping is still exercised.
+            self._spheroid_mapper = vtk.vtkPolyDataMapper()
         self._spheroid_mapper.SetInputConnection(
             self._spheroid_polydata_filter.GetOutputPort()
         )
@@ -578,6 +596,15 @@ class DistanceSpheroidInitRepresentation:
             self._spheroid_transform.Modified()
         if self._parametric_function_source is not None:
             self._parametric_function_source.Modified()
+
+        # Drive the contour shader: push (centre, radii) onto the mapper
+        # so its fragment shader bands the triaxial-ellipsoid implicit
+        # whose quadric coefficients come from the SSOT (ADR-0015
+        # §"Stack 4").  Mirrors how vtkLiverBezierSurfacePipeline sets its
+        # grid/margin uniforms.  No-op on the generic fallback mapper.
+        set_spheroid = getattr(self._spheroid_mapper, "SetSpheroid", None)
+        if set_spheroid is not None:
+            set_spheroid(list(center), rx, ry, rz)
 
         # Markers: resize the actor list, then update each sphere's
         # centre.
