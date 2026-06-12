@@ -7,8 +7,8 @@ pattern committed by `ADR-0013`_ §4 and the LiverMarkups dissolution
 named by `ADR-0014`_ §2.  One Pipeline observes a
 ``vtkMRMLBezierSurfaceNode`` (data, ADR-0014 §1), its paired
 ``vtkMRMLParametricSurfaceDisplayNode`` (decoration, ADR-0013 §8) and —
-when wired — the orchestrating ``vtkMRMLLiverResectionNode``'s
-``ResectionState`` / ``InitializationMode`` enums (per ADR-0013 §4).
+when wired — the orchestrating ``vtkMRMLResectionPlanNode``'s
+``State`` / ``InitializationMode`` (per ADR-0013 §4).
 The Pipeline owns three Representations keyed on the
 ``(state, initMode)`` tuple; ``UpdatePipeline()`` activates whichever
 Representation matches the current tuple.
@@ -55,12 +55,12 @@ The Pipeline attaches three ``vtkCommand::ModifiedEvent`` observers:
 * On the **display node** — ``vtkMRMLParametricSurfaceDisplayNode`` —
   decoration mutations.
 * On the **orchestrating-state node** (optional, when wired) —
-  ``vtkMRMLLiverResectionNode`` — coarse-grained workflow state
+  ``vtkMRMLResectionPlanNode`` — coarse-grained workflow state
   changes that some Representations gate on.
 
 All three callbacks route into ``UpdatePipeline()``.  See ADR-0013 §4
-for the rationale: the orchestrating-state node's ``ResectionState`` /
-``InitializationMode`` enums drive Representation dispatch.
+for the rationale: the orchestrating-state node's ``State`` /
+``InitializationMode`` drive Representation dispatch.
 
 Idempotency
 -----------
@@ -341,7 +341,7 @@ class LiverBezierSurfacePipeline(_PipelineBase):
     # ------------------------------------------------------------------ #
 
     def SetResectionNode(self, resectionNode: Any) -> None:  # noqa: N802 - VTK verb
-        """Attach the orchestrating-state node (``vtkMRMLLiverResectionNode``).
+        """Attach the orchestrating-state node (``vtkMRMLResectionPlanNode``).
 
         Per ADR-0013 §4 the Pipeline's observation set is not limited
         to its own display node — when the displayed concept's

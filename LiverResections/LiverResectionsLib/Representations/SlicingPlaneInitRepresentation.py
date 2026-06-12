@@ -104,9 +104,9 @@ except ImportError:  # pragma: no cover — pure-Python path
 
 
 # --------------------------------------------------------------------------- #
-# Default colour / opacity values — mirror the legacy
-# ``vtkMRMLLiverResectionNode`` constructor so the Init-state visual
-# baseline matches the Planning Representation's defaults.
+# Default colour / opacity values — carried forward from the v1
+# resection defaults so the Init-state visual baseline matches the
+# Planning Representation's defaults.
 # --------------------------------------------------------------------------- #
 
 DEFAULT_RESECTION_COLOR = (1.0, 1.0, 1.0)

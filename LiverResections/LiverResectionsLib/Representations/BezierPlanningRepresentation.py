@@ -79,10 +79,9 @@ except ImportError:  # pragma: no cover — pure-Python path
 
 
 # --------------------------------------------------------------------------- #
-# Default colour / opacity values — mirror the legacy
-# ``vtkMRMLLiverResectionNode`` constructor (see its .cxx, lines 56-66) so
-# the Pipeline path starts from an identical visual baseline.  Display
-# nodes carry these as float[3] in [0,1].
+# Default colour / opacity values — carried forward from the v1
+# resection defaults so the Pipeline path starts from an identical
+# visual baseline.  Display nodes carry these as float[3] in [0,1].
 # --------------------------------------------------------------------------- #
 
 DEFAULT_RESECTION_COLOR = (1.0, 1.0, 1.0)
