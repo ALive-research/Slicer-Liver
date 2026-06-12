@@ -295,6 +295,11 @@ foreach(_scenario IN LISTS _visual_test_scenarios)
     # ``QT_QPA_PLATFORM=offscreen`` already; the env line below is a
     # belt-and-braces safeguard for local runs.
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    # Offscreen GL rendering on a headless/software-GL stack can hang
+    # (rather than fail cleanly) if the GL context never comes up; cap
+    # each replay so a stuck render fails fast instead of holding the CI
+    # job open to its global limit.
+    TIMEOUT 180
   )
 endforeach()
 
