@@ -238,6 +238,16 @@ set(_visual_test_scenarios
   # COMMAND below supplies --additional-module-paths rather than
   # --disable-modules.
   DistanceSpheroidContourShader
+  # T3 ResectogramPipeline baseline targets (ADR-0027 invariant-test-
+  # first).  Each captures against the v1 monolith first, then is
+  # re-baselined to the v2.0 ResectogramPipeline.  Until the maintainer
+  # commits the .sha512 stubs the replay driver skips each at runtime.
+  Resectogram4x4BlurOff
+  Resectogram4x4NonSquareScaling
+  # SPLITTABLE / LAST — blur stays a v2.0 toggle; this baseline lands
+  # after the blur-off resectogram baselines are green (maintainer
+  # decision).  Listed here so the test surface is complete.
+  Resectogram4x4BlurOn
 )
 
 # Bundle extensions per scenario.  ``.png`` is the comparison target;

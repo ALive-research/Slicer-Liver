@@ -18,6 +18,8 @@ set(KIT_TEST_SRCS
   vtkLiverSpheroidRingExtractorEdgeCasesTest.cxx
   vtkLiverSpheroidRingExtractorConsistencyTest.cxx
   vtkSlicerLiverBezierControlPolygonGeometryTest1.cxx
+  vtkLiverResectogramAspectRatioTest.cxx
+  vtkLiverResectogramPixelMappingTest.cxx
   )
 
 #-----------------------------------------------------------------------------
@@ -57,5 +59,32 @@ set_property(SOURCE vtkLiverSpheroidRingExtractorConsistencyTest.cxx
   )
 SIMPLE_TEST(vtkLiverSpheroidRingExtractorConsistencyTest)
 set_tests_properties(vtkLiverSpheroidRingExtractorConsistencyTest PROPERTIES
+  SKIP_RETURN_CODE 125
+  )
+
+# T3 ResectogramPipeline — invariant-test-first scaffolding (ADR-0027).
+# Both helpers are extracted/introduced by the eventual T3 implementation;
+# until then the checked branch is compiled out behind its compile macro
+# and the test returns the CTest skip code (125).  The implementer adds
+# the pure-VTK helper (ADR-0015 §1, no MRML) and defines the matching
+# macro to lift each skip — see the test-file headers.
+#
+# vtkLiverResectogramAspectRatioTest pins the v1 Ratio() arc-length math
+# (square -> {1,1}; non-square -> non-{1,1}); the highest-value T3
+# invariant.  The active branch is gated on LIVER_RESECTOGRAM_ASPECT_RATIO
+# which is INTENTIONALLY left undefined here so the test skips (125)
+# until vtkLiverResectogramAspectRatio::ComputeAspectRatio lands; the
+# implementer adds the helper and appends that macro to lift the skip.
+SIMPLE_TEST(vtkLiverResectogramAspectRatioTest)
+set_tests_properties(vtkLiverResectogramAspectRatioTest PROPERTIES
+  SKIP_RETURN_CODE 125
+  )
+
+# vtkLiverResectogramPixelMappingTest pins the ADR-0025 §Context pixel ->
+# (u,v) correspondence the locator producer (issue #414) consumes.  Same
+# gating: LIVER_RESECTOGRAM_PIXEL_MAPPING is undefined until
+# vtkLiverResectogramPixelMapping::PixelToUV lands.
+SIMPLE_TEST(vtkLiverResectogramPixelMappingTest)
+set_tests_properties(vtkLiverResectogramPixelMappingTest PROPERTIES
   SKIP_RETURN_CODE 125
   )
