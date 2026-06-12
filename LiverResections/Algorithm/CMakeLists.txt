@@ -58,6 +58,10 @@ set(${KIT}_SRCS
   vtkLiverBezierFitter.cxx
   vtkSlicerLiverBezierControlPolygonGeometry.h
   vtkSlicerLiverBezierControlPolygonGeometry.cxx
+  vtkLiverResectogramAspectRatio.h
+  vtkLiverResectogramAspectRatio.cxx
+  vtkLiverResectogramPixelMapping.h
+  vtkLiverResectogramPixelMapping.cxx
   )
 
 #
