@@ -243,7 +243,7 @@ vtkMRMLAbstractLogic* qSlicerLiverResectionsModule::createLogic()
 //-----------------------------------------------------------------------------
 QStringList qSlicerLiverResectionsModule::associatedNodeTypes() const
 {
-  return QStringList() << "vtkMRMLLiverResectionNode";
+  return QStringList() << "vtkMRMLResectionPlanNode";
 }
 
 //-----------------------------------------------------------------------------
