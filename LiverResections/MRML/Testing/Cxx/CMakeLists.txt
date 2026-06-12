@@ -15,6 +15,11 @@ set(KIT_TEST_SRCS
   vtkMRMLResectionPlanNodeTest1.cxx
   vtkMRMLResectionPlanStorageNodeTest1.cxx
   vtkMRMLResectionPlanLegacyFcsvMigrationTest.cxx
+  # Characterization test (T2.7-2b): the plan-to-carrier association
+  # round-trips through .lrp.json via the typed "geometry" node-ref alone,
+  # re-resolving on a standalone load with no logic instance.  Pins the
+  # mechanism that makes the 6 legacy logic association maps removable.
+  vtkMRMLResectionPlanGeometryRefRoundTripTest.cxx
   )
 
 #-----------------------------------------------------------------------------
@@ -51,3 +56,4 @@ SIMPLE_TEST(vtkMRMLAbstractParametricSurfaceNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanStorageNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanLegacyFcsvMigrationTest)
+SIMPLE_TEST(vtkMRMLResectionPlanGeometryRefRoundTripTest)
