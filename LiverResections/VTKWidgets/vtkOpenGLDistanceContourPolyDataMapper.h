@@ -82,6 +82,21 @@ public:
   /// Get the contour visibility
   void SetContourVisibility(bool contourVisibility);
 
+  /// Set the triaxial-ellipsoid spheroid the contour renders.  The
+  /// mapper derives the vtkQuadric a0..a9 coefficient vector for the
+  /// shader uniform by calling
+  /// vtkLiverSpheroidRingExtractor::ComputeQuadricCoefficients (the
+  /// single source of truth, ADR-0015 §"Stack 4") — it does NOT
+  /// re-derive the (centre, radii) -> a0..a9 formula.  Binding the same
+  /// quadric the CPU ring extractor feeds vtkQuadric makes the rendered
+  /// surface and the extracted ring provably the same surface.
+  void SetSpheroid(const double center[3], double rx, double ry, double rz);
+
+  /// Read back the a0..a9 coefficient vector the mapper would bind as
+  /// the spheroid-quadric shader uniform.  CPU-readable mirror of the
+  /// bound uniform so the GPU path is testable without a GL context.
+  void GetSpheroidQuadricCoefficients(double a[10]) const;
+
 protected:
   vtkOpenGLDistanceContourPolyDataMapper();
   ~vtkOpenGLDistanceContourPolyDataMapper();

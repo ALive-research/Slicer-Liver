@@ -40,6 +40,12 @@
 // This module VTK includes
 #include "vtkOpenGLDistanceContourPolyDataMapper.h"
 
+// LiverResections Algorithm includes — the single source of truth for the
+// spheroid implicit's vtkQuadric a0..a9 form (ADR-0015 §"Stack 4").  The
+// GPU path derives its quadric uniform from this canonical builder so the
+// rendered surface and the CPU-extracted ring are the same surface.
+#include "vtkLiverSpheroidRingExtractor.h"
+
 // VTK includes
 #include <vtkCellData.h>
 #include <vtkFloatArray.h>
@@ -59,6 +65,9 @@
 #include <vtkTextureObject.h>
 #include <vtkTransform.h>
 
+// STD includes
+#include <algorithm>
+
 //------------------------------------------------------------------------------
 class vtkOpenGLDistanceContourPolyDataMapper::vtkInternal
 {
@@ -69,6 +78,9 @@ public:
     , ReferencePoint{ 1.0f, 0.0f, 0.0f, 1.0f }
     , ContourThickness(0.05)
     , ContourVisibility(false)
+    // Unit sphere at the origin as the pre-SetSpheroid default
+    // (a0 x^2 + a1 y^2 + a2 z^2 - 1 = 0).
+    , SpheroidQuadric{ 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0 }
   {
   }
 
@@ -77,6 +89,10 @@ public:
   std::array<float, 4> ReferencePoint;
   float ContourThickness;
   bool ContourVisibility;
+  // a0..a9 coefficients of the triaxial-ellipsoid quadric, derived from
+  // the SSOT (vtkLiverSpheroidRingExtractor::ComputeQuadricCoefficients)
+  // and bound to the fragment shader's uSpheroidQuadric* uniforms.
+  std::array<double, 10> SpheroidQuadric;
 };
 
 //------------------------------------------------------------------------------
@@ -129,21 +145,43 @@ void vtkOpenGLDistanceContourPolyDataMapper::ReplaceShaderValues(std::map<vtkSha
                                "in vec4 vertexWCVSOutput;"
                                "vec4 fragPositionMC = vertexWCVSOutput;\n");
 
+  // Triaxial-ellipsoid quadric uniforms.  The a0..a9 coefficient vector
+  // (ADR-0015 §"Stack 4") is packed into three vec3s plus a scalar:
+  //   uSpheroidQuadricSq    = (a0, a1, a2)  quadratic x^2 y^2 z^2
+  //   uSpheroidQuadricCross = (a3, a4, a5)  cross xy yz xz
+  //   uSpheroidQuadricLin   = (a6, a7, a8)  linear x y z
+  //   uSpheroidQuadricConst =  a9           constant
   vtkShaderProgram::Substitute(FSSource,
                                "//VTK::Color::Dec",
                                "//VTK::Color::Dec\n"
                                "uniform float uContourThickness;\n"
                                "uniform int uContourVisibility;\n"
-                               "uniform vec4 uExternalPointMC;\n"
-                               "uniform vec4 uReferencePointMC;\n");
+                               "uniform vec3 uSpheroidQuadricSq;\n"
+                               "uniform vec3 uSpheroidQuadricCross;\n"
+                               "uniform vec3 uSpheroidQuadricLin;\n"
+                               "uniform float uSpheroidQuadricConst;\n");
 
+  // Evaluate the triaxial-ellipsoid implicit
+  //   F(p) = a0 x^2 + a1 y^2 + a2 z^2
+  //        + a3 xy + a4 yz + a5 xz
+  //        + a6 x  + a7 y  + a8 z + a9
+  // (vtkQuadric's convention, NO implicit factor of 2) and band the
+  // zero iso-surface with abs(F(p)) < uContourThickness — the same
+  // implicit-banding shape the Bezier resection mapper uses for its
+  // margin bands.
   vtkShaderProgram::Substitute(FSSource,
                                "//VTK::Color::Impl",
                                "//VTK::Color::Impl\n"
-                               "  vec3 contourColor= vec3(1.0, 1.0 ,1.0);\n"
-                               "  float refDist= distance(uExternalPointMC, uReferencePointMC);\n"
-                               "  float dist = distance(uReferencePointMC, fragPositionMC);\n"
-                               "  if(abs(dist-refDist) < uContourThickness && uContourVisibility != 0){\n"
+                               "  vec3 contourColor = vec3(1.0, 1.0, 1.0);\n"
+                               "  vec3 p = fragPositionMC.xyz;\n"
+                               "  float spheroidValue =\n"
+                               "      dot(uSpheroidQuadricSq, p * p)\n"
+                               "    + uSpheroidQuadricCross.x * p.x * p.y\n"
+                               "    + uSpheroidQuadricCross.y * p.y * p.z\n"
+                               "    + uSpheroidQuadricCross.z * p.x * p.z\n"
+                               "    + dot(uSpheroidQuadricLin, p)\n"
+                               "    + uSpheroidQuadricConst;\n"
+                               "  if(abs(spheroidValue) < uContourThickness && uContourVisibility != 0){\n"
                                "     ambientColor = contourColor;\n"
                                "     diffuseColor = contourColor;\n"
                                "     opacity = 1.0;\n"
@@ -208,6 +246,30 @@ void vtkOpenGLDistanceContourPolyDataMapper::SetMapperShaderParameters(vtkOpenGL
     cellBO.Program->SetUniformi("uContourVisibility", static_cast<int>(this->Impl->ContourVisibility));
   }
 
+  const std::array<double, 10>& a = this->Impl->SpheroidQuadric;
+  if (cellBO.Program->IsUniformUsed("uSpheroidQuadricSq"))
+  {
+    float sq[3] = { static_cast<float>(a[0]), static_cast<float>(a[1]), static_cast<float>(a[2]) };
+    cellBO.Program->SetUniform3f("uSpheroidQuadricSq", sq);
+  }
+
+  if (cellBO.Program->IsUniformUsed("uSpheroidQuadricCross"))
+  {
+    float cross[3] = { static_cast<float>(a[3]), static_cast<float>(a[4]), static_cast<float>(a[5]) };
+    cellBO.Program->SetUniform3f("uSpheroidQuadricCross", cross);
+  }
+
+  if (cellBO.Program->IsUniformUsed("uSpheroidQuadricLin"))
+  {
+    float lin[3] = { static_cast<float>(a[6]), static_cast<float>(a[7]), static_cast<float>(a[8]) };
+    cellBO.Program->SetUniform3f("uSpheroidQuadricLin", lin);
+  }
+
+  if (cellBO.Program->IsUniformUsed("uSpheroidQuadricConst"))
+  {
+    cellBO.Program->SetUniformf("uSpheroidQuadricConst", static_cast<float>(a[9]));
+  }
+
   Superclass::SetMapperShaderParameters(cellBO, ren, actor);
 }
 
@@ -261,4 +323,21 @@ void vtkOpenGLDistanceContourPolyDataMapper::SetContourVisibility(bool contourVi
 {
   this->Impl->ContourVisibility = contourVisibility;
   this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLDistanceContourPolyDataMapper::SetSpheroid(const double center[3], double rx, double ry, double rz)
+{
+  // Derive the a0..a9 quadric vector from the single source of truth so
+  // the rendered surface matches the CPU-extracted ring (ADR-0015
+  // §"Stack 4").  No re-derivation of the (centre, radii) -> a0..a9
+  // formula here.
+  vtkLiverSpheroidRingExtractor::ComputeQuadricCoefficients(center, rx, ry, rz, this->Impl->SpheroidQuadric.data());
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLDistanceContourPolyDataMapper::GetSpheroidQuadricCoefficients(double a[10]) const
+{
+  std::copy(this->Impl->SpheroidQuadric.begin(), this->Impl->SpheroidQuadric.end(), a);
 }
