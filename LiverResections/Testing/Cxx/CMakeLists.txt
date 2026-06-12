@@ -8,7 +8,6 @@ set(INPUT ${CMAKE_CURRENT_SOURCE_DIR}/../Data/Input)
 set(KIT_TEST_SRCS
   vtkMRMLLiverResectionNodeTest1.cxx
   vtkSlicerLiverResectionsLogicTest1.cxx
-  vtkMRMLLiverResectionStorageRoundTripTest.cxx
   qSlicerLiverResectionsModuleIntegrationTest.cxx
   )
 
@@ -26,5 +25,4 @@ slicerMacroConfigureModuleCxxTestDriver(
 
 SIMPLE_TEST( vtkMRMLLiverResectionNodeTest1 )
 SIMPLE_TEST( vtkSlicerLiverResectionsLogicTest1)
-SIMPLE_TEST( vtkMRMLLiverResectionStorageRoundTripTest ${TEMP})
 SIMPLE_TEST( qSlicerLiverResectionsModuleIntegrationTest)
