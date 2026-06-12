@@ -66,6 +66,12 @@ def _parse_argv() -> argparse.Namespace:
             f"normalised to [0, 1].  Default {DEFAULT_TOLERANCE}."
         ),
     )
+    # The ExternalData_add_test() CMake command appends the resolved
+    # DATA{...} baseline files as trailing positional args so CTest
+    # fetches the blobs before the test runs.  The comparison locates
+    # them via --baseline-dir, so accept and ignore these here rather
+    # than letting argparse reject them as unrecognised.
+    parser.add_argument("externaldata_deps", nargs="*")
     if "--" in sys.argv:
         idx = sys.argv.index("--")
         argv = sys.argv[idx + 1 :]
