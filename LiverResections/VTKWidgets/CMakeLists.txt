@@ -41,6 +41,12 @@ set(${KIT}_EXPORT_DIRECTIVE "VTK_SLICER_${MODULE_NAME_UPPER}_MODULE_VTKWIDGETS_E
 set(${KIT}_INCLUDE_DIRECTORIES
   ${vtkSlicer${MODULE_NAME}ModuleMRML_SOURCE_DIR}
   ${vtkSlicer${MODULE_NAME}ModuleMRML_BINARY_DIR}
+  # vtkOpenGLDistanceContourPolyDataMapper derives its triaxial-ellipsoid
+  # shader uniform from vtkLiverSpheroidRingExtractor::ComputeQuadricCoefficients
+  # (the SSOT, ADR-0015 §"Stack 4") — pull in the Algorithm library's
+  # headers + binary dir (its generated export header).
+  ${vtkSlicer${MODULE_NAME}ModuleAlgorithm_SOURCE_DIR}
+  ${vtkSlicer${MODULE_NAME}ModuleAlgorithm_BINARY_DIR}
   )
 
 set(${KIT}_SRCS
@@ -60,6 +66,10 @@ set(${KIT}_SRCS
 
 set(${KIT}_TARGET_LIBRARIES
   vtkSlicer${MODULE_NAME}ModuleMRML
+  # The distance-contour mapper consumes the single-source-of-truth
+  # quadric-coefficient builder from the Algorithm library (ADR-0015
+  # §"Stack 4").  No cycle: the Algorithm library does NOT link VTKWidgets.
+  vtkSlicer${MODULE_NAME}ModuleAlgorithm
   ${VTK_LIBRARIES}
   )
 
