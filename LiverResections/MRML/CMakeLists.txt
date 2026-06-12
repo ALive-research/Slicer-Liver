@@ -7,8 +7,6 @@ set(${KIT}_EXPORT_DIRECTIVE "VTK_SLICER_${MODULE_NAME_UPPER}_MODULE_MRML_EXPORT"
 set(${KIT}_INCLUDE_DIRECTORIES)
 
 set(${KIT}_SRCS
-  vtkMRMLLiverResectionNode.h
-  vtkMRMLLiverResectionNode.cxx
   vtkMRMLLiverResectionCSVStorageNode.h
   vtkMRMLLiverResectionCSVStorageNode.cxx
   vtkMRMLAbstractParametricSurfaceNode.h
