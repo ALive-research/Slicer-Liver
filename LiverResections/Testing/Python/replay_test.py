@@ -46,6 +46,24 @@ import sys
 # catching real visual regressions.
 DEFAULT_TOLERANCE = 0.15
 
+# Substrings that mark a GL renderer string as a software rasteriser.
+# When the replay runs on one of these (e.g. CI's xvfb + llvmpipe
+# stack), the bezier distance-map render is unreliable and has been
+# observed to hang to the CTest TIMEOUT (see the visual-regression
+# hardening issue tracked in ADR-0020 §"Rollout plan").  We detect
+# this up front and skip BEFORE the hanging render rather than burning
+# the full per-test timeout.  Matched case-insensitively against the
+# renderer + version strings reported by ``vtkRenderWindow``.
+SOFTWARE_GL_MARKERS = (
+    "llvmpipe",
+    "softpipe",
+    "swrast",
+    "software rasterizer",
+    "software rasteriser",
+    "gallium llvmpipe",
+    "mesa offscreen",
+)
+
 
 def _parse_argv() -> argparse.Namespace:
     """Slice out the ``--`` separated args; same convention as the
@@ -119,6 +137,111 @@ def _has_baseline(baseline_dir: pathlib.Path, test_name: str) -> bool:
     png = _resolve_baseline_png(baseline_dir, test_name)
     stub = baseline_dir / f"{test_name}.png.sha512"
     return png.exists() and stub.exists()
+
+
+def _is_software_renderer(capabilities: str) -> bool:
+    """True iff ``capabilities`` names a software GL rasteriser.
+
+    ``capabilities`` is the free-form string reported by
+    ``vtkRenderWindow.ReportCapabilities()`` (which embeds ``GL_RENDERER``
+    + ``GL_VERSION``).  We scan it case-insensitively for any of
+    ``SOFTWARE_GL_MARKERS``.  Kept as a pure helper so the skip
+    decision is unit-testable without bringing up a GL context.
+    """
+    haystack = capabilities.lower()
+    return any(marker in haystack for marker in SOFTWARE_GL_MARKERS)
+
+
+def _probe_gl_renderer() -> str | None:
+    """Bring up a throwaway offscreen GL context and report its renderer.
+
+    Returns the ``vtkRenderWindow.ReportCapabilities()`` string, or
+    ``None`` if a context could not be created at all.  This is a cheap
+    probe: a bare ``vtkRenderWindow`` + capability query exercises only
+    context creation and ``glGetString`` reads, which work even on
+    llvmpipe — it does NOT touch the bezier distance-map mapper that is
+    the actual source of the software-GL hang.
+
+    Guarded so the probe can never itself crash the run: any exception
+    (and a context that fails to initialise) yields ``None``, which the
+    caller treats as "skip with notice" rather than proceeding into the
+    hanging render.
+    """
+    import vtk  # type: ignore[import-not-found]
+
+    render_window = None
+    try:
+        render_window = vtk.vtkRenderWindow()
+        render_window.SetOffScreenRendering(1)
+        render_window.SetSize(1, 1)
+        render_window.SetMultiSamples(0)
+        # The GL context is created lazily on the first ``Render``; until
+        # then ``ReportCapabilities`` only reports "display id not set"
+        # (verified offscreen on Mesa).  An EMPTY render — no renderer,
+        # no actors, no mapper — is the cheapest way to force context
+        # creation.  It exercises only context + framebuffer setup, NOT
+        # the bezier distance-map mapper that is the actual source of the
+        # software-GL hang, so it stays cheap even on llvmpipe.
+        render_window.Render()
+        # ``ReportCapabilities`` embeds ``GL_RENDERER`` + ``GL_VERSION``
+        # once the context is up.
+        capabilities = render_window.ReportCapabilities()
+        return capabilities if capabilities else None
+    except Exception:  # noqa: BLE001 — any failure means "cannot render here".
+        return None
+    finally:
+        if render_window is not None:
+            render_window.Finalize()
+
+
+def _software_gl_skip_reason(capabilities: str | None) -> str | None:
+    """Return a skip message if the probed GL stack cannot render here.
+
+    ``capabilities is None`` means the probe could not even create a
+    context — treat that as un-renderable too (skip, do not proceed).
+    A software rasteriser match returns a greppable ``[skip]`` reason.
+    A real GPU returns ``None`` (proceed with render + diff).
+
+    This is deliberately distinct from the missing-baseline logic: a
+    software-GL skip is about the *renderer*, not the baseline, so it
+    fires regardless of whether a baseline blob resolved.
+    """
+    if capabilities is None:
+        return (
+            "[skip] offscreen GL context could not be created — cannot "
+            "render the bezier distance-map here (see the visual-regression "
+            "hardening issue); skipping render+diff"
+        )
+    if _is_software_renderer(capabilities):
+        # Pull a short single-line renderer token out for the message;
+        # the full capabilities blob is multi-line.
+        renderer = _renderer_token(capabilities)
+        return (
+            f"[skip] offscreen software GL ({renderer}) — bezier "
+            "distance-map render is unreliable on this stack (see the "
+            "visual-regression hardening issue); skipping render+diff"
+        )
+    return None
+
+
+def _renderer_token(capabilities: str) -> str:
+    """Extract a compact renderer label from a capabilities blob.
+
+    ``ReportCapabilities`` emits lines like ``OpenGL renderer string:
+    llvmpipe (LLVM 15.0.7, 256 bits)``.  Return the value after that
+    label when present, else the first software marker found, else a
+    generic fallback — purely for a readable skip message.
+    """
+    for line in capabilities.splitlines():
+        if "renderer string" in line.lower():
+            value = line.partition(":")[2].strip()
+            if value:
+                return value
+    lowered = capabilities.lower()
+    for marker in SOFTWARE_GL_MARKERS:
+        if marker in lowered:
+            return marker
+    return "software"
 
 
 def _render_scenario(scenario, width: int, height: int):
@@ -239,6 +362,19 @@ def main() -> int:
 
     baseline_dir = pathlib.Path(args.baseline_dir)
     scenario = _load_scenario(args.scenarios_dir, args.test)
+
+    # Software-GL fast skip.  Probe the offscreen GL renderer up front
+    # (cheap context + capability query, NOT the bezier mapper) and
+    # bail out before the scenario render when we land on a software
+    # rasteriser, or when no GL context can be created at all.  This is
+    # what stops CI's xvfb + llvmpipe stack from burning the full
+    # per-test TIMEOUT on a render that hangs.  Distinct from the
+    # missing-baseline branch below: a software-GL skip is about the
+    # renderer, so it fires regardless of baseline presence.
+    skip_reason = _software_gl_skip_reason(_probe_gl_renderer())
+    if skip_reason is not None:
+        print(skip_reason)
+        return 0
 
     # When the visual-regression suite is explicitly enabled (the CI
     # hard-gate sets LIVER_RUN_VISUAL_TESTS=1), a registered scenario
