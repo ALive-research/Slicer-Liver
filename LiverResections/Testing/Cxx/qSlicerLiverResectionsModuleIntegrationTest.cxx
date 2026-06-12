@@ -47,12 +47,13 @@
 
 // Module includes
 #include <qSlicerLiverResectionsModule.h>
-#include <vtkMRMLLiverResectionNode.h>
+#include <vtkMRMLResectionPlanNode.h>
 #include "qSlicerLiverResectionsReader.h"
 #include <vtkSlicerLiverResectionsLogic.h>
 #include <vtkSlicerMarkupsLogic.h>
 #include <qSlicerLiverMarkupsModule.h> //Needed to include qSlicerLiverMarkupsModule_INCLUDE_DIRS to find the files from the LiverMarkupsModule
 
+#include <vtkMRMLBezierSurfaceNode.h>
 #include <vtkMRMLMarkupsBezierSurfaceNode.h>
 #include <vtkMRMLMarkupsBezierSurfaceDisplayNode.h>
 
@@ -165,12 +166,14 @@ int qSlicerLiverResectionsModuleIntegrationTest(int argc, char* argv[])
   module.initialize(appLogic);
   module.setMRMLScene(scene);
 
-  // Add and get nodes
-  checkAddAndGetNode(scene, "vtkMRMLLiverResectionNode");
-  checkAddAndGetNode(scene, "vtkMRMLLiverResectionCSVStorageNode");
+  // Add and get nodes — the v2 resection-plan wrapper + its Bezier
+  // carrier (ADR-0014 wrapper-vs-carrier split) are registered by the
+  // module logic's RegisterNodes().
+  checkAddAndGetNode(scene, "vtkMRMLResectionPlanNode");
+  checkAddAndGetNode(scene, "vtkMRMLResectionPlanStorageNode");
 
-  vtkMRMLLiverResectionNode* liverResectionNode = vtkMRMLLiverResectionNode::SafeDownCast(scene->GetFirstNodeByClass("vtkMRMLLiverResectionNode"));
-  Q_ASSERT(liverResectionNode);
+  vtkMRMLResectionPlanNode* resectionPlanNode = vtkMRMLResectionPlanNode::SafeDownCast(scene->GetFirstNodeByClass("vtkMRMLResectionPlanNode"));
+  Q_ASSERT(resectionPlanNode);
 
   vtkSlicerLiverResectionsLogic* liverResectionsLogic = vtkSlicerLiverResectionsLogic::SafeDownCast(module.logic());
   Q_ASSERT(liverResectionsLogic);
@@ -190,15 +193,16 @@ int qSlicerLiverResectionsModuleIntegrationTest(int argc, char* argv[])
   //    markupsModule->initialize(appLogic);
   delete markupsModule;
 
-  vtkNew<vtkMRMLModelNode> targetOrgan;
-  vtkNew<vtkSphereSource> source;
-  targetOrgan->SetPolyDataConnection(source->GetOutputPort());
-
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsSlicingContourDisplayNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceDisplayNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>::New());
-  liverResectionNode->SetTargetOrganModelNode(targetOrgan);
-  liverResectionsLogic->AddResectionPlane(liverResectionNode);
+
+  // The v2 plan resolves its geometry through a typed node reference
+  // to the Bezier carrier (ADR-0014); exercise that wiring.
+  vtkMRMLBezierSurfaceNode* bezierCarrier = vtkMRMLBezierSurfaceNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLBezierSurfaceNode"));
+  Q_ASSERT(bezierCarrier);
+  resectionPlanNode->SetAndObserveGeometryNode(bezierCarrier);
+  Q_ASSERT(resectionPlanNode->GetGeometryNode() == bezierCarrier);
 
   // Cannot get these back from qSlicerIOManager with public functions?
   //    qSlicerLiverResectionsReader *markupsReader;
@@ -206,7 +210,7 @@ int qSlicerLiverResectionsModuleIntegrationTest(int argc, char* argv[])
 
   // Also test the MRML methods in the nodes
   EXERCISE_ALL_BASIC_MRML_METHODS(slicingContourNode.GetPointer());
-  EXERCISE_ALL_BASIC_MRML_METHODS(liverResectionNode);
+  EXERCISE_ALL_BASIC_MRML_METHODS(resectionPlanNode);
 
   //    return module.runApp(argc, argv);//fails - just delete app instead
   delete module.app;
