@@ -224,8 +224,7 @@ int testLegacyFcsvMigratesToPlanWithDefaults()
 
   // The fcsv parse pulls the Markups-fiducial deprecation warning
   // ("fcsv format is deprecated ... use .mrk.json"); suppress it so
-  // CTest's WITH_VTK_ERROR_OUTPUT_CHECK does not flag it.  Precedent:
-  // vtkMRMLLiverResectionStorageRoundTripTest.cxx Phase 1.  Note: this
+  // CTest's WITH_VTK_ERROR_OUTPUT_CHECK does not flag it.  Note: this
   // suppression is ORTHOGONAL to assertion 3 below -- that asserts the
   // storage node's OWN GetUserMessages collection, not this VTK error
   // stream.
