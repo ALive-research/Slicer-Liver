@@ -52,6 +52,7 @@
 // recognise the new ``.lrp.json`` storage format.
 #include "vtkMRMLBezierSurfaceNode.h"
 #include "vtkMRMLParametricSurfaceDisplayNode.h"
+#include "vtkMRMLResectogramDisplayNode.h"
 #include "vtkMRMLResectionPlanNode.h"
 #include "vtkMRMLResectionPlanStorageNode.h"
 
@@ -135,6 +136,14 @@ void vtkSlicerLiverResectionsLogic::RegisterNodes()
   // persistence flows through the plan storage node below.
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLParametricSurfaceDisplayNode>::New());
+
+  // T3 ResectogramPipeline display node (ADR-0013 §1 + §5).  The
+  // resectogram is the flattened 2D image of the Bezier (u, v) domain
+  // (ADR-0025 §Context); it gets its OWN display-node type so the
+  // ResectogramPipeline can be keyed on it without sharing
+  // vtkMRMLParametricSurfaceDisplayNode (which the 3D Bezier-surface
+  // Pipeline owns) — one Pipeline per display-node type (ADR-0013 §1).
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLResectogramDisplayNode>::New());
 
   // Resection-plan family (2026-05-25 wrapper-vs-carrier amendment to
   // ADR-0014 §"Fourth layer" + ADR-0023 §"Persistence").  The plan
