@@ -8,13 +8,13 @@ programmatically groups its node types under per-stage Subject-Hierarchy
 folders ("Anatomy", "Vascular Territories", "Resections", "Volumetry"),
 lazily-created and reused.  T5.2-f wires ``LiverResections`` into the shared
 ``vtkSlicerSubjectHierarchyFolders.CollectUnderFolder`` utility: when a
-``vtkMRMLLiverResectionNode`` (the WRAPPER) is added to the scene, the module
+``vtkMRMLResectionPlanNode`` (the WRAPPER) is added to the scene, the module
 logic's ``OnMRMLSceneNodeAdded`` observer collects it under a scene-root
 "Resections" folder.
 
 Two pinned invariants:
 
-  1. The wrapper ``vtkMRMLLiverResectionNode`` lands under a scene-root
+  1. The wrapper ``vtkMRMLResectionPlanNode`` lands under a scene-root
      "Resections" folder (the per-stage folder).
   2. The hidden Bezier/contour CARRIERS (``SetHideFromEditors(true)``) are
      NOT reparented -- only the wrapper is collected.  Hiding the carriers
@@ -41,8 +41,8 @@ from __future__ import annotations
 import pytest
 
 RESECTIONS_FOLDER_NAME = "Resections"
-WRAPPER_CLASS = "vtkMRMLLiverResectionNode"
-HIDDEN_CARRIER_CLASS = "vtkMRMLMarkupsBezierSurfaceNode"
+WRAPPER_CLASS = "vtkMRMLResectionPlanNode"
+HIDDEN_CARRIER_CLASS = "vtkMRMLBezierSurfaceNode"
 
 
 def _slicer_scene_sh_or_skip():
@@ -99,7 +99,7 @@ def _scene_root_folder_named(shNode, name):
 
 
 def test_resection_wrapper_collected_under_resections_folder():
-    """The wrapper ``vtkMRMLLiverResectionNode`` lands under "Resections".
+    """The wrapper ``vtkMRMLResectionPlanNode`` lands under "Resections".
 
     ADR-0023 §"MRML scene organisation" [test]: per-stage scene-root folder,
     lazily created.  RED until the LiverResections ``OnMRMLSceneNodeAdded``
@@ -124,7 +124,7 @@ def test_resection_wrapper_collected_under_resections_folder():
     node_item = shNode.GetItemByDataNode(wrapper)
     assert node_item, "wrapper has no Subject-Hierarchy item"
     assert shNode.GetItemParent(node_item) == folder_item, (
-        "the wrapper vtkMRMLLiverResectionNode must be parented under the "
+        "the wrapper vtkMRMLResectionPlanNode must be parented under the "
         "scene-root 'Resections' folder (ADR-0023 §'MRML scene organisation')."
     )
     # The folder is a direct child of the scene root (per-stage folder).
