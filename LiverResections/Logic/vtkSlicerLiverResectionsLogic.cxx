@@ -171,6 +171,17 @@ void vtkSlicerLiverResectionsLogic::ProcessMRMLNodesEvents(vtkObject* caller, un
   // vtkMRMLLiverResectionNode.  SetState already enforces the
   // irreversible Init -> Planning transition (ADR-0019), so a repeat
   // interaction is a no-op rather than a regression.
+  //
+  // NOTE: at runtime the Init -> Planning transition is driven by the
+  // LayerDM Pipeline commit seam (LiverBezierSurfacePipeline.commit()),
+  // NOT by an observer delivering StartInteractionEvent to this arm --
+  // the per-node interaction observation was wired inside the retired
+  // legacy resection family and went with it.  This arm is the
+  // test-pinned C++ mirror of that transition
+  // (vtkSlicerLiverResectionsLogicCarrierStateAdvanceTest invokes
+  // ProcessMRMLNodesEvents directly).  Do not delete it as dead code,
+  // and do not re-add a per-node observer assuming it is the sole
+  // runtime driver -- the Pipeline commit seam owns that.
   auto surfaceCarrier = vtkMRMLBezierSurfaceNode::SafeDownCast(caller);
   if (surfaceCarrier && event == vtkCommand::StartInteractionEvent)
   {
