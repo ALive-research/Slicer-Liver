@@ -71,19 +71,26 @@ set_tests_properties(vtkLiverSpheroidRingExtractorConsistencyTest PROPERTIES
 #
 # vtkLiverResectogramAspectRatioTest pins the v1 Ratio() arc-length math
 # (square -> {1,1}; non-square -> non-{1,1}); the highest-value T3
-# invariant.  The active branch is gated on LIVER_RESECTOGRAM_ASPECT_RATIO
-# which is INTENTIONALLY left undefined here so the test skips (125)
-# until vtkLiverResectogramAspectRatio::ComputeAspectRatio lands; the
-# implementer adds the helper and appends that macro to lift the skip.
+# invariant.  The pure-VTK helper
+# vtkLiverResectogramAspectRatio::ComputeAspectRatio() now exists, so the
+# active branch is enabled via -DLIVER_RESECTOGRAM_ASPECT_RATIO.
+# SKIP_RETURN_CODE retained so a future build that compiles the test
+# without the macro degrades to a skip rather than a hard failure.
+set_property(SOURCE vtkLiverResectogramAspectRatioTest.cxx
+  APPEND PROPERTY COMPILE_DEFINITIONS LIVER_RESECTOGRAM_ASPECT_RATIO
+  )
 SIMPLE_TEST(vtkLiverResectogramAspectRatioTest)
 set_tests_properties(vtkLiverResectogramAspectRatioTest PROPERTIES
   SKIP_RETURN_CODE 125
   )
 
 # vtkLiverResectogramPixelMappingTest pins the ADR-0025 §Context pixel ->
-# (u,v) correspondence the locator producer (issue #414) consumes.  Same
-# gating: LIVER_RESECTOGRAM_PIXEL_MAPPING is undefined until
-# vtkLiverResectogramPixelMapping::PixelToUV lands.
+# (u,v) correspondence the locator producer (issue #414) consumes.  The
+# pure-VTK helper vtkLiverResectogramPixelMapping::PixelToUV() now exists,
+# so the active branch is enabled via -DLIVER_RESECTOGRAM_PIXEL_MAPPING.
+set_property(SOURCE vtkLiverResectogramPixelMappingTest.cxx
+  APPEND PROPERTY COMPILE_DEFINITIONS LIVER_RESECTOGRAM_PIXEL_MAPPING
+  )
 SIMPLE_TEST(vtkLiverResectogramPixelMappingTest)
 set_tests_properties(vtkLiverResectogramPixelMappingTest PROPERTIES
   SKIP_RETURN_CODE 125

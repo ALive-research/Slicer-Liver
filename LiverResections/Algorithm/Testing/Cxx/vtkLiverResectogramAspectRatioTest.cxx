@@ -75,6 +75,7 @@
 // VTK includes
 # include <vtkNew.h>
 # include <vtkPoints.h>
+# include <vtkSmartPointer.h>
 #endif
 
 #include <cmath>
