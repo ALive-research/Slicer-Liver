@@ -34,15 +34,14 @@ quadric and pushes it onto the mapper, exactly as production does.
 Render-config note (contour visibility)
 ----------------------------------------
 The contour mapper's fragment shader *discards* every fragment unless
-its ``uContourVisibility`` uniform is set (default ``false``); the
-Representation drives ``SetSpheroid`` but, in the current T2.2 iteration,
-does not toggle ``ContourVisibility``.  Contour visibility is a
-render-time display concern (like the camera pose and anti-aliasing
-state this module also fixes), so ``setup_viewport`` enables it on the
-mapper the Representation owns — without touching production logic — so a
-human (or the offscreen replay) actually sees the banded iso-surface.
-This is documented here because it is the difference between "the band is
-visible" and "the surface is wholly discarded".
+its ``uContourVisibility`` uniform is set (default ``false``).  Production
+``DistanceSpheroidInitRepresentation._apply`` now enables it (alongside
+``SetSpheroid``) once there is a spheroid to show, so the band renders in
+the real application.  ``setup_viewport`` re-asserts it here purely as
+belt-and-suspenders for the offscreen replay/interactive paths; it is no
+longer the sole enabler.  This note exists because the visibility toggle
+is the difference between "the band is visible" and "the surface is
+wholly discarded".
 
 This module exposes the same trio consumed by ``capture_baseline.py``
 and ``replay_test.py``: :func:`setup_scene`, :func:`setup_camera`,
