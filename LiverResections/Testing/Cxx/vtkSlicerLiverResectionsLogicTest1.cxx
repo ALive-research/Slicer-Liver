@@ -45,12 +45,10 @@
 
 // VTKSlicer includes
 #include "vtkSlicerLiverResectionsLogic.h"
-#include <vtkMRMLLiverResectionNode.h>
 
 // VTK includes
 #include <vtkNew.h>
 #include <vtkSmartPointer.h>
-#include <vtkSphereSource.h>
 
 // STD includes
 #include <cstdlib>
@@ -82,11 +80,7 @@ int vtkSlicerLiverResectionsLogicTest1(int, char*[])
 
   logic1->SetMRMLScene(scene);
 
-  // Legacy node-class registrations (retired by T2.7).
-  checkAddAndGetNode(scene, "vtkMRMLLiverResectionNode");
-  checkAddAndGetNode(scene, "vtkMRMLLiverResectionCSVStorageNode");
-
-  // New LiverResources data / display nodes (ADR-0014 §1) must be
+  // LiverResources data / display nodes (ADR-0014 §1) must be
   // registered by ``RegisterNodes()``.  The surface is non-storable
   // per the 2026-05-25 wrapper-vs-carrier amendment; persistence
   // flows through the plan-rooted storage node.
@@ -104,10 +98,6 @@ int vtkSlicerLiverResectionsLogicTest1(int, char*[])
   // ``pythonManager()->executeString``.  Coverage for both calls
   // lives in the manual-launch probe + the workflow-layer pytest
   // under ``Testing/Python/workflow/`` (ADR-0008 §3).
-
-  vtkNew<vtkMRMLModelNode> targetOrgan;
-  vtkNew<vtkSphereSource> source;
-  targetOrgan->SetPolyDataConnection(source->GetOutputPort());
 
   return EXIT_SUCCESS;
 }
