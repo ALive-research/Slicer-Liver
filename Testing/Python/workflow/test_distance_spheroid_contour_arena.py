@@ -172,13 +172,21 @@ def test_distance_spheroid_contour_arena(render_interactive: float) -> None:
     # skipped the no-qSlicerApplication case; this guards the distinct
     # "live scene but the LiverResections module did not register" case
     # (module path missing) with an explicit, greppable skip reason.
-    if slicer.mrmlScene.CreateNodeByClass("vtkMRMLBezierSurfaceNode") is None:
+    registration_probe = slicer.mrmlScene.CreateNodeByClass(
+        "vtkMRMLBezierSurfaceNode"
+    )
+    if registration_probe is None:
         pytest.skip(
             "[arena-skip] vtkMRMLBezierSurfaceNode is not registered -- the "
             "LiverResections module is not on the additional-module-paths.  "
             "Run via the pytest_launched CTest row (Liver/Testing/Python/"
             "CMakeLists.txt supplies the module paths)."
         )
+    # CreateNodeByClass returns a node with the factory's +1 reference that the
+    # caller owns; drop it, or the probe instance survives to process shutdown
+    # and trips vtkDebugLeaks (failing the launched harness) even when the test
+    # later skips on a software-GL stack.
+    registration_probe.UnRegister(None)
 
     # Software-GL gate (CI's xvfb + llvmpipe): the custom contour fragment
     # shader does not light fragments on a software rasteriser, and the
