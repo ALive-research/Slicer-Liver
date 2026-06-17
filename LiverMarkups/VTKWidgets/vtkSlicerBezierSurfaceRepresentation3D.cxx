@@ -539,6 +539,13 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture
   this->DistanceMapTexture->SetMagnificationFilter(vtkTextureObject::Linear);
   this->DistanceMapTexture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
   this->DistanceMapTexture->CreateSeq3DFromRaw(dimensions[0], dimensions[1], dimensions[2], numComps, VTK_FLOAT, imageData->GetScalarPointer(), 0);
+
+  // Thread the texture object to the mapper so it is Activate()-ed onto a
+  // texture unit at draw time and the sampler3D uniform binds to that unit.
+  // The one-time Bind() above is not sufficient: on a later render the
+  // sampler3D would otherwise point at a unit with no live GL_TEXTURE_3D
+  // bound — the offscreen-render abort root cause (ADR-0003).
+  this->BezierSurfaceResectionMapper->SetDistanceMapTextureObject(this->DistanceMapTexture);
 }
 
 //----------------------------------------------------------------------

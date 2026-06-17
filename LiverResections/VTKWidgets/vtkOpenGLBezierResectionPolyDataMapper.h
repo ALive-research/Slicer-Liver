@@ -49,6 +49,8 @@
 // STD includes
 #include <memory>
 
+class vtkTextureObject;
+
 //-------------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLBezierResectionPolyDataMapper : public vtkOpenGLPolyDataMapper
 {
@@ -134,6 +136,18 @@ public:
   /// Set the thickness factor for the grid
   void SetGridThicknessFactor(float thicknessFactor);
 
+  /// Set the 3D distance-map texture object the fragment shader samples.
+  ///
+  /// The representation (vtkSlicerBezierSurfaceRepresentation3D) owns the
+  /// texture object and threads it here so the mapper can Activate() it at
+  /// draw time and bind the ``sampler3D distanceTexture`` uniform to the
+  /// unit the texture actually lands on.  Without this the sampler is left
+  /// pointing at a texture unit with no live GL_TEXTURE_3D bound on a
+  /// subsequent render (the offscreen-render abort root cause; ADR-0003).
+  void SetDistanceMapTextureObject(vtkTextureObject* texture);
+  /// Get the distance-map texture object set by the representation.
+  vtkTextureObject* GetDistanceMapTextureObject() const;
+
 protected:
   vtkOpenGLBezierResectionPolyDataMapper();
   ~vtkOpenGLBezierResectionPolyDataMapper();
@@ -147,6 +161,11 @@ protected:
 
   // Set CameraShaderParameters
   void SetCameraShaderParameters(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor) override;
+
+  // Deactivate the distance-map texture after the draw so its texture unit
+  // is released back to the render window's texture-unit manager — mirrors
+  // how the base mapper releases its own textures (ADR-0003).
+  void RenderPieceFinish(vtkRenderer* ren, vtkActor* act) override;
 
 private:
   class vtkInternal;
