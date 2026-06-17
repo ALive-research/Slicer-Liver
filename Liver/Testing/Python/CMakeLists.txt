@@ -118,20 +118,24 @@ else()
   return()
 endif()
 
-# Full in-tree module set for ``--additional-module-paths``.  Each entry is a
-# module source dir whose scripted/loadable module Slicer must discover so the
-# launched widget-level tests can import it.  Keep in sync with the top-level
-# CMakeLists.txt module list.
+# Full in-tree module set for ``--additional-module-paths``, pointed at the
+# BUILT per-config module trees rather than the source dirs.  All Liver*
+# modules build into the same shared ``qt-loadable-modules`` /
+# ``qt-scripted-modules`` trees, so the two built dirs cover every in-tree
+# module at once.  Source dirs make a *scripted* module importable but a
+# *loadable* (C++) module's Python sub-package (``LiverResectionsLib``, which
+# carries the LayerDM Pipelines/Representations) only lands on ``sys.path``
+# from the built ``qt-scripted-modules`` tree (ADR-0013 §5) — pointing at
+# source is why the launched widget tests silently skipped.
 set(_liver_additional_module_paths
-  "${CMAKE_SOURCE_DIR}/Liver"
-  "${CMAKE_SOURCE_DIR}/LiverResections"
-  "${CMAKE_SOURCE_DIR}/LiverMarkups"
-  "${CMAKE_SOURCE_DIR}/LiverVolumetry"
-  "${CMAKE_SOURCE_DIR}/VascularTerritories"
-  # Stage-2 orchestrator + surgeon-UI module: its launched scene/widget
-  # invariant tests (LiverSegmentation/Testing/Python) need the module
-  # importable + registered as `liversegmentation` (ADR-0024).
-  "${CMAKE_SOURCE_DIR}/LiverSegmentation"
+  "${CMAKE_BINARY_DIR}/${Slicer_QTSCRIPTEDMODULES_LIB_DIR}"
+  "${CMAKE_BINARY_DIR}/${Slicer_QTLOADABLEMODULES_LIB_DIR}"
+  # SlicerLayerDisplayableManager dependency: ``LiverResectionsLib``
+  # hard-imports ``LayerDMLib`` (ADR-0013 §5, SlicerLayerDM as a hard
+  # EXTENSION_DEPENDS), so the LayerDM modules must be registered with the
+  # module manager, not merely import-able.  Mirrors VascularTerritories.
+  "${LayerDisplayableManager_DIR}/${Slicer_QTLOADABLEMODULES_LIB_DIR}"
+  "${LayerDisplayableManager_DIR}/${Slicer_QTSCRIPTEDMODULES_LIB_DIR}"
 )
 
 # Same test roots as the bare ``pytest_scaffold`` entries, plus the Stage-2
@@ -148,6 +152,16 @@ add_test(
   COMMAND "${_slicer_launcher}"
     --no-main-window
     --no-splash
+    # --testing runs against fresh temporary settings so the launcher does NOT
+    # inherit the developer's persisted Modules/AdditionalPaths (stale paths to
+    # removed build trees otherwise surface as "The shared library was not
+    # found." at module registration and the launched tests skip).
+    --testing
+    # Generated AdditionalLauncherSettings.ini: puts this build's and the
+    # SlicerLayerDisplayableManager dependency's library + PYTHONPATH entries on
+    # the launcher so the module .so files and their LayerDM-linked dependencies
+    # resolve at load time.  Expands to "--launcher-additional-settings <ini>".
+    ${Slicer_ADDITIONAL_LAUNCHER_SETTINGS}
     --additional-module-paths ${_liver_additional_module_paths}
     --python-script "${CMAKE_CURRENT_SOURCE_DIR}/run_pytest_launched.py"
     --
