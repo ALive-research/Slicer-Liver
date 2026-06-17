@@ -163,35 +163,36 @@ endif()
 # On a software-GL stack the script skips up front via the same probe the
 # replay driver uses (ADR-0020 §"Rollout plan"); the real abort/no-abort
 # verdict is on a GPU-backed display.
-if(DEFINED Slicer_LAUNCHER_EXECUTABLE)
-  set(_dm_render_launcher "${Slicer_LAUNCHER_EXECUTABLE}")
-elseif(DEFINED Slicer_EXECUTABLE)
-  set(_dm_render_launcher "${Slicer_EXECUTABLE}")
-else()
-  set(_dm_render_launcher "")
-endif()
-
-if(NOT _dm_render_launcher STREQUAL "")
-  add_test(
-    NAME LiverResections_distance_map_double_render
-    COMMAND "${_dm_render_launcher}"
-      --no-main-window
-      --no-splash
-      --additional-module-paths "${CMAKE_SOURCE_DIR}/LiverResections"
-      --python-script "${CMAKE_CURRENT_SOURCE_DIR}/distancemap_double_render_test.py"
-  )
-  set_tests_properties(LiverResections_distance_map_double_render PROPERTIES
-    LABELS "visual-regression;LiverResections;distance-map;characterisation"
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
-    # Same timeout rationale as the replay entries: a stuck offscreen render
-    # on a misdetected stack should fail fast rather than hold CI open.
-    TIMEOUT 180
-  )
-else()
-  message(STATUS
-    "Slicer-Liver: no Slicer launcher found; skipping "
-    "LiverResections_distance_map_double_render registration.")
-endif()
+# Registered through Slicer's ``slicer_add_python_test`` (the script-shaped
+# sibling of ``slicer_add_python_unittest``) rather than a hand-rolled
+# ``add_test``.  The macro supplies the two things a launched test needs to
+# load this module:
+#   * ``--testing`` — runs against fresh temporary settings, so the launcher
+#     never inherits the developer's persisted ``Modules/AdditionalPaths``
+#     (which may reference stale/removed build trees and otherwise surface as
+#     "The shared library was not found." at module registration); and
+#   * ``${Slicer_ADDITIONAL_LAUNCHER_SETTINGS}`` — the generated
+#     ``AdditionalLauncherSettings.ini`` that puts this build's and the
+#     SlicerLayerDisplayableManager dependency's library paths on the
+#     launcher's ``LibraryPaths``/``PYTHONPATH`` so the module ``.so`` and its
+#     LayerDM-linked dependencies resolve.
+# As with ``VascularTerritories`` (ADR-0023), the LayerDisplayableManager
+# loadable+scripted module paths are opted in explicitly so the dependency
+# modules are registered with the module manager, not merely import-able.
+slicer_add_python_test(
+  SCRIPT distancemap_double_render_test.py
+  SLICER_ARGS
+    --additional-module-paths
+    ${LayerDisplayableManager_DIR}/${Slicer_QTLOADABLEMODULES_LIB_DIR}
+    ${LayerDisplayableManager_DIR}/${Slicer_QTSCRIPTEDMODULES_LIB_DIR}
+)
+set_tests_properties(py_distancemap_double_render_test PROPERTIES
+  LABELS "visual-regression;LiverResections;distance-map;characterisation"
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  # Same timeout rationale as the replay entries: a stuck offscreen render
+  # on a misdetected stack should fail fast rather than hold CI open.
+  TIMEOUT 180
+)
 
 # ---------------------------------------------------------------------------
 # Opt-in gate for the visual-regression harness.
