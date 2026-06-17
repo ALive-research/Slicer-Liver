@@ -293,8 +293,15 @@ set(_visual_test_scenarios
   DistanceSpheroidContourShader
   # T3 ResectogramPipeline baseline targets (ADR-0027 invariant-test-
   # first).  Each captures against the v1 monolith first, then is
-  # re-baselined to the v2.0 ResectogramPipeline.  Until the maintainer
-  # commits the .sha512 stubs the replay driver skips each at runtime.
+  # re-baselined to the v2.0 ResectogramPipeline.  These replay entries
+  # are INERT until the baseline tag is published: no .sha512 stubs are
+  # committed under ../Data/Baseline/ (the maintainer's first capture
+  # session produces + uploads them to ALiveResearchTestingData), so the
+  # replay driver skips each at runtime with a clear log line, and the
+  # whole block is additionally gated behind SlicerLiver_ENABLE_VISUAL_TESTS
+  # (OFF by default).  The scenario scene-setup bodies
+  # (scenarios/Resectogram4x4*.py) are reached only once those baselines
+  # land.
   Resectogram4x4BlurOff
   Resectogram4x4NonSquareScaling
   # SPLITTABLE / LAST — blur stays a v2.0 toggle; this baseline lands
