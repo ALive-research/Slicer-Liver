@@ -56,6 +56,7 @@
 #include <vtkRenderer.h>
 #include <vtkSmartPointer.h>
 #include <vtkShaderProgram.h>
+#include <vtkTextureObject.h>
 #include <vtkTransform.h>
 
 //------------------------------------------------------------------------------
@@ -85,6 +86,7 @@ public:
   vtkWeakPointer<vtkOpenGLBezierResectionPolyDataMapper> Parent;
   vtkSmartPointer<vtkMatrix4x4> RasToIjkMatrixT;
   vtkSmartPointer<vtkMatrix4x4> IjkToTextureMatrixT;
+  vtkSmartPointer<vtkTextureObject> DistanceMapTexture;
   float ResectionMargin;
   float UncertaintyMargin;
   float ResectionMarginColor[3];
@@ -283,7 +285,23 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetMapperShaderParameters(vtkOpenGL
 {
   if (cellBO.Program->IsUniformUsed("distanceTexture"))
   {
-    cellBO.Program->SetUniformi("distanceTexture", 0);
+    // Activate the 3D distance-map texture onto a texture unit at DRAW
+    // time and bind the sampler3D uniform to the unit the texture object
+    // actually lands on.  The texture is uploaded once on node-change in
+    // vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture
+    // and threaded here via SetDistanceMapTextureObject().  Relying on a
+    // one-time Bind() at creation (and a hardcoded unit 0) left the
+    // sampler3D pointing at a unit with no live GL_TEXTURE_3D on a
+    // subsequent render — the offscreen-render abort root cause (ADR-0003).
+    if (this->Impl->DistanceMapTexture)
+    {
+      this->Impl->DistanceMapTexture->Activate();
+      cellBO.Program->SetUniformi("distanceTexture", this->Impl->DistanceMapTexture->GetTextureUnit());
+    }
+    else
+    {
+      cellBO.Program->SetUniformi("distanceTexture", 0);
+    }
   }
 
   if (cellBO.Program->IsUniformUsed("uRasToIjk"))
@@ -352,6 +370,33 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetMapperShaderParameters(vtkOpenGL
   }
 
   Superclass::SetMapperShaderParameters(cellBO, ren, actor);
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::RenderPieceFinish(vtkRenderer* ren, vtkActor* act)
+{
+  if (this->Impl->DistanceMapTexture)
+  {
+    this->Impl->DistanceMapTexture->Deactivate();
+  }
+  Superclass::RenderPieceFinish(ren, act);
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::SetDistanceMapTextureObject(vtkTextureObject* texture)
+{
+  if (this->Impl->DistanceMapTexture == texture)
+  {
+    return;
+  }
+  this->Impl->DistanceMapTexture = texture;
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+vtkTextureObject* vtkOpenGLBezierResectionPolyDataMapper::GetDistanceMapTextureObject() const
+{
+  return this->Impl->DistanceMapTexture;
 }
 
 //------------------------------------------------------------------------------
