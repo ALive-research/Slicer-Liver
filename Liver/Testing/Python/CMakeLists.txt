@@ -98,7 +98,10 @@ endforeach()
 #
 # Modules are ENABLED (no ``--disable-modules``): the full module set must be
 # importable for the widget-level shell tests, so CMake supplies
-# ``--additional-module-paths`` for the in-tree modules.
+# ``--additional-module-paths`` pointed at the BUILT module trees (see the
+# ``_liver_additional_module_paths`` block below) plus ``--testing`` and the
+# generated launcher-settings INI so the loadable modules and their LayerDM
+# dependency actually register.
 #
 # Local-run hint (NOT baked into the COMMAND): when a developer's Slicer Python
 # lacks ``highdicom``, pytest collection of the bundled DICOMTID1500Plugin can
