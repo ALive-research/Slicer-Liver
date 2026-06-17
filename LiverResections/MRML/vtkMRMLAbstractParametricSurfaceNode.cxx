@@ -201,10 +201,11 @@ const double* vtkMRMLAbstractParametricSurfaceNode::GetSlicingPlaneInitPoint(int
   // out-of-range index yields a zero vector rather than nullptr: the
   // Python wrapper unconditionally reads 3 doubles to build the tuple, so
   // a null return would dereference null and crash the interpreter.
+  // Silent out-of-range fallback (matches the prior null-sentinel's silence;
+  // no warning so callers that probe indices don't pollute warning counts).
   static const double kZeroVec[3] = { 0.0, 0.0, 0.0 };
   if (index < 0 || index > 1)
   {
-    vtkWarningMacro("GetSlicingPlaneInitPoint: index " << index << " out of range [0, 1]; returning zero vector");
     return kZeroVec;
   }
   return this->SlicingPlaneInitPoints[index];
@@ -285,10 +286,10 @@ const double* vtkMRMLAbstractParametricSurfaceNode::GetDistanceSpheroidInitPoint
   // Zero vector (not nullptr) for an out-of-range index — see the
   // GetSlicingPlaneInitPoint note: VTK_SIZEHINT(3) makes the wrapper read
   // 3 doubles, so a null return would crash the Python interpreter.
+  // Silent out-of-range fallback (see GetSlicingPlaneInitPoint).
   static const double kZeroVec[3] = { 0.0, 0.0, 0.0 };
   if (index < 0 || index >= this->NumberOfDistanceSpheroidInitPoints)
   {
-    vtkWarningMacro("GetDistanceSpheroidInitPoint: index " << index << " out of range [0, " << this->NumberOfDistanceSpheroidInitPoints << "); returning zero vector");
     return kZeroVec;
   }
   return &this->DistanceSpheroidInitPoints[static_cast<size_t>(index) * 3];

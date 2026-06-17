@@ -294,7 +294,15 @@ int testSlicingPlaneInit()
   CHECK_DOUBLE(got1[1], 4.0);
   CHECK_DOUBLE(got1[2], 7.25);
 
-  CHECK_NULL(node->GetSlicingPlaneInitPoint(2));
+  // Out-of-range returns a non-null zero vector (not nullptr): the getter is
+  // VTK_SIZEHINT(3)-annotated so the Python wrapper dereferences the return to
+  // build a 3-tuple, which would crash on a null.  Production callers only
+  // request valid indices, so this is behaviour-equivalent there.
+  const double* oorSlicing = node->GetSlicingPlaneInitPoint(2);
+  CHECK_NOT_NULL(oorSlicing);
+  CHECK_DOUBLE(oorSlicing[0], 0.0);
+  CHECK_DOUBLE(oorSlicing[1], 0.0);
+  CHECK_DOUBLE(oorSlicing[2], 0.0);
 
   double origin[3] = { 10.0, 20.0, 30.0 };
   double normal[3] = { 0.0, 1.0, 0.0 };
@@ -338,7 +346,13 @@ int testDistanceSpheroidInit()
     CHECK_DOUBLE(got[1], static_cast<double>(i) + 0.2);
     CHECK_DOUBLE(got[2], static_cast<double>(i) + 0.3);
   }
-  CHECK_NULL(node->GetDistanceSpheroidInitPoint(3));
+  // Out-of-range returns a non-null zero vector (see the slicing-plane note;
+  // VTK_SIZEHINT(3) forbids a null return).
+  const double* oorSpheroid = node->GetDistanceSpheroidInitPoint(3);
+  CHECK_NOT_NULL(oorSpheroid);
+  CHECK_DOUBLE(oorSpheroid[0], 0.0);
+  CHECK_DOUBLE(oorSpheroid[1], 0.0);
+  CHECK_DOUBLE(oorSpheroid[2], 0.0);
 
   double center[3] = { 5.0, 6.0, 7.0 };
   node->SetDistanceSpheroidCenter(center);
@@ -362,7 +376,10 @@ int testDistanceSpheroidInit()
   // Shrink-and-grow: shrinking to 1 then back to 3 should zero-fill.
   node->SetNumberOfDistanceSpheroidInitPoints(1);
   CHECK_INT(node->GetNumberOfDistanceSpheroidInitPoints(), 1);
-  CHECK_NULL(node->GetDistanceSpheroidInitPoint(1));
+  // Index 1 is now out of range (count shrank to 1): non-null zero vector.
+  const double* oorShrunk = node->GetDistanceSpheroidInitPoint(1);
+  CHECK_NOT_NULL(oorShrunk);
+  CHECK_DOUBLE(oorShrunk[0], 0.0);
   node->SetNumberOfDistanceSpheroidInitPoints(3);
   for (int i = 0; i < 3; ++i)
   {
