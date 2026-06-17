@@ -48,6 +48,7 @@
 
 // VTK includes
 #include <vtkSetGet.h>
+#include <vtkWrappingHints.h>
 
 // STD includes
 #include <vector>
@@ -241,7 +242,9 @@ public:
   //--------------------------------------------------------------------------
 
   virtual bool SetSlicingPlaneInitPoint(int index, const double point[3]);
-  const double* GetSlicingPlaneInitPoint(int index) const;
+  /// ``VTK_SIZEHINT(3)`` so the Python wrapper surfaces the returned
+  /// ``const double*`` as a 3-tuple rather than an opaque pointer string.
+  const double* GetSlicingPlaneInitPoint(int index) const VTK_SIZEHINT(3);
 
   virtual void SetSlicingPlaneOrigin(double x, double y, double z);
   void SetSlicingPlaneOrigin(const double xyz[3]);
@@ -259,7 +262,9 @@ public:
   virtual void SetNumberOfDistanceSpheroidInitPoints(int n);
 
   virtual bool SetDistanceSpheroidInitPoint(int index, const double point[3]);
-  const double* GetDistanceSpheroidInitPoint(int index) const;
+  /// ``VTK_SIZEHINT(3)`` so the Python wrapper surfaces the returned
+  /// ``const double*`` as a 3-tuple rather than an opaque pointer string.
+  const double* GetDistanceSpheroidInitPoint(int index) const VTK_SIZEHINT(3);
 
   virtual void SetDistanceSpheroidCenter(double x, double y, double z);
   void SetDistanceSpheroidCenter(const double xyz[3]);
