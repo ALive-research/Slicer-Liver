@@ -49,6 +49,10 @@ References
   ``vtkMRMLResectogramDisplayNode``.
 * ADR-0027 — invariant-test-first; the specific invariant is
   type-keyed dispatch WITHOUT cross-fire, not mere pipeline existence.
+* ADR-0013 §9 — the real-view fixture: the two dispatch tests consume
+  the shared ``layerdm_threed_view`` fixture in ``Testing/Python/conftest.py``,
+  which brings up a standalone ``qMRMLThreeDWidget`` hosting the upstream
+  ``vtkMRMLLayerDisplayableManager`` and queries it via ``GetNodePipeline``.
 * Mirrors the ``importorskip("LayerDMLib")`` gating used by the T2
   Bezier Pipeline tests under ``Testing/Python/unit/``.
 """
@@ -70,23 +74,6 @@ pytest.importorskip(
         "CI row (issue #460)."
     ),
 )
-
-
-@pytest.fixture
-def layerdm_threed_view():
-    """Yield a LayerDM-aware 3D view + its displayable manager.
-
-    TODO(liver-implementer): build the minimal launched-app 3D view that
-    hosts a ``vtkMRMLLayerDMDisplayableManager`` (mirror the T2
-    real-view fixture delivered with the Bezier Pipeline per ADR-0013
-    §9).  Until that fixture lands the dispatch tests below skip with a
-    clear reason rather than silently passing.
-    """
-    pytest.skip(
-        "Invariant not yet implemented: launched LayerDM 3D-view fixture for "
-        "ResectogramPipeline dispatch is not yet provided (ADR-0013 §9 "
-        "real-view fixture)."
-    )
 
 
 def test_resectogram_display_node_registers():
@@ -118,15 +105,25 @@ def test_resectogram_creator_fires_for_its_display_node(layerdm_threed_view):
     view, manager = layerdm_threed_view
     display = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLResectogramDisplayNode")
 
-    # TODO(liver-implementer): query the LayerDM manager for the pipeline
-    # bound to ``display`` and assert it is a ResectogramPipeline instance
-    # (the creator keyed on vtkMRMLResectogramDisplayNode fired).
-    pipeline = manager.GetPipelineForDisplayNode(display)
+    # Query the LayerDM manager for the pipeline bound to ``display`` via the
+    # ``GetNodePipeline`` accessor documented on vtkMRMLLayerDisplayableManager
+    # as the test/debug pipeline lookup.  A live ResectogramPipeline means the
+    # creator keyed on vtkMRMLResectogramDisplayNode fired (ADR-0013 §5).
+    pipeline = manager.GetNodePipeline(display)
     assert pipeline is not None, (
         "No pipeline created for vtkMRMLResectogramDisplayNode — the T3 "
-        "AddPipelineCreator (ADR-0013 §5) has not been wired."
+        "AddPipelineCreator (ADR-0013 §5) did not fire for the dedicated "
+        "display-node type."
     )
-    assert type(pipeline).__name__ == "ResectogramPipeline"
+    # The scripted ResectogramPipeline derives from
+    # vtkMRMLLayerDMScriptedPipeline (a vtkMRMLLayerDMScriptedPipelineBridge).
+    # GetNodePipeline returns the bridge; assert the bound Python object is a
+    # ResectogramPipeline by its class name.
+    assert type(pipeline).__name__ == "ResectogramPipeline", (
+        "the pipeline bound to vtkMRMLResectogramDisplayNode is "
+        f"{type(pipeline).__name__!r}, not ResectogramPipeline — the T3 "
+        "creator did not build the dedicated pipeline (ADR-0013 §5)."
+    )
 
 
 def test_resectogram_creator_does_not_collide_with_bezier(layerdm_threed_view):
@@ -155,10 +152,10 @@ def test_resectogram_creator_does_not_collide_with_bezier(layerdm_threed_view):
         "vtkMRMLResectogramDisplayNode"
     )
 
-    # TODO(liver-implementer): resolve the pipeline bound to each display
-    # node and assert the type mapping is disjoint.
-    parametric_pipeline = manager.GetPipelineForDisplayNode(parametric)
-    resectogram_pipeline = manager.GetPipelineForDisplayNode(resectogram)
+    # Resolve the pipeline bound to each display node via the DM's
+    # GetNodePipeline accessor and assert the type mapping is disjoint.
+    parametric_pipeline = manager.GetNodePipeline(parametric)
+    resectogram_pipeline = manager.GetNodePipeline(resectogram)
 
     assert type(parametric_pipeline).__name__ != "ResectogramPipeline", (
         "vtkMRMLParametricSurfaceDisplayNode wrongly produced a "
