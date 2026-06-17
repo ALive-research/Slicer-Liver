@@ -192,6 +192,11 @@ set_tests_properties(py_distancemap_double_render_test PROPERTIES
   # Same timeout rationale as the replay entries: a stuck offscreen render
   # on a misdetected stack should fail fast rather than hold CI open.
   TIMEOUT 180
+  # The script exits 77 when it skips on a software-GL stack (CI's
+  # xvfb + llvmpipe).  Mark that as a CTest SKIP so a masked skip is visible
+  # as a skip on the dashboard, not an indistinguishable green pass; the real
+  # abort/no-abort verdict is on a GPU-backed display.
+  SKIP_RETURN_CODE 77
 )
 
 # ---------------------------------------------------------------------------

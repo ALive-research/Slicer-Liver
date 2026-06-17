@@ -57,6 +57,12 @@ import replay_test  # noqa: E402  (path injection above is intentional)
 
 SCENARIO_NAME = "BezierSurface4x4Planning"
 
+# Exit code signalling "skipped, not run" to CTest.  Paired with the test's
+# ``SKIP_RETURN_CODE`` property so a software-GL skip reports as a genuine
+# CTest SKIP rather than an indistinguishable green pass — the real
+# abort/no-abort verdict is deferred to a GPU host, not silently claimed.
+SKIP_EXIT_CODE = 77
+
 
 def _load_scenario():
     """Import the 4x4 Planning scenario module (4-comp float distance-map)."""
@@ -94,8 +100,9 @@ def run() -> int:
     misdetected software stack, a timeout) — there is nothing to assert
     in Python beyond completion.
 
-    Returns 0 on success (both renders completed) and 0 on a clean
-    software-GL skip (the verdict is deferred to a GPU host).
+    Returns 0 on success (both renders completed) and ``SKIP_EXIT_CODE`` on a
+    clean software-GL skip (reported to CTest as a SKIP, not a pass — the
+    verdict is deferred to a GPU host).
     """
     # Software-GL fast skip — identical probe to the replay driver so the
     # known software-GL hang on the bezier distance-map never burns the
@@ -106,7 +113,7 @@ def run() -> int:
     )
     if skip_reason is not None:
         print(skip_reason)
-        return 0
+        return SKIP_EXIT_CODE
 
     scenario = _load_scenario()
     meta = scenario.describe()
