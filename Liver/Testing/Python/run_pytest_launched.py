@@ -83,6 +83,37 @@ def _test_roots(argv: list[str]) -> list[str]:
     return argv[1:]
 
 
+def _unshadow_pypi_packaging() -> None:
+    """Drop a ``slicer`` package dir from ``sys.path`` when it shadows ``packaging``.
+
+    In some Slicer builds the ``slicer`` *package directory itself* lands on
+    ``sys.path`` (not merely its parent), so the ``packaging.py`` it bundles
+    shadows the real ``site-packages/packaging`` package.  pytest's
+    ``_checkversion`` then runs ``from packaging.version import Version`` and
+    crashes at startup with ``'packaging' is not a package`` -- which is why a
+    launched pytest run could only be exercised on CI, never locally.
+
+    Remove any ``sys.path`` entry that is a ``slicer`` package dir carrying a
+    ``packaging.py``, and evict a half-imported single-module ``packaging`` so
+    the next import resolves to the real package.  No-op when the shadow is
+    absent (e.g. CI), so it is safe everywhere.
+    """
+    cleaned = [
+        p
+        for p in sys.path
+        if not (
+            p
+            and os.path.basename(os.path.normpath(p)) == "slicer"
+            and os.path.isfile(os.path.join(p, "packaging.py"))
+        )
+    ]
+    if len(cleaned) != len(sys.path):
+        sys.path[:] = cleaned
+        shadow = sys.modules.get("packaging")
+        if shadow is not None and not hasattr(shadow, "__path__"):
+            sys.modules.pop("packaging", None)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run pytest against the supplied roots and return its exit code.
 
@@ -92,6 +123,8 @@ def main(argv: list[str] | None = None) -> int:
     """
     if argv is None:
         argv = sys.argv
+
+    _unshadow_pypi_packaging()
 
     import pytest
 
