@@ -202,6 +202,16 @@ def test_extractor_not_invoked_per_drag_only_on_commit(monkeypatch):
     )
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "T2-target-mesh-weakref not yet implemented: the Init Representation's "
+        "TODO(T2-target-mesh-weakref) consume sites do not yet feed the "
+        "extractor the weakref'd target mesh (ADR-0014 §1).  Invariant-first "
+        "RED pin (ADR-0027); strict=True flips this to a hard failure the moment "
+        "the feature lands, forcing removal of this marker."
+    ),
+)
 def test_init_representation_reads_target_via_weakref(monkeypatch):
     """Extraction consumes the weakref'd target mesh, not a None/hard-coded path.
 
