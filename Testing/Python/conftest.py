@@ -53,6 +53,12 @@ from __future__ import annotations
 
 import pytest
 
+from slicer_pytest_support import (
+    import_slicer_or_skip,
+    require_mrml_scene,
+    require_qt_widget,
+)
+
 
 # --------------------------------------------------------------------------- #
 # CLI option
@@ -176,6 +182,125 @@ def a_slicer_app():
             "`Slicer --python-script $(which pytest) -- ...`."
         )
     return slicer
+
+
+# --------------------------------------------------------------------------- #
+# LayerDM real-view fixture (ADR-0013 §9)
+# --------------------------------------------------------------------------- #
+
+@pytest.fixture
+def layerdm_threed_view(render_interactive):
+    """Yield ``(view_widget, manager)`` for a live LayerDM-aware 3D view.
+
+    The ADR-0013 §9 "real-view fixture": a standalone ``qMRMLThreeDWidget``
+    bound to ``slicer.mrmlScene`` whose displayable-manager group hosts the
+    upstream ``vtkMRMLLayerDisplayableManager``.  The manager exposes
+    ``GetNodePipeline(node)`` — documented in
+    ``vtkMRMLLayerDisplayableManager.h`` as the test/debug accessor for the
+    pipeline bound to a display node — which the dispatch tests use to pin
+    the ADR-0013 §1 one-Pipeline-per-display-node-type invariant.
+
+    Brought up exactly as the LayerDM extension's own
+    ``DisplayableManagerTest`` and the project's
+    ``test_distance_spheroid_contour_arena`` view: a standalone
+    ``qMRMLThreeDWidget`` (``--no-main-window`` has no layout manager), with
+    the LayerDM DM registered into the 3D-view factory via
+    ``RegisterInDefaultViews()`` (idempotent — the LiverResections module
+    already calls it).  The displayable manager is retrieved through
+    ``qMRMLThreeDView.displayableManagerByClassName`` (the Q_INVOKABLE
+    accessor on ``qMRMLThreeDView``).
+
+    Consumes ``render_interactive`` like the other view-creating fixtures
+    this conftest documents: a positive value keeps the Qt window visible
+    for that many seconds before teardown; ``0.0`` (the CI default) stays
+    offscreen and tears down immediately after the consuming test asserts.
+
+    No-op / clean skip under bare ``PythonSlicer`` (no ``qSlicerApplication``):
+    the guards below skip with explicit, greppable reasons (issue #460
+    green-but-skipping discipline) rather than erroring or silently passing.
+    """
+    slicer = import_slicer_or_skip()
+    if slicer is None:
+        return
+    require_mrml_scene()
+    require_qt_widget()
+
+    # The view must host the LayerDM displayable manager (registered by the
+    # LiverResections module's setup()).  Probe that the resectogram display
+    # node class is registered with an explicit, greppable skip so a missing
+    # module path reads as a skip, not a false pass.
+    registration_probe = slicer.mrmlScene.CreateNodeByClass(
+        "vtkMRMLResectogramDisplayNode"
+    )
+    if registration_probe is None:
+        pytest.skip(
+            "[layerdm-view-skip] vtkMRMLResectogramDisplayNode is not "
+            "registered -- the LiverResections module is not on the "
+            "additional-module-paths.  Run via the pytest_launched CTest row "
+            "(Liver/Testing/Python/CMakeLists.txt supplies the module paths)."
+        )
+    # CreateNodeByClass returns a node carrying the factory's +1 reference the
+    # caller owns; drop it or the probe instance survives to process shutdown
+    # and trips vtkDebugLeaks (failing the launched harness).
+    registration_probe.UnRegister(None)
+
+    # Ensure the LayerDM DM is registered in the 3D-view factory.  Idempotent
+    # (RegisterInDefaultViews short-circuits when already present); the
+    # LiverResections module setup() already calls it, but a bare launched
+    # harness that imported only the conftest may not have, so assert it here.
+    from slicer import (  # type: ignore[import-not-found]
+        vtkMRMLLayerDisplayableManager,
+    )
+
+    vtkMRMLLayerDisplayableManager.RegisterInDefaultViews()
+
+    view_widget = slicer.qMRMLThreeDWidget()
+    view_widget.setMRMLScene(slicer.mrmlScene)
+    view_node = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLViewNode")
+    if view_node is None:
+        view_node = slicer.mrmlScene.AddNewNodeByClass(
+            "vtkMRMLViewNode", "LayerDMDispatchView"
+        )
+
+    # Map the GL surface before binding the view node so the displayable
+    # manager group is instantiated (same show()-then-bind ordering the
+    # arena + capture_baseline use).  Under QT_QPA_PLATFORM=offscreen (CI +
+    # launched harness) show() is visually a no-op but still maps the
+    # OpenGL surface; in interactive mode it makes the window visible.
+    view_widget.show()
+    view_widget.threeDView().forceRender()
+    view_widget.setMRMLViewNode(view_node)
+
+    manager = view_widget.threeDView().displayableManagerByClassName(
+        "vtkMRMLLayerDisplayableManager"
+    )
+    if manager is None:
+        pytest.skip(
+            "[layerdm-view-skip] vtkMRMLLayerDisplayableManager is not on the "
+            "3D view's displayable-manager group -- the upstream SlicerLayerDM "
+            "extension is not loaded on the launched path (issue #460).  Run "
+            "via pytest_launched with the LayerDM module paths."
+        )
+
+    try:
+        yield view_widget, manager
+        if render_interactive:
+            import qt  # type: ignore[import-not-found]
+
+            interactor = view_widget.threeDView().interactor()
+            if interactor is not None:
+                loop = qt.QEventLoop()
+                qt.QTimer.singleShot(
+                    int(render_interactive * 1000), loop.quit
+                )
+                interactor.Initialize()
+                view_widget.threeDView().forceRender()
+                loop.exec_()
+    finally:
+        # Tear the widget down so no view / DM survives to process exit and
+        # trips vtkDebugLeaks in the launched harness.
+        view_widget.setMRMLScene(None)
+        view_widget.deleteLater()
 
 
 # --------------------------------------------------------------------------- #
