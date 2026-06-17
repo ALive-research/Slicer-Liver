@@ -112,6 +112,46 @@ def _visible_pixel_count(view_widget) -> int:
     return int((arr.max(axis=1) > 8).sum())
 
 
+_SOFTWARE_GL_MARKERS = ("llvmpipe", "softpipe", "swrast", "software rasterizer")
+
+
+def _software_gl_skip_reason() -> str | None:
+    """Return a greppable skip reason on a software-GL stack, else None.
+
+    Brings up a throwaway offscreen ``vtkRenderWindow`` and reads its
+    ``ReportCapabilities`` -- the same cheap probe the replay driver
+    (``LiverResections/Testing/Python/replay_test.py``) uses.  Probing a
+    *throwaway* window before the live view is built keeps this off the
+    arena's own (possibly context-failed) render window, and lets the test
+    skip BEFORE attempting a render the software stack cannot light.  Any
+    probe failure is treated as un-renderable (skip), never a crash.
+    """
+    import vtk  # type: ignore[import-not-found]
+
+    render_window = None
+    try:
+        render_window = vtk.vtkRenderWindow()
+        render_window.SetOffScreenRendering(1)
+        render_window.SetSize(1, 1)
+        render_window.SetMultiSamples(0)
+        render_window.Render()
+        capabilities = (render_window.ReportCapabilities() or "").lower()
+    except Exception:  # noqa: BLE001 -- any failure means "cannot render here".
+        return "[arena-skip] offscreen GL context could not be created"
+    finally:
+        if render_window is not None:
+            render_window.Finalize()
+    match = next((m for m in _SOFTWARE_GL_MARKERS if m in capabilities), None)
+    if match is not None:
+        return (
+            f"[arena-skip] offscreen software GL ({match}) -- the production "
+            "contour fragment shader does not light fragments on a software "
+            "rasteriser; the lit-pixel verdict is deferred to a GPU-backed "
+            "display."
+        )
+    return None
+
+
 def test_distance_spheroid_contour_arena(render_interactive: float) -> None:
     """Render the production DistanceSpheroid contour; interactive or offscreen.
 
@@ -139,6 +179,17 @@ def test_distance_spheroid_contour_arena(render_interactive: float) -> None:
             "Run via the pytest_launched CTest row (Liver/Testing/Python/"
             "CMakeLists.txt supplies the module paths)."
         )
+
+    # Software-GL gate (CI's xvfb + llvmpipe): the custom contour fragment
+    # shader does not light fragments on a software rasteriser, and the
+    # offscreen render itself is unreliable there -- the same limitation the
+    # bezier distance-map render meets.  Probe a throwaway context and skip
+    # BEFORE building/rendering the live view so the test reports a real,
+    # greppable SKIP rather than a false pass or a render crash.  The
+    # lit-pixel verdict is on a GPU-backed display.
+    software_gl_skip = _software_gl_skip_reason()
+    if software_gl_skip is not None:
+        pytest.skip(software_gl_skip)
 
     import qt  # type: ignore[import-not-found]
 
@@ -243,33 +294,6 @@ def test_distance_spheroid_contour_arena(render_interactive: float) -> None:
             "not vtkOpenGLDistanceContourPolyDataMapper -- the relocated "
             "mapper is not wrapped onto the slicer namespace in this build."
         )
-
-        # Software-GL gate: the wiring assertions above (actor attached,
-        # production contour mapper + SSOT quadric) are GL-stack-independent
-        # and always run.  The pixel-count verdict below, however, depends on
-        # the custom contour fragment shader actually lighting fragments,
-        # which a software rasteriser (CI's xvfb + llvmpipe) does not do --
-        # the same offscreen-software-GL limitation the bezier distance-map
-        # render meets (ADR-0020 §"Rollout plan"; the replay driver's
-        # ``_software_gl_skip_reason`` gates on the same markers).  Skip the
-        # pixel assertion with an explicit, greppable reason on a software
-        # stack so it reports as a real SKIP, not a false pass; the lit-pixel
-        # verdict is on a GPU-backed display.
-        capabilities = (
-            view_widget.threeDView().renderWindow().ReportCapabilities() or ""
-        )
-        _software_markers = ("llvmpipe", "softpipe", "swrast", "software rasterizer")
-        _lowered = capabilities.lower()
-        _software_match = next(
-            (m for m in _software_markers if m in _lowered), None
-        )
-        if _software_match is not None:
-            pytest.skip(
-                f"[arena-skip] offscreen software GL ({_software_match}) -- the "
-                "production contour fragment shader does not light fragments on "
-                "a software rasteriser; the lit-pixel verdict is deferred to a "
-                "GPU-backed display.  Pipeline wiring above already passed."
-            )
 
         # Visible-pixel assertion: the contour band must actually draw.
         # The production Representation enables ``ContourVisibility`` once it
