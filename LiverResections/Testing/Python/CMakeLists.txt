@@ -147,6 +147,53 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# Distance-map double-render characterisation test (always-on, launcher-gated)
+# ---------------------------------------------------------------------------
+#
+# Pins the invariant behind the offscreen-render abort observed when a
+# vtkMRMLMarkupsBezierSurfaceNode with a 4-component float distance-map is
+# rendered twice (ADR-0003 §"Decision").  Unlike the pixel-baseline replay
+# entries below, this test has NO ExternalData baseline dependency: it
+# asserts only that the SECOND forceRender() completes without aborting and
+# leaves the GL context error-free.  It is therefore registered here,
+# OUTSIDE the SlicerLiver_ENABLE_VISUAL_TESTS opt-in, but still requires the
+# Slicer launcher (it brings up a minimal qSlicerApplication + offscreen 3D
+# view, Level 2 per Testing/README.md).
+#
+# On a software-GL stack the script skips up front via the same probe the
+# replay driver uses (ADR-0020 §"Rollout plan"); the real abort/no-abort
+# verdict is on a GPU-backed display.
+if(DEFINED Slicer_LAUNCHER_EXECUTABLE)
+  set(_dm_render_launcher "${Slicer_LAUNCHER_EXECUTABLE}")
+elseif(DEFINED Slicer_EXECUTABLE)
+  set(_dm_render_launcher "${Slicer_EXECUTABLE}")
+else()
+  set(_dm_render_launcher "")
+endif()
+
+if(NOT _dm_render_launcher STREQUAL "")
+  add_test(
+    NAME LiverResections_distance_map_double_render
+    COMMAND "${_dm_render_launcher}"
+      --no-main-window
+      --no-splash
+      --additional-module-paths "${CMAKE_SOURCE_DIR}/LiverResections"
+      --python-script "${CMAKE_CURRENT_SOURCE_DIR}/distancemap_double_render_test.py"
+  )
+  set_tests_properties(LiverResections_distance_map_double_render PROPERTIES
+    LABELS "visual-regression;LiverResections;distance-map;characterisation"
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    # Same timeout rationale as the replay entries: a stuck offscreen render
+    # on a misdetected stack should fail fast rather than hold CI open.
+    TIMEOUT 180
+  )
+else()
+  message(STATUS
+    "Slicer-Liver: no Slicer launcher found; skipping "
+    "LiverResections_distance_map_double_render registration.")
+endif()
+
+# ---------------------------------------------------------------------------
 # Opt-in gate for the visual-regression harness.
 #
 # Default OFF until two preconditions land: (a) the
