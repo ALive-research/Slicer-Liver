@@ -520,6 +520,10 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture
   {
     vtkWarningMacro("vtkSlicerBezierSurfaceRepresentation::CreateAndTransferDistanceMap:"
                     "There is no distance map node associated. Texture won't be generated.");
+    // Drop any previously-threaded texture so the mapper falls back to its
+    // no-distance-map path instead of sampling a stale 3D texture once the
+    // distance-map node is cleared (otherwise MRML state and GL state diverge).
+    this->BezierSurfaceResectionMapper->SetDistanceMapTextureObject(nullptr);
     return;
   }
 
@@ -528,6 +532,7 @@ void vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture
   {
     vtkWarningMacro("vtkSlicerBezierSurfaceRepresentation::CreateAndTransferDistanceMap:"
                     "There is no image data in the specified scalar volume node.");
+    this->BezierSurfaceResectionMapper->SetDistanceMapTextureObject(nullptr);
     return;
   }
 
