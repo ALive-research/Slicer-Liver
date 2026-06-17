@@ -94,9 +94,10 @@ def test_node_default_state_and_mode(mrml_module):
     assert node.GetInitMode() == (
         mrml_module.vtkMRMLBezierSurfaceNode.SlicingPlane
     )
-    # Read-only constants exposed to Python.
-    assert mrml_module.vtkMRMLBezierSurfaceNode.GridSize == 4
-    assert mrml_module.vtkMRMLBezierSurfaceNode.ControlGridSize == 48
+    # NB: GridSize / ControlGridSize are compile-time ``static constexpr``
+    # dimensions with no production Python consumer; VTK does not surface
+    # constexpr members as Python class attributes, and asserting their
+    # literal values from Python would test the wrapper, not behaviour.
 
 
 def test_node_state_round_trip(mrml_module):
@@ -237,12 +238,18 @@ def test_node_distance_spheroid_init_round_trip(mrml_module):
     assert node.GetDistanceSpheroidRadiusX() == 0.0
 
 
-def test_node_xml_round_trip_via_scene(mrml_module):
-    """End-to-end MRML scene XML round-trip recovers all data fields.
+def test_node_mrml_xml_carries_identity_not_bulk(mrml_module):
+    """MRML scene XML carries slim identity only; bulk lives in .lrp.json.
 
-    Uses the real ``vtkMRMLScene::Commit`` / ``Connect`` path, which
-    is the production code path; this is the strongest signal that
-    the WriteXML / ReadXMLAttributes pair carries the data unchanged.
+    Uses the real ``vtkMRMLScene::Commit`` / ``Connect`` path.  Per the
+    storage-ownership design
+    (``Docs/design/resection-plan-architecture/03-storage-ownership.md``),
+    ``WriteXML`` is deliberately slim: only scene-relevant identity
+    metadata (``State``, grid ``rows``/``cols``) goes into the ``.mrml``;
+    the bulk Init-mode data persists via the parent plan's ``.lrp.json``
+    storage path.  This pins that contract — identity round-trips through
+    the scene XML, bulk fields come back at their defaults when no paired
+    ``.lrp.json`` is loaded.
 
     Requires Slicer's own ``slicer`` module to be importable so that
     ``slicer.vtkMRMLScene`` is reachable; skips cleanly when running
@@ -303,39 +310,26 @@ def test_node_xml_round_trip_via_scene(mrml_module):
 
         sink = sink_scene.GetFirstNodeByClass("vtkMRMLBezierSurfaceNode")
         assert sink is not None
+
+        # The ``.mrml`` carries only scene-relevant identity metadata.
+        # ``State`` is written by the Bezier node's WriteXML and round-trips.
         assert sink.GetState() == source.GetState()
-        assert sink.GetInitMode() == source.GetInitMode()
-        assert sink.GetNumberOfDistanceSpheroidInitPoints() == 2
 
-        # GetControlGrid() returns the underlying ``const double*``;
-        # the VTK Python wrapping exposes it as an indexable sequence.
-        # If the wrapper ever switches to surfacing a raw memory
-        # address (or anything not subscriptable from Python) this
-        # assertion will fire and force us to expose a proper Python
-        # accessor — silently dropping out of the loop on the first
-        # element, as the original test did, would let a degraded
-        # round-trip pass unnoticed.
-        control_grid = sink.GetControlGrid()
-        assert hasattr(control_grid, "__getitem__"), (
-            "GetControlGrid() must surface as an indexable sequence from "
-            "Python; got " + repr(type(control_grid))
-        )
-        for i, expected in enumerate(grid):
-            assert control_grid[i] == pytest.approx(expected, rel=1e-5, abs=1e-7)
-
-        # Init audit data — independent of how the control-grid pointer
-        # wraps.
-        sp0 = sink.GetSlicingPlaneInitPoint(0)
-        sp1 = sink.GetSlicingPlaneInitPoint(1)
-        assert list(sp0) == pytest.approx([1.0, 2.0, 3.0])
-        assert list(sp1) == pytest.approx([-4.0, 5.0, -6.0])
-
-        assert list(sink.GetDistanceSpheroidCenter()) == pytest.approx(
-            [17.0, 18.0, 19.0]
-        )
-        assert sink.GetDistanceSpheroidRadiusX() == pytest.approx(2.5)
-        assert sink.GetDistanceSpheroidRadiusY() == pytest.approx(3.5)
-        assert sink.GetDistanceSpheroidRadiusZ() == pytest.approx(4.5)
+        # Per the storage-ownership design
+        # (``Docs/design/resection-plan-architecture/03-storage-ownership.md``)
+        # the BULK fields — ``InitMode``, the slicing-plane / spheroid init
+        # subordinates, the spheroid center+radii, and the control grid —
+        # are intentionally NOT serialized into the ``.mrml``; they persist
+        # through the parent plan's ``.lrp.json`` storage path.  A scene
+        # load WITHOUT a paired ``.lrp.json`` therefore recovers those bulk
+        # fields at their defaults — "degraded but non-crashing"
+        # (``04-save-load-flows.md`` §"Failure modes").  This test pins that
+        # split: identity round-trips via ``.mrml``; bulk does not.
+        cls = mrml_module.vtkMRMLBezierSurfaceNode
+        assert sink.GetInitMode() == cls.SlicingPlane  # default, not DistanceSpheroid
+        assert sink.GetNumberOfDistanceSpheroidInitPoints() == 0
+        assert list(sink.GetSlicingPlaneOrigin()) == [0.0, 0.0, 0.0]
+        assert sink.GetDistanceSpheroidRadiusX() == 0.0
     finally:
         try:
             os.unlink(path)
