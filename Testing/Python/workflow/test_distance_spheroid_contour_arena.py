@@ -244,6 +244,33 @@ def test_distance_spheroid_contour_arena(render_interactive: float) -> None:
             "mapper is not wrapped onto the slicer namespace in this build."
         )
 
+        # Software-GL gate: the wiring assertions above (actor attached,
+        # production contour mapper + SSOT quadric) are GL-stack-independent
+        # and always run.  The pixel-count verdict below, however, depends on
+        # the custom contour fragment shader actually lighting fragments,
+        # which a software rasteriser (CI's xvfb + llvmpipe) does not do --
+        # the same offscreen-software-GL limitation the bezier distance-map
+        # render meets (ADR-0020 §"Rollout plan"; the replay driver's
+        # ``_software_gl_skip_reason`` gates on the same markers).  Skip the
+        # pixel assertion with an explicit, greppable reason on a software
+        # stack so it reports as a real SKIP, not a false pass; the lit-pixel
+        # verdict is on a GPU-backed display.
+        capabilities = (
+            view_widget.threeDView().renderWindow().ReportCapabilities() or ""
+        )
+        _software_markers = ("llvmpipe", "softpipe", "swrast", "software rasterizer")
+        _lowered = capabilities.lower()
+        _software_match = next(
+            (m for m in _software_markers if m in _lowered), None
+        )
+        if _software_match is not None:
+            pytest.skip(
+                f"[arena-skip] offscreen software GL ({_software_match}) -- the "
+                "production contour fragment shader does not light fragments on "
+                "a software rasteriser; the lit-pixel verdict is deferred to a "
+                "GPU-backed display.  Pipeline wiring above already passed."
+            )
+
         # Visible-pixel assertion: the contour band must actually draw.
         # The production Representation enables ``ContourVisibility`` once it
         # has a spheroid to show (ADR-0014 §2); the mapper's fragment shader
