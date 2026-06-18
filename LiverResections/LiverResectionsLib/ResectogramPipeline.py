@@ -159,15 +159,21 @@ class ResectogramPipeline(_PipelineBase):
         """Reconcile both Representations against the current node set.
 
         Idempotent: a second call with no intervening node mutation is a
-        no-op observationally — the memoised ``(dataMTime, displayMTime)``
-        key short-circuits the work (`ADR-0013`_ §3).
+        no-op observationally — the memoised key short-circuits the work
+        (`ADR-0013`_ §3).  The key folds in the data node's control-point
+        MTime alongside its ``GetMTime``, because a markups control-point
+        DRAG advances the control-point MTime but NOT the node ``GetMTime``
+        — keying on ``GetMTime`` alone would leave the resectogram
+        non-reactive to surface edits (the dragging-changes-nothing failure
+        mode).
         """
         self._ensure_representations()
 
         data_mtime = _safe_get_mtime(self._data_node)
+        control_points_digest = _safe_get_control_points_digest(self._data_node)
         display_mtime = _safe_get_mtime(self._display_node)
 
-        key = (data_mtime, display_mtime)
+        key = (data_mtime, control_points_digest, display_mtime)
         if key == self._last_update_key:
             return  # idempotent short-circuit
         self._last_update_key = key
@@ -298,17 +304,26 @@ class ResectogramPipeline(_PipelineBase):
             return None
 
     def _attach_observer(self, node: Any) -> None:
-        """Add a ``vtkCommand::ModifiedEvent`` observer to ``node``.
+        """Observe the node's modification events, routed to ``UpdatePipeline()``.
 
-        Routes the callback into ``UpdatePipeline()``.  Stores the
-        observer tag so ``cleanup()`` / ``_detach_observer`` can detach
-        precisely.
+        Observes ``ModifiedEvent`` AND the markups control-point edit events
+        (``PointModifiedEvent`` / ``PointPositionDefinedEvent``).  A
+        markups control-point DRAG does NOT advance the node's ``GetMTime``
+        and fires ``PointModifiedEvent`` rather than ``ModifiedEvent``, so a
+        ``ModifiedEvent``-only observer would leave the resectogram
+        non-reactive to surface edits (the dragging-changes-nothing failure
+        mode).  Stores every observer tag so ``cleanup()`` /
+        ``_detach_observer`` can detach precisely.
         """
         if node is None or not hasattr(node, "AddObserver"):
             return
 
-        tag = node.AddObserver("ModifiedEvent", self._on_node_modified)
-        self._observer_tags.setdefault(id(node), []).append(tag)
+        tags = self._observer_tags.setdefault(id(node), [])
+        tags.append(node.AddObserver("ModifiedEvent", self._on_node_modified))
+        for event_name in ("PointModifiedEvent", "PointPositionDefinedEvent"):
+            event = getattr(node, event_name, None)
+            if event is not None:
+                tags.append(node.AddObserver(event, self._on_node_modified))
         if node not in self._observed_node_refs:
             self._observed_node_refs.append(node)
 
@@ -327,8 +342,16 @@ class ResectogramPipeline(_PipelineBase):
             pass
 
     def _on_node_modified(self, caller: Any, event: str) -> None:
-        """VTK observer callback — re-runs ``UpdatePipeline()``."""
+        """VTK observer callback — re-runs ``UpdatePipeline()``.
+
+        Invalidates the memoised update key first: the firing of an observed
+        event IS the change signal, but a markups control-point edit does
+        not advance the node ``GetMTime`` the key is built from, so without
+        the invalidation ``UpdatePipeline`` would short-circuit and the
+        flattened surface would not re-feed (the non-reactive failure mode).
+        """
         del caller, event  # observers route uniformly into UpdatePipeline()
+        self._last_update_key = None
         self.UpdatePipeline()
 
 
@@ -348,6 +371,35 @@ def _safe_get_mtime(node: Any) -> int:
         return int(getter())
     except Exception:  # pragma: no cover - defensive
         return 0
+
+
+def _safe_get_control_points_digest(node: Any) -> tuple:
+    """Return a digest of the data node's markups control-point positions.
+
+    A markups control-point DRAG does not advance the node's ``GetMTime``
+    (the positions live in a separately-timed control-point structure), so
+    the memoisation key folds in a cheap digest of the control-point
+    positions to stay reactive to surface edits.  Returns an empty tuple
+    when the node is missing the markups control-point accessors (stub nodes
+    in unit tests) or a read raises — the key then degrades to ``GetMTime``
+    alone, which is the correct behaviour for a non-markups data node.
+    """
+    if node is None:
+        return ()
+    count_getter = getattr(node, "GetNumberOfControlPoints", None)
+    position_getter = getattr(node, "GetNthControlPointPosition", None)
+    if count_getter is None or position_getter is None:
+        return ()
+    try:
+        count = int(count_getter())
+        position = [0.0, 0.0, 0.0]
+        digest = []
+        for index in range(count):
+            position_getter(index, position)
+            digest.append((position[0], position[1], position[2]))
+        return tuple(digest)
+    except Exception:  # pragma: no cover - defensive
+        return ()
 
 
 # --------------------------------------------------------------------------- #

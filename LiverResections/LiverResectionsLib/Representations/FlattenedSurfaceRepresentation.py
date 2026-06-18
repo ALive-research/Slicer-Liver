@@ -32,6 +32,20 @@ and paints the projected margin band (ADR-0025 §Context).  The
 aspect-ratio math is routed through the extracted Algorithm helper.  The
 Gaussian-blur post-pass (a later v2.0 toggle) is intentionally absent.
 
+The flattened quad fed to the 2D mapper as its INPUT geometry is the
+fixed planar ``(u, v)`` domain — that defines the OUTPUT rectangle.  The
+real surface enters as the mapper's ``"BSPoints"`` point-data array (the
+``vertexMCBS`` shader attribute): the data node's evaluated Bezier
+surface ``S(u, v)`` positions, sampled at the quad's resolution so the
+arrays align vertex-for-vertex.  The mapper transforms ``BSPoints``
+through ras→ijk→texture to sample the distance field at the REAL surface
+position, so the flattened image is coherent with the 3D surface and
+re-renders when the control points move (ADR-0025 §Context; the v1
+``BezierPlane->GetPointData()->AddArray(BezierSurfaceSourcePoints)``
+feed).  Without ``BSPoints`` the mapper falls back to the flat quad's own
+vertices and paints the distance field on a fixed plane — the
+non-coherent / non-reactive fixed-quad failure mode.
+
 The VTK objects are soft dependencies — same pattern as
 ``ConfirmedRepresentation``: a pure-Python pytest run skips the VTK-only
 branches, while a Slicer process (or any environment with VTK on
@@ -289,8 +303,16 @@ class FlattenedSurfaceRepresentation:
     def _apply_data_node(
         self, display_node: Any | None, data_node: Any | None
     ) -> None:
-        """Push the sampled surface onto the quad source, then recompute
-        the anisotropic ``MatRatio`` via the Algorithm helper.
+        """Push the real surface onto the 2D mapper, then recompute the
+        anisotropic ``MatRatio`` via the Algorithm helper.
+
+        The data node's evaluated Bezier surface ``S(u, v)`` is pushed onto
+        the 2D mapper's input as the ``"BSPoints"`` point-data array (the
+        ``vertexMCBS`` shader attribute), so the flattened image samples the
+        distance field at the REAL surface position — coherent with the 3D
+        view and reactive to control-point edits (ADR-0025 §Context).  When
+        the data node exposes only an explicit sampled-surface points object
+        (the unit-test stub path), that is used directly.
 
         The ``MatRatio`` math is NOT re-derived here — it is routed
         through the extracted pure-VTK ``vtkLiverResectogramAspectRatio``
@@ -301,14 +323,92 @@ class FlattenedSurfaceRepresentation:
             display_node, "GetEnableFlexibleBoundary", default=False
         )
 
+        # Prefer an explicit sampled-surface points object (unit-test stub);
+        # otherwise evaluate S(u, v) from the data node's Bezier control
+        # points (the real markups-node path inside Slicer).
         sampled = _safe_get_sampled_surface(data_node)
-        signature = (id(sampled) if sampled is not None else None, bool(flexible))
+        if sampled is None:
+            sampled = self._evaluate_surface_points(data_node)
+
+        signature = _surface_signature(sampled, flexible)
         if signature != self._last_surface_signature:
             self._last_surface_signature = signature
             self._input_refresh_count += 1
 
+        self._push_surface_onto_mapper_input(sampled)
         self._apply_mat_ratio(sampled, flexible)
         self._apply_distance_map_texture(display_node, data_node)
+
+    def _evaluate_surface_points(self, data_node: Any | None) -> Any | None:
+        """Return the data node's evaluated Bezier surface ``S(u, v)`` points.
+
+        Reads the markups node's 16 control points and feeds a
+        ``vtkBezierSurfaceSource`` at the flattened quad's resolution so the
+        evaluated grid aligns vertex-for-vertex with the quad the 2D mapper
+        renders (the v1 ``BezierSurfaceSource`` feed).  Returns ``None`` when
+        VTK / the source is unavailable, the data node carries no control
+        points, or the legacy 16-point grid is not yet complete — the caller
+        then degrades to the prior fixed-quad fallback (no crash).
+        """
+        if not _HAS_VTK or data_node is None:
+            return None
+
+        control_points = _read_control_points(data_node)
+        if control_points is None:
+            return None
+
+        source = _make_flattened_quad_source()
+        set_resolution = getattr(source, "SetResolution", None)
+        set_control_points = getattr(source, "SetControlPoints", None)
+        if set_resolution is None or set_control_points is None:
+            return None  # generic vtkPlaneSource fallback — no Bezier eval
+        try:
+            set_resolution(*_FLATTENED_QUAD_RESOLUTION)
+            set_control_points(control_points)
+            source.Update()
+            output = source.GetOutput()
+            points = output.GetPoints()
+        except Exception:  # pragma: no cover - defensive
+            return None
+        if points is None or points.GetNumberOfPoints() == 0:
+            return None
+        return points
+
+    def _push_surface_onto_mapper_input(self, sampled: Any | None) -> None:
+        """Push ``sampled`` onto the 2D mapper input as the ``"BSPoints"`` array.
+
+        Adds (or replaces) the ``"BSPoints"`` point-data array on the
+        flattened quad's output — the mapper's optional ``vertexMCBS``
+        attribute (the REAL surface ``S(u, v)`` positions).  The mapper
+        transforms these through ras→ijk→texture to sample the distance
+        field at the real surface, making the flattened image coherent with
+        the 3D surface (the v1
+        ``BezierPlane->GetPointData()->AddArray(BezierSurfaceSourcePoints)``
+        feed).  No-op when the quad source, the sampled surface, or the
+        point-data array (the bare-VTK stub-points path) is unavailable — the
+        mapper then falls back to the flat quad's own vertices.
+        """
+        plane = self._bezier_plane
+        if plane is None or sampled is None:
+            return
+        get_data = getattr(sampled, "GetData", None)
+        if get_data is None:
+            return  # stub points object (unit tests) — no vtkPoints array
+        try:
+            if hasattr(plane, "Update"):
+                plane.Update()
+            output = plane.GetOutput()
+            point_data = output.GetPointData()
+            surface_array = get_data()
+        except Exception:  # pragma: no cover - defensive
+            return
+        if point_data is None or surface_array is None:
+            return
+        # ``AddArray`` replaces an existing same-named array, so naming the
+        # surface array "BSPoints" and adding it both installs and refreshes
+        # the mapper's optional vertexMCBS attribute on every update.
+        surface_array.SetName("BSPoints")
+        point_data.AddArray(surface_array)
 
     def _apply_mat_ratio(self, sampled: Any | None, flexible: bool) -> None:
         """Compute + push the resectogram aspect-ratio scaling.
@@ -722,6 +822,68 @@ def _sampled_surface_resolution(sampled: Any) -> tuple[int, int]:
     if side * side == n:
         return (side, side)
     return (default, default)
+
+
+def _read_control_points(data_node: Any | None) -> Any | None:
+    """Return the data node's Bezier control points as a ``vtkPoints``.
+
+    Mirrors the v1 ``UpdateBezierSurfaceGeometry`` read: the legacy markups
+    Bezier node carries the 16-point ``(4, 4)`` control grid (ADR-0018 §1)
+    via ``GetNumberOfControlPoints`` / ``GetNthControlPointPosition``.
+    Returns ``None`` defensively when the accessors are absent (stub data
+    nodes), the grid is incomplete (< 16 defined points, mid-placement), or
+    a read raises — the caller then keeps the fixed-quad fallback.
+    """
+    if not _HAS_VTK or data_node is None:
+        return None
+    count_getter = getattr(data_node, "GetNumberOfControlPoints", None)
+    position_getter = getattr(data_node, "GetNthControlPointPosition", None)
+    if count_getter is None or position_getter is None:
+        return None
+    try:
+        count = int(count_getter())
+    except Exception:  # pragma: no cover - defensive
+        return None
+    if count != 16:  # the legacy 16-point invariant (the only fed grid)
+        return None
+    points = vtk.vtkPoints()
+    position = [0.0, 0.0, 0.0]
+    try:
+        for index in range(count):
+            position_getter(index, position)
+            points.InsertNextPoint(
+                float(position[0]), float(position[1]), float(position[2])
+            )
+    except Exception:  # pragma: no cover - defensive
+        return None
+    return points
+
+
+def _surface_signature(sampled: Any | None, flexible: bool) -> tuple:
+    """Return an idempotency signature for ``sampled`` + ``flexible``.
+
+    For a ``vtkPoints`` surface the signature folds in the point count and
+    the coordinate ``MTime`` (a stub points object that lacks ``GetMTime``
+    falls back to ``id``), so a control-point edit that re-evaluates the
+    surface bumps the signature and the refresh counter — the reactivity the
+    pipeline-level ``Modified`` observer triggers a re-``update()`` for.
+    """
+    if sampled is None:
+        return (None, bool(flexible))
+    count_getter = getattr(sampled, "GetNumberOfPoints", None)
+    mtime_getter = getattr(sampled, "GetMTime", None)
+    count = None
+    if count_getter is not None:
+        try:
+            count = int(count_getter())
+        except Exception:  # pragma: no cover - defensive
+            count = None
+    if mtime_getter is not None:
+        try:
+            return (count, int(mtime_getter()), bool(flexible))
+        except Exception:  # pragma: no cover - defensive
+            pass
+    return (id(sampled), count, bool(flexible))
 
 
 def _safe_get_sampled_surface(data_node: Any | None) -> Any | None:
