@@ -496,11 +496,11 @@ void vtkOpenGLResection2DPolyDataMapper::SetDistanceMapTextureObject(vtkTextureO
     return;
   }
 
+  // The smart-pointer member already holds the managed reference; an extra
+  // manual Register() here would never be balanced by an UnRegister() on the
+  // SetDistanceMapTextureObject(nullptr) clear path, leaking the texture
+  // object past the mapper's own destruction (vtkDebugLeaks).
   this->Impl->DistanceMapTextureObject = object;
-  if (object)
-  {
-    object->Register(this);
-  }
 
   this->Modified();
 }
@@ -519,11 +519,9 @@ void vtkOpenGLResection2DPolyDataMapper::SetVascularSegmentsTextureObject(vtkTex
     return;
   }
 
+  // See SetDistanceMapTextureObject: the smart-pointer member owns the
+  // reference; the manual Register() was unbalanced and leaked the object.
   this->Impl->VascularSegmentsTextureObject = object;
-  if (object)
-  {
-    object->Register(this);
-  }
 
   this->Modified();
 }
