@@ -159,6 +159,7 @@ class FlattenedSurfaceRepresentation:
         """
         self._apply_display_node(display_node)
         self._apply_data_node(display_node, data_node)
+        self._pose_overlay_camera(display_node)
 
     def cleanup(self) -> None:
         """Detach actors from the renderer and drop the VTK pipeline."""
@@ -318,6 +319,36 @@ class FlattenedSurfaceRepresentation:
             return (1.0, 1.0)
         return (float(ratio_out[0]), float(ratio_out[1]))
 
+    def _pose_overlay_camera(self, display_node: Any | None) -> None:
+        """Pose the resectogram's private overlay camera.
+
+        Reproduces the v1 ``ResectogramPlaneCenter`` pose: looks straight
+        down the flattened quad from its centre, with ``MirrorDisplay``
+        flipping the camera's z sign so the resectogram can be presented
+        mirrored to a partner display (ADR-0025 §Context).  No-op when the
+        camera or the quad source is unavailable (bare-VTK pytest path).
+        """
+        camera = self._resectogram_camera
+        plane = self._bezier_plane
+        if camera is None or plane is None:
+            return
+        if not hasattr(camera, "SetPosition"):
+            return
+
+        bounds = _quad_source_bounds(plane)
+        if bounds is None:
+            return
+
+        mirror = _safe_get_bool(display_node, "GetMirrorDisplay", default=False)
+        z_sign = 1.0 if mirror else -1.0
+
+        center_x = (bounds[0] + bounds[1]) / 2.0
+        center_y = (bounds[2] + bounds[3]) / 2.0
+        center_z = z_sign * 100.0
+
+        camera.SetPosition(center_x, center_y, center_z * 3.0)
+        camera.SetFocalPoint(center_x, center_y, center_z)
+
 
 # --------------------------------------------------------------------------- #
 # Helpers — small, self-contained per ADR-0013 §6 (Representations are
@@ -338,6 +369,25 @@ def _make_flattened_quad_source() -> Any | None:
     if factory is not None:
         return factory()
     return vtk.vtkPlaneSource()
+
+
+def _quad_source_bounds(plane: Any) -> tuple | None:
+    """Return the flattened quad's ``(xmin, xmax, ymin, ymax, zmin, zmax)``.
+
+    Updates the source pipeline first (the v1 ``ResectogramPlaneCenter``
+    reads ``BezierPlane->GetOutput()->GetBounds()``).  Returns ``None``
+    defensively when the source does not expose a bounded output.
+    """
+    try:
+        if hasattr(plane, "Update"):
+            plane.Update()
+        output = plane.GetOutput()
+        bounds = output.GetBounds()
+    except Exception:  # pragma: no cover - defensive
+        return None
+    if bounds is None or len(bounds) < 6:
+        return None
+    return tuple(float(b) for b in bounds)
 
 
 def _make_resection_mapper_2d() -> Any:

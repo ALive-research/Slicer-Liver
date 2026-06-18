@@ -111,8 +111,17 @@ class VascularContourRepresentation:
         return self._renderer
 
     def update(self, display_node: Any | None, data_node: Any | None) -> None:
-        """Reconcile the contour actors' visibility against the display node."""
-        del data_node  # geometry feed lands with the monolith-sever follow-up
+        """Reconcile the contour overlays against the current node set.
+
+        Pushes the flattened-strip polydata (the same strip the
+        ``FlattenedSurfaceRepresentation`` draws — the contours are
+        computed over it) into both contour mappers, then reconciles the
+        actors' visibility against ``ShowResection2D``.  Tolerant of
+        ``None`` arguments and of data nodes that do not yet expose the
+        strip accessor.
+        """
+        self._apply_strip_input(data_node)
+
         show = _safe_get_bool(display_node, "GetShowResection2D", default=False)
         for actor in (self._distance_contour_actor, self._slicing_contour_actor):
             if actor is not None:
@@ -177,6 +186,26 @@ class VascularContourRepresentation:
         self._slicing_contour_actor.SetMapper(self._slicing_contour_mapper)
         self._slicing_contour_actor.SetVisibility(False)
 
+    def _apply_strip_input(self, data_node: Any | None) -> None:
+        """Feed the flattened-strip polydata into both contour mappers.
+
+        The vascular contours are computed over the SAME flattened strip
+        the surface Representation draws (ADR-0025 §Context), so both
+        mappers take that polydata as their input.  No-op when the data
+        node is absent or does not yet expose the strip accessor (stub
+        data nodes in unit tests; the monolith-sever follow-up wires the
+        live carrier).
+        """
+        strip = _safe_get_strip_polydata(data_node)
+        if strip is None:
+            return
+        for mapper in (self._distance_contour_mapper, self._slicing_contour_mapper):
+            if mapper is None:
+                continue
+            setter = getattr(mapper, "SetInputData", None)
+            if setter is not None:
+                setter(strip)
+
     def _attach_actors(self, renderer: Any) -> None:
         if not hasattr(renderer, "AddActor"):
             return
@@ -219,6 +248,27 @@ def _make_contour_mapper(class_name: str) -> Any:
     if factory is not None:
         return factory()
     return vtk.vtkPolyDataMapper()
+
+
+def _safe_get_strip_polydata(data_node: Any | None) -> Any | None:
+    """Return the flattened-strip ``vtkPolyData`` off the data node, if any.
+
+    Reads a small set of conventional accessors defensively; returns
+    ``None`` when none are present (stub data nodes in unit tests).
+    """
+    if data_node is None:
+        return None
+    for name in ("GetResectogramStripPolyData", "GetStripPolyData"):
+        getter = getattr(data_node, name, None)
+        if getter is None:
+            continue
+        try:
+            value = getter()
+        except Exception:  # pragma: no cover - defensive
+            continue
+        if value is not None:
+            return value
+    return None
 
 
 def _safe_get_bool(node: Any | None, getter_name: str, *, default: bool) -> bool:
