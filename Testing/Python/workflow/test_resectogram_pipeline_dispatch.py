@@ -198,17 +198,19 @@ def _first_renderer(view_widget):
 def _renderer_owns_actor(renderer, actor) -> bool:
     """Whether ``actor`` is in ``renderer``'s actor collection.
 
-    Walks ``GetActors()`` by VTK-object identity (``IsSameObject``) rather
-    than Python ``is`` — PythonQt/VTK can hand back distinct Python wrappers
-    around the same C++ ``vtkActor``.
+    Walks ``GetActors()`` by VTK-object identity (the C++ pointer the
+    wrapper reports via ``GetAddressAsString("")``) rather than Python
+    ``is`` — PythonQt/VTK can hand back distinct Python wrappers around the
+    same C++ ``vtkActor``, so identity must be compared at the C++ level.
     """
     if renderer is None or actor is None:
         return False
+    target = actor.GetAddressAsString("")
     actors = renderer.GetActors()
     actors.InitTraversal()
     for _ in range(actors.GetNumberOfItems()):
         candidate = actors.GetNextActor()
-        if candidate is not None and candidate.IsSameObject(actor):
+        if candidate is not None and candidate.GetAddressAsString("") == target:
             return True
     return False
 

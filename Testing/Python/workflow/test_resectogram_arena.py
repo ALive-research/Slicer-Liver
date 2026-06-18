@@ -278,11 +278,16 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
             "-- the v2.0 ResectogramPipeline has nothing to key on (ADR-0013 §1)."
         )
 
-        view_node = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLViewNode")
-        if view_node is None:
-            view_node = slicer.mrmlScene.AddNewNodeByClass(
-                "vtkMRMLViewNode", "ResectogramArenaView"
-            )
+        # The view must carry the resectogram singleton tag so the tightened
+        # ResectogramPipeline creator (ADR-0023 §Stage-4) fires for it -- an
+        # untagged view no longer gets a pipeline dispatched.  Reuse the
+        # production view-manager so the arena and the live module agree on
+        # the tag + layout name.
+        from LiverResectionsLib.ResectogramViewManager import (  # type: ignore[import-not-found]
+            ResectogramViewManager,
+        )
+
+        view_node = ResectogramViewManager().ensureViewNode()
 
         # Map the view's GL surface BEFORE binding the view node so the
         # displayable-manager group attaches.  Under

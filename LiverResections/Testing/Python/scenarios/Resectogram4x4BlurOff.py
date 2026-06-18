@@ -378,6 +378,17 @@ def setup_viewport(view_node=None):
     view_node.SetBoxVisible(False)
     view_node.SetAxisLabelsVisible(False)
 
+    # Tag the panel's view as the dedicated resectogram view so the
+    # tightened ResectogramPipeline creator (ADR-0023 §Stage-4) dispatches
+    # the flattened strip into it -- the tightened creator no longer fires
+    # for an untagged view.  Reuse the production tag so the scenario, the
+    # arena, and the live module agree on a single value.
+    from LiverResectionsLib.ResectogramViewManager import (  # type: ignore[import-not-found]
+        RESECTOGRAM_VIEW_SINGLETON_TAG,
+    )
+
+    view_node.SetSingletonTag(RESECTOGRAM_VIEW_SINGLETON_TAG)
+
 
 def describe() -> dict:
     """Metadata persisted alongside the captured bundle."""
