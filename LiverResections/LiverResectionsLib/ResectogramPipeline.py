@@ -136,22 +136,10 @@ class ResectogramPipeline(_PipelineBase):
         the Pipeline.  Re-entrant: replacing an already-attached display
         node detaches the old observers and re-derives the data node.
         """
-        if self._display_node is not None:
-            self._detach_observer(self._display_node)
-        if self._data_node is not None:
-            self._detach_observer(self._data_node)
-
         super().SetDisplayNode(displayNode)
 
         self._display_node = displayNode
-        self._data_node = None
-        if displayNode is not None:
-            getter = getattr(displayNode, "GetDisplayableNode", None)
-            if getter is not None:
-                self._data_node = getter()
-            self._attach_observer(displayNode)
-            if self._data_node is not None:
-                self._attach_observer(self._data_node)
+        self._reattach_node_observers()
 
         self._last_update_key = None
 
@@ -194,6 +182,16 @@ class ResectogramPipeline(_PipelineBase):
         """
         del renderer  # accessed via self.GetRenderer() inside the helper
         self._ensure_representations()
+        # ``OnRendererRemoved`` -> ``cleanup()`` detaches the node observers
+        # (they are bundled with the renderer-scoped Representation teardown),
+        # so re-establish them here.  Without this the observed set is empty
+        # after the manager's initial renderer churn (SetDisplayNode attaches,
+        # OnRendererRemoved detaches, OnRendererAdded historically did NOT
+        # re-attach) and a control-point DRAG never reaches ``UpdatePipeline``
+        # — the dragging-changes-nothing failure mode.  Also re-derives the
+        # data node, covering the lifecycle where ``GetDisplayableNode()`` is
+        # not yet resolvable at ``SetDisplayNode`` time.
+        self._reattach_node_observers()
         # Re-emit a dispatch so the Representations re-attach their actors
         # against the new renderer.
         self._last_update_key = None
@@ -303,6 +301,36 @@ class ResectogramPipeline(_PipelineBase):
         except Exception:  # pragma: no cover - defensive
             return None
 
+    def _reattach_node_observers(self) -> None:
+        """(Re-)wire the display + data node observers, idempotently.
+
+        The observed set is logically tied to the display/data node, NOT the
+        renderer — but ``OnRendererRemoved`` -> ``cleanup()`` detaches every
+        observer to release the renderer-scoped Representations, so the
+        observers must be re-established whenever the display node is set or a
+        renderer is (re-)attached, or the resectogram silently stops tracking
+        control-point edits (the dragging-changes-nothing failure mode).
+
+        Detaches any stale observers first so repeated calls never stack
+        duplicate observers.  Re-derives ``self._data_node`` from the display
+        node's ``GetDisplayableNode()`` each time, which also covers the
+        lifecycle where the back-reference is not yet resolvable at
+        ``SetDisplayNode`` time but is by ``OnRendererAdded``.
+        """
+        for node in list(self._observed_node_refs):
+            self._detach_observer(node)
+
+        self._data_node = None
+        if self._display_node is None:
+            return
+
+        getter = getattr(self._display_node, "GetDisplayableNode", None)
+        if getter is not None:
+            self._data_node = getter()
+        self._attach_observer(self._display_node)
+        if self._data_node is not None:
+            self._attach_observer(self._data_node)
+
     def _attach_observer(self, node: Any) -> None:
         """Observe the node's modification events, routed to ``UpdatePipeline()``.
 
@@ -353,6 +381,20 @@ class ResectogramPipeline(_PipelineBase):
         del caller, event  # observers route uniformly into UpdatePipeline()
         self._last_update_key = None
         self.UpdatePipeline()
+        # UpdatePipeline only refreshes the Representations' VTK objects; the
+        # dedicated resectogram view's render window must still be told to
+        # repaint, or a control-point DRAG updates the flattened geometry
+        # without the panel visibly changing.  The framework renders after its
+        # own display-node event path, but this direct data-node observer
+        # bypasses it, so request a (coalesced) render through the base
+        # Pipeline's ``RequestRender`` (delegates to
+        # ``vtkMRMLLayerDMPipelineManager::RequestRender``).
+        request_render = getattr(self, "RequestRender", None)
+        if request_render is not None:
+            try:
+                request_render()
+            except Exception:  # pragma: no cover - defensive (stub bases)
+                pass
 
 
 # --------------------------------------------------------------------------- #

@@ -963,3 +963,127 @@ def test_resectogram_is_coherent_with_surface() -> None:
             resectogram_widget.setMRMLScene(None)
             resectogram_widget.deleteLater()
         slicer.mrmlScene.Clear(0)
+
+
+def test_resectogram_reacts_to_control_point_edit() -> None:
+    """A control-point edit MUST drive the pipeline WITHOUT a manual re-drive.
+
+    The reactivity invariant (ADR-0027; ADR-0023 §Stage-4): editing the
+    Bezier surface's control points must propagate to the flattened
+    resectogram through the Pipeline's OWN observer chain -- the data-node
+    ``PointModifiedEvent`` / ``ModifiedEvent`` observer wired in
+    ``ResectogramPipeline.SetDisplayNode`` -> ``_attach_observer``.
+
+    This is the gap ``test_resectogram_is_coherent_with_surface`` does NOT
+    cover: that test manually calls ``pipeline.UpdatePipeline()`` after
+    bending, so it proves the re-feed renders but says nothing about whether
+    a real (mouse-driven) edit auto-triggers it.  Here we bend the surface
+    and assert ``GetUpdateCount()`` ADVANCES on its own -- RED if the
+    observer never reaches the live pipeline (the dragging-changes-nothing
+    failure mode the maintainer caught), GREEN once the observer is attached
+    to the data node the user actually edits.
+
+    Does not need GPU: the assertion is on the Python-side update counter,
+    not rendered pixels, so it runs even under the software-GL skip.
+    """
+    slicer = import_slicer_or_skip()
+    if slicer is None:
+        return
+    require_mrml_scene()
+    require_qt_widget()
+
+    registration_probe = slicer.mrmlScene.CreateNodeByClass(
+        "vtkMRMLResectogramDisplayNode"
+    )
+    if registration_probe is None:
+        pytest.skip(
+            "[arena-skip] vtkMRMLResectogramDisplayNode is not registered -- "
+            "the LiverResections module is not on the additional-module-paths. "
+            "Run via the pytest_launched CTest row."
+        )
+    registration_probe.UnRegister(None)
+
+    try:
+        from slicer import (  # type: ignore[import-not-found]
+            vtkMRMLLayerDisplayableManager,
+        )
+    except ImportError:
+        pytest.skip(
+            "[arena-skip] vtkMRMLLayerDisplayableManager is not importable -- "
+            "the upstream SlicerLayerDM extension is not on the launched path "
+            "(issue #460)."
+        )
+    vtkMRMLLayerDisplayableManager.RegisterInDefaultViews()
+
+    scenario = _load_scenario("Resectogram4x4BlurOff")
+    meta = scenario.describe()
+    width, height = meta["viewport"]["size"]
+
+    resectogram_widget = None
+    try:
+        created_nodes = scenario.setup_scene()
+        bezier = created_nodes[0]
+        resectogram_display = created_nodes[3]
+
+        from LiverResectionsLib.ResectogramViewManager import (  # type: ignore[import-not-found]
+            ResectogramViewManager,
+        )
+
+        resectogram_view_node = ResectogramViewManager().ensureViewNode()
+        _restrict_display_to_view(resectogram_display, resectogram_view_node)
+
+        resectogram_widget = _build_view_widget(
+            slicer, slicer.mrmlScene, resectogram_view_node
+        )
+        scenario.setup_camera(resectogram_view_node)
+        scenario.setup_viewport(resectogram_view_node)
+        resectogram_widget.resize(width, height)
+        resectogram_widget.threeDView().renderWindow().SetSize(width, height)
+        resectogram_widget.threeDView().renderWindow().SetMultiSamples(0)
+        resectogram_widget.threeDView().forceRender()
+
+        manager = resectogram_widget.threeDView().displayableManagerByClassName(
+            "vtkMRMLLayerDisplayableManager"
+        )
+        assert manager is not None, (
+            "[arena] the resectogram view has no vtkMRMLLayerDisplayableManager "
+            "(SlicerLayerDM not loaded; issue #460)."
+        )
+        pipeline = manager.GetNodePipeline(resectogram_display)
+        assert pipeline is not None, (
+            "no pipeline dispatched for the resectogram display node "
+            "(ADR-0013 §5)."
+        )
+
+        # Sanity: the pipeline must have resolved the SAME Bezier node the
+        # edit targets as its data node, or the observer is on the wrong node
+        # and reactivity cannot work regardless of the render path.
+        data_node = pipeline.GetDataNode()
+        assert data_node is not None, (
+            "the ResectogramPipeline resolved no data node -- "
+            "SetDisplayNode/GetDisplayableNode returned None (the back-reference "
+            "was not established when the pipeline was created)."
+        )
+        assert data_node.GetID() == bezier.GetID(), (
+            f"the ResectogramPipeline's data node is {data_node.GetID()} but the "
+            f"edited Bezier node is {bezier.GetID()} -- the PointModifiedEvent "
+            "observer is attached to the wrong node."
+        )
+
+        before_count = pipeline.GetUpdateCount()
+        _bend_control_points(bezier)
+        # NO manual pipeline.UpdatePipeline() here -- the observer chain wired
+        # in SetDisplayNode / OnRendererAdded must carry the edit on its own.
+        after_count = pipeline.GetUpdateCount()
+
+        assert after_count > before_count, (
+            f"editing the Bezier control points did NOT advance the pipeline "
+            f"update count ({before_count} -> {after_count}) -- the data-node "
+            "modification observer never reached UpdatePipeline.  The "
+            "resectogram is non-reactive to surface edits (ADR-0027)."
+        )
+    finally:
+        if resectogram_widget is not None:
+            resectogram_widget.setMRMLScene(None)
+            resectogram_widget.deleteLater()
+        slicer.mrmlScene.Clear(0)
