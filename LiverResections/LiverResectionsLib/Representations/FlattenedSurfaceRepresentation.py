@@ -23,15 +23,14 @@ ADR-0013 §6 (Representations are composable VTK pipelines).  It owns:
   ``vtkLiverResectogramAspectRatio`` helper (Algorithm library,
   ADR-0015 §1) rather than re-deriving the v1 ``Ratio(bool)`` math.
 
-Scope of this skeleton
-----------------------
-Per the T3 bounded slice this skeleton COMPOSES the assembly and wires
-the display-node fields it consumes, but it does NOT yet sever the
-assembly out of the v1 monolith (that is a separate follow-up; until
-then the monolith remains the live 2D renderer) and it does NOT add the
-Gaussian-blur pass (a later v2.0 toggle).  The aspect-ratio math is
-routed through the extracted Algorithm helper; the Gaussian-blur hook
-is intentionally absent.
+Scope
+-----
+This Representation COMPOSES the assembly, wires the display-node fields
+it consumes, and binds the distance-map 3D texture + ras/ijk matrices on
+the 2D mapper so the flattened ``(u, v)`` quad samples the distance field
+and paints the projected margin band (ADR-0025 §Context).  The
+aspect-ratio math is routed through the extracted Algorithm helper.  The
+Gaussian-blur post-pass (a later v2.0 toggle) is intentionally absent.
 
 The VTK objects are soft dependencies — same pattern as
 ``ConfirmedRepresentation``: a pure-Python pytest run skips the VTK-only
@@ -134,6 +133,16 @@ class FlattenedSurfaceRepresentation:
         self._resection_actor_2d: Any | None = None
         self._resectogram_camera: Any | None = None
 
+        # The distance-map volume node the bound texture was built from.
+        # ``None`` until the first ``update()`` with a distance map binds
+        # one; used purely as the idempotency key so the texture is rebuilt
+        # only when the volume changes.  The texture OBJECT itself is owned
+        # SOLELY by the 2D mapper's ``vtkSmartPointer`` (C++) — this
+        # Representation deliberately keeps NO Python reference to it, so it
+        # dies with the mapper at view teardown rather than outliving the
+        # C++ pipeline on the Python heap (a vtkDebugLeaks trip).
+        self._distance_map_volume: Any | None = None
+
         # Last MatRatio pushed onto the 2D mapper.  ``None`` until the
         # first ``update()`` runs OR the mapper does not expose
         # ``SetMatRatio`` (generic-mapper fallback path).
@@ -177,6 +186,19 @@ class FlattenedSurfaceRepresentation:
 
     def cleanup(self) -> None:
         """Detach actors from the renderer and drop the VTK pipeline."""
+        # Drop the distance-map texture off the mapper so the mapper's
+        # vtkSmartPointer (the texture's sole owner) releases it (the v1
+        # clear-on-teardown discipline; avoids a stale sampler3D bind).
+        mapper = self._resection_mapper_2d
+        if mapper is not None:
+            unbind = getattr(mapper, "SetDistanceMapTextureObject", None)
+            if unbind is not None:
+                try:
+                    unbind(None)
+                except Exception:  # pragma: no cover - defensive
+                    pass
+        self._distance_map_volume = None
+
         if self._renderer is not None:
             self._detach_actors(self._renderer)
             self._renderer = None
@@ -286,6 +308,7 @@ class FlattenedSurfaceRepresentation:
             self._input_refresh_count += 1
 
         self._apply_mat_ratio(sampled, flexible)
+        self._apply_distance_map_texture(display_node, data_node)
 
     def _apply_mat_ratio(self, sampled: Any | None, flexible: bool) -> None:
         """Compute + push the resectogram aspect-ratio scaling.
@@ -309,6 +332,175 @@ class FlattenedSurfaceRepresentation:
             return
         setter(list(ratio))
         self._mat_ratio_applied = (float(ratio[0]), float(ratio[1]))
+
+    def _apply_distance_map_texture(
+        self, display_node: Any | None, data_node: Any | None
+    ) -> None:
+        """Bind the distance-map 3D texture + ras/ijk matrices on the mapper.
+
+        Ports the v1 monolith
+        ``vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture``
+        and the ras/ijk matrix feed (severed by the T3-e rewrite): the
+        flattened ``(u, v)`` quad samples the distance field through the
+        mapper's ``sampler3D`` to paint the projected margin band
+        (ADR-0025 §Context).  Without this only the wireframe grid +
+        coloured border draw.
+
+        Re-binds only when the distance-map volume changes (idempotent
+        per ADR-0013 §3) and degrades safely: no distance map, no mapper
+        ``SetDistanceMapTextureObject``, no renderer/GL context, or no
+        ``TextureObject`` helper all leave the grid/border render intact
+        and drop any stale texture from the mapper rather than sampling a
+        volume that is gone.
+        """
+        mapper = self._resection_mapper_2d
+        if mapper is None:
+            return
+        bind = getattr(mapper, "SetDistanceMapTextureObject", None)
+        if bind is None:
+            return  # generic-mapper fallback (bare-VTK path) — no sampler3D
+
+        already_bound = self._mapper_has_distance_map_texture(mapper)
+        volume = _safe_call_getter(data_node, "GetDistanceMapVolumeNode")
+        if volume is self._distance_map_volume and already_bound:
+            return  # unchanged + already bound — idempotent (ADR-0013 §3)
+
+        image_data = _safe_call_getter(volume, "GetImageData")
+        if image_data is None:
+            # No distance map (or no image data): drop any stale texture so
+            # the mapper falls back to its no-distance-map path instead of
+            # sampling a volume that is gone (the v1 warning branch).
+            bind(None)
+            self._distance_map_volume = volume
+            return
+
+        num_comps = _safe_get_int(display_node, "GetTextureNumComps", default=0)
+        texture = self._create_distance_map_texture(image_data, num_comps)
+        if texture is None:
+            # The GL render window is not live yet (texture build deferred):
+            # leave the volume unrecorded so a later update — once the
+            # window exists — retries the bind rather than short-circuiting.
+            bind(None)
+            self._distance_map_volume = None
+            return
+
+        # Hand the texture to the mapper's vtkSmartPointer and drop the
+        # local reference: the mapper is now its sole owner (no Python
+        # attribute survives to outlive the C++ teardown).
+        self._distance_map_volume = volume
+        bind(texture)
+        self._apply_distance_map_matrices(volume, image_data)
+        del texture
+
+    def _mapper_has_distance_map_texture(self, mapper: Any) -> bool:
+        """Whether the mapper currently holds a distance-map texture object.
+
+        The idempotency probe: the texture object is owned solely by the
+        mapper, so "already bound" is read off the mapper rather than a
+        Python attribute (which is deliberately not retained).  Tolerant of
+        the generic-mapper fallback that lacks the accessor.
+        """
+        getter = getattr(mapper, "GetDistanceMapTextureObject", None)
+        if getter is None:
+            return False
+        try:
+            return getter() is not None
+        except Exception:  # pragma: no cover - defensive
+            return False
+
+    def _create_distance_map_texture(
+        self, image_data: Any, num_comps: int
+    ) -> Any | None:
+        """Build the 3D distance-map texture object from ``image_data``.
+
+        Mirrors the v1 ``CreateAndTransferDistanceMapTexture`` body: a
+        ``vtkMultiTextureObjectHelper`` contexted on the renderer's
+        OpenGL render window, clamp-to-border wrapping, linear filtering,
+        and ``CreateSeq3DFromRaw`` from the volume's scalar pointer with
+        the display node's ``TextureNumComps`` component count.  Returns
+        ``None`` (caller drops the texture) when the helper class or the
+        render window is unavailable.
+        """
+        helper_factory = _import_texture_object_helper()
+        if helper_factory is None:
+            return None
+        render_window = self._render_window()
+        if render_window is None:
+            return None
+        try:
+            texture = helper_factory()
+            texture.SetContext(render_window)
+            clamp = getattr(texture, "ClampToBorder", None)
+            linear = getattr(texture, "Linear", None)
+            if clamp is not None:
+                texture.SetWrapS(clamp)
+                texture.SetWrapT(clamp)
+                texture.SetWrapR(clamp)
+            if linear is not None:
+                texture.SetMinificationFilter(linear)
+                texture.SetMagnificationFilter(linear)
+            texture.SetBorderColor(1000.0, 1000.0, 0.0, 0.0)
+            dimensions = image_data.GetDimensions()
+            texture.CreateSeq3DFromRaw(
+                dimensions[0],
+                dimensions[1],
+                dimensions[2],
+                int(num_comps),
+                vtk.VTK_FLOAT,
+                image_data.GetScalarPointer(),
+                0,
+            )
+        except Exception:  # pragma: no cover - defensive
+            return None
+        return texture
+
+    def _apply_distance_map_matrices(self, volume: Any, image_data: Any) -> None:
+        """Push the ras→ijk + ijk→texture transposed matrices on the mapper.
+
+        The v1 feed: the volume's RAS→IJK matrix (transposed for the
+        shader's column-major uniform) maps the flattened quad's RAS
+        position into the distance-map voxel grid, and a per-dimension
+        ``1/N`` scale (transposed) normalises voxel indices into the
+        ``[0, 1]`` texture domain the ``sampler3D`` reads.  No-op when the
+        mapper lacks the transposed-matrix setters.
+        """
+        mapper = self._resection_mapper_2d
+        set_ras = getattr(mapper, "SetRasToIjkMatrixT", None)
+        set_ijk = getattr(mapper, "SetIjkToTextureMatrixT", None)
+        if set_ras is None or set_ijk is None:
+            return
+        try:
+            ras_to_ijk_t = vtk.vtkMatrix4x4()
+            volume.GetRASToIJKMatrix(ras_to_ijk_t)
+            ras_to_ijk_t.Transpose()
+
+            dimensions = image_data.GetDimensions()
+            scaling = vtk.vtkTransform()
+            scaling.Scale(
+                1.0 / dimensions[0], 1.0 / dimensions[1], 1.0 / dimensions[2]
+            )
+            ijk_to_texture_t = vtk.vtkMatrix4x4()
+            scaling.GetTranspose(ijk_to_texture_t)
+        except Exception:  # pragma: no cover - defensive
+            return
+        set_ras(ras_to_ijk_t)
+        set_ijk(ijk_to_texture_t)
+
+    def _render_window(self) -> Any | None:
+        """Return the renderer's OpenGL render window, or ``None``.
+
+        The ``vtkMultiTextureObjectHelper`` must be contexted on a live
+        GL render window before ``CreateSeq3DFromRaw`` allocates the GPU
+        texture.  Returns ``None`` (no renderer, or the renderer has no
+        window yet) so the texture build is skipped until a window exists.
+        """
+        renderer = self._renderer
+        if renderer is None or not hasattr(renderer, "GetRenderWindow"):
+            return None
+        try:
+            return renderer.GetRenderWindow()
+        except Exception:  # pragma: no cover - defensive
+            return None
 
     def _compute_aspect_ratio(
         self, sampled: Any | None, flexible: bool
@@ -454,22 +646,62 @@ def _make_resection_mapper_2d() -> Any:
     return vtk.vtkPolyDataMapper()
 
 
-def _import_aspect_ratio_helper() -> Any | None:
-    """Return the ``vtkLiverResectogramAspectRatio`` helper class.
+def _import_wrapped_class(name: str) -> Any | None:
+    """Return a wrapped VTK/Slicer class by name, or ``None``.
 
-    Reachable from a Slicer process via the ``slicer`` namespace or the
-    wrapped Algorithm module.  Returns ``None`` in a bare-VTK pytest run
-    where the wrapped class is not importable.
+    Reachable from a Slicer process via the ``vtk`` or ``slicer``
+    namespace; returns ``None`` in a bare-VTK pytest run where the wrapped
+    class is not importable, so the calling branch degrades gracefully.
     """
     if _HAS_VTK:
-        factory = getattr(vtk, "vtkLiverResectogramAspectRatio", None)
+        factory = getattr(vtk, name, None)
         if factory is not None:
             return factory
     try:  # pragma: no cover — exercised inside Slicer
-        from slicer import vtkLiverResectogramAspectRatio  # type: ignore[import-not-found]
+        import slicer  # type: ignore[import-not-found]
 
-        return vtkLiverResectogramAspectRatio
+        return getattr(slicer, name, None)
     except Exception:
+        return None
+
+
+def _import_aspect_ratio_helper() -> Any | None:
+    """Return the ``vtkLiverResectogramAspectRatio`` helper class, or ``None``.
+
+    Named seam (unit tests monkeypatch it to inject a stub helper) over
+    the generic ``_import_wrapped_class``.
+    """
+    return _import_wrapped_class("vtkLiverResectogramAspectRatio")
+
+
+def _import_texture_object_helper() -> Any | None:
+    """Return the ``vtkMultiTextureObjectHelper`` class, or ``None``.
+
+    The helper (``LiverMarkups/VTKWidgets/``) wraps ``vtkTextureObject``
+    with the ``CreateSeq3DFromRaw`` upload the resectogram distance map
+    needs.  A named seam over ``_import_wrapped_class`` for symmetry with
+    the aspect-ratio helper.
+    """
+    return _import_wrapped_class("vtkMultiTextureObjectHelper")
+
+
+def _safe_call_getter(node: Any | None, getter_name: str) -> Any | None:
+    """Return ``node.<getter_name>()`` defensively, or ``None``.
+
+    Tolerant of a missing node, a missing accessor (stub nodes in unit
+    tests), or a raising getter.  Used to read the distance-map volume off
+    the data node (``GetDistanceMapVolumeNode`` — the same source the
+    scenario sets via ``SetDistanceMapVolumeNode``) and the volume's
+    ``GetImageData``.
+    """
+    if node is None:
+        return None
+    getter = getattr(node, getter_name, None)
+    if getter is None:
+        return None
+    try:
+        return getter()
+    except Exception:  # pragma: no cover - defensive
         return None
 
 
