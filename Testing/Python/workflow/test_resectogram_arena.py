@@ -191,19 +191,21 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
     require_mrml_scene()
     require_qt_widget()
 
-    # The scenario builds a vtkMRMLMarkupsBezierSurfaceNode + enables the
-    # resectogram strip on its display node.  Guard the distinct "live
-    # scene but the modules did not register" case with an explicit,
-    # greppable skip reason (module path missing).
+    # The scenario builds a vtkMRMLMarkupsBezierSurfaceNode + attaches a
+    # vtkMRMLResectogramDisplayNode (the v2.0 ResectogramPipeline carrier).
+    # Guard the distinct "live scene but the modules did not register" case
+    # with an explicit, greppable skip reason (module path missing).  Probe
+    # the resectogram display node specifically -- it is the T3 go-live
+    # carrier the registered ResectogramPipeline keys on (ADR-0013 §1/§5).
     registration_probe = slicer.mrmlScene.CreateNodeByClass(
-        "vtkMRMLMarkupsBezierSurfaceNode"
+        "vtkMRMLResectogramDisplayNode"
     )
     if registration_probe is None:
         pytest.skip(
-            "[arena-skip] vtkMRMLMarkupsBezierSurfaceNode is not registered -- "
-            "the LiverResections / LiverMarkups modules are not on the "
-            "additional-module-paths.  Run via the pytest_launched CTest row "
-            "(Liver/Testing/Python/CMakeLists.txt supplies the module paths)."
+            "[arena-skip] vtkMRMLResectogramDisplayNode is not registered -- "
+            "the LiverResections module is not on the additional-module-paths. "
+            "Run via the pytest_launched CTest row (Liver/Testing/Python/"
+            "CMakeLists.txt supplies the module paths)."
         )
     # CreateNodeByClass returns a node with the factory's +1 reference that the
     # caller owns; drop it, or the probe instance survives to process shutdown
@@ -225,31 +227,62 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
     meta = scenario.describe()
     width, height = meta["viewport"]["size"]
 
+    # Ensure the upstream LayerDM displayable manager is registered in the
+    # 3D-view factory so the standalone view hosts it and the registered
+    # ResectogramPipeline dispatches for the resectogram display node
+    # (ADR-0013 §5; idempotent -- RegisterInDefaultViews short-circuits when
+    # already present, and the LiverResections module setup() already calls
+    # it).  Skip cleanly when SlicerLayerDM is not on the launched path.
+    try:
+        from slicer import (  # type: ignore[import-not-found]
+            vtkMRMLLayerDisplayableManager,
+        )
+    except ImportError:
+        pytest.skip(
+            "[arena-skip] vtkMRMLLayerDisplayableManager is not importable -- "
+            "the upstream SlicerLayerDM extension is not on the launched path "
+            "(issue #460).  Run via pytest_launched with the LayerDM module "
+            "paths."
+        )
+    vtkMRMLLayerDisplayableManager.RegisterInDefaultViews()
+
     # Build the standalone view.  ``--no-main-window`` has no layout
     # manager, so construct the qMRMLThreeDWidget directly (the same
     # standalone-view pattern capture_baseline.py / replay_test.py use).
     view_widget = slicer.qMRMLThreeDWidget()
     view_widget.setMRMLScene(slicer.mrmlScene)
-    view_node = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLViewNode")
-    if view_node is None:
-        view_node = slicer.mrmlScene.AddNewNodeByClass(
-            "vtkMRMLViewNode", "ResectogramArenaView"
-        )
 
     created_nodes = None
     try:
         # Populate the scene (markups Bezier node + distance map + the
-        # resectogram-enabled display node).  setup_scene returns the
-        # created nodes so nothing leaks through a module global.
+        # resectogram display node).  setup_scene returns the created nodes
+        # so nothing leaks through a module global.  It Clear(0)s the scene
+        # first, so create the view node AFTER it -- a view node created
+        # before would be wiped, leaving the displayable-manager group bound
+        # to a node no longer in the scene (and the pipeline reconciliation
+        # would never fire).
         created_nodes = scenario.setup_scene()
         assert created_nodes is not None, (
             "scenario.setup_scene() returned None -- expected the created "
             "node handles (the no-module-globals contract)."
         )
-        bezier_node = created_nodes[0]
-        assert bezier_node is not None, (
+        assert created_nodes[0] is not None, (
             "scenario.setup_scene() did not return a Bezier node handle."
         )
+        # The v2.0 ResectogramPipeline carrier (ADR-0013 §1): the scenario
+        # returns it as the fourth handle.  Its presence in the scene is what
+        # drives the registered pipeline to render the flattened strip.
+        resectogram_display = created_nodes[3]
+        assert resectogram_display is not None, (
+            "scenario.setup_scene() did not return a vtkMRMLResectogramDisplayNode "
+            "-- the v2.0 ResectogramPipeline has nothing to key on (ADR-0013 §1)."
+        )
+
+        view_node = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLViewNode")
+        if view_node is None:
+            view_node = slicer.mrmlScene.AddNewNodeByClass(
+                "vtkMRMLViewNode", "ResectogramArenaView"
+            )
 
         # Map the view's GL surface BEFORE binding the view node so the
         # displayable-manager group attaches.  Under
@@ -289,21 +322,15 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
         view_widget.threeDView().forceRender()
 
         # ---- Structural wiring assertions (ALWAYS-ON, path-agnostic) ----
-        # These run regardless of the GL stack: a live renderer, the Bezier
-        # node's display node, and the resectogram strip enabled on it.
+        # These run regardless of the GL stack: a live renderer, the v2.0
+        # resectogram display node with the strip enabled, and a LIVE
+        # ResectogramPipeline dispatched for it.
         assert renderer is not None, "no live renderer on the view widget"
 
-        display_node = bezier_node.GetDisplayNode()
-        assert display_node is not None, (
-            "the Bezier node has no display node -- the scenario did not "
-            "create the resectogram display wiring."
-        )
         # The resectogram strip must be enabled (the whole point of the
-        # scenario).  ShowResection2D lives on the legacy markups display
-        # node (the v1 resectogram render path reads it); probe by accessor
-        # so the assertion is robust across the v1->v2 display-node
-        # migration.
-        get_show_2d = getattr(display_node, "GetShowResection2D", None)
+        # scenario).  ShowResection2D lives on the v2.0
+        # vtkMRMLResectogramDisplayNode (the ResectogramPipeline carrier).
+        get_show_2d = getattr(resectogram_display, "GetShowResection2D", None)
         assert get_show_2d is not None, (
             "the resectogram display node has no GetShowResection2D accessor "
             "-- the scenario is not driving a resectogram-capable display "
@@ -312,6 +339,41 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
         assert get_show_2d(), (
             "ShowResection2D is OFF on the display node -- the scenario did "
             "not enable the resectogram strip."
+        )
+
+        # The registered ResectogramPipeline must have dispatched for the
+        # display node and built a non-empty flattened-surface actor.  This
+        # is the T3-e go-live invariant (ADR-0013 §1/§5/§6): a
+        # vtkMRMLResectogramDisplayNode in a LayerDM-aware view yields a live
+        # pipeline whose FlattenedSurfaceRepresentation has renderable
+        # geometry -- the precondition for the lit-pixel verdict below.
+        manager = view_widget.threeDView().displayableManagerByClassName(
+            "vtkMRMLLayerDisplayableManager"
+        )
+        assert manager is not None, (
+            "[arena] the 3D view has no vtkMRMLLayerDisplayableManager -- the "
+            "upstream SlicerLayerDM extension is not loaded on the launched "
+            "path (issue #460)."
+        )
+        pipeline = manager.GetNodePipeline(resectogram_display)
+        assert pipeline is not None, (
+            "no pipeline dispatched for the vtkMRMLResectogramDisplayNode -- "
+            "the ResectogramPipeline creator (ADR-0013 §5) did not fire."
+        )
+        assert type(pipeline).__name__ == "ResectogramPipeline", (
+            "the pipeline bound to the resectogram display node is "
+            f"{type(pipeline).__name__!r}, not ResectogramPipeline (ADR-0013 §1)."
+        )
+        flattened = pipeline.GetFlattenedSurfaceRepresentation()
+        assert flattened is not None, (
+            "the ResectogramPipeline built no FlattenedSurfaceRepresentation "
+            "-- OnRendererAdded did not compose the Representations "
+            "(ADR-0013 §6)."
+        )
+        actor = flattened.GetResectionActor2D()
+        assert actor is not None and actor.GetMapper() is not None, (
+            "the flattened-surface actor / mapper is missing -- the "
+            "resectogram strip has nothing to draw."
         )
 
         # ---- Lit-pixel verdict (GPU-gated) ----

@@ -79,6 +79,20 @@ except ImportError:  # pragma: no cover — pure-Python path
 
 RESECTOGRAM_RENDERER_LAYER = 1
 
+# Flattened-quad geometry for the resectogram domain.  The resectogram is
+# the flattened 2D image of the Bezier ``(u, v)`` parameter domain
+# (ADR-0025 §Context); the strip is drawn on a FIXED flat quad — the same
+# planar 4x4 control grid + 20x20 tessellation the v1 monolith
+# ``vtkSlicerBezierSurfaceRepresentation3D`` poses its ``BezierPlane`` from
+# — NOT the data node's 3D surface.  The data node feeds the distance-map
+# texture and the ``MatRatio`` squeeze, not this quad's vertices.
+_FLATTENED_QUAD_RESOLUTION = (20, 20)
+_FLATTENED_QUAD_CONTROL_GRID = tuple(
+    (x, row * 40.0, 0.0)
+    for row in range(4)
+    for x in (-60.0, -20.0, 20.0, 60.0)
+)
+
 
 class FlattenedSurfaceRepresentation:
     """VTK assembly for the resectogram's flattened surface.
@@ -210,6 +224,7 @@ class FlattenedSurfaceRepresentation:
         assert vtk is not None  # gated by _HAS_VTK
 
         self._bezier_plane = _make_flattened_quad_source()
+        _initialise_flattened_quad(self._bezier_plane)
 
         mapper = _make_resection_mapper_2d()
         if self._bezier_plane is not None and hasattr(mapper, "SetInputConnection"):
@@ -366,9 +381,39 @@ def _make_flattened_quad_source() -> Any | None:
     if not _HAS_VTK:
         return None
     factory = getattr(vtk, "vtkBezierSurfaceSource", None)
+    if factory is None:
+        try:  # pragma: no cover — exercised inside Slicer
+            from slicer import vtkBezierSurfaceSource as factory  # type: ignore[no-redef]
+        except Exception:
+            factory = None
     if factory is not None:
         return factory()
     return vtk.vtkPlaneSource()
+
+
+def _initialise_flattened_quad(plane: Any | None) -> None:
+    """Tessellate the fixed flattened-domain quad on ``plane``.
+
+    Feeds the planar 4x4 control grid + 20x20 resolution the v1 monolith
+    poses ``BezierPlane`` from, then runs the source so its output carries
+    the strip geometry the 2D mapper renders.  A no-op on the generic
+    ``vtkPlaneSource`` fallback (which lacks ``SetControlPoints``); that
+    source already emits a unit quad sufficient for the bare-VTK unit
+    tests, which do not assert lit pixels.
+    """
+    if plane is None:
+        return
+    set_resolution = getattr(plane, "SetResolution", None)
+    set_control_points = getattr(plane, "SetControlPoints", None)
+    if set_resolution is None or set_control_points is None:
+        return
+    set_resolution(*_FLATTENED_QUAD_RESOLUTION)
+    points = vtk.vtkPoints()
+    for x, y, z in _FLATTENED_QUAD_CONTROL_GRID:
+        points.InsertNextPoint(x, y, z)
+    set_control_points(points)
+    if hasattr(plane, "Update"):
+        plane.Update()
 
 
 def _quad_source_bounds(plane: Any) -> tuple | None:

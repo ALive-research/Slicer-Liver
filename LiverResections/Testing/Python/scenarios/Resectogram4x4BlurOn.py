@@ -94,9 +94,11 @@ def setup_scene():
     Returns
     -------
     tuple
-        ``(bezier_node, parenchyma_model, distance_map_volume)`` — every
-        node created, returned (NOT cached in module globals) so the caller
-        owns teardown.
+        ``(bezier_node, parenchyma_model, distance_map_volume,
+        resectogram_display)`` — every node created, returned (NOT cached in
+        module globals) so the caller owns teardown.  The fourth handle is
+        the v2.0 ``vtkMRMLResectogramDisplayNode`` the ResectogramPipeline
+        keys on.
     """
     slicer.mrmlScene.Clear(0)
     slicer.modules.liverresections.logic()
@@ -112,10 +114,13 @@ def setup_scene():
         enable_flexible_boundary=ENABLE_FLEXIBLE_BOUNDARY,
         distance_map=distance_map,
     )
+    resectogram_display = _blur_off._attach_resectogram_display_node(
+        bezier, enable_flexible_boundary=ENABLE_FLEXIBLE_BOUNDARY
+    )
 
-    _engage_blur(bezier.GetDisplayNode())
+    _engage_blur(resectogram_display)
 
-    return bezier, parenchyma, distance_map
+    return bezier, parenchyma, distance_map, resectogram_display
 
 
 def setup_camera(view_node=None):
