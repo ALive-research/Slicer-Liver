@@ -304,6 +304,165 @@ def layerdm_threed_view(render_interactive):
 
 
 # --------------------------------------------------------------------------- #
+# Dedicated resectogram view fixture (ADR-0023 §Stage-4 — the one custom
+# layout v2.0 ships; ADR-0013 §1 disjoint keying)
+# --------------------------------------------------------------------------- #
+
+# Contract: the singleton tag the dedicated resectogram view carries.  The
+# T3-g1 view-manager adopts THIS exact value when it creates the dedicated
+# ``vtkMRMLViewNode`` (Hyperprobe pattern — a custom ``LayoutName`` /
+# ``LayoutLabel`` plus ``SetSingletonTag(RESECTOGRAM_VIEW_SINGLETON_TAG)``),
+# and the tightened ``registerResectogramPipelineCreator().tryCreate``
+# discriminates the dedicated view from every shared 3D anatomy view by this
+# tag.  Prefix-free + human-readable per the Hyperprobe custom-view
+# convention (ADR-0023 §Stage-4: "the one custom Slicer layout in v2.0").
+RESECTOGRAM_VIEW_SINGLETON_TAG = "LiverResectogram"
+
+
+def _bring_up_layerdm_threed_view(slicer, view_node):
+    """Build a standalone LayerDM-aware ``qMRMLThreeDWidget`` bound to ``view_node``.
+
+    Factored out of ``layerdm_threed_view`` so both the single-view fixture
+    and the two-view ``layerdm_resectogram_view`` fixture share the exact
+    show()-then-bind ordering (ADR-0013 §9 real-view fixture).  Returns
+    ``(view_widget, manager)`` or ``(view_widget, None)`` when the upstream
+    LayerDM displayable manager is not on the launched path.
+    """
+    view_widget = slicer.qMRMLThreeDWidget()
+    view_widget.setMRMLScene(slicer.mrmlScene)
+
+    # Map the GL surface before binding the view node so the displayable
+    # manager group is instantiated (same show()-then-bind ordering the arena
+    # + capture_baseline use).
+    view_widget.show()
+    view_widget.threeDView().forceRender()
+    view_widget.setMRMLViewNode(view_node)
+
+    manager = view_widget.threeDView().displayableManagerByClassName(
+        "vtkMRMLLayerDisplayableManager"
+    )
+    return view_widget, manager
+
+
+@pytest.fixture
+def layerdm_resectogram_view(render_interactive):
+    """Yield two LayerDM-aware 3D views: a shared anatomy view + the dedicated one.
+
+    The T3-g1 keystone fixture.  It stands up TWO standalone
+    ``qMRMLThreeDWidget``s, each hosting the upstream
+    ``vtkMRMLLayerDisplayableManager`` (ADR-0013 §9 real-view shape):
+
+    * a **shared anatomy view** — a plain ``vtkMRMLViewNode`` with NO
+      resectogram singleton tag (the v2.0 default 3D anatomy view), and
+    * the **dedicated resectogram view** — a ``vtkMRMLViewNode`` carrying
+      ``SetSingletonTag(RESECTOGRAM_VIEW_SINGLETON_TAG)`` (the Hyperprobe
+      custom-layout pattern; ADR-0023 §Stage-4 names the resectogram view as
+      the one custom Slicer layout v2.0 ships).
+
+    Yields a mapping so the keystone tests can address each view + its DM by
+    role::
+
+        {
+            "shared": (shared_view_widget, shared_manager),
+            "dedicated": (dedicated_view_widget, dedicated_manager),
+            "tag": RESECTOGRAM_VIEW_SINGLETON_TAG,
+        }
+
+    This fixture creates the dedicated view node + tag itself ONLY as the
+    test arena (the production view-manager does not exist yet — that is the
+    implementer's T3-g1).  It does NOT register or tighten any pipeline
+    creator: the creator-tightening is the implementation under test, and
+    the keystone dispatch tests are RED-by-design until it lands (ADR-0027).
+
+    Consumes ``render_interactive`` like the sibling ``layerdm_threed_view``;
+    skips cleanly under bare ``PythonSlicer`` (no ``qSlicerApplication``) with
+    explicit, greppable reasons (issue #460 green-but-skipping discipline).
+    """
+    slicer = import_slicer_or_skip()
+    if slicer is None:
+        return
+    require_mrml_scene()
+    require_qt_widget()
+
+    # Same registration probe the single-view fixture uses: a missing module
+    # path must read as a skip, not a false pass.
+    registration_probe = slicer.mrmlScene.CreateNodeByClass(
+        "vtkMRMLResectogramDisplayNode"
+    )
+    if registration_probe is None:
+        pytest.skip(
+            "[layerdm-view-skip] vtkMRMLResectogramDisplayNode is not "
+            "registered -- the LiverResections module is not on the "
+            "additional-module-paths.  Run via the pytest_launched CTest row "
+            "(Liver/Testing/Python/CMakeLists.txt supplies the module paths)."
+        )
+    # Drop the factory's +1 reference the caller owns (vtkDebugLeaks guard).
+    registration_probe.UnRegister(None)
+
+    from slicer import (  # type: ignore[import-not-found]
+        vtkMRMLLayerDisplayableManager,
+    )
+
+    vtkMRMLLayerDisplayableManager.RegisterInDefaultViews()
+
+    # The shared anatomy view: a plain view node, NO resectogram tag.
+    shared_view_node = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLViewNode", "LiverAnatomyView"
+    )
+
+    # The dedicated resectogram view: the Hyperprobe custom-layout pattern --
+    # a distinct view node carrying the resectogram singleton tag.  This is
+    # the arena standing in for the implementer's T3-g1 view-manager.
+    dedicated_view_node = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLViewNode", "LiverResectogramView"
+    )
+    dedicated_view_node.SetSingletonTag(RESECTOGRAM_VIEW_SINGLETON_TAG)
+
+    shared_widget, shared_manager = _bring_up_layerdm_threed_view(
+        slicer, shared_view_node
+    )
+    dedicated_widget, dedicated_manager = _bring_up_layerdm_threed_view(
+        slicer, dedicated_view_node
+    )
+
+    if shared_manager is None or dedicated_manager is None:
+        # Tear the partial widgets down before skipping (vtkDebugLeaks guard).
+        for widget in (shared_widget, dedicated_widget):
+            widget.setMRMLScene(None)
+            widget.deleteLater()
+        pytest.skip(
+            "[layerdm-view-skip] vtkMRMLLayerDisplayableManager is not on the "
+            "3D view's displayable-manager group -- the upstream SlicerLayerDM "
+            "extension is not loaded on the launched path (issue #460).  Run "
+            "via pytest_launched with the LayerDM module paths."
+        )
+
+    try:
+        yield {
+            "shared": (shared_widget, shared_manager),
+            "dedicated": (dedicated_widget, dedicated_manager),
+            "tag": RESECTOGRAM_VIEW_SINGLETON_TAG,
+        }
+        if render_interactive:
+            import qt  # type: ignore[import-not-found]
+
+            loop = qt.QEventLoop()
+            qt.QTimer.singleShot(int(render_interactive * 1000), loop.quit)
+            for widget in (shared_widget, dedicated_widget):
+                interactor = widget.threeDView().interactor()
+                if interactor is not None:
+                    interactor.Initialize()
+                    widget.threeDView().forceRender()
+            loop.exec_()
+    finally:
+        # Tear both widgets down so no view / DM survives to process exit and
+        # trips vtkDebugLeaks in the launched harness.
+        for widget in (shared_widget, dedicated_widget):
+            widget.setMRMLScene(None)
+            widget.deleteLater()
+
+
+# --------------------------------------------------------------------------- #
 # TODO (follow-up PRs) — fixture set to come
 # --------------------------------------------------------------------------- #
 #

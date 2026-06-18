@@ -166,3 +166,152 @@ def test_resectogram_creator_does_not_collide_with_bezier(layerdm_threed_view):
         "vtkMRMLResectogramDisplayNode wrongly produced a Bezier-surface "
         "Pipeline — the creators cross-fire (ADR-0013 §1 violation)."
     )
+
+
+# --------------------------------------------------------------------------- #
+# T3-g1 keystone invariants — the dedicated resectogram view (ADR-0023
+# §Stage-4) is the ONLY view the ResectogramPipeline fires into; the shared
+# anatomy 3D view stays clear (ADR-0013 §1 disjoint keying).
+#
+# RED-by-design (ADR-0027): both tests fail today because
+# ``registerResectogramPipelineCreator().tryCreate`` gates only on
+# ``isinstance(viewNode, vtkMRMLViewNode)`` (ResectogramPipeline.py
+# ~L399-409) — so the creator fires for EVERY 3D view, dispatching the
+# flattened strip into the shared anatomy renderer.  They go GREEN once the
+# T3-g1 implementer (a) lands the dedicated singleton view (Hyperprobe
+# pattern, ``SetSingletonTag(RESECTOGRAM_VIEW_SINGLETON_TAG)``) and (b)
+# tightens ``tryCreate`` to fire ONLY for the view carrying that tag.
+# --------------------------------------------------------------------------- #
+
+
+def _first_renderer(view_widget):
+    """Return the live ``vtkRenderer`` of the view widget's render window.
+
+    ``qMRMLThreeDView.renderer()`` is C++-only (not PythonQt-wrapped); reach
+    the renderer through the render-window's renderer collection, which is
+    plain VTK and fully wrapped.  Same accessor the resectogram arena
+    (``test_resectogram_arena.py``) and ``capture_baseline.py`` use.
+    """
+    return view_widget.threeDView().renderWindow().GetRenderers().GetFirstRenderer()
+
+
+def _renderer_owns_actor(renderer, actor) -> bool:
+    """Whether ``actor`` is in ``renderer``'s actor collection.
+
+    Walks ``GetActors()`` by VTK-object identity (``IsSameObject``) rather
+    than Python ``is`` — PythonQt/VTK can hand back distinct Python wrappers
+    around the same C++ ``vtkActor``.
+    """
+    if renderer is None or actor is None:
+        return False
+    actors = renderer.GetActors()
+    actors.InitTraversal()
+    for _ in range(actors.GetNumberOfItems()):
+        candidate = actors.GetNextActor()
+        if candidate is not None and candidate.IsSameObject(actor):
+            return True
+    return False
+
+
+def test_creator_fires_only_in_dedicated_view(layerdm_resectogram_view):
+    """The ResectogramPipeline dispatches into the dedicated view, NOT the shared one.
+
+    Pins ADR-0013 §1 (disjoint keying — one Pipeline per renderable target)
+    and ADR-0023 §Stage-4 (the resectogram is the one custom Slicer layout
+    v2.0 ships; it must not bleed into the shared 3D anatomy view).  With a
+    single ``vtkMRMLResectogramDisplayNode`` in the scene and TWO views
+    present — a shared anatomy ``vtkMRMLViewNode`` (no resectogram tag) and a
+    dedicated view carrying ``RESECTOGRAM_VIEW_SINGLETON_TAG`` — the LayerDM
+    DM yields a ``ResectogramPipeline`` ON THE DEDICATED VIEW and yields none
+    (or anything but a ResectogramPipeline) on the shared anatomy view.
+
+    RED-by-design (ADR-0027): the current ``tryCreate`` fires for every
+    ``vtkMRMLViewNode``, so the shared anatomy view ALSO gets a
+    ResectogramPipeline.  GREEN once T3-g1 tightens the creator to gate on
+    the dedicated view's singleton tag.
+    """
+    import slicer
+
+    shared_widget, shared_manager = layerdm_resectogram_view["shared"]
+    dedicated_widget, dedicated_manager = layerdm_resectogram_view["dedicated"]
+
+    display = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLResectogramDisplayNode")
+    shared_widget.threeDView().forceRender()
+    dedicated_widget.threeDView().forceRender()
+
+    dedicated_pipeline = dedicated_manager.GetNodePipeline(display)
+    shared_pipeline = shared_manager.GetNodePipeline(display)
+
+    assert (
+        dedicated_pipeline is not None
+        and type(dedicated_pipeline).__name__ == "ResectogramPipeline"
+    ), (
+        "the dedicated resectogram view (singleton tag "
+        f"{layerdm_resectogram_view['tag']!r}) did not get a "
+        "ResectogramPipeline — T3-g1's creator must fire for the dedicated "
+        "view (ADR-0023 §Stage-4)."
+    )
+    assert type(shared_pipeline).__name__ != "ResectogramPipeline", (
+        "the SHARED anatomy view wrongly got a ResectogramPipeline — the "
+        "creator still fires for every 3D view (ResectogramPipeline.py "
+        "tryCreate gates only on vtkMRMLViewNode).  T3-g1 must tighten it to "
+        "the dedicated view's singleton tag (ADR-0013 §1 disjoint keying)."
+    )
+
+
+def test_strip_actor_absent_from_shared_renderer(layerdm_resectogram_view):
+    """The flattened-surface strip actor lives in the dedicated renderer ONLY.
+
+    Pins ADR-0023 §Stage-4 at the renderer level: the
+    ``FlattenedSurfaceRepresentation``'s strip actor
+    (``GetResectionActor2D``) must be present in the dedicated view's
+    renderer and ABSENT from the shared anatomy view's renderer collection.
+    This is the visible consequence of the dispatch invariant — the strip
+    rendering into the shared anatomy renderer is the bug T3-g1 fixes.
+
+    RED-by-design (ADR-0027): today the creator fires for the shared view too,
+    so its ResectogramPipeline attaches the strip actor to the shared
+    renderer.  GREEN once T3-g1 tightens the creator.
+    """
+    import slicer
+
+    shared_widget, shared_manager = layerdm_resectogram_view["shared"]
+    dedicated_widget, dedicated_manager = layerdm_resectogram_view["dedicated"]
+
+    display = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLResectogramDisplayNode")
+    shared_widget.threeDView().forceRender()
+    dedicated_widget.threeDView().forceRender()
+
+    dedicated_pipeline = dedicated_manager.GetNodePipeline(display)
+    assert (
+        dedicated_pipeline is not None
+        and type(dedicated_pipeline).__name__ == "ResectogramPipeline"
+    ), (
+        "no ResectogramPipeline on the dedicated view — cannot locate the "
+        "strip actor (precondition for the renderer-ownership invariant)."
+    )
+
+    flattened = dedicated_pipeline.GetFlattenedSurfaceRepresentation()
+    assert flattened is not None, (
+        "the dedicated ResectogramPipeline has no FlattenedSurfaceRepresentation "
+        "— the strip assembly (ADR-0013 §6) is not built."
+    )
+    strip_actor = flattened.GetResectionActor2D()
+    assert strip_actor is not None, (
+        "the FlattenedSurfaceRepresentation exposes no 2D strip actor "
+        "(GetResectionActor2D) — nothing to locate in a renderer."
+    )
+
+    dedicated_renderer = _first_renderer(dedicated_widget)
+    shared_renderer = _first_renderer(shared_widget)
+
+    assert _renderer_owns_actor(dedicated_renderer, strip_actor), (
+        "the resectogram strip actor is NOT in the dedicated view's renderer "
+        "— the dedicated Pipeline did not attach it (ADR-0023 §Stage-4)."
+    )
+    assert not _renderer_owns_actor(shared_renderer, strip_actor), (
+        "the resectogram strip actor is present in the SHARED anatomy "
+        "renderer — the flattened strip is bleeding into the shared 3D view "
+        "(the T3-g1 bug).  T3-g1 must tighten tryCreate so the creator never "
+        "fires for the shared view (ADR-0013 §1; ADR-0023 §Stage-4)."
+    )
