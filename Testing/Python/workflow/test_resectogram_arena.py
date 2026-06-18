@@ -560,6 +560,31 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
             widget.threeDView().renderWindow().SetMultiSamples(0)
             widget.threeDView().forceRender()
 
+        # Frame the scene view on the 3D anatomy.  The standalone
+        # qMRMLThreeDWidget has no layout manager, so nothing resets-to-fit;
+        # without this the default camera sits at the origin and the view
+        # shows only the crosshair + a stray glyph instead of the framed
+        # parenchyma + Bezier surface.  Actors exist after the render above,
+        # so ResetCamera frames them -- but ResetCamera alone leaves the
+        # camera looking straight down +z, framing the z=0 planar Bezier
+        # surface EDGE-ON ("two collinear planes").  Re-pose it to an
+        # elevated 3/4 oblique view AFTER ResetCamera (so the clipping range
+        # ResetCamera computed still fits) by orbiting the camera up and
+        # around its focal point, then re-fitting.  The surface then reads as
+        # a 3D sheet, not a line.  Interactive-only polish: the band metric
+        # reads the resectogram renderer, not this one, so the assertions are
+        # unaffected.
+        scene_renderer.ResetCamera()
+        scene_camera = scene_renderer.GetActiveCamera()
+        scene_camera.Azimuth(45.0)
+        scene_camera.Elevation(35.0)
+        scene_camera.OrthogonalizeViewUp()
+        scene_renderer.ResetCameraClippingRange()
+        _crosshair = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLCrosshairNode")
+        if _crosshair is not None:
+            _crosshair.SetCrosshairMode(0)  # vtkMRMLCrosshairNode.NoCrosshair
+        scene_widget.threeDView().forceRender()
+
         # ---- Structural wiring assertions (ALWAYS-ON, path-agnostic) ----
         # These run regardless of the GL stack: live renderers, the v2.0
         # resectogram display node with the strip enabled, and a LIVE
@@ -736,6 +761,8 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
             # the cameras.  A single-shot timer quits the nested event loop
             # after the requested dwell so the test still terminates under
             # CI's brief-onscreen pass (--render-interactive=0.1).
+            import vtk  # type: ignore[import-not-found]
+
             loop = qt.QEventLoop()
             qt.QTimer.singleShot(int(render_interactive * 1000), loop.quit)
             for widget in (scene_widget, resectogram_widget):
@@ -743,6 +770,17 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
                 if interactor is not None:
                     interactor.Initialize()
                     widget.threeDView().forceRender()
+            # The scene view is the 3D anatomy the maintainer rotates to
+            # confirm coherence.  The standalone qMRMLThreeDView's default
+            # interactor style does not give plain trackball orbit, so install
+            # vtkInteractorStyleTrackballCamera on the scene interactor for the
+            # dwell (the resectogram view is a fixed flattened panel -- no
+            # rotation wanted there).
+            scene_interactor = scene_widget.threeDView().interactor()
+            if scene_interactor is not None:
+                scene_interactor.SetInteractorStyle(
+                    vtk.vtkInteractorStyleTrackballCamera()
+                )
             loop.exec_()
     finally:
         # Tear the widgets + scene down so no actor / node survives to process
@@ -753,4 +791,175 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
             if widget is not None:
                 widget.setMRMLScene(None)
                 widget.deleteLater()
+        slicer.mrmlScene.Clear(0)
+
+
+def _bend_control_points(bezier) -> None:
+    """Push the Bezier surface OUT of its planar pose (a coherence mutation).
+
+    The scenario lays the 16 control points flat at ``z == 0`` (a planar
+    surface).  Lift the interior control points well off that plane so the
+    evaluated ``S(u, v)`` bows into a dome — a large, unambiguous geometry
+    change.  The flattened resectogram samples the distance field at the
+    real ``S(u, v)``, so a coherent (BSPoints-fed) render MUST shift the
+    band; a fixed-quad render (the bug) ignores the surface and stays
+    pixel-identical.
+    """
+    for index in range(bezier.GetNumberOfControlPoints()):
+        position = [0.0, 0.0, 0.0]
+        bezier.GetNthControlPointPosition(index, position)
+        bezier.SetNthControlPointPosition(
+            index, position[0], position[1], position[2] + 35.0
+        )
+
+
+def test_resectogram_is_coherent_with_surface() -> None:
+    """Moving the surface's control points MUST change the flattened render.
+
+    The coherence / reactivity invariant (ADR-0027; ADR-0025 §Context): the
+    resectogram is the flattened image of the ACTUAL Bezier surface, so a
+    control-point edit that re-shapes ``S(u, v)`` must re-shape the flattened
+    distance-map band.  The fixed-quad failure mode (the maintainer-caught
+    bug) paints the distance field on a fixed plane regardless of the
+    surface, so the render is pixel-identical before/after the edit — this
+    test is RED against it and GREEN once the real surface feeds the 2D
+    mapper as the ``"BSPoints"`` attribute.
+
+    Single dedicated resectogram view (the band lives there); the scene view
+    is irrelevant to coherence so it is not built.  GPU-gated like the band
+    metric — the software rasteriser does not reliably light the band.
+    """
+    slicer = import_slicer_or_skip()
+    if slicer is None:
+        return
+    require_mrml_scene()
+    require_qt_widget()
+
+    registration_probe = slicer.mrmlScene.CreateNodeByClass(
+        "vtkMRMLResectogramDisplayNode"
+    )
+    if registration_probe is None:
+        pytest.skip(
+            "[arena-skip] vtkMRMLResectogramDisplayNode is not registered -- "
+            "the LiverResections module is not on the additional-module-paths. "
+            "Run via the pytest_launched CTest row."
+        )
+    registration_probe.UnRegister(None)
+
+    software_gl_skip = _software_gl_skip_reason()
+    if software_gl_skip is not None:
+        pytest.skip(software_gl_skip)
+
+    try:
+        from slicer import (  # type: ignore[import-not-found]
+            vtkMRMLLayerDisplayableManager,
+        )
+    except ImportError:
+        pytest.skip(
+            "[arena-skip] vtkMRMLLayerDisplayableManager is not importable -- "
+            "the upstream SlicerLayerDM extension is not on the launched path "
+            "(issue #460).  Run via pytest_launched with the LayerDM module "
+            "paths."
+        )
+    vtkMRMLLayerDisplayableManager.RegisterInDefaultViews()
+
+    try:
+        import numpy  # type: ignore[import-not-found]  # noqa: F401
+    except ImportError:
+        pytest.skip(
+            "[arena-skip] numpy unavailable -- cannot read the rendered back "
+            "buffer for the coherence assertion."
+        )
+
+    scenario = _load_scenario("Resectogram4x4BlurOff")
+    meta = scenario.describe()
+    width, height = meta["viewport"]["size"]
+
+    resectogram_widget = None
+    try:
+        created_nodes = scenario.setup_scene()
+        bezier = created_nodes[0]
+        parenchyma = created_nodes[1]
+        resectogram_display = created_nodes[3]
+
+        from LiverResectionsLib.ResectogramViewManager import (  # type: ignore[import-not-found]
+            ResectogramViewManager,
+        )
+
+        # Restrict the resectogram strip to its dedicated view, and ALL
+        # anatomy display nodes (the Bezier surface + markers + parenchyma)
+        # to a separate scene view.  Without the anatomy restriction the
+        # Bezier surface actor renders into the resectogram view too and
+        # MOVES with the control points -- which would let a fixed-quad
+        # resectogram (the bug) appear to "change" via the leaked surface
+        # actor and mask the non-coherence.  Isolating the resectogram
+        # renderer to the strip alone makes the pixel delta attributable to
+        # the flattened image only (ADR-0023 §Stage-4).
+        scene_view_node = slicer.mrmlScene.AddNewNodeByClass(
+            "vtkMRMLViewNode", "CoherenceSceneView"
+        )
+        resectogram_view_node = ResectogramViewManager().ensureViewNode()
+        for display in _collect_anatomy_display_nodes(bezier, parenchyma):
+            _restrict_display_to_view(display, scene_view_node)
+        _restrict_display_to_view(resectogram_display, resectogram_view_node)
+
+        resectogram_widget = _build_view_widget(
+            slicer, slicer.mrmlScene, resectogram_view_node
+        )
+        scenario.setup_camera(resectogram_view_node)
+        scenario.setup_viewport(resectogram_view_node)
+        resectogram_renderer = _first_renderer(resectogram_widget)
+        _apply_camera_and_background(resectogram_renderer, meta)
+        resectogram_widget.resize(width, height)
+        resectogram_widget.threeDView().renderWindow().SetSize(width, height)
+        resectogram_widget.threeDView().renderWindow().SetMultiSamples(0)
+        resectogram_widget.threeDView().forceRender()
+
+        # Interior-only mask: the band lives in the panel interior, so an
+        # interior signature isolates the distance-map fill from the fixed
+        # grid + border (which do not move when the surface bends).
+        before = _lit_mask(resectogram_widget)
+        rows, cols = before.shape
+        mr, mc = int(0.18 * rows), int(0.18 * cols)
+        before_interior = before[mr : rows - mr, mc : cols - mc].copy()
+
+        # Re-shape the surface, then drive the pipeline so the
+        # FlattenedSurfaceRepresentation re-feeds BSPoints + re-renders.
+        _bend_control_points(bezier)
+        manager = resectogram_widget.threeDView().displayableManagerByClassName(
+            "vtkMRMLLayerDisplayableManager"
+        )
+        assert manager is not None, (
+            "[arena] the resectogram view has no vtkMRMLLayerDisplayableManager "
+            "(SlicerLayerDM not loaded; issue #460)."
+        )
+        pipeline = manager.GetNodePipeline(resectogram_display)
+        assert pipeline is not None, (
+            "no pipeline dispatched for the resectogram display node "
+            "(ADR-0013 §5)."
+        )
+        pipeline.UpdatePipeline()
+        resectogram_widget.threeDView().forceRender()
+
+        after = _lit_mask(resectogram_widget)
+        after_interior = after[mr : rows - mr, mc : cols - mc]
+
+        changed = int(numpy.count_nonzero(before_interior != after_interior))
+        # A real coherent render bends the band substantially when the
+        # surface domes 35 mm off the plane; require a non-trivial fraction
+        # of interior pixels to flip so single-pixel dithering cannot pass.
+        min_changed = int(0.01 * before_interior.size)
+        assert changed >= min_changed, (
+            f"the flattened resectogram changed by only {changed} interior "
+            f"pixels (< {min_changed}) when the surface's control points "
+            "moved 35 mm off-plane -- the flattened image is NOT tracking the "
+            "real surface.  This is the fixed-quad bug: the 2D mapper is "
+            "painting the distance field on a fixed plane instead of the real "
+            "S(u, v) (feed the surface as the mapper's BSPoints attribute; "
+            "ADR-0025 §Context)."
+        )
+    finally:
+        if resectogram_widget is not None:
+            resectogram_widget.setMRMLScene(None)
+            resectogram_widget.deleteLater()
         slicer.mrmlScene.Clear(0)
