@@ -52,9 +52,6 @@
 // VTK includes
 #include <vtkWeakPointer.h>
 #include <vtkSmartPointer.h>
-#include "vtkOpenGLPolyDataMapper2D.h"
-#include <vtkActor2D.h>
-#include <vtkCamera.h>
 
 //------------------------------------------------------------------------------
 class vtkBezierSurfaceSource;
@@ -65,7 +62,6 @@ class vtkPoints;
 class vtkTextureObject;
 class vtkTubeFilter;
 class vtkOpenGLBezierResectionPolyDataMapper;
-class vtkOpenGLResection2DPolyDataMapper;
 
 //------------------------------------------------------------------------------
 class vtkMRMLMarkupsBezierSurfaceNode;
@@ -96,8 +92,6 @@ protected:
   /// TransferDistanceMap
   void CreateAndTransferDistanceMapTexture(vtkMRMLScalarVolumeNode* node, int numComps);
   void CreateAndTransferVascularSegmentsTexture(vtkMRMLScalarVolumeNode* node);
-  void Ratio(bool flexibleBoundery);
-  void ResectogramPlaneCenter(bool mirror);
 
 protected:
   // k Bezier surface releated elements
@@ -106,11 +100,6 @@ protected:
   vtkSmartPointer<vtkOpenGLBezierResectionPolyDataMapper> BezierSurfaceResectionMapper;
   vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor;
   vtkSmartPointer<vtkPolyDataNormals> BezierSurfaceNormals;
-  vtkSmartPointer<vtkOpenGLActor> BezierSurfaceActor2D;
-  vtkSmartPointer<vtkOpenGLResection2DPolyDataMapper> BezierSurfaceResectionMapper2D;
-  vtkSmartPointer<vtkBezierSurfaceSource> BezierPlane;
-  vtkSmartPointer<vtkDataArray> BezierSurfaceSourcePoints;
-  vtkSmartPointer<vtkCamera> ResectogramCamera;
 
   // Control polygon related elements
   vtkSmartPointer<vtkPolyData> ControlPolygonPolyData;
@@ -124,7 +113,6 @@ protected:
   vtkNew<vtkMatrix4x4> VBOShiftScale;
   vtkNew<vtkTransform> VBOInverseTransform;
   vtkWeakPointer<vtkShaderProperty> ShaderProperty;
-  vtkSmartPointer<vtkRenderer> CoRenderer2D;
 
   // Vascular Segments related elements
   vtkSmartPointer<vtkMultiTextureObjectHelper> VascularSegmentsTexture;
