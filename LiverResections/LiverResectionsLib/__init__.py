@@ -24,10 +24,16 @@ from .ResectogramPipeline import (
     ResectogramPipeline,
     registerResectogramPipelineCreator,
 )
+from .ResectogramViewManager import (
+    RESECTOGRAM_VIEW_SINGLETON_TAG,
+    ResectogramViewManager,
+)
 
 __all__ = [
     "LiverBezierSurfacePipeline",
     "registerPipelineCreator",
     "ResectogramPipeline",
     "registerResectogramPipelineCreator",
+    "ResectogramViewManager",
+    "RESECTOGRAM_VIEW_SINGLETON_TAG",
 ]

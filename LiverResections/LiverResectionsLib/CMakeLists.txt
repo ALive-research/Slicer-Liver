@@ -26,6 +26,7 @@ set(LiverResectionsLib_PYTHON_SCRIPTS
   DistanceMaps.py
   LiverBezierSurfacePipeline.py
   ResectogramPipeline.py
+  ResectogramViewManager.py
   Representations/__init__.py
   Representations/BezierPlanningRepresentation.py
   Representations/ConfirmedRepresentation.py

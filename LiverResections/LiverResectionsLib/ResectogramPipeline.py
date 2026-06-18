@@ -375,11 +375,15 @@ def registerResectogramPipelineCreator() -> None:
     Slicer restart in embedded contexts) would append a duplicate.
 
     The creator returns a fresh ``ResectogramPipeline`` only when the
-    ``(viewNode, node)`` pair matches
-    ``(vtkMRMLViewNode, vtkMRMLResectogramDisplayNode)``.  Other
-    combinations short-circuit to ``None`` so the Bezier creator (and any
-    other registered creator) gets a chance to handle them — no
-    cross-fire (`ADR-0013`_ §1).
+    ``node`` is a ``vtkMRMLResectogramDisplayNode`` AND the ``viewNode`` is
+    the DEDICATED resectogram view — the one carrying
+    ``SetSingletonTag(RESECTOGRAM_VIEW_SINGLETON_TAG)`` (`ADR-0023`_
+    §Stage-4).  Every other ``(viewNode, node)`` combination — slice views,
+    the shared 3D anatomy view, the Bezier parametric-surface display node —
+    short-circuits to ``None`` so the Bezier creator (and any other
+    registered creator) gets a chance to handle them, and the flattened
+    strip never bleeds into the shared anatomy renderer (`ADR-0013`_ §1
+    disjoint keying; `ADR-0023`_ §Stage-4).
     """
     global _REGISTERED
     if _REGISTERED:
@@ -396,13 +400,27 @@ def registerResectogramPipelineCreator() -> None:
         vtkMRMLViewNode,
     )
 
+    # Imported here (not at module top) because the tag constant lives in a
+    # sibling module that itself defers its ``slicer`` import; the local
+    # import keeps this module importable in plain Python.
+    try:  # pragma: no cover - exercised once per import path
+        from .ResectogramViewManager import RESECTOGRAM_VIEW_SINGLETON_TAG
+    except ImportError:
+        from ResectogramViewManager import (  # type: ignore[no-redef]
+            RESECTOGRAM_VIEW_SINGLETON_TAG,
+        )
+
     def tryCreate(viewNode, node):
-        # 3D-only gating: the resectogram renders into an overlay
-        # renderer of a 3D view.  ``RegisterInDefaultViews`` registers the
-        # generic LayerDM DM in both 3D and slice factories, so this
-        # creator is invoked for slice-view nodes too — short-circuit to
-        # None there so other creators (or none) handle the slice path.
+        # Dedicated-view gating (ADR-0023 §Stage-4): the resectogram renders
+        # ONLY into its dedicated view — the one carrying the resectogram
+        # singleton tag.  ``RegisterInDefaultViews`` registers the generic
+        # LayerDM DM in every 3D and slice factory, so this creator is
+        # invoked for the shared anatomy view and slice views too; gating on
+        # the singleton tag keeps the flattened strip out of the shared
+        # anatomy renderer (ADR-0013 §1 disjoint keying).
         if not isinstance(viewNode, vtkMRMLViewNode):
+            return None
+        if viewNode.GetSingletonTag() != RESECTOGRAM_VIEW_SINGLETON_TAG:
             return None
         if not isinstance(node, vtkMRMLResectogramDisplayNode):
             return None
