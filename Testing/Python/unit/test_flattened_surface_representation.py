@@ -298,6 +298,31 @@ def test_assembly_builds_quad_source_mapper_actor_camera(rep_module, vtk_module)
     rep.cleanup()
 
 
+def test_flattened_quad_source_emits_geometry(rep_module, vtk_module):
+    """The flattened-quad source carries renderable geometry (T3-e go-live).
+
+    The resectogram actor lights pixels only if its mapper has a non-empty
+    flattened-domain quad to draw.  The Representation tessellates the fixed
+    planar quad the v1 ``BezierPlane`` poses from (ADR-0025 §Context); pin
+    that the source's output has points + a positive planar (x/y) extent so
+    a regression that stops feeding the quad (the 0-lit-pixel failure mode)
+    is caught at the unit layer rather than only in the GPU arena.
+    """
+    rep = rep_module()
+    plane = rep.GetBezierPlane()
+    assert plane is not None
+    plane.Update()
+    output = plane.GetOutput()
+    assert output.GetNumberOfPoints() > 0, (
+        "the flattened-quad source emitted no points -- the resectogram "
+        "actor would have nothing to draw (0 lit pixels)."
+    )
+    bounds = output.GetBounds()
+    assert bounds[1] > bounds[0], "the flattened quad has no x extent"
+    assert bounds[3] > bounds[2], "the flattened quad has no y extent"
+    rep.cleanup()
+
+
 def test_actor_visibility_follows_show_resection_2d(rep_module, vtk_module):
     rep = rep_module()
     rep.update(_StubDisplayNode(show_2d=True), _StubDataNode())

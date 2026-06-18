@@ -89,15 +89,18 @@ PATCH_CENTER_XY = (15.0, 15.0)
 SPHERE_CENTER = (15.0, 15.0, 0.0)
 SPHERE_RADIUS = 40.0
 
-# Camera pose for the flattened resectogram panel.  Parallel-ish oblique
-# view framing the patch + sphere common centre; numeric, not reset-to-fit
-# (camera drift is the most common visual-regression false positive).
-CAMERA_POSITION = (15.0, 15.0, 160.0)
-CAMERA_FOCAL_POINT = (15.0, 15.0, 0.0)
+# Camera pose for the flattened resectogram panel.  The v2.0
+# ResectogramPipeline renders the strip on the FIXED flattened-domain quad
+# the Representation owns (the v1 ``BezierPlane`` grid spanning x in
+# [-60, 60], y in [0, 120]); frame its centre (0, 60) head-on so the strip
+# fills the panel.  Numeric pose, not reset-to-fit (camera drift is the most
+# common visual-regression false positive).
+CAMERA_POSITION = (0.0, 60.0, 300.0)
+CAMERA_FOCAL_POINT = (0.0, 60.0, 0.0)
 CAMERA_VIEW_UP = (0.0, 1.0, 0.0)
 CAMERA_PARALLEL_SCALE = 70.0
 CAMERA_VIEW_ANGLE = 45.0
-CAMERA_CLIPPING_RANGE = (10.0, 500.0)
+CAMERA_CLIPPING_RANGE = (10.0, 800.0)
 
 
 def _make_parenchyma_distance_map(
@@ -237,11 +240,47 @@ def _build_resectogram_bezier(
     display.SetVisibility(True)
 
     # Enable the resectogram strip (the flattened 2D image) and the
-    # anisotropic aspect-ratio scaling per the scenario configuration.
+    # anisotropic aspect-ratio scaling per the scenario configuration.  The
+    # v1 monolith reads these legacy markups-display-node fields directly;
+    # the v2.0 path mirrors them onto the dedicated resectogram display node
+    # below.
     display.SetShowResection2D(True)
     display.SetEnableFlexibleBoundary(enable_flexible_boundary)
 
     return bezier
+
+
+def _attach_resectogram_display_node(
+    bezier: slicer.vtkMRMLNode,
+    enable_flexible_boundary: bool,
+) -> slicer.vtkMRMLNode:
+    """Create + attach the v2.0 ``vtkMRMLResectogramDisplayNode``.
+
+    The dedicated resectogram display node is the v2.0 LayerDM carrier
+    (ADR-0013 §1) the registered ``ResectogramPipeline`` keys on: adding it
+    to the scene as a display node of the Bezier surface drives the
+    pipeline's ``FlattenedSurfaceRepresentation`` /
+    ``VascularContourRepresentation`` to render the flattened ``(u, v)``
+    strip.  Its resectogram fields mirror the legacy markups display node so
+    the v1 monolith and the v2.0 pipeline start from an identical visual
+    baseline (ADR-0025 §Context).
+
+    Returns the created display node so the caller owns teardown (the
+    no-module-globals contract).
+    """
+    resectogram_display = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLResectogramDisplayNode", "VisualTestResectogramDisplay"
+    )
+    resectogram_display.SetShowResection2D(True)
+    resectogram_display.SetMirrorDisplay(False)
+    resectogram_display.SetEnableFlexibleBoundary(enable_flexible_boundary)
+    resectogram_display.SetTextureNumComps(4)
+    resectogram_display.SetVisibility(True)
+    # Back-reference the Bezier surface so the pipeline's
+    # ``GetDisplayableNode()`` resolves the data node feeding MatRatio +
+    # the distance-map texture.
+    bezier.AddAndObserveDisplayNodeID(resectogram_display.GetID())
+    return resectogram_display
 
 
 def setup_scene():
@@ -256,9 +295,12 @@ def setup_scene():
     Returns
     -------
     tuple
-        ``(bezier_node, parenchyma_model, distance_map_volume)`` — every
-        node the scenario created, returned (NOT cached in module globals)
-        so the caller owns teardown and nothing survives to ``vtkDebugLeaks``.
+        ``(bezier_node, parenchyma_model, distance_map_volume,
+        resectogram_display)`` — every node the scenario created, returned
+        (NOT cached in module globals) so the caller owns teardown and
+        nothing survives to ``vtkDebugLeaks``.  The fourth handle is the
+        v2.0 ``vtkMRMLResectogramDisplayNode`` the ResectogramPipeline
+        keys on.
     """
     slicer.mrmlScene.Clear(0)
 
@@ -278,8 +320,11 @@ def setup_scene():
         enable_flexible_boundary=ENABLE_FLEXIBLE_BOUNDARY,
         distance_map=distance_map,
     )
+    resectogram_display = _attach_resectogram_display_node(
+        bezier, enable_flexible_boundary=ENABLE_FLEXIBLE_BOUNDARY
+    )
 
-    return bezier, parenchyma, distance_map
+    return bezier, parenchyma, distance_map, resectogram_display
 
 
 def setup_camera(view_node=None):
