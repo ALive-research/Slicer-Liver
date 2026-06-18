@@ -1,23 +1,61 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 
-"""Dual-mode interactive arena for the T3 resectogram appearance.
+"""Two-view interactive arena for the T3 resectogram appearance + content.
 
-The user-testing arena for the resectogram: an isolated, minimal-
-``qSlicerApplication`` 3D view that builds the deterministic resectogram
-scene (the flattened 2D image of the Bezier ``(u, v)`` domain, ADR-0025
-§Context) and lets the maintainer eyeball the blur-on/off + non-square
-aspect-ratio appearances on a GPU.  The SAME body runs two ways from one
-test (ADR-0008 §3 dual-use pattern):
+The user-testing arena for the resectogram.  It builds the deterministic
+resectogram scene (the flattened 2D image of the Bezier ``(u, v)`` domain,
+ADR-0025 §Context) into TWO isolated, minimal-``qSlicerApplication`` 3D
+views and lets the maintainer eyeball the blur-on/off + non-square
+aspect-ratio appearances on a GPU:
+
+* a **scene view** — a normal ``vtkMRMLViewNode`` showing the 3D anatomy
+  (the parenchyma sphere + the Bezier surface + its markers), and
+* the **resectogram view** — the dedicated ``"LiverResectogram"``-tagged
+  view (the Hyperprobe custom-layout pattern, ADR-0023 §Stage-4) showing
+  ONLY the flattened resectogram strip.
+
+The maintainer chose two physically separate ``qMRMLThreeDWidget`` views
+(rather than one shared view) so the 3D anatomy and the flattened strip
+never co-mingle in one renderer: per-display-node ``ViewNodeIDs``
+restriction binds each display node to exactly one view, and the arena
+asserts the renderer-level separation (no anatomy actor in the resectogram
+renderer; no strip actor in the scene renderer).
+
+The SAME body runs two ways from one test (ADR-0008 §3 dual-use pattern):
 
 * **offscreen / CI** (``pytest`` default, ``render_interactive == 0``) —
-  builds the view offscreen, runs the scenario, asserts the render
-  pipeline came up and the resectogram display wiring is in place, then
-  tears down.
+  builds both views offscreen, runs the scenario, asserts the render
+  pipeline came up, the resectogram display wiring is in place, the two
+  views are separated, and the resectogram view draws the actual margin
+  BAND (not just the wireframe grid + border), then tears down.
 * **interactive** (``pytest --render-interactive=SECONDS`` with
-  ``SECONDS > 0``) — shows the Qt window and starts the interactor so a
+  ``SECONDS > 0``) — shows both Qt windows and starts the interactors so a
   human can inspect the resectogram for ``SECONDS`` before teardown.  Run
   with ``-k`` to pick blur-on / blur-off / non-square.
+
+The band-content gate (RED-by-design, ADR-0027)
+------------------------------------------------
+Beyond "any lit pixels", the arena pins a CONTENT invariant: the
+resectogram view must render the projected distance-map margin BAND, not
+merely the flattened wireframe grid + coloured borders.  The earlier "≥1 %
+lit pixels" floor was too lenient — the grid + border alone clear it even
+when no texture is bound.  The new metric (``_interior_lit_fraction``)
+counts lit pixels in the strip INTERIOR (a margin around the panel edge is
+excluded), where a bare grid + border leaves the interior essentially
+empty but a textured margin band fills a contiguous interior region.  The
+scenario's deterministic 4-component distance map yields a deterministic
+band, so the interior-lit fraction is a stable discriminator.
+
+This gate is RED TODAY: ``FlattenedSurfaceRepresentation`` does not bind
+the distance-map texture (no ``SetDistanceMapTextureObject`` / ras-ijk
+matrices; the T3-e rewrite severed v1's texture path), so the strip
+interior is empty (grid + border only).  It goes GREEN once the implementer
+binds the distance-map texture so the projected margin band fills the
+``(u, v)`` panel interior (ADR-0025 §Context).  The verdict is GPU-gated —
+the software-GL rasteriser does not reliably light the band — so it carries
+the same software-GL skip the lit-pixel verdict always did; it needs
+launched/GPU verification.
 
 Harness placement (greppable skip reasons, mind #460)
 -----------------------------------------------------
@@ -28,15 +66,6 @@ has none of those, so the test SKIPS CLEANLY there via the shared guards;
 it EXECUTES under the launched-Slicer ``pytest_launched`` row.  Every skip
 prints an explicit, greppable reason — never a silent skip — per the #460
 launched-harness-silently-skips lesson.
-
-Capture-then-rebaseline note
-----------------------------
-The scenarios first render against the v1 monolith resectogram path (the
-legacy ``vtkMRMLMarkupsBezierSurfaceDisplayNode`` resectogram fields), then
-re-baseline to the v2.0 ResectogramPipeline at the implementer's go-live
-step.  This arena drives whatever path is live; the structural assertions
-below are path-agnostic (a 3D renderer + the Bezier node's display nodes),
-and the lit-pixel verdict is GPU-gated.
 
 Scenario source of truth
 -------------------------
@@ -53,9 +82,13 @@ See also
   pattern), §6 (the CI matrix + launched harness).
 * Docs/adr/0013-layerdm-pipeline-pattern.md §6 (the flattened-surface
   Representation owned by the ResectogramPipeline).
-* Testing/Python/workflow/test_distance_spheroid_contour_arena.py (the
-  arena pattern + the hard-won software-GL / vtkDebugLeaks safety guards
-  this file copies).
+* Docs/adr/0023-resection-plan-architecture.md §Stage-4 (the dedicated
+  resectogram view as the one custom Slicer layout v2.0 ships).
+* Docs/adr/0025-locator-architecture.md §Context (the resectogram is the
+  flattened ``(u, v)`` distance-map image).
+* Testing/Python/workflow/test_resectogram_pipeline_dispatch.py (the
+  ``_first_renderer`` / ``GetAddressAsString`` renderer-ownership identity
+  pattern this file reuses for the two-view separation).
 """
 
 from __future__ import annotations
@@ -102,20 +135,64 @@ def _first_renderer(view_widget):
 
     ``qMRMLThreeDView.renderer()`` is C++-only (not PythonQt-wrapped); reach
     the renderer through the render-window's renderer collection, which is
-    plain VTK and fully wrapped.  Same accessor capture_baseline.py uses.
+    plain VTK and fully wrapped.  Same accessor capture_baseline.py and the
+    dispatch tests (``test_resectogram_pipeline_dispatch.py``) use.
     """
     return view_widget.threeDView().renderWindow().GetRenderers().GetFirstRenderer()
 
 
-def _visible_pixel_count(view_widget) -> int:
-    """Count non-background pixels in the view's rendered back buffer.
+def _renderer_owns_actor(renderer, actor) -> bool:
+    """Whether ``actor`` is in ``renderer``'s actor collection.
+
+    Walks ``GetActors()`` by VTK-object identity (the C++ pointer the
+    wrapper reports via ``GetAddressAsString("")``) rather than Python
+    ``is`` — PythonQt/VTK can hand back distinct Python wrappers around the
+    same C++ ``vtkProp``, so identity must be compared at the C++ level.
+    Same identity pattern as ``test_resectogram_pipeline_dispatch.py``.
+    """
+    if renderer is None or actor is None:
+        return False
+    target = actor.GetAddressAsString("")
+    actors = renderer.GetActors()
+    actors.InitTraversal()
+    for _ in range(actors.GetNumberOfItems()):
+        candidate = actors.GetNextActor()
+        if candidate is not None and candidate.GetAddressAsString("") == target:
+            return True
+    return False
+
+
+def _renderer_actor_addresses(renderer) -> set[str]:
+    """Return the set of C++ actor addresses in ``renderer``.
+
+    The renderer-level companion to ``_renderer_owns_actor`` for the
+    two-view separation assertions: snapshots one renderer's actor identity
+    set so the other view's actors can be tested for absence by address
+    (ADR-0023 §Stage-4 — anatomy and the flattened strip must not co-mingle
+    in one renderer).
+    """
+    addresses: set[str] = set()
+    if renderer is None:
+        return addresses
+    actors = renderer.GetActors()
+    actors.InitTraversal()
+    for _ in range(actors.GetNumberOfItems()):
+        candidate = actors.GetNextActor()
+        if candidate is not None:
+            addresses.add(candidate.GetAddressAsString(""))
+    return addresses
+
+
+def _lit_mask(view_widget):
+    """Return a boolean H×W numpy mask of non-background pixels.
 
     Snapshots the GL back buffer with ``vtkWindowToImageFilter`` (the same
     pixel source ``capture_baseline.py`` / ``replay_test.py`` use, so this
-    counts exactly the pixels the visual-regression baseline pins) and
-    returns how many are non-black (the scenario background is ``(0,0,0)``).
-    Channel value > 8 tolerates only single-LSB dithering, not a lit
-    fragment.
+    reads exactly the pixels the visual-regression baseline pins) and marks
+    each pixel whose brightest channel exceeds 8 (the scenario background is
+    ``(0,0,0)``; the >8 threshold tolerates only single-LSB dithering, not a
+    lit fragment).  Shaped ``(height, width)`` so the band metric can carve
+    out an interior region.
     """
     import vtk  # type: ignore[import-not-found]
     from vtk.util import numpy_support  # type: ignore[import-not-found]
@@ -126,9 +203,62 @@ def _visible_pixel_count(view_widget) -> int:
     w2i.ReadFrontBufferOff()
     w2i.SetShouldRerender(0)  # already-rendered back buffer
     w2i.Update()
-    scalars = w2i.GetOutput().GetPointData().GetScalars()
-    arr = numpy_support.vtk_to_numpy(scalars)
-    return int((arr.max(axis=1) > 8).sum())
+    image = w2i.GetOutput()
+    cols, rows, _ = image.GetDimensions()
+    scalars = image.GetPointData().GetScalars()
+    arr = numpy_support.vtk_to_numpy(scalars).reshape(rows, cols, -1)
+    return arr.max(axis=2) > 8
+
+
+def _visible_pixel_count(view_widget) -> int:
+    """Count non-background pixels in the view's rendered back buffer.
+
+    The structural lit-pixel floor (any visible fragment).  Distinct from
+    the band-content metric below: this only proves the strip drew SOMETHING
+    (grid + border qualify); the band metric proves it drew the margin BAND.
+    """
+    return int(_lit_mask(view_widget).sum())
+
+
+def _interior_lit_fraction(view_widget, border_frac: float = 0.18) -> float:
+    """Return the lit fraction of the panel INTERIOR (the band-content metric).
+
+    The content gate that distinguishes a textured margin band from a bare
+    flattened grid + coloured border (ADR-0025 §Context — the resectogram is
+    the flattened ``(u, v)`` distance-map image; the band IS the projected
+    distance map, not the wireframe).
+
+    Why interior-only discriminates band-from-grid
+    -----------------------------------------------
+    The flattened-surface Representation always draws the ``(u, v)`` quad
+    GRID (a sparse wireframe) and the coloured resection BORDERS (the panel
+    edges).  Those clear a whole-frame "≥1 % lit" floor on their own — the
+    earlier, too-lenient gate.  But they are confined to the panel PERIMETER
+    and the thin grid lines: the panel INTERIOR (everything inside a
+    ``border_frac`` margin from each edge) stays dark when no distance-map
+    texture is bound.  A bound distance-map texture, by contrast, paints the
+    projected margin band as a CONTIGUOUS fill across that interior.  So the
+    interior-lit fraction separates the two regimes:
+
+    * grid + border only  → interior fraction ≈ 0 (a few stray grid pixels),
+    * textured margin band → interior fraction well above the floor.
+
+    ``border_frac`` (default 0.18) excludes the outer 18 % of the panel on
+    every side, leaving a centred interior window safely clear of the
+    coloured borders + the outermost grid lines for the scenario's fixed
+    camera pose.  The band fills a deterministic region because the
+    scenario's 4-component distance map is deterministic.
+
+    Returns the fraction in ``[0, 1]`` of interior pixels that are lit.
+    """
+    mask = _lit_mask(view_widget)
+    rows, cols = mask.shape
+    margin_r = int(border_frac * rows)
+    margin_c = int(border_frac * cols)
+    interior = mask[margin_r : rows - margin_r, margin_c : cols - margin_c]
+    if interior.size == 0:
+        return 0.0
+    return float(interior.sum()) / float(interior.size)
 
 
 _SOFTWARE_GL_MARKERS = ("llvmpipe", "softpipe", "swrast", "software rasterizer")
@@ -140,8 +270,8 @@ def _software_gl_skip_reason() -> str | None:
     Brings up a throwaway offscreen ``vtkRenderWindow`` and reads its
     ``ReportCapabilities`` -- the same cheap probe the replay driver
     (``LiverResections/Testing/Python/replay_test.py``) uses.  Probing a
-    *throwaway* window before the live view is built keeps this off the
-    arena's own (possibly context-failed) render window, and lets the test
+    *throwaway* window before the live views are built keeps this off the
+    arena's own (possibly context-failed) render windows, and lets the test
     skip BEFORE attempting a render the software stack cannot light.  Any
     probe failure is treated as un-renderable (skip), never a crash.
     """
@@ -165,21 +295,123 @@ def _software_gl_skip_reason() -> str | None:
         return (
             f"[arena-skip] offscreen software GL ({match}) -- the resectogram "
             "render path does not reliably light fragments on a software "
-            "rasteriser; the lit-pixel verdict is deferred to a GPU-backed "
+            "rasteriser; the band-content verdict is deferred to a GPU-backed "
             "display."
         )
     return None
 
 
+def _build_view_widget(slicer, scene, view_node):
+    """Build + map a standalone ``qMRMLThreeDWidget`` bound to ``view_node``.
+
+    ``--no-main-window`` has no layout manager, so construct the
+    ``qMRMLThreeDWidget`` directly (the same standalone-view pattern
+    capture_baseline.py / replay_test.py and the dispatch fixtures use).
+    Maps the GL surface (``show()`` + ``forceRender()``) BEFORE binding the
+    view node so the LayerDM displayable-manager group attaches.  Under
+    ``QT_QPA_PLATFORM=offscreen`` show() is visually a no-op but still maps
+    the OpenGL surface; without it the offscreen back buffer renders empty.
+    """
+    widget = slicer.qMRMLThreeDWidget()
+    widget.setMRMLScene(scene)
+    widget.show()
+    widget.threeDView().forceRender()
+    widget.setMRMLViewNode(view_node)
+    return widget
+
+
+def _apply_camera_and_background(renderer, meta) -> None:
+    """Push the scenario's deterministic camera pose + flat background.
+
+    The standalone ``qMRMLThreeDWidget`` (no layout manager) does not honour
+    the orphan MRML camera/view nodes the scenario configured, so push the
+    scenario's deterministic camera pose + flat black background straight
+    onto the live renderer -- the same thing capture_baseline.py / replay do
+    -- so the offscreen frame matches the captured baseline and the
+    interior-lit fraction reflects lit resectogram fragments, not a
+    non-black gradient.
+    """
+    camera = renderer.GetActiveCamera()
+    camera_spec = meta["camera"]
+    camera.SetPosition(*camera_spec["position"])
+    camera.SetFocalPoint(*camera_spec["focal_point"])
+    camera.SetViewUp(*camera_spec["view_up"])
+    camera.SetViewAngle(camera_spec["view_angle"])
+    camera.SetClippingRange(*camera_spec["clipping_range"])
+    background = meta["viewport"]["background"]
+    renderer.SetBackground(*background)
+    renderer.SetBackground2(*background)
+
+
+def _restrict_display_to_view(display_node, view_node) -> None:
+    """Bind ``display_node`` to render in ``view_node`` ONLY.
+
+    Clears any existing view restriction then adds the single target view,
+    so the display node's actor is hosted by exactly one view's renderer.
+    This is the per-display-node half of the no-overlap contract (ADR-0023
+    §Stage-4): anatomy display nodes restricted to the scene view, the
+    resectogram display node restricted to the resectogram view.
+    """
+    if display_node is None or view_node is None:
+        return
+    display_node.RemoveAllViewNodeIDs()
+    display_node.AddViewNodeID(view_node.GetID())
+
+
+def _collect_anatomy_display_nodes(bezier, parenchyma):
+    """Return every anatomy (non-resectogram) display node in the scene.
+
+    The 3D anatomy is the parenchyma sphere model + the Bezier surface +
+    its markers; each carries one or more display nodes.  Gather them so the
+    arena can restrict ALL of them to the scene view (and, by exclusion,
+    keep them out of the resectogram renderer).  The resectogram display
+    node (``vtkMRMLResectogramDisplayNode``) is explicitly excluded -- it is
+    bound to the resectogram view instead.
+    """
+    nodes = []
+    for owner in (parenchyma, bezier):
+        if owner is None:
+            continue
+        for index in range(owner.GetNumberOfDisplayNodes()):
+            display = owner.GetNthDisplayNode(index)
+            if display is None:
+                continue
+            if display.IsA("vtkMRMLResectogramDisplayNode"):
+                continue
+            nodes.append(display)
+    return nodes
+
+
 @pytest.mark.parametrize("scenario_name", _SCENARIOS)
 def test_resectogram_arena(scenario_name: str, render_interactive: float) -> None:
-    """Render a T3 resectogram scenario; interactive or offscreen.
+    """Render a T3 resectogram scenario into TWO separated views.
 
     The single body adapts to both modes by branching on
     ``render_interactive`` (ADR-0008 §3) — the offscreen path tears the
-    view down immediately after the structural assertions, the interactive
-    path shows the window and starts the interactor for
-    ``render_interactive`` seconds.
+    views down immediately after the structural + separation + band-content
+    assertions, the interactive path shows both windows and starts the
+    interactors for ``render_interactive`` seconds.
+
+    Two views, no overlap (ADR-0023 §Stage-4)
+    -----------------------------------------
+    * a **scene view** (plain ``vtkMRMLViewNode``) hosting the 3D anatomy,
+      its display nodes restricted to that view, and
+    * the dedicated **resectogram view** (the ``"LiverResectogram"`` tagged
+      view via ``ResectogramViewManager``) hosting ONLY the flattened strip.
+
+    The arena asserts the renderer-level separation: the resectogram strip
+    actor is in the resectogram renderer and ABSENT from the scene renderer,
+    and the anatomy actors are absent from the resectogram renderer.
+
+    Band-content gate (RED-by-design, ADR-0027)
+    -------------------------------------------
+    Beyond "any lit pixels", the resectogram view must draw the projected
+    distance-map margin BAND (ADR-0025 §Context), measured as a non-trivial
+    interior-lit fraction.  RED TODAY because
+    ``FlattenedSurfaceRepresentation`` does not bind the distance-map texture
+    (the T3-e rewrite severed v1's texture path), so the strip interior is
+    grid-only; GREEN once the implementer binds the texture.  The verdict is
+    GPU-gated and needs launched/GPU verification.
 
     Parametrised over the three T3 resectogram scenarios so the maintainer
     can ``pytest --render-interactive=N -k <scenario>`` to inspect any one
@@ -216,9 +448,9 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
     # Software-GL gate (CI's xvfb + llvmpipe): the resectogram render path
     # does not reliably light fragments on a software rasteriser, and the
     # offscreen render itself is unreliable there.  Probe a throwaway context
-    # and skip BEFORE building/rendering the live view so the test reports a
+    # and skip BEFORE building/rendering the live views so the test reports a
     # real, greppable SKIP rather than a false pass or a render crash.  The
-    # lit-pixel verdict is on a GPU-backed display.
+    # band-content verdict is on a GPU-backed display.
     software_gl_skip = _software_gl_skip_reason()
 
     import qt  # type: ignore[import-not-found]
@@ -228,7 +460,7 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
     width, height = meta["viewport"]["size"]
 
     # Ensure the upstream LayerDM displayable manager is registered in the
-    # 3D-view factory so the standalone view hosts it and the registered
+    # 3D-view factory so the standalone views host it and the registered
     # ResectogramPipeline dispatches for the resectogram display node
     # (ADR-0013 §5; idempotent -- RegisterInDefaultViews short-circuits when
     # already present, and the LiverResections module setup() already calls
@@ -246,27 +478,23 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
         )
     vtkMRMLLayerDisplayableManager.RegisterInDefaultViews()
 
-    # Build the standalone view.  ``--no-main-window`` has no layout
-    # manager, so construct the qMRMLThreeDWidget directly (the same
-    # standalone-view pattern capture_baseline.py / replay_test.py use).
-    view_widget = slicer.qMRMLThreeDWidget()
-    view_widget.setMRMLScene(slicer.mrmlScene)
-
-    created_nodes = None
+    scene_widget = None
+    resectogram_widget = None
     try:
-        # Populate the scene (markups Bezier node + distance map + the
-        # resectogram display node).  setup_scene returns the created nodes
-        # so nothing leaks through a module global.  It Clear(0)s the scene
-        # first, so create the view node AFTER it -- a view node created
-        # before would be wiped, leaving the displayable-manager group bound
-        # to a node no longer in the scene (and the pipeline reconciliation
-        # would never fire).
+        # Populate the scene (markups Bezier node + parenchyma + distance map
+        # + the resectogram display node).  setup_scene returns the created
+        # nodes so nothing leaks through a module global.  It Clear(0)s the
+        # scene first, so create the view nodes AFTER it -- a view node
+        # created before would be wiped, leaving the displayable-manager
+        # group bound to a node no longer in the scene.
         created_nodes = scenario.setup_scene()
         assert created_nodes is not None, (
             "scenario.setup_scene() returned None -- expected the created "
             "node handles (the no-module-globals contract)."
         )
-        assert created_nodes[0] is not None, (
+        bezier = created_nodes[0]
+        parenchyma = created_nodes[1]
+        assert bezier is not None, (
             "scenario.setup_scene() did not return a Bezier node handle."
         )
         # The v2.0 ResectogramPipeline carrier (ADR-0013 §1): the scenario
@@ -278,59 +506,68 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
             "-- the v2.0 ResectogramPipeline has nothing to key on (ADR-0013 §1)."
         )
 
-        # The view must carry the resectogram singleton tag so the tightened
-        # ResectogramPipeline creator (ADR-0023 §Stage-4) fires for it -- an
-        # untagged view no longer gets a pipeline dispatched.  Reuse the
-        # production view-manager so the arena and the live module agree on
-        # the tag + layout name.
+        # ---- Two view nodes ----
+        # The scene view: a normal vtkMRMLViewNode hosting the 3D anatomy.
+        # NO resectogram singleton tag, so the tightened ResectogramPipeline
+        # creator never fires for it (ADR-0023 §Stage-4).
+        scene_view_node = slicer.mrmlScene.AddNewNodeByClass(
+            "vtkMRMLViewNode", "ArenaSceneView"
+        )
+
+        # The dedicated resectogram view: the production view-manager owns
+        # the "LiverResectogram"-tagged singleton view node so the arena and
+        # the live module agree on the tag + layout name (ADR-0023 §Stage-4).
         from LiverResectionsLib.ResectogramViewManager import (  # type: ignore[import-not-found]
             ResectogramViewManager,
         )
 
-        view_node = ResectogramViewManager().ensureViewNode()
+        resectogram_view_node = ResectogramViewManager().ensureViewNode()
 
-        # Map the view's GL surface BEFORE binding the view node so the
-        # displayable-manager group attaches.  Under
-        # ``QT_QPA_PLATFORM=offscreen`` show() is visually a no-op but still
-        # maps the OpenGL surface + creates the default light; without it the
-        # offscreen back buffer renders empty.  Same show()-then-render
-        # ordering capture_baseline.py uses.
-        view_widget.show()
-        view_widget.threeDView().forceRender()
-        view_widget.setMRMLViewNode(view_node)
+        # ---- No-overlap: restrict each display node to its one view ----
+        # Anatomy display nodes (parenchyma + Bezier + markers) render in the
+        # scene view ONLY; the resectogram display node renders in the
+        # resectogram view ONLY.  ViewNodeIDs is the per-display-node half of
+        # the no-overlap contract (ADR-0023 §Stage-4); the renderer-level
+        # assertions below verify the consequence.
+        anatomy_display_nodes = _collect_anatomy_display_nodes(bezier, parenchyma)
+        for display in anatomy_display_nodes:
+            _restrict_display_to_view(display, scene_view_node)
+        _restrict_display_to_view(resectogram_display, resectogram_view_node)
 
-        scenario.setup_camera(view_node)
-        scenario.setup_viewport(view_node)
+        # ---- Build + map both standalone views ----
+        scene_widget = _build_view_widget(
+            slicer, slicer.mrmlScene, scene_view_node
+        )
+        resectogram_widget = _build_view_widget(
+            slicer, slicer.mrmlScene, resectogram_view_node
+        )
 
-        # The standalone qMRMLThreeDWidget (no layout manager) does not
-        # honour the orphan MRML camera/view nodes the scenario configured,
-        # so push the scenario's deterministic camera pose + flat black
-        # background straight onto the live renderer -- the same thing
-        # capture_baseline.py / replay do -- so the offscreen frame matches
-        # the captured baseline and the visible-pixel count reflects lit
-        # resectogram fragments, not a non-black gradient.
-        renderer = _first_renderer(view_widget)
-        camera = renderer.GetActiveCamera()
-        camera_spec = meta["camera"]
-        camera.SetPosition(*camera_spec["position"])
-        camera.SetFocalPoint(*camera_spec["focal_point"])
-        camera.SetViewUp(*camera_spec["view_up"])
-        camera.SetViewAngle(camera_spec["view_angle"])
-        camera.SetClippingRange(*camera_spec["clipping_range"])
-        background = meta["viewport"]["background"]
-        renderer.SetBackground(*background)
-        renderer.SetBackground2(*background)
+        scenario.setup_camera(resectogram_view_node)
+        scenario.setup_viewport(resectogram_view_node)
 
-        view_widget.resize(width, height)
-        view_widget.threeDView().renderWindow().SetSize(width, height)
-        view_widget.threeDView().renderWindow().SetMultiSamples(0)
-        view_widget.threeDView().forceRender()
+        # Push the scenario's deterministic camera + flat background onto the
+        # resectogram renderer (the panel the band metric reads).  The scene
+        # renderer keeps Slicer's default 3D camera -- the arena does not pin
+        # its pixels, only that anatomy actors live there and the strip does
+        # not.
+        scene_renderer = _first_renderer(scene_widget)
+        resectogram_renderer = _first_renderer(resectogram_widget)
+        _apply_camera_and_background(resectogram_renderer, meta)
+
+        for widget in (scene_widget, resectogram_widget):
+            widget.resize(width, height)
+            widget.threeDView().renderWindow().SetSize(width, height)
+            widget.threeDView().renderWindow().SetMultiSamples(0)
+            widget.threeDView().forceRender()
 
         # ---- Structural wiring assertions (ALWAYS-ON, path-agnostic) ----
-        # These run regardless of the GL stack: a live renderer, the v2.0
+        # These run regardless of the GL stack: live renderers, the v2.0
         # resectogram display node with the strip enabled, and a LIVE
-        # ResectogramPipeline dispatched for it.
-        assert renderer is not None, "no live renderer on the view widget"
+        # ResectogramPipeline dispatched for it on the dedicated view.
+        assert scene_renderer is not None, "no live renderer on the scene view"
+        assert resectogram_renderer is not None, (
+            "no live renderer on the resectogram view"
+        )
 
         # The resectogram strip must be enabled (the whole point of the
         # scenario).  ShowResection2D lives on the v2.0
@@ -347,18 +584,19 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
         )
 
         # The registered ResectogramPipeline must have dispatched for the
-        # display node and built a non-empty flattened-surface actor.  This
-        # is the T3-e go-live invariant (ADR-0013 §1/§5/§6): a
-        # vtkMRMLResectogramDisplayNode in a LayerDM-aware view yields a live
-        # pipeline whose FlattenedSurfaceRepresentation has renderable
-        # geometry -- the precondition for the lit-pixel verdict below.
-        manager = view_widget.threeDView().displayableManagerByClassName(
+        # display node ON THE DEDICATED VIEW and built a non-empty
+        # flattened-surface actor.  This is the T3-e go-live invariant
+        # (ADR-0013 §1/§5/§6): a vtkMRMLResectogramDisplayNode in a
+        # LayerDM-aware dedicated view yields a live pipeline whose
+        # FlattenedSurfaceRepresentation has renderable geometry -- the
+        # precondition for the band-content verdict below.
+        manager = resectogram_widget.threeDView().displayableManagerByClassName(
             "vtkMRMLLayerDisplayableManager"
         )
         assert manager is not None, (
-            "[arena] the 3D view has no vtkMRMLLayerDisplayableManager -- the "
-            "upstream SlicerLayerDM extension is not loaded on the launched "
-            "path (issue #460)."
+            "[arena] the resectogram 3D view has no "
+            "vtkMRMLLayerDisplayableManager -- the upstream SlicerLayerDM "
+            "extension is not loaded on the launched path (issue #460)."
         )
         pipeline = manager.GetNodePipeline(resectogram_display)
         assert pipeline is not None, (
@@ -375,16 +613,74 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
             "-- OnRendererAdded did not compose the Representations "
             "(ADR-0013 §6)."
         )
-        actor = flattened.GetResectionActor2D()
-        assert actor is not None and actor.GetMapper() is not None, (
+        strip_actor = flattened.GetResectionActor2D()
+        assert strip_actor is not None and strip_actor.GetMapper() is not None, (
             "the flattened-surface actor / mapper is missing -- the "
             "resectogram strip has nothing to draw."
         )
 
-        # ---- Lit-pixel verdict (GPU-gated) ----
+        # The flattened-surface mapper carries the (u, v) aspect-ratio
+        # mapping (MatRatio) the non-square scenario exercises.  Keep the
+        # structural reachability check: the mapper must expose the MatRatio
+        # accessor so the aspect-ratio path is wired (ADR-0013 §6).  Probe by
+        # attribute so the check reads as a wiring assertion, not a value
+        # assertion (the value is pinned by the visual-regression baseline).
+        mapper = strip_actor.GetMapper()
+        assert hasattr(mapper, "GetMatRatio"), (
+            "the flattened-surface mapper exposes no GetMatRatio accessor -- "
+            "the (u, v) aspect-ratio mapping the non-square scenario pins is "
+            "not wired on the resectogram mapper (ADR-0013 §6)."
+        )
+
+        # ---- Two-view separation (ALWAYS-ON, renderer identity) ----
+        # No overlap: the strip actor lives in the resectogram renderer and
+        # NOT in the scene renderer; the anatomy actors live in the scene
+        # renderer and NOT in the resectogram renderer (ADR-0023 §Stage-4 --
+        # the flattened strip must not bleed into the 3D anatomy view, and
+        # the anatomy must not bleed into the flattened panel).
+        assert _renderer_owns_actor(resectogram_renderer, strip_actor), (
+            "the resectogram strip actor is NOT in the resectogram view's "
+            "renderer -- the dedicated Pipeline did not attach it "
+            "(ADR-0023 §Stage-4)."
+        )
+        assert not _renderer_owns_actor(scene_renderer, strip_actor), (
+            "the resectogram strip actor is present in the SCENE (anatomy) "
+            "renderer -- the flattened strip is bleeding into the 3D anatomy "
+            "view (the overlap bug).  Restrict the resectogram display node to "
+            "the dedicated view (ADR-0023 §Stage-4)."
+        )
+
+        # We have no direct handle to the anatomy vtkActors (they live inside
+        # the upstream model / markups displayable managers), so assert the
+        # separation by renderer actor-identity SETS: the scene renderer
+        # carries the anatomy actors (everything but the strip), and NONE of
+        # those identities may appear in the resectogram renderer.
+        resectogram_addresses = _renderer_actor_addresses(resectogram_renderer)
+        scene_addresses = _renderer_actor_addresses(scene_renderer)
+        strip_address = strip_actor.GetAddressAsString("")
+        # The scene renderer must carry anatomy actors (the parenchyma sphere
+        # at minimum) and none of them may be the strip actor; the
+        # resectogram renderer must NOT share any actor identity with the
+        # scene renderer's anatomy actors (overlap = a shared address).
+        anatomy_addresses = scene_addresses - {strip_address}
+        assert anatomy_addresses, (
+            "the scene (anatomy) renderer carries no anatomy actors -- the "
+            "parenchyma / Bezier surface did not render into the scene view "
+            "(restriction bound them to the wrong view?)."
+        )
+        leaked = anatomy_addresses & resectogram_addresses
+        assert not leaked, (
+            "anatomy actor(s) leaked into the resectogram renderer "
+            f"(shared addresses: {sorted(leaked)}) -- the anatomy and the "
+            "flattened strip are co-mingling in one view (the overlap bug).  "
+            "Restrict the anatomy display nodes to the scene view "
+            "(ADR-0023 §Stage-4)."
+        )
+
+        # ---- Band-content verdict (GPU-gated, RED-by-design) ----
         # The resectogram render path does not reliably light fragments on a
-        # software rasteriser; defer the pixel verdict to a GPU-backed
-        # display.  The structural assertions above already ran.
+        # software rasteriser; defer the pixel verdicts to a GPU-backed
+        # display.  The structural + separation assertions above already ran.
         if software_gl_skip is not None:
             pytest.skip(software_gl_skip)
 
@@ -394,36 +690,67 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
         except ImportError:
             pytest.skip(
                 "[arena-skip] numpy / vtk.util.numpy_support unavailable -- "
-                "cannot read the rendered back buffer for the visible-pixel "
-                "assertion.  Structural wiring above already passed."
+                "cannot read the rendered back buffer for the band-content "
+                "assertion.  Structural wiring + separation above already "
+                "passed."
             )
-        visible = _visible_pixel_count(view_widget)
-        # A generous 1 % floor still fails hard on an all-black frame while
-        # tolerating the resectogram strip occupying only part of the panel.
+
+        # Structural lit-pixel floor: the strip drew SOMETHING (grid + border
+        # qualify).  Kept as the cheap precondition for the band metric.
+        visible = _visible_pixel_count(resectogram_widget)
         min_visible = int(0.01 * width * height)
         assert visible >= min_visible, (
             f"the resectogram rendered only {visible} lit pixels "
-            f"(< {min_visible}) -- the flattened strip is not visibly drawn.  "
-            "Expected the live resectogram path to light the (u, v) panel."
+            f"(< {min_visible}) -- the flattened strip is not visibly drawn at "
+            "all.  Expected the live resectogram path to light the (u, v) panel."
+        )
+
+        # Band-content gate (the RED pin, ADR-0027): the projected
+        # distance-map margin BAND must fill a non-trivial CONTIGUOUS region
+        # of the panel INTERIOR, distinguishing it from the bare flattened
+        # grid + coloured border (which leave the interior dark).  The
+        # scenario's deterministic 4-component distance map yields a
+        # deterministic band, so a stable interior-lit-fraction floor
+        # separates band-from-grid (ADR-0025 §Context).
+        #
+        # RED TODAY: FlattenedSurfaceRepresentation does not bind the
+        # distance-map texture (no SetDistanceMapTextureObject / ras-ijk
+        # matrices; the T3-e rewrite severed v1's texture path), so the
+        # interior is grid-only and this fraction is ~0.  GREEN once the
+        # implementer binds the distance-map texture so the margin band
+        # fills the (u, v) panel interior.  Needs launched/GPU verification.
+        interior_fraction = _interior_lit_fraction(resectogram_widget)
+        min_interior_fraction = 0.10
+        assert interior_fraction >= min_interior_fraction, (
+            f"the resectogram panel interior is only {interior_fraction:.3f} "
+            f"lit (< {min_interior_fraction}) -- the flattened strip is drawing "
+            "the (u, v) GRID + coloured BORDER but NOT the projected "
+            "distance-map margin BAND.  The band fills a contiguous interior "
+            "region only once FlattenedSurfaceRepresentation binds the "
+            "distance-map texture (RED-by-design until that lands; "
+            "ADR-0025 §Context)."
         )
 
         if render_interactive:
-            # Interactive arena: keep the window up and let the human drive
-            # the camera.  A single-shot timer quits the nested event loop
+            # Interactive arena: keep both windows up and let the human drive
+            # the cameras.  A single-shot timer quits the nested event loop
             # after the requested dwell so the test still terminates under
             # CI's brief-onscreen pass (--render-interactive=0.1).
-            interactor = view_widget.threeDView().interactor()
-            if interactor is not None:
-                loop = qt.QEventLoop()
-                qt.QTimer.singleShot(int(render_interactive * 1000), loop.quit)
-                interactor.Initialize()
-                view_widget.threeDView().forceRender()
-                loop.exec_()
+            loop = qt.QEventLoop()
+            qt.QTimer.singleShot(int(render_interactive * 1000), loop.quit)
+            for widget in (scene_widget, resectogram_widget):
+                interactor = widget.threeDView().interactor()
+                if interactor is not None:
+                    interactor.Initialize()
+                    widget.threeDView().forceRender()
+            loop.exec_()
     finally:
-        # Tear the widget + scene down so no actor / node survives to process
+        # Tear the widgets + scene down so no actor / node survives to process
         # exit and trips vtkDebugLeaks in the launched harness (the
         # LiverResections conftest's _launched_scene_cleanup clears the scene;
-        # the standalone widget is ours).
-        view_widget.setMRMLScene(None)
-        view_widget.deleteLater()
+        # the standalone widgets are ours).
+        for widget in (scene_widget, resectogram_widget):
+            if widget is not None:
+                widget.setMRMLScene(None)
+                widget.deleteLater()
         slicer.mrmlScene.Clear(0)
