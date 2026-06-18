@@ -179,16 +179,17 @@ class _StubMapperWithMatRatio:
 
 
 def _inject_mat_ratio_mapper(rep):
-    """Replace the Representation's 2D mapper with the MatRatio stub.
+    """Install the MatRatio stub as the Representation's 2D mapper.
 
-    Re-points the actor at the stub too (when VTK is present) so the
-    public assembly stays internally consistent.
+    The Representation pushes MatRatio / TextureNumComps off
+    ``_resection_mapper_2d`` directly (see ``_apply_mat_ratio``), so
+    re-pointing the actor at the stub is unnecessary — and a real
+    ``vtkActor`` (the launched harness) rejects a non-``vtkMapper`` via
+    ``SetMapper``.  Setting ``_resection_mapper_2d`` is sufficient and
+    works in both the bare and launched rows.
     """
     mapper = _StubMapperWithMatRatio()
     rep._resection_mapper_2d = mapper
-    actor = rep.GetResectionActor2D()
-    if actor is not None and hasattr(actor, "SetMapper"):
-        actor.SetMapper(mapper)
     return mapper
 
 

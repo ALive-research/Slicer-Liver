@@ -109,16 +109,15 @@ class _StubContourMapper:
 
 
 def _inject_contour_mappers(rep):
+    # The Representation feeds the strip via _distance/_slicing_contour_mapper
+    # directly (see _apply_strip_input), so re-pointing the actors is
+    # unnecessary — and a real vtkActor (launched harness) rejects a
+    # non-vtkMapper via SetMapper. Setting the mapper members is sufficient
+    # and works in both the bare and launched rows.
     distance = _StubContourMapper()
     slicing = _StubContourMapper()
     rep._distance_contour_mapper = distance
     rep._slicing_contour_mapper = slicing
-    distance_actor = rep.GetDistanceContourActor()
-    slicing_actor = rep.GetSlicingContourActor()
-    if distance_actor is not None and hasattr(distance_actor, "SetMapper"):
-        distance_actor.SetMapper(distance)
-    if slicing_actor is not None and hasattr(slicing_actor, "SetMapper"):
-        slicing_actor.SetMapper(slicing)
     return distance, slicing
 
 
