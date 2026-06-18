@@ -284,9 +284,10 @@ ships **three** tests, one per layer:
   `pytest --render-interactive=5` a developer sees the same
   assertions execute on visible pixels.
 
-The T2 LiverResections PR therefore **delivers the "real-view
-fixture" deferred by PR #316** — the missing piece of the ADR-0008
-test pyramid that the pytest scaffold left as a TODO.
+The T3 ResectogramPipeline tranche therefore **delivers the "real-view
+fixture" deferred by PR #316** (carried through T2 LiverResections to
+T3) — the missing piece of the ADR-0008 test pyramid that the pytest
+scaffold left as a TODO; it un-skips the launched Pipeline-dispatch test.
 
 ### 10. Pipeline class skeleton (illustrative)
 
@@ -421,7 +422,8 @@ under a follow-up ADR.
   test, Representation tests, workflow test with
   `render_interactive`.  The pytest scaffold is in place per PR
   #316; the *real-view fixture* the scaffold left as a TODO lands
-  in T2 LiverResections and is the precondition for T3.
+  in T3 (the ResectogramPipeline tranche), un-skipping the launched
+  Pipeline-dispatch test.
 - **Two architectures coexist during v2.0.0.**  Per
   [ADR-0002](0002-migrate-to-slicerlayerdm.md) Consequences, the
   legacy Markups path stays alive feature-flagged until the
@@ -462,9 +464,9 @@ pattern once:
    `vtkMRMLLiverResectionNode` and land on the new
    `vtkMRMLLiverBezierSurfaceDisplayNode` (per §8 above).
    Establishes `Liver<Module>/<Module>Pipeline.py` and the
-   `Representations/` subdirectory; delivers the real-view fixture
-   deferred by PR #316; provides the worked example T3 reviews
-   against.
+   `Representations/` subdirectory; provides the worked example T3
+   reviews against.  (The real-view fixture deferred by PR #316 lands
+   in T3 itself, not here.)
 2. **T3 — Resectogram + distance maps.**  Splits the resectogram
    into its own Pipeline composing the locator-crosshair,
    flattened-surface, and vascular-contour Representations.  The
@@ -496,7 +498,7 @@ the same pattern.
     nodes in C++.
   - [ADR-0008](0008-testing-strategy.md) — the three-layer test
     discipline this ADR applies to every Pipeline and
-    Representation; T2 delivers the deferred real-view fixture.
+    Representation; T3 delivers the deferred real-view fixture.
   - [ADR-0009](0009-ux-and-design-discipline.md) — UI diagrams
     under `Docs/architecture/ui/<module>.md` and combo-box
     elimination, both downstream of this pattern.
