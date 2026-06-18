@@ -56,6 +56,8 @@ vtkMRMLResectogramDisplayNode::vtkMRMLResectogramDisplayNode()
   , MirrorDisplay(false)
   , EnableFlexibleBoundary(false)
   , TextureNumComps(0)
+  , BlurEnabled(false)
+  , BlurRadius(2.0)
 {
 }
 
@@ -72,6 +74,8 @@ void vtkMRMLResectogramDisplayNode::WriteXML(ostream& of, int nIndent)
   vtkMRMLWriteXMLBooleanMacro(mirrorDisplay, MirrorDisplay);
   vtkMRMLWriteXMLBooleanMacro(enableFlexibleBoundary, EnableFlexibleBoundary);
   vtkMRMLWriteXMLIntMacro(textureNumComps, TextureNumComps);
+  vtkMRMLWriteXMLBooleanMacro(blurEnabled, BlurEnabled);
+  vtkMRMLWriteXMLFloatMacro(blurRadius, BlurRadius);
   vtkMRMLWriteXMLEndMacro();
 }
 
@@ -87,6 +91,8 @@ void vtkMRMLResectogramDisplayNode::ReadXMLAttributes(const char** atts)
   vtkMRMLReadXMLBooleanMacro(mirrorDisplay, MirrorDisplay);
   vtkMRMLReadXMLBooleanMacro(enableFlexibleBoundary, EnableFlexibleBoundary);
   vtkMRMLReadXMLIntMacro(textureNumComps, TextureNumComps);
+  vtkMRMLReadXMLBooleanMacro(blurEnabled, BlurEnabled);
+  vtkMRMLReadXMLFloatMacro(blurRadius, BlurRadius);
   vtkMRMLReadXMLEndMacro();
 
   this->EndModify(disabledModify);
@@ -103,6 +109,8 @@ void vtkMRMLResectogramDisplayNode::CopyContent(vtkMRMLNode* anode, bool deepCop
   vtkMRMLCopyBooleanMacro(MirrorDisplay);
   vtkMRMLCopyBooleanMacro(EnableFlexibleBoundary);
   vtkMRMLCopyIntMacro(TextureNumComps);
+  vtkMRMLCopyBooleanMacro(BlurEnabled);
+  vtkMRMLCopyFloatMacro(BlurRadius);
   vtkMRMLCopyEndMacro();
 }
 
@@ -116,5 +124,7 @@ void vtkMRMLResectogramDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
   vtkMRMLPrintBooleanMacro(MirrorDisplay);
   vtkMRMLPrintBooleanMacro(EnableFlexibleBoundary);
   vtkMRMLPrintIntMacro(TextureNumComps);
+  vtkMRMLPrintBooleanMacro(BlurEnabled);
+  vtkMRMLPrintFloatMacro(BlurRadius);
   vtkMRMLPrintEndMacro();
 }

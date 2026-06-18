@@ -80,6 +80,13 @@
  *   - ``TextureNumComps`` — number of components in the distance-map
  *     texture the 2D mapper samples (the v1 ``SetTextureNumComps``
  *     feed).
+ *   - ``BlurEnabled`` — whether the net-new v2.0 Gaussian-blur post-pass
+ *     is engaged on the resectogram overlay renderer.  No legacy field
+ *     corresponds; the ``FlattenedSurfaceRepresentation`` attaches a
+ *     ``vtkGaussianBlurPass`` to its renderer when this is ``true``
+ *     (ADR-0013 §6).
+ *   - ``BlurRadius`` — the Gaussian-blur kernel extent in pixels driving
+ *     that post-pass.
  *
  * \par Defaults
  *
@@ -136,6 +143,16 @@ public:
   vtkSetMacro(TextureNumComps, int);
   vtkGetMacro(TextureNumComps, int);
 
+  /// Whether the net-new v2.0 Gaussian-blur post-pass is engaged on the
+  /// resectogram overlay renderer (drives the ``vtkGaussianBlurPass`` the
+  /// ``FlattenedSurfaceRepresentation`` attaches; ADR-0013 §6).
+  vtkSetMacro(BlurEnabled, bool);
+  vtkGetMacro(BlurEnabled, bool);
+
+  /// Gaussian-blur kernel extent, in pixels, for that post-pass.
+  vtkSetMacro(BlurRadius, double);
+  vtkGetMacro(BlurRadius, double);
+
 protected:
   vtkMRMLResectogramDisplayNode();
   ~vtkMRMLResectogramDisplayNode() override;
@@ -148,6 +165,8 @@ private:
   bool MirrorDisplay;
   bool EnableFlexibleBoundary;
   int TextureNumComps;
+  bool BlurEnabled;
+  double BlurRadius;
 };
 
 #endif //__vtkmrmlresectogramdisplaynode_h_
