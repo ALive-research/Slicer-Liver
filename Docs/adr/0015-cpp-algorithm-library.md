@@ -145,8 +145,10 @@ testability is the load-bearing reason.
 ## Decision
 
 Slicer-Liver creates a new `LiverResections/Algorithm/` subdirectory
-hosting a C++ algorithm library with four `vtkAlgorithm`-style
-classes.  The library is pure VTK with **no MRML dependency**, is
+hosting a C++ algorithm library of `vtkAlgorithm`-style classes (the
+four original fitting/extraction classes plus the two `vtkLiverResectogram*`
+helpers added in T3 — see the §1 roster).  The library is pure VTK with
+**no MRML dependency**, is
 Python-wrapped via Slicer's existing VTK wrapping, ships its own C++
 test set under `Algorithm/Testing/Cxx/`, and is consumed by the
 state-aware LiverResections Pipeline introduced in
@@ -163,9 +165,13 @@ elsewhere in `LiverResections/` (`Logic/`, `MRML/`, `MRMLDM/`,
 | `vtkLiverSpheroidRingExtractor` | target `vtkPolyData` + spheroid | ordered ring `vtkPolyData` | `DistanceSpheroidInitRepresentation` |
 | `vtkLiverContourParameterizer` | ring + mode (corner-mapping / EFD) | parameterised curve | `vtkLiverBezierFitter` |
 | `vtkLiverBezierFitter` | parameterised curve | 4×4 grid + ring roles | Init→Planning transition |
+| `vtkLiverResectogramAspectRatio` | sampled grid + (u,v) sample counts | anisotropic `MatRatio` | `FlattenedSurfaceRepresentation` (T3) |
+| `vtkLiverResectogramPixelMapping` | (u,v) domain + viewport | pixel→(u,v) mapping | resectogram locator (T3; ADR-0025) |
 
-All four subclass `vtkPolyDataAlgorithm` (or `vtkAlgorithm` where the
-output is not a `vtkPolyData`).  Inputs come in through the standard
+All of these subclass `vtkPolyDataAlgorithm` (or `vtkAlgorithm` where the
+output is not a `vtkPolyData`).  The two `vtkLiverResectogram*` helpers
+were added by the T3 ResectogramPipeline tranche (the resectogram math
+the original four did not cover).  Inputs come in through the standard
 VTK pipeline input ports; parameters come in through `Set/Get`
 accessors.  No `vtkMRMLNode` reference appears in any of these
 classes — MRML lives entirely in the Python orchestration layer
