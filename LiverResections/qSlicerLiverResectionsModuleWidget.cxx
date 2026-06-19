@@ -64,8 +64,11 @@
 
 // Qt includes
 #include <QAbstractButton>
+#include <QGridLayout>
 #include <QLayout>
 #include <QPointer>
+#include <QSizePolicy>
+#include <QString>
 
 namespace
 {
@@ -236,18 +239,31 @@ void qSlicerLiverResectionsModuleWidget::openResectogramView()
     }
   }
 
-  // Ensure the singleton resectogram view node via the Python
-  // ResectogramViewManager (LiverResectionsLib), the source of truth for
-  // the singleton-by-tag view node.  ADR-0004 keeps the view-manager class
-  // on the Python side; delegate via the application's Python manager,
-  // mirroring the Pipeline-creator registration in
-  // ``qSlicerLiverResectionsModule::setup()``.
+  // Ensure the singleton resectogram view node AND present the flattened
+  // strip alone in it (display-node + view-node + camera configuration; no
+  // custom DisplayableManager, ADR-0013 §5).  Both live on the Python
+  // ResectogramViewManager (LiverResectionsLib), the source of truth for the
+  // singleton-by-tag view node; ADR-0004 keeps the view-manager class on the
+  // Python side.  Delegate via the application's Python manager, mirroring the
+  // Pipeline-creator registration in ``qSlicerLiverResectionsModule::setup()``.
+  // The surface + resectogram display node are passed by MRML node ID and
+  // resolved back inside Python so no live C++ pointers cross the bridge.
   if (qSlicerApplication* app = qSlicerApplication::application())
   {
     if (qSlicerPythonManager* pythonManager = app->pythonManager())
     {
-      pythonManager->executeString("from LiverResectionsLib.ResectogramViewManager import ResectogramViewManager\n"
-                                   "ResectogramViewManager().ensureViewNode()\n");
+      QString surfaceID = surface->GetID();
+      QString displayID = displayNode ? QString(displayNode->GetID()) : QString();
+      // GetNodeByID("") resolves to None, so an absent display node needs no
+      // separate guard on the Python side.
+      pythonManager->executeString(QString("import slicer\n"
+                                           "from LiverResectionsLib.ResectogramViewManager import ResectogramViewManager\n"
+                                           "_mgr = ResectogramViewManager()\n"
+                                           "_view = _mgr.ensureViewNode()\n"
+                                           "_surface = slicer.mrmlScene.GetNodeByID('%1')\n"
+                                           "_display = slicer.mrmlScene.GetNodeByID('%2')\n"
+                                           "_mgr.configureView(_view, _display, _surface)\n")
+                                     .arg(surfaceID, displayID));
     }
   }
 
@@ -283,12 +299,28 @@ void qSlicerLiverResectionsModuleWidget::showResectogramWidget(vtkMRMLViewNode* 
     {
       controller->hide();
     }
+    // Fill the panel rather than sit left-aligned + letterboxed: an Expanding
+    // size policy in both axes lets the embedded view claim the panel width,
+    // and a non-trivial minimum height makes it read as a square-ish strip
+    // panel matching the square (u, v) domain (the mapper's MatRatio handles
+    // intrinsic anisotropy inside it) -- ADR-0023 §Stage-4 layout.
+    widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    widget->setMinimumHeight(250);
     widget->setMRMLScene(this->mrmlScene());
     widget->setMRMLViewNode(viewNode);
     d->ResectogramWidget = widget;
 
-    // Add it below the gated action in the Resection Planning panel layout.
-    if (QLayout* layout = d->ResectionPlanningCollapsibleButton->layout())
+    // Place it below the gated action in the Resection Planning panel grid
+    // (row 2 under the combo + button rows, spanning both columns).  Drop the
+    // competing outer vertical spacer so the grid gives its stretch to the
+    // view widget instead of an empty filler, letting the strip fill the
+    // panel -- ADR-0023 §Stage-4.
+    if (QGridLayout* grid = qobject_cast<QGridLayout*>(d->ResectionPlanningCollapsibleButton->layout()))
+    {
+      grid->addWidget(widget, 2, 0, 1, 2);
+      grid->setRowStretch(2, 1);
+    }
+    else if (QLayout* layout = d->ResectionPlanningCollapsibleButton->layout())
     {
       layout->addWidget(widget);
     }

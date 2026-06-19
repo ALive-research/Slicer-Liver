@@ -404,7 +404,7 @@ The earlier 2026-05-15 volumetry-framework note's claim that "the current resect
 - **`qMRMLNodeComboBox` is the binding primitive** for every node-management surface (classifications, volumetry partitions, etc.). Slicer-native; provides create/select/rename/delete for free.
 - **Hierarchical table + master-detail endpoints sub-table** for Stage 3 Manual (groupings → centerlines → endpoints). Reuses `qMRMLMarkupsControlPointTableWidget` from Slicer-core for the endpoints panel.
 - **`ctkCollapsibleButton`-organised module widgets**, compact density (Slicer-native), no parallel palette/theme (per [ADR-0010](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0010-accessibility-and-i18n.md)).
-- **No custom Slicer layouts** in v2.0 except the resectogram view (registered by `LiverResections/`, invoked from Stage 4).
+- **No custom Slicer layouts** in v2.0; the resectogram view is delivered as a panel-embedded `qMRMLThreeDWidget` bound to a dedicated singleton view node, invoked from Stage 4 (see the amendment "Resectogram view: panel-embedded, not a registered layout" below — this supersedes the earlier "registered custom layout" wording).
 
 ### Cross-stage dependencies
 
@@ -542,12 +542,57 @@ Reviewable invariants that signal this decision is honoured:
 - `Liver/Liver.py` contains no domain logic — only composition and navigation. Grep: `Liver/Liver.py` should not import any algorithm or compute helpers.
 - `vtkMRMLAbstractTerritoriesNode` exists as a C++ base class in `VascularTerritories/MRML/` (or equivalent). Subclasses `vtkMRMLStdCouinaudTerritoriesNode` and `vtkMRMLCustomTerritoriesNode` register via `RegisterNodeClass`.
 - `qSlicerLiverResections` Stage 4 detail panel surfaces an `[Open resectogram view]` action per active resection.
-- `LiverResections/` registers a custom Slicer layout for the resectogram view.
+- `LiverResections/` embeds a `qMRMLThreeDWidget` bound to the dedicated resectogram singleton view node in the Stage 4 panel (NOT a registered custom Slicer layout — see the amendment "Resectogram view: panel-embedded, not a registered layout").
 - The sidebar's per-stage state indicators are driven by a per-stage `isComplete()` query (or equivalent) defined by each stage's module.
 - No new module declares `TotalSegmentator` or `MONAILabel` as `EXTENSION_DEPENDS`. The first-use install path is implemented in `LiverSegmentation/Logic/` (and any other AI-consuming module).
 - `.lrp.json` schema header reads `"schemaVersion": 2` on writes; reader rejects v1 outright and tolerates absent surgeon-state blocks within v2 via documented defaults.
 - Subject Hierarchy folder names "Anatomy", "Vascular Territories", "Resections", "Volumetry" exist after typical workflow use. Grep for `SubjectHierarchyCreateFolder` (or upstream equivalent) in each module's logic.
 - The 2026-05-14 stitch and 2026-05-15 framework PKS notes carry "Superseded by ADR-0023" annotations on the relevant claims.
+
+## Amendment: Resectogram view — panel-embedded, not a registered layout
+
+The earlier wording above (and the Stage-4 detail-panel notes) described the
+resectogram view as "the one custom Slicer layout v2.0 ships, registered by
+`LiverResections/`". The implemented Stage-4 decision is narrower and avoids
+the custom-layout-registration mechanism entirely: the resectogram view is
+delivered as a **panel-embedded `qMRMLThreeDWidget`** parented into the
+`LiverResections` "Resection Planning" module panel and bound to a dedicated
+**singleton `vtkMRMLViewNode`** (`ResectogramViewManager`, carrying the
+`LiverResectogram` singleton tag). No `vtkMRMLLayoutNode` layout description is
+registered, and no slot in the central layout area is reserved.
+
+Triggering the gated `[Open resectogram view]` action:
+
+- ensures the singleton view node (`ResectogramViewManager.ensureViewNode()`);
+- restricts the `vtkMRMLResectogramDisplayNode` to that view via the
+  display-node view allowlist (`AddViewNodeID`), so the flattened `(u, v)`
+  strip composites into the dedicated view alone;
+- restricts the selected surface's own anatomy display nodes *away* from the
+  dedicated view, so the resection surface's 3D anatomy does not bleed into the
+  strip (unknown user-loaded anatomy isolation is deferred to the unified GUI
+  load step);
+- frames the view's camera to parallel projection looking straight down the
+  flattened-quad centre; and
+- embeds a single `qMRMLThreeDWidget` (Expanding size policy, non-trivial
+  minimum height) into the panel grid so the strip fills the panel.
+
+This stays within the no-custom-DisplayableManager rule
+([ADR-0013](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0013-layerdm-pipeline-pattern.md)
+§5): the dedicated view receives the upstream LayerDM displayable manager, and
+the registered `ResectogramPipeline` creator — tightened to fire only for the
+tagged view — dispatches the strip. The pattern follows the SlicerHyperProbe
+side-panel `qMRMLThreeDWidget` precedent rather than v1's retired
+`CoRenderer2D` sub-viewport.
+
+```mermaid
+flowchart LR
+  A["[Open resectogram view]<br/>(gated action)"] --> B["ResectogramViewManager<br/>singleton vtkMRMLViewNode"]
+  A --> C["vtkMRMLResectogramDisplayNode<br/>restricted TO the view"]
+  A --> D["selected surface display nodes<br/>restricted AWAY from the view"]
+  B --> E["qMRMLThreeDWidget<br/>embedded in the LiverResections panel"]
+  C --> F["ResectogramPipeline<br/>(LayerDM, tagged-view only)"]
+  E --> F
+```
 
 ## References
 
