@@ -49,6 +49,7 @@
 
 // Slicer includes
 #include <qMRMLNodeComboBox.h>
+#include <qMRMLThreeDView.h>
 #include <qMRMLThreeDViewControllerWidget.h>
 #include <qMRMLThreeDWidget.h>
 #include <qSlicerApplication.h>
@@ -61,6 +62,10 @@
 #include <vtkMRMLScalarVolumeNode.h>
 #include <vtkMRMLScene.h>
 #include <vtkMRMLViewNode.h>
+
+// VTK includes
+#include <vtkCamera.h>
+#include <vtkRenderer.h>
 
 // Qt includes
 #include <QAbstractButton>
@@ -80,6 +85,21 @@ namespace
 /// singleton tag to bind the embedded view widget.  Kept in lockstep with the
 /// Python constant.
 const char* const RESECTOGRAM_VIEW_SINGLETON_TAG = "LiverResectogram";
+
+/// Flattened-quad camera pose + flat background pushed straight onto the
+/// embedded view's renderer.  The standalone qMRMLThreeDWidget is not managed
+/// by the layout manager, so it does NOT honour the MRML camera node or the
+/// view-node background; these are applied at the renderer level (mirroring the
+/// arena's ``_apply_camera_and_background`` and the proven scenario constants
+/// in scenarios/Resectogram4x4BlurOff.py).  They frame the FIXED flattened
+/// (u, v) quad, independent of the resection's patient-space pose.
+const double RESECTOGRAM_CAMERA_POSITION[3] = { 0.0, 60.0, 300.0 };
+const double RESECTOGRAM_CAMERA_FOCAL_POINT[3] = { 0.0, 60.0, 0.0 };
+const double RESECTOGRAM_CAMERA_VIEW_UP[3] = { 0.0, 1.0, 0.0 };
+const double RESECTOGRAM_CAMERA_PARALLEL_SCALE = 70.0;
+const double RESECTOGRAM_CAMERA_VIEW_ANGLE = 45.0;
+const double RESECTOGRAM_CAMERA_CLIPPING_RANGE[2] = { 10.0, 800.0 };
+const double RESECTOGRAM_BACKGROUND_RGB[3] = { 0.0, 0.0, 0.0 };
 } // namespace
 
 //-----------------------------------------------------------------------------
@@ -96,6 +116,14 @@ public:
   /// node (created once on first open; shown/raised on re-open).  Parented
   /// into the module panel layout, so Qt owns its lifetime.
   QPointer<qMRMLThreeDWidget> ResectogramWidget;
+
+  /// The surface currently observed for the resectogram-render hook (its
+  /// control-point edits repaint the embedded strip).  Distinct from
+  /// ``ActiveResectionNode`` (which observes for the gating predicate): the
+  /// render hook is wired only once the embedded view exists, and is
+  /// re-targeted on re-open, so it is tracked separately for symmetric
+  /// RemoveObserver.
+  vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode> RenderObservedNode;
 };
 
 //-----------------------------------------------------------------------------
@@ -280,12 +308,32 @@ void qSlicerLiverResectionsModuleWidget::openResectogramView()
     return;
   }
   this->showResectogramWidget(viewNode);
+
+  // Repaint the embedded strip whenever the selected surface's control points
+  // move.  The MRML displayable managers honour the ViewNodeIDs restriction,
+  // but the STANDALONE embedded view does not repaint on the Pipeline's
+  // RequestRender, so observe the surface here and force a render on edit
+  // (ADR-0023 §Stage-4).
+  this->observeSurfaceForRender(surface);
 }
 
 //-----------------------------------------------------------------------------
 void qSlicerLiverResectionsModuleWidget::showResectogramWidget(vtkMRMLViewNode* viewNode)
 {
   Q_D(qSlicerLiverResectionsModuleWidget);
+
+  // Binding the singleton view node to the embedded qMRMLThreeDWidget
+  // (setMRMLViewNode) synchronously attaches the LayerDM displayable manager,
+  // which uploads the distance-map 3D texture for the gate-satisfied surface.
+  // That upload needs a realized GL context (see hasRealizedGLContext): under
+  // --no-main-window it would hard-crash, so skip the embed there.  The
+  // display-node + view-node ensure (the headless action invariants) already
+  // ran in openResectogramView before this call; the embed + framing is the
+  // orchestrator's interactive :0 eyeball pass (ADR-0023 §Stage-4).
+  if (!this->hasRealizedGLContext())
+  {
+    return;
+  }
 
   // Create the embedded view widget exactly once (idempotent re-open).  Bind
   // it to the singleton view node; the controller chrome is hidden so the
@@ -335,4 +383,102 @@ void qSlicerLiverResectionsModuleWidget::showResectogramWidget(vtkMRMLViewNode* 
 
   d->ResectogramWidget->show();
   d->ResectogramWidget->raise();
+
+  // The standalone embedded view is not managed by the layout manager, so it
+  // ignores the MRML camera node + view-node background the Python
+  // configureView set.  Push the flattened-quad pose + flat background onto
+  // the renderer directly (mirrors the arena), then repaint.
+  this->poseEmbeddedRenderer();
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerLiverResectionsModuleWidget::poseEmbeddedRenderer()
+{
+  Q_D(qSlicerLiverResectionsModuleWidget);
+
+  if (!d->ResectogramWidget || !this->hasRealizedGLContext())
+  {
+    return;
+  }
+
+  qMRMLThreeDView* view = d->ResectogramWidget->threeDView();
+  if (!view)
+  {
+    return;
+  }
+  vtkRenderer* renderer = view->renderer();
+  if (!renderer)
+  {
+    return;
+  }
+
+  // Camera pose onto the renderer's ACTIVE camera (not the MRML camera node,
+  // which the standalone view ignores).  Parallel projection framing the fixed
+  // flattened (u, v) quad -- independent of the resection's patient-space pose.
+  vtkCamera* camera = renderer->GetActiveCamera();
+  if (camera)
+  {
+    camera->SetPosition(RESECTOGRAM_CAMERA_POSITION[0], RESECTOGRAM_CAMERA_POSITION[1], RESECTOGRAM_CAMERA_POSITION[2]);
+    camera->SetFocalPoint(RESECTOGRAM_CAMERA_FOCAL_POINT[0], RESECTOGRAM_CAMERA_FOCAL_POINT[1], RESECTOGRAM_CAMERA_FOCAL_POINT[2]);
+    camera->SetViewUp(RESECTOGRAM_CAMERA_VIEW_UP[0], RESECTOGRAM_CAMERA_VIEW_UP[1], RESECTOGRAM_CAMERA_VIEW_UP[2]);
+    camera->ParallelProjectionOn();
+    camera->SetParallelScale(RESECTOGRAM_CAMERA_PARALLEL_SCALE);
+    camera->SetViewAngle(RESECTOGRAM_CAMERA_VIEW_ANGLE);
+    camera->SetClippingRange(RESECTOGRAM_CAMERA_CLIPPING_RANGE[0], RESECTOGRAM_CAMERA_CLIPPING_RANGE[1]);
+  }
+
+  // Flat background onto the renderer (the blue gradient is the default 3D
+  // background the standalone view keeps unless overridden here).
+  renderer->SetBackground(RESECTOGRAM_BACKGROUND_RGB[0], RESECTOGRAM_BACKGROUND_RGB[1], RESECTOGRAM_BACKGROUND_RGB[2]);
+  renderer->SetBackground2(RESECTOGRAM_BACKGROUND_RGB[0], RESECTOGRAM_BACKGROUND_RGB[1], RESECTOGRAM_BACKGROUND_RGB[2]);
+
+  view->forceRender();
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerLiverResectionsModuleWidget::observeSurfaceForRender(vtkMRMLMarkupsBezierSurfaceNode* surface)
+{
+  Q_D(qSlicerLiverResectionsModuleWidget);
+
+  if (d->RenderObservedNode == surface)
+  {
+    return;
+  }
+
+  // Symmetric removal of the prior observer before re-targeting, so a stale
+  // surface never repaints the strip.
+  this->qvtkDisconnect(d->RenderObservedNode, vtkCommand::ModifiedEvent, this, SLOT(scheduleResectogramRender()));
+  this->qvtkDisconnect(d->RenderObservedNode, vtkMRMLMarkupsNode::PointModifiedEvent, this, SLOT(scheduleResectogramRender()));
+
+  d->RenderObservedNode = surface;
+  if (surface)
+  {
+    this->qvtkConnect(surface, vtkCommand::ModifiedEvent, this, SLOT(scheduleResectogramRender()));
+    this->qvtkConnect(surface, vtkMRMLMarkupsNode::PointModifiedEvent, this, SLOT(scheduleResectogramRender()));
+  }
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerLiverResectionsModuleWidget::scheduleResectogramRender()
+{
+  Q_D(qSlicerLiverResectionsModuleWidget);
+
+  // Same realized-GL-context requirement as the embed (hasRealizedGLContext):
+  // forcing a render drives the distance-map texture upload; no live view to
+  // repaint without one.
+  if (!d->ResectogramWidget || !this->hasRealizedGLContext())
+  {
+    return;
+  }
+  if (qMRMLThreeDView* view = d->ResectogramWidget->threeDView())
+  {
+    view->forceRender();
+  }
+}
+
+//-----------------------------------------------------------------------------
+bool qSlicerLiverResectionsModuleWidget::hasRealizedGLContext() const
+{
+  qSlicerApplication* app = qSlicerApplication::application();
+  return app != nullptr && app->mainWindow() != nullptr;
 }

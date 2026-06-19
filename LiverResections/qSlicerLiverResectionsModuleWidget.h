@@ -102,6 +102,12 @@ protected slots:
   /// computing a distance map flips the button live).
   void updateOpenActionState();
 
+  /// Repaint the embedded resectogram view.  Wired to the active surface's
+  /// PointModifiedEvent / ModifiedEvent so a control-point edit updates the
+  /// flattened strip live (the standalone embedded view does not repaint on
+  /// the Pipeline's RequestRender on its own; ADR-0023 §Stage-4).
+  void scheduleResectogramRender();
+
 protected:
   void setup() override;
 
@@ -110,6 +116,25 @@ protected:
   /// show/raise it.  Idempotent: re-invoking re-targets and re-shows the
   /// existing widget rather than adding a second.
   void showResectogramWidget(vtkMRMLViewNode* viewNode);
+
+  /// Push the flattened-quad camera pose + flat background straight onto the
+  /// embedded view's renderer.  The standalone qMRMLThreeDWidget is not
+  /// managed by the layout manager, so it does NOT honour the MRML camera /
+  /// view-node background; the renderer push is the load-bearing framing
+  /// (mirrors the arena's ``_apply_camera_and_background``; ADR-0023 §Stage-4).
+  void poseEmbeddedRenderer();
+
+  /// (Re)attach the reactivity observer so editing ``surface``'s control
+  /// points repaints the embedded strip.  Symmetric removal on re-target /
+  /// teardown so no stale observer fires.
+  void observeSurfaceForRender(vtkMRMLMarkupsBezierSurfaceNode* surface);
+
+  /// Whether a realized GL context is available (a shown main window).  The
+  /// embed binding + renderer push + forced render all drive the distance-map
+  /// 3D texture upload, which dereferences live GL entry points and crashes
+  /// without one (the --no-main-window launched harness); the framing is the
+  /// orchestrator's interactive :0 eyeball pass (ADR-0023 §Stage-4).
+  bool hasRealizedGLContext() const;
 
 protected:
   QScopedPointer<qSlicerLiverResectionsModuleWidgetPrivate> d_ptr;

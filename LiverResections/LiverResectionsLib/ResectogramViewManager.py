@@ -132,13 +132,16 @@ class ResectogramViewManager:
           ViewNodeIDs list is exactly ``[viewNode]`` (an EMPTY list means
           "all views").
 
-        * RESTRICT THE SELECTED SURFACE AWAY FROM THE VIEW.  Each of the
-          ``surface``'s OWN (non-resectogram) display nodes is restricted to
-          the existing anatomy view(s) and away from the resectogram view, so
-          the resection surface's 3D anatomy does not bleed into the flattened
-          strip.  UNKNOWN user-loaded anatomy (parenchyma / other nodes) is
-          NOT enumerated or isolated here -- that is deferred to the unified
-          GUI load step.
+        * RESTRICT ALL ANATOMY AWAY FROM THE VIEW.  EVERY displayable node's
+          (non-resectogram) display nodes in the scene -- the selected
+          ``surface`` AND any other anatomy (parenchyma, other models /
+          markups / volumes) -- is restricted to the existing anatomy view(s)
+          and away from the resectogram view, so no 3D anatomy bleeds into the
+          flattened strip.  The standalone embedded ``qMRMLThreeDWidget``
+          honours the MRML ViewNodeIDs allowlist (it is the displayable
+          managers, not the camera/background, that read it), so this is the
+          correct layer for the isolation.  Mirrors the arena's
+          ``_restrict_display_to_view`` over every anatomy display node.
 
         * FRAME THE CAMERA.  The view's camera node is set to PARALLEL
           projection looking straight down the flattened ``(u, v)`` quad,
@@ -161,49 +164,57 @@ class ResectogramViewManager:
             displayNode.RemoveAllViewNodeIDs()
             displayNode.AddViewNodeID(resectogramViewID)
 
-        self._restrictSurfaceAwayFromView(slicer, surface, resectogramViewID)
+        self._restrictAnatomyAwayFromView(slicer, resectogramViewID)
         self._frameCamera(slicer, viewNode, displayNode)
 
     @staticmethod
-    def _restrictSurfaceAwayFromView(  # noqa: N802 - Slicer/Qt verb convention
-        slicer: Any, surface: Any, resectogramViewID: str
+    def _restrictAnatomyAwayFromView(  # noqa: N802 - Slicer/Qt verb convention
+        slicer: Any, resectogramViewID: str
     ) -> None:
-        """Restrict ``surface``'s own display nodes away from the strip view.
+        """Restrict EVERY non-resectogram display node away from the strip view.
 
-        Each non-resectogram display node is bound to the current anatomy
-        view(s) excluding the resectogram view.  A display node left at the
-        default EMPTY ViewNodeIDs ("all views") would still draw in the
-        resectogram view, so the list is made NON-EMPTY and the resectogram
-        view ID is excluded.  Falls back to binding every anatomy view present
-        so the surface stays visible somewhere even when it had no prior
-        restriction.
+        Walks every ``vtkMRMLDisplayableNode`` in the scene and restricts each
+        of its non-resectogram display nodes to the anatomy view(s) excluding
+        the resectogram view, so no anatomy (the selected surface, the
+        parenchyma, or any other loaded node) bleeds into the flattened strip.
+        A display node left at the default EMPTY ViewNodeIDs ("all views")
+        would still draw in the resectogram view, so the list is made NON-EMPTY
+        and the resectogram view ID is excluded.  Falls back to binding every
+        anatomy view present so a node with no prior restriction stays visible
+        somewhere.  This is the MRML-level half of the no-overlap contract
+        (ADR-0023 §Stage-4); the displayable managers honour ViewNodeIDs even
+        for the standalone embedded view (unlike the camera/background, which
+        it ignores).
         """
-        if surface is None:
-            return
-
+        scene = slicer.mrmlScene
         anatomyViewIDs = ResectogramViewManager._anatomyViewNodeIDs(
             slicer, resectogramViewID
         )
 
-        for index in range(surface.GetNumberOfDisplayNodes()):
-            display = surface.GetNthDisplayNode(index)
-            if display is None or display.IsA("vtkMRMLResectogramDisplayNode"):
+        count = scene.GetNumberOfNodesByClass("vtkMRMLDisplayableNode")
+        for index in range(count):
+            node = scene.GetNthNodeByClass(index, "vtkMRMLDisplayableNode")
+            if node is None:
                 continue
+            for dIndex in range(node.GetNumberOfDisplayNodes()):
+                display = node.GetNthDisplayNode(dIndex)
+                if display is None or display.IsA("vtkMRMLResectogramDisplayNode"):
+                    continue
 
-            existing = [
-                display.GetNthViewNodeID(i)
-                for i in range(display.GetNumberOfViewNodeIDs())
-            ]
-            # Drop the resectogram view if it was previously allowed; keep any
-            # other explicit restriction the surface already carried.
-            kept = [
-                viewID for viewID in existing if viewID != resectogramViewID
-            ]
-            target = kept if kept else anatomyViewIDs
+                existing = [
+                    display.GetNthViewNodeID(i)
+                    for i in range(display.GetNumberOfViewNodeIDs())
+                ]
+                # Drop the resectogram view if it was previously allowed; keep
+                # any other explicit restriction the node already carried.
+                kept = [
+                    viewID for viewID in existing if viewID != resectogramViewID
+                ]
+                target = kept if kept else anatomyViewIDs
 
-            display.RemoveAllViewNodeIDs()
-            for viewID in target:
-                display.AddViewNodeID(viewID)
+                display.RemoveAllViewNodeIDs()
+                for viewID in target:
+                    display.AddViewNodeID(viewID)
 
     @staticmethod
     def _anatomyViewNodeIDs(  # noqa: N802 - Slicer/Qt verb convention
