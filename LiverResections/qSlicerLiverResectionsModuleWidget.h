@@ -46,8 +46,10 @@
 #include "qSlicerLiverResectionsModuleExport.h"
 
 class qMRMLNodeComboBox;
+class qMRMLThreeDWidget;
 class QAbstractButton;
 class vtkMRMLNode;
+class vtkMRMLViewNode;
 class vtkMRMLMarkupsBezierSurfaceNode;
 class qSlicerLiverResectionsModuleWidgetPrivate;
 
@@ -60,6 +62,13 @@ class qSlicerLiverResectionsModuleWidgetPrivate;
 /// ensures the singleton resectogram view node via the Python
 /// ``ResectogramViewManager`` (LiverResectionsLib).  No custom displayable
 /// manager (ADR-0013 §5).
+///
+/// Triggering also embeds a single ``qMRMLThreeDWidget`` bound to that
+/// singleton view node into this module's side panel (the SlicerHyperProbe
+/// ``create_three_d_widget`` precedent), so the LayerDM ``ResectogramPipeline``
+/// composites the flattened strip in a panel-local view rather than a
+/// main-area Slicer layout (ADR-0023 §Stage-4).  Idempotent: re-triggering
+/// shows/raises the existing widget instead of adding a second.
 class Q_SLICER_QTMODULES_LIVERRESECTIONS_EXPORT qSlicerLiverResectionsModuleWidget : public qSlicerAbstractModuleWidget
 {
   Q_OBJECT
@@ -95,6 +104,12 @@ protected slots:
 
 protected:
   void setup() override;
+
+  /// Embed (create once) the single ``qMRMLThreeDWidget`` bound to the
+  /// resectogram singleton ``viewNode`` into this module's panel, then
+  /// show/raise it.  Idempotent: re-invoking re-targets and re-shows the
+  /// existing widget rather than adding a second.
+  void showResectogramWidget(vtkMRMLViewNode* viewNode);
 
 protected:
   QScopedPointer<qSlicerLiverResectionsModuleWidgetPrivate> d_ptr;
