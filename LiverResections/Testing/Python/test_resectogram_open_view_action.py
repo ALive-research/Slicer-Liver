@@ -127,10 +127,20 @@ OPEN_BUTTON_OBJECT_NAME = "OpenResectogramViewButton"
 
 
 def _purge_resectogram_singleton_view():
-    """Remove any view node carrying the resectogram singleton tag.
+    """Remove the resectogram singleton view node AND its auto-created camera.
 
     No-op under bare pytest (no ``slicer``) or before the manager is
     importable.
+
+    Beyond the singleton VIEW node: ``GetViewActiveCameraNode(view)`` (the
+    cameras-logic accessor the framing path calls) AUTO-CREATES a
+    ``vtkMRMLCameraNode`` whose ``ActiveTag`` is the resectogram view, and that
+    camera node SURVIVES ``vtkMRMLScene.Clear(0)`` (the cameras logic re-pairs
+    it with the surviving singleton view).  Left behind it trips this
+    directory's ``_launched_scene_cleanup`` leak-check and pollutes a
+    ``count == 0`` precondition -- so reclaim the paired camera node here too,
+    BEFORE the view node it points at, so ``-k presentation`` alone does not
+    ERROR on a leaked camera.
     """
     try:
         import slicer  # type: ignore[import-not-found]
@@ -142,7 +152,9 @@ def _purge_resectogram_singleton_view():
     scene = getattr(slicer, "mrmlScene", None)
     if scene is None:
         return
-    stale = []
+
+    stale_views = []
+    stale_view_ids = set()
     total = scene.GetNumberOfNodesByClass(VIEW_NODE_CLASS)
     for index in range(total):
         node = scene.GetNthNodeByClass(index, VIEW_NODE_CLASS)
@@ -150,8 +162,22 @@ def _purge_resectogram_singleton_view():
             node is not None
             and node.GetSingletonTag() == RESECTOGRAM_VIEW_SINGLETON_TAG
         ):
-            stale.append(node)
-    for node in stale:
+            stale_views.append(node)
+            stale_view_ids.add(node.GetID())
+
+    # Reclaim any camera node paired (ActiveTag) with a resectogram view first,
+    # so removing the view does not leave an orphan camera the cameras logic
+    # re-pairs with the surviving singleton.
+    camera_total = scene.GetNumberOfNodesByClass("vtkMRMLCameraNode")
+    stale_cameras = []
+    for index in range(camera_total):
+        camera = scene.GetNthNodeByClass(index, "vtkMRMLCameraNode")
+        if camera is not None and camera.GetActiveTag() in stale_view_ids:
+            stale_cameras.append(camera)
+    for camera in stale_cameras:
+        scene.RemoveNode(camera)
+
+    for node in stale_views:
         scene.RemoveNode(node)
 
 
