@@ -135,6 +135,32 @@ if(DEFINED Python3_EXECUTABLE)
     set_tests_properties(LiverResections_ring_extraction_on_commit PROPERTIES
       LABELS "pytest;module-layer;LiverResections;ring-extraction"
     )
+
+    # T3-g3 -- gated "Open resectogram view" action on the net-new
+    # qSlicerLiverResectionsModuleWidget (ADR-0023 §Stage-4).  Three
+    # invariants: (1) the action enabled-iff a vtkMRMLMarkupsBezierSurfaceNode
+    # is selected AND GetDistanceMapVolumeNode() is non-null
+    # (state-orthogonal, NOT gated on ADR-0019 ResectionState); (2) triggering
+    # ensures EXACTLY ONE vtkMRMLResectogramDisplayNode on the surface,
+    # idempotent on re-trigger; (3) it ensures the singleton resectogram view
+    # node via ResectogramViewManager.ensureViewNode(), idempotent on
+    # re-trigger.  Reaching the GUI needs widgetRepresentation() under a
+    # launched qSlicerApplication, so it runs green under the launched-Slicer
+    # `pytest_launched` row (Liver/Testing/Python; this dir is already on its
+    # test roots) and SKIPS CLEANLY here under bare pytest (no qt.QWidget /
+    # no widget rep).  RED / skip-pending until the implementer lands the
+    # widget + the gating predicate + the display-node/view-node ensure path
+    # (ADR-0027 §Conformance: the skip lifts at the implementation commit).
+    add_test(
+      NAME LiverResections_resectogram_open_view_action
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_resectogram_open_view_action.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_resectogram_open_view_action PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;resectogram;stage4"
+    )
   else()
     message(STATUS
       "Slicer-Liver: pytest not importable from ${Python3_EXECUTABLE}; "
