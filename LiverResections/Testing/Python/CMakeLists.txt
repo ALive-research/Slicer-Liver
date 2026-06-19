@@ -161,6 +161,34 @@ if(DEFINED Python3_EXECUTABLE)
     set_tests_properties(LiverResections_resectogram_open_view_action PROPERTIES
       LABELS "pytest;module-layer;LiverResections;resectogram;stage4"
     )
+
+    # T3-g3c -- presentation fixes for the "Open resectogram view" action
+    # (ADR-0023 §Stage-4; ADR-0025 §Context; ADR-0013 §5 -- config, no custom
+    # DM).  Four invariants extending the g3/g3b ensure+embed surface, all
+    # GPU-free: (A) the vtkMRMLResectogramDisplayNode is restricted TO the
+    # singleton resectogram view (ViewNodeIDs == [view ID]); (B) the selected
+    # surface's own display node(s) are restricted AWAY from that view
+    # (owned-anatomy restriction; unknown-anatomy isolation deferred); (C) the
+    # view's vtkMRMLCameraNode is PARALLEL projection framed on the flattened
+    # (u,v) quad centre; (D) the embedded qMRMLThreeDWidget has Expanding
+    # horizontal size policy + a non-trivial minimumHeight so it fills the
+    # panel.  A--C run under the launched-Slicer `pytest_launched` row
+    # (Liver/Testing/Python; this dir is already on its test roots); D is gated
+    # behind a main window (the embed needs a realized GL context) exactly as
+    # g3b's embed test is.  SKIPS CLEANLY here under bare pytest (no qt.QWidget
+    # / no widget rep).  RED / skip-pending until the implementer lands the
+    # display-node restriction + the frameCamera path + the Expanding layout
+    # (ADR-0027 §Conformance: the skip lifts at the implementation commit).
+    add_test(
+      NAME LiverResections_resectogram_open_view_presentation
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_resectogram_open_view_presentation.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_resectogram_open_view_presentation PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;resectogram;stage4"
+    )
   else()
     message(STATUS
       "Slicer-Liver: pytest not importable from ${Python3_EXECUTABLE}; "
