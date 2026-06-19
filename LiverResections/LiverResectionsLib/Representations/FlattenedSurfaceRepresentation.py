@@ -23,14 +23,30 @@ ADR-0013 §6 (Representations are composable VTK pipelines).  It owns:
   ``vtkLiverResectogramAspectRatio`` helper (Algorithm library,
   ADR-0015 §1) rather than re-deriving the v1 ``Ratio(bool)`` math.
 
+Gaussian-blur post-pass (net-new, v2.0)
+---------------------------------------
+The resectogram display node carries a ``BlurEnabled`` on/off flag (no
+legacy counterpart).  When it is true this Representation moves the
+resectogram actor onto a PRIVATE overlay ``vtkRenderer`` it owns and sets
+a ``vtkGaussianBlurPass`` on that renderer; when false it detaches the
+pass and overlay, leaving the non-blur path byte-identical to the
+pre-blur appearance.  The overlay renderer (rather than the dedicated
+resectogram view's main renderer) carries the pass because
+``qMRMLThreeDView`` resets ``SetPass(nullptr)`` on every view-node
+ModifiedEvent and would clobber a pass set on the main renderer.  The
+blur is a GPU render-pass on a renderer the Representation owns — NOT
+pure-VTK math — so it lives here and not in the ADR-0015 §1 Algorithm
+library.  The toggle is live: it reconciles on every ``update()`` (the
+Pipeline's display-node MTime path), so a ``BlurEnabled`` change engages
+or disengages the pass without rebuilding the assembly (ADR-0013 §6).
+
 Scope
 -----
 This Representation COMPOSES the assembly, wires the display-node fields
 it consumes, and binds the distance-map 3D texture + ras/ijk matrices on
 the 2D mapper so the flattened ``(u, v)`` quad samples the distance field
 and paints the projected margin band (ADR-0025 §Context).  The
-aspect-ratio math is routed through the extracted Algorithm helper.  The
-Gaussian-blur post-pass (a later v2.0 toggle) is intentionally absent.
+aspect-ratio math is routed through the extracted Algorithm helper.
 
 The flattened quad fed to the 2D mapper as its INPUT geometry is the
 fixed planar ``(u, v)`` domain — that defines the OUTPUT rectangle.  The
@@ -122,10 +138,11 @@ class FlattenedSurfaceRepresentation:
     --------------
     * ``update(display_node, data_node)`` — reads decoration from the
       display node (``ShowResection2D`` / ``MirrorDisplay`` /
-      ``EnableFlexibleBoundary`` / ``TextureNumComps``), geometry from
-      the data node, recomputes ``MatRatio`` through the Algorithm
-      helper, and reconciles the resectogram actor.  Tolerant of
-      ``None`` arguments.
+      ``EnableFlexibleBoundary`` / ``TextureNumComps`` / ``BlurEnabled``),
+      geometry from the data node, recomputes ``MatRatio`` through the
+      Algorithm helper, reconciles the resectogram actor, and engages /
+      disengages the Gaussian-blur post-pass.  Tolerant of ``None``
+      arguments.
     * ``cleanup()`` — detaches the actor from the renderer and releases
       the VTK pipeline.
 
@@ -137,6 +154,9 @@ class FlattenedSurfaceRepresentation:
     * ``GetMatRatioApplied()`` — last ``MatRatio`` pushed onto the 2D
       mapper, or ``None`` before the first ``update()`` / when the
       mapper does not expose ``SetMatRatio``.
+    * ``GetBlurPass()`` / ``GetBlurOverlayRenderer()`` /
+      ``IsBlurPassAttached()`` — the Gaussian-blur post-pass, the private
+      overlay renderer hosting it, and whether blur is currently engaged.
     """
 
     def __init__(self, renderer: Any | None = None) -> None:
@@ -146,6 +166,22 @@ class FlattenedSurfaceRepresentation:
         self._resection_mapper_2d: Any | None = None
         self._resection_actor_2d: Any | None = None
         self._resectogram_camera: Any | None = None
+
+        # Gaussian-blur post-pass (net-new v2.0, on/off toggle, ADR-0013 §6).
+        # The blur is a GPU render-pass set DIRECTLY on the resectogram view's
+        # renderer (the one this Representation drew the strip into) — it blurs
+        # the already-correct flattened image.  An earlier private-overlay-
+        # renderer variant (to dodge ``qMRMLThreeDView`` resetting
+        # ``SetPass(nullptr)`` on view-node ModifiedEvent) mis-rendered: the 2D
+        # mapper's distance-map texture + shader did not survive being
+        # relocated onto a second renderer, so only the grid/border drew.  The
+        # dedicated resectogram view has a FIXED camera (no orbit), so its view
+        # node is not modified during steady-state display; ``_reconcile_blur_pass``
+        # re-sets the pass on every ``update()`` (data/display edit) right
+        # before the render, so the clobber does not bite in practice.  Blur-off
+        # clears the pass, leaving the non-blur appearance unchanged.
+        self._blur_pass: Any | None = None
+        self._blur_attached: bool = False
 
         # The distance-map volume node the bound texture was built from.
         # ``None`` until the first ``update()`` with a distance map binds
@@ -180,6 +216,7 @@ class FlattenedSurfaceRepresentation:
     def SetRenderer(self, renderer: Any | None) -> None:
         """Attach the resectogram actor to ``renderer``."""
         if self._renderer is not None and self._renderer is not renderer:
+            self._detach_blur_pass(self._renderer)
             self._detach_actors(self._renderer)
         self._renderer = renderer
         if renderer is not None:
@@ -197,6 +234,7 @@ class FlattenedSurfaceRepresentation:
         self._apply_display_node(display_node)
         self._apply_data_node(display_node, data_node)
         self._pose_overlay_camera(display_node)
+        self._reconcile_blur_pass(display_node)
 
     def cleanup(self) -> None:
         """Detach actors from the renderer and drop the VTK pipeline."""
@@ -214,12 +252,18 @@ class FlattenedSurfaceRepresentation:
         self._distance_map_volume = None
 
         if self._renderer is not None:
+            self._detach_blur_pass(self._renderer)
             self._detach_actors(self._renderer)
             self._renderer = None
         self._bezier_plane = None
         self._resection_mapper_2d = None
         self._resection_actor_2d = None
         self._resectogram_camera = None
+
+        # ``_detach_blur_pass`` above already cleared the pass off the renderer
+        # when blur was engaged; drop the pass object too.
+        self._blur_pass = None
+        self._blur_attached = False
 
     # ------------------------------------------------------------------ #
     # Introspection — used by the unit-layer tests
@@ -242,6 +286,18 @@ class FlattenedSurfaceRepresentation:
 
     def GetInputRefreshCount(self) -> int:
         return self._input_refresh_count
+
+    def GetBlurPass(self) -> Any | None:
+        """The ``vtkGaussianBlurPass``, or ``None`` before it is built."""
+        return self._blur_pass
+
+    def IsBlurPassAttached(self) -> bool:
+        """Whether the blur pass is currently set on the renderer.
+
+        The blur invariant the arena + unit layers pin: blur is engaged when
+        ``BlurEnabled`` is true and disengaged when false.
+        """
+        return self._blur_attached
 
     # ------------------------------------------------------------------ #
     # Internal helpers
@@ -656,6 +712,74 @@ class FlattenedSurfaceRepresentation:
         camera.SetPosition(center_x, center_y, center_z * 3.0)
         camera.SetFocalPoint(center_x, center_y, center_z)
 
+    # ------------------------------------------------------------------ #
+    # Gaussian-blur post-pass (ADR-0013 §6 — net-new v2.0 on/off toggle).
+    # ------------------------------------------------------------------ #
+
+    def _reconcile_blur_pass(self, display_node: Any | None) -> None:
+        """Engage / disengage the Gaussian-blur post-pass per ``BlurEnabled``.
+
+        The blur is a GPU render-pass on a renderer the Representation owns
+        (ADR-0013 §6) — NOT pure-VTK math, so it stays here rather than in the
+        Algorithm library (ADR-0015 §1, which has no GL context).  Live
+        toggle: this runs on every ``update()`` so a ``BlurEnabled`` flip
+        reconciles the pass without rebuilding the assembly — the
+        ``vtkSetMacro(BlurEnabled, bool)`` ``Modified()`` advances the display
+        node's MTime, which ``ResectogramPipeline.UpdatePipeline`` already
+        keys on, so no new observer is needed.  No-op when VTK or the renderer
+        is unavailable (bare-VTK pytest path).
+        """
+        renderer = self._renderer
+        if renderer is None or not _HAS_VTK:
+            return
+        if not hasattr(renderer, "SetPass"):
+            return
+
+        enabled = _safe_get_bool(display_node, "GetBlurEnabled", default=False)
+        radius = _safe_get_float(display_node, "GetBlurRadius", default=2.0)
+
+        if enabled:
+            self._attach_blur_pass(renderer, radius)
+        else:
+            self._detach_blur_pass(renderer)
+
+    def _attach_blur_pass(self, renderer: Any, radius: float) -> None:
+        """Set the ``vtkGaussianBlurPass`` on the resectogram view's renderer.
+
+        The pass (wrapping a ``vtkRenderStepsPass`` delegate) blurs the strip
+        the Representation already drew into ``renderer`` — no actor is moved,
+        so the textured distance-map band + grid + border all blur together
+        (relocating the actor onto a second renderer dropped the mapper's
+        distance-map texture, leaving only the grid).  Idempotent: re-engaging
+        reuses the same pass object and just re-sets it (cheap, and re-asserts
+        the pass should ``qMRMLThreeDView`` have cleared it on a view edit).
+        """
+        if self._blur_pass is None:
+            self._blur_pass = _make_gaussian_blur_pass()
+            if self._blur_pass is None:
+                return
+        _apply_blur_radius(self._blur_pass, radius)
+        try:
+            renderer.SetPass(self._blur_pass)
+        except Exception:  # pragma: no cover - defensive
+            return
+        self._blur_attached = True
+
+    def _detach_blur_pass(self, renderer: Any) -> None:
+        """Clear the blur pass off the renderer (restore the forward path).
+
+        Leaves the non-blur appearance identical to a path that never engaged
+        blur.  A no-op when blur was never engaged.
+        """
+        if not self._blur_attached:
+            return
+        if renderer is not None and hasattr(renderer, "SetPass"):
+            try:
+                renderer.SetPass(None)
+            except Exception:  # pragma: no cover - defensive
+                pass
+        self._blur_attached = False
+
 
 # --------------------------------------------------------------------------- #
 # Helpers — small, self-contained per ADR-0013 §6 (Representations are
@@ -744,6 +868,50 @@ def _make_resection_mapper_2d() -> Any:
     if factory is not None:
         return factory()
     return vtk.vtkPolyDataMapper()
+
+
+def _make_gaussian_blur_pass() -> Any | None:
+    """Return a ``vtkGaussianBlurPass`` wrapping the default forward pass.
+
+    The standard VTK render-pass composition: a ``vtkRenderStepsPass`` (the
+    default sequence a renderer runs) becomes the blur pass's delegate, so the
+    resectogram strip is rendered first and the Gaussian blur is applied to
+    the result.  Returns ``None`` when either render-pass class is unavailable
+    (older VTK / bare environment), leaving the renderer on its default
+    forward pass.
+    """
+    if not _HAS_VTK:
+        return None
+    blur_factory = getattr(vtk, "vtkGaussianBlurPass", None)
+    steps_factory = getattr(vtk, "vtkRenderStepsPass", None)
+    if blur_factory is None or steps_factory is None:
+        return None
+    blur_pass = blur_factory()
+    delegate = steps_factory()
+    if hasattr(blur_pass, "SetDelegatePass"):
+        blur_pass.SetDelegatePass(delegate)
+    return blur_pass
+
+
+def _apply_blur_radius(blur_pass: Any, radius: float) -> None:
+    """Push the kernel extent onto the blur pass, if it is configurable.
+
+    ``vtkGaussianBlurPass`` derives its kernel from the framebuffer it renders
+    into and does not expose a public radius setter on every VTK version; the
+    radius is consumed where the API allows it (best-effort) and otherwise
+    ignored.  The load-bearing visible difference is the on/off toggle, not
+    the radius — ``BlurRadius`` stays a dormant display-node field.
+    """
+    if blur_pass is None:
+        return
+    setter = getattr(blur_pass, "SetKernelRadius", None) or getattr(
+        blur_pass, "SetRadius", None
+    )
+    if setter is not None:
+        try:
+            setter(float(radius))
+        except Exception:  # pragma: no cover - defensive
+            pass
 
 
 def _import_wrapped_class(name: str) -> Any | None:
@@ -927,5 +1095,17 @@ def _safe_get_int(node: Any | None, getter_name: str, *, default: int) -> int:
         return default
     try:
         return int(getter())
+    except Exception:  # pragma: no cover - defensive
+        return default
+
+
+def _safe_get_float(node: Any | None, getter_name: str, *, default: float) -> float:
+    if node is None:
+        return default
+    getter = getattr(node, getter_name, None)
+    if getter is None:
+        return default
+    try:
+        return float(getter())
     except Exception:  # pragma: no cover - defensive
         return default

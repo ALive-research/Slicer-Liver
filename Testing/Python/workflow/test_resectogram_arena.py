@@ -813,6 +813,133 @@ def _bend_control_points(bezier) -> None:
         )
 
 
+
+def test_resectogram_blur_engages_pass() -> None:
+    """Engaging ``BlurEnabled`` MUST set a Gaussian-blur pass on the pipeline.
+
+    The on/off Gaussian-blur invariant (ADR-0027; ADR-0013 §6): rendering a
+    blur-ON resectogram through the real dedicated view + ResectogramPipeline
+    must leave a ``vtkGaussianBlurPass`` engaged on the FlattenedSurface
+    Representation (its reconcile sets the pass on the view's renderer).
+
+    This asserts the WIRING -- the pass object + that the reconcile engaged it
+    -- not rendered pixels.  The pixel-level softening is confirmed by the
+    maintainer's eyeball + the captured baseline; a cross-render pixel delta is
+    unreliable here because the dedicated resectogram view is a SINGLETON
+    shared across launched tests, so a prior widget's render can leak into a
+    pixel measurement.  The object wiring reflects THIS pipeline only, so it is
+    immune to that contamination.
+
+    GPU-gated: needs a real GL context + the registered LiverResections +
+    SlicerLayerDM modules, so it carries the software-GL + registration /
+    SlicerLayerDM (#460) skips; it SKIPS CLEANLY otherwise.
+    """
+    slicer = import_slicer_or_skip()
+    if slicer is None:
+        return
+    require_mrml_scene()
+    require_qt_widget()
+
+    registration_probe = slicer.mrmlScene.CreateNodeByClass(
+        "vtkMRMLResectogramDisplayNode"
+    )
+    if registration_probe is None:
+        pytest.skip(
+            "[arena-skip] vtkMRMLResectogramDisplayNode is not registered -- "
+            "the LiverResections module is not on the additional-module-paths. "
+            "Run via the pytest_launched CTest row."
+        )
+    registration_probe.UnRegister(None)
+
+    software_gl_skip = _software_gl_skip_reason()
+    if software_gl_skip is not None:
+        pytest.skip(software_gl_skip)
+
+    try:
+        from slicer import (  # type: ignore[import-not-found]
+            vtkMRMLLayerDisplayableManager,
+        )
+    except ImportError:
+        pytest.skip(
+            "[arena-skip] vtkMRMLLayerDisplayableManager is not importable -- "
+            "the upstream SlicerLayerDM extension is not on the launched path "
+            "(issue #460).  Run via pytest_launched with the LayerDM module "
+            "paths."
+        )
+    vtkMRMLLayerDisplayableManager.RegisterInDefaultViews()
+
+    scenario = _load_scenario("Resectogram4x4BlurOn")  # blur ON
+    meta = scenario.describe()
+    width, height = meta["viewport"]["size"]
+
+    resectogram_widget = None
+    try:
+        created_nodes = scenario.setup_scene()
+        bezier = created_nodes[0]
+        parenchyma = created_nodes[1]
+        resectogram_display = created_nodes[3]
+
+        from LiverResectionsLib.ResectogramViewManager import (  # type: ignore[import-not-found]
+            ResectogramViewManager,
+        )
+
+        scene_view_node = slicer.mrmlScene.AddNewNodeByClass(
+            "vtkMRMLViewNode", "BlurSceneView"
+        )
+        resectogram_view_node = ResectogramViewManager().ensureViewNode()
+        for display in _collect_anatomy_display_nodes(bezier, parenchyma):
+            _restrict_display_to_view(display, scene_view_node)
+        _restrict_display_to_view(resectogram_display, resectogram_view_node)
+
+        resectogram_widget = _build_view_widget(
+            slicer, slicer.mrmlScene, resectogram_view_node
+        )
+        scenario.setup_camera(resectogram_view_node)
+        scenario.setup_viewport(resectogram_view_node)
+        _apply_camera_and_background(_first_renderer(resectogram_widget), meta)
+        resectogram_widget.resize(width, height)
+        resectogram_widget.threeDView().renderWindow().SetSize(width, height)
+        resectogram_widget.threeDView().renderWindow().SetMultiSamples(0)
+        resectogram_widget.threeDView().forceRender()
+
+        manager = resectogram_widget.threeDView().displayableManagerByClassName(
+            "vtkMRMLLayerDisplayableManager"
+        )
+        assert manager is not None, (
+            "[arena] the resectogram view has no vtkMRMLLayerDisplayableManager "
+            "(SlicerLayerDM not loaded; issue #460)."
+        )
+        pipeline = manager.GetNodePipeline(resectogram_display)
+        assert pipeline is not None, (
+            "no pipeline dispatched for the resectogram display node "
+            "(ADR-0013 §5)."
+        )
+
+        # The scenario enabled blur; the pipeline must have reconciled a
+        # Gaussian-blur pass onto the flattened-surface Representation.
+        assert resectogram_display.GetBlurEnabled(), (
+            "the Resectogram4x4BlurOn scenario did not set BlurEnabled."
+        )
+        flattened = pipeline.GetFlattenedSurfaceRepresentation()
+        assert flattened is not None, (
+            "the ResectogramPipeline built no FlattenedSurfaceRepresentation "
+            "(ADR-0013 §6)."
+        )
+        assert flattened.IsBlurPassAttached(), (
+            "BlurEnabled is true but the FlattenedSurfaceRepresentation did not "
+            "engage the blur pass (ADR-0013 §6)."
+        )
+        blur_pass = flattened.GetBlurPass()
+        assert blur_pass is not None and blur_pass.IsA("vtkGaussianBlurPass"), (
+            "the engaged blur pass is not a vtkGaussianBlurPass."
+        )
+    finally:
+        if resectogram_widget is not None:
+            resectogram_widget.setMRMLScene(None)
+            resectogram_widget.deleteLater()
+        slicer.mrmlScene.Clear(0)
+
+
 def test_resectogram_is_coherent_with_surface() -> None:
     """Moving the surface's control points MUST change the flattened render.
 

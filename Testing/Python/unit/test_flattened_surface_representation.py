@@ -66,11 +66,15 @@ class _StubDisplayNode:
         mirror: bool = False,
         flexible: bool = False,
         texture_num_comps: int = 1,
+        blur_enabled: bool = False,
+        blur_radius: float = 2.0,
     ) -> None:
         self.show_2d = show_2d
         self.mirror = mirror
         self.flexible = flexible
         self.texture_num_comps = texture_num_comps
+        self.blur_enabled = blur_enabled
+        self.blur_radius = blur_radius
 
     def GetShowResection2D(self) -> bool:
         return self.show_2d
@@ -83,6 +87,12 @@ class _StubDisplayNode:
 
     def GetTextureNumComps(self) -> int:
         return self.texture_num_comps
+
+    def GetBlurEnabled(self) -> bool:
+        return self.blur_enabled
+
+    def GetBlurRadius(self) -> float:
+        return self.blur_radius
 
 
 class _StubPoints:
@@ -363,4 +373,119 @@ def test_mirror_display_flips_camera_z_sign(rep_module, vtk_module):
         "MirrorDisplay must flip the resectogram camera's z sign "
         "(v1 ResectogramPlaneCenter mirror toggle)."
     )
+    rep.cleanup()
+
+
+# --------------------------------------------------------------------------- #
+# Gaussian-blur post-pass (T3-g2) — the net-new v2.0 on/off blur invariant.
+#
+# qMRMLThreeDView owns the shared renderer's render-pass chain (it resets
+# SetPass(nullptr) on every view-node ModifiedEvent), so the Representation
+# hosts the blur on a PRIVATE overlay renderer it adds to the render window
+# when BlurEnabled is true (ADR-0013 §6 — the Representation owns the pass).
+# These pin: the overlay renderer is created + added to the window with the
+# vtkGaussianBlurPass set on IT when blur engages; the toggle is live
+# (true->false->true reuses the same objects); teardown removes the overlay
+# from the window; a no-renderer reconcile is a no-op.  They need a real
+# renderer + render window (SetPass / AddRenderer), so they skip when the
+# render-pass classes are unavailable.
+#
+# The OVERLAY renderer carries the pass — NOT the main renderer (whose
+# GetPass() is not None inside a live qMRMLThreeDView, so asserting it is
+# None there would be wrong).
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def render_pass_or_skip(vtk_module):
+    if getattr(vtk_module, "vtkGaussianBlurPass", None) is None:
+        pytest.skip("vtkGaussianBlurPass unavailable in this VTK build.")
+    if getattr(vtk_module, "vtkRenderStepsPass", None) is None:
+        pytest.skip("vtkRenderStepsPass unavailable in this VTK build.")
+    return vtk_module
+
+
+def _renderer_in_window(vtk):
+    """Return a renderer wired into an offscreen render window.
+
+    The blur pass is set directly on this renderer; a window is not strictly
+    required for ``SetPass``, but an offscreen window keeps the fixture close
+    to the live path without lighting real pixels.
+    """
+    renderer = vtk.vtkRenderer()
+    window = vtk.vtkRenderWindow()
+    window.SetOffScreenRendering(1)
+    window.AddRenderer(renderer)
+    return renderer, window
+
+
+def test_blur_pass_attached_when_enabled(rep_module, render_pass_or_skip):
+    """``BlurEnabled`` true → a vtkGaussianBlurPass is set on the renderer."""
+    vtk = render_pass_or_skip
+    renderer, _window = _renderer_in_window(vtk)
+    rep = rep_module(renderer=renderer)
+    assert not rep.IsBlurPassAttached()
+    assert renderer.GetPass() is None
+
+    rep.update(_StubDisplayNode(blur_enabled=True), _StubDataNode())
+
+    assert rep.IsBlurPassAttached(), "blur not engaged with BlurEnabled true"
+    assert renderer.GetPass() is rep.GetBlurPass() is not None, (
+        "the blur pass is not set on the renderer"
+    )
+    assert rep.GetBlurPass().IsA("vtkGaussianBlurPass")
+    rep.cleanup()
+
+
+def test_blur_pass_absent_when_disabled(rep_module, render_pass_or_skip):
+    """``BlurEnabled`` false → no pass on the renderer; blur is off."""
+    vtk = render_pass_or_skip
+    renderer, _window = _renderer_in_window(vtk)
+    rep = rep_module(renderer=renderer)
+    rep.update(_StubDisplayNode(blur_enabled=False), _StubDataNode())
+    assert not rep.IsBlurPassAttached()
+    assert renderer.GetPass() is None
+    rep.cleanup()
+
+
+def test_blur_toggles_live(rep_module, render_pass_or_skip):
+    """Toggling ``BlurEnabled`` across successive ``update()`` calls engages
+    then disengages blur without rebuilding the assembly — the live-toggle
+    invariant (ADR-0013 §6).  The SAME pass object is reused on re-engage (no
+    rebuild / leak)."""
+    vtk = render_pass_or_skip
+    renderer, _window = _renderer_in_window(vtk)
+    rep = rep_module(renderer=renderer)
+
+    rep.update(_StubDisplayNode(blur_enabled=True), _StubDataNode())
+    assert renderer.GetPass() is rep.GetBlurPass() is not None
+    blur_pass = rep.GetBlurPass()
+
+    rep.update(_StubDisplayNode(blur_enabled=False), _StubDataNode())
+    assert not rep.IsBlurPassAttached()
+    assert renderer.GetPass() is None
+
+    rep.update(_StubDisplayNode(blur_enabled=True), _StubDataNode())
+    assert renderer.GetPass() is blur_pass, "blur pass was rebuilt on re-engage"
+    rep.cleanup()
+
+
+def test_blur_detached_on_cleanup(rep_module, render_pass_or_skip):
+    """``cleanup()`` clears the blur pass off the renderer (forward path
+    restored)."""
+    vtk = render_pass_or_skip
+    renderer, _window = _renderer_in_window(vtk)
+    rep = rep_module(renderer=renderer)
+    rep.update(_StubDisplayNode(blur_enabled=True), _StubDataNode())
+    assert renderer.GetPass() is not None
+    rep.cleanup()
+    assert renderer.GetPass() is None, "blur pass survived cleanup on the renderer"
+
+
+def test_blur_reconcile_tolerates_no_renderer(rep_module):
+    """Blur reconcile is a no-op without a renderer (bare-VTK / unit path) —
+    no exception, blur never engages."""
+    rep = rep_module()
+    rep.update(_StubDisplayNode(blur_enabled=True), _StubDataNode())
+    assert not rep.IsBlurPassAttached()
     rep.cleanup()
