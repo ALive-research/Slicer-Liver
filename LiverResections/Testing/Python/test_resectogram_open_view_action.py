@@ -122,16 +122,78 @@ OPEN_BUTTON_OBJECT_NAME = "OpenResectogramViewButton"
 
 
 # --------------------------------------------------------------------------- #
+# Test isolation -- reclaim the resectogram singleton view node after each test.
+# --------------------------------------------------------------------------- #
+
+
+def _purge_resectogram_singleton_view():
+    """Remove any view node carrying the resectogram singleton tag.
+
+    No-op under bare pytest (no ``slicer``) or before the manager is
+    importable.
+    """
+    try:
+        import slicer  # type: ignore[import-not-found]
+        from LiverResectionsLib.ResectogramViewManager import (  # type: ignore[import-not-found]
+            RESECTOGRAM_VIEW_SINGLETON_TAG,
+        )
+    except Exception:  # pragma: no cover - bare-pytest / import-env dependent
+        return
+    scene = getattr(slicer, "mrmlScene", None)
+    if scene is None:
+        return
+    stale = []
+    total = scene.GetNumberOfNodesByClass(VIEW_NODE_CLASS)
+    for index in range(total):
+        node = scene.GetNthNodeByClass(index, VIEW_NODE_CLASS)
+        if (
+            node is not None
+            and node.GetSingletonTag() == RESECTOGRAM_VIEW_SINGLETON_TAG
+        ):
+            stale.append(node)
+    for node in stale:
+        scene.RemoveNode(node)
+
+
+@pytest.fixture(autouse=True)
+def _drop_resectogram_singleton_view():
+    """Reclaim the resectogram singleton view node around each test.
+
+    ``ResectogramViewManager.ensureViewNode()`` mints a ``vtkMRMLViewNode``
+    carrying a MRML ``SingletonTag``, which by design SURVIVES
+    ``vtkMRMLScene.Clear(0)``.  Left in place it (a) trips this directory's
+    ``_launched_scene_cleanup`` leak-check (``remaining <= baseline``) and
+    (b) pollutes a ``count == 0`` precondition.  Worse, a sibling test FILE
+    (the ``Testing/Python`` arena, which has no leak-check) can leak the same
+    singleton into the FIRST test here.  So purge it BOTH before the test (to
+    defend the precondition against an upstream leak) AND after (so this file
+    never leaks onward).  Module-local + function-scoped, so it brackets the
+    test inside the broader conftest cleanup.  No-op under bare pytest.
+    """
+    _purge_resectogram_singleton_view()
+    yield
+    _purge_resectogram_singleton_view()
+
+
+# --------------------------------------------------------------------------- #
 # Skip-guards -- every path prints an explicit, greppable reason (#460 lesson).
 # --------------------------------------------------------------------------- #
 
 
 def _slicer_or_skip():
-    """Resolve a launched ``slicer`` with a scene, or skip cleanly."""
-    from conftest import _import_slicer_or_skip, _require_mrml_scene
+    """Resolve a launched ``slicer`` with a scene, or skip cleanly.
 
-    _require_mrml_scene()
-    return _import_slicer_or_skip()
+    Import the guards from ``slicer_pytest_support`` directly, NOT
+    ``from conftest import``: when the launched harness passes several test
+    roots, ``conftest`` resolves to whichever sibling conftest is first on the
+    path (the cross-module ``Testing/Python`` one, which exports the unprefixed
+    names), not this directory's.  The sibling LiverResections tests import the
+    canonical bodies the same way for this reason.
+    """
+    from slicer_pytest_support import import_slicer_or_skip, require_mrml_scene
+
+    require_mrml_scene()
+    return import_slicer_or_skip()
 
 
 def _module_or_skip(slicer):
@@ -153,9 +215,9 @@ def _widget_or_skip(slicer):
     skips.  The skip lifts when the net-new ``qSlicerLiverResectionsModuleWidget``
     lands (ADR-0027 §Conformance).
     """
-    from conftest import _require_qt_widget
+    from slicer_pytest_support import require_qt_widget
 
-    _require_qt_widget()
+    require_qt_widget()
     module = _module_or_skip(slicer)
     rep = module.widgetRepresentation()
     if rep is None:
