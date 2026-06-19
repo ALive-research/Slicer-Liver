@@ -49,15 +49,35 @@
 
 // Slicer includes
 #include <qMRMLNodeComboBox.h>
+#include <qMRMLThreeDViewControllerWidget.h>
+#include <qMRMLThreeDWidget.h>
 #include <qSlicerApplication.h>
 #include <qSlicerPythonManager.h>
+
+// CTK includes
+#include <ctkCollapsibleButton.h>
 
 // MRML includes
 #include <vtkMRMLScalarVolumeNode.h>
 #include <vtkMRMLScene.h>
+#include <vtkMRMLViewNode.h>
 
 // Qt includes
 #include <QAbstractButton>
+#include <QLayout>
+#include <QPointer>
+
+namespace
+{
+/// The singleton tag the dedicated resectogram view node carries.  Mirrors
+/// the source-of-truth literal ``RESECTOGRAM_VIEW_SINGLETON_TAG`` in
+/// ``LiverResectionsLib/ResectogramViewManager.py``: the Python manager mints
+/// the node (ADR-0004 keeps the view-manager class on the Python side); this
+/// widget only resolves the already-minted node back from the scene by its
+/// singleton tag to bind the embedded view widget.  Kept in lockstep with the
+/// Python constant.
+const char* const RESECTOGRAM_VIEW_SINGLETON_TAG = "LiverResectogram";
+} // namespace
 
 //-----------------------------------------------------------------------------
 class qSlicerLiverResectionsModuleWidgetPrivate : public Ui_qSlicerLiverResectionsModuleWidget
@@ -68,6 +88,11 @@ public:
   /// The active resection surface currently observed for the gating
   /// predicate (so computing a distance map re-fires the state update).
   vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode> ActiveResectionNode;
+
+  /// The single embedded view widget bound to the singleton resectogram view
+  /// node (created once on first open; shown/raised on re-open).  Parented
+  /// into the module panel layout, so Qt owns its lifetime.
+  QPointer<qMRMLThreeDWidget> ResectogramWidget;
 };
 
 //-----------------------------------------------------------------------------
@@ -225,4 +250,57 @@ void qSlicerLiverResectionsModuleWidget::openResectogramView()
                                    "ResectogramViewManager().ensureViewNode()\n");
     }
   }
+
+  // Resolve the just-ensured singleton view node back from the scene by its
+  // tag (the Python manager is the source of truth for minting it) and embed
+  // a single qMRMLThreeDWidget bound to it in this module's panel.  The
+  // LayerDM ResectogramPipeline — registered to fire only for this tagged
+  // view — composites the flattened strip into this panel-local view rather
+  // than a main-area Slicer layout (ADR-0023 §Stage-4; the SlicerHyperProbe
+  // create_three_d_widget precedent).
+  vtkMRMLViewNode* viewNode = vtkMRMLViewNode::SafeDownCast(scene->GetSingletonNode(RESECTOGRAM_VIEW_SINGLETON_TAG, "vtkMRMLViewNode"));
+  if (!viewNode)
+  {
+    return;
+  }
+  this->showResectogramWidget(viewNode);
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerLiverResectionsModuleWidget::showResectogramWidget(vtkMRMLViewNode* viewNode)
+{
+  Q_D(qSlicerLiverResectionsModuleWidget);
+
+  // Create the embedded view widget exactly once (idempotent re-open).  Bind
+  // it to the singleton view node; the controller chrome is hidden so the
+  // panel reads as the flattened resectogram image (the Hyperprobe precedent
+  // hides threeDController() the same way).
+  if (!d->ResectogramWidget)
+  {
+    qMRMLThreeDWidget* widget = new qMRMLThreeDWidget(this);
+    widget->setObjectName("ResectogramThreeDWidget");
+    if (qMRMLThreeDViewControllerWidget* controller = widget->threeDController())
+    {
+      controller->hide();
+    }
+    widget->setMRMLScene(this->mrmlScene());
+    widget->setMRMLViewNode(viewNode);
+    d->ResectogramWidget = widget;
+
+    // Add it below the gated action in the Resection Planning panel layout.
+    if (QLayout* layout = d->ResectionPlanningCollapsibleButton->layout())
+    {
+      layout->addWidget(widget);
+    }
+  }
+  else
+  {
+    // Re-open: keep ONE widget; re-target the (singleton) view node and the
+    // current scene defensively, then show/raise it.
+    d->ResectogramWidget->setMRMLScene(this->mrmlScene());
+    d->ResectogramWidget->setMRMLViewNode(viewNode);
+  }
+
+  d->ResectogramWidget->show();
+  d->ResectogramWidget->raise();
 }

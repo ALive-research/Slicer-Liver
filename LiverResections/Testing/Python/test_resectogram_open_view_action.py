@@ -693,5 +693,143 @@ def test_retrigger_reuses_view_node_no_duplicate():
     )
 
 
+# --------------------------------------------------------------------------- #
+# Invariant 4 -- the open action embeds ONE qMRMLThreeDWidget bound to the
+# singleton resectogram view node into the module panel (T3-g3b).
+# --------------------------------------------------------------------------- #
+
+
+def _require_main_window_or_skip(slicer):
+    """Skip unless a realized main window exists to back a 3D GL context.
+
+    The embed step binds the singleton view node to a ``qMRMLThreeDWidget``
+    (``setMRMLViewNode``), which synchronously drives the markups displayable
+    manager to upload the distance-map 3D texture for the gate-satisfied
+    fixture surface.  That texture upload dereferences live GL entry points,
+    so it needs a REALIZED GL context -- i.e. a shown main window.  The
+    launched ``pytest_launched`` harness runs ``--no-main-window``
+    (``slicer.util.mainWindow()`` is ``None``), where no such context can be
+    created and the upload hard-crashes the process; the embed + binding is
+    instead exercised on the orchestrator's interactive ``:0`` eyeball pass
+    (ADR-0023 §Stage-4).  Skip cleanly here so the GPU-free invariants in this
+    file still run under the headless harness (#460 explicit-skip lesson).
+    """
+    if slicer.util.mainWindow() is None:
+        pytest.skip(
+            "no main window (--no-main-window harness): binding the embedded "
+            "qMRMLThreeDWidget to the singleton view node uploads the "
+            "distance-map 3D texture, which needs a realized GL context.  The "
+            "embed invariant is exercised on the interactive eyeball pass "
+            "(ADR-0023 §Stage-4); the GPU-free invariants in this file run "
+            "headlessly."
+        )
+
+
+def _resectogram_three_d_widgets(slicer, widget):
+    """Return the module panel's ``qMRMLThreeDWidget`` children.
+
+    The embedded resectogram view widget is a ``qMRMLThreeDWidget`` (a C++
+    class); the open action adds exactly one to the module panel (ADR-0023
+    §Stage-4, the SlicerHyperProbe ``create_three_d_widget`` precedent).
+    """
+    import qt  # type: ignore[import-not-found]
+
+    return [
+        child
+        for child in widget.findChildren(slicer.qMRMLThreeDWidget)
+        if isinstance(child, qt.QWidget)
+    ]
+
+
+def test_trigger_embeds_three_d_widget_bound_to_singleton_view_node():
+    """Triggering embeds one qMRMLThreeDWidget bound to the singleton view.
+
+    ADR-0023 §Stage-4: with the gate satisfied, the open action places a single
+    ``qMRMLThreeDWidget`` in the module panel whose ``mrmlViewNode()`` IS the
+    resectogram singleton view node (identity by node ID).  GPU-free -- pins the
+    widget tree + node identity, not the GL render (the orchestrator's eyeball).
+    """
+    slicer = _slicer_or_skip()
+    _require_main_window_or_skip(slicer)
+    slicer.mrmlScene.Clear(0)
+    widget = _widget_or_skip(slicer)
+    combo, button = _require_widget_chrome_or_skip(widget)
+
+    bezier = _make_surface_with_distance_map(slicer)
+    _accessor_or_skip(bezier)
+    if not _select_active_resection(widget, combo, bezier):
+        pytest.skip("cannot select the active resection (implementer contract).")
+    if not button.enabled:
+        pytest.skip(
+            "gate not satisfied (button disabled) -- covered by the Invariant "
+            "1 tests; the embedded view widget cannot be exercised until the "
+            "gate is wired."
+        )
+
+    _trigger_open(widget, button)
+
+    embedded = _resectogram_three_d_widgets(slicer, widget)
+    assert len(embedded) == 1, (
+        "triggering the open action must embed EXACTLY ONE qMRMLThreeDWidget "
+        f"in the module panel (got {len(embedded)}) -- ADR-0023 §Stage-4."
+    )
+
+    view_node = embedded[0].mrmlViewNode()
+    assert view_node is not None, (
+        "the embedded qMRMLThreeDWidget must be bound to a view node "
+        "(setMRMLViewNode) -- ADR-0023 §Stage-4."
+    )
+    from LiverResectionsLib.ResectogramViewManager import (  # type: ignore[import-not-found]
+        RESECTOGRAM_VIEW_SINGLETON_TAG,
+    )
+
+    assert view_node.GetSingletonTag() == RESECTOGRAM_VIEW_SINGLETON_TAG, (
+        "the embedded qMRMLThreeDWidget must be bound to the resectogram "
+        "SINGLETON view node (the one carrying RESECTOGRAM_VIEW_SINGLETON_TAG), "
+        "so the LayerDM ResectogramPipeline composites into it -- "
+        "ADR-0023 §Stage-4."
+    )
+
+
+def test_retrigger_reuses_three_d_widget_no_duplicate():
+    """Re-triggering does NOT add a second qMRMLThreeDWidget.
+
+    ADR-0023 §Stage-4: the embed step is idempotent -- a re-open shows/raises
+    the existing panel widget rather than minting a second one (mirroring the
+    singleton view-node + display-node idempotency).
+    """
+    slicer = _slicer_or_skip()
+    _require_main_window_or_skip(slicer)
+    slicer.mrmlScene.Clear(0)
+    widget = _widget_or_skip(slicer)
+    combo, button = _require_widget_chrome_or_skip(widget)
+
+    bezier = _make_surface_with_distance_map(slicer)
+    _accessor_or_skip(bezier)
+    if not _select_active_resection(widget, combo, bezier):
+        pytest.skip("cannot select the active resection (implementer contract).")
+    if not button.enabled:
+        pytest.skip(
+            "gate not satisfied (button disabled) -- covered by the Invariant "
+            "1 tests; embed idempotency cannot be exercised until the gate is "
+            "wired."
+        )
+
+    _trigger_open(widget, button)
+    first_count = len(_resectogram_three_d_widgets(slicer, widget))
+    _trigger_open(widget, button)
+    second_count = len(_resectogram_three_d_widgets(slicer, widget))
+
+    assert first_count == 1, (
+        "first trigger must embed exactly one qMRMLThreeDWidget "
+        "(ADR-0023 §Stage-4)."
+    )
+    assert second_count == 1, (
+        "re-triggering must REUSE the embedded qMRMLThreeDWidget, not add a "
+        f"second ({second_count} present after the 2nd trigger) -- "
+        "ADR-0023 §Stage-4 idempotent embed."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
