@@ -68,6 +68,15 @@ _RESECTOGRAM_CAMERA_VIEW_UP = (0.0, 1.0, 0.0)
 _RESECTOGRAM_CAMERA_PARALLEL_SCALE = 70.0
 _RESECTOGRAM_CAMERA_CLIPPING_RANGE = (10.0, 800.0)
 
+# Flat WHITE background for the PRODUCTION dedicated view (ADR-0023 §Stage-4).
+# A flat white panel reads as a clean 2D image, the resectogram presentation
+# the maintainer asked for.  This is DELIBERATELY decoupled from the visual-
+# regression scenario's ``BACKGROUND_RGB`` (black): the arena's interior-lit-
+# fraction / band-content metrics assume a black background (every lit pixel
+# is content), so the scenario keeps pushing its own black via the arena's
+# ``_apply_camera_and_background``; only this production path goes white.
+RESECTOGRAM_VIEW_BACKGROUND_RGB = (1.0, 1.0, 1.0)
+
 
 class ResectogramViewManager:
     """Owns the dedicated ``vtkMRMLViewNode`` for the resectogram display.
@@ -165,7 +174,25 @@ class ResectogramViewManager:
             displayNode.AddViewNodeID(resectogramViewID)
 
         self._restrictAnatomyAwayFromView(slicer, resectogramViewID)
+        self._applyViewNodeBackground(viewNode)
         self._frameCamera(slicer, viewNode, displayNode)
+
+    @staticmethod
+    def _applyViewNodeBackground(  # noqa: N802 - Slicer/Qt verb convention
+        viewNode: Any,
+    ) -> None:
+        """Set the MRML view node's flat WHITE background (ADR-0023 §Stage-4).
+
+        The STANDALONE embedded ``qMRMLThreeDWidget`` ignores the view node's
+        background (the widget pushes onto its own renderer, see
+        ``poseEmbeddedRenderer``).  But the moment the view is handed to the
+        Slicer LAYOUT MANAGER -- on a double-click maximize -- the layout-managed
+        render reads the BACKGROUND off the MRML view node.  Setting it here (a
+        flat white, no gradient) makes a maximized resectogram render correctly
+        on white instead of falling back to the default 3D-anatomy blue gradient.
+        """
+        viewNode.SetBackgroundColor(*RESECTOGRAM_VIEW_BACKGROUND_RGB)
+        viewNode.SetBackgroundColor2(*RESECTOGRAM_VIEW_BACKGROUND_RGB)
 
     @staticmethod
     def _restrictAnatomyAwayFromView(  # noqa: N802 - Slicer/Qt verb convention

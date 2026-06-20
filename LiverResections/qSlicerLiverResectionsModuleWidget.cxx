@@ -99,7 +99,14 @@ const double RESECTOGRAM_CAMERA_VIEW_UP[3] = { 0.0, 1.0, 0.0 };
 const double RESECTOGRAM_CAMERA_PARALLEL_SCALE = 70.0;
 const double RESECTOGRAM_CAMERA_VIEW_ANGLE = 45.0;
 const double RESECTOGRAM_CAMERA_CLIPPING_RANGE[2] = { 10.0, 800.0 };
-const double RESECTOGRAM_BACKGROUND_RGB[3] = { 0.0, 0.0, 0.0 };
+// Flat WHITE background for the embedded resectogram renderer (ADR-0023
+// §Stage-4): a clean 2D-image panel.  DELIBERATELY decoupled from the
+// visual-regression scenario's black background (scenarios/Resectogram4x4BlurOff
+// BACKGROUND_RGB): the arena's interior-lit-fraction metrics assume black, so
+// only this production renderer push goes white (it matches the white the
+// Python ResectogramViewManager pushes onto the MRML view node for the
+// layout-managed / maximized render).
+const double RESECTOGRAM_BACKGROUND_RGB[3] = { 1.0, 1.0, 1.0 };
 } // namespace
 
 //-----------------------------------------------------------------------------
@@ -317,6 +324,15 @@ void qSlicerLiverResectionsModuleWidget::refreshResectogramDrawer()
   // RequestRender, so observe the surface here and force a render on edit
   // (ADR-0023 §Stage-4).
   this->observeSurfaceForRender(surface);
+
+  // Fire one INITIAL render at the end of the populate path so the strip is
+  // visible immediately on auto-populate -- no surface edit required.  Without
+  // this the embedded view stays blank until the first PointModifiedEvent
+  // drives scheduleResectogramRender (the strip would otherwise appear only
+  // after the user nudges a control point).  Self-gated on a realized GL
+  // context (hasRealizedGLContext): a no-op under --no-main-window, where the
+  // embed never happened.
+  this->scheduleResectogramRender();
 }
 
 //-----------------------------------------------------------------------------
