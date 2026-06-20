@@ -29,11 +29,24 @@ See also:
 
 from __future__ import annotations
 
+import os
 import sys
 
 import pytest
 
-from slicer_pytest_support import (  # noqa: F401  (re-exported for `from conftest import ...`)
+# Put this directory on ``sys.path`` so a test module here can import a SIBLING
+# test module by bare name (e.g. the presentation test imports the shared
+# helpers from ``test_resectogram_open_view_action``).  conftest is loaded by
+# pytest for every file in this directory under BOTH harnesses; the launched
+# harness resolves the sibling via its test roots, but a bare ``PythonSlicer -m
+# pytest`` collecting a single file leaves the sibling dir off ``sys.path`` and
+# the import ERRORs at collection.  This insertion fixes that without changing
+# importmode.
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
+
+from slicer_pytest_support import (  # noqa: E402,F401  (re-exported for `from conftest import ...`)
     import_slicer_or_skip as _import_slicer_or_skip,
     require_mrml_scene as _require_mrml_scene,
     require_qt_widget as _require_qt_widget,
