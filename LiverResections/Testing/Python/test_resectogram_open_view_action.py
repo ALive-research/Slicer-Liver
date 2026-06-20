@@ -1,11 +1,11 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 
-"""T3-g3 -- gated "Open resectogram view" action on the LiverResections widget.
+"""T3-g3 -- auto-populated resectogram drawer on the LiverResections widget.
 
-LiverResections is a loadable (C++) module that, until T3-g3, ships NO widget
+LiverResections is a loadable (C++) module that, until T3-g3, shipped NO widget
 representation (``qSlicerLiverResectionsModule::createWidgetRepresentation()``
-returns ``nullptr``).  T3-g3 adds the module's FIRST GUI -- the ADR-0023
+returned ``nullptr``).  T3-g3 adds the module's FIRST GUI -- the ADR-0023
 §Stage-4 "Resection Planning" surface that ``Liver/Liver.py`` composes via
 ``LiverResections.widgetRepresentation()`` -- carrying:
 
@@ -13,39 +13,45 @@ returns ``nullptr``).  T3-g3 adds the module's FIRST GUI -- the ADR-0023
     the merged resectogram render stack reads -- NOT the
     ``vtkMRMLBezierSurfaceNode`` carrier) that selects the *active* resection,
     and
-  * an [Open resectogram view] action/button.
+  * a collapsible "Resectogram" drawer that AUTO-POPULATES (no click) when the
+    selected surface carries a distance map, and shows an explanatory HINT
+    otherwise.
+
+The TRIGGER is the SELECTION: setting the combo box to a valid surface (no
+explicit [Open] button; the maintainer removed it -- the drawer auto-populates
+on selection AND when a distance map appears on the already-selected surface).
 
 Three pinned invariants (all MRML/widget-state -- GPU-free, runnable in a
 minimal ``qSlicerApplication`` without a GL view; the strip RENDERING is out
 of g3 scope and is the orchestrator's eyeball pass, not asserted here):
 
-  1. PREDICATE GATING (the load-bearing invariant).  The action is enabled
-     iff a Bezier surface is selected AND
+  1. AUTO-POPULATE PREDICATE (the load-bearing invariant).  The drawer
+     populates iff a Bezier surface is selected AND
      ``selectedNode->GetDistanceMapVolumeNode() != nullptr``
-     (vtkMRMLMarkupsBezierSurfaceNode.h line 91).  Disabled when no surface is
-     selected, and disabled when the selected surface has no distance map.
-     STATE-ORTHOGONAL: the gate does NOT read the ADR-0019 ResectionState -- a
-     Planning *or* Confirmed surface with a distance map can open.
+     (vtkMRMLMarkupsBezierSurfaceNode.h line 91).  Otherwise the drawer shows a
+     non-empty HINT instead of the view (ADR-0009 §explainable state).
+     STATE-ORTHOGONAL: the predicate does NOT read the ADR-0019 ResectionState
+     -- a Planning *or* Confirmed surface with a distance map populates.
 
-  2. SINGLE DISPLAY NODE ON TRIGGER.  Triggering the action with the gate
-     satisfied ensures EXACTLY ONE ``vtkMRMLResectogramDisplayNode`` on the
-     selected surface (``AddAndObserveDisplayNodeID`` when none present);
-     re-triggering reuses it (idempotent -- no second display node).  This is
-     net-new production behaviour: today only the
-     ``Resectogram4x4BlurOff`` scenario builder attaches the display node
+  2. SINGLE DISPLAY NODE ON SELECTION.  Selecting a valid surface ensures
+     EXACTLY ONE ``vtkMRMLResectogramDisplayNode`` on it
+     (``AddAndObserveDisplayNodeID`` when none present); re-selecting reuses it
+     (idempotent -- no second display node).  This is net-new production
+     behaviour: today only the ``Resectogram4x4BlurOff`` scenario builder
+     attaches the display node
      (scenarios/Resectogram4x4BlurOff.py ``_attach_resectogram_display_node``).
 
-  3. VIEW-NODE IDEMPOTENCY.  The action ensures the singleton resectogram view
-     node via ``ResectogramViewManager.ensureViewNode()``
-     (LiverResectionsLib/ResectogramViewManager.py); re-triggering reuses it
+  3. VIEW-NODE IDEMPOTENCY.  Selecting a valid surface ensures the singleton
+     resectogram view node via ``ResectogramViewManager.ensureViewNode()``
+     (LiverResectionsLib/ResectogramViewManager.py); re-selecting reuses it
      -- no second ``vtkMRMLViewNode`` carrying RESECTOGRAM_VIEW_SINGLETON_TAG.
 
-The action adds ONLY a display node + a view node + leans on the already-
+The widget adds ONLY a display node + a view node + leans on the already-
 registered ResectogramPipeline creator: NO custom DisplayableManager
 (ADR-0013 §5; the ``feedback_layerdm_no_custom_dm`` lesson).  Binding the
-singleton view node into a visible custom LAYOUT slot (the side-panel
-qMRMLThreeDWidget placement) is OUT of g3 scope; these tests stop at
-"display node ensured + view node ensured".
+singleton view node into the drawer's embedded qMRMLThreeDWidget is gated on a
+realized GL context; the headless invariants stop at
+"display node ensured + view node ensured + hint vs view".
 
 -- WHY THIS IS A LAUNCHED-SLICER PYTEST (NOT A ctkTest) --
 
@@ -57,7 +63,7 @@ registered) pre-implementation and goes GREEN post -- the ADR-0027
 shape.  A C++ generic widget test may accompany the IMPLEMENTATION later.
 
 Reaching the GUI: ``slicer.modules.liverresections.widgetRepresentation()``.
-The combo box + button are located by objectName (see the implementer
+The combo box + drawer + hint are located by objectName (see the implementer
 contract below); a thin Python-accessible helper API is preferred where
 direct child-finding is brittle.
 
@@ -76,27 +82,27 @@ down minted nodes so the launched harness does not trip ``vtkDebugLeaks``.
   * objectName ``"ResectionSurfaceComboBox"`` -- the
     ``qMRMLNodeComboBox`` of ``vtkMRMLMarkupsBezierSurfaceNode`` selecting the
     active resection.
-  * objectName ``"OpenResectogramViewButton"`` -- the [Open resectogram
-    view] ``QPushButton`` / ``QToolButton`` carrying the gated action.
-  * The button's ``enabled`` state realises the gating predicate, and its
-    ``toolTip`` explains the disabled reason (ADR-0009 §"explainable disabled
-    state").
-  * Triggering = ``button.click()`` (or invoking the wired QAction).
-  * The action's display-node-ensure entry point keys on the
-    combo-box-selected ``vtkMRMLMarkupsBezierSurfaceNode`` and calls
+  * objectName ``"ResectogramDrawer"`` -- the collapsible "Resectogram" drawer
+    that auto-populates with the embedded view (or shows the hint).
+  * objectName ``"ResectogramHintLabel"`` -- the hint shown in the drawer when
+    no valid resectogram is available (ADR-0009 §"explainable state").  Its
+    text is non-empty and it is VISIBLE iff the drawer is NOT populated.
+  * Selecting a valid surface (combo ``setCurrentNode``) is the TRIGGER: it
+    keys the display-node-ensure entry point on the selected
+    ``vtkMRMLMarkupsBezierSurfaceNode`` and calls
     ``ResectogramViewManager.ensureViewNode()`` once.
 
 If the implementer cannot expose stable objectNames, a thin Python-accessible
 API on the widget (e.g. ``widget.setActiveResectionNode(node)`` /
-``widget.isOpenResectogramViewEnabled()`` / ``widget.openResectogramView()``)
-satisfies the same invariants -- the helpers below probe both shapes and skip
-with explicit guidance if neither is present.
+``widget.resectogramDrawer()`` / ``widget.resectogramHintLabel()``) satisfies
+the same invariants -- the helpers below probe both shapes and skip with
+explicit guidance if neither is present.
 
 See also:
   * Docs/adr/0027-invariant-test-first-v2-implementation.md (red->green)
   * Docs/adr/0023-unified-gui-stage-workflow.md §Stage-4 (the GUI surface)
   * Docs/adr/0013-layerdm-pipeline-pattern.md §5 (no custom DM)
-  * Docs/adr/0009-ux-and-design-discipline.md (explainable disabled state)
+  * Docs/adr/0009-ux-and-design-discipline.md (explainable state)
   * LiverMarkups/MRML/vtkMRMLMarkupsBezierSurfaceNode.h line 91
     (GetDistanceMapVolumeNode)
   * LiverResections/LiverResectionsLib/ResectogramViewManager.py
@@ -115,10 +121,12 @@ RESECTOGRAM_DISPLAY_CLASS = "vtkMRMLResectogramDisplayNode"
 VIEW_NODE_CLASS = "vtkMRMLViewNode"
 
 # Implementer-contract objectNames (see module docstring).  The pinned
-# invariant is the gating behaviour, not the spelling -- if these change, the
-# helpers below skip with explicit guidance rather than silently passing.
+# invariant is the auto-populate behaviour, not the spelling -- if these
+# change, the helpers below skip with explicit guidance rather than silently
+# passing.
 COMBO_BOX_OBJECT_NAME = "ResectionSurfaceComboBox"
-OPEN_BUTTON_OBJECT_NAME = "OpenResectogramViewButton"
+DRAWER_OBJECT_NAME = "ResectogramDrawer"
+HINT_LABEL_OBJECT_NAME = "ResectogramHintLabel"
 
 
 # --------------------------------------------------------------------------- #
@@ -270,21 +278,34 @@ def _accessor_or_skip(bezier):
         )
 
 
-def _open_button(widget):
-    """Return the [Open resectogram view] button by objectName, or ``None``.
+def _hint_label(widget):
+    """Return the resectogram drawer's hint label by objectName, or ``None``.
 
     Probes both the direct objectName and a thin Python-accessible getter so
     the implementer has two ways to satisfy the contract.
     """
     import qt  # type: ignore[import-not-found]
 
-    button = widget.findChild(qt.QAbstractButton, OPEN_BUTTON_OBJECT_NAME)
-    if button is not None:
-        return button
-    getter = getattr(widget, "openResectogramViewButton", None)
+    label = widget.findChild(qt.QLabel, HINT_LABEL_OBJECT_NAME)
+    if label is not None:
+        return label
+    getter = getattr(widget, "resectogramHintLabel", None)
     if callable(getter):
         return getter()
-    return getattr(widget, "OpenResectogramViewButton", None)
+    return getattr(widget, "ResectogramHintLabel", None)
+
+
+def _drawer(widget):
+    """Return the resectogram drawer by objectName, or ``None``."""
+    import qt  # type: ignore[import-not-found]
+
+    drawer = widget.findChild(qt.QWidget, DRAWER_OBJECT_NAME)
+    if drawer is not None:
+        return drawer
+    getter = getattr(widget, "resectogramDrawer", None)
+    if callable(getter):
+        return getter()
+    return getattr(widget, "ResectogramDrawer", None)
 
 
 def _combo_box(widget):
@@ -301,29 +322,31 @@ def _combo_box(widget):
 
 
 def _require_widget_chrome_or_skip(widget):
-    """Skip unless both the combo box and the open button are findable.
+    """Skip unless both the combo box and the drawer hint are findable.
 
-    The pinned invariant is the gating behaviour; if neither the objectName
-    nor a Python-accessible getter resolves the controls, skip with guidance
-    rather than failing -- the implementer wires one of the two shapes.
+    The pinned invariant is the auto-populate behaviour; if neither the
+    objectName nor a Python-accessible getter resolves the controls, skip with
+    guidance rather than failing -- the implementer wires one of the two
+    shapes.  Returns ``(combo, hint)``.
     """
     combo = _combo_box(widget)
-    button = _open_button(widget)
-    if combo is None or button is None:
+    hint = _hint_label(widget)
+    if combo is None or hint is None:
         pytest.skip(
             "T3-g3 widget chrome not found: expected a "
             f"qMRMLNodeComboBox objectName={COMBO_BOX_OBJECT_NAME!r} and a "
-            f"button objectName={OPEN_BUTTON_OBJECT_NAME!r} (or the "
+            f"QLabel objectName={HINT_LABEL_OBJECT_NAME!r} (or the "
             "Python-accessible getters resectionSurfaceComboBox / "
-            "openResectogramViewButton).  Skip lifts when the implementer "
-            "wires the controls (ADR-0023 §Stage-4)."
+            "resectogramHintLabel).  Skip lifts when the implementer wires the "
+            "controls (ADR-0023 §Stage-4)."
         )
-    return combo, button
+    return combo, hint
 
 
 def _select_active_resection(widget, combo, node):
     """Select ``node`` as the active resection on the widget.
 
+    Selecting is the TRIGGER in the auto-populate model (no [Open] button).
     Prefers a thin Python API (``setActiveResectionNode``); falls back to the
     qMRMLNodeComboBox ``setCurrentNode``.  Returns ``True`` on success.
     """
@@ -337,17 +360,23 @@ def _select_active_resection(widget, combo, node):
     return False
 
 
-def _trigger_open(widget, button):
-    """Trigger the open-resectogram-view action.
+def _require_populated_or_skip(hint):
+    """Skip unless the drawer populated (the hint is hidden).
 
-    Prefers a thin Python API (``openResectogramView``); falls back to a
-    button click.
+    In the auto-populate model, selecting a distance-mapped surface should hide
+    the hint and run the ensure path.  If the hint is NOT hidden the
+    auto-populate predicate is not yet wired -- skip with an explicit reason
+    (covered by the Invariant 1 hint tests) rather than asserting a downstream
+    ensure invariant against an un-fired trigger (#460 explicit-skip lesson).
+    Checked via ``isHidden()`` not ``visible``: under --no-main-window the
+    unshown widget tree reports ``visible==False`` regardless.
     """
-    action = getattr(widget, "openResectogramView", None)
-    if callable(action):
-        action()
-        return
-    button.click()
+    if not hint.isHidden():
+        pytest.skip(
+            "drawer did not auto-populate on a distance-mapped surface (hint "
+            "not hidden) -- the auto-populate predicate is not yet wired; "
+            "covered by test_hint_hidden_when_surface_has_distance_map."
+        )
 
 
 def _count_resectogram_display_nodes(slicer, bezier):
@@ -438,21 +467,42 @@ def _make_surface_without_distance_map(slicer):
 
 
 # --------------------------------------------------------------------------- #
-# Invariant 1 -- predicate gating (the load-bearing, GPU-free invariant).
+# Invariant 1 -- auto-populate predicate (the load-bearing, GPU-free invariant).
+# The drawer shows the HINT when the predicate is unsatisfied, and hides it
+# (populating the view in its place) when satisfied.
 # --------------------------------------------------------------------------- #
 
 
-def test_open_action_disabled_when_no_surface_selected():
-    """No active resection selected => the open action is DISABLED.
+def test_resectogram_drawer_exists():
+    """The widget carries the collapsible "Resectogram" drawer.
 
-    ADR-0023 §Stage-4 gating predicate (enabled-iff): the action requires a
-    selected Bezier surface.  With the combo box cleared, the button is
-    disabled.  RED until the widget + gate land (skips pre-implementation).
+    ADR-0023 §Stage-4: the drawer is the container the view auto-populates into
+    (replacing the removed [Open] button).  Cheap structural pin -- the drawer
+    is findable by objectName (or the Python-accessible getter).
+    """
+    slicer = _slicer_or_skip()
+    widget = _widget_or_skip(slicer)
+    _require_widget_chrome_or_skip(widget)
+
+    assert _drawer(widget) is not None, (
+        "the LiverResections widget must carry the collapsible resectogram "
+        f"drawer (objectName {DRAWER_OBJECT_NAME!r} or the resectogramDrawer() "
+        "getter) -- ADR-0023 §Stage-4."
+    )
+
+
+def test_hint_shown_when_no_surface_selected():
+    """No active resection selected => the drawer shows the hint.
+
+    ADR-0023 §Stage-4 auto-populate predicate (the negative branch): with no
+    surface selected the drawer cannot populate, so it shows a non-empty,
+    visible hint instead of an edge-on / blank view (ADR-0009 §explainable
+    state).  RED until the widget + drawer land (skips pre-implementation).
     """
     slicer = _slicer_or_skip()
     slicer.mrmlScene.Clear(0)
     widget = _widget_or_skip(slicer)
-    combo, button = _require_widget_chrome_or_skip(widget)
+    combo, hint = _require_widget_chrome_or_skip(widget)
 
     # Clear any selection: select no node.
     if not _select_active_resection(widget, combo, None):
@@ -461,24 +511,33 @@ def test_open_action_disabled_when_no_surface_selected():
             "is available to clear the selection (implementer contract)."
         )
 
-    assert not button.enabled, (
-        "the [Open resectogram view] action must be DISABLED when no Bezier "
-        "surface is selected (ADR-0023 §Stage-4 gating predicate)."
+    assert not hint.isHidden(), (
+        "the resectogram drawer hint must be SHOWN when no Bezier surface is "
+        "selected (ADR-0023 §Stage-4 auto-populate predicate; ADR-0009 "
+        "§explainable state).  Checked via isHidden() not visible: under "
+        "--no-main-window the unshown widget tree reports visible==False "
+        "regardless, but isHidden() reflects the explicit show/hide state."
+    )
+    assert hint.text, (
+        "the resectogram drawer hint must carry non-empty text explaining what "
+        "to select (ADR-0009 §explainable state) -- e.g. 'select a resection "
+        "with a computed distance map'."
     )
 
 
-def test_open_action_disabled_when_surface_has_no_distance_map():
-    """Surface selected but no distance map => the open action is DISABLED.
+def test_hint_shown_when_surface_has_no_distance_map():
+    """Surface selected but no distance map => the drawer shows the hint.
 
-    ADR-0023 §Stage-4 gating predicate: enabled-iff a surface is selected AND
-    ``GetDistanceMapVolumeNode() != nullptr`` (vtkMRMLMarkupsBezierSurfaceNode.h
-    line 91).  A surface without a distance map keeps the action disabled --
-    the merged resectogram stack has nothing to sample.
+    ADR-0023 §Stage-4 auto-populate predicate: populates iff a surface is
+    selected AND ``GetDistanceMapVolumeNode() != nullptr``
+    (vtkMRMLMarkupsBezierSurfaceNode.h line 91).  A surface without a distance
+    map keeps the hint up -- the merged resectogram stack has nothing to
+    sample.
     """
     slicer = _slicer_or_skip()
     slicer.mrmlScene.Clear(0)
     widget = _widget_or_skip(slicer)
-    combo, button = _require_widget_chrome_or_skip(widget)
+    combo, hint = _require_widget_chrome_or_skip(widget)
 
     bezier = _make_surface_without_distance_map(slicer)
     _accessor_or_skip(bezier)
@@ -490,24 +549,31 @@ def test_open_action_disabled_when_surface_has_no_distance_map():
             "setActiveResectionNode / combo.setCurrentNode)."
         )
 
-    assert not button.enabled, (
-        "the [Open resectogram view] action must be DISABLED when the "
-        "selected surface has no distance map "
-        "(GetDistanceMapVolumeNode() is None) -- ADR-0023 §Stage-4."
+    assert not hint.isHidden(), (
+        "the resectogram drawer hint must be SHOWN when the selected surface "
+        "has no distance map (GetDistanceMapVolumeNode() is None) -- "
+        "ADR-0023 §Stage-4, ADR-0009 §explainable state.  Checked via "
+        "isHidden() not visible (see test_hint_shown_when_no_surface_selected)."
+    )
+    assert hint.text, (
+        "the resectogram drawer hint must carry non-empty text explaining the "
+        "unpopulated reason (ADR-0009 §explainable state)."
     )
 
 
-def test_open_action_enabled_when_surface_has_distance_map():
-    """Surface with a distance map selected => the open action is ENABLED.
+def test_hint_hidden_when_surface_has_distance_map():
+    """Surface with a distance map selected => the drawer hint is HIDDEN.
 
-    ADR-0023 §Stage-4 gating predicate: the positive branch.  State-ORTHOGONAL
-    -- the gate does NOT read ADR-0019 ResectionState, so a distance-mapped
-    surface enables the action regardless of Planning/Confirmed state.
+    ADR-0023 §Stage-4 auto-populate predicate: the positive branch -- the
+    drawer populates (shows the view), so the hint is hidden.  State-ORTHOGONAL
+    -- the predicate does NOT read ADR-0019 ResectionState, so a distance-mapped
+    surface populates regardless of Planning/Confirmed state.  GPU-free: pins
+    the hint visibility, not the GL render.
     """
     slicer = _slicer_or_skip()
     slicer.mrmlScene.Clear(0)
     widget = _widget_or_skip(slicer)
-    combo, button = _require_widget_chrome_or_skip(widget)
+    combo, hint = _require_widget_chrome_or_skip(widget)
 
     bezier = _make_surface_with_distance_map(slicer)
     _accessor_or_skip(bezier)
@@ -519,38 +585,12 @@ def test_open_action_enabled_when_surface_has_distance_map():
             "setActiveResectionNode / combo.setCurrentNode)."
         )
 
-    assert button.enabled, (
-        "the [Open resectogram view] action must be ENABLED when a Bezier "
-        "surface WITH a distance map is selected (ADR-0023 §Stage-4 gating "
-        "predicate, positive branch)."
-    )
-
-
-def test_open_action_disabled_state_is_explainable_via_tooltip():
-    """The disabled action carries a non-empty tooltip explaining why.
-
-    ADR-0009 §"explainable disabled state": a disabled affordance must say why
-    it is disabled.  Cheap to pin -- the tooltip is non-empty in the
-    no-distance-map disabled case.  RED until the implementer wires the
-    tooltip alongside the gate.
-    """
-    slicer = _slicer_or_skip()
-    slicer.mrmlScene.Clear(0)
-    widget = _widget_or_skip(slicer)
-    combo, button = _require_widget_chrome_or_skip(widget)
-
-    bezier = _make_surface_without_distance_map(slicer)
-    _accessor_or_skip(bezier)
-    if not _select_active_resection(widget, combo, bezier):
-        pytest.skip(
-            "cannot select the active resection (implementer contract)."
-        )
-
-    assert not button.enabled  # precondition for this assertion
-    assert button.toolTip, (
-        "a disabled [Open resectogram view] action must carry a non-empty "
-        "tooltip explaining the disabled reason (ADR-0009 §explainable "
-        "disabled state) -- e.g. 'select a resection with a distance map'."
+    assert hint.isHidden(), (
+        "the resectogram drawer hint must be HIDDEN when a Bezier surface WITH "
+        "a distance map is selected -- the drawer auto-populates the view in "
+        "its place (ADR-0023 §Stage-4 auto-populate predicate, positive "
+        "branch).  Checked via isHidden(): the ensure + hint-hide run headless; "
+        "the GL embed itself is gated to the main-window eyeball pass."
     )
 
 
@@ -571,7 +611,7 @@ def test_trigger_ensures_exactly_one_resectogram_display_node():
     slicer = _slicer_or_skip()
     slicer.mrmlScene.Clear(0)
     widget = _widget_or_skip(slicer)
-    combo, button = _require_widget_chrome_or_skip(widget)
+    combo, hint = _require_widget_chrome_or_skip(widget)
 
     bezier = _make_surface_with_distance_map(slicer)
     _accessor_or_skip(bezier)
@@ -581,24 +621,17 @@ def test_trigger_ensures_exactly_one_resectogram_display_node():
         pytest.skip(
             "cannot select the active resection (implementer contract)."
         )
-    if not button.enabled:
-        pytest.skip(
-            "gate not satisfied (button disabled) on a distance-mapped "
-            "surface -- the gating predicate is not yet wired; covered by "
-            "test_open_action_enabled_when_surface_has_distance_map."
-        )
-
-    _trigger_open(widget, button)
+    _require_populated_or_skip(hint)
 
     assert _count_resectogram_display_nodes(slicer, bezier) == 1, (
-        "triggering the open action must ensure EXACTLY ONE "
-        f"{RESECTOGRAM_DISPLAY_CLASS} on the selected surface "
+        "selecting a distance-mapped surface must ensure EXACTLY ONE "
+        f"{RESECTOGRAM_DISPLAY_CLASS} on it "
         "(AddAndObserveDisplayNodeID when none present) -- ADR-0023 §Stage-4."
     )
 
 
-def test_retrigger_reuses_display_node_no_duplicate():
-    """Re-triggering does NOT create a second resectogram display node.
+def test_reselect_reuses_display_node_no_duplicate():
+    """Re-selecting does NOT create a second resectogram display node.
 
     ADR-0023 §Stage-4: the ensure step is idempotent -- a surface that already
     carries a ``vtkMRMLResectogramDisplayNode`` is reused, not duplicated.
@@ -606,7 +639,7 @@ def test_retrigger_reuses_display_node_no_duplicate():
     slicer = _slicer_or_skip()
     slicer.mrmlScene.Clear(0)
     widget = _widget_or_skip(slicer)
-    combo, button = _require_widget_chrome_or_skip(widget)
+    combo, hint = _require_widget_chrome_or_skip(widget)
 
     bezier = _make_surface_with_distance_map(slicer)
     _accessor_or_skip(bezier)
@@ -614,24 +647,22 @@ def test_retrigger_reuses_display_node_no_duplicate():
         pytest.skip(
             "cannot select the active resection (implementer contract)."
         )
-    if not button.enabled:
-        pytest.skip(
-            "gate not satisfied (button disabled) -- covered by the gating "
-            "tests; idempotency cannot be exercised until the gate is wired."
-        )
-
-    _trigger_open(widget, button)
+    _require_populated_or_skip(hint)
     first_count = _count_resectogram_display_nodes(slicer, bezier)
-    _trigger_open(widget, button)
+
+    # Re-select the SAME surface (clear then re-select) to re-run the ensure
+    # path and prove idempotency.
+    _select_active_resection(widget, combo, None)
+    _select_active_resection(widget, combo, bezier)
     second_count = _count_resectogram_display_nodes(slicer, bezier)
 
     assert first_count == 1, (
-        "first trigger must leave exactly one resectogram display node "
+        "first selection must leave exactly one resectogram display node "
         "(ADR-0023 §Stage-4)."
     )
     assert second_count == 1, (
-        "re-triggering must REUSE the existing resectogram display node, not "
-        f"create a second ({second_count} present after the 2nd trigger) -- "
+        "re-selecting must REUSE the existing resectogram display node, not "
+        f"create a second ({second_count} present after the 2nd selection) -- "
         "ADR-0023 §Stage-4 idempotent ensure."
     )
 
@@ -641,17 +672,18 @@ def test_retrigger_reuses_display_node_no_duplicate():
 # --------------------------------------------------------------------------- #
 
 
-def test_trigger_ensures_singleton_resectogram_view_node():
-    """Triggering ensures the singleton resectogram view node exists.
+def test_selection_ensures_singleton_resectogram_view_node():
+    """Selecting a valid surface ensures the singleton resectogram view node.
 
-    ADR-0023 §Stage-4: the action calls
-    ``ResectogramViewManager.ensureViewNode()`` -- after one trigger exactly
-    one ``vtkMRMLViewNode`` carries RESECTOGRAM_VIEW_SINGLETON_TAG.
+    ADR-0023 §Stage-4: the widget calls
+    ``ResectogramViewManager.ensureViewNode()`` -- after selecting a valid
+    surface exactly one ``vtkMRMLViewNode`` carries
+    RESECTOGRAM_VIEW_SINGLETON_TAG.
     """
     slicer = _slicer_or_skip()
     slicer.mrmlScene.Clear(0)
     widget = _widget_or_skip(slicer)
-    combo, button = _require_widget_chrome_or_skip(widget)
+    combo, hint = _require_widget_chrome_or_skip(widget)
 
     bezier = _make_surface_with_distance_map(slicer)
     _accessor_or_skip(bezier)
@@ -661,33 +693,26 @@ def test_trigger_ensures_singleton_resectogram_view_node():
         pytest.skip(
             "cannot select the active resection (implementer contract)."
         )
-    if not button.enabled:
-        pytest.skip(
-            "gate not satisfied (button disabled) -- the gating predicate is "
-            "not yet wired; covered by the Invariant 1 tests."
-        )
-
-    _trigger_open(widget, button)
+    _require_populated_or_skip(hint)
 
     assert _count_singleton_view_nodes(slicer) == 1, (
-        "triggering the open action must ensure exactly one "
+        "selecting a distance-mapped surface must ensure exactly one "
         "resectogram-tagged vtkMRMLViewNode via "
         "ResectogramViewManager.ensureViewNode() -- ADR-0023 §Stage-4."
     )
 
 
-def test_retrigger_reuses_view_node_no_duplicate():
-    """Re-triggering reuses the singleton view node -- no second view node.
+def test_reselect_reuses_view_node_no_duplicate():
+    """Re-selecting reuses the singleton view node -- no second view node.
 
-    ADR-0023 §Stage-4 + ResectogramViewManager singleton-by-tag: a second
-    trigger re-targets the existing tagged view node rather than minting a
-    duplicate (the singleton-tag mechanism the Slicer view machinery
-    enforces).
+    ADR-0023 §Stage-4 + ResectogramViewManager singleton-by-tag: re-selecting
+    re-targets the existing tagged view node rather than minting a duplicate
+    (the singleton-tag mechanism the Slicer view machinery enforces).
     """
     slicer = _slicer_or_skip()
     slicer.mrmlScene.Clear(0)
     widget = _widget_or_skip(slicer)
-    combo, button = _require_widget_chrome_or_skip(widget)
+    combo, hint = _require_widget_chrome_or_skip(widget)
 
     bezier = _make_surface_with_distance_map(slicer)
     _accessor_or_skip(bezier)
@@ -695,33 +720,28 @@ def test_retrigger_reuses_view_node_no_duplicate():
         pytest.skip(
             "cannot select the active resection (implementer contract)."
         )
-    if not button.enabled:
-        pytest.skip(
-            "gate not satisfied (button disabled) -- covered by the Invariant "
-            "1 tests; view-node idempotency cannot be exercised until the "
-            "gate is wired."
-        )
-
-    _trigger_open(widget, button)
+    _require_populated_or_skip(hint)
     first_count = _count_singleton_view_nodes(slicer)
-    _trigger_open(widget, button)
+
+    _select_active_resection(widget, combo, None)
+    _select_active_resection(widget, combo, bezier)
     second_count = _count_singleton_view_nodes(slicer)
 
     assert first_count == 1, (
-        "first trigger must leave exactly one resectogram-tagged view node "
+        "first selection must leave exactly one resectogram-tagged view node "
         "(ADR-0023 §Stage-4)."
     )
     assert second_count == 1, (
-        "re-triggering must REUSE the singleton resectogram view node, not "
-        f"create a second ({second_count} present after the 2nd trigger) -- "
+        "re-selecting must REUSE the singleton resectogram view node, not "
+        f"create a second ({second_count} present after the 2nd selection) -- "
         "ResectogramViewManager.ensureViewNode() is singleton-by-tag "
         "(ADR-0023 §Stage-4)."
     )
 
 
 # --------------------------------------------------------------------------- #
-# Invariant 4 -- the open action embeds ONE qMRMLThreeDWidget bound to the
-# singleton resectogram view node into the module panel (T3-g3b).
+# Invariant 4 -- selecting a valid surface embeds ONE qMRMLThreeDWidget bound
+# to the singleton resectogram view node inside the drawer (T3-g3b).
 # --------------------------------------------------------------------------- #
 
 
@@ -752,11 +772,12 @@ def _require_main_window_or_skip(slicer):
 
 
 def _resectogram_three_d_widgets(slicer, widget):
-    """Return the module panel's ``qMRMLThreeDWidget`` children.
+    """Return the drawer's ``qMRMLThreeDWidget`` children.
 
     The embedded resectogram view widget is a ``qMRMLThreeDWidget`` (a C++
-    class); the open action adds exactly one to the module panel (ADR-0023
-    §Stage-4, the SlicerHyperProbe ``create_three_d_widget`` precedent).
+    class); selecting a valid surface adds exactly one inside the drawer
+    (ADR-0023 §Stage-4, the SlicerHyperProbe ``create_three_d_widget``
+    precedent).
     """
     import qt  # type: ignore[import-not-found]
 
@@ -767,37 +788,30 @@ def _resectogram_three_d_widgets(slicer, widget):
     ]
 
 
-def test_trigger_embeds_three_d_widget_bound_to_singleton_view_node():
-    """Triggering embeds one qMRMLThreeDWidget bound to the singleton view.
+def test_selection_embeds_three_d_widget_bound_to_singleton_view_node():
+    """Selecting a valid surface embeds one qMRMLThreeDWidget bound to the view.
 
-    ADR-0023 §Stage-4: with the gate satisfied, the open action places a single
-    ``qMRMLThreeDWidget`` in the module panel whose ``mrmlViewNode()`` IS the
-    resectogram singleton view node (identity by node ID).  GPU-free -- pins the
-    widget tree + node identity, not the GL render (the orchestrator's eyeball).
+    ADR-0023 §Stage-4: with the predicate satisfied, the drawer auto-populates
+    a single ``qMRMLThreeDWidget`` whose ``mrmlViewNode()`` IS the resectogram
+    singleton view node (identity by node ID).  GPU-free -- pins the widget tree
+    + node identity, not the GL render (the orchestrator's eyeball).
     """
     slicer = _slicer_or_skip()
     _require_main_window_or_skip(slicer)
     slicer.mrmlScene.Clear(0)
     widget = _widget_or_skip(slicer)
-    combo, button = _require_widget_chrome_or_skip(widget)
+    combo, hint = _require_widget_chrome_or_skip(widget)
 
     bezier = _make_surface_with_distance_map(slicer)
     _accessor_or_skip(bezier)
     if not _select_active_resection(widget, combo, bezier):
         pytest.skip("cannot select the active resection (implementer contract).")
-    if not button.enabled:
-        pytest.skip(
-            "gate not satisfied (button disabled) -- covered by the Invariant "
-            "1 tests; the embedded view widget cannot be exercised until the "
-            "gate is wired."
-        )
-
-    _trigger_open(widget, button)
+    _require_populated_or_skip(hint)
 
     embedded = _resectogram_three_d_widgets(slicer, widget)
     assert len(embedded) == 1, (
-        "triggering the open action must embed EXACTLY ONE qMRMLThreeDWidget "
-        f"in the module panel (got {len(embedded)}) -- ADR-0023 §Stage-4."
+        "selecting a valid surface must embed EXACTLY ONE qMRMLThreeDWidget "
+        f"in the drawer (got {len(embedded)}) -- ADR-0023 §Stage-4."
     )
 
     view_node = embedded[0].mrmlViewNode()
@@ -817,42 +831,37 @@ def test_trigger_embeds_three_d_widget_bound_to_singleton_view_node():
     )
 
 
-def test_retrigger_reuses_three_d_widget_no_duplicate():
-    """Re-triggering does NOT add a second qMRMLThreeDWidget.
+def test_reselect_reuses_three_d_widget_no_duplicate():
+    """Re-selecting does NOT add a second qMRMLThreeDWidget.
 
-    ADR-0023 §Stage-4: the embed step is idempotent -- a re-open shows/raises
-    the existing panel widget rather than minting a second one (mirroring the
-    singleton view-node + display-node idempotency).
+    ADR-0023 §Stage-4: the embed step is idempotent -- re-selecting the surface
+    re-targets/shows the existing drawer widget rather than minting a second
+    one (mirroring the singleton view-node + display-node idempotency).
     """
     slicer = _slicer_or_skip()
     _require_main_window_or_skip(slicer)
     slicer.mrmlScene.Clear(0)
     widget = _widget_or_skip(slicer)
-    combo, button = _require_widget_chrome_or_skip(widget)
+    combo, hint = _require_widget_chrome_or_skip(widget)
 
     bezier = _make_surface_with_distance_map(slicer)
     _accessor_or_skip(bezier)
     if not _select_active_resection(widget, combo, bezier):
         pytest.skip("cannot select the active resection (implementer contract).")
-    if not button.enabled:
-        pytest.skip(
-            "gate not satisfied (button disabled) -- covered by the Invariant "
-            "1 tests; embed idempotency cannot be exercised until the gate is "
-            "wired."
-        )
-
-    _trigger_open(widget, button)
+    _require_populated_or_skip(hint)
     first_count = len(_resectogram_three_d_widgets(slicer, widget))
-    _trigger_open(widget, button)
+
+    _select_active_resection(widget, combo, None)
+    _select_active_resection(widget, combo, bezier)
     second_count = len(_resectogram_three_d_widgets(slicer, widget))
 
     assert first_count == 1, (
-        "first trigger must embed exactly one qMRMLThreeDWidget "
+        "first selection must embed exactly one qMRMLThreeDWidget "
         "(ADR-0023 §Stage-4)."
     )
     assert second_count == 1, (
-        "re-triggering must REUSE the embedded qMRMLThreeDWidget, not add a "
-        f"second ({second_count} present after the 2nd trigger) -- "
+        "re-selecting must REUSE the embedded qMRMLThreeDWidget, not add a "
+        f"second ({second_count} present after the 2nd selection) -- "
         "ADR-0023 §Stage-4 idempotent embed."
     )
 

@@ -68,8 +68,8 @@
 #include <vtkRenderer.h>
 
 // Qt includes
-#include <QAbstractButton>
 #include <QGridLayout>
+#include <QLabel>
 #include <QLayout>
 #include <QPointer>
 #include <QSizePolicy>
@@ -144,9 +144,8 @@ void qSlicerLiverResectionsModuleWidget::setup()
   d->setupUi(this);
 
   this->connect(d->ResectionSurfaceComboBox, SIGNAL(currentNodeChanged(vtkMRMLNode*)), this, SLOT(onActiveResectionChanged(vtkMRMLNode*)));
-  this->connect(d->OpenResectogramViewButton, SIGNAL(clicked()), this, SLOT(openResectogramView()));
 
-  this->updateOpenActionState();
+  this->refreshResectogramDrawer();
 }
 
 //-----------------------------------------------------------------------------
@@ -157,10 +156,17 @@ qMRMLNodeComboBox* qSlicerLiverResectionsModuleWidget::resectionSurfaceComboBox(
 }
 
 //-----------------------------------------------------------------------------
-QAbstractButton* qSlicerLiverResectionsModuleWidget::openResectogramViewButton() const
+QWidget* qSlicerLiverResectionsModuleWidget::resectogramDrawer() const
 {
   Q_D(const qSlicerLiverResectionsModuleWidget);
-  return d->OpenResectogramViewButton;
+  return d->ResectogramDrawer;
+}
+
+//-----------------------------------------------------------------------------
+QLabel* qSlicerLiverResectionsModuleWidget::resectogramHintLabel() const
+{
+  Q_D(const qSlicerLiverResectionsModuleWidget);
+  return d->ResectogramHintLabel;
 }
 
 //-----------------------------------------------------------------------------
@@ -176,7 +182,7 @@ void qSlicerLiverResectionsModuleWidget::setMRMLScene(vtkMRMLScene* scene)
   Q_D(qSlicerLiverResectionsModuleWidget);
   this->Superclass::setMRMLScene(scene);
   d->ResectionSurfaceComboBox->setMRMLScene(scene);
-  this->updateOpenActionState();
+  this->refreshResectogramDrawer();
 }
 
 //-----------------------------------------------------------------------------
@@ -186,64 +192,50 @@ void qSlicerLiverResectionsModuleWidget::onActiveResectionChanged(vtkMRMLNode* n
 
   vtkMRMLMarkupsBezierSurfaceNode* surface = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(node);
 
-  // Re-observe the active surface so computing a distance map (which
-  // mutates the surface node) re-fires the gating predicate live.
-  this->qvtkDisconnect(d->ActiveResectionNode, vtkCommand::ModifiedEvent, this, SLOT(updateOpenActionState()));
+  // Re-observe the active surface so computing a distance map (which mutates
+  // the surface node) re-evaluates the drawer state live -- this is the
+  // auto-populate path: a distance map appearing on the selected surface fills
+  // the drawer without any explicit user action (ADR-0023 §Stage-4).
+  this->qvtkDisconnect(d->ActiveResectionNode, vtkCommand::ModifiedEvent, this, SLOT(refreshResectogramDrawer()));
   d->ActiveResectionNode = surface;
   if (surface)
   {
-    this->qvtkConnect(surface, vtkCommand::ModifiedEvent, this, SLOT(updateOpenActionState()));
+    this->qvtkConnect(surface, vtkCommand::ModifiedEvent, this, SLOT(refreshResectogramDrawer()));
   }
 
-  this->updateOpenActionState();
+  this->refreshResectogramDrawer();
 }
 
 //-----------------------------------------------------------------------------
-void qSlicerLiverResectionsModuleWidget::updateOpenActionState()
+void qSlicerLiverResectionsModuleWidget::refreshResectogramDrawer()
 {
   Q_D(qSlicerLiverResectionsModuleWidget);
 
   vtkMRMLMarkupsBezierSurfaceNode* surface = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(d->ResectionSurfaceComboBox->currentNode());
 
-  // ADR-0023 §Stage-4 gating predicate: enabled iff a Bezier surface is
-  // selected AND it carries a distance map.  State-orthogonal: the gate
-  // does NOT consult the ADR-0019 ResectionState.
+  // ADR-0023 §Stage-4 auto-populate predicate: a resectogram is available iff
+  // a Bezier surface is selected AND it carries a distance map.
+  // State-orthogonal: the predicate does NOT consult the ADR-0019
+  // ResectionState.
   bool hasSurface = (surface != nullptr);
   bool hasDistanceMap = hasSurface && (surface->GetDistanceMapVolumeNode() != nullptr);
-  bool enabled = hasSurface && hasDistanceMap;
-
-  d->OpenResectogramViewButton->setEnabled(enabled);
-
-  // ADR-0009 §"explainable disabled state": a disabled affordance says why.
-  if (!hasSurface)
-  {
-    d->OpenResectogramViewButton->setToolTip(tr("Select a resection surface."));
-  }
-  else if (!hasDistanceMap)
-  {
-    d->OpenResectogramViewButton->setToolTip(tr("Compute the distance map first."));
-  }
-  else
-  {
-    d->OpenResectogramViewButton->setToolTip(tr("Open the resectogram view for the selected resection surface."));
-  }
-}
-
-//-----------------------------------------------------------------------------
-void qSlicerLiverResectionsModuleWidget::openResectogramView()
-{
-  Q_D(qSlicerLiverResectionsModuleWidget);
-
-  vtkMRMLMarkupsBezierSurfaceNode* surface = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(d->ResectionSurfaceComboBox->currentNode());
-  if (!surface || surface->GetDistanceMapVolumeNode() == nullptr)
-  {
-    // Gate not satisfied; nothing to open.
-    return;
-  }
-
   vtkMRMLScene* scene = this->mrmlScene();
-  if (!scene)
+
+  if (!hasDistanceMap || !scene)
   {
+    // ADR-0009 §"explainable state": show a hint INSTEAD of an edge-on / blank
+    // view, and stop observing any stale surface for render so a deselected
+    // surface no longer repaints the strip.
+    if (d->ResectogramWidget)
+    {
+      d->ResectogramWidget->hide();
+    }
+    this->observeSurfaceForRender(nullptr);
+    if (d->ResectogramHintLabel)
+    {
+      d->ResectogramHintLabel->setText(!hasSurface ? tr("Select a resection with a computed distance map.") : tr("Compute the distance map for this resection first."));
+      d->ResectogramHintLabel->show();
+    }
     return;
   }
 
@@ -307,6 +299,16 @@ void qSlicerLiverResectionsModuleWidget::openResectogramView()
   {
     return;
   }
+
+  // The resectogram is available: hide the explanatory hint and show the view
+  // in its place.  showResectogramWidget self-gates on a realized GL context
+  // (hasRealizedGLContext); under --no-main-window the node-ensure +
+  // configureView invariants above still ran, but the embed + framing is the
+  // orchestrator's interactive :0 eyeball pass (ADR-0023 §Stage-4).
+  if (d->ResectogramHintLabel)
+  {
+    d->ResectogramHintLabel->hide();
+  }
   this->showResectogramWidget(viewNode);
 
   // Repaint the embedded strip whenever the selected surface's control points
@@ -327,8 +329,8 @@ void qSlicerLiverResectionsModuleWidget::showResectogramWidget(vtkMRMLViewNode* 
   // which uploads the distance-map 3D texture for the gate-satisfied surface.
   // That upload needs a realized GL context (see hasRealizedGLContext): under
   // --no-main-window it would hard-crash, so skip the embed there.  The
-  // display-node + view-node ensure (the headless action invariants) already
-  // ran in openResectogramView before this call; the embed + framing is the
+  // display-node + view-node ensure (the headless invariants) already ran in
+  // refreshResectogramDrawer before this call; the embed + framing is the
   // orchestrator's interactive :0 eyeball pass (ADR-0023 §Stage-4).
   if (!this->hasRealizedGLContext())
   {
@@ -347,8 +349,8 @@ void qSlicerLiverResectionsModuleWidget::showResectogramWidget(vtkMRMLViewNode* 
     {
       controller->hide();
     }
-    // Fill the panel rather than sit left-aligned + letterboxed: an Expanding
-    // size policy in both axes lets the embedded view claim the panel width,
+    // Fill the drawer rather than sit left-aligned + letterboxed: an Expanding
+    // size policy in both axes lets the embedded view claim the drawer width,
     // and a non-trivial minimum height makes it read as a square-ish strip
     // panel matching the square (u, v) domain (the mapper's MatRatio handles
     // intrinsic anisotropy inside it) -- ADR-0023 §Stage-4 layout.
@@ -358,17 +360,15 @@ void qSlicerLiverResectionsModuleWidget::showResectogramWidget(vtkMRMLViewNode* 
     widget->setMRMLViewNode(viewNode);
     d->ResectogramWidget = widget;
 
-    // Place it below the gated action in the Resection Planning panel grid
-    // (row 2 under the combo + button rows, spanning both columns).  Drop the
-    // competing outer vertical spacer so the grid gives its stretch to the
-    // view widget instead of an empty filler, letting the strip fill the
-    // panel -- ADR-0023 §Stage-4.
-    if (QGridLayout* grid = qobject_cast<QGridLayout*>(d->ResectionPlanningCollapsibleButton->layout()))
+    // Place it inside the resectogram drawer, below the hint label (row 1 of
+    // the drawer grid), so it fills the drawer width and claims its stretch --
+    // ADR-0023 §Stage-4.
+    if (QGridLayout* grid = qobject_cast<QGridLayout*>(d->ResectogramDrawer->layout()))
     {
-      grid->addWidget(widget, 2, 0, 1, 2);
-      grid->setRowStretch(2, 1);
+      grid->addWidget(widget, 1, 0);
+      grid->setRowStretch(1, 1);
     }
-    else if (QLayout* layout = d->ResectionPlanningCollapsibleButton->layout())
+    else if (QLayout* layout = d->ResectogramDrawer->layout())
     {
       layout->addWidget(widget);
     }
