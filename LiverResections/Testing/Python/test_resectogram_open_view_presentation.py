@@ -1,16 +1,17 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 
-"""T3-g3c -- presentation fixes for the "Open resectogram view" action.
+"""T3-g3c -- presentation fixes for the auto-populated resectogram drawer.
 
-T3-g3/g3b landed the gated [Open resectogram view] action + an embedded
+T3-g3/g3b landed the auto-populated resectogram drawer + an embedded
 ``qMRMLThreeDWidget`` bound to the singleton resectogram view node
 (``test_resectogram_open_view_action.py`` pins those invariants).  But the
 embedded view DUPLICATES the shared 3D anatomy scene instead of presenting the
 flattened ``(u, v)`` strip alone, and the widget sits left-aligned + letterboxed
-in the module panel.  T3-g3c fixes presentation in three planes -- WITHOUT a
-custom DisplayableManager (ADR-0013 §5; the ``feedback_layerdm_no_custom_dm``
-lesson); view-node + display-node + layout configuration only:
+in the drawer.  T3-g3c fixes presentation in three planes -- WITHOUT a custom
+DisplayableManager (ADR-0013 §5; the ``feedback_layerdm_no_custom_dm`` lesson);
+view-node + display-node + layout configuration only.  The trigger throughout
+is the SELECTION (no [Open] button -- the maintainer removed it):
 
   A. DISPLAY-NODE VIEW RESTRICTION (strip into the dedicated view).
      Triggering with the gate satisfied restricts the
@@ -106,18 +107,18 @@ from __future__ import annotations
 import pytest
 
 # Reuse the g3 sibling's established helpers verbatim rather than re-inventing
-# the harness (the gating/ensure/embed scaffolding is the shared surface).
+# the harness (the predicate/ensure/embed scaffolding is the shared surface).
 from test_resectogram_open_view_action import (
     RESECTOGRAM_DISPLAY_CLASS,
     _accessor_or_skip,
     _make_surface_with_distance_map,
     _purge_resectogram_singleton_view,
     _require_main_window_or_skip,
+    _require_populated_or_skip,
     _require_widget_chrome_or_skip,
     _resectogram_three_d_widgets,
     _select_active_resection,
     _slicer_or_skip,
-    _trigger_open,
     _widget_or_skip,
 )
 
@@ -158,29 +159,22 @@ def _drop_resectogram_singleton_view():
 
 
 def _open_with_gate_satisfied(slicer):
-    """Build a gate-satisfied surface, select it, trigger the open action.
+    """Build a gate-satisfied surface and SELECT it (the auto-populate trigger).
 
-    Returns ``(widget, bezier)`` once the action has fired.  Skips cleanly
-    (explicit, greppable reason -- #460) at every pre-implementation gap: no
-    widget rep, no chrome, no accessor, or a still-disabled gate.
+    Returns ``(widget, bezier)`` once the drawer has auto-populated.  Skips
+    cleanly (explicit, greppable reason -- #460) at every pre-implementation
+    gap: no widget rep, no chrome, no accessor, or a drawer that did not
+    populate (hint still visible).
     """
     slicer.mrmlScene.Clear(0)
     widget = _widget_or_skip(slicer)
-    combo, button = _require_widget_chrome_or_skip(widget)
+    combo, hint = _require_widget_chrome_or_skip(widget)
 
     bezier = _make_surface_with_distance_map(slicer)
     _accessor_or_skip(bezier)
     if not _select_active_resection(widget, combo, bezier):
         pytest.skip("cannot select the active resection (implementer contract).")
-    if not button.enabled:
-        pytest.skip(
-            "gate not satisfied (button disabled) on a distance-mapped "
-            "surface -- the gating predicate is not yet wired; the g3c "
-            "presentation invariants cannot be exercised until the gate is "
-            "wired (covered by test_resectogram_open_view_action.py)."
-        )
-
-    _trigger_open(widget, button)
+    _require_populated_or_skip(hint)
     return widget, bezier
 
 

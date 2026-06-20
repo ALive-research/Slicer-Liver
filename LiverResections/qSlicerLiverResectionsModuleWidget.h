@@ -47,7 +47,7 @@
 
 class qMRMLNodeComboBox;
 class qMRMLThreeDWidget;
-class QAbstractButton;
+class QLabel;
 class vtkMRMLNode;
 class vtkMRMLViewNode;
 class vtkMRMLMarkupsBezierSurfaceNode;
@@ -55,20 +55,25 @@ class qSlicerLiverResectionsModuleWidgetPrivate;
 
 /// \brief The Stage-4 "Resection Planning" surface (ADR-0023 §Stage-4).
 ///
-/// LiverResections' first GUI: a resection-surface selector plus a gated
-/// [Open resectogram view] action.  The action is enabled iff the selected
-/// ``vtkMRMLMarkupsBezierSurfaceNode`` carries a distance map; triggering it
-/// ensures exactly one ``vtkMRMLResectogramDisplayNode`` on the surface and
-/// ensures the singleton resectogram view node via the Python
-/// ``ResectogramViewManager`` (LiverResectionsLib).  No custom displayable
-/// manager (ADR-0013 §5).
+/// LiverResections' first GUI: a resection-surface selector plus a
+/// collapsible "Resectogram" drawer.  Selecting a
+/// ``vtkMRMLMarkupsBezierSurfaceNode`` that carries a distance map
+/// auto-populates the drawer -- no explicit action: the widget ensures exactly
+/// one ``vtkMRMLResectogramDisplayNode`` on the surface and ensures the
+/// singleton resectogram view node via the Python ``ResectogramViewManager``
+/// (LiverResectionsLib).  No custom displayable manager (ADR-0013 §5).
 ///
-/// Triggering also embeds a single ``qMRMLThreeDWidget`` bound to that
-/// singleton view node into this module's side panel (the SlicerHyperProbe
+/// Auto-population also embeds a single ``qMRMLThreeDWidget`` bound to that
+/// singleton view node inside the drawer (the SlicerHyperProbe
 /// ``create_three_d_widget`` precedent), so the LayerDM ``ResectogramPipeline``
 /// composites the flattened strip in a panel-local view rather than a
-/// main-area Slicer layout (ADR-0023 §Stage-4).  Idempotent: re-triggering
-/// shows/raises the existing widget instead of adding a second.
+/// main-area Slicer layout (ADR-0023 §Stage-4).  Idempotent: re-selecting a
+/// valid surface re-targets the existing widget instead of adding a second.
+///
+/// When the selected surface is invalid (none, or no distance map) the drawer
+/// shows a short hint INSTEAD of an edge-on / blank view (ADR-0009
+/// §"explainable state").  Re-evaluated on selection change AND on scene/node
+/// modified events, so computing a distance map auto-populates the drawer.
 class Q_SLICER_QTMODULES_LIVERRESECTIONS_EXPORT qSlicerLiverResectionsModuleWidget : public qSlicerAbstractModuleWidget
 {
   Q_OBJECT
@@ -80,9 +85,12 @@ public:
   /// The active-resection selector (objectName ``ResectionSurfaceComboBox``).
   Q_INVOKABLE qMRMLNodeComboBox* resectionSurfaceComboBox() const;
 
-  /// The gated [Open resectogram view] action button
-  /// (objectName ``OpenResectogramViewButton``).
-  Q_INVOKABLE QAbstractButton* openResectogramViewButton() const;
+  /// The collapsible resectogram drawer (objectName ``ResectogramDrawer``).
+  Q_INVOKABLE QWidget* resectogramDrawer() const;
+
+  /// The hint shown in the drawer when no valid resectogram is available
+  /// (objectName ``ResectogramHintLabel``).
+  Q_INVOKABLE QLabel* resectogramHintLabel() const;
 
   /// Select ``node`` as the active resection (thin Python-accessible setter).
   Q_INVOKABLE void setActiveResectionNode(vtkMRMLNode* node);
@@ -90,17 +98,12 @@ public:
 public slots:
   void setMRMLScene(vtkMRMLScene*) override;
 
-  /// Trigger the gated open-resectogram-view action: ensure a resectogram
-  /// display node on the active surface (idempotent) and ensure the
-  /// singleton resectogram view node.
-  void openResectogramView();
-
 protected slots:
-  /// Re-evaluate the gating predicate on selection change.
+  /// Re-evaluate the drawer state on selection change.
   void onActiveResectionChanged(vtkMRMLNode* node);
-  /// Re-evaluate the gating predicate on scene/node modified events (so
-  /// computing a distance map flips the button live).
-  void updateOpenActionState();
+  /// Re-evaluate the drawer state on scene/node modified events (so computing
+  /// a distance map auto-populates the drawer live).
+  void refreshResectogramDrawer();
 
   /// Repaint the embedded resectogram view.  Wired to the active surface's
   /// PointModifiedEvent / ModifiedEvent so a control-point edit updates the
@@ -112,9 +115,9 @@ protected:
   void setup() override;
 
   /// Embed (create once) the single ``qMRMLThreeDWidget`` bound to the
-  /// resectogram singleton ``viewNode`` into this module's panel, then
-  /// show/raise it.  Idempotent: re-invoking re-targets and re-shows the
-  /// existing widget rather than adding a second.
+  /// resectogram singleton ``viewNode`` inside the drawer, then show/raise it.
+  /// Idempotent: re-invoking re-targets and re-shows the existing widget
+  /// rather than adding a second.
   void showResectogramWidget(vtkMRMLViewNode* viewNode);
 
   /// Push the flattened-quad camera pose + flat background straight onto the
