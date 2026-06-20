@@ -128,6 +128,10 @@ from test_resectogram_open_view_action import (
 # false positive; this is a coarse "is it framed at all" gate).
 _FOCAL_POINT_TOLERANCE_MM = 1.0
 
+# Per-channel tolerance for the white-background assertion.  SetBackgroundColor
+# round-trips through float storage, so an exact 1.0 comparison is brittle.
+_BACKGROUND_TOLERANCE = 1e-3
+
 
 # --------------------------------------------------------------------------- #
 # Test isolation -- reclaim the resectogram singleton view node after each test.
@@ -443,6 +447,55 @@ def test_embedded_three_d_widget_expands_to_fill_panel():
         f"square-ish strip panel, not a letterboxed sliver (got "
         f"{view_widget.minimumHeight}) -- ADR-0023 §Stage-4 layout fix."
     )
+
+
+# --------------------------------------------------------------------------- #
+# Invariant E -- the resectogram view node carries a flat WHITE background.
+# GPU-free: SetBackgroundColor is a MRML field set inside configureView, read
+# by the Slicer layout manager on a maximize.  Decoupled from the visual-
+# regression scenario's BLACK background (the arena's interior-lit metrics
+# assume black; only the production view goes white).
+# --------------------------------------------------------------------------- #
+
+
+def test_trigger_sets_resectogram_view_node_white_background():
+    """After trigger, the resectogram view node's background is flat white.
+
+    ADR-0023 §Stage-4: the production dedicated view reads as a clean 2D image
+    on a flat WHITE background.  Both the flat color and the gradient endpoint
+    (``BackgroundColor`` / ``BackgroundColor2``) are white so a layout-managed /
+    maximized render -- which reads the MRML view node, not the embedded
+    renderer -- shows the framed resectogram on white, not the default 3D blue
+    gradient.  GPU-free: the field is set in ``configureView``, queryable
+    without a render.  DELIBERATELY decoupled from the
+    ``Resectogram4x4BlurOff`` scenario's BLACK ``BACKGROUND_RGB`` (the arena's
+    interior-lit-fraction metrics assume black).  RED today: the view node keeps
+    its default 3D background until the white-background wiring lands.
+    """
+    slicer = _slicer_or_skip()
+    _open_with_gate_satisfied(slicer)
+    view = _resectogram_view_node(slicer)
+
+    from LiverResectionsLib.ResectogramViewManager import (  # type: ignore[import-not-found]
+        RESECTOGRAM_VIEW_BACKGROUND_RGB,
+    )
+
+    for label, background in (
+        ("BackgroundColor", view.GetBackgroundColor()),
+        ("BackgroundColor2", view.GetBackgroundColor2()),
+    ):
+        for axis, (got, want) in enumerate(
+            zip(background, RESECTOGRAM_VIEW_BACKGROUND_RGB)
+        ):
+            assert abs(got - want) <= _BACKGROUND_TOLERANCE, (
+                f"the resectogram view node's {label} must be the production "
+                f"white {tuple(RESECTOGRAM_VIEW_BACKGROUND_RGB)!r} (axis {axis}: "
+                f"got {got}, want {want}, tol {_BACKGROUND_TOLERANCE}) so a "
+                "layout-managed / maximized render shows the framed resectogram "
+                "on white -- ADR-0023 §Stage-4.  This is decoupled from the "
+                "scenario's black BACKGROUND_RGB on purpose (the arena's "
+                "interior-lit metrics assume black)."
+            )
 
 
 if __name__ == "__main__":
