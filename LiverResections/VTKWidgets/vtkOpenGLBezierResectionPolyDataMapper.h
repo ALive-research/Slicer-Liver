@@ -148,6 +148,18 @@ public:
   /// Get the distance-map texture object set by the representation.
   vtkTextureObject* GetDistanceMapTextureObject() const;
 
+  /// Get the locator marker position (RAS world point, ADR-0025)
+  const float* GetLocatorPosition() const;
+  /// Set the locator marker position (RAS world point, ADR-0025)
+  void SetLocatorPosition(float position[3]);
+  /// Set the locator marker position (RAS world point, ADR-0025)
+  void SetLocatorPosition(float x, float y, float z);
+
+  /// Get the locator marker radius (0 disables the marker, ADR-0025)
+  float GetLocatorRadius() const;
+  /// Set the locator marker radius (0 disables the marker, ADR-0025)
+  void SetLocatorRadius(float radius);
+
 protected:
   vtkOpenGLBezierResectionPolyDataMapper();
   ~vtkOpenGLBezierResectionPolyDataMapper();

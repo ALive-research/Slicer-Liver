@@ -78,6 +78,8 @@ public:
     , ResectionClipOut(false)
     , GridDivisions(20)
     , GridThicknessFactor(9.5f)
+    , LocatorPosition{ 0.0f, 0.0f, 0.0f }
+    , LocatorRadius(0.0f)
   {
     this->RasToIjkMatrixT = vtkSmartPointer<vtkMatrix4x4>::New();
     this->IjkToTextureMatrixT = vtkSmartPointer<vtkMatrix4x4>::New();
@@ -98,6 +100,8 @@ public:
   bool ResectionClipOut;
   unsigned int GridDivisions;
   float GridThicknessFactor;
+  float LocatorPosition[3];
+  float LocatorRadius;
 };
 
 //------------------------------------------------------------------------------
@@ -144,6 +148,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(std::map<vtkSha
                                "//VTK::PositionVC::Dec\n"
                                "out vec4 vertexMCVSOutput;\n"
                                "out vec4 vertexWCVSOutput;\n"
+                               "out vec4 vertexRASVSOutput;\n"
                                "in vec2  uvCoords;\n"
                                "out vec2 uvCoordsOutput;\n"
                                "uniform mat4 uShiftScale;\n"
@@ -155,7 +160,8 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(std::map<vtkSha
                                "//VTK::PositionVC::Impl\n"
                                "vertexMCVSOutput = vertexMC;\n"
                                "uvCoordsOutput = uvCoords;\n"
-                               "vertexWCVSOutput = uIjkToTexture*uRasToIjk*uShiftScale*vertexMC;\n");
+                               "vertexWCVSOutput = uIjkToTexture*uRasToIjk*uShiftScale*vertexMC;\n"
+                               "vertexRASVSOutput = uShiftScale*vertexMC;\n");
 
   vtkShaderProgram::Substitute(FSSource,
                                "//VTK::PositionVC::Dec",
@@ -178,7 +184,10 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(std::map<vtkSha
                                "uniform int uInterpolatedMargins;\n"
                                "uniform int uGridDivisions;\n"
                                "uniform float uGridThickness;\n"
+                               "uniform vec3 uLocatorPosition;\n"
+                               "uniform float uLocatorRadius;\n"
                                "in vec4 vertexWCVSOutput;\n"
+                               "in vec4 vertexRASVSOutput;\n"
                                "in vec2 uvCoordsOutput;\n"
                                "vec4 fragPositionMC = vertexWCVSOutput;\n");
 
@@ -239,6 +248,14 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(std::map<vtkSha
     "    diffuseColor = vec3(0.0);\n"
     "  } else if ((uvCoordsOutput.x > 0.5 && uvCoordsOutput.y < borderSize) || (uvCoordsOutput.x > 1.0 - borderSize && uvCoordsOutput.y < 0.5) ) {\n"
     "    ambientColor = topRightColor;\n"
+    "    diffuseColor = vec3(0.0);\n"
+    "  }\n"
+
+    // Locator marker (ADR-0025): draws on top of the corner markers where
+    // they overlap.  uLocatorRadius == 0 is the off state.  The colour is
+    // a placeholder white; the locator display node will drive it later.
+    "  if (uLocatorRadius > 0.0 && distance(vertexRASVSOutput.xyz, uLocatorPosition) < uLocatorRadius) {\n"
+    "    ambientColor = vec3(1.0, 1.0, 1.0);\n"
     "    diffuseColor = vec3(0.0);\n"
     "  }\n"
     "}\n");
@@ -367,6 +384,16 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetMapperShaderParameters(vtkOpenGL
   if (cellBO.Program->IsUniformUsed("uGridThickness"))
   {
     cellBO.Program->SetUniformf("uGridThickness", this->Impl->GridThicknessFactor);
+  }
+
+  if (cellBO.Program->IsUniformUsed("uLocatorPosition"))
+  {
+    cellBO.Program->SetUniform3f("uLocatorPosition", this->Impl->LocatorPosition);
+  }
+
+  if (cellBO.Program->IsUniformUsed("uLocatorRadius"))
+  {
+    cellBO.Program->SetUniformf("uLocatorRadius", this->Impl->LocatorRadius);
   }
 
   Superclass::SetMapperShaderParameters(cellBO, ren, actor);
@@ -644,5 +671,42 @@ float vtkOpenGLBezierResectionPolyDataMapper::GetGridThicknessFactor() const
 void vtkOpenGLBezierResectionPolyDataMapper::SetGridThicknessFactor(float thickness)
 {
   this->Impl->GridThicknessFactor = thickness;
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+const float* vtkOpenGLBezierResectionPolyDataMapper::GetLocatorPosition() const
+{
+  return this->Impl->LocatorPosition;
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::SetLocatorPosition(float position[3])
+{
+  this->Impl->LocatorPosition[0] = position[0];
+  this->Impl->LocatorPosition[1] = position[1];
+  this->Impl->LocatorPosition[2] = position[2];
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::SetLocatorPosition(float x, float y, float z)
+{
+  this->Impl->LocatorPosition[0] = x;
+  this->Impl->LocatorPosition[1] = y;
+  this->Impl->LocatorPosition[2] = z;
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+float vtkOpenGLBezierResectionPolyDataMapper::GetLocatorRadius() const
+{
+  return this->Impl->LocatorRadius;
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::SetLocatorRadius(float radius)
+{
+  this->Impl->LocatorRadius = radius;
   this->Modified();
 }

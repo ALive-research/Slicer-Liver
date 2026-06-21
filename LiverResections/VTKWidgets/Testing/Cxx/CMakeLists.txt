@@ -11,6 +11,7 @@ set(KIT vtkSlicer${MODULE_NAME}ModuleVTKWidgets)
 set(KIT_TEST_SRCS
   vtkLiverBezierWidgetTest1.cxx
   vtkOpenGLLiverResectionMappersRelocationTest1.cxx
+  vtkOpenGLBezierResectionPolyDataMapperLocatorTest1.cxx
   vtkOpenGLDistanceContourMapperSpheroidSSOTTest.cxx
   )
 
@@ -43,6 +44,7 @@ target_link_libraries(${KIT}CxxTests
 
 SIMPLE_TEST(vtkLiverBezierWidgetTest1)
 SIMPLE_TEST(vtkOpenGLLiverResectionMappersRelocationTest1)
+SIMPLE_TEST(vtkOpenGLBezierResectionPolyDataMapperLocatorTest1)
 
 # GPU-path / SSOT consistency pin for the distance-spheroid init contour
 # (ADR-0014 §2 triaxial-ellipsoid contour, ADR-0015 §"Stack 4" render ==
