@@ -183,7 +183,26 @@ qSlicerLiverResectionsModuleWidget::qSlicerLiverResectionsModuleWidget(QWidget* 
 }
 
 //-----------------------------------------------------------------------------
-qSlicerLiverResectionsModuleWidget::~qSlicerLiverResectionsModuleWidget() = default;
+qSlicerLiverResectionsModuleWidget::~qSlicerLiverResectionsModuleWidget()
+{
+  Q_D(qSlicerLiverResectionsModuleWidget);
+
+  // The enlarge installs an event filter on the layout manager's central
+  // viewport, which OUTLIVES this widget (it belongs to the application layout
+  // manager, not to this).  If we are torn down while still enlarged, remove
+  // that filter so a later viewport event is never delivered to this destroyed
+  // object (use-after-free).  The embedded view's own filter is removed too for
+  // symmetry -- the view is normally a child torn down with us, but the removal
+  // is harmless and keeps the install/remove pairing explicit.
+  if (d->EnlargeHost)
+  {
+    d->EnlargeHost->removeEventFilter(this);
+  }
+  if (d->ResectogramWidget && d->ResectogramWidget->threeDView())
+  {
+    d->ResectogramWidget->threeDView()->removeEventFilter(this);
+  }
+}
 
 //-----------------------------------------------------------------------------
 void qSlicerLiverResectionsModuleWidget::setup()
