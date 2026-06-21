@@ -409,7 +409,7 @@ void qSlicerLiverResectionsModuleWidget::showResectogramWidget(vtkMRMLViewNode* 
   // Binding the singleton view node to the embedded qMRMLThreeDWidget
   // (setMRMLViewNode) synchronously attaches the LayerDM displayable manager,
   // which uploads the distance-map 3D texture for the gate-satisfied surface.
-  // That upload needs a realized GL context (see hasRealizedGLContext): under
+  // That upload needs a REALIZED GL context (see hasRealizedGLContext): under
   // --no-main-window it would hard-crash, so skip the embed there.  The
   // display-node + view-node ensure (the headless invariants) already ran in
   // refreshResectogramDrawer before this call; the embed + framing is the
@@ -419,10 +419,23 @@ void qSlicerLiverResectionsModuleWidget::showResectogramWidget(vtkMRMLViewNode* 
     return;
   }
 
-  // Create the embedded view widget exactly once (idempotent re-open).  Bind
-  // it to the singleton view node; the controller chrome is hidden so the
-  // panel reads as the flattened resectogram image (the Hyperprobe precedent
-  // hides threeDController() the same way).
+  // Expand the drawer BEFORE the embedded view is shown/bound.  A widget only
+  // realizes its GL context once it is actually MAPPED (visible on screen); a
+  // child of a collapsed ctkCollapsibleButton is never mapped, so show() on it
+  // is a no-op and the distance-map 3D texture upload at setMRMLViewNode lands
+  // in an unrealized context (GL_INVALID_VALUE -> "Failed to allocate 3D
+  // texture").  Uncollapsing the drawer here guarantees the embed below maps
+  // and realizes before the bind -- the realize-then-bind order the arena
+  // workflow proves (test_resectogram_arena _build_view_widget).
+  if (d->ResectogramDrawer->collapsed())
+  {
+    d->ResectogramDrawer->setCollapsed(false);
+  }
+
+  // Create the embedded view widget exactly once (idempotent re-open).  The
+  // controller chrome is hidden so the panel reads as the flattened
+  // resectogram image (the Hyperprobe precedent hides threeDController() the
+  // same way).
   if (!d->ResectogramWidget)
   {
     qMRMLThreeDWidget* widget = new qMRMLThreeDWidget(this);
@@ -438,13 +451,12 @@ void qSlicerLiverResectionsModuleWidget::showResectogramWidget(vtkMRMLViewNode* 
     // intrinsic anisotropy inside it) -- ADR-0023 §Stage-4 layout.
     widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     widget->setMinimumHeight(250);
-    widget->setMRMLScene(this->mrmlScene());
-    widget->setMRMLViewNode(viewNode);
     d->ResectogramWidget = widget;
 
     // Place it inside the resectogram drawer, below the hint label (row 1 of
     // the drawer grid), so it fills the drawer width and claims its stretch --
-    // ADR-0023 §Stage-4.
+    // ADR-0023 §Stage-4.  Parenting it into the (now expanded) drawer is what
+    // lets show() + forceRender() below MAP and realize its GL surface.
     if (QGridLayout* grid = qobject_cast<QGridLayout*>(d->ResectogramDrawer->layout()))
     {
       grid->addWidget(widget, 1, 0);
@@ -454,6 +466,22 @@ void qSlicerLiverResectionsModuleWidget::showResectogramWidget(vtkMRMLViewNode* 
     {
       layout->addWidget(widget);
     }
+    widget->setMRMLScene(this->mrmlScene());
+
+    // Realize the GL surface BEFORE binding the view node.  show() maps the
+    // now-parented widget inside the expanded drawer, and forceRender() pumps a
+    // frame so the OpenGL context is genuinely current; only then does
+    // setMRMLViewNode attach the LayerDM displayable manager and upload the
+    // distance-map 3D texture INTO a realized context.  Binding into a realized
+    // context is what lets the texture allocate (an unrealized context yields
+    // GL_INVALID_VALUE -> "Failed to allocate 3D texture"); the deferred
+    // kickInitialResectogramRender below then drives the Pipeline's first frame.
+    // This mirrors the arena workflow's realize-then-bind order
+    // (test_resectogram_arena _build_view_widget).  The raise() is left to the
+    // shared show()/raise() below both branches.
+    widget->show();
+    widget->threeDView()->forceRender();
+    widget->setMRMLViewNode(viewNode);
 
     // The embedded view is a FIXED flattened (u, v) image under parallel
     // projection; orbiting or maximizing it is incorrect.  Lock both out at the
@@ -466,7 +494,8 @@ void qSlicerLiverResectionsModuleWidget::showResectogramWidget(vtkMRMLViewNode* 
   else
   {
     // Re-open: keep ONE widget; re-target the (singleton) view node and the
-    // current scene defensively, then show/raise it.
+    // current scene defensively.  The widget was already realized on first
+    // create, so the realize-then-bind ordering is not needed again here.
     d->ResectogramWidget->setMRMLScene(this->mrmlScene());
     d->ResectogramWidget->setMRMLViewNode(viewNode);
   }
