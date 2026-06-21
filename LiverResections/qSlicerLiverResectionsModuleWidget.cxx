@@ -63,6 +63,7 @@
 #include <ctkCollapsibleButton.h>
 
 // MRML includes
+#include <vtkMRMLLayoutNode.h>
 #include <vtkMRMLScalarVolumeNode.h>
 #include <vtkMRMLScene.h>
 #include <vtkMRMLViewNode.h>
@@ -138,6 +139,15 @@ public:
   /// re-targeted on re-open, so it is tracked separately for symmetric
   /// RemoveObserver.
   vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode> RenderObservedNode;
+
+  /// The scene's layout node, observed for the double-click maximize/restore of
+  /// the resectogram view.  A maximize hands the singleton resectogram view
+  /// node to the Slicer layout manager, which realises a FRESH
+  /// layout-managed view + LayerDM ResectogramPipeline for it; that pipeline
+  /// needs the same initial feed kick the embedded panel got, or the maximized
+  /// view paints white-but-empty.  Tracked for symmetric RemoveObserver across
+  /// scene changes.
+  vtkWeakPointer<vtkMRMLLayoutNode> LayoutNode;
 };
 
 //-----------------------------------------------------------------------------
@@ -201,6 +211,7 @@ void qSlicerLiverResectionsModuleWidget::setMRMLScene(vtkMRMLScene* scene)
   Q_D(qSlicerLiverResectionsModuleWidget);
   this->Superclass::setMRMLScene(scene);
   d->ResectionSurfaceComboBox->setMRMLScene(scene);
+  this->observeLayoutNode();
   this->refreshResectogramDrawer();
 }
 
@@ -336,6 +347,13 @@ void qSlicerLiverResectionsModuleWidget::refreshResectogramDrawer()
   // RequestRender, so observe the surface here and force a render on edit
   // (ADR-0023 §Stage-4).
   this->observeSurfaceForRender(surface);
+
+  // (Re)attach the layout-node observer now that the embed has happened: the
+  // layout node (the maximize / restore driver) is minted by the layout
+  // manager, which may not have run yet when setMRMLScene first fired, so
+  // resolve + observe it here once a realized GL context (and thus the main
+  // layout) is present.  Idempotent re-attach.
+  this->observeLayoutNode();
 
   // Replay the working reactivity path on auto-populate so the strip is visible
   // with NO manual edit.  The synchronous populate fires before the embedded
@@ -512,12 +530,12 @@ void qSlicerLiverResectionsModuleWidget::lockEmbeddedViewInteraction()
     return;
   }
 
-  // The camera widget hosted by the view's camera displayable manager owns both
-  // the trackball-rotate event translations and the double-click maximize-view
-  // translation (vtkMRMLCameraWidget).  Remap exactly those to WidgetEventNone
-  // so the panel cannot rotate or maximize, while pan / zoom (translate, dolly,
-  // wheel) stay untouched.  No custom DisplayableManager (ADR-0013 §5): this is
-  // a per-view config of the upstream camera widget.
+  // The camera widget hosted by the view's camera displayable manager owns the
+  // trackball-rotate event translations (vtkMRMLCameraWidget).  Remap exactly
+  // those to WidgetEventNone so the flat panel cannot be orbited, while pan /
+  // zoom (translate, dolly, wheel) AND the double-click focus/maximize stay
+  // untouched.  No custom DisplayableManager (ADR-0013 §5): this is a per-view
+  // config of the upstream camera widget.
   vtkMRMLCameraDisplayableManager* cameraDM = vtkMRMLCameraDisplayableManager::SafeDownCast(view->displayableManagerByClassName("vtkMRMLCameraDisplayableManager"));
   if (!cameraDM)
   {
@@ -529,20 +547,15 @@ void qSlicerLiverResectionsModuleWidget::lockEmbeddedViewInteraction()
     return;
   }
 
-  // Fix B -- no 3D rotation.  Drop the left-button rotate-start translations
-  // (the bare drag and the markup-placement Alt variant) and the Ctrl-drag spin
-  // so a flat 2D panel cannot be orbited.  Pan (Shift / middle drag) and zoom
-  // (right drag, Ctrl + Shift drag, mouse wheel) are left intact.
+  // No 3D rotation.  Drop the left-button rotate-start translations (the bare
+  // drag and the markup-placement Alt variant) and the Ctrl-drag spin so a flat
+  // 2D panel cannot be orbited.  Pan (Shift / middle drag) and zoom (right drag,
+  // Ctrl + Shift drag, mouse wheel) are left intact, and the double-click
+  // focus/maximize is deliberately NOT suppressed so enlarging the strip into
+  // the main layout still works (ADR-0023 §Stage-4).
   cameraWidget->SetEventTranslation(vtkMRMLCameraWidget::WidgetStateIdle, vtkCommand::LeftButtonPressEvent, vtkEvent::NoModifier, vtkMRMLCameraWidget::WidgetEventNone);
   cameraWidget->SetEventTranslation(vtkMRMLCameraWidget::WidgetStateIdle, vtkCommand::LeftButtonPressEvent, vtkEvent::AltModifier, vtkMRMLCameraWidget::WidgetEventNone);
   cameraWidget->SetEventTranslation(vtkMRMLCameraWidget::WidgetStateIdle, vtkCommand::LeftButtonPressEvent, vtkEvent::ControlModifier, vtkMRMLCameraWidget::WidgetEventNone);
-
-  // Fix C -- no double-click maximize.  The layout-managed maximize view does
-  // not carry the LayerDM flattened strip (the Pipeline is bound to this
-  // embedded renderer), so it would show an empty white view.  Suppress the
-  // double-click so the side-panel image simply ignores it; making the
-  // layout-managed render paint the strip is deliberately out of scope.
-  cameraWidget->SetEventTranslation(vtkMRMLCameraWidget::WidgetStateIdle, vtkCommand::LeftButtonDoubleClickEvent, vtkEvent::NoModifier, vtkMRMLCameraWidget::WidgetEventNone);
 }
 
 //-----------------------------------------------------------------------------
@@ -566,6 +579,53 @@ void qSlicerLiverResectionsModuleWidget::observeSurfaceForRender(vtkMRMLMarkupsB
     this->qvtkConnect(surface, vtkCommand::ModifiedEvent, this, SLOT(scheduleResectogramRender()));
     this->qvtkConnect(surface, vtkMRMLMarkupsNode::PointModifiedEvent, this, SLOT(scheduleResectogramRender()));
   }
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerLiverResectionsModuleWidget::observeLayoutNode()
+{
+  Q_D(qSlicerLiverResectionsModuleWidget);
+
+  // The maximize / restore of the resectogram view is driven through the
+  // scene's singleton layout node (AddMaximizedViewNode / RemoveMaximizedViewNode
+  // fire its ModifiedEvent).  Observe it so the layout-managed maximized view's
+  // fresh LayerDM Pipeline gets the same feed kick the embedded panel got.
+  vtkMRMLScene* scene = this->mrmlScene();
+  vtkMRMLLayoutNode* layoutNode = scene ? vtkMRMLLayoutNode::SafeDownCast(scene->GetFirstNodeByClass("vtkMRMLLayoutNode")) : nullptr;
+
+  if (d->LayoutNode == layoutNode)
+  {
+    return;
+  }
+
+  // Symmetric removal of the prior observer before re-targeting.
+  this->qvtkDisconnect(d->LayoutNode, vtkCommand::ModifiedEvent, this, SLOT(onLayoutModified()));
+  d->LayoutNode = layoutNode;
+  if (layoutNode)
+  {
+    this->qvtkConnect(layoutNode, vtkCommand::ModifiedEvent, this, SLOT(onLayoutModified()));
+  }
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerLiverResectionsModuleWidget::onLayoutModified()
+{
+  // A maximize/restore of the resectogram view realises a FRESH
+  // layout-managed qMRMLThreeDView + LayerDM ResectogramPipeline for the
+  // singleton view node.  Its background + parallel camera come from the MRML
+  // view node (the Python ResectogramViewManager already set them white +
+  // parallel), but the new Pipeline does not feed the flattened-surface
+  // geometry until something drives its observer -> UpdatePipeline ->
+  // RequestRender path -- the SAME initial-kick gap the embedded panel had on
+  // auto-populate.  Replay that kick: firing the observed surface's Modified()
+  // once drives EVERY ResectogramPipeline bound to this view node (the embedded
+  // panel's AND the maximized view's) to reconcile + RequestRender, so the
+  // strip feeds and paints in the maximized view too (ADR-0023 §Stage-4).
+  //
+  // Idempotent: the kick only repaints, it does not mutate the surface, so a
+  // layout modification unrelated to the resectogram view (any other
+  // maximize/restore) costs at most one redundant coalesced render.
+  this->kickInitialResectogramRender();
 }
 
 //-----------------------------------------------------------------------------
