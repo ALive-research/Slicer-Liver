@@ -541,8 +541,8 @@ Reviewable invariants that signal this decision is honoured:
 - `Liver/Liver.py` exposes a sidebar widget with six entries matching the six stages.
 - `Liver/Liver.py` contains no domain logic — only composition and navigation. Grep: `Liver/Liver.py` should not import any algorithm or compute helpers.
 - `vtkMRMLAbstractTerritoriesNode` exists as a C++ base class in `VascularTerritories/MRML/` (or equivalent). Subclasses `vtkMRMLStdCouinaudTerritoriesNode` and `vtkMRMLCustomTerritoriesNode` register via `RegisterNodeClass`.
-- `qSlicerLiverResections` Stage 4 detail panel surfaces an `[Open resectogram view]` action per active resection.
-- `LiverResections/` embeds a `qMRMLThreeDWidget` bound to the dedicated resectogram singleton view node in the Stage 4 panel (NOT a registered custom Slicer layout — see the amendment "Resectogram view: panel-embedded, not a registered layout").
+- `qSlicerLiverResections` Stage 4 detail panel AUTO-POPULATES a "Resectogram" drawer when the active resection carries a distance map (no explicit `[Open]` action — see the amendment "Resectogram view: panel-embedded, not a registered layout").
+- `LiverResections/` embeds a `qMRMLThreeDWidget` bound to the dedicated resectogram singleton view node in the Stage 4 panel (NOT a registered custom Slicer layout — see the amendment), and a double-click on it CUSTOM-ENLARGES the widget into the central layout area (NOT Slicer's built-in maximize — see the amendment).
 - The sidebar's per-stage state indicators are driven by a per-stage `isComplete()` query (or equivalent) defined by each stage's module.
 - No new module declares `TotalSegmentator` or `MONAILabel` as `EXTENSION_DEPENDS`. The first-use install path is implemented in `LiverSegmentation/Logic/` (and any other AI-consuming module).
 - `.lrp.json` schema header reads `"schemaVersion": 2` on writes; reader rejects v1 outright and tolerates absent surgeon-state blocks within v2 via documented defaults.
@@ -561,9 +561,14 @@ delivered as a **panel-embedded `qMRMLThreeDWidget`** parented into the
 `LiverResectogram` singleton tag). No `vtkMRMLLayoutNode` layout description is
 registered, and no slot in the central layout area is reserved.
 
-Triggering the gated `[Open resectogram view]` action:
+The trigger is the SELECTION, not a button: the earlier `[Open resectogram
+view]` action was removed in favour of auto-populate. Selecting a
+`vtkMRMLMarkupsBezierSurfaceNode` that carries a distance map auto-fills the
+drawer (an unsatisfied predicate shows an explainable hint instead, ADR-0009).
+Auto-populate:
 
 - ensures the singleton view node (`ResectogramViewManager.ensureViewNode()`);
+- ensures exactly one `vtkMRMLResectogramDisplayNode` on the surface;
 - restricts the `vtkMRMLResectogramDisplayNode` to that view via the
   display-node view allowlist (`AddViewNodeID`), so the flattened `(u, v)`
   strip composites into the dedicated view alone;
@@ -576,22 +581,38 @@ Triggering the gated `[Open resectogram view]` action:
 - embeds a single `qMRMLThreeDWidget` (Expanding size policy, non-trivial
   minimum height) into the panel grid so the strip fills the panel.
 
+**Enlarge, not built-in maximize.** A double-click on the embedded view
+CUSTOM-ENLARGES it: the one embedded `qMRMLThreeDWidget` is reparented into the
+layout manager's central viewport (and back on a second double-click). Slicer's
+built-in double-click maximize is deliberately NOT used: maximizing the
+singleton view node hands it to the layout manager, which realises a SECOND
+`qMRMLThreeDWidget`; each widget owns its own LayerDM pipeline + renderer, and
+the strip actors only ever populate the embedded widget's renderer — the
+layout-managed one comes up blank (a topology probe confirmed this), and forcing
+its pipeline to draw is what caused an earlier render storm. Reparenting the one
+working widget within the main window preserves its GL context + distance-map
+texture, so the strip renders enlarged with no second pipeline. A Qt event
+filter on the embedded view consumes the double-click before VTK sees it, so the
+built-in maximize never fires.
+
 This stays within the no-custom-DisplayableManager rule
 ([ADR-0013](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0013-layerdm-pipeline-pattern.md)
 §5): the dedicated view receives the upstream LayerDM displayable manager, and
 the registered `ResectogramPipeline` creator — tightened to fire only for the
-tagged view — dispatches the strip. The pattern follows the SlicerHyperProbe
-side-panel `qMRMLThreeDWidget` precedent rather than v1's retired
-`CoRenderer2D` sub-viewport.
+tagged view — dispatches the strip; the enlarge is pure Qt widget reparenting,
+not a displayable manager. The pattern follows the SlicerHyperProbe side-panel
+`qMRMLThreeDWidget` precedent rather than v1's retired `CoRenderer2D`
+sub-viewport.
 
 ```mermaid
 flowchart LR
-  A["[Open resectogram view]<br/>(gated action)"] --> B["ResectogramViewManager<br/>singleton vtkMRMLViewNode"]
+  A["select distance-mapped surface<br/>(auto-populate)"] --> B["ResectogramViewManager<br/>singleton vtkMRMLViewNode"]
   A --> C["vtkMRMLResectogramDisplayNode<br/>restricted TO the view"]
   A --> D["selected surface display nodes<br/>restricted AWAY from the view"]
   B --> E["qMRMLThreeDWidget<br/>embedded in the LiverResections panel"]
   C --> F["ResectogramPipeline<br/>(LayerDM, tagged-view only)"]
   E --> F
+  E -.->|double-click| G["custom enlarge:<br/>reparent into central viewport"]
 ```
 
 ## References
