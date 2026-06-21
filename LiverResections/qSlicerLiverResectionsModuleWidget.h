@@ -46,6 +46,7 @@
 #include "qSlicerLiverResectionsModuleExport.h"
 
 class qMRMLNodeComboBox;
+class qMRMLThreeDView;
 class qMRMLThreeDWidget;
 class QLabel;
 class vtkMRMLNode;
@@ -127,6 +128,20 @@ protected:
   /// (mirrors the arena's ``_apply_camera_and_background``; ADR-0023 §Stage-4).
   void poseEmbeddedRenderer();
 
+  /// Lock the embedded view to a flat 2D panel: remap the camera widget's
+  /// trackball-rotate and double-click maximize-view event translations to
+  /// WidgetEventNone so the fixed flattened (u, v) image cannot be orbited or
+  /// maximized (pan / zoom stay).  Config-only on the upstream camera widget --
+  /// no custom DisplayableManager (ADR-0013 §5; ADR-0023 §Stage-4).
+  void lockEmbeddedViewInteraction();
+
+  /// Deferred (next event-loop turn) initial render of the auto-populated
+  /// strip: kicks the observed surface's Modified() once to drive the same
+  /// observer -> UpdatePipeline -> RequestRender path a manual edit uses, so
+  /// the strip is visible on auto-populate with no edit -- after the embedded
+  /// widget has been shown/realised (ADR-0023 §Stage-4).
+  void kickInitialResectogramRender();
+
   /// (Re)attach the reactivity observer so editing ``surface``'s control
   /// points repaints the embedded strip.  Symmetric removal on re-target /
   /// teardown so no stale observer fires.
@@ -138,6 +153,13 @@ protected:
   /// without one (the --no-main-window launched harness); the framing is the
   /// orchestrator's interactive :0 eyeball pass (ADR-0023 §Stage-4).
   bool hasRealizedGLContext() const;
+
+  /// The embedded resectogram view, gated on the embed having happened: returns
+  /// the ``qMRMLThreeDView`` only when the widget exists AND a realized GL
+  /// context is present (the embed never happens under ``--no-main-window``),
+  /// else ``nullptr``.  Centralises the embed-gate preamble the renderer push /
+  /// interaction lock / forced render all share (ADR-0023 §Stage-4).
+  qMRMLThreeDView* embeddedThreeDView() const;
 
 protected:
   QScopedPointer<qSlicerLiverResectionsModuleWidgetPrivate> d_ptr;
