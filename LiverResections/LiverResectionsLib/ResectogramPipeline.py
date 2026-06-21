@@ -146,22 +146,27 @@ class ResectogramPipeline(_PipelineBase):
     def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
         """Reconcile both Representations against the current node set.
 
-        Idempotent: a second call with no intervening node mutation is a
-        no-op observationally — the memoised key short-circuits the work
-        (`ADR-0013`_ §3).  The key folds in the data node's control-point
-        MTime alongside its ``GetMTime``, because a markups control-point
-        DRAG advances the control-point MTime but NOT the node ``GetMTime``
-        — keying on ``GetMTime`` alone would leave the resectogram
-        non-reactive to surface edits (the dragging-changes-nothing failure
-        mode).
+        Idempotent: a second call with no intervening control-point mutation
+        is a no-op observationally — the memoised key short-circuits the work
+        (`ADR-0013`_ §3).
+
+        The key is the data node's control-point GEOMETRY digest ALONE.  It
+        deliberately does NOT fold in ``GetMTime`` of the data or display node:
+        a maximize binds the resectogram view node to two live qMRMLThreeDViews
+        whose renders re-``Modified()`` the surface AND the resectogram display
+        node every frame, advancing those MTimes WITHOUT any geometry change.
+        Keying on them would make every render-churned MTime a fresh key →
+        re-feed + RequestRender on every render → the maximize render storm
+        (continuous ~47 renders/s).  A control-point DRAG changes the geometry
+        digest (so edit-reactivity is preserved), but render-induced MTime
+        churn at fixed geometry leaves the digest unchanged → short-circuit →
+        the loop is broken.  A markups control-point DRAG also advances only
+        the control-point structure, not the node ``GetMTime``, so the digest
+        is the correct reactivity signal on both counts.
         """
         self._ensure_representations()
 
-        data_mtime = _safe_get_mtime(self._data_node)
-        control_points_digest = _safe_get_control_points_digest(self._data_node)
-        display_mtime = _safe_get_mtime(self._display_node)
-
-        key = (data_mtime, control_points_digest, display_mtime)
+        key = _safe_get_control_points_digest(self._data_node)
         if key == self._last_update_key:
             return  # idempotent short-circuit
         self._last_update_key = key
@@ -372,23 +377,27 @@ class ResectogramPipeline(_PipelineBase):
     def _on_node_modified(self, caller: Any, event: str) -> None:
         """VTK observer callback — re-runs ``UpdatePipeline()``.
 
-        Invalidates the memoised update key first: the firing of an observed
-        event IS the change signal, but a markups control-point edit does
-        not advance the node ``GetMTime`` the key is built from, so without
-        the invalidation ``UpdatePipeline`` would short-circuit and the
-        flattened surface would not re-feed (the non-reactive failure mode).
+        Does NOT invalidate the memoised key: ``UpdatePipeline`` keys on the
+        control-point geometry digest, which a real control-point edit changes
+        on its own (so the edit is picked up) but a render-induced ``Modified``
+        at fixed geometry does NOT.  Resetting the key here would defeat that
+        short-circuit and re-open the maximize render storm.
+
+        Requests a render ONLY when ``UpdatePipeline`` actually did work — the
+        ``_update_count`` advanced.  A render-churned ``Modified`` at unchanged
+        geometry short-circuits (no count advance) → no render requested →
+        the feedback loop is broken.  A real control-point DRAG advances the
+        digest → real work → exactly one coalesced render through the base
+        Pipeline's ``RequestRender`` (delegates to
+        ``vtkMRMLLayerDMPipelineManager::RequestRender``), so the panel
+        repaints live without the framework's own display-node event path.
         """
         del caller, event  # observers route uniformly into UpdatePipeline()
-        self._last_update_key = None
+        before = self._update_count
         self.UpdatePipeline()
-        # UpdatePipeline only refreshes the Representations' VTK objects; the
-        # dedicated resectogram view's render window must still be told to
-        # repaint, or a control-point DRAG updates the flattened geometry
-        # without the panel visibly changing.  The framework renders after its
-        # own display-node event path, but this direct data-node observer
-        # bypasses it, so request a (coalesced) render through the base
-        # Pipeline's ``RequestRender`` (delegates to
-        # ``vtkMRMLLayerDMPipelineManager::RequestRender``).
+        if self._update_count == before:
+            return  # short-circuited: no geometry change, no render
+
         request_render = getattr(self, "RequestRender", None)
         if request_render is not None:
             try:
@@ -398,33 +407,23 @@ class ResectogramPipeline(_PipelineBase):
 
 
 # --------------------------------------------------------------------------- #
-# Safe accessors — tolerant of stub nodes that omit GetMTime etc.
+# Safe accessors — tolerant of stub nodes that omit the markups accessors.
 # --------------------------------------------------------------------------- #
-
-
-def _safe_get_mtime(node: Any) -> int:
-    """Read ``GetMTime()`` off ``node`` defensively; 0 when unavailable."""
-    if node is None:
-        return 0
-    getter = getattr(node, "GetMTime", None)
-    if getter is None:
-        return 0
-    try:
-        return int(getter())
-    except Exception:  # pragma: no cover - defensive
-        return 0
 
 
 def _safe_get_control_points_digest(node: Any) -> tuple:
     """Return a digest of the data node's markups control-point positions.
 
-    A markups control-point DRAG does not advance the node's ``GetMTime``
-    (the positions live in a separately-timed control-point structure), so
-    the memoisation key folds in a cheap digest of the control-point
-    positions to stay reactive to surface edits.  Returns an empty tuple
+    This digest is the SOLE memoisation key for ``UpdatePipeline`` (it does
+    NOT fold in ``GetMTime``): a control-point edit changes the digest, while
+    a render-induced ``Modified`` at fixed geometry does not, which is exactly
+    the discrimination that keeps edits reactive while breaking the maximize
+    render storm.  A markups control-point DRAG advances only the
+    separately-timed control-point structure, not the node ``GetMTime``, so a
+    geometry digest is the correct reactivity signal.  Returns an empty tuple
     when the node is missing the markups control-point accessors (stub nodes
-    in unit tests) or a read raises — the key then degrades to ``GetMTime``
-    alone, which is the correct behaviour for a non-markups data node.
+    in unit tests) or a read raises — the key is then a constant, so a
+    non-markups data node reconciles exactly once.
     """
     if node is None:
         return ()

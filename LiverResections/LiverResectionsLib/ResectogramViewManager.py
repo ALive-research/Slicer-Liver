@@ -170,8 +170,7 @@ class ResectogramViewManager:
         resectogramViewID = viewNode.GetID()
 
         if displayNode is not None:
-            displayNode.RemoveAllViewNodeIDs()
-            displayNode.AddViewNodeID(resectogramViewID)
+            self._setViewNodeIDsIfChanged(displayNode, [resectogramViewID])
 
         self._restrictAnatomyAwayFromView(slicer, resectogramViewID)
         self._applyViewNodeBackground(viewNode)
@@ -190,9 +189,20 @@ class ResectogramViewManager:
         render reads the BACKGROUND off the MRML view node.  Setting it here (a
         flat white, no gradient) makes a maximized resectogram render correctly
         on white instead of falling back to the default 3D-anatomy blue gradient.
+
+        Idempotent: the view node's ``SetBackgroundColor`` Modifies it even when
+        the colour is unchanged, so skip the write when both background colours
+        are already the target -- a redundant ``configureView`` then fires no
+        view-node ModifiedEvent (one fewer storm leg).
         """
-        viewNode.SetBackgroundColor(*RESECTOGRAM_VIEW_BACKGROUND_RGB)
-        viewNode.SetBackgroundColor2(*RESECTOGRAM_VIEW_BACKGROUND_RGB)
+        target = RESECTOGRAM_VIEW_BACKGROUND_RGB
+        if (
+            tuple(viewNode.GetBackgroundColor()) == target
+            and tuple(viewNode.GetBackgroundColor2()) == target
+        ):
+            return
+        viewNode.SetBackgroundColor(*target)
+        viewNode.SetBackgroundColor2(*target)
 
     @staticmethod
     def _restrictAnatomyAwayFromView(  # noqa: N802 - Slicer/Qt verb convention
@@ -239,9 +249,35 @@ class ResectogramViewManager:
                 ]
                 target = kept if kept else anatomyViewIDs
 
-                display.RemoveAllViewNodeIDs()
-                for viewID in target:
-                    display.AddViewNodeID(viewID)
+                ResectogramViewManager._setViewNodeIDsIfChanged(display, target)
+
+    @staticmethod
+    def _setViewNodeIDsIfChanged(  # noqa: N802 - Slicer/Qt verb convention
+        display: Any, target: list
+    ) -> None:
+        """Set a display node's ViewNodeIDs only when they actually differ.
+
+        ``RemoveAllViewNodeIDs`` + ``AddViewNodeID`` each call ``Modified()``
+        unconditionally, so re-applying the SAME allowlist still fires the
+        display node's ModifiedEvent -- and the resectogram display node's
+        ModifiedEvent re-triggers a render, which re-Modified()'s the surface,
+        which re-runs ``refreshResectogramDrawer`` -> ``configureView``: the
+        maximize render storm's display-node leg (the ~2x display Modifies the
+        diagnosis measured).  Skipping the write when the allowlist is already
+        the target makes a redundant ``configureView`` Modify nothing, so the
+        loop has no fuel.  ``existing == target`` compares order-sensitively;
+        the callers always build ``target`` in a stable order so a no-op
+        re-apply matches.
+        """
+        existing = [
+            display.GetNthViewNodeID(i)
+            for i in range(display.GetNumberOfViewNodeIDs())
+        ]
+        if existing == list(target):
+            return
+        display.RemoveAllViewNodeIDs()
+        for viewID in target:
+            display.AddViewNodeID(viewID)
 
     @staticmethod
     def _anatomyViewNodeIDs(  # noqa: N802 - Slicer/Qt verb convention
@@ -315,14 +351,37 @@ class ResectogramViewManager:
         )
         z_sign = -1.0 if mirror else 1.0
 
-        cameraNode.SetFocalPoint(focal_x, focal_y, focal_z)
-        cameraNode.SetPosition(
-            focal_x, focal_y, focal_z + z_sign * _RESECTOGRAM_CAMERA_DISTANCE
+        position = (
+            focal_x,
+            focal_y,
+            focal_z + z_sign * _RESECTOGRAM_CAMERA_DISTANCE,
         )
+        vtkCamera = cameraNode.GetCamera()
+
+        # Re-posing the camera node to the SAME pose still fires its
+        # ModifiedEvent (each Set* call Modifies, plus the explicit Modified()
+        # below), which the view machinery turns into a render -- another leg
+        # of the maximize render storm if configureView re-runs every frame.
+        # Apply the pose ONLY when it actually differs from the current one, so
+        # a redundant configureView leaves the camera untouched and fires no
+        # render.
+        already_posed = (
+            tuple(cameraNode.GetFocalPoint()) == _RESECTOGRAM_QUAD_CENTRE
+            and tuple(cameraNode.GetPosition()) == position
+            and tuple(cameraNode.GetViewUp()) == _RESECTOGRAM_CAMERA_VIEW_UP
+            and cameraNode.GetParallelProjection() == 1
+            and vtkCamera.GetParallelScale() == _RESECTOGRAM_CAMERA_PARALLEL_SCALE
+            and tuple(vtkCamera.GetClippingRange())
+            == _RESECTOGRAM_CAMERA_CLIPPING_RANGE
+        )
+        if already_posed:
+            return
+
+        cameraNode.SetFocalPoint(focal_x, focal_y, focal_z)
+        cameraNode.SetPosition(*position)
         cameraNode.SetViewUp(*_RESECTOGRAM_CAMERA_VIEW_UP)
         cameraNode.SetParallelProjection(1)
 
-        vtkCamera = cameraNode.GetCamera()
         vtkCamera.SetParallelScale(_RESECTOGRAM_CAMERA_PARALLEL_SCALE)
         vtkCamera.SetClippingRange(*_RESECTOGRAM_CAMERA_CLIPPING_RANGE)
 

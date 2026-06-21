@@ -157,6 +157,20 @@ public:
   /// the anatomy markups redraw (the maximized-view flash).  Edge-triggered:
   /// onLayoutModified kicks only when this flag flips (ADR-0023 §Stage-4).
   bool ResectogramViewMaximized = false;
+
+  /// The (surface, hasDistanceMap) the drawer was last populated against.  The
+  /// ``ActiveResectionNode`` ModifiedEvent observer fires ``refreshResectogramDrawer``
+  /// on EVERY surface modification, but the auto-populate predicate depends only
+  /// on the selected surface identity and whether it carries a distance map
+  /// (ADR-0023 §Stage-4).  A maximize re-Modified()'s the surface every render;
+  /// re-running the full populate (display-node ensure + Python configureView +
+  /// re-embed) on each is a leg of the render storm.  Edge-trigger on these two
+  /// instead: when an observed ModifiedEvent changes neither, the populate is a
+  /// no-op and is skipped.  ``RefreshValid`` guards the very first run (where the
+  /// cached values are not yet meaningful) and forces a populate after a deselect.
+  bool RefreshValid = false;
+  vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode> RefreshedSurface;
+  bool RefreshedHasDistanceMap = false;
 };
 
 //-----------------------------------------------------------------------------
@@ -259,6 +273,30 @@ void qSlicerLiverResectionsModuleWidget::refreshResectogramDrawer()
   bool hasSurface = (surface != nullptr);
   bool hasDistanceMap = hasSurface && (surface->GetDistanceMapVolumeNode() != nullptr);
   vtkMRMLScene* scene = this->mrmlScene();
+
+  // Edge-trigger on the populate-relevant state only.  The ActiveResectionNode
+  // ModifiedEvent observer fires this slot on EVERY surface modification --
+  // including the per-frame re-Modified() a maximize triggers -- but the
+  // populate depends only on the selected surface identity and its
+  // distance-map presence.  When neither changed since the last populate, the
+  // work (display-node ensure + Python configureView + re-embed, or the hint
+  // swap) would be a no-op that nonetheless Modifies nodes and re-fires a
+  // render: a leg of the maximize render storm.  Skip it.  The
+  // contentsCollapsed and combo-box-change paths route through
+  // onActiveResectionChanged / scheduleResectogramRender, not this guard, so a
+  // collapse/expand or reselect still re-renders.  Only short-circuit once a
+  // scene is present: a null scene is a transient pre-attach state, not a
+  // stable populate to cache against.
+  if (scene && d->RefreshValid && surface == d->RefreshedSurface && hasDistanceMap == d->RefreshedHasDistanceMap)
+  {
+    return;
+  }
+  if (scene)
+  {
+    d->RefreshValid = true;
+    d->RefreshedSurface = surface;
+    d->RefreshedHasDistanceMap = hasDistanceMap;
+  }
 
   if (!hasDistanceMap || !scene)
   {
@@ -608,13 +646,20 @@ void qSlicerLiverResectionsModuleWidget::observeSurfaceForRender(vtkMRMLMarkupsB
 
   // Symmetric removal of the prior observer before re-targeting, so a stale
   // surface never repaints the strip.
-  this->qvtkDisconnect(d->RenderObservedNode, vtkCommand::ModifiedEvent, this, SLOT(scheduleResectogramRender()));
   this->qvtkDisconnect(d->RenderObservedNode, vtkMRMLMarkupsNode::PointModifiedEvent, this, SLOT(scheduleResectogramRender()));
 
   d->RenderObservedNode = surface;
   if (surface)
   {
-    this->qvtkConnect(surface, vtkCommand::ModifiedEvent, this, SLOT(scheduleResectogramRender()));
+    // Render on the control-point-edit signal ONLY (PointModifiedEvent), NOT
+    // the generic ModifiedEvent.  A maximize binds the resectogram view node
+    // to two live qMRMLThreeDViews whose renders re-Modified() the surface
+    // every frame; a generic-ModifiedEvent->forceRender observer would re-fire
+    // a render on each of those render-induced Modifies -- a feedback loop (the
+    // maximize render storm, continuous ~47 renders/s).  PointModifiedEvent is
+    // the real control-point-edit signal a render does not raise, so the strip
+    // still repaints live on a drag without the render-induced churn re-firing
+    // (ADR-0023 §Stage-4).
     this->qvtkConnect(surface, vtkMRMLMarkupsNode::PointModifiedEvent, this, SLOT(scheduleResectogramRender()));
   }
 }
@@ -694,10 +739,19 @@ void qSlicerLiverResectionsModuleWidget::onLayoutModified()
   }
   d->ResectogramViewMaximized = maximized;
 
-  if (maximized)
+  // The resectogram view node is bound to TWO qMRMLThreeDViews: our embedded
+  // side-panel widget AND the layout-managed view Slicer maximizes.  With both
+  // live and observing the same view node + scene, a maximize sends each into a
+  // render that invalidates the other -- a render storm.  So hide the embedded
+  // side-panel widget while the view is maximized (only the layout view should
+  // render then), and restore it on un-maximize.  No surface->Modified() kick:
+  // the layout-managed view realises its own GL context + feeds its LayerDM
+  // Pipeline on map (realise-then-bind, like the embedded panel), so it renders
+  // the strip on its own; a kick here would also wake the markups manager to
+  // redraw anatomy mid-swap (ADR-0023 §Stage-4).
+  if (d->ResectogramWidget)
   {
-    // Just maximized: feed the maximized view's fresh Pipeline once.
-    this->kickInitialResectogramRender();
+    d->ResectogramWidget->setVisible(!maximized);
   }
 }
 
