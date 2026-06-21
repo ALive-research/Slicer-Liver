@@ -34,7 +34,7 @@ References
 * `ADR-0025`_ §Context — the resectogram as the flattened ``(u, v)`` image.
 
 .. _ADR-0013: ../../Docs/adr/0013-layerdm-pipeline-pattern.md
-.. _ADR-0023: ../../Docs/adr/0023-resection-plan-architecture.md
+.. _ADR-0023: ../../Docs/adr/0023-unified-gui-stage-workflow.md
 .. _ADR-0025: ../../Docs/adr/0025-locator-architecture.md
 """
 
@@ -160,7 +160,7 @@ class ResectogramViewManager:
         Idempotent -- re-running re-applies the same state.
 
         .. _ADR-0013: ../../Docs/adr/0013-layerdm-pipeline-pattern.md
-        .. _ADR-0023: ../../Docs/adr/0023-resection-plan-architecture.md
+        .. _ADR-0023: ../../Docs/adr/0023-unified-gui-stage-workflow.md
         """
         import slicer  # type: ignore[import-not-found]
 

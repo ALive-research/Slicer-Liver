@@ -234,9 +234,11 @@ void qSlicerLiverResectionsModule::setup()
 qSlicerAbstractModuleRepresentation* qSlicerLiverResectionsModule ::createWidgetRepresentation()
 {
   // ADR-0023 §Stage-4 — the "Resection Planning" surface.  Previously this
-  // module shipped no GUI (returned nullptr); it now hosts the gated
-  // [Open resectogram view] action.  Liver/Liver.py composes this widget
-  // via LiverResections.widgetRepresentation().
+  // module shipped no GUI (returned nullptr); it now hosts the resection-surface
+  // selector and the auto-populating "Resectogram" drawer (selecting a
+  // distance-mapped surface fills it; a double-click enlarges the embedded view
+  // into the central layout area).  Liver/Liver.py composes this widget via
+  // LiverResections.widgetRepresentation().
   return new qSlicerLiverResectionsModuleWidget;
 }
 
