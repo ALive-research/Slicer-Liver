@@ -55,6 +55,8 @@
 #include "vtkMRMLResectogramDisplayNode.h"
 #include "vtkMRMLResectionPlanNode.h"
 #include "vtkMRMLResectionPlanStorageNode.h"
+#include "vtkMRMLLocatorNode.h"
+#include "vtkMRMLLocatorDisplayNode.h"
 
 #include <vtkCommand.h>
 #include <vtkMRMLMarkupsBezierSurfaceNode.h>
@@ -151,6 +153,13 @@ void vtkSlicerLiverResectionsLogic::RegisterNodes()
   // .lrp.json persistence target.
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLResectionPlanNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLResectionPlanStorageNode>::New());
+
+  // Locator family (ADR-0025 §"Registration").  The locator is a
+  // C++ data-only carrier plus its display node.  Per ADR-0025 the
+  // ONLY new wiring is RegisterNodeClass — no new Pipeline, no
+  // displayable manager, no factory creator (ADR-0013 §5).
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLLocatorNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLLocatorDisplayNode>::New());
 }
 
 //---------------------------------------------------------------------------
