@@ -20,6 +20,7 @@ set(KIT_TEST_SRCS
   # re-resolving on a standalone load with no logic instance.  Pins the
   # mechanism that makes the 6 legacy logic association maps removable.
   vtkMRMLResectionPlanGeometryRefRoundTripTest.cxx
+  vtkMRMLLocatorNodeTest1.cxx
   )
 
 #-----------------------------------------------------------------------------
@@ -57,3 +58,4 @@ SIMPLE_TEST(vtkMRMLResectionPlanNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanStorageNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanLegacyFcsvMigrationTest)
 SIMPLE_TEST(vtkMRMLResectionPlanGeometryRefRoundTripTest)
+SIMPLE_TEST(vtkMRMLLocatorNodeTest1)

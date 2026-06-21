@@ -21,6 +21,10 @@ set(${KIT}_SRCS
   vtkMRMLResectionPlanNode.cxx
   vtkMRMLResectionPlanStorageNode.h
   vtkMRMLResectionPlanStorageNode.cxx
+  vtkMRMLLocatorNode.h
+  vtkMRMLLocatorNode.cxx
+  vtkMRMLLocatorDisplayNode.h
+  vtkMRMLLocatorDisplayNode.cxx
   )
 
 set(${KIT}_TARGET_LIBRARIES
