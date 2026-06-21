@@ -163,6 +163,12 @@ protected:
   /// observer fires.
   void observeLayoutNode();
 
+  /// Whether the singleton resectogram view is CURRENTLY maximized per the
+  /// scene's layout node.  ``onLayoutModified`` edge-triggers off this (kick
+  /// only on a transition INTO maximized), and ``observeLayoutNode`` seeds the
+  /// baseline from it; both share this one resolution (ADR-0023 §Stage-4).
+  bool resectogramViewIsMaximized() const;
+
   /// Whether a realized GL context is available (a shown main window).  The
   /// embed binding + renderer push + forced render all drive the distance-map
   /// 3D texture upload, which dereferences live GL entry points and crashes

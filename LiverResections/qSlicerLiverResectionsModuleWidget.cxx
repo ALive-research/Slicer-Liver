@@ -148,6 +148,15 @@ public:
   /// view paints white-but-empty.  Tracked for symmetric RemoveObserver across
   /// scene changes.
   vtkWeakPointer<vtkMRMLLayoutNode> LayoutNode;
+
+  /// Whether the resectogram view was maximized as of the last observed layout
+  /// modification.  The layout node fires its ModifiedEvent for EVERY layout
+  /// change (every view's maximize/restore, layout switches), but the feed kick
+  /// must replay only when THIS view's maximized state actually transitions --
+  /// otherwise an unrelated layout change re-fires the surface Modified() and
+  /// the anatomy markups redraw (the maximized-view flash).  Edge-triggered:
+  /// onLayoutModified kicks only when this flag flips (ADR-0023 §Stage-4).
+  bool ResectogramViewMaximized = false;
 };
 
 //-----------------------------------------------------------------------------
@@ -601,6 +610,15 @@ void qSlicerLiverResectionsModuleWidget::observeLayoutNode()
   // Symmetric removal of the prior observer before re-targeting.
   this->qvtkDisconnect(d->LayoutNode, vtkCommand::ModifiedEvent, this, SLOT(onLayoutModified()));
   d->LayoutNode = layoutNode;
+
+  // Seed the edge-trigger baseline from the layout node's CURRENT state, so the
+  // first onLayoutModified after (re)attach compares against reality rather than
+  // a stale default -- a missed-transition (no kick) or a phantom transition
+  // (a spurious kick) otherwise.  At populate time no view is maximized, so this
+  // is normally false; resolving it defensively also covers re-attach while a
+  // maximize is already in effect.
+  d->ResectogramViewMaximized = this->resectogramViewIsMaximized();
+
   if (layoutNode)
   {
     this->qvtkConnect(layoutNode, vtkCommand::ModifiedEvent, this, SLOT(onLayoutModified()));
@@ -608,24 +626,50 @@ void qSlicerLiverResectionsModuleWidget::observeLayoutNode()
 }
 
 //-----------------------------------------------------------------------------
+bool qSlicerLiverResectionsModuleWidget::resectogramViewIsMaximized() const
+{
+  Q_D(const qSlicerLiverResectionsModuleWidget);
+
+  vtkMRMLScene* scene = this->mrmlScene();
+  vtkMRMLViewNode* viewNode = scene ? vtkMRMLViewNode::SafeDownCast(scene->GetSingletonNode(RESECTOGRAM_VIEW_SINGLETON_TAG, "vtkMRMLViewNode")) : nullptr;
+  return d->LayoutNode != nullptr && viewNode != nullptr && d->LayoutNode->IsMaximizedViewNode(viewNode);
+}
+
+//-----------------------------------------------------------------------------
 void qSlicerLiverResectionsModuleWidget::onLayoutModified()
 {
-  // A maximize/restore of the resectogram view realises a FRESH
-  // layout-managed qMRMLThreeDView + LayerDM ResectogramPipeline for the
-  // singleton view node.  Its background + parallel camera come from the MRML
-  // view node (the Python ResectogramViewManager already set them white +
-  // parallel), but the new Pipeline does not feed the flattened-surface
-  // geometry until something drives its observer -> UpdatePipeline ->
-  // RequestRender path -- the SAME initial-kick gap the embedded panel had on
-  // auto-populate.  Replay that kick: firing the observed surface's Modified()
-  // once drives EVERY ResectogramPipeline bound to this view node (the embedded
-  // panel's AND the maximized view's) to reconcile + RequestRender, so the
-  // strip feeds and paints in the maximized view too (ADR-0023 §Stage-4).
+  Q_D(qSlicerLiverResectionsModuleWidget);
+
+  // The layout node fires its ModifiedEvent for EVERY layout change -- any
+  // view's maximize/restore, a layout switch, a background recolour.  Replaying
+  // the surface-Modified() feed kick on each one re-runs the anatomy markups'
+  // UpdatePipeline in the shared views, and as a maximize/restore generates
+  // several layout modifications in quick succession the maximized view flashes
+  // the Bezier surface + its control polygon between coalesced renders.
   //
-  // Idempotent: the kick only repaints, it does not mutate the surface, so a
-  // layout modification unrelated to the resectogram view (any other
-  // maximize/restore) costs at most one redundant coalesced render.
-  this->kickInitialResectogramRender();
+  // Edge-trigger instead: resolve the resectogram view's CURRENT maximized
+  // state from the layout node and act ONLY when it actually transitions for
+  // THIS view.  A transition INTO maximized realises a FRESH layout-managed
+  // qMRMLThreeDView + LayerDM ResectogramPipeline whose new Pipeline has not yet
+  // fed the flattened-surface geometry (the same initial-kick gap the embedded
+  // panel had on auto-populate) -- replay the kick exactly once there.  A
+  // transition OUT (restore) needs no kick; just track the new state.  Every
+  // unrelated layout modification is a no-op now, so nothing re-fires the
+  // anatomy markups (ADR-0023 §Stage-4).
+  const bool maximized = this->resectogramViewIsMaximized();
+
+  if (maximized == d->ResectogramViewMaximized)
+  {
+    // No transition for the resectogram view: an unrelated layout modification.
+    return;
+  }
+  d->ResectogramViewMaximized = maximized;
+
+  if (maximized)
+  {
+    // Just maximized: feed the maximized view's fresh Pipeline once.
+    this->kickInitialResectogramRender();
+  }
 }
 
 //-----------------------------------------------------------------------------
