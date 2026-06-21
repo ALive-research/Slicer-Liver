@@ -112,6 +112,15 @@ protected slots:
   /// the Pipeline's RequestRender on its own; ADR-0023 §Stage-4).
   void scheduleResectogramRender();
 
+  /// Replay the initial render kick when the resectogram view's
+  /// maximized/restored state changes.  A double-click maximize hands the
+  /// singleton resectogram view node to the Slicer layout manager, which
+  /// realises a FRESH layout-managed view + LayerDM ``ResectogramPipeline``;
+  /// that pipeline needs the same surface ``Modified()`` feed kick the embedded
+  /// panel got, or the maximized view renders white-but-empty.  Wired to the
+  /// scene's layout node ``ModifiedEvent``; idempotent (ADR-0023 §Stage-4).
+  void onLayoutModified();
+
 protected:
   void setup() override;
 
@@ -128,11 +137,12 @@ protected:
   /// (mirrors the arena's ``_apply_camera_and_background``; ADR-0023 §Stage-4).
   void poseEmbeddedRenderer();
 
-  /// Lock the embedded view to a flat 2D panel: remap the camera widget's
-  /// trackball-rotate and double-click maximize-view event translations to
-  /// WidgetEventNone so the fixed flattened (u, v) image cannot be orbited or
-  /// maximized (pan / zoom stay).  Config-only on the upstream camera widget --
-  /// no custom DisplayableManager (ADR-0013 §5; ADR-0023 §Stage-4).
+  /// Lock the embedded view's ROTATION: remap the camera widget's
+  /// trackball-rotate event translations to WidgetEventNone so the fixed
+  /// flattened (u, v) image cannot be orbited (pan / zoom AND the double-click
+  /// focus/maximize stay, so the strip can still be enlarged into the main
+  /// layout).  Config-only on the upstream camera widget -- no custom
+  /// DisplayableManager (ADR-0013 §5; ADR-0023 §Stage-4).
   void lockEmbeddedViewInteraction();
 
   /// Deferred (next event-loop turn) initial render of the auto-populated
@@ -146,6 +156,12 @@ protected:
   /// points repaints the embedded strip.  Symmetric removal on re-target /
   /// teardown so no stale observer fires.
   void observeSurfaceForRender(vtkMRMLMarkupsBezierSurfaceNode* surface);
+
+  /// (Re)attach the observer on the scene's layout node so a double-click
+  /// maximize/restore of the resectogram view replays the render feed kick
+  /// (``onLayoutModified``).  Symmetric removal on scene change so no stale
+  /// observer fires.
+  void observeLayoutNode();
 
   /// Whether a realized GL context is available (a shown main window).  The
   /// embed binding + renderer push + forced render all drive the distance-map
