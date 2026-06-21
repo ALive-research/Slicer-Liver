@@ -189,6 +189,45 @@ if(DEFINED Python3_EXECUTABLE)
     set_tests_properties(LiverResections_resectogram_open_view_presentation PROPERTIES
       LABELS "pytest;module-layer;LiverResections;resectogram;stage4"
     )
+
+    # T3-g3 -- custom enlarge/restore of the embedded resectogram widget
+    # (ADR-0023 §Stage-4).  Slicer's built-in double-click maximize is unusable
+    # (it realises a SECOND layout-managed widget on the singleton view node
+    # whose LayerDM pipeline never populates the strip), so a double-click
+    # reparents the ONE embedded qMRMLThreeDWidget into the central layout
+    # viewport and back.  Invariants: enlarge reparents to the viewport, restore
+    # reparents back under the drawer, there is never a second widget, and the
+    # toggle is idempotent/symmetric.  Main-window-gated (the embed needs a
+    # realized GL context), so it runs under the launched-Slicer
+    # `pytest_launched` row and SKIPS CLEANLY here under bare pytest.
+    add_test(
+      NAME LiverResections_resectogram_enlarge_toggle
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_resectogram_enlarge_toggle.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_resectogram_enlarge_toggle PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;resectogram;stage4"
+    )
+
+    # T3 -- ResectogramPipeline memo-key invariant (ADR-0013 §3 idempotency;
+    # the render-storm fix).  The Pipeline keys UpdatePipeline on the
+    # control-point geometry digest ALONE, so a render-induced Modified() at
+    # fixed geometry short-circuits (no update, no render) while a real
+    # control-point edit advances the update count.  Pure module-layer +
+    # GPU-free; importorskip("LayerDMLib") so it runs under the launched-Slicer
+    # row and SKIPS CLEANLY here under bare pytest.
+    add_test(
+      NAME LiverResections_resectogram_pipeline_memo_key
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_resectogram_pipeline_memo_key.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_resectogram_pipeline_memo_key PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;resectogram;render-storm"
+    )
   else()
     message(STATUS
       "Slicer-Liver: pytest not importable from ${Python3_EXECUTABLE}; "
