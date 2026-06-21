@@ -55,6 +55,10 @@
 #include <qSlicerApplication.h>
 #include <qSlicerPythonManager.h>
 
+// MRML DisplayableManager includes
+#include <vtkMRMLCameraDisplayableManager.h>
+#include <vtkMRMLCameraWidget.h>
+
 // CTK includes
 #include <ctkCollapsibleButton.h>
 
@@ -65,6 +69,8 @@
 
 // VTK includes
 #include <vtkCamera.h>
+#include <vtkCommand.h>
+#include <vtkEvent.h>
 #include <vtkRenderer.h>
 
 // Qt includes
@@ -74,6 +80,7 @@
 #include <QPointer>
 #include <QSizePolicy>
 #include <QString>
+#include <QTimer>
 
 namespace
 {
@@ -151,6 +158,11 @@ void qSlicerLiverResectionsModuleWidget::setup()
   d->setupUi(this);
 
   this->connect(d->ResectionSurfaceComboBox, SIGNAL(currentNodeChanged(vtkMRMLNode*)), this, SLOT(onActiveResectionChanged(vtkMRMLNode*)));
+
+  // Expanding the drawer after it auto-populated while collapsed realises the
+  // embedded view for the first time; re-render so the strip is visible on
+  // expand (the populate-while-collapsed case -- ADR-0023 §Stage-4).
+  this->connect(d->ResectogramDrawer, SIGNAL(contentsCollapsed(bool)), this, SLOT(scheduleResectogramRender()));
 
   this->refreshResectogramDrawer();
 }
@@ -325,13 +337,40 @@ void qSlicerLiverResectionsModuleWidget::refreshResectogramDrawer()
   // (ADR-0023 §Stage-4).
   this->observeSurfaceForRender(surface);
 
-  // Fire one INITIAL render at the end of the populate path so the strip is
-  // visible immediately on auto-populate -- no surface edit required.  Without
-  // this the embedded view stays blank until the first PointModifiedEvent
-  // drives scheduleResectogramRender (the strip would otherwise appear only
-  // after the user nudges a control point).  Self-gated on a realized GL
+  // Replay the working reactivity path on auto-populate so the strip is visible
+  // with NO manual edit.  The synchronous populate fires before the embedded
+  // widget is realised/visible (the drawer may still be collapsed) and before
+  // the LayerDM Pipeline has fed the flattened-surface geometry, so a render
+  // here would paint nothing -- the strip otherwise appears only after the
+  // first PointModifiedEvent.  Defer to the next event-loop turn
+  // (singleShot(0)), once the show/raise has been processed, then kick the SAME
+  // observer -> UpdatePipeline -> RequestRender path a manual edit drives by
+  // firing the selected surface's Modified() once.  Self-gated on a realized GL
   // context (hasRealizedGLContext): a no-op under --no-main-window, where the
-  // embed never happened.
+  // embed never happened (ADR-0023 §Stage-4).
+  QTimer::singleShot(0, this, [this]() { this->kickInitialResectogramRender(); });
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerLiverResectionsModuleWidget::kickInitialResectogramRender()
+{
+  Q_D(qSlicerLiverResectionsModuleWidget);
+
+  if (!this->embeddedThreeDView())
+  {
+    return;
+  }
+
+  // Fire the observed surface's Modified() once: this drives the same
+  // observer -> UpdatePipeline -> RequestRender path a control-point edit uses,
+  // so the Pipeline feeds the flattened-surface geometry on auto-populate
+  // rather than waiting for the first manual edit.  Idempotent: the observer
+  // only repaints, it does not mutate the surface, so a redundant kick costs at
+  // most one extra render and never spams (one deferred call per populate).
+  if (d->RenderObservedNode)
+  {
+    d->RenderObservedNode->Modified();
+  }
   this->scheduleResectogramRender();
 }
 
@@ -388,6 +427,14 @@ void qSlicerLiverResectionsModuleWidget::showResectogramWidget(vtkMRMLViewNode* 
     {
       layout->addWidget(widget);
     }
+
+    // The embedded view is a FIXED flattened (u, v) image under parallel
+    // projection; orbiting or maximizing it is incorrect.  Lock both out at the
+    // camera widget the view's camera displayable manager already hosts -- a
+    // config-only change (no custom DisplayableManager, ADR-0013 §5).  Done
+    // once, on first create, after setMRMLViewNode has instantiated the
+    // displayable managers.
+    this->lockEmbeddedViewInteraction();
   }
   else
   {
@@ -408,16 +455,21 @@ void qSlicerLiverResectionsModuleWidget::showResectogramWidget(vtkMRMLViewNode* 
 }
 
 //-----------------------------------------------------------------------------
-void qSlicerLiverResectionsModuleWidget::poseEmbeddedRenderer()
+qMRMLThreeDView* qSlicerLiverResectionsModuleWidget::embeddedThreeDView() const
 {
-  Q_D(qSlicerLiverResectionsModuleWidget);
+  Q_D(const qSlicerLiverResectionsModuleWidget);
 
   if (!d->ResectogramWidget || !this->hasRealizedGLContext())
   {
-    return;
+    return nullptr;
   }
+  return d->ResectogramWidget->threeDView();
+}
 
-  qMRMLThreeDView* view = d->ResectogramWidget->threeDView();
+//-----------------------------------------------------------------------------
+void qSlicerLiverResectionsModuleWidget::poseEmbeddedRenderer()
+{
+  qMRMLThreeDView* view = this->embeddedThreeDView();
   if (!view)
   {
     return;
@@ -452,6 +504,48 @@ void qSlicerLiverResectionsModuleWidget::poseEmbeddedRenderer()
 }
 
 //-----------------------------------------------------------------------------
+void qSlicerLiverResectionsModuleWidget::lockEmbeddedViewInteraction()
+{
+  qMRMLThreeDView* view = this->embeddedThreeDView();
+  if (!view)
+  {
+    return;
+  }
+
+  // The camera widget hosted by the view's camera displayable manager owns both
+  // the trackball-rotate event translations and the double-click maximize-view
+  // translation (vtkMRMLCameraWidget).  Remap exactly those to WidgetEventNone
+  // so the panel cannot rotate or maximize, while pan / zoom (translate, dolly,
+  // wheel) stay untouched.  No custom DisplayableManager (ADR-0013 §5): this is
+  // a per-view config of the upstream camera widget.
+  vtkMRMLCameraDisplayableManager* cameraDM = vtkMRMLCameraDisplayableManager::SafeDownCast(view->displayableManagerByClassName("vtkMRMLCameraDisplayableManager"));
+  if (!cameraDM)
+  {
+    return;
+  }
+  vtkMRMLCameraWidget* cameraWidget = cameraDM->GetCameraWidget();
+  if (!cameraWidget)
+  {
+    return;
+  }
+
+  // Fix B -- no 3D rotation.  Drop the left-button rotate-start translations
+  // (the bare drag and the markup-placement Alt variant) and the Ctrl-drag spin
+  // so a flat 2D panel cannot be orbited.  Pan (Shift / middle drag) and zoom
+  // (right drag, Ctrl + Shift drag, mouse wheel) are left intact.
+  cameraWidget->SetEventTranslation(vtkMRMLCameraWidget::WidgetStateIdle, vtkCommand::LeftButtonPressEvent, vtkEvent::NoModifier, vtkMRMLCameraWidget::WidgetEventNone);
+  cameraWidget->SetEventTranslation(vtkMRMLCameraWidget::WidgetStateIdle, vtkCommand::LeftButtonPressEvent, vtkEvent::AltModifier, vtkMRMLCameraWidget::WidgetEventNone);
+  cameraWidget->SetEventTranslation(vtkMRMLCameraWidget::WidgetStateIdle, vtkCommand::LeftButtonPressEvent, vtkEvent::ControlModifier, vtkMRMLCameraWidget::WidgetEventNone);
+
+  // Fix C -- no double-click maximize.  The layout-managed maximize view does
+  // not carry the LayerDM flattened strip (the Pipeline is bound to this
+  // embedded renderer), so it would show an empty white view.  Suppress the
+  // double-click so the side-panel image simply ignores it; making the
+  // layout-managed render paint the strip is deliberately out of scope.
+  cameraWidget->SetEventTranslation(vtkMRMLCameraWidget::WidgetStateIdle, vtkCommand::LeftButtonDoubleClickEvent, vtkEvent::NoModifier, vtkMRMLCameraWidget::WidgetEventNone);
+}
+
+//-----------------------------------------------------------------------------
 void qSlicerLiverResectionsModuleWidget::observeSurfaceForRender(vtkMRMLMarkupsBezierSurfaceNode* surface)
 {
   Q_D(qSlicerLiverResectionsModuleWidget);
@@ -477,16 +571,10 @@ void qSlicerLiverResectionsModuleWidget::observeSurfaceForRender(vtkMRMLMarkupsB
 //-----------------------------------------------------------------------------
 void qSlicerLiverResectionsModuleWidget::scheduleResectogramRender()
 {
-  Q_D(qSlicerLiverResectionsModuleWidget);
-
-  // Same realized-GL-context requirement as the embed (hasRealizedGLContext):
-  // forcing a render drives the distance-map texture upload; no live view to
-  // repaint without one.
-  if (!d->ResectogramWidget || !this->hasRealizedGLContext())
-  {
-    return;
-  }
-  if (qMRMLThreeDView* view = d->ResectogramWidget->threeDView())
+  // Same realized-GL-context requirement as the embed (embeddedThreeDView
+  // gates on it): forcing a render drives the distance-map texture upload; no
+  // live view to repaint without one.
+  if (qMRMLThreeDView* view = this->embeddedThreeDView())
   {
     view->forceRender();
   }
