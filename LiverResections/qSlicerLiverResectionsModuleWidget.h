@@ -96,6 +96,26 @@ public:
   /// Select ``node`` as the active resection (thin Python-accessible setter).
   Q_INVOKABLE void setActiveResectionNode(vtkMRMLNode* node);
 
+  /// Enlarge the embedded resectogram widget into the central layout area.
+  /// Reparents the ONE embedded ``qMRMLThreeDWidget`` to the layout manager's
+  /// central viewport and stretches it to fill -- the custom "maximize" that
+  /// replaces Slicer's built-in double-click maximize (which realises a blank
+  /// SECOND widget on the singleton view node; ADR-0023 §Stage-4).  Idempotent.
+  Q_INVOKABLE void enlargeResectogram();
+
+  /// Restore the embedded resectogram widget back into the drawer.  Toggle
+  /// counterpart of ``enlargeResectogram`` (ADR-0023 §Stage-4).  Idempotent.
+  Q_INVOKABLE void restoreResectogram();
+
+  /// Whether the embedded resectogram widget is currently enlarged into the
+  /// central layout area.
+  Q_INVOKABLE bool isResectogramEnlarged() const;
+
+  /// Catch a double-click on the embedded resectogram view and toggle the
+  /// custom enlarge/restore, consuming the event so Slicer's built-in maximize
+  /// (the blank-second-widget path) never fires (ADR-0023 §Stage-4).
+  bool eventFilter(QObject* watched, QEvent* event) override;
+
 public slots:
   void setMRMLScene(vtkMRMLScene*) override;
 
@@ -111,15 +131,6 @@ protected slots:
   /// flattened strip live (the standalone embedded view does not repaint on
   /// the Pipeline's RequestRender on its own; ADR-0023 §Stage-4).
   void scheduleResectogramRender();
-
-  /// Replay the initial render kick when the resectogram view's
-  /// maximized/restored state changes.  A double-click maximize hands the
-  /// singleton resectogram view node to the Slicer layout manager, which
-  /// realises a FRESH layout-managed view + LayerDM ``ResectogramPipeline``;
-  /// that pipeline needs the same surface ``Modified()`` feed kick the embedded
-  /// panel got, or the maximized view renders white-but-empty.  Wired to the
-  /// scene's layout node ``ModifiedEvent``; idempotent (ADR-0023 §Stage-4).
-  void onLayoutModified();
 
 protected:
   void setup() override;
@@ -157,17 +168,10 @@ protected:
   /// teardown so no stale observer fires.
   void observeSurfaceForRender(vtkMRMLMarkupsBezierSurfaceNode* surface);
 
-  /// (Re)attach the observer on the scene's layout node so a double-click
-  /// maximize/restore of the resectogram view replays the render feed kick
-  /// (``onLayoutModified``).  Symmetric removal on scene change so no stale
-  /// observer fires.
-  void observeLayoutNode();
-
-  /// Whether the singleton resectogram view is CURRENTLY maximized per the
-  /// scene's layout node.  ``onLayoutModified`` edge-triggers off this (kick
-  /// only on a transition INTO maximized), and ``observeLayoutNode`` seeds the
-  /// baseline from it; both share this one resolution (ADR-0023 §Stage-4).
-  bool resectogramViewIsMaximized() const;
+  /// Toggle the embedded resectogram widget between enlarged (central layout
+  /// area) and restored (drawer).  Invoked from the double-click event filter
+  /// (ADR-0023 §Stage-4).
+  void toggleResectogramEnlarged();
 
   /// Whether a realized GL context is available (a shown main window).  The
   /// embed binding + renderer push + forced render all drive the distance-map

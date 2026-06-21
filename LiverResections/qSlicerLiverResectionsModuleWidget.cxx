@@ -53,6 +53,7 @@
 #include <qMRMLThreeDViewControllerWidget.h>
 #include <qMRMLThreeDWidget.h>
 #include <qSlicerApplication.h>
+#include <qSlicerLayoutManager.h>
 #include <qSlicerPythonManager.h>
 
 // MRML DisplayableManager includes
@@ -63,7 +64,6 @@
 #include <ctkCollapsibleButton.h>
 
 // MRML includes
-#include <vtkMRMLLayoutNode.h>
 #include <vtkMRMLScalarVolumeNode.h>
 #include <vtkMRMLScene.h>
 #include <vtkMRMLViewNode.h>
@@ -75,13 +75,16 @@
 #include <vtkRenderer.h>
 
 // Qt includes
+#include <QEvent>
 #include <QGridLayout>
 #include <QLabel>
 #include <QLayout>
+#include <QMouseEvent>
 #include <QPointer>
 #include <QSizePolicy>
 #include <QString>
 #include <QTimer>
+#include <QWidget>
 
 namespace
 {
@@ -112,8 +115,9 @@ const double RESECTOGRAM_CAMERA_CLIPPING_RANGE[2] = { 10.0, 800.0 };
 // visual-regression scenario's black background (scenarios/Resectogram4x4BlurOff
 // BACKGROUND_RGB): the arena's interior-lit-fraction metrics assume black, so
 // only this production renderer push goes white (it matches the white the
-// Python ResectogramViewManager pushes onto the MRML view node for the
-// layout-managed / maximized render).
+// Python ResectogramViewManager pushes onto the MRML view node).  The renderer
+// push survives the custom enlarge (reparent into the central layout area), so
+// the enlarged strip keeps the same white panel.
 const double RESECTOGRAM_BACKGROUND_RGB[3] = { 1.0, 1.0, 1.0 };
 } // namespace
 
@@ -140,23 +144,21 @@ public:
   /// RemoveObserver.
   vtkWeakPointer<vtkMRMLMarkupsBezierSurfaceNode> RenderObservedNode;
 
-  /// The scene's layout node, observed for the double-click maximize/restore of
-  /// the resectogram view.  A maximize hands the singleton resectogram view
-  /// node to the Slicer layout manager, which realises a FRESH
-  /// layout-managed view + LayerDM ResectogramPipeline for it; that pipeline
-  /// needs the same initial feed kick the embedded panel got, or the maximized
-  /// view paints white-but-empty.  Tracked for symmetric RemoveObserver across
-  /// scene changes.
-  vtkWeakPointer<vtkMRMLLayoutNode> LayoutNode;
+  /// Whether the embedded resectogram widget is currently enlarged into the
+  /// central layout area.  Built-in double-click maximize is unusable here --
+  /// it realises a SECOND layout-managed widget on the singleton view node
+  /// whose LayerDM pipeline never populates the strip (a topology probe showed
+  /// the strip actors live ONLY in the embedded widget's renderer).  So
+  /// "maximize" is a CUSTOM ENLARGE: the one embedded qMRMLThreeDWidget is
+  /// reparented into the central viewport (reparenting WITHIN the main window
+  /// preserves the GL context + distance-map texture) and back (ADR-0023
+  /// §Stage-4).
+  bool ResectogramEnlarged = false;
 
-  /// Whether the resectogram view was maximized as of the last observed layout
-  /// modification.  The layout node fires its ModifiedEvent for EVERY layout
-  /// change (every view's maximize/restore, layout switches), but the feed kick
-  /// must replay only when THIS view's maximized state actually transitions --
-  /// otherwise an unrelated layout change re-fires the surface Modified() and
-  /// the anatomy markups redraw (the maximized-view flash).  Edge-triggered:
-  /// onLayoutModified kicks only when this flag flips (ADR-0023 §Stage-4).
-  bool ResectogramViewMaximized = false;
+  /// While enlarged, the central viewport the embedded widget was reparented
+  /// into -- watched for resize so the overlay re-fits, and removed from the
+  /// filter on restore.  A QPointer so a destroyed viewport reads null.
+  QPointer<QWidget> EnlargeHost;
 
   /// The (surface, hasDistanceMap) the drawer was last populated against.  The
   /// ``ActiveResectionNode`` ModifiedEvent observer fires ``refreshResectogramDrawer``
@@ -234,7 +236,6 @@ void qSlicerLiverResectionsModuleWidget::setMRMLScene(vtkMRMLScene* scene)
   Q_D(qSlicerLiverResectionsModuleWidget);
   this->Superclass::setMRMLScene(scene);
   d->ResectionSurfaceComboBox->setMRMLScene(scene);
-  this->observeLayoutNode();
   this->refreshResectogramDrawer();
 }
 
@@ -395,13 +396,6 @@ void qSlicerLiverResectionsModuleWidget::refreshResectogramDrawer()
   // (ADR-0023 §Stage-4).
   this->observeSurfaceForRender(surface);
 
-  // (Re)attach the layout-node observer now that the embed has happened: the
-  // layout node (the maximize / restore driver) is minted by the layout
-  // manager, which may not have run yet when setMRMLScene first fired, so
-  // resolve + observe it here once a realized GL context (and thus the main
-  // layout) is present.  Idempotent re-attach.
-  this->observeLayoutNode();
-
   // Replay the working reactivity path on auto-populate so the strip is visible
   // with NO manual edit.  The synchronous populate fires before the embedded
   // widget is realised/visible (the drawer may still be collapsed) and before
@@ -528,6 +522,17 @@ void qSlicerLiverResectionsModuleWidget::showResectogramWidget(vtkMRMLViewNode* 
     // once, on first create, after setMRMLViewNode has instantiated the
     // displayable managers.
     this->lockEmbeddedViewInteraction();
+
+    // Capture a double-click on the embedded view to toggle the CUSTOM enlarge
+    // (reparent into the central layout area) / restore.  The event filter sits
+    // on the GL view widget itself, so it sees the double-click before the view
+    // forwards it to VTK -- consuming it there suppresses Slicer's built-in
+    // maximize (which would realise a blank SECOND widget on the singleton view
+    // node; ADR-0023 §Stage-4).
+    if (qMRMLThreeDView* view = widget->threeDView())
+    {
+      view->installEventFilter(this);
+    }
   }
   else
   {
@@ -609,9 +614,11 @@ void qSlicerLiverResectionsModuleWidget::lockEmbeddedViewInteraction()
   // The camera widget hosted by the view's camera displayable manager owns the
   // trackball-rotate event translations (vtkMRMLCameraWidget).  Remap exactly
   // those to WidgetEventNone so the flat panel cannot be orbited, while pan /
-  // zoom (translate, dolly, wheel) AND the double-click focus/maximize stay
-  // untouched.  No custom DisplayableManager (ADR-0013 §5): this is a per-view
-  // config of the upstream camera widget.
+  // zoom (translate, dolly, wheel) stay untouched.  The double-click is handled
+  // by this widget's event filter (the custom enlarge/restore), which sits on
+  // the GL view and consumes the event before VTK sees it.  No custom
+  // DisplayableManager (ADR-0013 §5): this is a per-view config of the upstream
+  // camera widget.
   vtkMRMLCameraDisplayableManager* cameraDM = vtkMRMLCameraDisplayableManager::SafeDownCast(view->displayableManagerByClassName("vtkMRMLCameraDisplayableManager"));
   if (!cameraDM)
   {
@@ -626,9 +633,9 @@ void qSlicerLiverResectionsModuleWidget::lockEmbeddedViewInteraction()
   // No 3D rotation.  Drop the left-button rotate-start translations (the bare
   // drag and the markup-placement Alt variant) and the Ctrl-drag spin so a flat
   // 2D panel cannot be orbited.  Pan (Shift / middle drag) and zoom (right drag,
-  // Ctrl + Shift drag, mouse wheel) are left intact, and the double-click
-  // focus/maximize is deliberately NOT suppressed so enlarging the strip into
-  // the main layout still works (ADR-0023 §Stage-4).
+  // Ctrl + Shift drag, mouse wheel) are left intact.  The double-click is NOT
+  // remapped here: this widget's event filter consumes it at the Qt level
+  // (before VTK) to drive the custom enlarge/restore (ADR-0023 §Stage-4).
   cameraWidget->SetEventTranslation(vtkMRMLCameraWidget::WidgetStateIdle, vtkCommand::LeftButtonPressEvent, vtkEvent::NoModifier, vtkMRMLCameraWidget::WidgetEventNone);
   cameraWidget->SetEventTranslation(vtkMRMLCameraWidget::WidgetStateIdle, vtkCommand::LeftButtonPressEvent, vtkEvent::AltModifier, vtkMRMLCameraWidget::WidgetEventNone);
   cameraWidget->SetEventTranslation(vtkMRMLCameraWidget::WidgetStateIdle, vtkCommand::LeftButtonPressEvent, vtkEvent::ControlModifier, vtkMRMLCameraWidget::WidgetEventNone);
@@ -665,93 +672,136 @@ void qSlicerLiverResectionsModuleWidget::observeSurfaceForRender(vtkMRMLMarkupsB
 }
 
 //-----------------------------------------------------------------------------
-void qSlicerLiverResectionsModuleWidget::observeLayoutNode()
+bool qSlicerLiverResectionsModuleWidget::eventFilter(QObject* watched, QEvent* event)
 {
   Q_D(qSlicerLiverResectionsModuleWidget);
 
-  // The maximize / restore of the resectogram view is driven through the
-  // scene's singleton layout node (AddMaximizedViewNode / RemoveMaximizedViewNode
-  // fire its ModifiedEvent).  Observe it so the layout-managed maximized view's
-  // fresh LayerDM Pipeline gets the same feed kick the embedded panel got.
-  vtkMRMLScene* scene = this->mrmlScene();
-  vtkMRMLLayoutNode* layoutNode = scene ? vtkMRMLLayoutNode::SafeDownCast(scene->GetFirstNodeByClass("vtkMRMLLayoutNode")) : nullptr;
-
-  if (d->LayoutNode == layoutNode)
+  // A LEFT double-click on the embedded view toggles the custom enlarge.  Sit
+  // on the GL view widget so we see the event before it forwards to the VTK
+  // interactor; consuming it suppresses Slicer's built-in maximize (which would
+  // realise a blank SECOND widget on the singleton view node; ADR-0023
+  // §Stage-4).
+  if (event != nullptr && event->type() == QEvent::MouseButtonDblClick && d->ResectogramWidget != nullptr && watched == d->ResectogramWidget->threeDView())
   {
-    return;
+    QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+    if (mouseEvent->button() == Qt::LeftButton)
+    {
+      this->toggleResectogramEnlarged();
+      return true; // consumed: no built-in maximize
+    }
   }
 
-  // Symmetric removal of the prior observer before re-targeting.
-  this->qvtkDisconnect(d->LayoutNode, vtkCommand::ModifiedEvent, this, SLOT(onLayoutModified()));
-  d->LayoutNode = layoutNode;
-
-  // Seed the edge-trigger baseline from the layout node's CURRENT state, so the
-  // first onLayoutModified after (re)attach compares against reality rather than
-  // a stale default -- a missed-transition (no kick) or a phantom transition
-  // (a spurious kick) otherwise.  At populate time no view is maximized, so this
-  // is normally false; resolving it defensively also covers re-attach while a
-  // maximize is already in effect.
-  d->ResectogramViewMaximized = this->resectogramViewIsMaximized();
-
-  if (layoutNode)
+  // Keep the enlarged overlay fitted to the central viewport as it resizes
+  // (the overlay is a raw child, not in the viewport's layout, so Qt does not
+  // resize it for us).
+  if (event != nullptr && event->type() == QEvent::Resize && d->ResectogramEnlarged && d->ResectogramWidget != nullptr && watched == d->EnlargeHost && d->EnlargeHost != nullptr)
   {
-    this->qvtkConnect(layoutNode, vtkCommand::ModifiedEvent, this, SLOT(onLayoutModified()));
+    d->ResectogramWidget->setGeometry(d->EnlargeHost->rect());
   }
+
+  return this->Superclass::eventFilter(watched, event);
 }
 
 //-----------------------------------------------------------------------------
-bool qSlicerLiverResectionsModuleWidget::resectogramViewIsMaximized() const
+bool qSlicerLiverResectionsModuleWidget::isResectogramEnlarged() const
 {
   Q_D(const qSlicerLiverResectionsModuleWidget);
-
-  vtkMRMLScene* scene = this->mrmlScene();
-  vtkMRMLViewNode* viewNode = scene ? vtkMRMLViewNode::SafeDownCast(scene->GetSingletonNode(RESECTOGRAM_VIEW_SINGLETON_TAG, "vtkMRMLViewNode")) : nullptr;
-  return d->LayoutNode != nullptr && viewNode != nullptr && d->LayoutNode->IsMaximizedViewNode(viewNode);
+  return d->ResectogramEnlarged;
 }
 
 //-----------------------------------------------------------------------------
-void qSlicerLiverResectionsModuleWidget::onLayoutModified()
+void qSlicerLiverResectionsModuleWidget::toggleResectogramEnlarged()
+{
+  Q_D(qSlicerLiverResectionsModuleWidget);
+  if (d->ResectogramEnlarged)
+  {
+    this->restoreResectogram();
+  }
+  else
+  {
+    this->enlargeResectogram();
+  }
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerLiverResectionsModuleWidget::enlargeResectogram()
 {
   Q_D(qSlicerLiverResectionsModuleWidget);
 
-  // The layout node fires its ModifiedEvent for EVERY layout change -- any
-  // view's maximize/restore, a layout switch, a background recolour.  Replaying
-  // the surface-Modified() feed kick on each one re-runs the anatomy markups'
-  // UpdatePipeline in the shared views, and as a maximize/restore generates
-  // several layout modifications in quick succession the maximized view flashes
-  // the Bezier surface + its control polygon between coalesced renders.
-  //
-  // Edge-trigger instead: resolve the resectogram view's CURRENT maximized
-  // state from the layout node and act ONLY when it actually transitions for
-  // THIS view.  A transition INTO maximized realises a FRESH layout-managed
-  // qMRMLThreeDView + LayerDM ResectogramPipeline whose new Pipeline has not yet
-  // fed the flattened-surface geometry (the same initial-kick gap the embedded
-  // panel had on auto-populate) -- replay the kick exactly once there.  A
-  // transition OUT (restore) needs no kick; just track the new state.  Every
-  // unrelated layout modification is a no-op now, so nothing re-fires the
-  // anatomy markups (ADR-0023 §Stage-4).
-  const bool maximized = this->resectogramViewIsMaximized();
-
-  if (maximized == d->ResectogramViewMaximized)
+  if (!d->ResectogramWidget || d->ResectogramEnlarged)
   {
-    // No transition for the resectogram view: an unrelated layout modification.
     return;
   }
-  d->ResectogramViewMaximized = maximized;
 
-  // The resectogram view node is bound to TWO qMRMLThreeDViews: our embedded
-  // side-panel widget AND the layout-managed view Slicer maximizes.  With both
-  // live and observing the same view node + scene, a maximize sends each into a
-  // render that invalidates the other -- a render storm.  So hide the embedded
-  // side-panel widget while the view is maximized (only the layout view should
-  // render then), and restore it on un-maximize.  No surface->Modified() kick:
-  // the layout-managed view realises its own GL context + feeds its LayerDM
-  // Pipeline on map (realise-then-bind, like the embedded panel), so it renders
-  // the strip on its own; a kick here would also wake the markups manager to
-  // redraw anatomy mid-swap (ADR-0023 §Stage-4).
-  if (d->ResectogramWidget)
+  // Reparent the ONE embedded widget into the layout manager's central
+  // viewport.  Built-in maximize is unusable (it realises a blank SECOND widget
+  // on the singleton view node whose LayerDM pipeline never populates the
+  // strip); reparenting the working widget WITHIN the main window preserves its
+  // GL context + distance-map texture, so the strip renders enlarged with no
+  // second pipeline (ADR-0023 §Stage-4; verified on :0).
+  qSlicerApplication* app = qSlicerApplication::application();
+  qSlicerLayoutManager* layoutManager = app ? app->layoutManager() : nullptr;
+  QWidget* viewport = layoutManager ? layoutManager->viewport() : nullptr;
+  if (!viewport)
   {
-    d->ResectogramWidget->setVisible(!maximized);
+    return;
+  }
+
+  d->ResectogramWidget->setParent(viewport);
+  d->ResectogramWidget->setGeometry(viewport->rect());
+  d->ResectogramWidget->show();
+  d->ResectogramWidget->raise();
+
+  // Track the viewport for resize-refit + later removal.
+  d->EnlargeHost = viewport;
+  viewport->installEventFilter(this);
+
+  d->ResectogramEnlarged = true;
+
+  // The renderer (camera pose + white background) survives the reparent; pump a
+  // frame so the enlarged surface paints immediately.
+  if (qMRMLThreeDView* view = d->ResectogramWidget->threeDView())
+  {
+    view->forceRender();
+  }
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerLiverResectionsModuleWidget::restoreResectogram()
+{
+  Q_D(qSlicerLiverResectionsModuleWidget);
+
+  if (!d->ResectogramWidget || !d->ResectogramEnlarged)
+  {
+    return;
+  }
+
+  // Stop watching the central viewport for resize.
+  if (d->EnlargeHost)
+  {
+    d->EnlargeHost->removeEventFilter(this);
+    d->EnlargeHost = nullptr;
+  }
+
+  // Re-home the widget into the drawer grid at (1, 0) -- addWidget reparents it
+  // back under the drawer (the slot showResectogramWidget originally placed it
+  // in; ADR-0023 §Stage-4).
+  if (QGridLayout* grid = qobject_cast<QGridLayout*>(d->ResectogramDrawer->layout()))
+  {
+    grid->addWidget(d->ResectogramWidget, 1, 0);
+    grid->setRowStretch(1, 1);
+  }
+  else
+  {
+    d->ResectogramWidget->setParent(d->ResectogramDrawer);
+  }
+  d->ResectogramWidget->show();
+
+  d->ResectogramEnlarged = false;
+
+  if (qMRMLThreeDView* view = d->ResectogramWidget->threeDView())
+  {
+    view->forceRender();
   }
 }
 
