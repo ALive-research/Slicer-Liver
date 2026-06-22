@@ -112,13 +112,24 @@ def _require_main_window_or_skip(slicer):
 
 
 def _widget_or_skip(slicer):
+    # Per ADR-0004 the Stage-4 GUI is Python: build the widget directly rather
+    # than reaching it via the loadable module's widgetRepresentation().  The
+    # C++ module is still required for the logic + MRML nodes the fixture uses.
     module = getattr(slicer.modules, MODULE_NAME, None)
     if module is None:
         pytest.skip(f"'{MODULE_NAME}' module not registered.")
-    rep = module.widgetRepresentation()
-    if rep is None:
-        pytest.skip("LiverResections has no widget representation yet.")
-    return rep
+    try:
+        from LiverResectionsLib.ResectionPlanningWidget import (  # type: ignore[import-not-found]
+            ResectionPlanningWidget,
+        )
+    except Exception as exc:  # pragma: no cover - import-environment dependent
+        pytest.skip(
+            "LiverResectionsLib.ResectionPlanningWidget not importable "
+            f"({exc!r}) -- the ADR-0004 Python Stage-4 widget is unreachable."
+        )
+    widget = ResectionPlanningWidget()
+    widget.setMRMLScene(slicer.mrmlScene)
+    return widget
 
 
 def _enlarge_api_or_skip(widget):

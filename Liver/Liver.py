@@ -358,6 +358,13 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return self._buildStage1Page(), True
     if index == 5:
       return self._buildStage6Page(), True
+    if index == 3:
+      # Stage 4 "Resection Planning" GUI is Python (ADR-0004): build the
+      # Python ResectionPlanningWidget directly rather than routing through
+      # the LiverResections loadable module's widgetRepresentation().  The
+      # IsStageComplete() query path still reads the C++ module logic
+      # (see _stageIsComplete) -- only the widget surface moved to Python.
+      return self._buildResectionPlanningPage()
 
     module = getattr(slicer.modules, self._STAGE_MODULE[index], None)
     rep = None
@@ -382,6 +389,29 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     layout.addWidget(qt.QLabel("Case Setup — load volumes and tag roles (Stage 1)."))
     layout.addStretch(1)
     return page
+
+  def _buildResectionPlanningPage(self):
+    """Return ``(page_widget, is_available)`` for the Stage-4 Python widget.
+
+    Build the Stage-4 Resection Planning Python widget (ADR-0004).
+
+    The GUI surface for Stage 4 is Python (ADR-0004: widgets/GUI logic
+    are Python; C++ only for data-only MRML nodes + profile-justified
+    algorithm libs).  The widget imports ResectogramViewManager directly
+    and calls the wrapped C++ nodes/logic without the string bridge the
+    retired C++ widget used.  The reference is stored on the shell (in
+    ``_stagePages`` by the caller) so its lifetime is the shell's, like
+    the other stage pages.  Falls back to the unavailable placeholder
+    when the Python lib is not reachable (e.g. a build without the
+    LiverResectionsLib scripted package).
+    """
+    try:
+      from LiverResectionsLib.ResectionPlanningWidget import ResectionPlanningWidget
+    except Exception:  # pragma: no cover — surfaces only when the lib is absent
+      return self._buildUnavailablePage(self._STAGE_NAMES[3]), False
+    widget = ResectionPlanningWidget()
+    widget.setMRMLScene(slicer.mrmlScene)
+    return widget, True
 
   def _buildStage6Page(self):
     """Shell-owned Export placeholder (ADR-0023 §Stage 6).

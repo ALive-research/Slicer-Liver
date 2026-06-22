@@ -47,20 +47,19 @@ set(MODULE_INCLUDE_DIRECTORIES
 set(MODULE_SRCS
   qSlicer${MODULE_NAME}Module.cxx
   qSlicer${MODULE_NAME}Module.h
-  qSlicer${MODULE_NAME}ModuleWidget.cxx
-  qSlicer${MODULE_NAME}ModuleWidget.h
   qSlicer${MODULE_NAME}Reader.h
   qSlicer${MODULE_NAME}Reader.cxx
   )
 
 set(MODULE_MOC_SRCS
   qSlicer${MODULE_NAME}Module.h
-  qSlicer${MODULE_NAME}ModuleWidget.h
   qSlicer${MODULE_NAME}Reader.h
   )
 
+# ADR-0004 — the Stage-4 "Resection Planning" GUI is Python
+# (LiverResectionsLib.ResectionPlanningWidget); this loadable module
+# ships no C++ widget representation, so there are no module .ui files.
 set(MODULE_UI_SRCS
-  Resources/UI/qSlicer${MODULE_NAME}ModuleWidget.ui
   )
 
 set(MODULE_TARGET_LIBRARIES

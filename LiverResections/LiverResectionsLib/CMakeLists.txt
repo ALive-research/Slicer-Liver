@@ -25,6 +25,7 @@ set(LiverResectionsLib_PYTHON_SCRIPTS
   __init__.py
   DistanceMaps.py
   LiverBezierSurfacePipeline.py
+  ResectionPlanningWidget.py
   ResectogramPipeline.py
   ResectogramViewManager.py
   Representations/__init__.py
