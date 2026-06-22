@@ -426,7 +426,21 @@ class ResectionPlanningWidget(qt.QWidget):
         view = self.embeddedThreeDView()
         if view is None:
             return
-        renderer = view.renderer()
+        # qMRMLThreeDView does not expose a ``renderer()`` accessor to Python
+        # (unlike the C++ class), so resolve the main (layer-0) renderer through
+        # the render window -- the camera pose + flat background must land on the
+        # renderer the strip actors live in, or the fixed (u, v) quad renders
+        # off-frame and the panel shows only the background.
+        renderer = None
+        renderWindow = view.renderWindow()
+        renderers = renderWindow.GetRenderers() if renderWindow is not None else None
+        if renderers is not None:
+            renderers.InitTraversal()
+            for _ in range(renderers.GetNumberOfItems()):
+                candidate = renderers.GetNextItem()
+                if candidate is not None and candidate.GetLayer() == 0:
+                    renderer = candidate
+                    break
         if renderer is None:
             return
 
