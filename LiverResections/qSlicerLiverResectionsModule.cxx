@@ -38,7 +38,6 @@
 ==============================================================================*/
 
 #include "qSlicerLiverResectionsModule.h"
-#include "qSlicerLiverResectionsModuleWidget.h"
 
 // Qt includes
 #include <QDebug>
@@ -233,13 +232,11 @@ void qSlicerLiverResectionsModule::setup()
 //-----------------------------------------------------------------------------
 qSlicerAbstractModuleRepresentation* qSlicerLiverResectionsModule ::createWidgetRepresentation()
 {
-  // ADR-0023 §Stage-4 — the "Resection Planning" surface.  Previously this
-  // module shipped no GUI (returned nullptr); it now hosts the resection-surface
-  // selector and the auto-populating "Resectogram" drawer (selecting a
-  // distance-mapped surface fills it; a double-click enlarges the embedded view
-  // into the central layout area).  Liver/Liver.py composes this widget via
-  // LiverResections.widgetRepresentation().
-  return new qSlicerLiverResectionsModuleWidget;
+  // ADR-0004 — the Stage-4 "Resection Planning" GUI is Python
+  // (LiverResectionsLib.ResectionPlanningWidget), composed directly by
+  // Liver/Liver.py.  This loadable module is data-only (MRML nodes + logic +
+  // I/O) and ships no C++ widget representation.
+  return nullptr;
 }
 
 //-----------------------------------------------------------------------------

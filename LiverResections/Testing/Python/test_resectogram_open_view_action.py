@@ -242,26 +242,34 @@ def _module_or_skip(slicer):
 
 
 def _widget_or_skip(slicer):
-    """Return the module's widget representation, or skip cleanly.
+    """Construct the Python ResectionPlanningWidget, or skip cleanly.
 
-    RED pre-implementation: ``createWidgetRepresentation()`` returns
-    ``nullptr`` today, so ``widgetRepresentation()`` is ``None`` and the test
-    skips.  The skip lifts when the net-new ``qSlicerLiverResectionsModuleWidget``
-    lands (ADR-0027 §Conformance).
+    Per ADR-0004 the Stage-4 GUI is Python: the widget is built directly
+    (``ResectionPlanningWidget(); setMRMLScene(slicer.mrmlScene)``) rather than
+    reached via the loadable module's ``widgetRepresentation()`` (which now
+    returns ``nullptr`` again).  Skips cleanly when the lib is not importable
+    (e.g. a build without the LiverResectionsLib scripted package).
     """
     from slicer_pytest_support import require_qt_widget
 
     require_qt_widget()
-    module = _module_or_skip(slicer)
-    rep = module.widgetRepresentation()
-    if rep is None:
-        pytest.skip(
-            "LiverResections has no widget representation -- "
-            "createWidgetRepresentation() still returns nullptr.  T3-g3 adds "
-            "the module's first GUI (qSlicerLiverResectionsModuleWidget, "
-            "ADR-0023 §Stage-4); the skip lifts when it lands."
+    # The C++ loadable module still hosts the logic + MRML nodes; require it so
+    # the gate-satisfied fixture builders (which call
+    # ``slicer.modules.liverresections.logic()``) work.
+    _module_or_skip(slicer)
+    try:
+        from LiverResectionsLib.ResectionPlanningWidget import (  # type: ignore[import-not-found]
+            ResectionPlanningWidget,
         )
-    return rep
+    except Exception as exc:  # pragma: no cover - import-environment dependent
+        pytest.skip(
+            "LiverResectionsLib.ResectionPlanningWidget not importable "
+            f"({exc!r}) -- the ADR-0004 Python Stage-4 widget is unreachable in "
+            "this environment; the skip lifts when the lib is on the path."
+        )
+    widget = ResectionPlanningWidget()
+    widget.setMRMLScene(slicer.mrmlScene)
+    return widget
 
 
 def _accessor_or_skip(bezier):
