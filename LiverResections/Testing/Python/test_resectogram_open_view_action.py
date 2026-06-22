@@ -62,10 +62,13 @@ registered) pre-implementation and goes GREEN post -- the ADR-0027
 §Conformance "for skipped tests, the skip lifts at the implementation commit"
 shape.  A C++ generic widget test may accompany the IMPLEMENTATION later.
 
-Reaching the GUI: ``slicer.modules.liverresections.widgetRepresentation()``.
-The combo box + drawer + hint are located by objectName (see the implementer
-contract below); a thin Python-accessible helper API is preferred where
-direct child-finding is brittle.
+Reaching the GUI: the Stage-4 panel is a Python widget per ADR-0004 -- the
+tests build ``LiverResectionsLib.ResectionPlanningWidget`` directly and call
+``setMRMLScene`` (the loadable module's ``createWidgetRepresentation()`` returns
+nullptr; ``Liver/Liver.py`` composes the Python widget for stage 3).  The combo
+box + drawer + hint are located by objectName (see the implementer contract
+below); a thin Python-accessible helper API is preferred where direct
+child-finding is brittle.
 
 Dual harness (ADR-0008 §1, §6): runs meaningfully under the launched-Slicer
 ``pytest_launched`` row (Liver/Testing/Python/run_pytest_launched.py; this
@@ -77,8 +80,8 @@ down minted nodes so the launched harness does not trip ``vtkDebugLeaks``.
 
 -- IMPLEMENTER CONTRACT (assumed objectNames + entry points) --
 
-  * ``qSlicerLiverResectionsModuleWidget`` -- the net-new C++ widget returned
-    by ``createWidgetRepresentation()``.
+  * ``LiverResectionsLib.ResectionPlanningWidget`` -- the Python Stage-4 widget
+    (ADR-0004); composed by ``Liver/Liver.py`` for stage 3.
   * objectName ``"ResectionSurfaceComboBox"`` -- the
     ``qMRMLNodeComboBox`` of ``vtkMRMLMarkupsBezierSurfaceNode`` selecting the
     active resection.

@@ -136,21 +136,19 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections;ring-extraction"
     )
 
-    # T3-g3 -- gated "Open resectogram view" action on the net-new
-    # qSlicerLiverResectionsModuleWidget (ADR-0023 §Stage-4).  Three
-    # invariants: (1) the action enabled-iff a vtkMRMLMarkupsBezierSurfaceNode
-    # is selected AND GetDistanceMapVolumeNode() is non-null
-    # (state-orthogonal, NOT gated on ADR-0019 ResectionState); (2) triggering
-    # ensures EXACTLY ONE vtkMRMLResectogramDisplayNode on the surface,
-    # idempotent on re-trigger; (3) it ensures the singleton resectogram view
-    # node via ResectogramViewManager.ensureViewNode(), idempotent on
-    # re-trigger.  Reaching the GUI needs widgetRepresentation() under a
+    # T3-g3 -- auto-populate of the Stage-4 ResectionPlanningWidget (the Python
+    # widget, ADR-0004; ADR-0023 §Stage-4).  Three invariants: (1) the drawer
+    # auto-populates iff a vtkMRMLMarkupsBezierSurfaceNode is selected AND
+    # GetDistanceMapVolumeNode() is non-null (state-orthogonal, NOT gated on
+    # ADR-0019 ResectionState); (2) triggering ensures EXACTLY ONE
+    # vtkMRMLResectogramDisplayNode on the surface, idempotent on re-trigger;
+    # (3) it ensures the singleton resectogram view node via
+    # ResectogramViewManager.ensureViewNode(), idempotent on re-trigger.  The
+    # test builds LiverResectionsLib.ResectionPlanningWidget directly under a
     # launched qSlicerApplication, so it runs green under the launched-Slicer
     # `pytest_launched` row (Liver/Testing/Python; this dir is already on its
     # test roots) and SKIPS CLEANLY here under bare pytest (no qt.QWidget /
-    # no widget rep).  RED / skip-pending until the implementer lands the
-    # widget + the gating predicate + the display-node/view-node ensure path
-    # (ADR-0027 §Conformance: the skip lifts at the implementation commit).
+    # no widget).
     add_test(
       NAME LiverResections_resectogram_open_view_action
       COMMAND "${Python3_EXECUTABLE}" -m pytest
