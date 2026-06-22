@@ -67,13 +67,21 @@ from .ResectogramViewManager import (
 # view-node background; these are applied at the renderer level (mirroring the
 # arena's ``_apply_camera_and_background`` and the proven scenario constants
 # in scenarios/Resectogram4x4BlurOff.py).  They frame the FIXED flattened
-# (u, v) quad, independent of the resection's patient-space pose.
-_RESECTOGRAM_CAMERA_POSITION = (0.0, 60.0, 300.0)
-_RESECTOGRAM_CAMERA_FOCAL_POINT = (0.0, 60.0, 0.0)
+# (u, v) quad, independent of the resection's patient-space pose.  The camera
+# looks straight down -Z at the flattened quad (which lies in the Z=0 plane)
+# with +Y up; the position/focal are only a DIRECTION seed -- ResetCamera()
+# repositions + sets the parallel scale to FIT the quad to whatever viewport
+# the strip currently occupies (drawer or enlarged central area), so the strip
+# fills the view rather than sitting at a fixed scale with wide margins.
+_RESECTOGRAM_CAMERA_POSITION = (0.0, 0.0, 1.0)
+_RESECTOGRAM_CAMERA_FOCAL_POINT = (0.0, 0.0, 0.0)
 _RESECTOGRAM_CAMERA_VIEW_UP = (0.0, 1.0, 0.0)
-_RESECTOGRAM_CAMERA_PARALLEL_SCALE = 70.0
-_RESECTOGRAM_CAMERA_VIEW_ANGLE = 45.0
-_RESECTOGRAM_CAMERA_CLIPPING_RANGE = (10.0, 800.0)
+# Fill factor applied after ResetCamera: ResetCamera fits the quad's bounding
+# SPHERE (leaving the square quad with diagonal-vs-side slack), so zoom in past
+# the fit to make the quad occupy as much of the view as possible.  Tuned by
+# eyeball; <1.42 (the square half-diagonal/half-side ratio) keeps the quad's
+# (u, v) border fully visible.
+_RESECTOGRAM_CAMERA_FILL_ZOOM = 1.35
 # Flat WHITE background for the embedded resectogram renderer (ADR-0023
 # §Stage-4): a clean 2D-image panel.  Matches the white the Python
 # ResectogramViewManager pushes onto the MRML view node.
@@ -445,17 +453,22 @@ class ResectionPlanningWidget(qt.QWidget):
             return
 
         # Camera pose onto the renderer's ACTIVE camera (not the MRML camera
-        # node, which the standalone view ignores).  Parallel projection
-        # framing the fixed flattened (u, v) quad.
+        # node, which the standalone view ignores).  Seed the head-on -Z view
+        # direction + parallel projection, then ResetCamera() to FIT the
+        # flattened (u, v) quad to the CURRENT viewport -- so the strip fills the
+        # view in whichever it participates (drawer or enlarged central area),
+        # not a fixed scale with wide margins.  ResetCamera fits visible-prop
+        # bounds: the anatomy is isolated (vis=0) so only the strip is fitted.
         camera = renderer.GetActiveCamera()
         if camera is not None:
-            camera.SetPosition(*_RESECTOGRAM_CAMERA_POSITION)
             camera.SetFocalPoint(*_RESECTOGRAM_CAMERA_FOCAL_POINT)
+            camera.SetPosition(*_RESECTOGRAM_CAMERA_POSITION)
             camera.SetViewUp(*_RESECTOGRAM_CAMERA_VIEW_UP)
             camera.ParallelProjectionOn()
-            camera.SetParallelScale(_RESECTOGRAM_CAMERA_PARALLEL_SCALE)
-            camera.SetViewAngle(_RESECTOGRAM_CAMERA_VIEW_ANGLE)
-            camera.SetClippingRange(*_RESECTOGRAM_CAMERA_CLIPPING_RANGE)
+            renderer.ResetCamera()
+            # Zoom past the bounding-sphere fit so the quad maximally occupies
+            # the view (pan/zoom remain available to the user from here).
+            camera.Zoom(_RESECTOGRAM_CAMERA_FILL_ZOOM)
 
         # Flat background onto the renderer (the blue gradient is the default
         # 3D background the standalone view keeps unless overridden here).
@@ -572,8 +585,14 @@ class ResectionPlanningWidget(qt.QWidget):
             and watched is self._enlargeHost
         ):
             self._resectogramWidget.setGeometry(self._enlargeHost.rect)
+            # Re-fit so the strip keeps filling the resized central viewport.
+            self.poseEmbeddedRenderer()
 
-        return super().eventFilter(watched, event)
+        # Unhandled: do NOT filter the event out.  Return False rather than
+        # delegating to ``super().eventFilter`` -- PythonQt's QWidget does not
+        # expose ``eventFilter`` via ``super()`` (it raises AttributeError), and
+        # the Qt contract for an event filter is simply "False = pass through".
+        return False
 
     def isResectogramEnlarged(self):  # noqa: N802 - Slicer/Qt verb convention
         return self._resectogramEnlarged
@@ -609,11 +628,9 @@ class ResectionPlanningWidget(qt.QWidget):
 
         self._resectogramEnlarged = True
 
-        # The renderer (camera pose + white background) survives the reparent;
-        # pump a frame so the enlarged surface paints immediately.
-        view = self._resectogramWidget.threeDView()
-        if view is not None:
-            view.forceRender()
+        # Re-fit the camera to the (now much larger) central viewport so the
+        # strip fills it, then paint.  poseEmbeddedRenderer ends with a render.
+        self.poseEmbeddedRenderer()
 
     def restoreResectogram(self):  # noqa: N802 - Slicer/Qt verb convention
         if self._resectogramWidget is None or not self._resectogramEnlarged:
@@ -636,9 +653,8 @@ class ResectionPlanningWidget(qt.QWidget):
 
         self._resectogramEnlarged = False
 
-        view = self._resectogramWidget.threeDView()
-        if view is not None:
-            view.forceRender()
+        # Re-fit the camera to the drawer viewport so the strip fills it again.
+        self.poseEmbeddedRenderer()
 
     # ----------------------------------------------------------------------- #
     # Helpers.
