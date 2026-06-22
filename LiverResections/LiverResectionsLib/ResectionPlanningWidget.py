@@ -43,7 +43,7 @@ References
 * `ADR-0013`_ §5 -- no custom DisplayableManager; config only.
 * `ADR-0009`_ -- explainable state (the hint).
 
-.. _ADR-0004: ../../Docs/adr/0004-language-boundary.md
+.. _ADR-0004: ../../Docs/adr/0004-python-cpp-boundary.md
 .. _ADR-0009: ../../Docs/adr/0009-ux-and-design-discipline.md
 .. _ADR-0013: ../../Docs/adr/0013-layerdm-pipeline-pattern.md
 .. _ADR-0023: ../../Docs/adr/0023-unified-gui-stage-workflow.md
@@ -138,6 +138,15 @@ class ResectionPlanningWidget(qt.QWidget):
 
         self._setupUi()
         self.refreshResectogramDrawer()
+
+        # Symmetric teardown: the VTK observers live on scene nodes that OUTLIVE
+        # this panel, and the enlarge installs an event filter on the layout
+        # viewport (also longer-lived).  The retired C++ widget relied on
+        # qvtkConnect auto-disconnect + an explicit destructor to drop both; the
+        # raw-AddObserver / installEventFilter Python port has no such automatic
+        # hook, so wire cleanup() to the widget's destruction to remove them and
+        # avoid a stale callback into a dead widget (module reload / scene close).
+        self.destroyed.connect(lambda *_: self.cleanup())
 
     # ----------------------------------------------------------------------- #
     # Construction.
@@ -655,6 +664,30 @@ class ResectionPlanningWidget(qt.QWidget):
 
         # Re-fit the camera to the drawer viewport so the strip fills it again.
         self.poseEmbeddedRenderer()
+
+    def cleanup(self):  # noqa: N802 - Slicer/Qt verb convention
+        """Drop every observer + event filter this widget placed on objects that
+        outlive it, so none fire into a destroyed widget.
+
+        Mirrors the retired C++ widget's destructor (which removed the enlarge
+        event filters) plus the qvtkConnect auto-disconnect (which dropped the
+        VTK node observers).  Safe to call more than once.
+        """
+        # VTK node observers (on scene nodes that outlive this panel).
+        if self._activeResectionNode is not None and self._activeNodeObservationTag is not None:
+            self._activeResectionNode.RemoveObserver(self._activeNodeObservationTag)
+        self._activeNodeObservationTag = None
+        self.observeSurfaceForRender(None)  # symmetric removal of the render observer
+
+        # Event filters: the enlarge viewport (owned by the layout manager, which
+        # long outlives this widget) and the embedded view.
+        if self._enlargeHost is not None:
+            self._enlargeHost.removeEventFilter(self)
+            self._enlargeHost = None
+        if self._resectogramWidget is not None:
+            view = self._resectogramWidget.threeDView()
+            if view is not None:
+                view.removeEventFilter(self)
 
     # ----------------------------------------------------------------------- #
     # Helpers.
