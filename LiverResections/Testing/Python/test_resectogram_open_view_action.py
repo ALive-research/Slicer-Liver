@@ -272,7 +272,14 @@ def _widget_or_skip(slicer):
         )
     widget = ResectionPlanningWidget()
     widget.setMRMLScene(slicer.mrmlScene)
-    return widget
+    # Register for deterministic teardown: this widget is PARENTLESS, and a
+    # parentless ResectionPlanningWidget surviving to app shutdown crashes the
+    # launched harness (its combo box's scene wiring tears down out of order vs
+    # the scene).  The conftest autouse fixture tears registered widgets down
+    # after the test, while the scene is still alive.
+    from slicer_pytest_support import register_widget_for_teardown
+
+    return register_widget_for_teardown(widget)
 
 
 def _accessor_or_skip(bezier):

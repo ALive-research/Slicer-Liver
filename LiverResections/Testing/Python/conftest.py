@@ -67,6 +67,45 @@ def _live_mrml_scene():
 
 
 @pytest.fixture(autouse=True)
+def _teardown_resection_planning_widgets():
+    """Destroy any parentless ResectionPlanningWidget a test built, before the
+    scene (and the process) is torn down.
+
+    The Stage-4 widget (``LiverResectionsLib.ResectionPlanningWidget``) is built
+    PARENTLESS by the tests; production parents it into the Liver shell tab,
+    where Qt destroys it before the scene.  A parentless widget survives to app
+    shutdown, where its ``qMRMLNodeComboBox``'s scene wiring tears down in an
+    undefined order vs the scene and crashes ``SlicerApp`` ("exit abnormally"),
+    failing the launched harness even when every test PASSED.  ``_widget_or_skip``
+    registers each widget it builds via
+    ``slicer_pytest_support.register_widget_for_teardown``; drain + tear them
+    down here (``cleanup()`` releases the combo's scene + the observers/filters,
+    then ``deleteLater`` drops the widget) while the scene is still alive.
+    No-op under bare pytest / when none were built.
+    """
+    yield
+    try:
+        from slicer_pytest_support import drain_widgets_for_teardown
+    except Exception:  # pragma: no cover - import-environment dependent
+        return
+    widgets = drain_widgets_for_teardown()
+    if not widgets:
+        return
+    for widget in widgets:
+        try:
+            cleanup = getattr(widget, "cleanup", None)
+            if callable(cleanup):
+                cleanup()
+            widget.setParent(None)
+            widget.deleteLater()
+        except Exception:  # pragma: no cover - defensive teardown
+            pass
+    slicer = sys.modules.get("slicer")
+    if _looks_like_real_slicer(slicer):
+        slicer.app.processEvents()
+
+
+@pytest.fixture(autouse=True)
 def _launched_scene_cleanup():
     """Clear the MRML scene after each launched test; assert it stays clean.
 

@@ -129,7 +129,12 @@ def _widget_or_skip(slicer):
         )
     widget = ResectionPlanningWidget()
     widget.setMRMLScene(slicer.mrmlScene)
-    return widget
+    # Parentless widget -> register for deterministic teardown so it does not
+    # survive to app shutdown and crash the launched harness (see the conftest
+    # autouse fixture + slicer_pytest_support.register_widget_for_teardown).
+    from slicer_pytest_support import register_widget_for_teardown
+
+    return register_widget_for_teardown(widget)
 
 
 def _enlarge_api_or_skip(widget):
