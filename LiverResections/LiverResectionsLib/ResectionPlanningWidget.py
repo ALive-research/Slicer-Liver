@@ -139,15 +139,6 @@ class ResectionPlanningWidget(qt.QWidget):
         self._setupUi()
         self.refreshResectogramDrawer()
 
-        # Symmetric teardown: the VTK observers live on scene nodes that OUTLIVE
-        # this panel, and the enlarge installs an event filter on the layout
-        # viewport (also longer-lived).  The retired C++ widget relied on
-        # qvtkConnect auto-disconnect + an explicit destructor to drop both; the
-        # raw-AddObserver / installEventFilter Python port has no such automatic
-        # hook, so wire cleanup() to the widget's destruction to remove them and
-        # avoid a stale callback into a dead widget (module reload / scene close).
-        self.destroyed.connect(lambda *_: self.cleanup())
-
     # ----------------------------------------------------------------------- #
     # Construction.
     # ----------------------------------------------------------------------- #
@@ -672,7 +663,16 @@ class ResectionPlanningWidget(qt.QWidget):
         Mirrors the retired C++ widget's destructor (which removed the enlarge
         event filters) plus the qvtkConnect auto-disconnect (which dropped the
         VTK node observers).  Safe to call more than once.
+
+        In production the widget is parented into the Liver shell's tab and is
+        destroyed BEFORE the scene (so qMRMLNodeComboBox cleans its own scene
+        wiring); call this when tearing the widget down OUT of that order
+        (module reload, or a parentless test widget) so the combo box releases
+        the scene before the scene is freed -- otherwise the combo's scene
+        observer fires into freed memory at app shutdown.
         """
+        if self._comboBox is not None:
+            self._comboBox.setMRMLScene(None)
         # VTK node observers (on scene nodes that outlive this panel).
         if self._activeResectionNode is not None and self._activeNodeObservationTag is not None:
             self._activeResectionNode.RemoveObserver(self._activeNodeObservationTag)

@@ -97,3 +97,33 @@ def require_qt_widget() -> None:
             "Bare PythonSlicer -m pytest cannot satisfy widget-level "
             "tests; see the launched-Slicer harness (run_pytest_launched.py)."
         )
+
+
+# --------------------------------------------------------------------------- #
+# Widget teardown registry (launched-harness shutdown-crash guard).
+#
+# Tests build the Stage-4 ResectionPlanningWidget PARENTLESS (production parents
+# it into the Liver shell tab, where Qt destroys it before the scene).  A
+# parentless widget survives to app shutdown, where its qMRMLNodeComboBox's
+# scene wiring tears down in an undefined order vs the scene and crashes
+# SlicerApp ("exit abnormally"), failing the launched harness even when every
+# test passed.  A test helper registers each widget it builds here; the
+# LiverResections conftest's autouse fixture drains + tears them down (cleanup()
+# + deleteLater) after each test, while the scene is still alive.
+# --------------------------------------------------------------------------- #
+
+_WIDGETS_FOR_TEARDOWN: list = []
+
+
+def register_widget_for_teardown(widget):
+    """Register a parentless test-built widget for deterministic teardown."""
+    if widget is not None:
+        _WIDGETS_FOR_TEARDOWN.append(widget)
+    return widget
+
+
+def drain_widgets_for_teardown():
+    """Return the registered widgets and clear the registry."""
+    widgets = list(_WIDGETS_FOR_TEARDOWN)
+    _WIDGETS_FOR_TEARDOWN.clear()
+    return widgets
