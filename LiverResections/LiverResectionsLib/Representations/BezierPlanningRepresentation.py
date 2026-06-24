@@ -14,20 +14,26 @@ constructed by ``LiverBezierSurfacePipeline.initialize()`` and
 exercised by direct Python instantiation in unit tests.  Full
 integration with Slicer's LayerDM framework happens at T2.6.
 
-Per ADR-0014 §3 the four custom OpenGL mappers
-(``vtkOpenGLBezierResectionPolyDataMapper``,
-``vtkOpenGLSlicingContourPolyDataMapper``,
-``vtkOpenGLDistanceContourPolyDataMapper``,
-``vtkOpenGLResection2DPolyDataMapper``) **relocate** from
-``LiverMarkups/VTKWidgets/`` to ``LiverResections/VTKWidgets/``.  The
-relocation has not landed yet (it is part of the broader T2 cohort,
-not the T2.2 stack); this Representation uses the generic
-``vtkPolyDataMapper`` + ``vtkActor`` pair until that relocation
-completes, at which point the surface mapper field will flip to
-``vtkOpenGLBezierResectionPolyDataMapper`` *without changing the
-Representation's public API*.  Marked with
-``TODO(T2-mapper-relocation)`` at the construction point so the
-swap is mechanical.
+Surface mapper (T2-mapper-wiring)
+---------------------------------
+Per ADR-0014 §3 the four custom OpenGL mappers relocated from
+``LiverMarkups/VTKWidgets/`` to ``LiverResections/VTKWidgets/``.  Inside a
+launched Slicer this Representation drives the relocated, real
+``vtkOpenGLBezierResectionPolyDataMapper`` over the tessellated Bernstein
+patch built by ``vtkBezierSurfaceSource`` + ``vtkPolyDataNormals`` (the same
+pipeline shape v1's ``vtkSlicerBezierSurfaceRepresentation3D`` assembled),
+including the ``uvCoords`` the mapper's vertex shader reads and the
+display-node colour / grid uniforms.  When the wrapped classes are off the
+path — the bare-VTK unit layer — it falls back to a generic
+``vtkPolyDataMapper`` + ``vtkActor`` pair over the raw control mesh so the
+Representation still constructs (``_resolve_vtk_class`` selects the path).
+
+The RAS/IJK transform matrices and the distance-map 3D texture binding are
+NOT wired here: the v2 ``vtkMRMLBezierSurfaceNode`` carries no distance-map
+reference (the v1 markups node did), so there is no node-level source to
+thread, and the fragment shader degrades gracefully when no ``distanceTexture``
+is bound.  Those wait on a follow-on that gives the v2 node a distance-map
+reference.
 
 Renderer attachment
 -------------------
@@ -87,6 +93,19 @@ except ImportError:  # pragma: no cover — pure-Python path
 DEFAULT_RESECTION_COLOR = (1.0, 1.0, 1.0)
 DEFAULT_RESECTION_OPACITY = 1.0
 
+# The relocated real surface mapper + the Bezier tessellation source (ADR-0014
+# §3).  Both are wrapped-C++ classes reachable only inside a launched Slicer;
+# ``_resolve_vtk_class`` falls back to ``None`` in the bare-VTK unit layer, in
+# which case the Representation builds a generic ``vtkPolyDataMapper`` pipeline
+# so it still constructs (the structural / colour bookkeeping stays testable).
+REAL_SURFACE_MAPPER_CLASS = "vtkOpenGLBezierResectionPolyDataMapper"
+BEZIER_SURFACE_SOURCE_CLASS = "vtkBezierSurfaceSource"
+
+# Tessellation resolution of the Bezier patch, carried forward verbatim from
+# the v1 ``vtkSlicerBezierSurfaceRepresentation3D`` ctor (``SetResolution(20,
+# 20)``) so the rendered surface matches the legacy visual baseline.
+BEZIER_SURFACE_RESOLUTION = 20
+
 
 class BezierPlanningRepresentation:
     """VTK assembly for the Planning-state Bezier surface.
@@ -110,19 +129,15 @@ class BezierPlanningRepresentation:
 
     Grid rendering
     --------------
-    The 4×4 control grid is **not** rendered as a separate actor.  Per
-    ADR-0014 §3 the relocated ``vtkOpenGLBezierResectionPolyDataMapper``
-    overlays the grid as a fragment-shader feature on the *surface*
-    mapper itself — the legacy mapper at
-    ``LiverMarkups/VTKWidgets/vtkOpenGLResection2DPolyDataMapper.cpp:281``
-    draws it procedurally via ``uGridDivisions`` / ``uGridThickness`` /
-    ``uResectionGridColor`` uniforms tested against
-    ``uvCoordsOutput``.  This skeleton therefore renders only the
-    surface actor; the display node's ``GridVisibility`` /
-    ``GridDivisions`` / ``GridThickness`` / ``ResectionGridColor``
-    fields are stored on the node and will be plumbed into the mapper's
-    uniforms when the relocation happens (``TODO(T2-mapper-relocation)``
-    in ``_build_vtk_pipeline``).
+    The control grid is **not** rendered as a separate actor.  Per
+    ADR-0014 §3 the ``vtkOpenGLBezierResectionPolyDataMapper`` overlays the
+    grid as a fragment-shader feature on the *surface* mapper itself, drawing
+    it procedurally via ``uGridDivisions`` / ``uGridThickness`` /
+    ``uResectionGridColor`` uniforms tested against ``uvCoordsOutput``.  The
+    Representation renders only the surface actor and plumbs the display node's
+    ``Grid3DVisibility`` / ``GridDivisions`` / ``GridThickness`` /
+    ``ResectionGridColor`` fields onto those uniforms in
+    ``_apply_mapper_display_fields`` (gated on grid visibility, v1 parity).
 
     Introspection (used by unit tests)
     ----------------------------------
@@ -138,8 +153,13 @@ class BezierPlanningRepresentation:
     def __init__(self, renderer: Any | None = None) -> None:
         self._renderer: Any | None = None
 
-        # The four VTK objects the Representation owns.  ``None`` in
-        # the pure-Python testing path.
+        # The VTK objects the Representation owns.  ``None`` in the
+        # pure-Python testing path.  On the real path the surface is the
+        # tessellated Bezier patch (``_surface_source`` -> ``_surface_normals``
+        # -> mapper); on the bare-VTK fallback it is the raw control mesh
+        # carried directly in ``_surface_polydata``.
+        self._surface_source: Any | None = None
+        self._surface_normals: Any | None = None
         self._surface_polydata: Any | None = None
         self._surface_mapper: Any | None = None
         self._surface_actor: Any | None = None
@@ -159,12 +179,6 @@ class BezierPlanningRepresentation:
         # bumps this counter.
         self._input_refresh_count: int = 0
 
-        # TODO(T2-mapper-relocation): swap ``vtk.vtkPolyDataMapper`` for
-        # ``vtkOpenGLBezierResectionPolyDataMapper`` once the four custom
-        # mappers are relocated from ``LiverMarkups/VTKWidgets/`` to
-        # ``LiverResections/VTKWidgets/`` per ADR-0014 §3.  The public
-        # API of this Representation does not change — only the mapper
-        # field's concrete type.
         if _HAS_VTK:
             self._build_vtk_pipeline()
 
@@ -211,6 +225,8 @@ class BezierPlanningRepresentation:
             self._detach_actors(self._renderer)
             self._renderer = None
         # Drop strong references so VTK can free the resources.
+        self._surface_source = None
+        self._surface_normals = None
         self._surface_polydata = None
         self._surface_mapper = None
         self._surface_actor = None
@@ -224,6 +240,19 @@ class BezierPlanningRepresentation:
 
     def GetSurfaceMapper(self) -> Any | None:
         return self._surface_mapper
+
+    def GetSurfacePolyData(self) -> Any | None:
+        """Return the surface polydata the mapper renders.
+
+        On the real path this is the tessellated Bezier patch emitted by the
+        normals filter (one point per resolution cell, with per-point normals
+        and the ``uvCoords`` TCoords the mapper's vertex shader reads); on the
+        bare-VTK fallback it is the raw control mesh.  ``None`` when VTK is
+        absent or no ``update()`` has materialised geometry.
+        """
+        if self._surface_normals is not None:
+            return self._surface_normals.GetOutput()
+        return self._surface_polydata
 
     def GetCurrentColor(self) -> tuple[float, float, float]:
         return self._current_color
@@ -243,21 +272,43 @@ class BezierPlanningRepresentation:
 
         Called from ``__init__`` only when ``vtk`` is importable.
 
-        TODO(T2-mapper-relocation): swap the generic ``vtkPolyDataMapper``
-        for ADR-0014 §3's relocated ``vtkOpenGLBezierResectionPolyDataMapper``
-        and plumb the display node's ``GridDivisions`` / ``GridThickness``
-        / ``ResectionGridColor`` / ``GridVisibility`` fields into the
-        mapper's fragment-shader uniforms (``uGridDivisions`` /
-        ``uGridThickness`` / ``uResectionGridColor``).  The grid is a
-        shader feature on the surface mapper — NOT a separate actor.
-        See ``LiverMarkups/VTKWidgets/vtkOpenGLResection2DPolyDataMapper.cpp:281``
-        for the legacy fragment-shader test against ``uvCoordsOutput``.
+        Real path (inside Slicer): the relocated
+        ``vtkOpenGLBezierResectionPolyDataMapper`` (ADR-0014 §3) renders the
+        tessellated Bernstein patch built by ``vtkBezierSurfaceSource`` +
+        ``vtkPolyDataNormals`` — the same pipeline shape the v1
+        ``vtkSlicerBezierSurfaceRepresentation3D`` ctor assembled.  The source
+        emits the 2-component ``uvCoords`` (TCoords) the mapper's vertex shader
+        reads; the grid is a fragment-shader feature on that mapper driven by
+        ``GridDivisions`` / ``GridThickness`` / ``ResectionGridColor`` uniforms
+        (plumbed in ``_apply_display_node``), NOT a separate actor.
+
+        Bare-VTK fallback (unit layer): the wrapped classes are off the path,
+        so a generic ``vtkPolyDataMapper`` over a plain ``vtkPolyData`` keeps
+        the Representation constructible and the colour bookkeeping testable.
         """
         assert vtk is not None  # for the type-checker — gated by _HAS_VTK
 
-        self._surface_polydata = vtk.vtkPolyData()
-        self._surface_mapper = vtk.vtkPolyDataMapper()
-        self._surface_mapper.SetInputData(self._surface_polydata)
+        mapper_class = _resolve_vtk_class(REAL_SURFACE_MAPPER_CLASS)
+        source_class = _resolve_vtk_class(BEZIER_SURFACE_SOURCE_CLASS)
+
+        if mapper_class is not None and source_class is not None:
+            self._surface_source = source_class()
+            self._surface_source.SetResolution(
+                BEZIER_SURFACE_RESOLUTION, BEZIER_SURFACE_RESOLUTION
+            )
+            self._surface_normals = vtk.vtkPolyDataNormals()
+            self._surface_normals.SetInputConnection(
+                self._surface_source.GetOutputPort()
+            )
+            self._surface_mapper = mapper_class()
+            self._surface_mapper.SetInputConnection(
+                self._surface_normals.GetOutputPort()
+            )
+        else:
+            self._surface_polydata = vtk.vtkPolyData()
+            self._surface_mapper = vtk.vtkPolyDataMapper()
+            self._surface_mapper.SetInputData(self._surface_polydata)
+
         self._surface_actor = vtk.vtkActor()
         self._surface_actor.SetMapper(self._surface_mapper)
         # Sensible defaults so a freshly-constructed Representation is
@@ -315,20 +366,20 @@ class BezierPlanningRepresentation:
         # consumer.  Until then we honour the pure-vector fields,
         # which matches today's LiverResectionNode behaviour.
 
-        # TODO(T2-mapper-relocation): the display node's grid fields —
-        # ``GridVisibility``, ``GridDivisions``, ``GridThickness``,
-        # ``ResectionGridColor`` — are stored on the node but not yet
-        # plumbed through to a renderer.  Once the relocated
-        # ``vtkOpenGLBezierResectionPolyDataMapper`` swaps in (per
-        # ADR-0014 §3), read them here and push to that mapper's
-        # ``uGridDivisions`` / ``uGridThickness`` / ``uResectionGridColor``
-        # uniforms.  Grid visibility is a shader feature on the surface
-        # mapper, not a separate actor.
-
         if self._surface_actor is not None:
             prop = self._surface_actor.GetProperty()
             prop.SetColor(*color)
             prop.SetOpacity(opacity)
+
+        # Drive the real mapper's fragment-shader uniforms from the display
+        # node — porting vtkSlicerBezierSurfaceRepresentation3D::
+        # UpdateBezierSurfaceDisplay.  The Bezier shader colours the surface
+        # from ``uResectionColor`` / ``uResectionOpacity`` (not the actor
+        # property) and draws the grid procedurally from ``uGridDivisions`` /
+        # ``uGridThickness`` against the ``uvCoords``; grid visibility is a
+        # shader feature on the surface mapper, NOT a separate actor.  No-op on
+        # the generic fallback mapper (the getattr guards below).
+        self._apply_mapper_display_fields(display_node, color, opacity)
 
     def _apply_data_node(self, data_node: Any | None) -> None:
         """Push the (Rows×Cols) control grid onto the surface mapper.
@@ -342,14 +393,24 @@ class BezierPlanningRepresentation:
         if data_node is None:
             return
 
-        grid_getter = getattr(data_node, "GetControlGrid", None)
+        # Prefer ``GetControlGridVector`` (``const std::vector<double>&`` ->
+        # a Python tuple) over ``GetControlGrid`` (``const double*``): VTK
+        # cannot wrap a bare pointer return into an indexable buffer — from
+        # Python it surfaces as an opaque pointer-string (``'_..._p_double'``)
+        # whose ``[0]`` is the character ``'_'``, not a coordinate.  The
+        # vector accessor round-trips cleanly.  Stub data nodes in the
+        # unit-layer tests expose only ``GetControlGrid`` (a plain list), so
+        # fall back to it.
+        grid_getter = getattr(data_node, "GetControlGridVector", None)
+        if grid_getter is None:
+            grid_getter = getattr(data_node, "GetControlGrid", None)
         if grid_getter is None:
             return
 
         # Resolve (rows, cols) from the node — required to size the
-        # iteration over the flat ``GetControlGrid()`` return.  Default
-        # to 4×4 when the accessors are absent (legacy stubs in unit
-        # tests); the array-length check below catches any drift.
+        # iteration over the flat control-grid return.  Default to 4×4 when
+        # the accessors are absent (legacy stubs in unit tests); the
+        # array-length check below catches any drift.
         rows = int(getattr(data_node, "GetRows", lambda: 4)())
         cols = int(getattr(data_node, "GetCols", lambda: 4)())
         control_count = rows * cols
@@ -363,8 +424,7 @@ class BezierPlanningRepresentation:
             return
 
         # Materialise to a tuple of ``flat_length`` floats for
-        # memoisation.  The wrapped ``const double*`` from C++ may
-        # surface as a sequence that does not implement ``__hash__``;
+        # memoisation.  The wrapped sequence may not implement ``__hash__``;
         # tuple it for the signature comparison.  An ``IndexError`` /
         # ``TypeError`` here means the underlying buffer is shorter
         # than ``3 * Rows * Cols`` — a shape-drift bug worth surfacing,
@@ -387,17 +447,115 @@ class BezierPlanningRepresentation:
         if not _HAS_VTK:
             return
 
-        # Rebuild the surface polydata from the (Rows×Cols) control
-        # mesh.  For the skeleton the "surface" is the raw control mesh
-        # itself (``control_count`` points + ``(rows-1)*(cols-1)``
-        # quads); the fitted Bernstein patch will be substituted in
-        # when the relocated ``vtkOpenGLBezierResectionPolyDataMapper``
-        # is wired up per ADR-0014 §3 (see TODO(T2-mapper-relocation)
-        # in ``_build_vtk_pipeline``).  At that point the grid also
-        # appears — as fragment-shader uniforms on the surface mapper,
-        # not as separate geometry.
         points = _make_points_from_flat(flat, control_count)
-        self._refresh_surface_polydata(points, rows, cols)
+        if self._surface_source is not None:
+            # Real path: drive the Bezier surface source with the control
+            # grid; it tessellates the Bernstein patch and emits the
+            # ``uvCoords`` (TCoords) the mapper's vertex shader consumes.
+            self._feed_bezier_source(points, rows, cols)
+        else:
+            # Bare-VTK fallback: the "surface" is the raw control mesh
+            # (``control_count`` points + ``(rows-1)*(cols-1)`` quads) so the
+            # generic mapper has something to draw and the colour bookkeeping
+            # stays exercised in the unit layer.
+            self._refresh_surface_polydata(points, rows, cols)
+
+    def _feed_bezier_source(self, points: Any, rows: int, cols: int) -> None:
+        """Push the control grid into the Bezier source and tessellate.
+
+        The source iterates its control-point array row-major as
+        ``i * cols + j`` (matching the node's row-major ``GetControlGrid``),
+        so its control-point shape must equal the node's ``(rows, cols)`` for
+        the indices to line up.  ``Update()`` materialises the patch + TCoords
+        and the normals filter adds per-point normals, so ``GetSurfacePolyData``
+        returns renderable geometry without a render pass — the same eager
+        update the v1 representation did (``BezierSurfaceSource->Update()``).
+        """
+        assert vtk is not None
+        source = self._surface_source
+        if source is None:
+            return
+        set_ncp = getattr(source, "SetNumberOfControlPoints", None)
+        if set_ncp is not None:
+            set_ncp(rows, cols)
+        source.SetControlPoints(points)
+        source.Update()
+        if self._surface_normals is not None:
+            self._surface_normals.Update()
+
+    def _apply_mapper_display_fields(
+        self, display_node: Any | None, color: tuple, opacity: float
+    ) -> None:
+        """Push the display node's decoration onto the real mapper's uniforms.
+
+        Ports ``vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceDisplay``.
+        A no-op on the generic fallback mapper, which has no ``SetResection*``
+        surface — there the colour rides on the actor property set by the
+        caller.  Margin scalars (``SetResectionMargin`` / ``SetUncertaintyMargin``)
+        are intentionally left at the mapper defaults: the v2 node hierarchy
+        carries no margin field yet, and the margins only bias the distance
+        field, which is not bound in this slice.
+        """
+        mapper = self._surface_mapper
+        if mapper is None:
+            return
+        set_color = getattr(mapper, "SetResectionColor", None)
+        if set_color is None:
+            return  # generic fallback mapper — nothing to push to a shader
+        set_color(float(color[0]), float(color[1]), float(color[2]))
+        set_opacity = getattr(mapper, "SetResectionOpacity", None)
+        if set_opacity is not None:
+            set_opacity(float(opacity))
+
+        if display_node is None:
+            return
+
+        _push_color3(
+            mapper, "SetResectionGridColor",
+            getattr(display_node, "GetResectionGridColor", None),
+        )
+        _push_color3(
+            mapper, "SetResectionMarginColor",
+            getattr(display_node, "GetResectionMarginColor", None),
+        )
+        _push_color3(
+            mapper, "SetUncertaintyMarginColor",
+            getattr(display_node, "GetUncertaintyMarginColor", None),
+        )
+        _push_bool(
+            mapper, "SetResectionClipOut",
+            getattr(display_node, "GetClipOut", None),
+        )
+        _push_bool(
+            mapper, "SetInterpolatedMargins",
+            getattr(display_node, "GetInterpolatedMargins", None),
+        )
+
+        # Grid divisions / thickness, gated on 3D-grid visibility exactly as
+        # v1 did: when the grid is hidden, zero the divisions so the fragment
+        # shader draws no grid lines.
+        grid_visible = True
+        vis_getter = getattr(display_node, "GetGrid3DVisibility", None)
+        if vis_getter is not None:
+            try:
+                grid_visible = bool(vis_getter())
+            except Exception:  # pragma: no cover - defensive
+                grid_visible = True
+
+        set_divisions = getattr(mapper, "SetGridDivisions", None)
+        set_thickness = getattr(mapper, "SetGridThicknessFactor", None)
+        if grid_visible:
+            div_getter = getattr(display_node, "GetGridDivisions", None)
+            thick_getter = getattr(display_node, "GetGridThickness", None)
+            if set_divisions is not None and div_getter is not None:
+                set_divisions(int(div_getter()))
+            if set_thickness is not None and thick_getter is not None:
+                set_thickness(float(thick_getter()))
+        else:
+            if set_divisions is not None:
+                set_divisions(0)
+            if set_thickness is not None:
+                set_thickness(0.0)
 
     def _refresh_surface_polydata(self, points: Any, rows: int, cols: int) -> None:
         assert vtk is not None
@@ -425,6 +583,58 @@ class BezierPlanningRepresentation:
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
+
+
+def _resolve_vtk_class(name: str) -> Any | None:
+    """Resolve a wrapped-C++ class by name from ``slicer`` then ``vtk``.
+
+    The relocated mapper + the Bezier surface source are wrapped into Slicer's
+    ``slicer`` namespace (``SlicerMacroBuildModuleLogic`` Python wrapping); the
+    plain ``vtk`` module is the fallback for a non-Slicer VTK build.  Returns
+    ``None`` when neither namespace exposes the class (the bare-VTK unit layer),
+    which drives the generic-mapper fallback.  Mirrors
+    ``DistanceSpheroidInitRepresentation._resolve_extractor_class``.
+    """
+    for module_name in ("slicer", "vtk"):
+        try:
+            module = __import__(module_name)
+        except ImportError:
+            continue
+        cls = getattr(module, name, None)
+        if cls is not None:
+            return cls
+    return None
+
+
+def _push_color3(mapper: Any, setter_name: str, getter: Any | None) -> None:
+    """Read a 3-vector from ``getter`` and push it to ``mapper.<setter_name>``.
+
+    No-op when either the getter or the mapper setter is absent (the generic
+    fallback mapper) — keeps the plumbing tolerant of partial display nodes.
+    """
+    if getter is None:
+        return
+    setter = getattr(mapper, setter_name, None)
+    if setter is None:
+        return
+    try:
+        c = getter()
+        setter(float(c[0]), float(c[1]), float(c[2]))
+    except Exception:  # pragma: no cover - defensive
+        pass
+
+
+def _push_bool(mapper: Any, setter_name: str, getter: Any | None) -> None:
+    """Read a bool from ``getter`` and push it to ``mapper.<setter_name>``."""
+    if getter is None:
+        return
+    setter = getattr(mapper, setter_name, None)
+    if setter is None:
+        return
+    try:
+        setter(bool(getter()))
+    except Exception:  # pragma: no cover - defensive
+        pass
 
 
 def _as_color_tuple(raw: Any) -> tuple[float, float, float]:
