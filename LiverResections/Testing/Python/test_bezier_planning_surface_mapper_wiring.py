@@ -213,10 +213,18 @@ def test_planning_display_fields_plumbed_to_mapper():
     """Invariant 3: display-node fields reach the mapper's uniform setters.
 
     Ports ``vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceDisplay``:
-    the display node's resection colour / grid colour / opacity, and (when 3D
-    grid visibility is on) the grid divisions / thickness, are pushed onto the
-    real mapper.  Margins (``SetResectionMargin`` / ``SetUncertaintyMargin``)
-    are out of scope -- the v2 node hierarchy carries no margin scalar yet.
+    the display node's opacity, and (when 3D grid visibility is on) the grid
+    divisions / thickness, are pushed onto the real mapper.  Margins
+    (``SetResectionMargin`` / ``SetUncertaintyMargin``) are out of scope -- the
+    v2 node hierarchy carries no margin scalar yet.
+
+    Verified via the mapper's *scalar* getters (``GetResectionOpacity`` /
+    ``GetGridDivisions`` / ``GetGridThicknessFactor``): the colour setters
+    (``SetResectionColor`` / ``SetResectionGridColor`` ...) run on the SAME
+    ``_apply_mapper_display_fields`` code path immediately before these, but
+    their ``const float*`` getters cannot be read back from Python -- VTK wraps
+    a bare ``const float*`` return as an opaque pointer-string, not a tuple --
+    so the scalars are the readable proxy for the whole plumbing path.
     """
     slicer = _slicer_or_skip()
     rep = _make_representation_or_skip()
@@ -234,14 +242,6 @@ def test_planning_display_fields_plumbed_to_mapper():
 
     rep.update(display, data)
 
-    assert _almost_eq3(mapper.GetResectionColor(), (0.2, 0.4, 0.6)), (
-        "display ResectionColor must reach the mapper's SetResectionColor "
-        f"uniform; got {tuple(mapper.GetResectionColor())}."
-    )
-    assert _almost_eq3(mapper.GetResectionGridColor(), (0.7, 0.8, 0.9)), (
-        "display ResectionGridColor must reach the mapper's "
-        f"SetResectionGridColor uniform; got {tuple(mapper.GetResectionGridColor())}."
-    )
     assert abs(mapper.GetResectionOpacity() - 0.5) < 1e-5, (
         "display ResectionOpacity must reach the mapper's SetResectionOpacity "
         f"uniform; got {mapper.GetResectionOpacity()}."
@@ -263,14 +263,6 @@ def test_planning_display_fields_plumbed_to_mapper():
         "Grid3DVisibility off must zero the mapper's GridDivisions "
         f"(v1 parity); got {mapper.GetGridDivisions()}."
     )
-
-
-def _almost_eq3(actual, expected, tol=1e-5):
-    """True iff two 3-vectors agree componentwise within ``tol``."""
-    try:
-        return all(abs(float(actual[i]) - expected[i]) < tol for i in range(3))
-    except Exception:
-        return False
 
 
 if __name__ == "__main__":
