@@ -21,6 +21,11 @@ set(KIT_TEST_SRCS
   # re-resolving on a standalone load with no logic instance.  Pins the
   # mechanism that makes the 6 legacy logic association maps removable.
   vtkMRMLResectionPlanGeometryRefRoundTripTest.cxx
+  # ADR-0031: the distance-map volume is a path-specific input of the
+  # resection plan, named by a typed "distanceMap" node-ref on the plan
+  # wrapper (not the carrier).  Pins the role literal + the in-scene
+  # set/get round-trip + nullptr-clears.
+  vtkMRMLResectionPlanDistanceMapRefTest.cxx
   vtkMRMLLocatorNodeTest1.cxx
   )
 
@@ -60,4 +65,5 @@ SIMPLE_TEST(vtkMRMLResectionPlanNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanStorageNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanLegacyFcsvMigrationTest)
 SIMPLE_TEST(vtkMRMLResectionPlanGeometryRefRoundTripTest)
+SIMPLE_TEST(vtkMRMLResectionPlanDistanceMapRefTest)
 SIMPLE_TEST(vtkMRMLLocatorNodeTest1)

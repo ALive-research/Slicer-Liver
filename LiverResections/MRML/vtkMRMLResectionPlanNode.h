@@ -50,6 +50,7 @@
 #include <vtkSetGet.h>
 
 class vtkMRMLAbstractParametricSurfaceNode;
+class vtkMRMLScalarVolumeNode;
 
 /**
  * \class vtkMRMLResectionPlanNode
@@ -167,6 +168,23 @@ public:
   /// Reference role name — exposed as a constant so the storage node
   /// + Logic share a single literal.
   static const char* GetGeometryReferenceRole() { return "geometry"; }
+
+  /// Typed accessor for the ``distanceMap`` reference to the scalar
+  /// volume the resection margins are measured against.  Returns
+  /// nullptr when no distance map is wired (ADR-0031).  The distance
+  /// map is a path-specific INPUT of the plan, not a property of the
+  /// surface carrier — per ADR-0014 §"Fourth layer" inputs live on the
+  /// wrapper.
+  vtkMRMLScalarVolumeNode* GetDistanceMapVolumeNode();
+
+  /// Set the ``distanceMap`` reference to the distance-map scalar volume
+  /// (ADR-0031).  Passing nullptr clears it (the graceful
+  /// no-distance-map fallback the render path preserves).
+  void SetAndObserveDistanceMapVolumeNode(vtkMRMLScalarVolumeNode* distanceMap);
+
+  /// Reference role name — exposed as a constant so the storage node,
+  /// the Pipeline, and the render Representation share a single literal.
+  static const char* GetDistanceMapReferenceRole() { return "distanceMap"; }
 
 protected:
   vtkMRMLResectionPlanNode();
