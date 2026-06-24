@@ -31,6 +31,8 @@ See also:
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 
@@ -112,18 +114,44 @@ def require_qt_widget() -> None:
 # + deleteLater) after each test, while the scene is still alive.
 # --------------------------------------------------------------------------- #
 
-_WIDGETS_FOR_TEARDOWN: list = []
+_REGISTRY_ATTR = "_liverWidgetTeardownRegistry"
+
+
+def _teardown_registry():
+    """The registry list, stored on the ``slicer`` MODULE (a process singleton).
+
+    NOT a module global of ``slicer_pytest_support``: the multi-root launched
+    harness can import this support module as DISTINCT objects (the sibling
+    -import collision the conftest notes), splitting a module-global list so a
+    widget registered through one import is invisible to a drain through
+    another.  ``sys.modules['slicer']`` is singular across every import, so
+    hanging the list off it keeps registration + drain on the SAME list.
+    Returns ``None`` under bare pytest (no ``slicer``).
+    """
+    slicer = sys.modules.get("slicer")
+    if slicer is None:
+        return None
+    registry = getattr(slicer, _REGISTRY_ATTR, None)
+    if registry is None:
+        registry = []
+        setattr(slicer, _REGISTRY_ATTR, registry)
+    return registry
 
 
 def register_widget_for_teardown(widget):
-    """Register a parentless test-built widget for deterministic teardown."""
-    if widget is not None:
-        _WIDGETS_FOR_TEARDOWN.append(widget)
+    """Register a parentless test-built widget (the real Python instance, so the
+    conftest fixture can call its ``cleanup()``) for deterministic teardown."""
+    registry = _teardown_registry()
+    if registry is not None and widget is not None:
+        registry.append(widget)
     return widget
 
 
 def drain_widgets_for_teardown():
     """Return the registered widgets and clear the registry."""
-    widgets = list(_WIDGETS_FOR_TEARDOWN)
-    _WIDGETS_FOR_TEARDOWN.clear()
+    registry = _teardown_registry()
+    if not registry:
+        return []
+    widgets = list(registry)
+    registry.clear()
     return widgets

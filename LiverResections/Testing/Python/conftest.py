@@ -84,25 +84,57 @@ def _teardown_resection_planning_widgets():
     No-op under bare pytest / when none were built.
     """
     yield
+    slicer = sys.modules.get("slicer")
+    if not _looks_like_real_slicer(slicer):
+        return
+    try:
+        import qt
+    except Exception:  # pragma: no cover - bare pytest
+        return
+    # First, the registered REAL Python widget instances: call their cleanup()
+    # (releases the combo's scene AND the surface/active observers + event
+    # filters -- the populate path adds a surface observer the sweep below
+    # cannot reach through the bare C++ wrapper), then drop them.
     try:
         from slicer_pytest_support import drain_widgets_for_teardown
+
+        for widget in drain_widgets_for_teardown():
+            try:
+                cleanup = getattr(widget, "cleanup", None)
+                if callable(cleanup):
+                    cleanup()
+                widget.setParent(None)
+                widget.deleteLater()
+            except Exception:  # pragma: no cover - defensive teardown
+                pass
     except Exception:  # pragma: no cover - import-environment dependent
-        return
-    widgets = drain_widgets_for_teardown()
-    if not widgets:
-        return
-    for widget in widgets:
+        pass
+    # SWEEP top-level widgets for a leaked ResectionPlanningWidget, identified by
+    # its "ResectogramDrawer" child.  A registry keyed on a module global is NOT
+    # reliable here: the multi-root launched harness can import
+    # ``slicer_pytest_support`` as DISTINCT module objects (the same collision
+    # the sibling-import note warns about), so a widget registered through one
+    # import is invisible to a drain through another.  The sweep needs no shared
+    # state.  The crash source is the widget's qMRMLNodeComboBox scene wiring, so
+    # release it (setMRMLScene(None)) on the combo directly -- callable on the
+    # C++ wrapper even when the Python subclass's methods are not -- then drop
+    # the widget while the scene is still alive.
+    for widget in list(slicer.app.topLevelWidgets()):
         try:
+            if widget.findChild(qt.QWidget, "ResectogramDrawer") is None:
+                continue
             cleanup = getattr(widget, "cleanup", None)
             if callable(cleanup):
                 cleanup()
+            else:
+                combo = widget.findChild(qt.QWidget, "ResectionSurfaceComboBox")
+                if combo is not None and hasattr(combo, "setMRMLScene"):
+                    combo.setMRMLScene(None)
             widget.setParent(None)
             widget.deleteLater()
         except Exception:  # pragma: no cover - defensive teardown
             pass
-    slicer = sys.modules.get("slicer")
-    if _looks_like_real_slicer(slicer):
-        slicer.app.processEvents()
+    slicer.app.processEvents()
 
 
 @pytest.fixture(autouse=True)
