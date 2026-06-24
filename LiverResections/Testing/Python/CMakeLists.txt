@@ -136,6 +136,31 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections;ring-extraction"
     )
 
+    # T2-mapper-wiring -- BezierPlanningRepresentation drives the real,
+    # relocated vtkOpenGLBezierResectionPolyDataMapper (ADR-0014 §3) rendering
+    # the tessellated Bezier patch (vtkBezierSurfaceSource + vtkPolyDataNormals
+    # + uvCoords) instead of the placeholder control mesh through a generic
+    # vtkPolyDataMapper, and plumbs the display node's colour/grid fields onto
+    # the mapper uniforms (ports vtkSlicerBezierSurfaceRepresentation3D).  This
+    # is the slice that unblocks the ADR-0025 locator consumer (#489).  Needs
+    # the wrapped real mapper + bezier source + vtkMRMLBezierSurfaceNode /
+    # vtkMRMLParametricSurfaceDisplayNode, so it runs green under the
+    # launched-Slicer `pytest_launched` row and SKIPS CLEANLY here under bare
+    # pytest (no slicer.mrmlScene / wrapped widget classes off the path).  GL
+    # free -- no render.  RED / skip-pending until the implementer swaps the
+    # mapper + ports the tessellation (ADR-0027 §Conformance: the skip lifts at
+    # the implementation commit).
+    add_test(
+      NAME LiverResections_bezier_planning_surface_mapper_wiring
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_bezier_planning_surface_mapper_wiring.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_bezier_planning_surface_mapper_wiring PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;mapper-wiring"
+    )
+
     # T3-g3 -- auto-populate of the Stage-4 ResectionPlanningWidget (the Python
     # widget, ADR-0004; ADR-0023 §Stage-4).  Three invariants: (1) the drawer
     # auto-populates iff a vtkMRMLMarkupsBezierSurfaceNode is selected AND
