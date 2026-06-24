@@ -15,6 +15,7 @@
 #include "vtkMRMLResectionPlanNode.h"
 #include "vtkMRMLResectionPlanStorageNode.h"
 #include "vtkMRMLAbstractParametricSurfaceNode.h"
+#include "vtkMRMLScalarVolumeNode.h"
 
 // MRML includes
 #include <vtkMRMLNodePropertyMacros.h>
@@ -43,6 +44,13 @@ vtkMRMLResectionPlanNode::vtkMRMLResectionPlanNode()
   // surface bulk data persists through the storage node, not through
   // the .mrml XML.
   this->AddNodeReferenceRole(GetGeometryReferenceRole(), GetGeometryReferenceRole());
+
+  // Typed node-reference role to the distance-map scalar volume the
+  // resection margins are measured against (ADR-0031).  The distance map
+  // is a path-specific input of the plan; per ADR-0014 §"Fourth layer"
+  // inputs live on the wrapper, not the surface carrier.  Like the
+  // geometry role, no content-modified observation is wired here.
+  this->AddNodeReferenceRole(GetDistanceMapReferenceRole(), GetDistanceMapReferenceRole());
 }
 
 //------------------------------------------------------------------------------
@@ -93,6 +101,18 @@ vtkMRMLAbstractParametricSurfaceNode* vtkMRMLResectionPlanNode::GetGeometryNode(
 void vtkMRMLResectionPlanNode::SetAndObserveGeometryNode(vtkMRMLAbstractParametricSurfaceNode* surface)
 {
   this->SetAndObserveNodeReferenceID(GetGeometryReferenceRole(), surface ? surface->GetID() : nullptr);
+}
+
+//------------------------------------------------------------------------------
+vtkMRMLScalarVolumeNode* vtkMRMLResectionPlanNode::GetDistanceMapVolumeNode()
+{
+  return vtkMRMLScalarVolumeNode::SafeDownCast(this->GetNodeReference(GetDistanceMapReferenceRole()));
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLResectionPlanNode::SetAndObserveDistanceMapVolumeNode(vtkMRMLScalarVolumeNode* distanceMap)
+{
+  this->SetAndObserveNodeReferenceID(GetDistanceMapReferenceRole(), distanceMap ? distanceMap->GetID() : nullptr);
 }
 
 //------------------------------------------------------------------------------
