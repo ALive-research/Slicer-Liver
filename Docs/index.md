@@ -49,6 +49,7 @@ adr/0027-invariant-test-first-v2-implementation.md
 adr/0028-parameter-node-wrapper.md
 adr/0029-stage1-case-setup-contract.md
 adr/0030-ci-slicer-image-pinning.md
+adr/0031-distance-map-input-on-resection-plan.md
 ```
 
 ```{toctree}
