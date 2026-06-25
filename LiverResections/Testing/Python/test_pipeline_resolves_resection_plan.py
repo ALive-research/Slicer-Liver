@@ -140,5 +140,42 @@ def test_pipeline_resection_node_none_for_unowned_surface():
     )
 
 
+def test_pipeline_does_not_rescan_for_plan_every_tick():
+    """The reverse-resolution is memoised against scene state, not per-tick.
+
+    For a bare surface with no owning plan, ``_resection_node`` stays None;
+    a naive implementation re-scans the scene (``GetNodesByClass``) on every
+    ``UpdatePipeline`` -- i.e. every interaction/drag frame.  Pin that the scan
+    is gated on the scene's modified time: repeated dispatches with no scene
+    change must resolve at most once.
+    """
+    slicer = _slicer_or_skip()
+    pipeline = _make_pipeline_or_skip()
+
+    data, display = _wire_surface_with_display(slicer)  # no owning plan
+    if not hasattr(pipeline, "_resolve_resection_node"):
+        pytest.skip("Pipeline has no _resolve_resection_node -- slice 1c absent.")
+    pipeline.SetDisplayNode(display)
+
+    calls = {"n": 0}
+    original = pipeline._resolve_resection_node
+
+    def _counting(*args, **kwargs):
+        calls["n"] += 1
+        return original(*args, **kwargs)
+
+    pipeline._resolve_resection_node = _counting
+
+    for _ in range(3):
+        pipeline.UpdatePipeline()
+
+    assert calls["n"] <= 1, (
+        "the Pipeline re-scanned the scene for an owning plan on every "
+        f"UpdatePipeline tick ({calls['n']} scans, no scene change) -- the "
+        "reverse-resolution must be memoised against scene state so idle / "
+        "per-drag dispatches do not full-scene-scan."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

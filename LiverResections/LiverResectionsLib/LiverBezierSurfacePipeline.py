@@ -189,6 +189,14 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         self._display_node: Any | None = None
         self._resection_node: Any | None = None
 
+        # Scene ``MTime`` the last plan reverse-resolution scan ran against
+        # (ADR-0031).  The scan (``GetNodesByClass``) is gated on this so a
+        # bare surface with no owning plan does not full-scene-scan on every
+        # ``UpdatePipeline`` tick; it re-scans only when the scene structure
+        # changes (a plan added later).  ``None`` forces a scan on the next
+        # dispatch (reset when the display/data node changes).
+        self._last_resection_scan_mtime: int | None = None
+
         # Observer tags so ``cleanup()`` can detach precisely.  Index
         # by ``id(node)`` because ``vtkObject`` subclasses are not
         # universally hashable on identity.
@@ -273,6 +281,8 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         # Invalidate the memoised dispatch key — the next
         # ``UpdatePipeline`` picks up the new node set.
         self._last_update_key = None
+        # Force a fresh plan reverse-resolution for the new data node.
+        self._last_resection_scan_mtime = None
 
     def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
         """Dispatch the active Representation by ``(state, initMode)``.
@@ -295,10 +305,18 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         # and adopt it, so the plan's distance-map + margins reach the mapper
         # with no external SetResectionNode caller.  Re-attempted while unset
         # (the plan's geometry ref may be wired after the display node lands).
+        # Gate the scan on the scene's MTime so a bare surface with no owning
+        # plan does not full-scene-scan every tick (every interaction frame):
+        # re-scan only when the scene structure changed since the last scan
+        # (which is when a plan could have appeared).
         if self._resection_node is None and self._data_node is not None:
-            resolved = self._resolve_resection_node()
-            if resolved is not None:
-                self.SetResectionNode(resolved)
+            scene = self._data_node.GetScene()
+            scene_mtime = scene.GetMTime() if scene is not None else 0
+            if scene_mtime != self._last_resection_scan_mtime:
+                self._last_resection_scan_mtime = scene_mtime
+                resolved = self._resolve_resection_node()
+                if resolved is not None:
+                    self.SetResectionNode(resolved)
 
         # Build the dispatch key.  Falls back to ``0`` MTime for nodes
         # whose ``GetMTime`` is unavailable (defensive — stub nodes in
