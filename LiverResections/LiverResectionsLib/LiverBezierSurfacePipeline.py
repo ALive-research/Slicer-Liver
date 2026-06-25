@@ -306,6 +306,12 @@ class LiverBezierSurfacePipeline(_PipelineBase):
 
         active = self._representations.get(active_name) if active_name else None
         if active is not None:
+            # Thread the orchestrating wrapper to Representations that consume
+            # its path-specific inputs (the Planning surface reads the
+            # distance-map volume + margins off it, ADR-0031).  Only the
+            # BezierPlanningRepresentation implements this; others ignore it.
+            if hasattr(active, "SetResectionPlanNode"):
+                active.SetResectionPlanNode(self._resection_node)
             active.update(self._display_node, self._data_node)
 
         # Init-mode parameter mutations only MARK extraction pending; the

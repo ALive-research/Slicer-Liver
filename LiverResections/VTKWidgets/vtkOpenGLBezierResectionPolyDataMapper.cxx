@@ -89,6 +89,12 @@ public:
   vtkSmartPointer<vtkMatrix4x4> RasToIjkMatrixT;
   vtkSmartPointer<vtkMatrix4x4> IjkToTextureMatrixT;
   vtkSmartPointer<vtkTextureObject> DistanceMapTexture;
+  // Distance-map source image set from Python (ADR-0031); the texture above
+  // is (re)built from it lazily in BuildBufferObjects once a GL context is
+  // available.  DistanceMapBuiltMTime tracks the image MTime the live
+  // texture was built from, so a changed volume triggers a rebuild.
+  vtkSmartPointer<vtkImageData> DistanceMapImageData;
+  vtkMTimeType DistanceMapBuiltMTime = 0;
   float ResectionMargin;
   float UncertaintyMargin;
   float ResectionMarginColor[3];
@@ -132,6 +138,38 @@ void vtkOpenGLBezierResectionPolyDataMapper::BuildBufferObjects(vtkRenderer* ren
     vtkOpenGLVertexBufferObjectCache* cache = renWin->GetVBOCache();
     auto tcoords = this->CurrentInput->GetPointData()->GetTCoords();
     this->VBOs->CacheDataArray("uvCoords", tcoords, cache, VTK_FLOAT);
+  }
+
+  // Build / refresh the 3D distance-map texture from the image data set via
+  // SetDistanceMapImageData (ADR-0031).  Done here — not in the setter —
+  // because the upload needs a live GL context (the render window), and
+  // realize-then-bind on the live context is the ADR-0003 discipline.  The
+  // texture is rebuilt only when the source image's MTime advances past the
+  // one the current texture was built from, so steady-state renders do not
+  // re-upload.  Mirrors v1 CreateAndTransferDistanceMapTexture, but uses the
+  // base vtkTextureObject (single texture — no multi-texture sequencing).
+  if (this->Impl->DistanceMapImageData)
+  {
+    vtkImageData* image = this->Impl->DistanceMapImageData;
+    if (!this->Impl->DistanceMapTexture || image->GetMTime() > this->Impl->DistanceMapBuiltMTime)
+    {
+      auto renWin = vtkOpenGLRenderWindow::SafeDownCast(ren->GetRenderWindow());
+      int dimensions[3] = { 0, 0, 0 };
+      image->GetDimensions(dimensions);
+
+      vtkNew<vtkTextureObject> texture;
+      texture->SetContext(renWin);
+      texture->SetWrapS(vtkTextureObject::ClampToBorder);
+      texture->SetWrapT(vtkTextureObject::ClampToBorder);
+      texture->SetWrapR(vtkTextureObject::ClampToBorder);
+      texture->SetMinificationFilter(vtkTextureObject::Linear);
+      texture->SetMagnificationFilter(vtkTextureObject::Linear);
+      texture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
+      texture->Create3DFromRaw(dimensions[0], dimensions[1], dimensions[2], image->GetNumberOfScalarComponents(), image->GetScalarType(), image->GetScalarPointer());
+
+      this->Impl->DistanceMapTexture = texture;
+      this->Impl->DistanceMapBuiltMTime = image->GetMTime();
+    }
   }
 
   Superclass::BuildBufferObjects(ren, act);
@@ -424,6 +462,32 @@ void vtkOpenGLBezierResectionPolyDataMapper::SetDistanceMapTextureObject(vtkText
 vtkTextureObject* vtkOpenGLBezierResectionPolyDataMapper::GetDistanceMapTextureObject() const
 {
   return this->Impl->DistanceMapTexture;
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLBezierResectionPolyDataMapper::SetDistanceMapImageData(vtkImageData* imageData)
+{
+  if (this->Impl->DistanceMapImageData == imageData)
+  {
+    return;
+  }
+  this->Impl->DistanceMapImageData = imageData;
+  // Force a texture (re)build on the next BuildBufferObjects, and drop the
+  // current texture when the image is cleared so the sampler falls back to
+  // the no-distance-map path (MRML state and GL state must not diverge —
+  // ADR-0003).
+  this->Impl->DistanceMapBuiltMTime = 0;
+  if (imageData == nullptr)
+  {
+    this->Impl->DistanceMapTexture = nullptr;
+  }
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+vtkImageData* vtkOpenGLBezierResectionPolyDataMapper::GetDistanceMapImageData() const
+{
+  return this->Impl->DistanceMapImageData;
 }
 
 //------------------------------------------------------------------------------
