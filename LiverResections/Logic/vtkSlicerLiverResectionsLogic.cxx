@@ -126,6 +126,40 @@ bool vtkSlicerLiverResectionsLogic::IsStageComplete()
 }
 
 //---------------------------------------------------------------------------
+vtkMRMLResectionPlanNode* vtkSlicerLiverResectionsLogic::CreateResectionPlan(const char* name)
+{
+  // Mint the v2 carrier + plan + display triad the interactive workflow
+  // needs (ADR-0032; ADR-0014 §"Fourth layer"), mirroring the file loaders'
+  // resolve-or-create discipline (vtkMRMLResectionPlanStorageNode::ReadFcsv).
+  vtkMRMLScene* scene = this->GetMRMLScene();
+  if (scene == nullptr)
+  {
+    vtkErrorMacro("CreateResectionPlan: no MRML scene is bound");
+    return nullptr;
+  }
+
+  auto* plan = vtkMRMLResectionPlanNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLResectionPlanNode", (name ? name : "Resection")));
+  auto* carrier = vtkMRMLBezierSurfaceNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLBezierSurfaceNode"));
+  if (plan == nullptr || carrier == nullptr)
+  {
+    vtkErrorMacro("CreateResectionPlan: failed to instantiate the resection node graph");
+    return nullptr;
+  }
+
+  // The parametric-surface display node (which the LayerDM Pipeline creator
+  // matches on, ADR-0013 §5) is minted + observed on the carrier here.
+  carrier->CreateDefaultDisplayNodes();
+
+  // Wire the wrapper to the carrier via the typed geometry reference; the
+  // Pipeline reverse-resolves the plan from this back-reference (ADR-0031).
+  plan->SetAndObserveGeometryNode(carrier);
+
+  // The plan starts in Init (ADR-0019); the control grid is seeded by the
+  // placement step, not here.
+  return plan;
+}
+
+//---------------------------------------------------------------------------
 void vtkSlicerLiverResectionsLogic::RegisterNodes()
 {
   assert(this->GetMRMLScene() != nullptr);

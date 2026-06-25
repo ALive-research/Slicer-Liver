@@ -57,6 +57,8 @@
 #include <vtkMRMLLabelMapVolumeNode.h>
 #include <itkImage.h>
 
+class vtkMRMLResectionPlanNode;
+
 //------------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_LOGIC_EXPORT vtkSlicerLiverResectionsLogic : public vtkSlicerModuleLogic
 {
@@ -89,6 +91,19 @@ public:
   virtual bool IsStageComplete();
 
   char* LoadLiverResection(const std::string& fileName, const std::string& nodeName /*=nullptr*/, vtkMRMLMessageCollection* userMessages /*=nullptr*/);
+
+  /// Create a new v2 resection node graph and return the plan wrapper.
+  ///
+  /// Mints the carrier + plan + display triad the interactive workflow
+  /// needs (ADR-0014 §"Fourth layer"; ADR-0032), identically to the file
+  /// loaders: a ``vtkMRMLResectionPlanNode`` wrapper whose typed
+  /// ``geometry`` reference resolves a freshly-created
+  /// ``vtkMRMLBezierSurfaceNode`` carrier carrying a default
+  /// ``vtkMRMLParametricSurfaceDisplayNode`` (which the LayerDM Pipeline
+  /// creator matches on).  The plan starts in ``Init`` (ADR-0019); the
+  /// control grid is seeded by the placement step, not here.  Returns
+  /// nullptr when no MRML scene is bound or node instantiation fails.
+  vtkMRMLResectionPlanNode* CreateResectionPlan(const char* name = nullptr);
 
 protected:
   vtkSlicerLiverResectionsLogic();
