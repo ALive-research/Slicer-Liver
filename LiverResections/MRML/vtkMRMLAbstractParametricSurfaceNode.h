@@ -231,6 +231,17 @@ public:
   /// doubles.  Returns true on success; false on null pointer.
   virtual bool SetControlGrid(const double* values);
 
+  /// Set a single control point at grid position ``(row, col)`` to
+  /// ``(x, y, z)``.  Writes into the row-major flat grid at
+  /// ``(row * Cols + col) * 3``.  Returns false (leaving the grid
+  /// untouched) when ``row >= Rows`` or ``col >= Cols``.
+  ///
+  /// This is the Python-wrappable grid seam: the scalar-argument form
+  /// crosses the Python wrap, whereas ``SetControlGrid(const double*)``
+  /// (a bare pointer) does not — so scenarios and interaction code
+  /// position the grid through this.
+  virtual bool SetControlPoint(unsigned int row, unsigned int col, double x, double y, double z);
+
   /// Read the control grid as a flat row-major array.
   const double* GetControlGrid() const { return this->ControlGrid.data(); }
 

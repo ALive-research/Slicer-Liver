@@ -181,6 +181,21 @@ bool vtkMRMLAbstractParametricSurfaceNode::SetControlGrid(const double* values)
 }
 
 //------------------------------------------------------------------------------
+bool vtkMRMLAbstractParametricSurfaceNode::SetControlPoint(unsigned int row, unsigned int col, double x, double y, double z)
+{
+  if (row >= this->Rows || col >= this->Cols)
+  {
+    return false;
+  }
+  const size_t base = static_cast<size_t>(row * this->Cols + col) * 3u;
+  this->ControlGrid[base + 0] = x;
+  this->ControlGrid[base + 1] = y;
+  this->ControlGrid[base + 2] = z;
+  this->Modified();
+  return true;
+}
+
+//------------------------------------------------------------------------------
 bool vtkMRMLAbstractParametricSurfaceNode::SetSlicingPlaneInitPoint(int index, const double point[3])
 {
   if (index < 0 || index > 1 || point == nullptr)
