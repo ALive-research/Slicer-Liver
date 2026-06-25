@@ -8,14 +8,18 @@ Bezier surface remains visible after the fragment shader's discard
 runs.
 
 In the ``qMRMLThreeDWidget`` replay harness the visible pixels come
-from the legacy Markups render path
-(``vtkMRMLMarkupsBezierSurfaceNode`` → upstream Markups displayable
-manager → ``vtkSlicerBezierSurfaceRepresentation3D`` →
-``vtkOpenGLBezierResectionPolyDataMapper``).  In that path the only
-pixel-flipping difference between Planning and Confirmed is the
-``ClipOut`` uniform — driven by the ``ClipOut`` flag on the markups
-display node.  This scenario therefore reuses the Planning fixture and
-flips ``ClipOut`` on that display node.
+from the v2 LayerDM render path (``vtkMRMLBezierSurfaceNode`` +
+``vtkMRMLParametricSurfaceDisplayNode`` + the orchestrating
+``vtkMRMLResectionPlanNode`` → ``LiverBezierSurfacePipeline`` →
+``BezierPlanningRepresentation`` → ``vtkOpenGLBezierResectionPolyDataMapper``).
+The only pixel-flipping difference between Planning and Confirmed is the
+``ClipOut`` uniform — driven by the ``ClipOut`` flag on the parametric-
+surface display node.  This scenario therefore reuses the Planning
+fixture and flips ``ClipOut`` on that display node, staying on the
+Planning representation (the one that threads the distance map),
+mirroring v1's single-representation + uniform model.  Driving the
+Confirmed-state representation off the distance map is a separate
+follow-on (the ConfirmedRepresentation does not yet thread it).
 
 References
 ----------
@@ -50,22 +54,23 @@ CAMERA_VIEW_ANGLE = _planning.CAMERA_VIEW_ANGLE
 CAMERA_CLIPPING_RANGE = _planning.CAMERA_CLIPPING_RANGE
 
 
-def setup_scene() -> slicer.vtkMRMLMarkupsBezierSurfaceNode:
+def setup_scene() -> slicer.vtkMRMLBezierSurfaceNode:
     """Build the Planning fixture, then engage Confirmed-state trim.
 
     In this render path the Confirmed state differs from Planning by a
     single shader uniform — parenchyma trim — driven by ``ClipOut`` on
-    the markups Bezier surface display node.
+    the parametric-surface display node.
 
     Returns
     -------
-    vtkMRMLMarkupsBezierSurfaceNode
-        The same markups Bezier surface node ``BezierSurface4x4Planning``
-        builds, with the Confirmed-state ``ClipOut`` uniform engaged.
+    vtkMRMLBezierSurfaceNode
+        The same data carrier ``BezierSurface4x4Planning`` builds, with
+        the Confirmed-state ``ClipOut`` uniform engaged on its display
+        node.
     """
-    bezier = _planning.setup_scene()
-    bezier.GetDisplayNode().SetClipOut(True)
-    return bezier
+    carrier = _planning.setup_scene()
+    carrier.GetDisplayNode().SetClipOut(True)
+    return carrier
 
 
 def setup_camera(view_node: slicer.vtkMRMLViewNode | None = None) -> None:
