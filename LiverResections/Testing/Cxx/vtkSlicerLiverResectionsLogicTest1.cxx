@@ -46,6 +46,11 @@
 // VTKSlicer includes
 #include "vtkSlicerLiverResectionsLogic.h"
 
+// Module MRML includes (create-API triad)
+#include "vtkMRMLBezierSurfaceNode.h"
+#include "vtkMRMLParametricSurfaceDisplayNode.h"
+#include "vtkMRMLResectionPlanNode.h"
+
 // VTK includes
 #include <vtkNew.h>
 #include <vtkSmartPointer.h>
@@ -98,6 +103,24 @@ int vtkSlicerLiverResectionsLogicTest1(int, char*[])
   // ``pythonManager()->executeString``.  Coverage for both calls
   // lives in the manual-launch probe + the workflow-layer pytest
   // under ``Testing/Python/workflow/`` (ADR-0008 §3).
+
+  // #501 slice 1 — the logic create-API mints the v2 carrier + plan +
+  // display triad interactively, identically to the file loaders (ADR-0032
+  // interaction model; ADR-0014 §"Fourth layer" wrapper/carrier; ADR-0031).
+  // Pins the structural invariant: a resection-plan wrapper whose geometry
+  // reference resolves a Bezier carrier that carries a parametric-surface
+  // display node (the LayerDM Pipeline creator matches on that display node),
+  // with the plan in the Init state (ADR-0019).
+  {
+    vtkMRMLResectionPlanNode* plan = logic1->CreateResectionPlan("Resection_CreateApiTest");
+    CHECK_NOT_NULL(plan);
+    CHECK_NOT_NULL(scene->GetNodeByID(plan->GetID()));
+
+    vtkMRMLBezierSurfaceNode* carrier = vtkMRMLBezierSurfaceNode::SafeDownCast(plan->GetGeometryNode());
+    CHECK_NOT_NULL(carrier);
+    CHECK_NOT_NULL(vtkMRMLParametricSurfaceDisplayNode::SafeDownCast(carrier->GetDisplayNode()));
+    CHECK_INT(plan->GetState(), vtkMRMLResectionPlanNode::Init);
+  }
 
   return EXIT_SUCCESS;
 }
