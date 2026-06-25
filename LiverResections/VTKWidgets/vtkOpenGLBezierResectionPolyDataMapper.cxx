@@ -157,18 +157,28 @@ void vtkOpenGLBezierResectionPolyDataMapper::BuildBufferObjects(vtkRenderer* ren
       int dimensions[3] = { 0, 0, 0 };
       image->GetDimensions(dimensions);
 
-      vtkNew<vtkTextureObject> texture;
-      texture->SetContext(renWin);
-      texture->SetWrapS(vtkTextureObject::ClampToBorder);
-      texture->SetWrapT(vtkTextureObject::ClampToBorder);
-      texture->SetWrapR(vtkTextureObject::ClampToBorder);
-      texture->SetMinificationFilter(vtkTextureObject::Linear);
-      texture->SetMagnificationFilter(vtkTextureObject::Linear);
-      texture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
-      texture->Create3DFromRaw(dimensions[0], dimensions[1], dimensions[2], image->GetNumberOfScalarComponents(), image->GetScalarType(), image->GetScalarPointer());
+      // Build only when there is a live GL context, the image is non-empty,
+      // and its scalars are allocated: Create3DFromRaw on a null/short buffer
+      // would upload garbage or abort.  Otherwise leave DistanceMapTexture
+      // untouched and do NOT advance DistanceMapBuiltMTime, so the shader takes
+      // its no-distance-map path and a later render retries once the
+      // image/context is valid (ADR-0003: MRML and GL state must not diverge).
+      const bool canBuild = renWin != nullptr && dimensions[0] > 0 && dimensions[1] > 0 && dimensions[2] > 0 && image->GetScalarPointer() != nullptr;
+      if (canBuild)
+      {
+        vtkNew<vtkTextureObject> texture;
+        texture->SetContext(renWin);
+        texture->SetWrapS(vtkTextureObject::ClampToBorder);
+        texture->SetWrapT(vtkTextureObject::ClampToBorder);
+        texture->SetWrapR(vtkTextureObject::ClampToBorder);
+        texture->SetMinificationFilter(vtkTextureObject::Linear);
+        texture->SetMagnificationFilter(vtkTextureObject::Linear);
+        texture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
+        texture->Create3DFromRaw(dimensions[0], dimensions[1], dimensions[2], image->GetNumberOfScalarComponents(), image->GetScalarType(), image->GetScalarPointer());
 
-      this->Impl->DistanceMapTexture = texture;
-      this->Impl->DistanceMapBuiltMTime = image->GetMTime();
+        this->Impl->DistanceMapTexture = texture;
+        this->Impl->DistanceMapBuiltMTime = image->GetMTime();
+      }
     }
   }
 
