@@ -136,6 +136,24 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections;ring-extraction"
     )
 
+    # Per-point control-grid setter is Python-wrappable -- vtkMRMLBezierSurfaceNode
+    # SetControlPoint(row, col, x, y, z) is reachable from Python (the flat
+    # SetControlGrid(const double*) is not) and round-trips via
+    # GetControlGridVector.  The grid seam a re-baseline scenario / interaction
+    # code uses to position the v2 surface.  Needs the wrapped node, so it runs
+    # green under the launched-Slicer `pytest_launched` row and SKIPS CLEANLY
+    # here under bare pytest (no slicer.mrmlScene).
+    add_test(
+      NAME LiverResections_parametric_surface_setcontrolpoint
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_parametric_surface_setcontrolpoint.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_parametric_surface_setcontrolpoint PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;parametric-surface"
+    )
+
     # T2-mapper-wiring -- BezierPlanningRepresentation drives the real,
     # relocated vtkOpenGLBezierResectionPolyDataMapper (ADR-0014 §3) rendering
     # the tessellated Bezier patch (vtkBezierSurfaceSource + vtkPolyDataNormals

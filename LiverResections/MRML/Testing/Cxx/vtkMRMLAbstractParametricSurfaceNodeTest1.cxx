@@ -447,6 +447,38 @@ int testGetInitModeAsStringInvalidDefault()
   return EXIT_SUCCESS;
 }
 
+//------------------------------------------------------------------------------
+// Per-point control-grid setter -- the Python-wrappable seam a scenario /
+// interaction uses to position the grid (the flat ``SetControlGrid(const
+// double*)`` cannot cross the Python wrap).  ``SetControlPoint(row, col, x,
+// y, z)`` writes the (row, col) triple into the row-major flat grid at
+// ``(row * Cols + col) * 3``; out-of-range (row >= Rows or col >= Cols)
+// returns false and leaves the grid untouched.  Exercised via the
+// abstract-base pointer so the v2.1 NURBS sibling shares the seam.
+int testSetControlPointWritesGrid()
+{
+  vtkNew<vtkMRMLBezierSurfaceNode> bezier;
+  vtkMRMLAbstractParametricSurfaceNode* surface = bezier.GetPointer();
+  CHECK_NOT_NULL(surface);
+
+  // Default 4x4 grid.  Write the (1, 2) control point.
+  const unsigned int cols = surface->GetCols();
+  CHECK_BOOL(surface->SetControlPoint(1, 2, 1.5, -2.5, 3.0), true);
+
+  const double* grid = surface->GetControlGrid();
+  const unsigned int base = (1u * cols + 2u) * 3u;
+  CHECK_DOUBLE(grid[base + 0], 1.5);
+  CHECK_DOUBLE(grid[base + 1], -2.5);
+  CHECK_DOUBLE(grid[base + 2], 3.0);
+
+  // Out-of-range row / col are rejected and leave the grid unchanged.
+  CHECK_BOOL(surface->SetControlPoint(surface->GetRows(), 0, 9.0, 9.0, 9.0), false);
+  CHECK_BOOL(surface->SetControlPoint(0, surface->GetCols(), 9.0, 9.0, 9.0), false);
+  CHECK_DOUBLE(surface->GetControlGrid()[base + 0], 1.5);
+
+  return EXIT_SUCCESS;
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -469,6 +501,9 @@ int vtkMRMLAbstractParametricSurfaceNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testSetRowsNonSquareRejectedViaBase());
   CHECK_EXIT_SUCCESS(testGetInitModeFromStringNullPtr());
   CHECK_EXIT_SUCCESS(testGetInitModeAsStringInvalidDefault());
+
+  // Per-point control-grid setter (the Python-wrappable grid seam).
+  CHECK_EXIT_SUCCESS(testSetControlPointWritesGrid());
 
   std::cout << "vtkMRMLAbstractParametricSurfaceNodeTest1 completed successfully" << std::endl;
   return EXIT_SUCCESS;
