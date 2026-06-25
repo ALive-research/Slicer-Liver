@@ -11,8 +11,9 @@ This module exposes three setup functions consumed identically by
 ``replay_test.py`` (the CI replay flow):
 
 * :func:`setup_scene`     — populates the MRML scene with a target
-  parenchyma model and a markups Bezier surface node carrying the
-  shader inputs.  Returns the created markups Bezier surface node so
+  parenchyma model and the v2 resection node graph (data carrier +
+  parametric-surface display node + the orchestrating resection-plan
+  wrapper carrying the shader inputs).  Returns the data carrier so
   callers can drive further per-scenario state.
 * :func:`setup_camera`    — sets the 3D view camera to a deterministic
   pose.  Replay tolerance is tight; camera drift is the most common
@@ -23,8 +24,9 @@ This module exposes three setup functions consumed identically by
 
 Designed to be importable from a pristine Slicer (``--no-main-window``)
 boot; no module GUI bring-up required.  The scene-setup code builds the
-markups Bezier surface node — the same node class the GUI render path
-binds — so the test exercises the production Markups render pipeline.
+v2 node graph the production GUI render path binds — so the test
+exercises the production LayerDM Pipeline render path (ADR-0013 §5,
+ADR-0031), not the retired v1 Markups path.
 
 References
 ----------
@@ -190,35 +192,40 @@ def _make_synthetic_parenchyma() -> slicer.vtkMRMLModelNode:
     return model
 
 
-def setup_scene() -> slicer.vtkMRMLMarkupsBezierSurfaceNode:
-    """Populate ``slicer.mrmlScene`` with the 4x4 Bezier Planning fixture.
+def setup_scene() -> slicer.vtkMRMLBezierSurfaceNode:
+    """Populate ``slicer.mrmlScene`` with the v2 4x4 Bezier Planning fixture.
 
     The function clears the scene first so it is idempotent under
     repeated invocation (e.g. across retries in capture_baseline.py).
 
     The visible pixels in the ``qMRMLThreeDWidget`` replay harness come
-    from the legacy Markups render path:
-    ``vtkMRMLMarkupsBezierSurfaceNode`` (+ its display node) → the
-    upstream Markups displayable manager →
-    ``vtkSlicerBezierSurfaceRepresentation3D`` → the
-    ``vtkOpenGLBezierResectionPolyDataMapper``.  The fixture therefore
-    hand-builds the markups bezier node directly and lands the shader
-    inputs on it; the v2 resection-plan carrier is render-inert in this
-    harness and is intentionally not part of the scene.
+    from the v2 LayerDM render path: the data carrier
+    ``vtkMRMLBezierSurfaceNode`` + its decoration
+    ``vtkMRMLParametricSurfaceDisplayNode`` + the orchestrating
+    ``vtkMRMLResectionPlanNode`` (which carries the distance-map volume +
+    the safety / risk margins per ADR-0031) → ``LiverBezierSurfacePipeline``
+    → ``BezierPlanningRepresentation`` → the real
+    ``vtkOpenGLBezierResectionPolyDataMapper``.  The pipeline's creator
+    matches the parametric-surface display node; the pipeline
+    reverse-resolves the plan from the carrier's ``geometry``
+    back-reference (ADR-0031) and threads the distance map + margins onto
+    the mapper.
 
     Returns
     -------
-    vtkMRMLMarkupsBezierSurfaceNode
-        The created markups Bezier surface node; callers may further
-        mutate its display node.
+    vtkMRMLBezierSurfaceNode
+        The created data carrier; callers reach the display node via
+        ``GetDisplayNode()`` to flip per-state uniforms (e.g. the
+        Confirmed scenario's ``ClipOut``).
     """
     slicer.mrmlScene.Clear(0)
 
     # Force-load the LiverResections logic.  In ``--no-main-window``
     # boots, modules are not auto-instantiated until first reference;
     # going through ``slicer.modules`` triggers module load + logic
-    # singleton construction — which is what registers the Markups
-    # bezier node + its displayable manager on the render path.
+    # singleton construction — which performs the ADR-0013 §5
+    # registration calls (node classes + the LayerDM displayable manager
+    # in default views + the Pipeline creator) the v2 render path needs.
     slicer.modules.liverresections.logic()
 
     _make_synthetic_parenchyma()
@@ -227,54 +234,66 @@ def setup_scene() -> slicer.vtkMRMLMarkupsBezierSurfaceNode:
         sphere_radius=40.0,
     )
 
-    # Hand-build the markups Bezier surface node directly.  The
-    # representation no-ops unless the node carries exactly 16 control
-    # points, so seed 16 (mirroring the 4x4 grid the legacy
-    # ``AddBezierSurface`` laid out) before re-positioning them below.
-    bezier = slicer.mrmlScene.AddNewNodeByClass(
-        "vtkMRMLMarkupsBezierSurfaceNode", "VisualTestBezier"
+    # v2 data carrier + its parametric-surface display node.  The LayerDM
+    # Pipeline creator matches on the display node; the carrier is its
+    # displayable node (``display.GetDisplayableNode()``), from which the
+    # Pipeline derives its data node.
+    carrier = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLBezierSurfaceNode", "VisualTestBezier"
     )
-    for _ in range(16):
-        bezier.AddControlPoint(vtk.vtkVector3d(0.0, 0.0, 0.0))
-    bezier.CreateDefaultDisplayNodes()
+    display = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLParametricSurfaceDisplayNode", "VisualTestBezierDisplay"
+    )
+    carrier.SetAndObserveDisplayNodeID(display.GetID())
 
-    # Shader inputs that live on the markups NODE (see
-    # vtkMRMLMarkupsBezierSurfaceNode.h): resection / uncertainty
-    # margins and the distance-map volume.
-    bezier.SetResectionMargin(10.0)
-    bezier.SetUncertaintyMargin(2.0)
-
-    # Re-position the 16 control points so the patch fully encloses the
-    # parenchyma's z=0 disc.  The legacy layout was a default 0..30
-    # grid; we expand to -30..60 (centred on sphere centre 15,15) so the
-    # bezier-plane / contour-band correspondence is visible.
+    # Position the 4x4 control grid so the patch encloses the parenchyma's
+    # z=0 disc — same layout the v1 fixture used (centred on sphere centre
+    # (15, 15), spanning -30..60).  ``SetControlPoint`` is the
+    # Python-wrappable grid seam; ``(row, col)`` indexes the row-major grid.
     cx, cy = PATCH_CENTER_XY
-    half = PATCH_HALF_EXTENT
-    base_x = cx - half
-    base_y = cy - half
-    for i in range(4):
-        for j in range(4):
-            idx = i * 4 + j
-            bezier.SetNthControlPointPosition(
-                idx,
-                base_x + PATCH_SPACING * i,
-                base_y + PATCH_SPACING * j,
+    base_x = cx - PATCH_HALF_EXTENT
+    base_y = cy - PATCH_HALF_EXTENT
+    for row in range(4):
+        for col in range(4):
+            carrier.SetControlPoint(
+                row,
+                col,
+                base_x + PATCH_SPACING * row,
+                base_y + PATCH_SPACING * col,
                 0.0,
             )
 
-    # Display-node decoration (see
-    # vtkMRMLMarkupsBezierSurfaceDisplayNode.h).  ORDER MATTERS:
-    # ``TextureNumComps`` must be set BEFORE the distance map so the
-    # subsequent texture upload reads the correct per-voxel stride
-    # rather than the default zero-component stride.  Planning state
-    # leaves ``ClipOut`` off — the full surface is visible.
-    display = bezier.GetDisplayNode()
-    display.SetTextureNumComps(4)
-    bezier.SetDistanceMapVolumeNode(distance_map)
+    # Decoration on the display node
+    # (vtkMRMLParametricSurfaceDisplayNode).  Unlike v1 there is no
+    # ``TextureNumComps`` to set — the v2 mapper derives the component
+    # count from the distance-map image itself.  Planning leaves
+    # ``ClipOut`` off — the full surface is visible.
+    display.SetResectionColor(1.0, 1.0, 1.0)
+    display.SetGrid3DVisibility(True)
     display.SetClipOut(False)
     display.SetVisibility(True)
 
-    return bezier
+    # The orchestrating plan wrapper carries the path-specific inputs the
+    # surface shader needs (ADR-0031): the distance-map volume + the
+    # safety / risk margins (the v1 shader inputs that lived on the
+    # markups node).  The ``geometry`` reference to the carrier is what
+    # lets the Pipeline reverse-resolve this plan from the rendered
+    # surface.
+    plan = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLResectionPlanNode", "VisualTestResectionPlan"
+    )
+    plan.SetAndObserveGeometryNode(carrier)
+    plan.SetAndObserveDistanceMapVolumeNode(distance_map)
+    plan.SetSafetyMargin_mm(10.0)
+    plan.SetRiskMargin_mm(2.0)
+
+    # Planning state activates the BezierPlanningRepresentation (the one
+    # that threads the distance map).  Confirmed reuses this fixture and
+    # flips the display node's ClipOut — it stays on this representation,
+    # mirroring v1's single-representation + uniform model.
+    carrier.SetState(1)  # vtkMRMLBezierSurfaceNode::Planning
+
+    return carrier
 
 
 def setup_camera(view_node: slicer.vtkMRMLViewNode | None = None) -> None:
