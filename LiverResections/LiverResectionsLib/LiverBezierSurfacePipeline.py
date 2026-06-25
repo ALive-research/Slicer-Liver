@@ -287,6 +287,19 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         """
         self._ensure_representations()
 
+        # Reverse-resolve the orchestrating wrapper when no explicit one was
+        # set (ADR-0031).  The LayerDM creator hands the Pipeline only the
+        # display node (it matches on vtkMRMLParametricSurfaceDisplayNode), so
+        # nothing sets _resection_node in the live render path; discover the
+        # vtkMRMLResectionPlanNode whose geometry reference is our data node
+        # and adopt it, so the plan's distance-map + margins reach the mapper
+        # with no external SetResectionNode caller.  Re-attempted while unset
+        # (the plan's geometry ref may be wired after the display node lands).
+        if self._resection_node is None and self._data_node is not None:
+            resolved = self._resolve_resection_node()
+            if resolved is not None:
+                self.SetResectionNode(resolved)
+
         # Build the dispatch key.  Falls back to ``0`` MTime for nodes
         # whose ``GetMTime`` is unavailable (defensive — stub nodes in
         # tests may not implement it).
@@ -413,6 +426,42 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             return getter()
         except Exception:  # pragma: no cover - defensive
             return None
+
+    def _resolve_resection_node(self) -> Any | None:
+        """Reverse-resolve the ``vtkMRMLResectionPlanNode`` wrapper.
+
+        The plan wrapper references the surface carrier via the ``geometry``
+        role (ADR-0014 §"Fourth layer"); the Pipeline reverse-walks that to
+        adopt the wrapper, so it can thread the plan's distance-map + margins
+        (ADR-0031) onto the Representation without an external caller.  Scans
+        the scene for the plan whose ``GetGeometryNode()`` is our data node.
+        Returns ``None`` when no plan owns this data node (a bare surface — the
+        no-distance-map fallback).
+        """
+        data_node = self._data_node
+        if data_node is None:
+            return None
+        scene = getattr(data_node, "GetScene", lambda: None)()
+        if scene is None:
+            return None
+        try:
+            plans = scene.GetNodesByClass("vtkMRMLResectionPlanNode")
+        except Exception:  # pragma: no cover - defensive
+            return None
+        if plans is None:
+            return None
+        plans.InitTraversal()
+        item = plans.GetNextItemAsObject()
+        while item is not None:
+            getter = getattr(item, "GetGeometryNode", None)
+            if getter is not None:
+                try:
+                    if getter() is data_node:
+                        return item
+                except Exception:  # pragma: no cover - defensive
+                    pass
+            item = plans.GetNextItemAsObject()
+        return None
 
     def _run_ring_extraction(self, target_model: Any | None = None) -> None:
         """Run the discrete ring extraction against ``target_model``.

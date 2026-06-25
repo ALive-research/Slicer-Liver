@@ -161,6 +161,24 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections;mapper-wiring"
     )
 
+    # T2 render-cutover slice 1c -- the LayerDM Pipeline reverse-resolves its
+    # vtkMRMLResectionPlanNode wrapper from the data node's geometry
+    # back-reference (ADR-0031), so the live render path threads the
+    # distance-map + margins with no external SetResectionNode caller.  Needs
+    # the wrapped plan / carrier / display nodes + the importable Pipeline, so
+    # it runs green under the launched-Slicer `pytest_launched` row and SKIPS
+    # CLEANLY here under bare pytest (no slicer.mrmlScene / LayerDMLib).
+    add_test(
+      NAME LiverResections_pipeline_resolves_resection_plan
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_pipeline_resolves_resection_plan.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_pipeline_resolves_resection_plan PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;mapper-wiring"
+    )
+
     # T3-g3 -- auto-populate of the Stage-4 ResectionPlanningWidget (the Python
     # widget, ADR-0004; ADR-0023 §Stage-4).  Three invariants: (1) the drawer
     # auto-populates iff a vtkMRMLMarkupsBezierSurfaceNode is selected AND
