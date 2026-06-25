@@ -50,6 +50,7 @@
 #include <memory>
 
 class vtkTextureObject;
+class vtkImageData;
 
 //-------------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLBezierResectionPolyDataMapper : public vtkOpenGLPolyDataMapper
@@ -147,6 +148,22 @@ public:
   void SetDistanceMapTextureObject(vtkTextureObject* texture);
   /// Get the distance-map texture object set by the representation.
   vtkTextureObject* GetDistanceMapTextureObject() const;
+
+  /// Set the distance-map volume's image data; the mapper builds and binds
+  /// the 3D distance texture from it internally at render time (ADR-0031).
+  ///
+  /// The texture upload (``vtkTextureObject::Create3DFromRaw`` with the
+  /// scalar ``void*``) cannot cross the Python wrap, so a Python
+  /// Representation passes the ``vtkImageData`` here and the GL upload lives
+  /// in C++.  The number of components is read from the image itself.  The
+  /// texture is (re)built lazily in ``BuildBufferObjects`` when a live GL
+  /// context is available and the image changed — never eagerly here, so the
+  /// realize-then-bind discipline holds (ADR-0003).  Passing nullptr clears
+  /// the distance map (the graceful no-distance-map fallback).
+  void SetDistanceMapImageData(vtkImageData* imageData);
+  /// Get the distance-map image data set via SetDistanceMapImageData (the
+  /// GL-free introspection point; the texture itself is built at render).
+  vtkImageData* GetDistanceMapImageData() const;
 
   /// Get the locator marker position (RAS world point, ADR-0025)
   const float* GetLocatorPosition() const;

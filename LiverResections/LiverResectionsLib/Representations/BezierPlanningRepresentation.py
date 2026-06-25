@@ -179,6 +179,13 @@ class BezierPlanningRepresentation:
         # bumps this counter.
         self._input_refresh_count: int = 0
 
+        # The orchestrating ``vtkMRMLResectionPlanNode`` wrapper, set by the
+        # Pipeline via ``SetResectionPlanNode`` (ADR-0031).  It carries the
+        # distance-map volume + the resection / uncertainty margins the
+        # surface shader needs — path-specific inputs that live on the
+        # wrapper, not the carrier.  ``None`` until the Pipeline wires it.
+        self._resection_plan_node: Any | None = None
+
         if _HAS_VTK:
             self._build_vtk_pipeline()
 
@@ -203,6 +210,16 @@ class BezierPlanningRepresentation:
     def GetRenderer(self) -> Any | None:
         return self._renderer
 
+    def SetResectionPlanNode(self, plan_node: Any | None) -> None:
+        """Attach the orchestrating ``vtkMRMLResectionPlanNode`` wrapper.
+
+        The Pipeline calls this before ``update()`` so the Representation can
+        read the distance-map volume + the resection / uncertainty margins
+        off the wrapper (ADR-0031) and thread them onto the real mapper.
+        ``None`` clears it (the no-distance-map fallback).
+        """
+        self._resection_plan_node = plan_node
+
     def update(
         self, display_node: Any | None, data_node: Any | None
     ) -> None:
@@ -218,6 +235,10 @@ class BezierPlanningRepresentation:
         # VTK.
         self._apply_display_node(display_node)
         self._apply_data_node(data_node)
+        # Thread the wrapper's distance-map volume + margins onto the real
+        # mapper (ADR-0031).  No-op on the generic fallback mapper / when no
+        # plan node is wired.
+        self._apply_resection_plan(self._resection_plan_node)
 
     def cleanup(self) -> None:
         """Detach actors from the renderer and drop the VTK pipeline."""
@@ -230,6 +251,7 @@ class BezierPlanningRepresentation:
         self._surface_polydata = None
         self._surface_mapper = None
         self._surface_actor = None
+        self._resection_plan_node = None
 
     # ------------------------------------------------------------------ #
     # Introspection — used by the unit-layer tests
@@ -557,6 +579,75 @@ class BezierPlanningRepresentation:
             if set_thickness is not None:
                 set_thickness(0.0)
 
+    def _apply_resection_plan(self, plan_node: Any | None) -> None:
+        """Thread the wrapper's distance map + margins onto the real mapper.
+
+        Per ADR-0031 the distance-map volume + the resection / uncertainty
+        margins are path-specific inputs carried by the
+        ``vtkMRMLResectionPlanNode`` wrapper.  This ports v1's
+        ``UpdateFromMRML`` distance-map block
+        (``vtkSlicerBezierSurfaceRepresentation3D``): set the margins, and
+        when a distance-map volume with image data is present, hand the image
+        to the mapper (which builds + binds the 3D texture in C++ at render
+        time — the ``void*`` upload cannot cross the Python wrap) and compute
+        the RAS->IJK and IJK->texture matrices from the volume geometry.  When
+        no distance map is wired, clear the image and reset the matrices to
+        identity (the graceful no-distance-map fallback the shader supports).
+
+        A no-op on the generic fallback mapper (the getattr guard) and when
+        VTK is unavailable.
+        """
+        if not _HAS_VTK:
+            return
+        mapper = self._surface_mapper
+        if mapper is None or not hasattr(mapper, "SetDistanceMapImageData"):
+            return  # generic fallback mapper — no distance-map shader surface
+
+        # Margins are plan fields, meaningful independent of the distance map
+        # (the shader simply has no band to draw without a bound texture).
+        if plan_node is not None:
+            safety = getattr(plan_node, "GetSafetyMargin_mm", None)
+            risk = getattr(plan_node, "GetRiskMargin_mm", None)
+            if safety is not None:
+                mapper.SetResectionMargin(float(safety()))
+            if risk is not None:
+                mapper.SetUncertaintyMargin(float(risk()))
+
+        volume = None
+        if plan_node is not None:
+            getter = getattr(plan_node, "GetDistanceMapVolumeNode", None)
+            if getter is not None:
+                volume = getter()
+
+        image = volume.GetImageData() if volume is not None else None
+        if image is None:
+            # No distance map: drop the texture source and reset the
+            # transforms so MRML state and GL state cannot diverge.
+            mapper.SetDistanceMapImageData(None)
+            mapper.SetRasToIjkMatrix(_identity_matrix())
+            mapper.SetIjkToTextureMatrix(_identity_matrix())
+            return
+
+        mapper.SetDistanceMapImageData(image)
+
+        # RAS->IJK straight off the volume; the mapper transposes internally.
+        ras_to_ijk = vtk.vtkMatrix4x4()
+        volume.GetRASToIJKMatrix(ras_to_ijk)
+        mapper.SetRasToIjkMatrix(ras_to_ijk)
+
+        # IJK->texture is the 1/dimensions scaling (texture coords are
+        # normalised), matching v1's scaling transform.
+        dimensions = image.GetDimensions()
+        scaling = vtk.vtkTransform()
+        scaling.Scale(
+            1.0 / dimensions[0] if dimensions[0] else 1.0,
+            1.0 / dimensions[1] if dimensions[1] else 1.0,
+            1.0 / dimensions[2] if dimensions[2] else 1.0,
+        )
+        ijk_to_texture = vtk.vtkMatrix4x4()
+        scaling.GetMatrix(ijk_to_texture)
+        mapper.SetIjkToTextureMatrix(ijk_to_texture)
+
     def _refresh_surface_polydata(self, points: Any, rows: int, cols: int) -> None:
         assert vtk is not None
         polydata = self._surface_polydata
@@ -583,6 +674,15 @@ class BezierPlanningRepresentation:
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
+
+
+def _identity_matrix() -> Any:
+    """A fresh 4x4 identity ``vtkMatrix4x4`` (reset transform for the
+    no-distance-map fallback)."""
+    assert vtk is not None
+    m = vtk.vtkMatrix4x4()
+    m.Identity()
+    return m
 
 
 def _resolve_vtk_class(name: str) -> Any | None:

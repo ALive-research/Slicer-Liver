@@ -78,6 +78,8 @@ import pytest
 
 BEZIER_NODE_CLASS = "vtkMRMLBezierSurfaceNode"
 DISPLAY_NODE_CLASS = "vtkMRMLParametricSurfaceDisplayNode"
+PLAN_NODE_CLASS = "vtkMRMLResectionPlanNode"
+VOLUME_NODE_CLASS = "vtkMRMLScalarVolumeNode"
 REAL_MAPPER_CLASS = "vtkOpenGLBezierResectionPolyDataMapper"
 
 
@@ -263,6 +265,105 @@ def test_planning_display_fields_plumbed_to_mapper():
         "Grid3DVisibility off must zero the mapper's GridDivisions "
         f"(v1 parity); got {mapper.GetGridDivisions()}."
     )
+
+
+def _require_plan_distance_map_seam_or_skip(rep, slicer):
+    """Skip unless the distance-map threading seam (ADR-0031) has landed.
+
+    RED == ``BezierPlanningRepresentation`` has no ``SetResectionPlanNode`` or
+    the mapper has no ``SetDistanceMapImageData`` / the plan node is not
+    registered.  The skip lifts when slice 1b wires the wrapper's distance-map
+    + margins through to the mapper (ADR-0027 §Conformance).
+    """
+    mapper = rep.GetSurfaceMapper()
+    if not hasattr(rep, "SetResectionPlanNode") or not hasattr(
+        mapper, "SetDistanceMapImageData"
+    ):
+        pytest.skip(
+            "distance-map threading seam absent (no SetResectionPlanNode / "
+            "SetDistanceMapImageData) -- ADR-0031 slice 1b has not landed."
+        )
+    if slicer.mrmlScene.AddNewNodeByClass(PLAN_NODE_CLASS) is None:
+        pytest.skip(
+            f"{PLAN_NODE_CLASS} not registered in this build -- cannot thread "
+            "the distance-map input."
+        )
+
+
+def test_planning_distance_map_threaded_from_plan_to_mapper():
+    """ADR-0031: the wrapper's distance-map volume + margins reach the mapper.
+
+    The Pipeline threads the orchestrating ``vtkMRMLResectionPlanNode`` to the
+    Planning Representation, which pushes the distance-map image data, the
+    RAS/IJK matrices, and the safety / risk margins onto the real mapper.  All
+    GL-free: the image is *stored* on the mapper here (the 3D texture is built
+    at render, exercised on the :0 eyeball), the matrices/margins are CPU
+    setters.  Clearing the distance map returns the mapper to the
+    no-distance-map fallback.
+    """
+    import vtk
+
+    slicer = _slicer_or_skip()
+    rep = _make_representation_or_skip()
+    mapper = _require_real_mapper_or_skip(rep)
+    _require_plan_distance_map_seam_or_skip(rep, slicer)
+
+    data = _bezier_node_or_skip(slicer)
+    display = _display_node_or_skip(slicer)
+
+    plan = slicer.mrmlScene.AddNewNodeByClass(PLAN_NODE_CLASS)
+    volume = slicer.mrmlScene.AddNewNodeByClass(VOLUME_NODE_CLASS)
+    assert plan is not None and volume is not None
+
+    # Non-identity geometry so the RAS/IJK matrix is observably non-identity.
+    image = vtk.vtkImageData()
+    image.SetDimensions(4, 4, 4)
+    image.AllocateScalars(vtk.VTK_FLOAT, 1)
+    volume.SetAndObserveImageData(image)
+    volume.SetSpacing(2.0, 2.0, 2.0)
+
+    plan.SetAndObserveDistanceMapVolumeNode(volume)
+    plan.SetSafetyMargin_mm(10.0)
+    plan.SetRiskMargin_mm(2.0)
+
+    rep.SetResectionPlanNode(plan)
+    rep.update(display, data)
+
+    assert mapper.GetDistanceMapImageData() is volume.GetImageData(), (
+        "the wrapper's distance-map image must reach the mapper (the mapper "
+        "builds the 3D texture from it in C++ at render)."
+    )
+    assert abs(mapper.GetResectionMargin() - 10.0) < 1e-5, (
+        "plan SafetyMargin_mm must reach the mapper's ResectionMargin; got "
+        f"{mapper.GetResectionMargin()}."
+    )
+    assert abs(mapper.GetUncertaintyMargin() - 2.0) < 1e-5, (
+        "plan RiskMargin_mm must reach the mapper's UncertaintyMargin; got "
+        f"{mapper.GetUncertaintyMargin()}."
+    )
+    ras_to_ijk_t = mapper.GetRasToIjkMatrixT()
+    assert ras_to_ijk_t is not None and not _is_identity(ras_to_ijk_t), (
+        "the RAS/IJK matrix must be computed from the distance-map volume "
+        "geometry (non-identity for a spacing-2 volume), not left at identity."
+    )
+
+    # Clear the distance map -> mapper returns to the no-distance-map fallback.
+    plan.SetAndObserveDistanceMapVolumeNode(None)
+    rep.update(display, data)
+    assert mapper.GetDistanceMapImageData() is None, (
+        "clearing the wrapper's distance-map reference must drop the image "
+        "from the mapper (MRML state and GL state must not diverge)."
+    )
+
+
+def _is_identity(matrix, tol=1e-9):
+    """True iff a vtkMatrix4x4 is the identity within ``tol``."""
+    for i in range(4):
+        for j in range(4):
+            expected = 1.0 if i == j else 0.0
+            if abs(matrix.GetElement(i, j) - expected) > tol:
+                return False
+    return True
 
 
 if __name__ == "__main__":
