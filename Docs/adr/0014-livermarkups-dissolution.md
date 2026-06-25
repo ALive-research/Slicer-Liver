@@ -256,6 +256,15 @@ surgeon moves through the workflow.
 
 ### 3. Custom widget subclassing vtkAbstractWidget directly
 
+> **Superseded in part by [ADR-0032](0032-v2-interaction-via-layerdm-pipeline-seam.md).**
+> The standalone-`vtkAbstractWidget` interaction decision in this section
+> is replaced: v2 interaction routes through the LayerDM Pipeline's
+> `ProcessInteractionEvent` seam (no separate widget, no custom DM), and
+> `vtkLiverBezierWidget` / `vtkLiverBezierRepresentation` are retired.
+> The **mapper relocation** decided below stands (it is done).  The
+> left/right-drag + right-click event-table semantics move onto the
+> Pipeline seam.
+
 A single `vtkLiverBezierWidget` subclasses `vtkAbstractWidget`
 directly — *not* `vtkSlicerMarkupsWidget`.  Free design space:
 
