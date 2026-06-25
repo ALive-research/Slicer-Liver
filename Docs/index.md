@@ -50,6 +50,7 @@ adr/0028-parameter-node-wrapper.md
 adr/0029-stage1-case-setup-contract.md
 adr/0030-ci-slicer-image-pinning.md
 adr/0031-distance-map-input-on-resection-plan.md
+adr/0032-v2-interaction-via-layerdm-pipeline-seam.md
 ```
 
 ```{toctree}
