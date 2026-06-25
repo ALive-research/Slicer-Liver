@@ -8,9 +8,9 @@ Bezier resection surface): the Planning-state Representation must render the
 *tessellated Bezier patch* through the relocated, real
 ``vtkOpenGLBezierResectionPolyDataMapper`` -- NOT the placeholder raw
 control-mesh through a generic ``vtkPolyDataMapper``.  This is the bottleneck
-slice that unblocks the ADR-0025 locator consumer (#489) and Locator B/D: the
-``uLocatorPosition`` / ``uLocatorRadius`` uniforms landed on that mapper have
-no visible effect until a real instance actually renders the surface.
+slice that unblocks the ADR-0025 locator consumer (Slice C) and Locator B/D:
+the ``uLocatorPosition`` / ``uLocatorRadius`` uniforms landed on that mapper
+have no visible effect until a real instance actually renders the surface.
 
 Three pinned invariants (all GL-free -- no render, no window):
 
@@ -31,17 +31,16 @@ Three pinned invariants (all GL-free -- no render, no window):
      ``SetGridDivisions`` / ``SetGridThicknessFactor``), porting the v1 setup
      from ``vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceDisplay``.
 
--- SCOPED OUT of this slice (deferred) --
+-- Distance-map binding (now landed, ADR-0031) --
 
 The RAS/IJK transformation matrices and the distance-map 3D texture binding
-(``SetRasToIjkMatrixT`` / ``SetIjkToTextureMatrixT`` /
-``SetDistanceMapTextureObject``) are NOT wired here: the v2
-``vtkMRMLBezierSurfaceNode`` carries no distance-map volume reference (the v1
-``vtkMRMLMarkupsBezierSurfaceNode`` did, via ``GetDistanceMapVolumeNode()``).
-With no node-level distance-map source there is nothing to thread; the mapper's
-fragment shader already degrades gracefully when no ``distanceTexture`` is
-bound (``SetUniformi("distanceTexture", 0)`` fallback).  Those parts wait on a
-follow-on that gives the v2 node a distance-map reference.
+were the follow-on this slice originally deferred.  They have since landed: the
+distance-map volume is a path-specific input on the ``vtkMRMLResectionPlanNode``
+wrapper (ADR-0031), threaded by ``BezierPlanningRepresentation`` onto the mapper
+(``SetDistanceMapImageData`` + the RAS/IJK matrices).
+``test_planning_distance_map_threaded_from_plan_to_mapper`` below pins that
+threading; the mapper still degrades gracefully (no band) when no distance map
+is wired.
 
 -- WHY THIS IS A LAUNCHED-SLICER PYTEST --
 
@@ -53,20 +52,19 @@ widget classes off the path, so this SKIPS CLEANLY via the shared
 ``slicer_pytest_support`` guards.  The Representation is plain Python + VTK;
 the test needs no render window.
 
--- WHY THIS IS RED NOW --
+-- HARNESS BEHAVIOUR --
 
-``BezierPlanningRepresentation._build_vtk_pipeline`` still constructs a generic
-``vtk.vtkPolyDataMapper`` and ``_apply_data_node`` builds the raw control mesh
-(``TODO(T2-mapper-relocation)`` at construction + data-apply).  Each test
-SKIPS pre-implementation on the real-mapper seam (``_require_real_mapper_or_skip``)
-rather than failing noisily, and goes GREEN once the implementer swaps the
-mapper + ports the tessellation -- per ADR-0027 §Conformance ("for skipped
-tests, the skip lifts at the implementation commit").
+The swap + tessellation + distance-map threading have landed, so these tests
+run GREEN under a launched Slicer.  Each still guards on the real-mapper seam
+(``_require_real_mapper_or_skip``) so it SKIPS CLEANLY -- never fails noisily --
+in an environment where the wrapped mapper is off the path (bare pytest), per
+ADR-0027 §Conformance.
 
 See also:
   * Docs/adr/0014-livermarkups-dissolution.md §3   (mapper relocation -- done)
   * Docs/adr/0013-layerdm-pipeline-pattern.md §6     (Representations as pipelines)
-  * Docs/adr/0025-cross-view-locator.md              (#489 consumer this unblocks)
+  * Docs/adr/0031-distance-map-input-on-resection-plan.md  (distance-map input)
+  * Docs/adr/0025-cross-view-locator.md              (the locator consumer this unblocks)
   * Docs/adr/0008-testing-strategy.md §1, §6         (dual-harness strategy)
   * LiverMarkups/VTKWidgets/vtkSlicerBezierSurfaceRepresentation3D.cxx  (v1 source)
   * LiverResections/Testing/Python/conftest.py       (the cleanup fixtures)
