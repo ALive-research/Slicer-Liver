@@ -108,6 +108,24 @@ The scene-level state (territories, partitions, stage UI) is
 transferred — when it needs transferring — via its own files,
 authored by the respective modules.
 
+### Distance-map input: deliberately not persisted (v2.0)
+
+The resection-plan wrapper's `distanceMap` volume reference
+([ADR-0031](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0031-distance-map-input-on-resection-plan.md)) is a
+**path-specific input**, not authored plan data: it is a *computed*
+scalar volume (derived from the parenchyma segmentation + the surface).
+v2.0 does **not** write it to the `.lrp.json` — persisting a
+scene-local node ID would reintroduce exactly the cross-machine breakage
+the trim above removed. Re-linking the distance map on load rides on the
+same v2.1 stable-ID resolution (#415) as the other node references; until
+then the plan re-establishes / recomputes it rather than carrying a
+fragile ID. The two margins (`safetyMargin_mm`, `riskMargin_mm`), being
+plain scalars, **do** round-trip — the rest of the distance-shading input
+set is persisted; only the volume reference waits for v2.1. A guard test
+(`LiverResections/Testing/Python/test_resection_plan_distance_map_not_persisted.py`)
+pins this omission so a symmetry-minded storage edit cannot ship the
+fragile persistence early.
+
 ## Reader / writer behaviour
 
 - **Reader** rejects `schemaVersion < 2` or `> 2`.

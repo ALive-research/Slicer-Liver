@@ -470,6 +470,27 @@ if(DEFINED Python3_EXECUTABLE)
     set_tests_properties(LiverResections_flattened_surface_plan_shading PROPERTIES
       LABELS "pytest;module-layer;LiverResections;resectogram;mapper-wiring"
     )
+
+    # #501 slice 6 -- round-trip symmetry guard: the resection-plan WRAPPER's
+    # distanceMap volume reference deliberately does NOT persist to .lrp.json in
+    # v2.0 (ADR-0031; the distance map is a computed input whose scene-local
+    # node ID breaks across reloads -- stable cross-machine references are
+    # deferred to v2.1 per Docs/design/resection-plan-architecture/
+    # 05-lrp-json-schema.md).  A characterization/creep-guard: green on the
+    # current build, it fails a symmetry-minded storage edit that adds the
+    # distanceMap ref before the v2.1 stable-ID mechanism exists.  The positive
+    # field-by-field round-trip symmetry is pinned by the C++
+    # vtkMRMLResectionPlanStorageNodeTest1 (testPlanRootedRoundTrip).
+    add_test(
+      NAME LiverResections_resection_plan_distance_map_not_persisted
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_resection_plan_distance_map_not_persisted.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_resection_plan_distance_map_not_persisted PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;storage;round-trip"
+    )
   else()
     message(STATUS
       "Slicer-Liver: pytest not importable from ${Python3_EXECUTABLE}; "
