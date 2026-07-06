@@ -193,6 +193,13 @@ class FlattenedSurfaceRepresentation:
         # C++ pipeline on the Python heap (a vtkDebugLeaks trip).
         self._distance_map_volume: Any | None = None
 
+        # The orchestrating ``vtkMRMLResectionPlanNode`` wrapper, set by the
+        # ResectogramPipeline via ``SetResectionPlanNode`` (ADR-0031).  It
+        # carries the distance-shading input set the flattened strip reads --
+        # the distance-map volume AND the safety / risk margins -- none of
+        # which live on the carrier (ADR-0014 §"Fourth layer").
+        self._resection_plan_node: Any | None = None
+
         # Last MatRatio pushed onto the 2D mapper.  ``None`` until the
         # first ``update()`` runs OR the mapper does not expose
         # ``SetMatRatio`` (generic-mapper fallback path).
@@ -224,6 +231,17 @@ class FlattenedSurfaceRepresentation:
 
     def GetRenderer(self) -> Any | None:
         return self._renderer
+
+    def SetResectionPlanNode(self, plan_node: Any | None) -> None:  # noqa: N802 - VTK verb
+        """Attach the orchestrating ``vtkMRMLResectionPlanNode`` wrapper.
+
+        The ResectogramPipeline calls this before ``update()`` so the flattened
+        strip can read its distance-shading input set -- the distance-map volume
+        AND the safety / risk margins -- off the wrapper (ADR-0031), mirroring
+        the 3D ``BezierPlanningRepresentation``.  ``None`` clears it (the
+        no-distance-map fallback).
+        """
+        self._resection_plan_node = plan_node
 
     def update(self, display_node: Any | None, data_node: Any | None) -> None:
         """Reconcile the resectogram against the current display + data nodes.
@@ -489,6 +507,29 @@ class FlattenedSurfaceRepresentation:
         setter(list(ratio))
         self._mat_ratio_applied = (float(ratio[0]), float(ratio[1]))
 
+    def _apply_resection_margins(self, mapper: Any) -> None:
+        """Thread the wrapper's resection / uncertainty margins onto the mapper.
+
+        Per ADR-0031 the safety + risk margins are path-specific inputs carried
+        by the ``vtkMRMLResectionPlanNode`` wrapper, alongside the distance-map
+        volume, as one distance-shading input set.  Ports the margin block of
+        the 3D ``BezierPlanningRepresentation._apply_resection_plan``: push
+        ``GetSafetyMargin_mm`` -> ``SetResectionMargin`` and ``GetRiskMargin_mm``
+        -> ``SetUncertaintyMargin``.  A no-op when no plan is wired or on the
+        generic fallback mapper (the getattr guards).
+        """
+        plan = self._resection_plan_node
+        if plan is None:
+            return
+        safety = getattr(plan, "GetSafetyMargin_mm", None)
+        risk = getattr(plan, "GetRiskMargin_mm", None)
+        set_resection = getattr(mapper, "SetResectionMargin", None)
+        set_uncertainty = getattr(mapper, "SetUncertaintyMargin", None)
+        if safety is not None and set_resection is not None:
+            set_resection(float(safety()))
+        if risk is not None and set_uncertainty is not None:
+            set_uncertainty(float(risk()))
+
     def _apply_distance_map_texture(
         self, display_node: Any | None, data_node: Any | None
     ) -> None:
@@ -512,12 +553,23 @@ class FlattenedSurfaceRepresentation:
         mapper = self._resection_mapper_2d
         if mapper is None:
             return
+
+        # Thread the wrapper's resection / uncertainty margins onto the 2D
+        # mapper FIRST (ADR-0031): they are valid plan state independent of the
+        # distance-map texture (the shader simply has no band to draw until a
+        # texture is bound), so they must be set even on the no-distance-map /
+        # deferred-GL paths below.  Mirrors BezierPlanningRepresentation.
+        self._apply_resection_margins(mapper)
+
         bind = getattr(mapper, "SetDistanceMapTextureObject", None)
         if bind is None:
             return  # generic-mapper fallback (bare-VTK path) — no sampler3D
 
         already_bound = self._mapper_has_distance_map_texture(mapper)
-        volume = _safe_call_getter(data_node, "GetDistanceMapVolumeNode")
+        # Source the distance-map volume from the WRAPPER (ADR-0031), NOT the
+        # data node / carrier — the distance map is a wrapper-owned input of
+        # the resection plan (ADR-0014 §"Fourth layer").
+        volume = _safe_call_getter(self._resection_plan_node, "GetDistanceMapVolumeNode")
         if volume is self._distance_map_volume and already_bound:
             return  # unchanged + already bound — idempotent (ADR-0013 §3)
 
@@ -534,10 +586,12 @@ class FlattenedSurfaceRepresentation:
         texture = self._create_distance_map_texture(image_data, num_comps)
         if texture is None:
             # The GL render window is not live yet (texture build deferred):
-            # leave the volume unrecorded so a later update — once the
-            # window exists — retries the bind rather than short-circuiting.
+            # record the SOURCED (wrapper) volume so the sourced layer is
+            # observable, but leave the texture unbound so a later update --
+            # once the window exists -- retries the bind (``already_bound``
+            # stays False, so the idempotency guard above does not short it).
             bind(None)
-            self._distance_map_volume = None
+            self._distance_map_volume = volume
             return
 
         # Hand the texture to the mapper's vtkSmartPointer and drop the

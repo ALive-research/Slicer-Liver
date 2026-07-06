@@ -125,6 +125,16 @@ class ResectogramPipeline(_PipelineBase):
         self._vascular_contour: Any | None = None
         self._representations_initialised = False
 
+        # The orchestrating ``vtkMRMLResectionPlanNode`` wrapper, reverse-
+        # resolved from the data node's ``geometry`` back-reference (ADR-0031;
+        # ADR-0014 §"Fourth layer"), so the flattened strip reads its distance-
+        # shading input set (distance map + margins) off the wrapper.  Mirrors
+        # LiverBezierSurfacePipeline.  The scan (``GetNodesByClass``) is gated on
+        # the scene MTime so a bare surface (no owning plan) does not re-scan on
+        # every render.
+        self._resection_node: Any | None = None
+        self._last_resection_scan_mtime: int | None = None
+
     # ------------------------------------------------------------------ #
     # LayerDM lifecycle overrides
     # ------------------------------------------------------------------ #
@@ -142,6 +152,9 @@ class ResectogramPipeline(_PipelineBase):
         self._reattach_node_observers()
 
         self._last_update_key = None
+        # Re-resolve the owning plan wrapper for the new data node (ADR-0031).
+        self._resection_node = None
+        self._last_resection_scan_mtime = None
 
     def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
         """Reconcile both Representations against the current node set.
@@ -165,6 +178,20 @@ class ResectogramPipeline(_PipelineBase):
         is the correct reactivity signal on both counts.
         """
         self._ensure_representations()
+
+        # Reverse-resolve the owning plan wrapper (scene-MTime-gated so a bare
+        # surface does not re-scan every render) and thread it into the
+        # flattened strip BEFORE the memo-key short-circuit, so the strip always
+        # holds the current wrapper reference (ADR-0031; mirror
+        # LiverBezierSurfacePipeline).  ``update()`` below then reads the
+        # distance-shading set off it when the geometry digest changes.
+        if self._resection_node is None and self._data_node is not None:
+            scene_mtime = _safe_get_scene_mtime(self._data_node)
+            if scene_mtime != self._last_resection_scan_mtime:
+                self._last_resection_scan_mtime = scene_mtime
+                self._resection_node = self._resolve_resection_node()
+        if self._flattened_surface is not None:
+            self._flattened_surface.SetResectionPlanNode(self._resection_node)
 
         key = _safe_get_control_points_digest(self._data_node)
         if key == self._last_update_key:
@@ -213,6 +240,14 @@ class ResectogramPipeline(_PipelineBase):
 
     def GetDataNode(self) -> Any | None:
         return self._data_node
+
+    def GetResectionNode(self) -> Any | None:  # noqa: N802 - VTK verb
+        """Return the reverse-resolved ``vtkMRMLResectionPlanNode`` wrapper.
+
+        ``None`` for a bare surface with no owning plan (the no-distance-map
+        fallback).  Resolved lazily in ``UpdatePipeline`` (ADR-0031).
+        """
+        return self._resection_node
 
     def GetFlattenedSurfaceRepresentation(self) -> Any | None:
         return self._flattened_surface
@@ -289,6 +324,42 @@ class ResectogramPipeline(_PipelineBase):
         self._vascular_contour = VascularContourRepresentation(renderer=renderer)
 
         self._representations_initialised = True
+
+    def _resolve_resection_node(self) -> Any | None:
+        """Reverse-resolve the ``vtkMRMLResectionPlanNode`` wrapper.
+
+        The plan wrapper references the surface carrier via the ``geometry``
+        role (ADR-0014 §"Fourth layer"); the Pipeline reverse-walks that to
+        adopt the wrapper, so it can thread the plan's distance-map + margins
+        (ADR-0031) onto the flattened strip without an external caller.  Scans
+        the scene for the plan whose ``GetGeometryNode()`` is our data node.
+        Returns ``None`` when no plan owns this data node (a bare surface — the
+        no-distance-map fallback).  Mirrors LiverBezierSurfacePipeline.
+        """
+        data_node = self._data_node
+        if data_node is None:
+            return None
+        scene = getattr(data_node, "GetScene", lambda: None)()
+        if scene is None:
+            return None
+        try:
+            plans = scene.GetNodesByClass("vtkMRMLResectionPlanNode")
+        except Exception:  # pragma: no cover - defensive
+            return None
+        if plans is None:
+            return None
+        plans.InitTraversal()
+        item = plans.GetNextItemAsObject()
+        while item is not None:
+            getter = getattr(item, "GetGeometryNode", None)
+            if getter is not None:
+                try:
+                    if getter() is data_node:
+                        return item
+                except Exception:  # pragma: no cover - defensive
+                    pass
+            item = plans.GetNextItemAsObject()
+        return None
 
     def _safe_get_renderer(self) -> Any | None:
         """Return ``self.GetRenderer()`` if available, else ``None``.
@@ -409,6 +480,25 @@ class ResectogramPipeline(_PipelineBase):
 # --------------------------------------------------------------------------- #
 # Safe accessors — tolerant of stub nodes that omit the markups accessors.
 # --------------------------------------------------------------------------- #
+
+
+def _safe_get_scene_mtime(node: Any) -> int | None:
+    """Return the MTime of ``node``'s scene, or ``None`` if unreachable.
+
+    Gates the plan reverse-resolution scan (``GetNodesByClass``) so a bare
+    surface with no owning plan does not re-scan on every render — the scan
+    re-runs only when the scene has changed since the last miss.
+    """
+    scene = getattr(node, "GetScene", lambda: None)() if node is not None else None
+    if scene is None:
+        return None
+    getter = getattr(scene, "GetMTime", None)
+    if getter is None:
+        return None
+    try:
+        return int(getter())
+    except Exception:  # pragma: no cover - defensive
+        return None
 
 
 def _safe_get_control_points_digest(node: Any) -> tuple:
