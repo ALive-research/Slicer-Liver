@@ -257,6 +257,41 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections;interaction"
     )
 
+    # #501 slice 3b -- DistanceSpheroid Init-mode PLACEMENT on the LayerDM
+    # Pipeline (ADR-0032: interaction routes through the Pipeline interaction
+    # seam, no standalone vtkAbstractWidget).  Same shape as slice 3a for the
+    # other init mode.  Pins the GL-free placement kernel
+    # _place_distance_spheroid_init_point -- in Init+DistanceSpheroid it fills
+    # the DYNAMICALLY-sized DistanceSpheroidInitPoints array in order (slot 0,
+    # 1, ... up to GetNumberOfDistanceSpheroidInitPoints()) via
+    # SetDistanceSpheroidInitPoint and returns the placed index, refusing a
+    # placement past capacity (invariants 1+2); it is a no-op returning None
+    # outside Init+DistanceSpheroid (Planning state / SlicingPlane mode,
+    # invariant 3, ADR-0019); and placement progress resets on SetDisplayNode so
+    # a fresh carrier restarts at index 0 (invariant 4).  Plus the
+    # ProcessInteractionEvent routing override dispatching Init+DistanceSpheroid
+    # -> placement (invariant 5), skip-pending behind a realized main-window view
+    # (display->world plus the camera-coupled centre/radii derivation need a
+    # renderer; the full routing is verified on the interactive :0 pass per
+    # ADR-0032 §Conformance).  Builds the plan/carrier/display triad via the
+    # merged logic create-API (CreateResectionPlan, slice 1) and sizes the
+    # spheroid array while in Init (the capacity setter is Init-guarded), so it
+    # runs green under the launched-Slicer `pytest_launched` row and SKIPS
+    # CLEANLY here under bare pytest (no slicer.mrmlScene / LayerDMLib /
+    # create-API).  RED / skip-pending until the implementer lands the placement
+    # kernel + the interaction dispatch (ADR-0027 §Conformance: the skip lifts at
+    # the implementation commit).
+    add_test(
+      NAME LiverResections_pipeline_distance_spheroid_init_placement
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_pipeline_distance_spheroid_init_placement.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_pipeline_distance_spheroid_init_placement PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;interaction"
+    )
+
     # T3-g3 -- auto-populate of the Stage-4 ResectionPlanningWidget (the Python
     # widget, ADR-0004; ADR-0023 §Stage-4).  Three invariants: (1) the drawer
     # auto-populates iff a vtkMRMLMarkupsBezierSurfaceNode is selected AND
