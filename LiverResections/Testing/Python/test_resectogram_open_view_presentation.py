@@ -204,25 +204,40 @@ def _resectogram_view_node(slicer):
     return view
 
 
-def _resectogram_display_nodes(bezier):
-    """Return the ``vtkMRMLResectogramDisplayNode``s referenced by ``bezier``."""
+def _display_host(plan):
+    """Return the node that carries the display nodes for ``plan``.
+
+    In the v2 node graph the display nodes (resectogram + parametric-surface
+    anatomy) live on the plan's CARRIER (``GetGeometryNode()``, ADR-0014
+    §"Fourth layer"), not the plan wrapper.  Fall back to the node itself if it
+    exposes no geometry node (defensive).
+    """
+    carrier = plan.GetGeometryNode() if hasattr(plan, "GetGeometryNode") else None
+    return carrier if carrier is not None else plan
+
+
+def _resectogram_display_nodes(plan):
+    """Return the ``vtkMRMLResectogramDisplayNode``s on the plan's carrier."""
+    host = _display_host(plan)
     nodes = []
-    for index in range(bezier.GetNumberOfDisplayNodes()):
-        display = bezier.GetNthDisplayNode(index)
+    for index in range(host.GetNumberOfDisplayNodes()):
+        display = host.GetNthDisplayNode(index)
         if display is not None and display.IsA(RESECTOGRAM_DISPLAY_CLASS):
             nodes.append(display)
     return nodes
 
 
-def _surface_anatomy_display_nodes(bezier):
-    """Return the surface's NON-resectogram display node(s).
+def _surface_anatomy_display_nodes(plan):
+    """Return the carrier's NON-resectogram display node(s).
 
-    These are the surface's own 3D-anatomy display nodes (the markups display
-    node etc.) that invariant B restricts AWAY from the resectogram view.
+    These are the carrier's own 3D-anatomy display nodes (the parametric-surface
+    display node) that invariant B restricts AWAY from the resectogram view
+    (ADR-0014 §"Fourth layer").
     """
+    host = _display_host(plan)
     nodes = []
-    for index in range(bezier.GetNumberOfDisplayNodes()):
-        display = bezier.GetNthDisplayNode(index)
+    for index in range(host.GetNumberOfDisplayNodes()):
+        display = host.GetNthDisplayNode(index)
         if display is not None and not display.IsA(RESECTOGRAM_DISPLAY_CLASS):
             nodes.append(display)
     return nodes

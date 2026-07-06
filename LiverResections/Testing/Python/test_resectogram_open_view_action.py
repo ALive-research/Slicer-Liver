@@ -1,47 +1,48 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 
-"""T3-g3 -- auto-populated resectogram drawer on the LiverResections widget.
+"""T3-g3 / #501 slice 4 -- auto-populated resectogram drawer, v2 node graph.
 
 LiverResections is a loadable (C++) module that, until T3-g3, shipped NO widget
 representation (``qSlicerLiverResectionsModule::createWidgetRepresentation()``
 returned ``nullptr``).  T3-g3 adds the module's FIRST GUI -- the ADR-0023
 §Stage-4 "Resection Planning" surface that ``Liver/Liver.py`` composes via
-``LiverResections.widgetRepresentation()`` -- carrying:
+``LiverResections.widgetRepresentation()``.  #501 slice 4 re-points that surface
+off the v1 markups node onto the v2 resection-plan node graph (ADR-0014 §"Fourth
+layer" wrapper/carrier split), so this file's fixtures build + select the v2
+wrapper.  The widget carries:
 
-  * a ``qMRMLNodeComboBox`` of ``vtkMRMLMarkupsBezierSurfaceNode`` (the node
-    the merged resectogram render stack reads -- NOT the
-    ``vtkMRMLBezierSurfaceNode`` carrier) that selects the *active* resection,
-    and
+  * a ``qMRMLNodeComboBox`` of ``vtkMRMLResectionPlanNode`` (the v2 WRAPPER, NOT
+    the v1 ``vtkMRMLMarkupsBezierSurfaceNode``) that selects the *active*
+    resection, and
   * a collapsible "Resectogram" drawer that AUTO-POPULATES (no click) when the
-    selected surface carries a distance map, and shows an explanatory HINT
-    otherwise.
+    selected plan's WRAPPER carries a distance map, and shows an explanatory
+    HINT otherwise.
 
-The TRIGGER is the SELECTION: setting the combo box to a valid surface (no
+The TRIGGER is the SELECTION: setting the combo box to a valid plan (no
 explicit [Open] button; the maintainer removed it -- the drawer auto-populates
-on selection AND when a distance map appears on the already-selected surface).
+on selection AND when a distance map appears on the already-selected plan).
 
 Three pinned invariants (all MRML/widget-state -- GPU-free, runnable in a
 minimal ``qSlicerApplication`` without a GL view; the strip RENDERING is out
 of g3 scope and is the orchestrator's eyeball pass, not asserted here):
 
   1. AUTO-POPULATE PREDICATE (the load-bearing invariant).  The drawer
-     populates iff a Bezier surface is selected AND
-     ``selectedNode->GetDistanceMapVolumeNode() != nullptr``
-     (vtkMRMLMarkupsBezierSurfaceNode.h line 91).  Otherwise the drawer shows a
+     populates iff a plan is selected AND
+     ``plan->GetDistanceMapVolumeNode() != nullptr`` -- the distance map lives
+     on the WRAPPER (ADR-0031), not the carrier.  Otherwise the drawer shows a
      non-empty HINT instead of the view (ADR-0009 §explainable state).
      STATE-ORTHOGONAL: the predicate does NOT read the ADR-0019 ResectionState
-     -- a Planning *or* Confirmed surface with a distance map populates.
+     -- a Planning *or* Confirmed plan with a distance map populates.
 
-  2. SINGLE DISPLAY NODE ON SELECTION.  Selecting a valid surface ensures
-     EXACTLY ONE ``vtkMRMLResectogramDisplayNode`` on it
-     (``AddAndObserveDisplayNodeID`` when none present); re-selecting reuses it
-     (idempotent -- no second display node).  This is net-new production
-     behaviour: today only the ``Resectogram4x4BlurOff`` scenario builder
-     attaches the display node
-     (scenarios/Resectogram4x4BlurOff.py ``_attach_resectogram_display_node``).
+  2. SINGLE DISPLAY NODE ON SELECTION.  Selecting a valid plan ensures
+     EXACTLY ONE ``vtkMRMLResectogramDisplayNode`` on the plan's CARRIER
+     (``plan.GetGeometryNode()``, a ``vtkMRMLBezierSurfaceNode``; ADR-0014
+     §"Fourth layer"), NOT on the wrapper (``AddAndObserveDisplayNodeID`` when
+     none present); re-selecting reuses it (idempotent -- no second display
+     node).
 
-  3. VIEW-NODE IDEMPOTENCY.  Selecting a valid surface ensures the singleton
+  3. VIEW-NODE IDEMPOTENCY.  Selecting a valid plan ensures the singleton
      resectogram view node via ``ResectogramViewManager.ensureViewNode()``
      (LiverResectionsLib/ResectogramViewManager.py); re-selecting reuses it
      -- no second ``vtkMRMLViewNode`` carrying RESECTOGRAM_VIEW_SINGLETON_TAG.
@@ -83,16 +84,16 @@ down minted nodes so the launched harness does not trip ``vtkDebugLeaks``.
   * ``LiverResectionsLib.ResectionPlanningWidget`` -- the Python Stage-4 widget
     (ADR-0004); composed by ``Liver/Liver.py`` for stage 3.
   * objectName ``"ResectionSurfaceComboBox"`` -- the
-    ``qMRMLNodeComboBox`` of ``vtkMRMLMarkupsBezierSurfaceNode`` selecting the
-    active resection.
+    ``qMRMLNodeComboBox`` of ``vtkMRMLResectionPlanNode`` (the v2 wrapper)
+    selecting the active resection.
   * objectName ``"ResectogramDrawer"`` -- the collapsible "Resectogram" drawer
     that auto-populates with the embedded view (or shows the hint).
   * objectName ``"ResectogramHintLabel"`` -- the hint shown in the drawer when
     no valid resectogram is available (ADR-0009 §"explainable state").  Its
     text is non-empty and it is VISIBLE iff the drawer is NOT populated.
-  * Selecting a valid surface (combo ``setCurrentNode``) is the TRIGGER: it
-    keys the display-node-ensure entry point on the selected
-    ``vtkMRMLMarkupsBezierSurfaceNode`` and calls
+  * Selecting a valid plan (combo ``setCurrentNode``) is the TRIGGER: it keys
+    the display-node-ensure entry point on the selected plan's CARRIER
+    (``plan.GetGeometryNode()``) and calls
     ``ResectogramViewManager.ensureViewNode()`` once.
 
 If the implementer cannot expose stable objectNames, a thin Python-accessible
@@ -106,12 +107,15 @@ See also:
   * Docs/adr/0023-unified-gui-stage-workflow.md §Stage-4 (the GUI surface)
   * Docs/adr/0013-layerdm-pipeline-pattern.md §5 (no custom DM)
   * Docs/adr/0009-ux-and-design-discipline.md (explainable state)
-  * LiverMarkups/MRML/vtkMRMLMarkupsBezierSurfaceNode.h line 91
-    (GetDistanceMapVolumeNode)
+  * Docs/adr/0014-livermarkups-dissolution.md §"Fourth layer" (wrapper/carrier)
+  * Docs/adr/0031-distance-map-on-resection-plan-wrapper.md (distance map on the
+    WRAPPER; the auto-populate predicate reads it there)
+  * Docs/adr/0019-resection-state-machine.md (plan state; predicate is
+    state-orthogonal)
   * LiverResections/LiverResectionsLib/ResectogramViewManager.py
     (ensureViewNode singleton-by-tag)
-  * LiverResections/Testing/Python/scenarios/Resectogram4x4BlurOff.py
-    (surface-with-distance-map fixture builders reused below)
+  * LiverResections/Testing/Python/test_resection_planning_widget_v2_repoint.py
+    (the v2 re-point invariants; the fixture idioms reused below)
 """
 
 from __future__ import annotations
@@ -119,7 +123,10 @@ from __future__ import annotations
 import pytest
 
 MODULE_NAME = "liverresections"
-BEZIER_SURFACE_CLASS = "vtkMRMLMarkupsBezierSurfaceNode"
+# #501 slice 4: the combo + fixtures now build/select the v2 plan WRAPPER; the
+# resectogram display node lands on its CARRIER (ADR-0014 §"Fourth layer").
+PLAN_NODE_CLASS = "vtkMRMLResectionPlanNode"
+BEZIER_CARRIER_CLASS = "vtkMRMLBezierSurfaceNode"
 RESECTOGRAM_DISPLAY_CLASS = "vtkMRMLResectogramDisplayNode"
 VIEW_NODE_CLASS = "vtkMRMLViewNode"
 
@@ -282,17 +289,18 @@ def _widget_or_skip(slicer):
     return register_widget_for_teardown(widget)
 
 
-def _accessor_or_skip(bezier):
-    """Skip unless the Bezier surface exposes ``GetDistanceMapVolumeNode``.
+def _accessor_or_skip(plan):
+    """Skip unless the plan WRAPPER exposes ``GetDistanceMapVolumeNode``.
 
-    The gate reads this accessor (vtkMRMLMarkupsBezierSurfaceNode.h line 91);
-    if the Python wrapping does not surface it, the gate cannot be exercised.
+    #501 slice 4: the gate reads the distance map off the WRAPPER (ADR-0031),
+    not off the carrier surface.  If the Python wrapping does not surface the
+    accessor, the gate cannot be exercised -- skip cleanly.
     """
-    if not hasattr(bezier, "GetDistanceMapVolumeNode"):
+    if not hasattr(plan, "GetDistanceMapVolumeNode"):
         pytest.skip(
-            f"{BEZIER_SURFACE_CLASS} exposes no GetDistanceMapVolumeNode() in "
-            "this build -- the T3-g3 gating predicate (ADR-0023 §Stage-4) "
-            "cannot be evaluated."
+            f"{PLAN_NODE_CLASS} exposes no GetDistanceMapVolumeNode() in this "
+            "build -- the ADR-0031 distance-map-on-wrapper gating predicate "
+            "(ADR-0023 §Stage-4) cannot be evaluated."
         )
 
 
@@ -397,11 +405,19 @@ def _require_populated_or_skip(hint):
         )
 
 
-def _count_resectogram_display_nodes(slicer, bezier):
-    """Count ``vtkMRMLResectogramDisplayNode``s referenced by ``bezier``."""
+def _count_resectogram_display_nodes(slicer, plan):
+    """Count ``vtkMRMLResectogramDisplayNode``s on the plan's CARRIER.
+
+    #501 slice 4: the resectogram display node attaches to the carrier
+    (``plan.GetGeometryNode()``, a ``vtkMRMLBezierSurfaceNode``), NOT the
+    wrapper (ADR-0014 §"Fourth layer").
+    """
+    carrier = plan.GetGeometryNode()
+    if carrier is None:
+        return 0
     count = 0
-    for index in range(bezier.GetNumberOfDisplayNodes()):
-        display = bezier.GetNthDisplayNode(index)
+    for index in range(carrier.GetNumberOfDisplayNodes()):
+        display = carrier.GetNthDisplayNode(index)
         if display is not None and display.IsA(RESECTOGRAM_DISPLAY_CLASS):
             count += 1
     return count
@@ -430,58 +446,96 @@ def _count_singleton_view_nodes(slicer):
 
 
 # --------------------------------------------------------------------------- #
-# Fixture builders -- reuse the Resectogram4x4BlurOff scenario, plus a
-# no-distance-map variant for the disabled-gate case.
+# Fixture builders -- mint a v2 resection plan via the logic create-API
+# (#501 slice 1), with / without a distance map on the WRAPPER (ADR-0031).
+# Mirrors ``test_resection_planning_widget_v2_repoint._make_plan_or_skip``.
 # --------------------------------------------------------------------------- #
 
 
-def _make_surface_with_distance_map(slicer):
-    """Build a Bezier surface WITH a distance map (gate-satisfied fixture).
+def _resection_logic_or_skip(slicer):
+    """Return the resection logic with the create-API, or skip cleanly.
 
-    Reuses the ``Resectogram4x4BlurOff`` scenario builders so the fixture
-    matches the production render inputs.  Returns the markups Bezier node;
-    the distance map is attached via ``SetDistanceMapVolumeNode`` inside the
-    builder so ``GetDistanceMapVolumeNode()`` is non-null.
+    The plan/carrier/display triad is minted via the merged
+    ``CreateResectionPlan`` (#501 slice 1); skip cleanly if the module / logic /
+    create-API is not reachable in this build (never fail).
     """
-    from scenarios import Resectogram4x4BlurOff as scn  # type: ignore[import-not-found]
+    module = _module_or_skip(slicer)
+    logic = module.logic()
+    if logic is None:
+        pytest.skip("liverresections module has no logic singleton.")
+    if not hasattr(logic, "CreateResectionPlan"):
+        pytest.skip(
+            "vtkSlicerLiverResectionsLogic has no CreateResectionPlan -- the "
+            "create-API (#501 slice 1) is not in this build."
+        )
+    return logic
 
-    slicer.modules.liverresections.logic()
-    distance_map = scn._make_parenchyma_distance_map(
-        sphere_center=scn.SPHERE_CENTER,
-        sphere_radius=scn.SPHERE_RADIUS,
-    )
-    bezier = scn._build_resectogram_bezier(
-        half_extent_u=scn.PATCH_HALF_EXTENT_U,
-        half_extent_v=scn.PATCH_HALF_EXTENT_V,
-        enable_flexible_boundary=scn.ENABLE_FLEXIBLE_BOUNDARY,
-        distance_map=distance_map,
-    )
-    return bezier
+
+def _make_plan_or_skip(slicer, name, with_distance_map):
+    """Mint a v2 resection plan (``vtkMRMLResectionPlanNode`` wrapper).
+
+    When ``with_distance_map`` is True, attaches a scalar volume as the distance
+    map on the WRAPPER (ADR-0031); otherwise leaves
+    ``GetDistanceMapVolumeNode()`` null so the negative auto-populate branch is
+    exercised.  Skips cleanly (never fails) when the create-API / node API is
+    absent, mirroring the v2 re-point reference test.
+    """
+    logic = _resection_logic_or_skip(slicer)
+    plan = logic.CreateResectionPlan(name)
+    if plan is None or not plan.IsA(PLAN_NODE_CLASS):
+        pytest.skip(
+            "CreateResectionPlan did not return a vtkMRMLResectionPlanNode -- "
+            "cannot exercise the #501 slice-4 re-point."
+        )
+    for method in ("GetGeometryNode", "GetDistanceMapVolumeNode"):
+        if not hasattr(plan, method):
+            pytest.skip(
+                f"{PLAN_NODE_CLASS} exposes no {method}() in this build -- the "
+                "ADR-0031 distance-map-on-wrapper API is not wrapped."
+            )
+    if with_distance_map:
+        if not hasattr(plan, "SetAndObserveDistanceMapVolumeNode"):
+            pytest.skip(
+                f"{PLAN_NODE_CLASS} has no SetAndObserveDistanceMapVolumeNode -- "
+                "cannot attach the distance map on the wrapper (ADR-0031)."
+            )
+        volume = slicer.mrmlScene.AddNewNodeByClass(
+            "vtkMRMLScalarVolumeNode", f"{name}DistanceMap"
+        )
+        if volume is None:
+            pytest.skip(
+                "vtkMRMLScalarVolumeNode not registered -- cannot attach a "
+                "distance map on the wrapper."
+            )
+        plan.SetAndObserveDistanceMapVolumeNode(volume)
+        if plan.GetDistanceMapVolumeNode() is None:
+            pytest.skip(
+                "distance map did not attach to the wrapper -- cannot exercise "
+                "the positive auto-populate branch (ADR-0031)."
+            )
+    return plan
+
+
+def _make_surface_with_distance_map(slicer):
+    """Mint a plan WITH a distance map on the WRAPPER (gate-satisfied fixture).
+
+    #501 slice 4: builds the v2 wrapper via ``CreateResectionPlan`` and attaches
+    the distance map on the wrapper (ADR-0031) so
+    ``plan.GetDistanceMapVolumeNode()`` is non-null.  Returns the plan wrapper.
+    """
+    return _make_plan_or_skip(slicer, "GateTestPlanDistanceMap", with_distance_map=True)
 
 
 def _make_surface_without_distance_map(slicer):
-    """Build a Bezier surface with NO distance map (gate-disabled fixture).
+    """Mint a plan with NO distance map on the WRAPPER (gate-disabled fixture).
 
-    Same control-point footprint as the gate-satisfied fixture but
-    ``SetDistanceMapVolumeNode`` is never called, so
-    ``GetDistanceMapVolumeNode()`` is null and the gate must DISABLE the
-    action (ADR-0023 §Stage-4 gating predicate).
+    #501 slice 4: the wrapper's ``GetDistanceMapVolumeNode()`` is left null, so
+    the gate must DISABLE the action (ADR-0031, ADR-0023 §Stage-4 gating
+    predicate).  Returns the plan wrapper.
     """
-    import vtk  # type: ignore[import-not-found]
-
-    slicer.modules.liverresections.logic()
-    bezier = slicer.mrmlScene.AddNewNodeByClass(
-        BEZIER_SURFACE_CLASS, "GateTestBezierNoDistanceMap"
+    return _make_plan_or_skip(
+        slicer, "GateTestPlanNoDistanceMap", with_distance_map=False
     )
-    if bezier is None:
-        pytest.skip(
-            f"{BEZIER_SURFACE_CLASS} not registered in this build -- "
-            "cannot exercise the T3-g3 gate."
-        )
-    for _ in range(16):
-        bezier.AddControlPoint(vtk.vtkVector3d(0.0, 0.0, 0.0))
-    bezier.CreateDefaultDisplayNodes()
-    return bezier
 
 
 # --------------------------------------------------------------------------- #
@@ -544,34 +598,33 @@ def test_hint_shown_when_no_surface_selected():
 
 
 def test_hint_shown_when_surface_has_no_distance_map():
-    """Surface selected but no distance map => the drawer shows the hint.
+    """Plan selected but WRAPPER has no distance map => the drawer shows the hint.
 
-    ADR-0023 §Stage-4 auto-populate predicate: populates iff a surface is
-    selected AND ``GetDistanceMapVolumeNode() != nullptr``
-    (vtkMRMLMarkupsBezierSurfaceNode.h line 91).  A surface without a distance
-    map keeps the hint up -- the merged resectogram stack has nothing to
-    sample.
+    ADR-0023 §Stage-4 auto-populate predicate: populates iff a plan is selected
+    AND ``plan.GetDistanceMapVolumeNode() != nullptr`` -- read off the WRAPPER
+    (ADR-0031).  A plan without a distance map keeps the hint up -- the merged
+    resectogram stack has nothing to sample.
     """
     slicer = _slicer_or_skip()
     slicer.mrmlScene.Clear(0)
     widget = _widget_or_skip(slicer)
     combo, hint = _require_widget_chrome_or_skip(widget)
 
-    bezier = _make_surface_without_distance_map(slicer)
-    _accessor_or_skip(bezier)
-    assert bezier.GetDistanceMapVolumeNode() is None  # fixture sanity
+    plan = _make_surface_without_distance_map(slicer)
+    _accessor_or_skip(plan)
+    assert plan.GetDistanceMapVolumeNode() is None  # fixture sanity
 
-    if not _select_active_resection(widget, combo, bezier):
+    if not _select_active_resection(widget, combo, plan):
         pytest.skip(
             "cannot select the active resection (implementer contract: "
             "setActiveResectionNode / combo.setCurrentNode)."
         )
 
     assert not hint.isHidden(), (
-        "the resectogram drawer hint must be SHOWN when the selected surface "
-        "has no distance map (GetDistanceMapVolumeNode() is None) -- "
-        "ADR-0023 §Stage-4, ADR-0009 §explainable state.  Checked via "
-        "isHidden() not visible (see test_hint_shown_when_no_surface_selected)."
+        "the resectogram drawer hint must be SHOWN when the selected plan's "
+        "WRAPPER has no distance map (plan.GetDistanceMapVolumeNode() is None) "
+        "-- ADR-0031, ADR-0023 §Stage-4, ADR-0009 §explainable state.  Checked "
+        "via isHidden() not visible (see test_hint_shown_when_no_surface_selected)."
     )
     assert hint.text, (
         "the resectogram drawer hint must carry non-empty text explaining the "
@@ -580,35 +633,36 @@ def test_hint_shown_when_surface_has_no_distance_map():
 
 
 def test_hint_hidden_when_surface_has_distance_map():
-    """Surface with a distance map selected => the drawer hint is HIDDEN.
+    """Plan whose WRAPPER carries a distance map => the drawer hint is HIDDEN.
 
     ADR-0023 §Stage-4 auto-populate predicate: the positive branch -- the
-    drawer populates (shows the view), so the hint is hidden.  State-ORTHOGONAL
-    -- the predicate does NOT read ADR-0019 ResectionState, so a distance-mapped
-    surface populates regardless of Planning/Confirmed state.  GPU-free: pins
-    the hint visibility, not the GL render.
+    drawer populates (shows the view), so the hint is hidden.  The distance map
+    is read off the WRAPPER (ADR-0031).  State-ORTHOGONAL -- the predicate does
+    NOT read ADR-0019 ResectionState, so a distance-mapped plan populates
+    regardless of Planning/Confirmed state.  GPU-free: pins the hint visibility,
+    not the GL render.
     """
     slicer = _slicer_or_skip()
     slicer.mrmlScene.Clear(0)
     widget = _widget_or_skip(slicer)
     combo, hint = _require_widget_chrome_or_skip(widget)
 
-    bezier = _make_surface_with_distance_map(slicer)
-    _accessor_or_skip(bezier)
-    assert bezier.GetDistanceMapVolumeNode() is not None  # fixture sanity
+    plan = _make_surface_with_distance_map(slicer)
+    _accessor_or_skip(plan)
+    assert plan.GetDistanceMapVolumeNode() is not None  # fixture sanity
 
-    if not _select_active_resection(widget, combo, bezier):
+    if not _select_active_resection(widget, combo, plan):
         pytest.skip(
             "cannot select the active resection (implementer contract: "
             "setActiveResectionNode / combo.setCurrentNode)."
         )
 
     assert hint.isHidden(), (
-        "the resectogram drawer hint must be HIDDEN when a Bezier surface WITH "
-        "a distance map is selected -- the drawer auto-populates the view in "
-        "its place (ADR-0023 §Stage-4 auto-populate predicate, positive "
-        "branch).  Checked via isHidden(): the ensure + hint-hide run headless; "
-        "the GL embed itself is gated to the main-window eyeball pass."
+        "the resectogram drawer hint must be HIDDEN when the selected plan's "
+        "WRAPPER carries a distance map -- the drawer auto-populates the view "
+        "in its place (ADR-0031, ADR-0023 §Stage-4 auto-populate predicate, "
+        "positive branch).  Checked via isHidden(): the ensure + hint-hide run "
+        "headless; the GL embed itself is gated to the main-window eyeball pass."
     )
 
 
@@ -618,61 +672,63 @@ def test_hint_hidden_when_surface_has_distance_map():
 
 
 def test_trigger_ensures_exactly_one_resectogram_display_node():
-    """Triggering ensures EXACTLY ONE resectogram display node on the surface.
+    """Triggering ensures EXACTLY ONE resectogram display node on the CARRIER.
 
     ADR-0023 §Stage-4 click action: ensure a ``vtkMRMLResectogramDisplayNode``
-    on the selected surface (``AddAndObserveDisplayNodeID`` if none present).
-    The surface starts with no resectogram display node; one trigger creates
-    exactly one.  Net-new production behaviour (today only the
-    Resectogram4x4BlurOff scenario attaches it).
+    on the selected plan's CARRIER (``plan.GetGeometryNode()``; ADR-0014
+    §"Fourth layer") -- ``AddAndObserveDisplayNodeID`` if none present.  The
+    carrier starts with no resectogram display node; one trigger creates
+    exactly one.
     """
     slicer = _slicer_or_skip()
     slicer.mrmlScene.Clear(0)
     widget = _widget_or_skip(slicer)
     combo, hint = _require_widget_chrome_or_skip(widget)
 
-    bezier = _make_surface_with_distance_map(slicer)
-    _accessor_or_skip(bezier)
-    assert _count_resectogram_display_nodes(slicer, bezier) == 0  # fixture sanity
+    plan = _make_surface_with_distance_map(slicer)
+    _accessor_or_skip(plan)
+    assert _count_resectogram_display_nodes(slicer, plan) == 0  # fixture sanity
 
-    if not _select_active_resection(widget, combo, bezier):
+    if not _select_active_resection(widget, combo, plan):
         pytest.skip(
             "cannot select the active resection (implementer contract)."
         )
     _require_populated_or_skip(hint)
 
-    assert _count_resectogram_display_nodes(slicer, bezier) == 1, (
-        "selecting a distance-mapped surface must ensure EXACTLY ONE "
-        f"{RESECTOGRAM_DISPLAY_CLASS} on it "
-        "(AddAndObserveDisplayNodeID when none present) -- ADR-0023 §Stage-4."
+    assert _count_resectogram_display_nodes(slicer, plan) == 1, (
+        "selecting a distance-mapped plan must ensure EXACTLY ONE "
+        f"{RESECTOGRAM_DISPLAY_CLASS} on its CARRIER (plan.GetGeometryNode(), a "
+        f"{BEZIER_CARRIER_CLASS}) -- AddAndObserveDisplayNodeID when none "
+        "present; ADR-0023 §Stage-4, ADR-0014 §\"Fourth layer\"."
     )
 
 
 def test_reselect_reuses_display_node_no_duplicate():
     """Re-selecting does NOT create a second resectogram display node.
 
-    ADR-0023 §Stage-4: the ensure step is idempotent -- a surface that already
-    carries a ``vtkMRMLResectogramDisplayNode`` is reused, not duplicated.
+    ADR-0023 §Stage-4: the ensure step is idempotent -- a carrier that already
+    carries a ``vtkMRMLResectogramDisplayNode`` is reused, not duplicated
+    (ADR-0014 §"Fourth layer").
     """
     slicer = _slicer_or_skip()
     slicer.mrmlScene.Clear(0)
     widget = _widget_or_skip(slicer)
     combo, hint = _require_widget_chrome_or_skip(widget)
 
-    bezier = _make_surface_with_distance_map(slicer)
-    _accessor_or_skip(bezier)
-    if not _select_active_resection(widget, combo, bezier):
+    plan = _make_surface_with_distance_map(slicer)
+    _accessor_or_skip(plan)
+    if not _select_active_resection(widget, combo, plan):
         pytest.skip(
             "cannot select the active resection (implementer contract)."
         )
     _require_populated_or_skip(hint)
-    first_count = _count_resectogram_display_nodes(slicer, bezier)
+    first_count = _count_resectogram_display_nodes(slicer, plan)
 
-    # Re-select the SAME surface (clear then re-select) to re-run the ensure
-    # path and prove idempotency.
+    # Re-select the SAME plan (clear then re-select) to re-run the ensure path
+    # and prove idempotency.
     _select_active_resection(widget, combo, None)
-    _select_active_resection(widget, combo, bezier)
-    second_count = _count_resectogram_display_nodes(slicer, bezier)
+    _select_active_resection(widget, combo, plan)
+    second_count = _count_resectogram_display_nodes(slicer, plan)
 
     assert first_count == 1, (
         "first selection must leave exactly one resectogram display node "
@@ -703,18 +759,18 @@ def test_selection_ensures_singleton_resectogram_view_node():
     widget = _widget_or_skip(slicer)
     combo, hint = _require_widget_chrome_or_skip(widget)
 
-    bezier = _make_surface_with_distance_map(slicer)
-    _accessor_or_skip(bezier)
+    plan = _make_surface_with_distance_map(slicer)
+    _accessor_or_skip(plan)
     assert _count_singleton_view_nodes(slicer) == 0  # fixture sanity
 
-    if not _select_active_resection(widget, combo, bezier):
+    if not _select_active_resection(widget, combo, plan):
         pytest.skip(
             "cannot select the active resection (implementer contract)."
         )
     _require_populated_or_skip(hint)
 
     assert _count_singleton_view_nodes(slicer) == 1, (
-        "selecting a distance-mapped surface must ensure exactly one "
+        "selecting a distance-mapped plan must ensure exactly one "
         "resectogram-tagged vtkMRMLViewNode via "
         "ResectogramViewManager.ensureViewNode() -- ADR-0023 §Stage-4."
     )
@@ -732,9 +788,9 @@ def test_reselect_reuses_view_node_no_duplicate():
     widget = _widget_or_skip(slicer)
     combo, hint = _require_widget_chrome_or_skip(widget)
 
-    bezier = _make_surface_with_distance_map(slicer)
-    _accessor_or_skip(bezier)
-    if not _select_active_resection(widget, combo, bezier):
+    plan = _make_surface_with_distance_map(slicer)
+    _accessor_or_skip(plan)
+    if not _select_active_resection(widget, combo, plan):
         pytest.skip(
             "cannot select the active resection (implementer contract)."
         )
@@ -742,7 +798,7 @@ def test_reselect_reuses_view_node_no_duplicate():
     first_count = _count_singleton_view_nodes(slicer)
 
     _select_active_resection(widget, combo, None)
-    _select_active_resection(widget, combo, bezier)
+    _select_active_resection(widget, combo, plan)
     second_count = _count_singleton_view_nodes(slicer)
 
     assert first_count == 1, (
@@ -820,9 +876,9 @@ def test_selection_embeds_three_d_widget_bound_to_singleton_view_node():
     widget = _widget_or_skip(slicer)
     combo, hint = _require_widget_chrome_or_skip(widget)
 
-    bezier = _make_surface_with_distance_map(slicer)
-    _accessor_or_skip(bezier)
-    if not _select_active_resection(widget, combo, bezier):
+    plan = _make_surface_with_distance_map(slicer)
+    _accessor_or_skip(plan)
+    if not _select_active_resection(widget, combo, plan):
         pytest.skip("cannot select the active resection (implementer contract).")
     _require_populated_or_skip(hint)
 
@@ -862,15 +918,15 @@ def test_reselect_reuses_three_d_widget_no_duplicate():
     widget = _widget_or_skip(slicer)
     combo, hint = _require_widget_chrome_or_skip(widget)
 
-    bezier = _make_surface_with_distance_map(slicer)
-    _accessor_or_skip(bezier)
-    if not _select_active_resection(widget, combo, bezier):
+    plan = _make_surface_with_distance_map(slicer)
+    _accessor_or_skip(plan)
+    if not _select_active_resection(widget, combo, plan):
         pytest.skip("cannot select the active resection (implementer contract).")
     _require_populated_or_skip(hint)
     first_count = len(_resectogram_three_d_widgets(slicer, widget))
 
     _select_active_resection(widget, combo, None)
-    _select_active_resection(widget, combo, bezier)
+    _select_active_resection(widget, combo, plan)
     second_count = len(_resectogram_three_d_widgets(slicer, widget))
 
     assert first_count == 1, (
