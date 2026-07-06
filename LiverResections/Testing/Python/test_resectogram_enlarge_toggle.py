@@ -31,9 +31,13 @@ exercised on the interactive ``:0`` eyeball pass (#460 explicit-skip lesson).
 
 See also:
   * Docs/adr/0023-unified-gui-stage-workflow.md §Stage-4
+  * Docs/adr/0014-livermarkups-dissolution.md §"Fourth layer" (wrapper/carrier)
+  * Docs/adr/0031-distance-map-on-resection-plan-wrapper.md (distance map on the
+    WRAPPER; the fixture attaches it there)
   * Docs/adr/0013-layerdm-pipeline-pattern.md §5 (no custom DM)
   * test_resectogram_open_view_action.py (the auto-populate invariants reused
-    here via the shared scenario builder)
+    here via the shared v2-plan fixture builder)
+  * test_resection_planning_widget_v2_repoint.py (the v2 re-point idioms)
 """
 
 from __future__ import annotations
@@ -41,7 +45,10 @@ from __future__ import annotations
 import pytest
 
 MODULE_NAME = "liverresections"
-BEZIER_SURFACE_CLASS = "vtkMRMLMarkupsBezierSurfaceNode"
+# #501 slice 4: the enlarge/restore invariants are node-model-agnostic (they
+# assert on the embedded qMRMLThreeDWidget reparenting); only the fixture the
+# combo selects changes -- the v2 plan WRAPPER (ADR-0014 §"Fourth layer").
+PLAN_NODE_CLASS = "vtkMRMLResectionPlanNode"
 VIEW_NODE_CLASS = "vtkMRMLViewNode"
 COMBO_BOX_OBJECT_NAME = "ResectionSurfaceComboBox"
 
@@ -153,34 +160,66 @@ def _enlarge_api_or_skip(widget):
         )
 
 
-def _select(widget, slicer, bezier):
+def _select(widget, slicer, plan):
     setter = getattr(widget, "setActiveResectionNode", None)
     if callable(setter):
-        setter(bezier)
+        setter(plan)
         return True
     import qt  # type: ignore[import-not-found]
 
     combo = widget.findChild(qt.QWidget, COMBO_BOX_OBJECT_NAME)
     if combo is not None and hasattr(combo, "setCurrentNode"):
-        combo.setCurrentNode(bezier)
+        combo.setCurrentNode(plan)
         return True
     return False
 
 
 def _make_surface_with_distance_map(slicer):
-    from scenarios import Resectogram4x4BlurOff as scn  # type: ignore[import-not-found]
+    """Mint a v2 resection plan WITH a distance map on the WRAPPER (ADR-0031).
 
-    slicer.modules.liverresections.logic()
-    distance_map = scn._make_parenchyma_distance_map(
-        sphere_center=scn.SPHERE_CENTER,
-        sphere_radius=scn.SPHERE_RADIUS,
+    #501 slice 4: builds the wrapper via the logic create-API
+    (``CreateResectionPlan``, #501 slice 1) and attaches the distance map on the
+    WRAPPER; skips cleanly (never fails) when the create-API / node API is
+    absent, mirroring ``test_resection_planning_widget_v2_repoint._make_plan_or_skip``.
+    Returns the ``vtkMRMLResectionPlanNode`` wrapper.
+    """
+    module = getattr(slicer.modules, MODULE_NAME, None)
+    if module is None:
+        pytest.skip(f"'{MODULE_NAME}' module not registered.")
+    logic = module.logic()
+    if logic is None or not hasattr(logic, "CreateResectionPlan"):
+        pytest.skip(
+            "vtkSlicerLiverResectionsLogic has no CreateResectionPlan -- the "
+            "create-API (#501 slice 1) is not in this build."
+        )
+    plan = logic.CreateResectionPlan("EnlargeTogglePlan")
+    if plan is None or not plan.IsA(PLAN_NODE_CLASS):
+        pytest.skip(
+            "CreateResectionPlan did not return a vtkMRMLResectionPlanNode -- "
+            "cannot exercise the #501 slice-4 re-point."
+        )
+    if not hasattr(plan, "SetAndObserveDistanceMapVolumeNode") or not hasattr(
+        plan, "GetDistanceMapVolumeNode"
+    ):
+        pytest.skip(
+            f"{PLAN_NODE_CLASS} has no distance-map-on-wrapper API (ADR-0031) -- "
+            "cannot make the plan populate-ready."
+        )
+    volume = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLScalarVolumeNode", "EnlargeTogglePlanDistanceMap"
     )
-    return scn._build_resectogram_bezier(
-        half_extent_u=scn.PATCH_HALF_EXTENT_U,
-        half_extent_v=scn.PATCH_HALF_EXTENT_V,
-        enable_flexible_boundary=scn.ENABLE_FLEXIBLE_BOUNDARY,
-        distance_map=distance_map,
-    )
+    if volume is None:
+        pytest.skip(
+            "vtkMRMLScalarVolumeNode not registered -- cannot attach a distance "
+            "map on the wrapper."
+        )
+    plan.SetAndObserveDistanceMapVolumeNode(volume)
+    if plan.GetDistanceMapVolumeNode() is None:
+        pytest.skip(
+            "distance map did not attach to the wrapper -- cannot exercise the "
+            "positive auto-populate branch (ADR-0031)."
+        )
+    return plan
 
 
 def _embedded_three_d_widgets(slicer, widget):
@@ -211,8 +250,8 @@ def _setup_populated(slicer):
     rep = widget
     self = rep.self() if hasattr(rep, "self") else rep
     _enlarge_api_or_skip(self)
-    bezier = _make_surface_with_distance_map(slicer)
-    if not _select(self, slicer, bezier):
+    plan = _make_surface_with_distance_map(slicer)
+    if not _select(self, slicer, plan):
         pytest.skip("cannot select the active resection (implementer contract).")
     # Drawer must have populated the embedded widget.
     embedded = _embedded_three_d_widgets(slicer, rep)

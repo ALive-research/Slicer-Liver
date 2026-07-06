@@ -10,13 +10,16 @@ its wrapped C++ nodes/logic directly -- no ``executeString`` string bridge.
 The behaviour mirrors the retired C++ ``qSlicerLiverResectionsModuleWidget``
 faithfully:
 
-* AUTO-POPULATE.  Selecting a ``vtkMRMLMarkupsBezierSurfaceNode`` that carries
-  a distance map ensures EXACTLY ONE ``vtkMRMLResectogramDisplayNode`` on it,
-  runs ``ResectogramViewManager.configureView``, embeds a single
-  ``qMRMLThreeDWidget`` bound to the singleton view node, and hides the hint.
-  Otherwise the hint is shown with the appropriate explanatory text.
-  Edge-triggered on ``(surface identity, hasDistanceMap)`` to avoid the
-  render-storm re-populate.
+* AUTO-POPULATE.  Selecting a ``vtkMRMLResectionPlanNode`` WRAPPER whose
+  distance map is set (``GetDistanceMapVolumeNode``, on the wrapper per
+  `ADR-0031`_) ensures EXACTLY ONE ``vtkMRMLResectogramDisplayNode`` on the
+  wrapper's CARRIER (``GetGeometryNode()``, a ``vtkMRMLBezierSurfaceNode``,
+  `ADR-0014`_ §"Fourth layer"), runs ``ResectogramViewManager.configureView``,
+  embeds a single ``qMRMLThreeDWidget`` bound to the singleton view node, and
+  hides the hint.  Otherwise the hint is shown with the appropriate explanatory
+  text.  Edge-triggered on ``(plan identity, hasDistanceMap)`` to avoid the
+  render-storm re-populate.  A "Place resection" button mints a fresh plan
+  graph via the logic create-API (`ADR-0032`_) and selects it.
 * EMBED.  ONE ``qMRMLThreeDWidget`` (objectName "ResectogramThreeDWidget");
   realize-then-bind so the distance-map 3D texture uploads into a realized GL
   context.
@@ -27,9 +30,12 @@ faithfully:
   remapped to ``WidgetEventNone`` so the flat panel cannot be orbited
   (``lockEmbeddedViewInteraction``) -- no custom DisplayableManager
   (`ADR-0013`_ §5).
-* REACTIVITY.  The active surface is observed for ``PointModifiedEvent`` ONLY
-  (the storm fix) to force a render of the embedded view; a deferred
-  initial-render kick shows the strip on auto-populate without an edit.
+* REACTIVITY.  The carrier is observed for ``ModifiedEvent`` (its only
+  control-point-edit signal -- it is not a markups node) to force a render of
+  the embedded view; a deferred initial-render kick shows the strip on
+  auto-populate without an edit.  The v1 storm-free variant (markups
+  ``PointModifiedEvent``) has no carrier equivalent; the storm-free guard is a
+  GL-coupled concern verified on the interactive ``:0`` probe (`ADR-0032`_).
 * CUSTOM ENLARGE.  A left double-click on the embedded view reparents the ONE
   widget into the layout manager's central viewport and back -- Slicer's
   built-in maximize is suppressed (it realises a blank second widget on the
@@ -42,11 +48,17 @@ References
 * `ADR-0023`_ §Stage-4 -- the dedicated resectogram view + auto-populate.
 * `ADR-0013`_ §5 -- no custom DisplayableManager; config only.
 * `ADR-0009`_ -- explainable state (the hint).
+* `ADR-0014`_ §"Fourth layer" -- the wrapper/carrier split.
+* `ADR-0031`_ -- the distance map lives on the resection-plan wrapper.
+* `ADR-0032`_ -- v2 interaction + the logic create-API for placement.
 
 .. _ADR-0004: ../../Docs/adr/0004-python-cpp-boundary.md
 .. _ADR-0009: ../../Docs/adr/0009-ux-and-design-discipline.md
 .. _ADR-0013: ../../Docs/adr/0013-layerdm-pipeline-pattern.md
+.. _ADR-0014: ../../Docs/adr/0014-livermarkups-dissolution.md
 .. _ADR-0023: ../../Docs/adr/0023-unified-gui-stage-workflow.md
+.. _ADR-0031: ../../Docs/adr/0031-distance-map-input-on-resection-plan.md
+.. _ADR-0032: ../../Docs/adr/0032-v2-interaction-via-layerdm-pipeline-seam.md
 """
 
 from __future__ import annotations
@@ -87,9 +99,18 @@ _RESECTOGRAM_CAMERA_FILL_ZOOM = 1.35
 # ResectogramViewManager pushes onto the MRML view node.
 _RESECTOGRAM_BACKGROUND_RGB = (1.0, 1.0, 1.0)
 
-_BEZIER_SURFACE_CLASS = "vtkMRMLMarkupsBezierSurfaceNode"
+# The Stage-4 combo selects the v2 resection-plan WRAPPER (ADR-0014 §"Fourth
+# layer").  The distance map is read off the wrapper (ADR-0031); the resectogram
+# display node + the render observation land on the wrapper's CARRIER
+# (``GetGeometryNode()``, a ``vtkMRMLBezierSurfaceNode``).
+_RESECTION_PLAN_CLASS = "vtkMRMLResectionPlanNode"
+_BEZIER_CARRIER_CLASS = "vtkMRMLBezierSurfaceNode"
 _RESECTOGRAM_DISPLAY_CLASS = "vtkMRMLResectogramDisplayNode"
 _VIEW_NODE_CLASS = "vtkMRMLViewNode"
+# The logic module whose create-API (``CreateResectionPlan``) the Place button
+# calls to mint a fresh plan + carrier + display triad (ADR-0032).
+_LOGIC_MODULE_NAME = "liverresections"
+_DEFAULT_RESECTION_NAME = "Resection"
 
 # Minimum embedded-view height so it reads as a square-ish strip panel rather
 # than a letterboxed sliver (ADR-0023 §Stage-4 layout).
@@ -159,7 +180,7 @@ class ResectionPlanningWidget(qt.QWidget):
 
         comboBox = slicer.qMRMLNodeComboBox()
         comboBox.setObjectName("ResectionSurfaceComboBox")
-        comboBox.nodeTypes = [_BEZIER_SURFACE_CLASS]
+        comboBox.nodeTypes = [_RESECTION_PLAN_CLASS]
         comboBox.noneEnabled = True
         comboBox.addEnabled = False
         comboBox.removeEnabled = False
@@ -167,10 +188,19 @@ class ResectionPlanningWidget(qt.QWidget):
         planningLayout.addWidget(comboBox, 0, 1)
         self._comboBox = comboBox
 
+        # "Place resection" mints a fresh v2 plan graph (wrapper + carrier +
+        # display) via the logic create-API and selects it (ADR-0032; ADR-0019
+        # starts the plan in Init so the placement step seeds the grid).
+        placeButton = qt.QPushButton("Place resection")
+        placeButton.setObjectName("PlaceResectionButton")
+        planningLayout.addWidget(placeButton, 1, 0, 1, 2)
+        self._placeButton = placeButton
+        placeButton.connect("clicked()", self.onPlaceResection)
+
         drawer = ctk.ctkCollapsibleButton()
         drawer.setObjectName("ResectogramDrawer")
         drawer.text = "Resectogram"
-        planningLayout.addWidget(drawer, 1, 0, 1, 2)
+        planningLayout.addWidget(drawer, 2, 0, 1, 2)
         self._drawer = drawer
 
         drawerLayout = qt.QGridLayout(drawer)
@@ -209,25 +239,52 @@ class ResectionPlanningWidget(qt.QWidget):
     def resectogramHintLabel(self):  # noqa: N802 - Slicer/Qt verb convention
         return self._hintLabel
 
+    def placeResectionButton(self):  # noqa: N802 - Slicer/Qt verb convention
+        return self._placeButton
+
     def setActiveResectionNode(self, node):  # noqa: N802 - Slicer/Qt verb convention
         self._comboBox.setCurrentNode(node)
+
+    def onPlaceResection(self):  # noqa: N802 - Slicer/Qt verb convention
+        """Mint a fresh v2 resection plan graph and select it.
+
+        Delegates to the logic create-API (``CreateResectionPlan``), which mints
+        the wrapper + carrier + carrier display triad and wires the geometry
+        reference (ADR-0032; ADR-0014 §"Fourth layer").  The fresh plan starts in
+        Init (ADR-0019); the placement step seeds the control grid.  Selecting it
+        drives the combo -> ``onActiveResectionChanged`` -> drawer path.
+        """
+        logic = self._resectionLogic()
+        if logic is None or not hasattr(logic, "CreateResectionPlan"):
+            return
+        plan = logic.CreateResectionPlan(_DEFAULT_RESECTION_NAME)
+        if plan is not None:
+            self.setActiveResectionNode(plan)
+
+    @staticmethod
+    def _resectionLogic():
+        """Return the LiverResections module logic singleton, or ``None``."""
+        module = getattr(slicer.modules, _LOGIC_MODULE_NAME, None)
+        if module is None:
+            return None
+        return module.logic()
 
     # ----------------------------------------------------------------------- #
     # Selection -> drawer state.
     # ----------------------------------------------------------------------- #
 
     def onActiveResectionChanged(self, node):  # noqa: N802 - Slicer/Qt verb convention
-        surface = self._asBezierSurface(node)
+        plan = self._asResectionPlan(node)
 
-        # Re-observe the active surface so computing a distance map (which
-        # mutates the surface node) re-evaluates the drawer state live -- this
-        # is the auto-populate path.
+        # Re-observe the active plan WRAPPER so attaching a distance map (which
+        # mutates the wrapper, ADR-0031) re-evaluates the drawer state live --
+        # this is the auto-populate path.
         if self._activeResectionNode is not None and self._activeNodeObservationTag is not None:
             self._activeResectionNode.RemoveObserver(self._activeNodeObservationTag)
         self._activeNodeObservationTag = None
-        self._activeResectionNode = surface
-        if surface is not None:
-            self._activeNodeObservationTag = surface.AddObserver(
+        self._activeResectionNode = plan
+        if plan is not None:
+            self._activeNodeObservationTag = plan.AddObserver(
                 vtk.vtkCommand.ModifiedEvent, self._onActiveResectionModified
             )
 
@@ -240,58 +297,63 @@ class ResectionPlanningWidget(qt.QWidget):
         self.scheduleResectogramRender()
 
     def refreshResectogramDrawer(self):  # noqa: N802 - Slicer/Qt verb convention
-        surface = self._asBezierSurface(self._comboBox.currentNode())
+        plan = self._asResectionPlan(self._comboBox.currentNode())
+        # The strip actors, the resectogram display node, and the render
+        # observation all live on the plan's CARRIER (ADR-0014 §"Fourth layer");
+        # the distance map is read off the WRAPPER (ADR-0031).
+        carrier = plan.GetGeometryNode() if plan is not None else None
 
         # ADR-0023 §Stage-4 auto-populate predicate: a resectogram is available
-        # iff a Bezier surface is selected AND it carries a distance map.
-        # State-orthogonal: the predicate does NOT consult the ADR-0019
-        # ResectionState.
-        hasSurface = surface is not None
+        # iff a resection PLAN is selected AND its WRAPPER carries a distance map
+        # (ADR-0031).  State-orthogonal: the predicate does NOT consult the
+        # ADR-0019 ResectionState.
+        hasPlan = plan is not None
         hasDistanceMap = bool(
-            hasSurface and surface.GetDistanceMapVolumeNode() is not None
+            hasPlan and carrier is not None and plan.GetDistanceMapVolumeNode() is not None
         )
         scene = self._mrmlScene
 
-        # Edge-trigger on the populate-relevant state only.  The active-surface
-        # ModifiedEvent observer fires this on EVERY surface modification --
+        # Edge-trigger on the populate-relevant state only.  The active-plan
+        # ModifiedEvent observer fires this on EVERY wrapper modification --
         # including the per-frame re-Modified() a maximize triggers -- but the
-        # populate depends only on the selected surface identity + its
-        # distance-map presence.  When neither changed, skip the work (a leg of
-        # the maximize render storm).  Only short-circuit once a scene is
-        # present: a null scene is a transient pre-attach state.
+        # populate depends only on the selected plan identity + its distance-map
+        # presence.  When neither changed, skip the work (a leg of the maximize
+        # render storm).  Only short-circuit once a scene is present: a null
+        # scene is a transient pre-attach state.
         if (
             scene is not None
             and self._refreshValid
-            and surface is self._refreshedSurface
+            and plan is self._refreshedSurface
             and hasDistanceMap == self._refreshedHasDistanceMap
         ):
             return
         if scene is not None:
             self._refreshValid = True
-            self._refreshedSurface = surface
+            self._refreshedSurface = plan
             self._refreshedHasDistanceMap = hasDistanceMap
 
         if not hasDistanceMap or scene is None:
             # ADR-0009 §"explainable state": show a hint INSTEAD of an edge-on /
-            # blank view, and stop observing any stale surface for render.
+            # blank view, and stop observing any stale carrier for render.
             if self._resectogramWidget is not None:
                 self._resectogramWidget.hide()
             self.observeSurfaceForRender(None)
             self._hintLabel.text = (
                 "Select a resection with a computed distance map."
-                if not hasSurface
+                if not hasPlan
                 else "Compute the distance map for this resection first."
             )
             self._hintLabel.show()
             return
 
-        # Ensure EXACTLY ONE resectogram display node on the surface
-        # (idempotent): reuse an existing one, create one only when absent.
-        displayNode = self._existingResectogramDisplayNode(surface)
+        # Ensure EXACTLY ONE resectogram display node on the CARRIER
+        # (idempotent, ADR-0014 §"Fourth layer"): reuse an existing one, create
+        # one only when absent.
+        displayNode = self._existingResectogramDisplayNode(carrier)
         if displayNode is None:
             displayNode = scene.AddNewNodeByClass(_RESECTOGRAM_DISPLAY_CLASS)
             if displayNode is not None:
-                surface.AddAndObserveDisplayNodeID(displayNode.GetID())
+                carrier.AddAndObserveDisplayNodeID(displayNode.GetID())
 
         # Ensure the singleton resectogram view node AND present the flattened
         # strip alone in it (display-node + view-node + camera configuration;
@@ -299,7 +361,7 @@ class ResectionPlanningWidget(qt.QWidget):
         # view-manager class is Python and is imported + called DIRECTLY here.
         manager = ResectogramViewManager()
         view = manager.ensureViewNode()
-        manager.configureView(view, displayNode, surface)
+        manager.configureView(view, displayNode, carrier)
 
         # Resolve the just-ensured singleton view node back from the scene by
         # its tag and embed a single qMRMLThreeDWidget bound to it.
@@ -316,9 +378,8 @@ class ResectionPlanningWidget(qt.QWidget):
         self._hintLabel.hide()
         self.showResectogramWidget(viewNode)
 
-        # Repaint the embedded strip whenever the selected surface's control
-        # points move.
-        self.observeSurfaceForRender(surface)
+        # Repaint the embedded strip whenever the carrier's control points move.
+        self.observeSurfaceForRender(carrier)
 
         # Replay the working reactivity path on auto-populate so the strip is
         # visible with NO manual edit.  Defer to the next event-loop turn, once
@@ -523,23 +584,23 @@ class ResectionPlanningWidget(qt.QWidget):
             return
 
         # Symmetric removal of the prior observer before re-targeting, so a
-        # stale surface never repaints the strip.
+        # stale carrier never repaints the strip.
         if self._renderObservedNode is not None and self._renderObservationTag is not None:
             self._renderObservedNode.RemoveObserver(self._renderObservationTag)
         self._renderObservationTag = None
 
         self._renderObservedNode = surface
         if surface is not None:
-            # Render on the control-point-edit signal ONLY
-            # (PointModifiedEvent), NOT the generic ModifiedEvent.  A maximize
-            # binds the resectogram view node to two live qMRMLThreeDViews
-            # whose renders re-Modified() the surface every frame; a
-            # generic-ModifiedEvent->forceRender observer would re-fire a render
-            # on each of those render-induced Modifies -- a feedback loop (the
-            # maximize render storm).  PointModifiedEvent is the real
-            # control-point-edit signal a render does not raise.
+            # The v2 carrier (vtkMRMLBezierSurfaceNode) is not a markups node and
+            # fires only the generic ModifiedEvent on a control-point edit, so
+            # observe that.  The v1 storm-free path hooked the markups
+            # PointModifiedEvent to dodge the maximize feedback loop (a render
+            # re-Modified() the surface every frame); the equivalent storm-free
+            # guard on the carrier's ModifiedEvent is a GL-coupled concern
+            # verified on the interactive :0 probe (ADR-0032 §Conformance), not
+            # this headless path.
             self._renderObservationTag = surface.AddObserver(
-                slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
+                vtk.vtkCommand.ModifiedEvent,
                 self._onObservedSurfacePointModified,
             )
 
@@ -694,17 +755,19 @@ class ResectionPlanningWidget(qt.QWidget):
     # ----------------------------------------------------------------------- #
 
     @staticmethod
-    def _asBezierSurface(node):
-        """Return ``node`` if it is a Bezier surface node, else ``None``."""
-        if node is not None and node.IsA(_BEZIER_SURFACE_CLASS):
+    def _asResectionPlan(node):
+        """Return ``node`` if it is a resection-plan wrapper node, else ``None``."""
+        if node is not None and node.IsA(_RESECTION_PLAN_CLASS):
             return node
         return None
 
     @staticmethod
-    def _existingResectogramDisplayNode(surface):
-        """Return the surface's resectogram display node, or ``None``."""
-        for index in range(surface.GetNumberOfDisplayNodes()):
-            candidate = surface.GetNthDisplayNode(index)
+    def _existingResectogramDisplayNode(carrier):
+        """Return the carrier's resectogram display node, or ``None``."""
+        if carrier is None:
+            return None
+        for index in range(carrier.GetNumberOfDisplayNodes()):
+            candidate = carrier.GetNthDisplayNode(index)
             if candidate is not None and candidate.IsA(_RESECTOGRAM_DISPLAY_CLASS):
                 return candidate
         return None
