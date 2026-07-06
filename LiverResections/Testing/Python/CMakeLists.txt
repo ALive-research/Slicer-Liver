@@ -417,6 +417,59 @@ if(DEFINED Python3_EXECUTABLE)
     set_tests_properties(LiverResections_resectogram_pipeline_memo_key PROPERTIES
       LABELS "pytest;module-layer;LiverResections;resectogram;render-storm"
     )
+
+    # #501 slice 5 -- thread the resection-plan WRAPPER into the resectogram
+    # render path (ADR-0031: the distance-map volume + the safety / risk
+    # margins are wrapper-owned inputs on vtkMRMLResectionPlanNode; ADR-0013 §5,
+    # §6).  Ports the 3D path (LiverBezierSurfacePipeline._resolve_resection_node
+    # + BezierPlanningRepresentation.SetResectionPlanNode) into the resectogram
+    # path.  This entry pins the PIPELINE half: ResectogramPipeline
+    # reverse-resolves the vtkMRMLResectionPlanNode whose GetGeometryNode() is
+    # its data node (carrier) and hands it to the FlattenedSurfaceRepresentation
+    # via SetResectionPlanNode -- an unowned carrier resolves to None.  Needs
+    # the wrapped plan / carrier / resectogram-display nodes + the importable
+    # Pipeline (base vtkMRMLLayerDMScriptedPipeline), so it runs green under the
+    # launched-Slicer `pytest_launched` row and SKIPS CLEANLY here under bare
+    # pytest (no slicer.mrmlScene / LayerDMLib).  RED / skip-pending until the
+    # implementer lands the reverse-resolution seam (ADR-0027 §Conformance: the
+    # skip lifts at the implementation commit).
+    add_test(
+      NAME LiverResections_resectogram_pipeline_resolves_resection_plan
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_resectogram_pipeline_resolves_resection_plan.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_resectogram_pipeline_resolves_resection_plan PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;resectogram;mapper-wiring"
+    )
+
+    # #501 slice 5 -- the REPRESENTATION half: FlattenedSurfaceRepresentation
+    # shades off the WRAPPER (ADR-0031), not the carrier.  With a plan wrapper
+    # set, update() threads SetResectionMargin(SafetyMargin_mm) +
+    # SetUncertaintyMargin(RiskMargin_mm) onto the 2D
+    # vtkOpenGLResection2DPolyDataMapper and sources the distance-map volume
+    # from plan.GetDistanceMapVolumeNode() (present -> resolved source; absent ->
+    # source cleared, graceful fallback, margins still set).  GL-free: a FAKE 2D
+    # mapper records the margin scalar-setters + the resolved distance-map source
+    # (same mock-mapper idiom as test_bezier_planning_surface_mapper_wiring.py);
+    # the real GL 3D-texture upload + the strip render are the :0 eyeball
+    # follow-up, NOT asserted here.  Needs the wrapped plan / carrier /
+    # resectogram-display / volume nodes, so it runs green under the
+    # launched-Slicer `pytest_launched` row and SKIPS CLEANLY here under bare
+    # pytest (no slicer.mrmlScene).  RED / skip-pending until the implementer
+    # ports the wrapper-shading path (ADR-0027 §Conformance: the skip lifts at
+    # the implementation commit).
+    add_test(
+      NAME LiverResections_flattened_surface_plan_shading
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_flattened_surface_plan_shading.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_flattened_surface_plan_shading PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;resectogram;mapper-wiring"
+    )
   else()
     message(STATUS
       "Slicer-Liver: pytest not importable from ${Python3_EXECUTABLE}; "
