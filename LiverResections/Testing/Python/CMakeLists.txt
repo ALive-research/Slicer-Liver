@@ -330,6 +330,41 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections;resectogram;stage4"
     )
 
+    # #501 slice 4 -- re-point the Stage-4 ResectionPlanningWidget (the Python
+    # widget, ADR-0004; ADR-0023 §Stage-4) from the v1 markups surface to the v2
+    # resection-plan node graph (ADR-0014 §"Fourth layer" wrapper/carrier).
+    # Three GPU-free invariants: (1) the active-resection combo offers a
+    # vtkMRMLResectionPlanNode WRAPPER and NOT the v1
+    # vtkMRMLMarkupsBezierSurfaceNode (nodeTypes re-point); (2) the auto-populate
+    # predicate reads the distance map off the WRAPPER
+    # (plan.GetDistanceMapVolumeNode(), ADR-0031) -- none selected -> "select"
+    # hint, plan without distance map -> "compute" hint, plan WITH distance map
+    # -> hint hidden AND exactly one vtkMRMLResectogramDisplayNode ensured on the
+    # CARRIER (plan.GetGeometryNode(), a vtkMRMLBezierSurfaceNode), idempotent on
+    # repeated refresh; (3) a "Place resection" affordance
+    # (placeResectionButton() + onPlaceResection()) mints a plan via the merged
+    # logic create-API (CreateResectionPlan, slice 1), adds it to the scene, and
+    # selects it in the combo (scene gains a plan + a Bezier carrier).  Builds
+    # LiverResectionsLib.ResectionPlanningWidget directly under a launched
+    # qSlicerApplication, so it runs green under the launched-Slicer
+    # `pytest_launched` row (Liver/Testing/Python; this dir is already on its
+    # test roots) and SKIPS CLEANLY here under bare pytest (no qt.QWidget /
+    # no widget / no create-API).  Each invariant is additionally guarded on the
+    # NEW state's presence (nodeTypes inspection / place-button accessor), so it
+    # lands RED-as-skip on the still-v1 build and turns GREEN once slice 4
+    # re-points the widget (ADR-0027 §Conformance: the skip lifts at the
+    # implementation commit).
+    add_test(
+      NAME LiverResections_resection_planning_widget_v2_repoint
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_resection_planning_widget_v2_repoint.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_resection_planning_widget_v2_repoint PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;resectogram;stage4"
+    )
+
     # T3 -- ResectogramPipeline memo-key invariant (ADR-0013 §3 idempotency;
     # the render-storm fix).  The Pipeline keys UpdatePipeline on the
     # control-point geometry digest ALONE, so a render-induced Modified() at
