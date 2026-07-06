@@ -210,6 +210,13 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         # invariant.
         self._last_update_key: tuple | None = None
 
+        # SlicingPlane Init-placement progress (ADR-0032 slice 3a): how many
+        # of the fixed two slicing-plane init points have been placed on the
+        # current carrier.  The node has no on-node placed-count (the array is
+        # a fixed 2 slots), so the Pipeline owns it; reset when the carrier
+        # changes (SetDisplayNode).
+        self._slicing_plane_points_placed: int = 0
+
         # Counter that workflow tests assert idempotency against:
         # advances only on dispatch work, not on short-circuits.
         self._update_count: int = 0
@@ -283,6 +290,8 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         self._last_update_key = None
         # Force a fresh plan reverse-resolution for the new data node.
         self._last_resection_scan_mtime = None
+        # Restart SlicingPlane init-placement for the new carrier (slice 3a).
+        self._slicing_plane_points_placed = 0
 
     def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
         """Dispatch the active Representation by ``(state, initMode)``.
@@ -541,23 +550,95 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         return False, sys.float_info.max
 
     def ProcessInteractionEvent(self, eventData: Any) -> bool:  # noqa: N802 - VTK verb
-        """Move the nearest control point to the cursor's world position.
+        """Route the interaction by resection state (ADR-0032).
 
-        Back-projects the cursor's display position onto the plane of the
-        picked control point (its current depth), then routes through the
-        GL-free kernel.  Returns True iff a control point moved (the
-        interaction logic keeps focus on a pipeline that returns True).
+        * ``Init`` + ``SlicingPlane`` — PLACE the next slicing-plane init point
+          at the cursor's world position (back-projected onto the focal plane,
+          since there is no picked point yet to supply depth).
+        * ``Planning`` — EDIT: move the nearest control point to the cursor's
+          world position (back-projected onto that point's depth).
+
+        Returns True iff geometry changed (the interaction logic keeps focus on
+        a pipeline that returns True).
         """
         renderer = self._safe_get_renderer()
         if renderer is None:
             return False
-        idx, distance2 = self._nearest_control_point_in_display(renderer, eventData)
-        if idx is None or distance2 > self._CONTROL_POINT_PICK_RADIUS_PX * self._CONTROL_POINT_PICK_RADIUS_PX:
-            return False
-        world = self._event_world_at_control_point(renderer, eventData, idx)
-        if world is None:
-            return False
-        return self._apply_world_point_to_nearest_control_point(world) is not None
+        carrier = self._data_node
+        state = _safe_get_state(carrier)
+
+        if state == STATE_INIT and _safe_get_init_mode(carrier) == INIT_MODE_SLICING_PLANE:
+            world = self._event_world_on_focal_plane(renderer, eventData)
+            if world is None:
+                return False
+            return self._place_slicing_plane_init_point(world) is not None
+
+        if state == STATE_PLANNING:
+            idx, distance2 = self._nearest_control_point_in_display(renderer, eventData)
+            if idx is None or distance2 > self._CONTROL_POINT_PICK_RADIUS_PX * self._CONTROL_POINT_PICK_RADIUS_PX:
+                return False
+            world = self._event_world_at_control_point(renderer, eventData, idx)
+            if world is None:
+                return False
+            return self._apply_world_point_to_nearest_control_point(world) is not None
+
+        return False
+
+    def _place_slicing_plane_init_point(self, world: Any) -> int | None:
+        """Place the next slicing-plane init point at RAS ``world``.
+
+        The GL-free Init-placement kernel (ADR-0032 slice 3a): when the carrier
+        is in ``Init`` + ``SlicingPlane`` mode and fewer than the fixed two
+        slicing-plane init points have been placed, writes the next point (slot
+        0 then 1) via ``SetSlicingPlaneInitPoint`` and returns its index.  Fill
+        order (not nearest-selection — that is the Planning edit path).  A
+        no-op returning ``None`` when: no carrier, not ``Init`` state, not
+        ``SlicingPlane`` mode, or both slots already placed (the array is full
+        — the next step is ``commit()`` to fit the surface, ADR-0019).
+        """
+        carrier = self._data_node
+        if carrier is None:
+            return None
+        if _safe_get_state(carrier) != STATE_INIT:
+            return None
+        if _safe_get_init_mode(carrier) != INIT_MODE_SLICING_PLANE:
+            return None
+        set_point = getattr(carrier, "SetSlicingPlaneInitPoint", None)
+        if set_point is None or self._slicing_plane_points_placed >= 2:
+            return None
+        index = self._slicing_plane_points_placed
+        try:
+            placed = set_point(index, [float(world[0]), float(world[1]), float(world[2])])
+        except Exception:  # pragma: no cover - defensive
+            return None
+        if placed is False:  # the node's Init-only guard rejected it
+            return None
+        self._slicing_plane_points_placed += 1
+        return index
+
+    def _event_world_on_focal_plane(self, renderer: Any, eventData: Any):
+        """Back-project the cursor's display position onto the camera focal
+        plane, returning RAS ``(x, y, z)``.
+
+        Used to place init points, which have no existing picked point to
+        supply a depth; the focal plane is the conventional placement depth.
+        ``None`` on failure.
+        """
+        try:
+            ex, ey = eventData.GetDisplayPosition()
+            camera = renderer.GetActiveCamera()
+            fp = camera.GetFocalPoint()
+            renderer.SetWorldPoint(fp[0], fp[1], fp[2], 1.0)
+            renderer.WorldToDisplay()
+            _fx, _fy, fz = renderer.GetDisplayPoint()
+            renderer.SetDisplayPoint(float(ex), float(ey), fz)
+            renderer.DisplayToWorld()
+            wx, wy, wz, ww = renderer.GetWorldPoint()
+        except Exception:  # pragma: no cover - defensive
+            return None
+        if ww == 0.0:
+            return None
+        return (wx / ww, wy / ww, wz / ww)
 
     def _apply_world_point_to_nearest_control_point(self, world: Any) -> int | None:
         """Move the carrier's nearest control point to RAS ``world``.
