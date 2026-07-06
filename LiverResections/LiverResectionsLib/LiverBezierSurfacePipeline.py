@@ -217,6 +217,14 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         # changes (SetDisplayNode).
         self._slicing_plane_points_placed: int = 0
 
+        # DistanceSpheroid Init-placement progress (ADR-0032 slice 3b): how many
+        # distance-spheroid init points have been placed on the current carrier.
+        # Unlike SlicingPlane (a fixed two slots), the spheroid capacity is
+        # DYNAMIC (``GetNumberOfDistanceSpheroidInitPoints`` — default 0, sized
+        # while in Init), and the node still exposes no on-node placed-count, so
+        # the Pipeline owns it; reset when the carrier changes (SetDisplayNode).
+        self._distance_spheroid_points_placed: int = 0
+
         # Counter that workflow tests assert idempotency against:
         # advances only on dispatch work, not on short-circuits.
         self._update_count: int = 0
@@ -292,6 +300,8 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         self._last_resection_scan_mtime = None
         # Restart SlicingPlane init-placement for the new carrier (slice 3a).
         self._slicing_plane_points_placed = 0
+        # Restart DistanceSpheroid init-placement for the new carrier (slice 3b).
+        self._distance_spheroid_points_placed = 0
 
     def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
         """Dispatch the active Representation by ``(state, initMode)``.
@@ -573,6 +583,12 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                 return False
             return self._place_slicing_plane_init_point(world) is not None
 
+        if state == STATE_INIT and _safe_get_init_mode(carrier) == INIT_MODE_DISTANCE_SPHEROID:
+            world = self._event_world_on_focal_plane(renderer, eventData)
+            if world is None:
+                return False
+            return self._place_distance_spheroid_init_point(world) is not None
+
         if state == STATE_PLANNING:
             idx, distance2 = self._nearest_control_point_in_display(renderer, eventData)
             if idx is None or distance2 > self._CONTROL_POINT_PICK_RADIUS_PX * self._CONTROL_POINT_PICK_RADIUS_PX:
@@ -614,6 +630,46 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         if placed is False:  # the node's Init-only guard rejected it
             return None
         self._slicing_plane_points_placed += 1
+        return index
+
+    def _place_distance_spheroid_init_point(self, world: Any) -> int | None:
+        """Place the next distance-spheroid init point at RAS ``world``.
+
+        The GL-free Init-placement kernel (ADR-0032 slice 3b): when the carrier
+        is in ``Init`` + ``DistanceSpheroid`` mode and fewer than the carrier's
+        DYNAMIC capacity (``GetNumberOfDistanceSpheroidInitPoints``, sized while
+        in Init) have been placed, writes the next point via
+        ``SetDistanceSpheroidInitPoint`` and returns its index.  Fill order (not
+        nearest-selection — that is the Planning edit path).  A no-op returning
+        ``None`` when: no carrier, not ``Init`` state, not ``DistanceSpheroid``
+        mode, capacity unset/zero, or all points already placed (the next step
+        is ``commit()`` to fit the surface, ADR-0019).
+        """
+        carrier = self._data_node
+        if carrier is None:
+            return None
+        if _safe_get_state(carrier) != STATE_INIT:
+            return None
+        if _safe_get_init_mode(carrier) != INIT_MODE_DISTANCE_SPHEROID:
+            return None
+        set_point = getattr(carrier, "SetDistanceSpheroidInitPoint", None)
+        get_count = getattr(carrier, "GetNumberOfDistanceSpheroidInitPoints", None)
+        if set_point is None or get_count is None:
+            return None
+        try:
+            capacity = int(get_count())
+        except Exception:  # pragma: no cover - defensive
+            return None
+        if self._distance_spheroid_points_placed >= capacity:
+            return None
+        index = self._distance_spheroid_points_placed
+        try:
+            placed = set_point(index, [float(world[0]), float(world[1]), float(world[2])])
+        except Exception:  # pragma: no cover - defensive
+            return None
+        if placed is False:  # the node's Init-only guard rejected it
+            return None
+        self._distance_spheroid_points_placed += 1
         return index
 
     def _event_world_on_focal_plane(self, renderer: Any, eventData: Any):
