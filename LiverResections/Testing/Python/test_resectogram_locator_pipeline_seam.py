@@ -69,8 +69,8 @@ green-but-skipping prone).
 See also:
   * Docs/adr/0025-locator-architecture.md §Producer, §Consumer, §Context,
     §Click-to-reslice, §Conformance
-  * Docs/adr/0032-... (the resectogram interaction seam)
-  * Docs/adr/0027-invariant-test-first.md  (RED / skip-pending discipline)
+  * Docs/adr/0032-v2-interaction-via-layerdm-pipeline-seam.md  (the seam)
+  * Docs/adr/0027-invariant-test-first-v2-implementation.md  (RED / skip-pending)
   * Docs/adr/0004-python-cpp-boundary.md   (the seam is Python)
   * Docs/adr/0013-layerdm-pipeline-pattern.md §5, §6
   * LiverResections/LiverResectionsLib/ResectogramPipeline.py
@@ -538,6 +538,37 @@ def test_can_process_interaction_event_gated_on_data_node():
         "displayed (the strip maps every in-view pixel)."
     )
     assert distance2 == pytest.approx(0.0)
+
+
+# --------------------------------------------------------------------------- #
+# Invariant 5 -- the locator resolver's no-scene guard
+# --------------------------------------------------------------------------- #
+
+
+def test_resolve_locator_node_none_when_surface_has_no_scene():
+    """``_resolve_locator_node`` returns None when the surface has no scene.
+
+    A displayed carrier always has a scene in production, so this is the
+    defensive guard: a surface whose ``GetScene()`` yields None must resolve to
+    no locator, returning before touching the scene API.  Exercises only the
+    staticmethod's None-guard -- no ``slicer.mrmlScene``, no wrapped classes --
+    but needs ``ResectogramPipeline`` importable (LayerDMLib), so it skips
+    cleanly under bare pytest.
+    """
+    try:
+        module = __import__(PIPELINE_MODULE, fromlist=[PIPELINE_CLASS])
+        pipeline_cls = getattr(module, PIPELINE_CLASS)
+    except Exception as exc:  # pragma: no cover - import-environment dependent
+        pytest.skip(
+            f"{PIPELINE_CLASS} not importable ({exc!r}) -- LayerDMLib is off the "
+            "path in this environment."
+        )
+
+    class _SurfaceWithoutScene:
+        def GetScene(self):  # noqa: N802 - VTK verb
+            return None
+
+    assert pipeline_cls._resolve_locator_node(_SurfaceWithoutScene()) is None
 
 
 if __name__ == "__main__":

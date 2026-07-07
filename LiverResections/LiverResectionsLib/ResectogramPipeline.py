@@ -268,6 +268,13 @@ class ResectogramPipeline(_PipelineBase):
         click anywhere it has a data node.  ``distance2`` is 0: the strip owns
         its standalone embedded view, so no other interactive Pipeline competes
         for focus (`ADR-0025`_ §Click-to-reslice).
+
+        The constant-zero ``distance2`` is sound ONLY while the resectogram
+        singleton view hosts a single interactive Pipeline: a zero distance
+        unconditionally wins the LayerDM focus arbitration, so a second
+        interactive Pipeline registered into this view (e.g. the v2.1
+        cross-module producers `ADR-0025`_ anticipates) would be starved.  If
+        that day comes, arbitrate by real display distance here.
         """
         import sys
 
@@ -322,6 +329,9 @@ class ResectogramPipeline(_PipelineBase):
         render_window = renderer.GetRenderWindow() if renderer is not None else None
         if render_window is None:
             return None
+        # The render-window size is the pixel-mapping viewport because the strip
+        # owns a standalone single-renderer embedded view (window == viewport);
+        # this equivalence would break only under a sub-unit renderer viewport.
         viewport_size = render_window.GetSize()
 
         from LiverResectionsLib.ResectogramLocatorProducer import (
