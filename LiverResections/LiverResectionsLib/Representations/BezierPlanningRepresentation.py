@@ -23,10 +23,16 @@ launched Slicer this Representation drives the relocated, real
 patch built by ``vtkBezierSurfaceSource`` + ``vtkPolyDataNormals`` (the same
 pipeline shape v1's ``vtkSlicerBezierSurfaceRepresentation3D`` assembled),
 including the ``uvCoords`` the mapper's vertex shader reads and the
-display-node colour / grid uniforms.  When the wrapped classes are off the
-path — the bare-VTK unit layer — it falls back to a generic
-``vtkPolyDataMapper`` + ``vtkActor`` pair over the raw control mesh so the
-Representation still constructs (``_resolve_vtk_class`` selects the path).
+display-node colour / grid uniforms.
+
+The custom mapper is injected, not silently discovered (ADR-0014 §3).  In
+production the ``surface_mapper`` constructor argument is left ``None`` and
+this Representation resolves the real wrapped class (raising loudly if it is
+off the path — a real misconfiguration must NOT degrade to a shader-less
+generic mapper).  The bare-VTK unit layer (ADR-0008 §2), where the wrapped
+classes are unreachable, injects a generic ``vtkPolyDataMapper`` instance
+explicitly; that source-less path renders the raw control mesh over a plain
+``vtkPolyData`` so the structural / colour bookkeeping stays testable.
 
 The RAS/IJK transform matrices and the distance-map 3D texture binding are
 NOT wired here: the v2 ``vtkMRMLBezierSurfaceNode`` carries no distance-map
@@ -79,10 +85,10 @@ DEFAULT_RESECTION_COLOR = (1.0, 1.0, 1.0)
 DEFAULT_RESECTION_OPACITY = 1.0
 
 # The relocated real surface mapper + the Bezier tessellation source (ADR-0014
-# §3).  Both are wrapped-C++ classes reachable only inside a launched Slicer;
-# ``_resolve_vtk_class`` falls back to ``None`` in the bare-VTK unit layer, in
-# which case the Representation builds a generic ``vtkPolyDataMapper`` pipeline
-# so it still constructs (the structural / colour bookkeeping stays testable).
+# §3).  Both are wrapped-C++ classes reachable only inside a launched Slicer.
+# In production (no injected mapper) ``_require_vtk_class`` resolves them or
+# raises — there is no silent generic fallback.  The bare-VTK unit layer
+# injects a generic mapper instead (ADR-0008 §2).
 REAL_SURFACE_MAPPER_CLASS = "vtkOpenGLBezierResectionPolyDataMapper"
 BEZIER_SURFACE_SOURCE_CLASS = "vtkBezierSurfaceSource"
 
@@ -97,11 +103,17 @@ class BezierPlanningRepresentation:
 
     Constructor
     -----------
-    ``BezierPlanningRepresentation(renderer=None)``
+    ``BezierPlanningRepresentation(renderer=None, *, surface_mapper=None)``
 
     * ``renderer`` — the ``vtkRenderer`` the actors are added to.
       Optional; ``None`` is supported for unit tests (the actors
       exist but are unrendered).
+    * ``surface_mapper`` — a custom-mapper INSTANCE (dependency
+      injection, ADR-0014 §3).  ``None`` (production) resolves the real
+      ``vtkOpenGLBezierResectionPolyDataMapper`` + ``vtkBezierSurfaceSource``
+      pipeline, raising if either wrapped class is off the path.  An
+      injected instance (bare-VTK unit layer, ADR-0008 §2) drives a
+      source-less pipeline over a plain ``vtkPolyData``.
 
     Public methods
     --------------
@@ -135,7 +147,9 @@ class BezierPlanningRepresentation:
     * ``GetCurrentOpacity()`` — the opacity last written.
     """
 
-    def __init__(self, renderer: Any | None = None) -> None:
+    def __init__(
+        self, renderer: Any | None = None, *, surface_mapper: Any | None = None
+    ) -> None:
         self._renderer: Any | None = None
 
         # The VTK objects the Representation owns.  ``None`` in the
@@ -171,7 +185,7 @@ class BezierPlanningRepresentation:
         # wrapper, not the carrier.  ``None`` until the Pipeline wires it.
         self._resection_plan_node: Any | None = None
 
-        self._build_vtk_pipeline()
+        self._build_vtk_pipeline(surface_mapper)
 
         if renderer is not None:
             self.SetRenderer(renderer)
@@ -273,29 +287,33 @@ class BezierPlanningRepresentation:
     # Internal helpers
     # ------------------------------------------------------------------ #
 
-    def _build_vtk_pipeline(self) -> None:
+    def _build_vtk_pipeline(self, surface_mapper: Any | None) -> None:
         """Construct the surface actor.
 
-        Called from ``__init__`` only when ``vtk`` is importable.
+        Called from ``__init__``.
 
-        Real path (inside Slicer): the relocated
-        ``vtkOpenGLBezierResectionPolyDataMapper`` (ADR-0014 §3) renders the
-        tessellated Bernstein patch built by ``vtkBezierSurfaceSource`` +
-        ``vtkPolyDataNormals`` — the same pipeline shape the v1
-        ``vtkSlicerBezierSurfaceRepresentation3D`` ctor assembled.  The source
-        emits the 2-component ``uvCoords`` (TCoords) the mapper's vertex shader
-        reads; the grid is a fragment-shader feature on that mapper driven by
-        ``GridDivisions`` / ``GridThickness`` / ``ResectionGridColor`` uniforms
-        (plumbed in ``_apply_display_node``), NOT a separate actor.
+        Production path (``surface_mapper is None``): resolve the relocated
+        ``vtkOpenGLBezierResectionPolyDataMapper`` + ``vtkBezierSurfaceSource``
+        wrapped classes (ADR-0014 §3), raising loudly if either is off the path
+        — a real misconfiguration must not silently render shader-less.  The
+        mapper renders the tessellated Bernstein patch built by
+        ``vtkBezierSurfaceSource`` + ``vtkPolyDataNormals`` — the same pipeline
+        shape the v1 ``vtkSlicerBezierSurfaceRepresentation3D`` ctor assembled.
+        The source emits the 2-component ``uvCoords`` (TCoords) the mapper's
+        vertex shader reads; the grid is a fragment-shader feature on that
+        mapper driven by ``GridDivisions`` / ``GridThickness`` /
+        ``ResectionGridColor`` uniforms (plumbed in ``_apply_display_node``),
+        NOT a separate actor.
 
-        Bare-VTK fallback (unit layer): the wrapped classes are off the path,
-        so a generic ``vtkPolyDataMapper`` over a plain ``vtkPolyData`` keeps
-        the Representation constructible and the colour bookkeeping testable.
+        Injected path (``surface_mapper`` given, bare-VTK unit layer per
+        ADR-0008 §2): the wrapped classes are off the path, so the caller
+        injects a generic mapper instance.  It is fed a plain ``vtkPolyData``
+        (source-less) carrying the raw control mesh, keeping the Representation
+        constructible and the colour bookkeeping testable.
         """
-        mapper_class = _resolve_vtk_class(REAL_SURFACE_MAPPER_CLASS)
-        source_class = _resolve_vtk_class(BEZIER_SURFACE_SOURCE_CLASS)
-
-        if mapper_class is not None and source_class is not None:
+        if surface_mapper is None:
+            mapper_class = _require_vtk_class(REAL_SURFACE_MAPPER_CLASS)
+            source_class = _require_vtk_class(BEZIER_SURFACE_SOURCE_CLASS)
             self._surface_source = source_class()
             self._surface_source.SetResolution(
                 BEZIER_SURFACE_RESOLUTION, BEZIER_SURFACE_RESOLUTION
@@ -310,7 +328,7 @@ class BezierPlanningRepresentation:
             )
         else:
             self._surface_polydata = vtk.vtkPolyData()
-            self._surface_mapper = vtk.vtkPolyDataMapper()
+            self._surface_mapper = surface_mapper
             self._surface_mapper.SetInputData(self._surface_polydata)
 
         self._surface_actor = vtk.vtkActor()
@@ -658,15 +676,16 @@ def _identity_matrix() -> Any:
     return m
 
 
-def _resolve_vtk_class(name: str) -> Any | None:
-    """Resolve a wrapped-C++ class by name from ``slicer`` then ``vtk``.
+def _require_vtk_class(name: str) -> Any:
+    """Resolve a wrapped-C++ class by name from ``slicer`` then ``vtk``, or raise.
 
     The relocated mapper + the Bezier surface source are wrapped into Slicer's
     ``slicer`` namespace (``SlicerMacroBuildModuleLogic`` Python wrapping); the
-    plain ``vtk`` module is the fallback for a non-Slicer VTK build.  Returns
-    ``None`` when neither namespace exposes the class (the bare-VTK unit layer),
-    which drives the generic-mapper fallback.  Mirrors
-    ``DistanceSpheroidInitRepresentation._resolve_extractor_class``.
+    plain ``vtk`` module is the fallback for a non-Slicer VTK build.  Raises
+    ``RuntimeError`` when neither namespace exposes the class — a real
+    misconfiguration in production (ADR-0014 §3) must fail loudly rather than
+    degrade to a shader-less generic mapper.  Bare-VTK unit tests (ADR-0008 §2)
+    avoid this path by injecting a mapper instance instead.
     """
     for module_name in ("slicer", "vtk"):
         try:
@@ -676,7 +695,13 @@ def _resolve_vtk_class(name: str) -> Any | None:
         cls = getattr(module, name, None)
         if cls is not None:
             return cls
-    return None
+    raise RuntimeError(
+        f"{name} is not reachable from the 'slicer' or 'vtk' namespace. "
+        "It is a wrapped-C++ class relocated to LiverResections/VTKWidgets/ "
+        "(ADR-0014 §3) and available only inside a launched Slicer with the "
+        "module loaded.  Inject a mapper instance for bare-VTK unit tests "
+        "(ADR-0008 §2)."
+    )
 
 
 def _push_color3(mapper: Any, setter_name: str, getter: Any | None) -> None:

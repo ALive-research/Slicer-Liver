@@ -62,14 +62,17 @@ feed).  Without ``BSPoints`` the mapper falls back to the flat quad's own
 vertices and paints the distance field on a fixed plane — the
 non-coherent / non-reactive fixed-quad failure mode.
 
-The VTK objects are soft dependencies — same pattern as
-``ConfirmedRepresentation``: a pure-Python pytest run skips the VTK-only
-branches, while a Slicer process (or any environment with VTK on
-``PYTHONPATH``) exercises the full pipeline.  The relocated 2D mapper
-(``vtkOpenGLResection2DPolyDataMapper``) and the ``vtkBezierSurfaceSource``
-are reachable only inside a Slicer process, so their use is gated behind
-``hasattr`` / import guards and the generic VTK fallbacks keep the
-skeleton importable everywhere.
+The relocated 2D mapper (``vtkOpenGLResection2DPolyDataMapper``) is a
+custom wrapped-C++ class reachable only inside a Slicer process; it is
+injected, not silently discovered (ADR-0014 §3).  In production the
+``resection_mapper_2d`` constructor argument is ``None`` and this
+Representation resolves the real wrapped class (raising if it is off the
+path — a real misconfiguration must not degrade to a shader-less generic
+mapper); the bare-VTK unit layer (ADR-0008 §2) injects a generic
+``vtkPolyDataMapper`` instance.  The flattened-quad SOURCE is NOT custom:
+``vtkBezierSurfaceSource`` is preferred but degrades to base VTK's
+``vtkPlaneSource`` (always present), and the distance-map texture /
+aspect-ratio helpers stay behind soft import guards.
 
 References
 ----------
@@ -118,11 +121,16 @@ class FlattenedSurfaceRepresentation:
 
     Constructor
     -----------
-    ``FlattenedSurfaceRepresentation(renderer=None)``
+    ``FlattenedSurfaceRepresentation(renderer=None, *, resection_mapper_2d=None)``
 
     * ``renderer`` — the ``vtkRenderer`` the resectogram actor is added
       to.  Optional; ``None`` is supported for unit tests (the actor
       exists but is unrendered).
+    * ``resection_mapper_2d`` — the custom 2D-mapper INSTANCE (dependency
+      injection, ADR-0014 §3).  ``None`` (production) resolves the real
+      ``vtkOpenGLResection2DPolyDataMapper``, raising if it is off the
+      path.  An injected instance (bare-VTK unit layer, ADR-0008 §2) is
+      used as-is.  The flattened-quad source is not affected.
 
     Public methods
     --------------
@@ -149,7 +157,12 @@ class FlattenedSurfaceRepresentation:
       overlay renderer hosting it, and whether blur is currently engaged.
     """
 
-    def __init__(self, renderer: Any | None = None) -> None:
+    def __init__(
+        self,
+        renderer: Any | None = None,
+        *,
+        resection_mapper_2d: Any | None = None,
+    ) -> None:
         self._renderer: Any | None = None
 
         self._bezier_plane: Any | None = None
@@ -200,7 +213,7 @@ class FlattenedSurfaceRepresentation:
         self._last_surface_signature: tuple | None = None
         self._input_refresh_count: int = 0
 
-        self._build_vtk_pipeline()
+        self._build_vtk_pipeline(resection_mapper_2d)
 
         if renderer is not None:
             self.SetRenderer(renderer)
@@ -310,20 +323,26 @@ class FlattenedSurfaceRepresentation:
     # Internal helpers
     # ------------------------------------------------------------------ #
 
-    def _build_vtk_pipeline(self) -> None:
+    def _build_vtk_pipeline(self, resection_mapper_2d: Any | None) -> None:
         """Construct the flattened-quad source, 2D mapper, actor + camera.
 
-        Prefers the relocated ``vtkOpenGLResection2DPolyDataMapper`` and
-        ``vtkBezierSurfaceSource`` (reachable inside a Slicer process);
-        falls back to a generic ``vtkPolyDataMapper`` + ``vtkPlaneSource``
-        so the skeleton stays importable in a bare VTK environment.  The
-        public API is invariant across the fallback — only the concrete
-        mapper / source types flip.
+        The 2D mapper is injected, not silently discovered (ADR-0014 §3): a
+        ``None`` argument (production) resolves the real relocated
+        ``vtkOpenGLResection2DPolyDataMapper``, raising if it is off the path;
+        an injected instance (bare-VTK unit layer, ADR-0008 §2) is used as-is.
+
+        The flattened-quad source is NOT custom: ``vtkBezierSurfaceSource`` is
+        preferred but degrades to base VTK's ``vtkPlaneSource`` (always
+        present), so it keeps its resolve-or-fallback shape.
         """
         self._bezier_plane = _make_flattened_quad_source()
         _initialise_flattened_quad(self._bezier_plane)
 
-        mapper = _make_resection_mapper_2d()
+        mapper = (
+            resection_mapper_2d
+            if resection_mapper_2d is not None
+            else _make_resection_mapper_2d()
+        )
         if self._bezier_plane is not None and hasattr(mapper, "SetInputConnection"):
             mapper.SetInputConnection(self._bezier_plane.GetOutputPort())
         self._resection_mapper_2d = mapper
@@ -891,21 +910,25 @@ def _quad_source_bounds(plane: Any) -> tuple | None:
 
 
 def _make_resection_mapper_2d() -> Any:
-    """Return the resectogram's 2D mapper.
+    """Return the resectogram's 2D mapper instance, or raise.
 
-    Prefers the relocated ``vtkOpenGLResection2DPolyDataMapper``
-    (``LiverResections/VTKWidgets/``, reachable in a Slicer process);
-    falls back to a generic ``vtkPolyDataMapper``.
+    Resolves the relocated ``vtkOpenGLResection2DPolyDataMapper``
+    (``LiverResections/VTKWidgets/``, reachable in a Slicer process).
+    Raises ``RuntimeError`` when it is off the path — a real
+    misconfiguration in production (ADR-0014 §3) must fail loudly rather
+    than degrade to a shader-less generic mapper.  Bare-VTK unit tests
+    (ADR-0008 §2) avoid this path by injecting a mapper instance instead.
     """
-    factory = getattr(vtk, "vtkOpenGLResection2DPolyDataMapper", None)
+    factory = _import_wrapped_class("vtkOpenGLResection2DPolyDataMapper")
     if factory is None:
-        try:  # pragma: no cover — exercised inside Slicer
-            from slicer import vtkOpenGLResection2DPolyDataMapper as factory  # type: ignore[no-redef]
-        except Exception:
-            factory = None
-    if factory is not None:
-        return factory()
-    return vtk.vtkPolyDataMapper()
+        raise RuntimeError(
+            "vtkOpenGLResection2DPolyDataMapper is not reachable from the "
+            "'vtk' or 'slicer' namespace.  It is a wrapped-C++ class relocated "
+            "to LiverResections/VTKWidgets/ (ADR-0014 §3) and available only "
+            "inside a launched Slicer with the module loaded.  Inject a mapper "
+            "instance for bare-VTK unit tests (ADR-0008 §2)."
+        )
+    return factory()
 
 
 def _make_gaussian_blur_pass() -> Any | None:

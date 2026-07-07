@@ -39,12 +39,13 @@ Three pieces of geometry per ADR-0014 §2:
 Per ADR-0014 §3 the four custom OpenGL mappers — including
 ``vtkOpenGLDistanceContourPolyDataMapper`` — relocate from
 ``LiverMarkups/VTKWidgets/`` to ``LiverResections/VTKWidgets/``.  The
-relocation has not landed yet; this Representation uses the generic
-``vtkPolyDataMapper`` + ``vtkActor`` pair until the relocation
-completes, at which point the spheroid mapper field flips to
-``vtkOpenGLDistanceContourPolyDataMapper`` *without changing the
-Representation's public API*.  Marked with
-``TODO(T2-mapper-relocation)`` at the construction point.
+spheroid CONTOUR mapper is that custom class, injected rather than
+silently discovered: in production the ``spheroid_mapper`` constructor
+argument is ``None`` and this Representation resolves the real wrapped
+class (raising if it is off the path); the bare-VTK unit layer
+(ADR-0008 §2) injects a generic ``vtkPolyDataMapper`` instance.  The
+sphere-MARKER mappers are genuinely generic geometry and stay plain
+``vtkPolyDataMapper`` (not injected).
 
 Renderer attachment
 -------------------
@@ -95,11 +96,17 @@ class DistanceSpheroidInitRepresentation:
 
     Constructor
     -----------
-    ``DistanceSpheroidInitRepresentation(renderer=None)``
+    ``DistanceSpheroidInitRepresentation(renderer=None, *, spheroid_mapper=None)``
 
     * ``renderer`` — the ``vtkRenderer`` the actors are added to.
       Optional; ``None`` is supported for unit tests (the actors
       exist but are unrendered).
+    * ``spheroid_mapper`` — the custom contour-mapper INSTANCE
+      (dependency injection, ADR-0014 §3).  ``None`` (production)
+      resolves the real ``vtkOpenGLDistanceContourPolyDataMapper``,
+      raising if it is off the path.  An injected instance (bare-VTK
+      unit layer, ADR-0008 §2) is used as-is.  The sphere-marker mappers
+      are always plain ``vtkPolyDataMapper`` and not affected.
 
     Public methods
     --------------
@@ -141,7 +148,9 @@ class DistanceSpheroidInitRepresentation:
       observes a change in (Center, Radii, init points, displayMTime).
     """
 
-    def __init__(self, renderer: Any | None = None) -> None:
+    def __init__(
+        self, renderer: Any | None = None, *, spheroid_mapper: Any | None = None
+    ) -> None:
         self._renderer: Any | None = None
 
         # The VTK pipeline objects the Representation owns.  ``None`` in
@@ -183,13 +192,7 @@ class DistanceSpheroidInitRepresentation:
         # the Init->Planning commit, or ``None`` before commit.
         self._ring_polydata: Any | None = None
 
-        # TODO(T2-mapper-relocation): swap ``vtk.vtkPolyDataMapper`` for
-        # ``vtkOpenGLDistanceContourPolyDataMapper`` once the four
-        # custom mappers are relocated from ``LiverMarkups/VTKWidgets/``
-        # to ``LiverResections/VTKWidgets/`` per ADR-0014 §3.  The
-        # public API of this Representation does not change — only the
-        # spheroid mapper field's concrete type.
-        self._build_vtk_pipeline()
+        self._build_vtk_pipeline(spheroid_mapper)
 
         if renderer is not None:
             self.SetRenderer(renderer)
@@ -316,7 +319,7 @@ class DistanceSpheroidInitRepresentation:
     # Internal helpers
     # ------------------------------------------------------------------ #
 
-    def _build_vtk_pipeline(self) -> None:
+    def _build_vtk_pipeline(self, spheroid_mapper: Any | None) -> None:
         """Construct the spheroid pipeline.
 
         Marker actors are built lazily on demand (the count is data-
@@ -332,10 +335,12 @@ class DistanceSpheroidInitRepresentation:
         on-commit CPU-extracted ring.  ``_apply_data_node`` pushes the
         (centre, radii) onto the mapper via ``SetSpheroid``.
 
-        When the relocated mapper is not on the path (a plain non-Slicer
-        VTK build used by the unit-layer tests) the pipeline falls back
-        to a generic ``vtkPolyDataMapper`` so the Representation still
-        constructs and the marker/colour bookkeeping stays testable.
+        The contour mapper is injected, not silently discovered: in
+        production ``spheroid_mapper`` is ``None`` and this resolves the
+        real wrapped class (raising if it is off the path — a real
+        misconfiguration must not degrade to a shader-less generic
+        mapper); the bare-VTK unit layer (ADR-0008 §2) injects a generic
+        mapper instance.
         """
         # Spheroid pipeline ---------------------------------------------------
         self._parametric_ellipsoid = vtk.vtkParametricEllipsoid()
@@ -362,17 +367,17 @@ class DistanceSpheroidInitRepresentation:
             self._parametric_function_source.GetOutputPort()
         )
 
-        mapper_class = _resolve_extractor_class(
-            "vtkOpenGLDistanceContourPolyDataMapper"
-        )
-        if mapper_class is not None:
+        if spheroid_mapper is None:
+            mapper_class = _require_vtk_class(
+                "vtkOpenGLDistanceContourPolyDataMapper"
+            )
             self._spheroid_mapper = mapper_class()
         else:
-            # Non-Slicer VTK build (unit-layer tests): the relocated
-            # mapper is not wrapped onto the path.  A generic mapper keeps
-            # the pipeline constructible; the triaxial banding is a no-op
-            # there but the marker/colour bookkeeping is still exercised.
-            self._spheroid_mapper = vtk.vtkPolyDataMapper()
+            # Bare-VTK unit layer (ADR-0008 §2): the relocated mapper is
+            # off the path, so the caller injects a generic mapper.  The
+            # triaxial banding is a no-op there but the marker / colour
+            # bookkeeping is still exercised.
+            self._spheroid_mapper = spheroid_mapper
         self._spheroid_mapper.SetInputConnection(
             self._spheroid_polydata_filter.GetOutputPort()
         )
@@ -635,7 +640,10 @@ def _resolve_extractor_class(name: str) -> Any | None:
     The Algorithm-library classes are wrapped into Slicer's ``slicer``
     namespace (``SlicerMacroBuildModuleLogic`` Python wrapping); the
     plain ``vtk`` module is the fallback for non-Slicer VTK builds.
-    Returns ``None`` when neither namespace exposes the class.
+    Returns ``None`` when neither namespace exposes the class — the
+    on-commit ring extraction degrades to a no-op when the extractor is
+    unreachable, so this stays resolve-or-``None`` (unlike the mapper
+    resolution, which is resolve-or-raise).
     """
     for module_name in ("slicer", "vtk"):
         try:
@@ -646,6 +654,34 @@ def _resolve_extractor_class(name: str) -> Any | None:
         if cls is not None:
             return cls
     return None
+
+
+def _require_vtk_class(name: str) -> Any:
+    """Resolve a wrapped-C++ class by name from ``slicer`` then ``vtk``, or raise.
+
+    The relocated custom mapper is wrapped into Slicer's ``slicer``
+    namespace (``SlicerMacroBuildModuleLogic`` Python wrapping); the plain
+    ``vtk`` module is the fallback for a non-Slicer VTK build.  Raises
+    ``RuntimeError`` when neither namespace exposes the class — a real
+    misconfiguration in production (ADR-0014 §3) must fail loudly rather
+    than degrade to a shader-less generic mapper.  Bare-VTK unit tests
+    (ADR-0008 §2) avoid this path by injecting a mapper instance instead.
+    """
+    for module_name in ("slicer", "vtk"):
+        try:
+            module = __import__(module_name)
+        except ImportError:
+            continue
+        cls = getattr(module, name, None)
+        if cls is not None:
+            return cls
+    raise RuntimeError(
+        f"{name} is not reachable from the 'slicer' or 'vtk' namespace. "
+        "It is a wrapped-C++ class relocated to LiverResections/VTKWidgets/ "
+        "(ADR-0014 §3) and available only inside a launched Slicer with the "
+        "module loaded.  Inject a mapper instance for bare-VTK unit tests "
+        "(ADR-0008 §2)."
+    )
 
 
 def _model_polydata(target_model: Any | None) -> Any | None:
