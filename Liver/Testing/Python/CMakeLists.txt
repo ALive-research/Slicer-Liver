@@ -78,6 +78,37 @@ foreach(_pytest_file IN LISTS _liver_shell_pytest_files)
   )
 endforeach()
 
+# Stage-1 Case-Setup volume-role vocabulary + tagging seam (ADR-0029 §Stage 1;
+# ADR-0023 §"Stage 1"; ADR-0004 §"Python/C++ boundary" -- the Qt panel vs the
+# pure-Python role seam).  Pins a NEW shared role module
+# ``SlicerLiverCommonLib.roles`` importable by BOTH the Liver shell (Case Setup,
+# the role WRITER) and LiverSegmentation (Stage 2, the role READER): the fixed
+# ``LiverRole`` scene-attribute key + the five machine-stable CamelCase values
+# (Native / Arterial / PortalVenous / Delayed / Other, NO spaces) + a
+# ``set_volume_role(volume, role) -> bool`` tagging seam (validates the role,
+# writes the attribute, no-op-False on an unknown role or a None volume).
+# Collapses the vocabulary drift between LiverSegmentation.py's ad-hoc constants
+# and the arch doc's spaced labels into one shared module.  Invariant 1 (the
+# vocabulary) needs no scene and runs everywhere the module imports; invariants
+# 2--3 (tagging + the Stage-1 completion predicate) mint a
+# vtkMRMLScalarVolumeNode on the live scene, so they run green under the
+# launched-Slicer `pytest_launched` row and SKIP CLEANLY here under bare pytest
+# (no slicer.mrmlScene).  GL-free -- only node attributes + a scene-level
+# predicate (the body of LiverWidget._stage1IsComplete) are asserted, no view /
+# render window.  RED / skip-pending (guards on the SlicerLiverCommonLib.roles
+# import + the set_volume_role seam) until the implementer lands the shared
+# module (ADR-0027 §Conformance: the skip lifts at the implementation commit).
+add_test(
+  NAME LiverCaseSetupVolumeRoles
+  COMMAND "${Python3_EXECUTABLE}" -m pytest
+    -q
+    "${CMAKE_CURRENT_SOURCE_DIR}/test_case_setup_volume_roles.py"
+  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+set_tests_properties(LiverCaseSetupVolumeRoles PROPERTIES
+  LABELS "pytest;module-layer;Liver;case-setup"
+)
+
 # --------------------------------------------------------------------------- #
 # pytest_launched — same test roots as pytest_scaffold, inside a launched
 # Slicer.
