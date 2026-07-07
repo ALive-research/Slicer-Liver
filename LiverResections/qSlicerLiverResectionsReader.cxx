@@ -131,11 +131,12 @@ QStringList qSlicerLiverResectionsReader::extensions() const
   // node in the scene.  Re-enabling the filter here lets Add Data
   // round-trip to a visible surface.
   //
-  // The legacy ``.lrp.fcsv`` stays for load-only migration; writes
-  // always emit ``.lrp.json`` via the dedicated ``qSlicerNodeWriter``
-  // registered in ``qSlicerLiverResectionsModule::setup()``.
-  return QStringList() << "Liver resection plan (*.lrp.json)"
-                       << "LiverResections CSV (*.lrp.fcsv)";
+  // Only the v2 ``.lrp.json`` schema is advertised; the legacy
+  // ``.lrp.fcsv`` migration is retired (ADR-0014 §"Dissolution";
+  // ADR-0032 §"Consequences").  Writes always emit ``.lrp.json`` via the
+  // dedicated ``qSlicerNodeWriter`` registered in
+  // ``qSlicerLiverResectionsModule::setup()``.
+  return QStringList() << "Liver resection plan (*.lrp.json)";
 }
 
 //-----------------------------------------------------------------------------
@@ -167,14 +168,12 @@ bool qSlicerLiverResectionsReader::load(const IOProperties& properties)
   // plan storage node.  The storage node's reader walks the
   // ``surface.type`` discriminator and instantiates the right
   // concrete surface subclass into the scene.
-  // A legacy v1 ``.lrp.fcsv`` is migrated seamlessly through the same
-  // plan-storage path: ``vtkMRMLResectionPlanStorageNode::ReadData``
-  // detects the legacy extension and lifts the 16 Bezier control points
-  // into a v2 plan + carrier (see that node's §"Legacy `.lrp.fcsv`"
-  // and Docs/migrations/v1-to-v2.md).  Both extensions therefore yield
-  // a ``vtkMRMLResectionPlanNode`` that the LayerDM Pipeline renders.
+  // The legacy v1 ``.lrp.fcsv`` migration is retired (ADR-0014
+  // §"Dissolution"; ADR-0032 §"Consequences") — only the v2
+  // ``.lrp.json`` loads, yielding a ``vtkMRMLResectionPlanNode`` that
+  // the LayerDM Pipeline renders.
   const QString lowerName = fileName.toLower();
-  if (lowerName.endsWith(".lrp.json") || lowerName.endsWith(".lrp.fcsv"))
+  if (lowerName.endsWith(".lrp.json"))
   {
     vtkMRMLScene* scene = d->LiverResectionsLogic->GetMRMLScene();
     if (!scene)
@@ -236,10 +235,11 @@ bool qSlicerLiverResectionsReader::load(const IOProperties& properties)
     return true;
   }
 
-  // No other extension is advertised by supportedFileTypes(); both the
-  // v2 ``.lrp.json`` and the legacy v1 ``.lrp.fcsv`` route through the
-  // plan-storage path above.  The old vtkMRMLLiverResectionNode-family
-  // loader is intentionally no longer reached from here.
+  // No other extension is advertised by supportedFileTypes(); the v2
+  // ``.lrp.json`` routes through the plan-storage path above.  The
+  // legacy v1 ``.lrp.fcsv`` migration and the old
+  // vtkMRMLLiverResectionNode-family loader are retired (ADR-0014
+  // §"Dissolution"; ADR-0032 §"Consequences").
   this->userMessages()->AddMessage(vtkCommand::ErrorEvent, (QString("Unsupported file extension for '%1'").arg(fileName)).toUtf8().constData());
   this->setLoadedNodes(QStringList());
   return false;

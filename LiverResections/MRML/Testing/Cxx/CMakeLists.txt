@@ -15,7 +15,6 @@ set(KIT_TEST_SRCS
   vtkMRMLAbstractParametricSurfaceNodeTest1.cxx
   vtkMRMLResectionPlanNodeTest1.cxx
   vtkMRMLResectionPlanStorageNodeTest1.cxx
-  vtkMRMLResectionPlanLegacyFcsvMigrationTest.cxx
   # Characterization test (T2.7-2b): the plan-to-carrier association
   # round-trips through .lrp.json via the typed "geometry" node-ref alone,
   # re-resolving on a standalone load with no logic instance.  Pins the
@@ -28,13 +27,6 @@ set(KIT_TEST_SRCS
   vtkMRMLResectionPlanDistanceMapRefTest.cxx
   vtkMRMLLocatorNodeTest1.cxx
   )
-
-#-----------------------------------------------------------------------------
-# Pass the in-source Fixtures/ directory through to the test driver.
-# Consumed by vtkMRMLResectionPlanLegacyFcsvMigrationTest, which reads
-# the committed legacy ``.lrp.fcsv`` fixture through the v2 plan-storage
-# migration path.
-add_definitions(-DLIVER_BEZIER_STORAGE_TEST_FIXTURE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/Fixtures\")
 
 #-----------------------------------------------------------------------------
 # Pass a writable temp dir (the standard CMake binary-tree temporary
@@ -63,7 +55,6 @@ SIMPLE_TEST(vtkMRMLResectogramDisplayNodeTest1)
 SIMPLE_TEST(vtkMRMLAbstractParametricSurfaceNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanStorageNodeTest1)
-SIMPLE_TEST(vtkMRMLResectionPlanLegacyFcsvMigrationTest)
 SIMPLE_TEST(vtkMRMLResectionPlanGeometryRefRoundTripTest)
 SIMPLE_TEST(vtkMRMLResectionPlanDistanceMapRefTest)
 SIMPLE_TEST(vtkMRMLLocatorNodeTest1)
