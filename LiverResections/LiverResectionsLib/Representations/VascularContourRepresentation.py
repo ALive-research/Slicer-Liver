@@ -186,12 +186,12 @@ class VascularContourRepresentation:
         strip = _safe_get_strip_polydata(data_node)
         if strip is None:
             return
+        # Both contour mappers are the real custom mappers (a hard requirement,
+        # ADR-0014 §3) -- vtkPolyDataMapper subclasses that always expose
+        # SetInputData -- so the strip is fed with a direct call.
         for mapper in (self._distance_contour_mapper, self._slicing_contour_mapper):
-            if mapper is None:
-                continue
-            setter = getattr(mapper, "SetInputData", None)
-            if setter is not None:
-                setter(strip)
+            if mapper is not None:
+                mapper.SetInputData(strip)
 
     def _attach_actors(self, renderer: Any) -> None:
         if not hasattr(renderer, "AddActor"):
