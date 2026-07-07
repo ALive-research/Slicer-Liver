@@ -171,6 +171,9 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         self.logic = None
         self.structureTabs = None
         self._backendStatusLabel = None
+        # Load-a-segmentation affordance (the v2.0 no-AI path); built in setup().
+        self._loadSegCombo = None
+        self._loadSegTable = None
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)
 
@@ -186,6 +189,8 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
             page = self._buildStructureCard(title, sctCode)
             self.structureTabs.addTab(page, f"{GLYPH_PENDING}  {title}")
         self.layout.addWidget(self.structureTabs)
+
+        self.layout.addWidget(self._buildLoadSegmentationSection())
 
         self.layout.addWidget(self._buildBackendStatusRow())
 
@@ -247,6 +252,97 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         preDownload.connect("clicked()", self.onPreDownload)
         layout.addWidget(preDownload)
         return row
+
+    def _buildLoadSegmentationSection(self):
+        """Build the "load an existing segmentation" affordance (ADR-0024).
+
+        The v2.0 path to a canonical segmentation WITHOUT in-app AI (deferred to
+        v2.1): pick a loaded ``vtkMRMLSegmentationNode``, assign each of its
+        segments a structure, and Import -> the logic promotes it to canonical
+        and SCT-tags the assigned segments (``importSegmentationAsCanonical``).
+        """
+        box = qt.QGroupBox("Load an existing segmentation")
+        box.setObjectName("LoadSegmentationSection")
+        layout = qt.QVBoxLayout(box)
+        layout.addWidget(qt.QLabel(
+            "Load a segmentation via Add Data, select it here, assign each "
+            "segment a structure, then Import as the canonical segmentation."))
+
+        combo = slicer.qMRMLNodeComboBox()
+        combo.setObjectName("LoadSegmentationComboBox")
+        combo.nodeTypes = ["vtkMRMLSegmentationNode"]
+        combo.addEnabled = False
+        combo.removeEnabled = False
+        combo.noneEnabled = True
+        combo.setMRMLScene(slicer.mrmlScene)
+        combo.connect("currentNodeChanged(vtkMRMLNode*)", self._onLoadSegmentationSelected)
+        layout.addWidget(combo)
+
+        table = qt.QTableWidget()
+        table.setObjectName("LoadSegmentationAssignTable")
+        table.setColumnCount(2)
+        table.setHorizontalHeaderLabels(["Segment", "Structure"])
+        table.horizontalHeader().setStretchLastSection(True)
+        table.editTriggers = qt.QAbstractItemView.NoEditTriggers
+        layout.addWidget(table)
+
+        importButton = qt.QPushButton("Import as canonical segmentation")
+        importButton.setObjectName("ImportSegmentationButton")
+        importButton.connect("clicked()", self._onImportSegmentationAsCanonical)
+        layout.addWidget(importButton)
+
+        self._loadSegCombo = combo
+        self._loadSegTable = table
+        return box
+
+    def _onLoadSegmentationSelected(self, node):
+        """Repopulate the per-segment structure-assignment table."""
+        table = self._loadSegTable
+        if table is None:
+            return
+        segmentIds = []
+        if node is not None:
+            segmentation = node.GetSegmentation()
+            segmentIds = list(segmentation.GetSegmentIDs())
+        table.setRowCount(len(segmentIds))
+        for row, segmentId in enumerate(segmentIds):
+            segment = node.GetSegmentation().GetSegment(segmentId)
+            name = segment.GetName() if segment is not None else segmentId
+            nameItem = qt.QTableWidgetItem(name)
+            nameItem.setData(qt.Qt.UserRole, segmentId)
+            table.setItem(row, 0, nameItem)
+
+            picker = qt.QComboBox()
+            picker.addItem("(skip)", None)
+            for title, sctCode in STRUCTURE_TABS:
+                picker.addItem(title, sctCode)
+            table.setCellWidget(row, 1, picker)
+
+    def _onImportSegmentationAsCanonical(self):
+        """Collect the structure assignments and promote the loaded node."""
+        combo = self._loadSegCombo
+        table = self._loadSegTable
+        if combo is None or table is None or self.logic is None:
+            return
+        node = combo.currentNode()
+        if node is None:
+            return
+        assignments = {}
+        for row in range(table.rowCount):
+            nameItem = table.item(row, 0)
+            picker = table.cellWidget(row, 1)
+            if nameItem is None or picker is None:
+                continue
+            sctCode = picker.itemData(picker.currentIndex)
+            if sctCode is None:
+                continue  # "(skip)"
+            segmentId = nameItem.data(qt.Qt.UserRole)
+            meaning = picker.itemText(picker.currentIndex)
+            assignments[segmentId] = (sctCode, meaning)
+        if not assignments:
+            return
+        self.logic.importSegmentationAsCanonical(node, assignments)
+        self._refreshTabGlyphs()
 
     def onPreDownload(self):
         """Pre-download the AI backend without minting a node.
