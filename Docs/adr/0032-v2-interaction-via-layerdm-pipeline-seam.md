@@ -127,7 +127,8 @@ with no custom DM; the grid math is Python (testable without GL via
 **Follow-up.** The migration is sliced under #501 (logic create-API →
 Pipeline edit seam → placement → `ResectionPlanningWidget` re-point →
 resectogram re-source → round-trip), and only after it lands is the v1
-render retirement (#493 slices 3–4) safe.
+render retirement (#493 slices 3–4) safe.  That retirement is now
+executed — see the 2026-07-07 amendment below.
 
 ## Conformance
 
@@ -142,6 +143,54 @@ render retirement (#493 slices 3–4) safe.
   `SetControlPoint`; the same drag in the post-commit read-only state is a
   no-op.
 - Placement + the create flow live in Python (ADR-0004).
+
+## Amendment (2026-07-07): v1 markups Bézier render fully retired
+
+The v2 interactive workflow having landed (the Pipeline interaction seam +
+Python placement per §"Decision", plus the #501 slices), the v1 markups
+Bézier subsystem is now **fully retired** — a reversal of the earlier
+assumption that the v1 node survives for loaders.
+
+**What was assumed before.**
+[ADR-0013](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0013-layerdm-pipeline-pattern.md)
+and this ADR's original body left the v1 render + node in place so a
+legacy `.lrp.fcsv` resection plan could still be migrated on load (the
+"keep the legacy Markups path alive" position).
+
+**What changes now.** The following are removed in full:
+
+- the v1 render classes `vtkSlicerBezierSurfaceWidget`,
+  `vtkSlicerBezierSurfaceRepresentation3D`, `vtkSlicerBezierSurfaceRepresentation2D`;
+- the v1 MRML classes `vtkMRMLMarkupsBezierSurfaceNode` and
+  `vtkMRMLMarkupsBezierSurfaceDisplayNode`, and their markups-node /
+  display-node registrations;
+- the legacy `.lrp.fcsv` migration: the CSV parse vehicle
+  `vtkMRMLLiverResectionCSVStorageNode`, the storage node's `ReadFcsv`
+  branch, and the reader's `.lrp.fcsv` acceptance.
+
+`vtkBezierSurfaceSource` is **kept** — it is a pure-VTK surface evaluator
+the v2 render path (`BezierPlanningRepresentation`,
+`FlattenedSurfaceRepresentation`) and `vtkLiverVolumetryLogic` consume; it
+is unrelated to the retired v1 node family.
+
+**Rationale.** After the #501 interactive migration, the entire
+place/edit/render workflow is on v2; the v1 node has no remaining
+producer or consumer.  The maintainer records a negligible v1-scene
+install base, so preserving the `.lrp.fcsv` migration is not worth the
+carrying cost of a whole disjoint node hierarchy + its CSV parser.
+
+**Consequence.** Legacy `.lrp.fcsv` resection-plan files **no longer
+load** — only the v2 `.lrp.json` schema is read and written.  The sole
+Bézier render + interaction path is the v2 LayerDM Pipeline
+([ADR-0013](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0013-layerdm-pipeline-pattern.md)
+§5;
+[ADR-0031](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0031-distance-map-input-on-resection-plan.md)).
+
+**Conformance.** The `qSlicerLiverMarkupsModuleTest` registration
+invariant is flipped: `vtkMRMLMarkupsBezierSurfaceNode` must NOT be a
+registered markups type [test].  A repo grep for the retired class names
+resolves only in historical porting-note comments, never in code
+[review].
 
 ## References
 
