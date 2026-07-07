@@ -144,5 +144,160 @@ def test_card_run_produces_exactly_one_scratch_node(monkeypatch):
     )
 
 
+# =========================================================================== #
+# Silent-hand-off GUARD — a card Run with no PortalVenous volume must not
+# silently drive the backend with a None volume.
+# =========================================================================== #
+#
+# ``_StructureCard.onRun`` calls ``self._widget.logic.segment(volume, ...)``
+# where ``volume = selectInputVolume()`` is None when no Stage-1
+# ``LiverRole='PortalVenous'`` volume exists.  A None volume must NOT reach
+# ``segment()`` (no scratch node minted, no misleading progress bar); instead
+# the card surfaces feedback on ``statusLabel`` and leaves Accept/Reject
+# disabled.  The counterpart: WITH a PortalVenous volume, Run proceeds.
+#
+# ADR-0024 §"Per-structure micro-workflows" (the Stage-1/Stage-2 hand-off is
+# an explicit precondition, not a silent no-op); test-first per ADR-0027.
+
+
+def _require_qt_widget_or_skip():
+    from conftest import _require_qt_widget
+
+    _require_qt_widget()
+
+
+def _make_card_or_skip(slicer, orch, sctCode):
+    """Build one ``_StructureCard`` GL-free on a stand-in widget.
+
+    The card only touches its owning widget through ``self._widget.logic``;
+    it does not need the full ``LiverSegmentationWidget`` (which builds a
+    QTabWidget + scene observers).  A minimal stand-in carrying the real
+    orchestrator ``logic`` exercises the real ``selectInputVolume`` /
+    ``segment`` paths while keeping construction cheap and GL-free (only the
+    card's own QPushButton/QLabel/QProgressBar are built; nothing renders).
+
+    ``_refreshTabGlyphs`` is stubbed on the stand-in so ``onAccept``'s call is
+    a no-op here (glyph refresh is covered by the accepted-glyph suite).
+    """
+    _require_qt_widget_or_skip()
+    try:
+        import LiverSegmentation  # type: ignore[import-not-found]
+    except ImportError as exc:
+        pytest.skip(f"LiverSegmentation not importable ({exc}).")
+
+    card_cls = getattr(LiverSegmentation, "_StructureCard", None)
+    if card_cls is None:
+        pytest.fail(
+            "LiverSegmentation must expose the per-structure card controller "
+            "(_StructureCard) that owns onRun -- ADR-0024 "
+            "§'Per-structure micro-workflows'."
+        )
+
+    class _StandInWidget:
+        def __init__(self, logic):
+            self.logic = logic
+
+        def _refreshTabGlyphs(self):
+            pass
+
+    widget = _StandInWidget(orch)
+    card = card_cls(widget, "Liver", sctCode)
+    return card
+
+
+def test_card_run_without_portalvenous_volume_does_not_segment(monkeypatch):
+    """Run with no PortalVenous volume mints no scratch node + surfaces feedback.
+
+    ADR-0024 §"Per-structure micro-workflows": Stage 2 works on the Stage-1
+    PortalVenous volume.  With none tagged, ``selectInputVolume()`` is None;
+    onRun must NOT hand a None volume to ``segment()`` (no scratch node), and
+    must surface actionable feedback on ``statusLabel`` while leaving
+    Accept/Reject disabled and the progress bar hidden.
+
+    RED-as-skip until the guard lands: today's onRun calls ``segment(None,...)``
+    -> ``_runTotalSegmentator(None,...)`` -> a scratch node, and sets the
+    "Review the result" text with Accept/Reject enabled.
+
+    The backend seam is monkeypatched so, even under the current (unfixed)
+    behaviour, no real inference runs and the leak-checking teardown stays
+    honest.
+    """
+    slicer, orch = _orchestrator_or_skip()
+    slicer.mrmlScene.Clear(0)
+
+    if not hasattr(orch, "segment"):
+        pytest.fail(
+            "orchestrator must expose segment(volume, sctTarget) per ADR-0024 "
+            "-- not yet implemented."
+        )
+    _mock_backend_segment(monkeypatch, slicer, orch)
+
+    card = _make_card_or_skip(slicer, orch, SCT_LIVER_CODE)
+
+    # No PortalVenous volume in the scene: selectInputVolume() -> None.
+    assert orch.selectInputVolume() is None, (
+        "precondition: no PortalVenous-role volume exists for this test."
+    )
+
+    card.onRun()
+
+    assert len(_segmentation_nodes(slicer, ROLE_SCRATCH)) == 0, (
+        "onRun with no PortalVenous volume must NOT call segment() -- no "
+        "scratch node may be minted from a None input (ADR-0024 Stage-1/"
+        "Stage-2 hand-off precondition)."
+    )
+    status = card.statusLabel.text
+    assert status and status != "Idle" and "Review the result" not in status, (
+        "onRun must surface actionable feedback on statusLabel (e.g. 'Tag a "
+        "PortalVenous volume in Case Setup first.'), not the post-run "
+        f"'Review the result' text; got {status!r}."
+    )
+    assert card.acceptButton.enabled is False, (
+        "Accept must stay disabled when Run did not produce a result."
+    )
+    assert card.rejectButton.enabled is False, (
+        "Reject must stay disabled when Run did not produce a result."
+    )
+    assert card.progressBar.visible is False, (
+        "the progress bar must not be left visible when Run short-circuits."
+    )
+
+
+def test_card_run_with_portalvenous_volume_still_segments(monkeypatch):
+    """Run WITH a PortalVenous volume still drives the backend + mints scratch.
+
+    Counterpart to the guard: the short-circuit must be scoped to the
+    missing-input case only.  With a Stage-1 PortalVenous volume present,
+    onRun proceeds — one scratch node, Accept/Reject enabled.
+
+    ADR-0024 §"Per-structure micro-workflows".
+    """
+    slicer, orch = _orchestrator_or_skip()
+    slicer.mrmlScene.Clear(0)
+
+    if not hasattr(orch, "segment"):
+        pytest.fail(
+            "orchestrator must expose segment(volume, sctTarget) per ADR-0024 "
+            "-- not yet implemented."
+        )
+
+    _add_input_volume(slicer)  # LiverRole='PortalVenous'
+    _mock_backend_segment(monkeypatch, slicer, orch)
+
+    card = _make_card_or_skip(slicer, orch, SCT_LIVER_CODE)
+    card.onRun()
+
+    assert len(_segmentation_nodes(slicer, ROLE_SCRATCH)) == 1, (
+        "onRun with a PortalVenous volume must proceed and mint exactly one "
+        "scratch node (ADR-0024 §'Per-structure micro-workflows')."
+    )
+    assert card.acceptButton.enabled is True, (
+        "Accept must be enabled after a successful Run."
+    )
+    assert card.rejectButton.enabled is True, (
+        "Reject must be enabled after a successful Run."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
