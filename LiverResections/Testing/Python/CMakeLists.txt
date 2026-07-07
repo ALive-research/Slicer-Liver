@@ -322,6 +322,44 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections;locator;mapper-wiring"
     )
 
+    # Locator interaction SEAM (GL-free), ADR-0032 seam / ADR-0025 Slice C --
+    # the ResectogramPipeline glue that turns a resectogram click into a locator
+    # pick.  Pins a NEW ResectogramPipeline._produce_from_display_position seam
+    # (ADR-0004 Python) that resolves the four producer inputs off the LIVE
+    # Pipeline state -- the surface carrier (GetDataNode()), the scene's single
+    # vtkMRMLLocatorNode (GetFirstNodeByClass, ADR-0025 §Consumer), the
+    # mat_ratio (GetFlattenedSurfaceRepresentation().GetMatRatioApplied(),
+    # ADR-0025 §Context) and the strip renderer's render-window size -- then
+    # lazily composes ResectogramLocatorProducer(surface, locator).produce(...)
+    # (ADR-0025 §Producer).  Invariant 1: the seam composes VTK display pixel
+    # (64,192) in a 256x256 viewport at isotropic ratio -> (u,v)=(0.25,0.75) ->
+    # world (22.5,7.5,0) (the SAME known affine grid + anchor as
+    # test_resectogram_locator_producer.py; VTK bottom-left origin, no Qt
+    # y-flip) onto the locator's PickedPositionWorld and returns it.
+    # Invariant 2: a degenerate input (no locator / mat_ratio None /
+    # non-positive viewport / no surface) is a no-op returning None leaving the
+    # locator untouched.  The Qt event-filter click sourcing + click->reslice
+    # end-to-end are the interaction layer, verified on the interactive :0 pass
+    # (ADR-0025 §Click-to-reslice) -- OUT of scope.  Needs the wrapped
+    # vtkMRMLBezierSurfaceNode / vtkMRMLLocatorNode + the create-API + the
+    # LayerDMLib-based Pipeline, so it runs green under the launched-Slicer
+    # `pytest_launched` row and SKIPS CLEANLY here under bare pytest (no
+    # slicer.mrmlScene / LayerDMLib / wrapped classes off the path).  GL free --
+    # renderer + render window are FAKED, no render.  RED / skip-pending
+    # (invariant 1 guards on the _produce_from_display_position seam) until the
+    # implementer lands it (ADR-0027 §Conformance: the skip lifts at the
+    # implementation commit).
+    add_test(
+      NAME LiverResections_resectogram_locator_pipeline_seam
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_resectogram_locator_pipeline_seam.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_resectogram_locator_pipeline_seam PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;locator"
+    )
+
     # #501 slice 2 -- the v2 resection control-point edit path on the LayerDM
     # Pipeline (ADR-0032: interaction routes through the Pipeline interaction
     # seam, no standalone vtkAbstractWidget).  Pins the GL-free edit kernel
