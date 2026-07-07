@@ -726,31 +726,28 @@ def _identity_matrix() -> Any:
 
 
 def _require_vtk_class(name: str) -> Any:
-    """Resolve a wrapped-C++ class by name from ``slicer`` then ``vtk``, or raise.
+    """Resolve a wrapped-C++ VTKWidgets class by name from ``slicer``, or raise.
 
     The relocated mapper + the Bezier surface source are wrapped into Slicer's
-    ``slicer`` namespace (``SlicerMacroBuildModuleLogic`` Python wrapping); the
-    plain ``vtk`` module is the fallback for a non-Slicer VTK build.  Raises
-    ``RuntimeError`` when neither namespace exposes the class — a real
-    misconfiguration in production (ADR-0014 §3) must fail loudly rather than
+    ``slicer`` namespace (ADR-0014 §3).  Raises ``RuntimeError`` when a class is
+    absent — a real misconfiguration in production must fail loudly rather than
     degrade to a shader-less generic mapper.  Bare-VTK unit tests (ADR-0008 §2)
     avoid this path by injecting a mapper instance instead.
     """
-    for module_name in ("slicer", "vtk"):
-        try:
-            module = __import__(module_name)
-        except ImportError:
-            continue
-        cls = getattr(module, name, None)
-        if cls is not None:
-            return cls
-    raise RuntimeError(
-        f"{name} is not reachable from the 'slicer' or 'vtk' namespace. "
-        "It is a wrapped-C++ class relocated to LiverResections/VTKWidgets/ "
-        "(ADR-0014 §3) and available only inside a launched Slicer with the "
-        "module loaded.  Inject a mapper instance for bare-VTK unit tests "
-        "(ADR-0008 §2)."
-    )
+    try:
+        import slicer
+    except ImportError:
+        slicer = None
+    cls = getattr(slicer, name, None) if slicer is not None else None
+    if cls is None:
+        raise RuntimeError(
+            f"{name} is not reachable from the 'slicer' namespace. "
+            "It is a wrapped-C++ class relocated to LiverResections/VTKWidgets/ "
+            "(ADR-0014 §3) and available only inside a launched Slicer with the "
+            "module loaded.  Inject a mapper instance for bare-VTK unit tests "
+            "(ADR-0008 §2)."
+        )
+    return cls
 
 
 def _push_color3(mapper: Any, setter_name: str, getter: Any | None) -> None:

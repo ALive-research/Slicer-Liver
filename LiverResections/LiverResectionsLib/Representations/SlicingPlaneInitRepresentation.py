@@ -599,23 +599,19 @@ def _distance(
 
 
 def _resolve_extractor_class(name: str) -> Any | None:
-    """Resolve a VTK-wrapped ring-extractor class by name.
+    """Resolve a wrapped-C++ ring-extractor class by name, or ``None``.
 
-    The Algorithm-library classes are wrapped into Slicer's ``slicer``
-    namespace (``SlicerMacroBuildModuleLogic`` Python wrapping); the
-    plain ``vtk`` module is the fallback for non-Slicer VTK builds.
-    Returns ``None`` when neither namespace exposes the class — the
-    caller then declines to extract rather than raising.
+    The ring extractors live in ``LiverResections/Algorithm/`` and are exposed
+    only on the module's Algorithm Python wrapping (ADR-0014 §3) — NOT on the
+    ``slicer`` or ``vtk`` namespaces.  Lazily imported so this module stays
+    importable where the wrapping is off the path (the bare-VTK unit layer);
+    the caller then declines to extract rather than raising.
     """
-    for module_name in ("slicer", "vtk"):
-        try:
-            module = __import__(module_name)
-        except ImportError:
-            continue
-        cls = getattr(module, name, None)
-        if cls is not None:
-            return cls
-    return None
+    try:
+        import vtkSlicerLiverResectionsModuleAlgorithmPython as algorithm
+    except ImportError:
+        return None
+    return getattr(algorithm, name, None)
 
 
 def _model_polydata(target_model: Any | None) -> Any | None:
