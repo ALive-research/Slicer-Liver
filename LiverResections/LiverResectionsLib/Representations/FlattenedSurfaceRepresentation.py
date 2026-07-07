@@ -139,7 +139,7 @@ class FlattenedSurfaceRepresentation:
     Introspection (used by unit tests)
     ----------------------------------
     * ``GetResectionMapper2D()`` / ``GetResectionActor2D()`` — the 2D
-      mapper + actor pair, or ``None`` before the pipeline is built.
+      mapper + actor pair, or ``None`` when VTK is absent.
     * ``GetResectogramCamera()`` — the private overlay camera.
     * ``GetMatRatioApplied()`` — last ``MatRatio`` pushed onto the 2D
       mapper, or ``None`` before the first ``update()`` / when the
@@ -767,8 +767,8 @@ class FlattenedSurfaceRepresentation:
         reconciles the pass without rebuilding the assembly — the
         ``vtkSetMacro(BlurEnabled, bool)`` ``Modified()`` advances the display
         node's MTime, which ``ResectogramPipeline.UpdatePipeline`` already
-        keys on, so no new observer is needed.  No-op when the renderer
-        is unavailable (no realized view).
+        keys on, so no new observer is needed.  No-op when VTK or the renderer
+        is unavailable (bare-VTK pytest path).
         """
         renderer = self._renderer
         if renderer is None:
@@ -893,12 +893,9 @@ def _quad_source_bounds(plane: Any) -> tuple | None:
 def _make_resection_mapper_2d() -> Any:
     """Return the resectogram's 2D mapper.
 
-    The relocated ``vtkOpenGLResection2DPolyDataMapper``
-    (``LiverResections/VTKWidgets/``) is a hard requirement: a resolver miss is
-    a misconfiguration (the LiverResections module is not loaded / not wrapped)
-    that must surface LOUDLY, not degrade to a generic ``vtkPolyDataMapper``
-    with no ``sampler3D`` to paint the distance-field band (ADR-0008 §2 — the
-    no-VTK unit layer this once degraded for was never built).
+    Prefers the relocated ``vtkOpenGLResection2DPolyDataMapper``
+    (``LiverResections/VTKWidgets/``, reachable in a Slicer process);
+    falls back to a generic ``vtkPolyDataMapper``.
     """
     factory = getattr(vtk, "vtkOpenGLResection2DPolyDataMapper", None)
     if factory is None:
@@ -906,15 +903,9 @@ def _make_resection_mapper_2d() -> Any:
             from slicer import vtkOpenGLResection2DPolyDataMapper as factory  # type: ignore[no-redef]
         except Exception:
             factory = None
-    if factory is None:
-        raise RuntimeError(
-            "FlattenedSurfaceRepresentation requires the relocated "
-            "vtkOpenGLResection2DPolyDataMapper (ADR-0014 §3); neither the "
-            "'slicer' nor the 'vtk' namespace exposes it.  Load the "
-            "LiverResections module so its wrapped VTKWidgets classes are on "
-            "the path."
-        )
-    return factory()
+    if factory is not None:
+        return factory()
+    return vtk.vtkPolyDataMapper()
 
 
 def _make_gaussian_blur_pass() -> Any | None:

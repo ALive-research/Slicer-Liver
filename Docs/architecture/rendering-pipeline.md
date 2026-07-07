@@ -195,7 +195,7 @@ sequenceDiagram
 | `BezierPlanningRepresentation` (drives the real mapper)    | ✓ landed (PR #354; real-mapper wiring in the #493/#501 cutover) |
 | `SlicingPlaneInitRepresentation`                           | ✓ landed (PR #358)  |
 | `DistanceSpheroidInitRepresentation`                       | ✓ landed (PR #359)  |
-| Custom OpenGL mappers (`vtkOpenGLBezierResectionPolyDataMapper`, …) | ✓ landed — relocated to `LiverResections/VTKWidgets/` (ADR-0014 §3); a hard requirement (#498) |
+| Custom OpenGL mappers (`vtkOpenGLBezierResectionPolyDataMapper`, …) | ✓ landed — relocated to `LiverResections/VTKWidgets/` (ADR-0014 §3); real mapper drives the launched render (pinned by `test_custom_mapper_wiring`), generic fallback retained for the bare-VTK unit layer |
 | Display-node fields → mapper uniforms              | ✓ landed (#493/#501 cutover) |
 | Fragment-shader grid overlay                       | ✓ landed (#493/#501 cutover) |
 | Parenchyma-trim shader (Confirmed state)           | ⏳ `ConfirmedRepresentation` still on a generic mapper — custom relocation not yet landed (ADR-0019) |
@@ -215,13 +215,16 @@ sequenceDiagram
   **(state, initMode) for the Pipeline's internal Representation
   table**.  ADR-0018 §3 commits sibling Pipelines (not a third axis)
   for the future Bezier vs NURBS divergence.
-- The Representations drive their **real** custom OpenGL mappers
-  (`vtkOpenGLBezierResectionPolyDataMapper`, the contour + resection-2D
-  mappers), relocated to `LiverResections/VTKWidgets/` (ADR-0014 §3) and
-  now a hard requirement — a resolver miss raises rather than silently
-  degrading to a generic `vtkPolyDataMapper` (#498).  The lone exception
-  is `ConfirmedRepresentation`, whose parenchyma-trim mapper has not been
-  relocated yet and remains a generic `vtkPolyDataMapper`.
+- Inside a launched Slicer the Representations drive their **real** custom
+  OpenGL mappers (`vtkOpenGLBezierResectionPolyDataMapper`, the contour +
+  resection-2D mappers), relocated to `LiverResections/VTKWidgets/`
+  (ADR-0014 §3); the launched wiring invariants
+  (`test_custom_mapper_wiring.py`) pin that the real mapper — not a generic
+  one — backs the render in production.  The Representations retain a generic
+  `vtkPolyDataMapper` fallback so they still construct in the bare-VTK unit
+  layer (`Testing/Python/unit/`, ADR-0008 §2) where the wrapped classes are
+  off the path.  `ConfirmedRepresentation`'s parenchyma-trim mapper has not
+  been relocated yet and is a generic `vtkPolyDataMapper` in all contexts.
 
 [adr-0002]: ../adr/0002-migrate-to-slicerlayerdm.md
 

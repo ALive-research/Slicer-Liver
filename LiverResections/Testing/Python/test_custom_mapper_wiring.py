@@ -17,12 +17,13 @@ Representations that carry a custom OpenGL shader mapper (relocated to
   * ``FlattenedSurfaceRepresentation`` -- its 2D resection mapper IS the real
     ``vtkOpenGLResection2DPolyDataMapper``.
 
-These assertions are the invariant that makes it SAFE to convert the
-"custom mapper unresolved -> silent generic ``vtkPolyDataMapper`` fallback" into
-a LOUD hard requirement: once the mapper MUST be the real class under launched
-Slicer, a resolver miss is a misconfiguration to surface, not a shader-less
-degradation to tolerate (ADR-0008 §2 -- the "no-VTK unit layer" the fallback
-aspired to was never built).
+These assertions pin that in PRODUCTION (a launched Slicer) the render is backed
+by the REAL custom shader mapper, not a generic ``vtkPolyDataMapper``.  The
+Representations keep a generic-mapper fallback so they still construct in the
+bare-VTK unit layer (``Testing/Python/unit/``, ADR-0008 §2) where the wrapped
+classes are off the path; these launched invariants are what would catch that
+fallback silently backing a real render -- i.e. they make the production
+real-mapper guarantee testable without removing the unit-layer fallback.
 
 Genuinely-generic mappers (the ``DistanceSpheroidInit`` sphere markers, the
 ``SlicingPlaneInit`` plane mapper, the ``Confirmed`` surface mapper whose custom
