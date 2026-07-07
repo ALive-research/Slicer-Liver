@@ -36,8 +36,56 @@ continue to run and exercise the real invariants (ADR-0008 §1, §6).
 
 from __future__ import annotations
 
+import sys
+
+import pytest
+
 from slicer_pytest_support import (  # noqa: F401  (re-exported for `from conftest import ...`)
     import_slicer_or_skip as _import_slicer_or_skip,
     require_mrml_scene as _require_mrml_scene,
     require_qt_widget as _require_qt_widget,
 )
+
+
+def _looks_like_real_slicer(module) -> bool:
+    """True iff ``module`` is the genuine launched-Slicer ``slicer`` module."""
+    return module is not None and getattr(module, "mrmlScene", None) is not None
+
+
+def _live_mrml_scene():
+    """Return the launched-Slicer ``mrmlScene`` or ``None`` under bare pytest."""
+    slicer = sys.modules.get("slicer")
+    if not _looks_like_real_slicer(slicer):
+        return None
+    return slicer.mrmlScene
+
+
+@pytest.fixture(autouse=True)
+def _launched_scene_cleanup():
+    """Clear the MRML scene after each launched test; assert it stays clean.
+
+    Active only under a launched Slicer (``slicer.mrmlScene`` present); a no-op
+    under bare ``PythonSlicer -m pytest``.  Mirrors the LiverResections /
+    LiverSegmentation conftest fixture: no scene node the Case-Setup role tests
+    mint (scalar volumes) may survive to process shutdown and trip
+    ``vtkDebugLeaks`` in the launched harness (ADR-0008 §6).  The role tests also
+    tear down their own volumes in a ``finally``; this fixture is the backstop.
+    """
+    scene = _live_mrml_scene()
+    if scene is None:
+        yield
+        return
+
+    baseline = scene.GetNumberOfNodes()
+
+    yield
+
+    scene.Clear(0)
+    remaining = scene.GetNumberOfNodes()
+    assert remaining <= baseline, (
+        "MRML scene GREW past its pre-test baseline even after Clear(): "
+        f"{remaining} node(s) remain vs {baseline} at test start.  A node "
+        "Clear() cannot reclaim survives to process shutdown and trips "
+        "vtkDebugLeaks, failing the launched harness.  Tear down every node "
+        "the test created."
+    )
