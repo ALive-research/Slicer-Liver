@@ -576,24 +576,20 @@ class DistanceSpheroidInitRepresentation:
         if self._parametric_function_source is not None:
             self._parametric_function_source.Modified()
 
-        # Drive the contour shader: push (centre, radii) onto the mapper
-        # so its fragment shader bands the triaxial-ellipsoid implicit
-        # whose quadric coefficients come from the SSOT (ADR-0015
-        # §"Stack 4").  Mirrors how vtkLiverBezierSurfacePipeline sets its
-        # grid/margin uniforms.  No-op on the generic fallback mapper.
-        set_spheroid = getattr(self._spheroid_mapper, "SetSpheroid", None)
-        if set_spheroid is not None:
-            set_spheroid(list(center), rx, ry, rz)
+        # Drive the contour shader: push (centre, radii) onto the mapper so its
+        # fragment shader bands the triaxial-ellipsoid implicit whose quadric
+        # coefficients come from the SSOT (ADR-0015 §"Stack 4").  Mirrors how
+        # vtkLiverBezierSurfacePipeline sets its grid/margin uniforms.  The
+        # spheroid mapper is the real vtkOpenGLDistanceContourPolyDataMapper (a
+        # hard requirement, ADR-0014 §3), so its setters are called directly.
+        self._spheroid_mapper.SetSpheroid(list(center), rx, ry, rz)
 
-        # Make the banded contour visible.  The mapper defaults to hidden
-        # and its fragment shader discards every fragment while visibility
-        # is off, so without this the placed spheroid never renders.
-        # Enabling it here -- once the representation has a spheroid to
-        # show -- is what actually draws the triaxial ellipsoid.  No-op on
-        # the generic fallback mapper.
-        set_contour_visibility = getattr(self._spheroid_mapper, "SetContourVisibility", None)
-        if set_contour_visibility is not None:
-            set_contour_visibility(True)
+        # Make the banded contour visible.  The mapper defaults to hidden and
+        # its fragment shader discards every fragment while visibility is off,
+        # so without this the placed spheroid never renders.  Enabling it here
+        # -- once the representation has a spheroid to show -- is what actually
+        # draws the triaxial ellipsoid.
+        self._spheroid_mapper.SetContourVisibility(True)
 
         # Markers: resize the actor list, then update each sphere's
         # centre.

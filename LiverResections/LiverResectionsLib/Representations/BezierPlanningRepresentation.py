@@ -335,28 +335,16 @@ class BezierPlanningRepresentation:
     def _apply_display_node(self, display_node: Any | None) -> None:
         """Push decoration fields onto the actors.
 
-        Tolerant of ``None`` / partial display nodes — falls back to
-        defaults.
+        Tolerant of a ``None`` display node — falls back to defaults.  A
+        non-``None`` display node is the real ``vtkMRMLParametricSurfaceDisplayNode``
+        (its accessors are always present, ADR-0013 §8).
         """
         if display_node is None:
             color = DEFAULT_RESECTION_COLOR
             opacity = DEFAULT_RESECTION_OPACITY
         else:
-            color_getter = getattr(display_node, "GetResectionColor", None)
-            opacity_getter = getattr(
-                display_node, "GetResectionOpacity", None
-            )
-
-            color = (
-                _as_color_tuple(color_getter())
-                if color_getter is not None
-                else DEFAULT_RESECTION_COLOR
-            )
-            opacity = (
-                float(opacity_getter())
-                if opacity_getter is not None
-                else DEFAULT_RESECTION_OPACITY
-            )
+            color = _as_color_tuple(display_node.GetResectionColor())
+            opacity = float(display_node.GetResectionOpacity())
 
         self._current_color = color
         self._current_opacity = opacity
@@ -396,31 +384,24 @@ class BezierPlanningRepresentation:
         if data_node is None:
             return
 
-        # Prefer ``GetControlGridVector`` (``const std::vector<double>&`` ->
-        # a Python tuple) over ``GetControlGrid`` (``const double*``): VTK
-        # cannot wrap a bare pointer return into an indexable buffer — from
-        # Python it surfaces as an opaque pointer-string (``'_..._p_double'``)
-        # whose ``[0]`` is the character ``'_'``, not a coordinate.  The
-        # vector accessor round-trips cleanly.  Stub data nodes in the
-        # unit-layer tests expose only ``GetControlGrid`` (a plain list), so
-        # fall back to it.
-        grid_getter = getattr(data_node, "GetControlGridVector", None)
-        if grid_getter is None:
-            grid_getter = getattr(data_node, "GetControlGrid", None)
-        if grid_getter is None:
-            return
-
-        # Resolve (rows, cols) from the node — required to size the
-        # iteration over the flat control-grid return.  Default to 4×4 when
-        # the accessors are absent (legacy stubs in unit tests); the
-        # array-length check below catches any drift.
-        rows = int(getattr(data_node, "GetRows", lambda: 4)())
-        cols = int(getattr(data_node, "GetCols", lambda: 4)())
+        # Read the control grid from ``GetControlGridVector``
+        # (``const std::vector<double>&`` -> a Python tuple), NOT the flat
+        # ``GetControlGrid`` (``const double*``): VTK cannot wrap a bare pointer
+        # return into an indexable buffer — from Python it surfaces as an opaque
+        # pointer-string (``'_..._p_double'``) whose ``[0]`` is the character
+        # ``'_'``, not a coordinate.  The v2 ``vtkMRMLBezierSurfaceNode`` carrier
+        # always exposes the vector accessor (ADR-0014 §"Fourth layer").
+        # Resolve (rows, cols) off the same node — required to size the
+        # iteration over the flat control-grid return (ADR-0018 §1: the shape is
+        # ``(3, 3)`` or ``(4, 4)``).  The array-length check below catches any
+        # shape drift.
+        rows = int(data_node.GetRows())
+        cols = int(data_node.GetCols())
         control_count = rows * cols
         flat_length = 3 * control_count
 
         try:
-            raw = grid_getter()
+            raw = data_node.GetControlGridVector()
         except Exception:  # pragma: no cover - defensive
             return
         if raw is None:
@@ -457,23 +438,20 @@ class BezierPlanningRepresentation:
         """Push the control grid into the Bezier source and tessellate.
 
         The source iterates its control-point array row-major as
-        ``i * cols + j`` (matching the node's row-major ``GetControlGrid``),
-        so its control-point shape must equal the node's ``(rows, cols)`` for
-        the indices to line up.  ``Update()`` materialises the patch + TCoords
-        and the normals filter adds per-point normals, so ``GetSurfacePolyData``
+        ``i * cols + j`` (matching the node's row-major control grid), so its
+        control-point shape must equal the node's ``(rows, cols)`` for the
+        indices to line up.  ``Update()`` materialises the patch + TCoords and
+        the normals filter adds per-point normals, so ``GetSurfacePolyData``
         returns renderable geometry without a render pass — the same eager
         update the v1 representation did (``BezierSurfaceSource->Update()``).
+        The source + normals filter are the real wrapped classes constructed
+        by ``_build_vtk_pipeline`` (ADR-0014 §3).
         """
         source = self._surface_source
-        if source is None:
-            return
-        set_ncp = getattr(source, "SetNumberOfControlPoints", None)
-        if set_ncp is not None:
-            set_ncp(rows, cols)
+        source.SetNumberOfControlPoints(rows, cols)
         source.SetControlPoints(points)
         source.Update()
-        if self._surface_normals is not None:
-            self._surface_normals.Update()
+        self._surface_normals.Update()
 
     def _apply_mapper_display_fields(
         self, display_node: Any | None, color: tuple, opacity: float
@@ -481,73 +459,40 @@ class BezierPlanningRepresentation:
         """Push the display node's decoration onto the real mapper's uniforms.
 
         Ports ``vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceDisplay``.
-        A no-op on the generic fallback mapper, which has no ``SetResection*``
-        surface — there the colour rides on the actor property set by the
-        caller.  Margin scalars (``SetResectionMargin`` / ``SetUncertaintyMargin``)
-        are intentionally left at the mapper defaults: the v2 node hierarchy
-        carries no margin field yet, and the margins only bias the distance
-        field, which is not bound in this slice.
+        The surface mapper is the real ``vtkOpenGLBezierResectionPolyDataMapper``
+        (a hard requirement, ADR-0014 §3) and a non-``None`` display node is the
+        real ``vtkMRMLParametricSurfaceDisplayNode``; both expose their full
+        accessor surface, so the fields are pushed with direct calls.  Margin
+        scalars (``SetResectionMargin`` / ``SetUncertaintyMargin``) are
+        intentionally left at the mapper defaults here: the margins ride the
+        distance-field path in ``_apply_resection_plan`` (ADR-0031).
         """
         mapper = self._surface_mapper
         if mapper is None:
             return
-        set_color = getattr(mapper, "SetResectionColor", None)
-        if set_color is None:
-            return  # generic fallback mapper — nothing to push to a shader
-        set_color(float(color[0]), float(color[1]), float(color[2]))
-        set_opacity = getattr(mapper, "SetResectionOpacity", None)
-        if set_opacity is not None:
-            set_opacity(float(opacity))
+        mapper.SetResectionColor(float(color[0]), float(color[1]), float(color[2]))
+        mapper.SetResectionOpacity(float(opacity))
 
         if display_node is None:
             return
 
+        _push_color3(mapper.SetResectionGridColor, display_node.GetResectionGridColor)
+        _push_color3(mapper.SetResectionMarginColor, display_node.GetResectionMarginColor)
         _push_color3(
-            mapper, "SetResectionGridColor",
-            getattr(display_node, "GetResectionGridColor", None),
+            mapper.SetUncertaintyMarginColor, display_node.GetUncertaintyMarginColor
         )
-        _push_color3(
-            mapper, "SetResectionMarginColor",
-            getattr(display_node, "GetResectionMarginColor", None),
-        )
-        _push_color3(
-            mapper, "SetUncertaintyMarginColor",
-            getattr(display_node, "GetUncertaintyMarginColor", None),
-        )
-        _push_bool(
-            mapper, "SetResectionClipOut",
-            getattr(display_node, "GetClipOut", None),
-        )
-        _push_bool(
-            mapper, "SetInterpolatedMargins",
-            getattr(display_node, "GetInterpolatedMargins", None),
-        )
+        mapper.SetResectionClipOut(bool(display_node.GetClipOut()))
+        mapper.SetInterpolatedMargins(bool(display_node.GetInterpolatedMargins()))
 
         # Grid divisions / thickness, gated on 3D-grid visibility exactly as
         # v1 did: when the grid is hidden, zero the divisions so the fragment
         # shader draws no grid lines.
-        grid_visible = True
-        vis_getter = getattr(display_node, "GetGrid3DVisibility", None)
-        if vis_getter is not None:
-            try:
-                grid_visible = bool(vis_getter())
-            except Exception:  # pragma: no cover - defensive
-                grid_visible = True
-
-        set_divisions = getattr(mapper, "SetGridDivisions", None)
-        set_thickness = getattr(mapper, "SetGridThicknessFactor", None)
-        if grid_visible:
-            div_getter = getattr(display_node, "GetGridDivisions", None)
-            thick_getter = getattr(display_node, "GetGridThickness", None)
-            if set_divisions is not None and div_getter is not None:
-                set_divisions(int(div_getter()))
-            if set_thickness is not None and thick_getter is not None:
-                set_thickness(float(thick_getter()))
+        if bool(display_node.GetGrid3DVisibility()):
+            mapper.SetGridDivisions(int(display_node.GetGridDivisions()))
+            mapper.SetGridThicknessFactor(float(display_node.GetGridThickness()))
         else:
-            if set_divisions is not None:
-                set_divisions(0)
-            if set_thickness is not None:
-                set_thickness(0.0)
+            mapper.SetGridDivisions(0)
+            mapper.SetGridThicknessFactor(0.0)
 
     def _apply_resection_plan(self, plan_node: Any | None) -> None:
         """Thread the wrapper's distance map + margins onto the real mapper.
@@ -564,27 +509,22 @@ class BezierPlanningRepresentation:
         no distance map is wired, clear the image and reset the matrices to
         identity (the graceful no-distance-map fallback the shader supports).
 
-        A no-op on the generic fallback mapper (the getattr guard).
+        The surface mapper is the real ``vtkOpenGLBezierResectionPolyDataMapper``
+        (a hard requirement, ADR-0014 §3), so its distance-map setters are
+        called directly; a non-``None`` plan node is the real
+        ``vtkMRMLResectionPlanNode`` wrapper (ADR-0031).
         """
         mapper = self._surface_mapper
-        if mapper is None or not hasattr(mapper, "SetDistanceMapImageData"):
-            return  # generic fallback mapper — no distance-map shader surface
+        if mapper is None:
+            return
 
         # Margins are plan fields, meaningful independent of the distance map
         # (the shader simply has no band to draw without a bound texture).
-        if plan_node is not None:
-            safety = getattr(plan_node, "GetSafetyMargin_mm", None)
-            risk = getattr(plan_node, "GetRiskMargin_mm", None)
-            if safety is not None:
-                mapper.SetResectionMargin(float(safety()))
-            if risk is not None:
-                mapper.SetUncertaintyMargin(float(risk()))
-
         volume = None
         if plan_node is not None:
-            getter = getattr(plan_node, "GetDistanceMapVolumeNode", None)
-            if getter is not None:
-                volume = getter()
+            mapper.SetResectionMargin(float(plan_node.GetSafetyMargin_mm()))
+            mapper.SetUncertaintyMargin(float(plan_node.GetRiskMargin_mm()))
+            volume = plan_node.GetDistanceMapVolumeNode()
 
         image = volume.GetImageData() if volume is not None else None
         if image is None:
@@ -650,33 +590,16 @@ def _resolve_vtk_class(name: str) -> Any | None:
     return None
 
 
-def _push_color3(mapper: Any, setter_name: str, getter: Any | None) -> None:
-    """Read a 3-vector from ``getter`` and push it to ``mapper.<setter_name>``.
+def _push_color3(setter: Any, getter: Any) -> None:
+    """Read a 3-vector from ``getter`` and push it to ``setter``.
 
-    No-op when either the getter or the mapper setter is absent (the generic
-    fallback mapper) — keeps the plumbing tolerant of partial display nodes.
+    The colour getter (``const float*`` -> a Python sequence) is coerced to
+    three floats; a coercion failure is swallowed defensively (a colour field
+    left unset is a benign no-op, unlike a geometry read).
     """
-    if getter is None:
-        return
-    setter = getattr(mapper, setter_name, None)
-    if setter is None:
-        return
     try:
         c = getter()
         setter(float(c[0]), float(c[1]), float(c[2]))
-    except Exception:  # pragma: no cover - defensive
-        pass
-
-
-def _push_bool(mapper: Any, setter_name: str, getter: Any | None) -> None:
-    """Read a bool from ``getter`` and push it to ``mapper.<setter_name>``."""
-    if getter is None:
-        return
-    setter = getattr(mapper, setter_name, None)
-    if setter is None:
-        return
-    try:
-        setter(bool(getter()))
     except Exception:  # pragma: no cover - defensive
         pass
 
