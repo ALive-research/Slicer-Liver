@@ -13,15 +13,15 @@ square render where the baseline is rectangular.
 
 Blur is OFF in this scenario so the only visual variable versus
 ``Resectogram4x4BlurOff`` is the domain aspect ratio.  The anisotropic
-scaling is gated by ``EnableFlexibleBoundary`` on the legacy
-``vtkMRMLMarkupsBezierSurfaceDisplayNode`` (drives
-``vtkLiverResectogramAspectRatio`` / the v1 ``Ratio(bool)`` toggle), held
-ON here so the squeeze is exercised.
+scaling is gated by ``EnableFlexibleBoundary`` on the
+``vtkMRMLResectogramDisplayNode`` (drives
+``vtkLiverResectogramAspectRatio``), held ON here so the squeeze is
+exercised.  The v1 markups render path is retired (ADR-0014
+§"Dissolution"; ADR-0032 §"Consequences").
 
-Capture-then-rebaseline contract: same as ``Resectogram4x4BlurOff`` —
-captured against the v1 monolith first, re-baselined to v2.0.  Until a
-``.sha512`` stub lands the replay driver skips this scenario before the
-body runs.
+Capture contract: same as ``Resectogram4x4BlurOff`` — captured against
+the v2.0 ResectogramPipeline.  Until a ``.sha512`` stub lands the replay
+driver skips this scenario before the body runs.
 
 This scenario reuses the deterministic scene builders from
 ``Resectogram4x4BlurOff`` (same package) so the ONLY difference is the

@@ -12,18 +12,16 @@ blur kernel extent (``BlurRadius``) is left at the display node's default,
 matching ``Resectogram4x4BlurOff``, so blur on/off is the single visual
 variable.
 
-No v1 blur appearance to reproduce
-----------------------------------
-The Gaussian-blur post-pass is NET-NEW for v2.0 — there is no blur field
-on the legacy ``vtkMRMLMarkupsBezierSurfaceDisplayNode`` and no
-``vtkGaussianBlurPass`` anywhere in the v1 tree.  So unlike the blur-OFF /
-non-square baselines (captured against the v1 monolith first), this
-scenario's baseline is captured against the v2.0 path: the blur toggle
-lives on ``vtkMRMLResectogramDisplayNode`` (``BlurEnabled``) and the
+Net-new v2.0 blur post-pass
+---------------------------
+The Gaussian-blur post-pass is NET-NEW for v2.0.  The blur toggle lives on
+``vtkMRMLResectogramDisplayNode`` (``BlurEnabled``) and the
 flattened-surface Representation attaches a ``vtkGaussianBlurPass`` to a
 private overlay renderer when engaged (ADR-0013 §6).  ``setup_scene``
 engages blur on the resectogram display node so the rendered strip differs
-visibly (softer band) from ``Resectogram4x4BlurOff``.
+visibly (softer band) from ``Resectogram4x4BlurOff``.  Both scenarios
+capture against the v2.0 ResectogramPipeline; the v1 markups render path
+is retired (ADR-0014 §"Dissolution"; ADR-0032 §"Consequences").
 
 References
 ----------

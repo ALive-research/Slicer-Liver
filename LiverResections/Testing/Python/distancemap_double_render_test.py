@@ -2,17 +2,18 @@
 # Distributed under the OSI-approved BSD 3-Clause License.
 """Characterisation test: the Bezier distance-map survives a SECOND render.
 
-This pins the invariant behind the offscreen-render abort observed when a
-``vtkMRMLMarkupsBezierSurfaceNode`` carrying a 4-component float
-distance-map volume is rendered, then rendered AGAIN via a second
-``forceRender()``.  The first render comes up; the second has been
-observed to abort (or hang) on multiple GL stacks.
+This pins the invariant behind the offscreen-render abort observed when
+the v2 Bezier resection surface (a ``vtkMRMLBezierSurfaceNode`` carrier
+with a plan wrapper carrying a 4-component float distance-map volume) is
+rendered, then rendered AGAIN via a second ``forceRender()``.  The first
+render comes up; the second has been observed to abort (or hang) on
+multiple GL stacks.  The v1 markups render path is retired (ADR-0014
+§"Dissolution"; ADR-0032 §"Consequences").
 
 Root-cause analysis (see ADR-0003 §"Decision" and the render-env
 keystone analysis) points at the 3D distance-map texture object being
-``Bind()``/``Deactivate()``-ed exactly once at creation in
-``vtkSlicerBezierSurfaceRepresentation3D::CreateAndTransferDistanceMapTexture``,
-while the draw-time mapper
+``Bind()``/``Deactivate()``-ed exactly once at creation, while the
+draw-time mapper
 (``vtkOpenGLBezierResectionPolyDataMapper::SetMapperShaderParameters``)
 only sets the ``sampler3D distanceTexture`` uniform.  Nothing re-activates
 the texture object onto its sampler unit at draw time, so the second
@@ -24,8 +25,8 @@ Bezier scenario, then ``forceRender()``-ing a SECOND time, must complete
 without aborting and must leave the GL context error-free.
 
 Test level: Level 2 — minimal ``qSlicerApplication`` (the SUT touches
-MRML + the Markups render pipeline), per the SlicerLayerDM / trame-slicer
-precedent recorded in ``LiverResections/Testing/README.md``.
+MRML + the v2 LayerDM render pipeline), per the SlicerLayerDM /
+trame-slicer precedent recorded in ``LiverResections/Testing/README.md``.
 
 This is a launched/visual-tier test: it is RED-by-design today (the
 second render aborts on the affected stacks) and yields the real verdict

@@ -1049,32 +1049,32 @@ def _sampled_surface_resolution(sampled: Any) -> tuple[int, int]:
 def _read_control_points(data_node: Any | None) -> Any | None:
     """Return the data node's Bezier control points as a ``vtkPoints``.
 
-    Mirrors the v1 ``UpdateBezierSurfaceGeometry`` read: the legacy markups
-    Bezier node carries the 16-point ``(4, 4)`` control grid (ADR-0018 §1)
-    via ``GetNumberOfControlPoints`` / ``GetNthControlPointPosition``.
-    Returns ``None`` defensively when the accessors are absent (stub data
-    nodes), the grid is incomplete (< 16 defined points, mid-placement), or
-    a read raises — the caller then keeps the fixed-quad fallback.
+    Reads the v2 ``vtkMRMLBezierSurfaceNode`` carrier's 16-point ``(4, 4)``
+    control grid from the flat row-major vector ``GetControlGridVector``
+    (length ``3 * 16`` = 48; ADR-0014 §"Fourth layer", ADR-0018 §1).  The v1
+    markups control-point API is retired (ADR-0014 §"Dissolution"; ADR-0032
+    §"Consequences").  Returns ``None`` defensively when the accessor is
+    absent (stub data nodes), the grid is incomplete (< 16 defined points,
+    mid-placement), or a read raises — the caller then keeps the fixed-quad
+    fallback.
     """
     if not _HAS_VTK or data_node is None:
         return None
-    count_getter = getattr(data_node, "GetNumberOfControlPoints", None)
-    position_getter = getattr(data_node, "GetNthControlPointPosition", None)
-    if count_getter is None or position_getter is None:
+    grid_getter = getattr(data_node, "GetControlGridVector", None)
+    if grid_getter is None:
         return None
     try:
-        count = int(count_getter())
+        grid = grid_getter()
     except Exception:  # pragma: no cover - defensive
         return None
-    if count != 16:  # the legacy 16-point invariant (the only fed grid)
+    if len(grid) != 16 * 3:  # the 16-point invariant (the only fed grid)
         return None
     points = vtk.vtkPoints()
-    position = [0.0, 0.0, 0.0]
     try:
-        for index in range(count):
-            position_getter(index, position)
+        for index in range(16):
+            base = index * 3
             points.InsertNextPoint(
-                float(position[0]), float(position[1]), float(position[2])
+                float(grid[base]), float(grid[base + 1]), float(grid[base + 2])
             )
     except Exception:  # pragma: no cover - defensive
         return None

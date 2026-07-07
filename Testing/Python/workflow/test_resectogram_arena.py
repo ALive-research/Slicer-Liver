@@ -423,8 +423,10 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
     require_mrml_scene()
     require_qt_widget()
 
-    # The scenario builds a vtkMRMLMarkupsBezierSurfaceNode + attaches a
-    # vtkMRMLResectogramDisplayNode (the v2.0 ResectogramPipeline carrier).
+    # The scenario builds a v2 vtkMRMLBezierSurfaceNode carrier + attaches
+    # a vtkMRMLResectogramDisplayNode (the v2.0 ResectogramPipeline carrier;
+    # the v1 markups render path is retired -- ADR-0014 §"Dissolution",
+    # ADR-0032 §"Consequences").
     # Guard the distinct "live scene but the modules did not register" case
     # with an explicit, greppable skip reason (module path missing).  Probe
     # the resectogram display node specifically -- it is the T3 go-live
@@ -481,7 +483,7 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
     scene_widget = None
     resectogram_widget = None
     try:
-        # Populate the scene (markups Bezier node + parenchyma + distance map
+        # Populate the scene (v2 Bezier carrier + parenchyma + distance map
         # + the resectogram display node).  setup_scene returns the created
         # nodes so nothing leaks through a module global.  It Clear(0)s the
         # scene first, so create the view nodes AFTER it -- a view node
@@ -797,20 +799,32 @@ def test_resectogram_arena(scenario_name: str, render_interactive: float) -> Non
 def _bend_control_points(bezier) -> None:
     """Push the Bezier surface OUT of its planar pose (a coherence mutation).
 
-    The scenario lays the 16 control points flat at ``z == 0`` (a planar
-    surface).  Lift the interior control points well off that plane so the
-    evaluated ``S(u, v)`` bows into a dome — a large, unambiguous geometry
-    change.  The flattened resectogram samples the distance field at the
-    real ``S(u, v)``, so a coherent (BSPoints-fed) render MUST shift the
-    band; a fixed-quad render (the bug) ignores the surface and stays
+    The scenario lays the 4x4 control points flat at ``z == 0`` (a planar
+    surface).  Lift every control point well off that plane so the
+    evaluated ``S(u, v)`` bows — a large, unambiguous geometry change.  The
+    flattened resectogram samples the distance field at the real
+    ``S(u, v)``, so a coherent (BSPoints-fed) render MUST shift the band; a
+    fixed-quad render (the bug) ignores the surface and stays
     pixel-identical.
+
+    Reads/writes the v2 ``vtkMRMLBezierSurfaceNode`` carrier's row-major
+    control grid (``GetControlGridVector`` / ``SetControlPoint(row, col,
+    x, y, z)``); the v1 markups control-point API is retired (ADR-0014
+    §"Dissolution"; ADR-0032 §"Consequences").
     """
-    for index in range(bezier.GetNumberOfControlPoints()):
-        position = [0.0, 0.0, 0.0]
-        bezier.GetNthControlPointPosition(index, position)
-        bezier.SetNthControlPointPosition(
-            index, position[0], position[1], position[2] + 35.0
-        )
+    grid = list(bezier.GetControlGridVector())
+    rows = 4
+    cols = 4
+    for row in range(rows):
+        for col in range(cols):
+            base = (row * cols + col) * 3
+            bezier.SetControlPoint(
+                row,
+                col,
+                grid[base + 0],
+                grid[base + 1],
+                grid[base + 2] + 35.0,
+            )
 
 
 
