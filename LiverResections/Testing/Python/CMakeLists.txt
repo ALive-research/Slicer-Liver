@@ -218,6 +218,59 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections;mapper-wiring"
     )
 
+    # #489 locator consumer (Representation half) -- BezierPlanningRepresentation
+    # reads a single vtkMRMLLocatorNode's picked world point + its display-node
+    # Radius and drives the real vtkOpenGLBezierResectionPolyDataMapper's locator
+    # uniforms (uLocatorPosition / uLocatorRadius, ADR-0025 §Rendering) through a
+    # new SetLocatorNode seam (mirrors SetResectionPlanNode; NO custom DM, NO new
+    # factory -- ADR-0013 §5/§6).  Invariant 1: node position + display radius
+    # reach the mapper; invariant 2: no locator node (SetLocatorNode(None)) zeroes
+    # uLocatorRadius (the shader off state).  Node -> consumer only; the full
+    # producer -> node -> consumer chain (#489) closes when Slice B lands.  Needs
+    # the wrapped locator nodes + real mapper + Representation, so it runs green
+    # under the launched-Slicer `pytest_launched` row and SKIPS CLEANLY here under
+    # bare pytest (no slicer.mrmlScene / wrapped classes off the path).  GL free
+    # -- the mapper's uniform accessors need no render window.  RED / skip-pending
+    # (guards on the SetLocatorNode + GetLocatorRadius seams) until the implementer
+    # lands the consumer (ADR-0027 §Conformance: the skip lifts at the
+    # implementation commit).
+    add_test(
+      NAME LiverResections_bezier_planning_locator_consumer
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_bezier_planning_locator_consumer.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_bezier_planning_locator_consumer PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;locator;mapper-wiring"
+    )
+
+    # #489 locator consumer (Pipeline half) -- LiverBezierSurfacePipeline resolves
+    # the scene's single vtkMRMLLocatorNode (GetFirstNodeByClass; v2.0 has exactly
+    # one) and threads it onto the active Representation via SetLocatorNode before
+    # update() (mirrors the ADR-0031 SetResectionPlanNode reverse-resolve+thread;
+    # ADR-0025 §Consumer, ADR-0013 §6).  Positive: a locator node in the scene ->
+    # its display Radius reaches the mapper's uLocatorRadius with no external
+    # SetLocatorNode caller; negative: no locator node -> uLocatorRadius stays 0
+    # (no false-positive; shader off state).  Node -> consumer only; the full
+    # producer -> node -> consumer chain (#489) closes when Slice B lands.  Needs
+    # the wrapped locator nodes + real mapper + importable Pipeline, so it runs
+    # green under the launched-Slicer `pytest_launched` row and SKIPS CLEANLY here
+    # under bare pytest (no slicer.mrmlScene / LayerDMLib).  GL free.  RED /
+    # skip-pending (guards on a Representation exposing SetLocatorNode) until the
+    # implementer lands the Pipeline resolution + threading (ADR-0027 §Conformance:
+    # the skip lifts at the implementation commit).
+    add_test(
+      NAME LiverResections_pipeline_resolves_locator
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_pipeline_resolves_locator.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_pipeline_resolves_locator PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;locator;mapper-wiring"
+    )
+
     # #501 slice 2 -- the v2 resection control-point edit path on the LayerDM
     # Pipeline (ADR-0032: interaction routes through the Pipeline interaction
     # seam, no standalone vtkAbstractWidget).  Pins the GL-free edit kernel
