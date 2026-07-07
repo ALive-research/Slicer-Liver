@@ -128,7 +128,7 @@ class DistanceSpheroidInitRepresentation:
     Introspection (used by unit tests)
     ----------------------------------
     * ``GetMarkerActors()`` — list of ``vtkActor`` rendering the
-      seed markers, or an empty list if VTK is not importable.
+      seed markers, or an empty list before the pipeline is built.
     * ``GetSpheroidActor()`` — the ``vtkActor`` rendering the
       translucent spheroid, or ``None``.
     * ``GetSpheroidMapper()`` — the spheroid mapper.
@@ -144,8 +144,8 @@ class DistanceSpheroidInitRepresentation:
     def __init__(self, renderer: Any | None = None) -> None:
         self._renderer: Any | None = None
 
-        # The VTK pipeline objects the Representation owns.  ``None`` in
-        # the pure-Python testing path.
+        # The VTK pipeline objects the Representation owns.  ``None`` until
+        # ``_build_vtk_pipeline`` runs.
         self._parametric_ellipsoid: Any | None = None
         self._parametric_function_source: Any | None = None
         self._spheroid_polydata_filter: Any | None = None
@@ -332,10 +332,11 @@ class DistanceSpheroidInitRepresentation:
         on-commit CPU-extracted ring.  ``_apply_data_node`` pushes the
         (centre, radii) onto the mapper via ``SetSpheroid``.
 
-        When the relocated mapper is not on the path (a plain non-Slicer
-        VTK build used by the unit-layer tests) the pipeline falls back
-        to a generic ``vtkPolyDataMapper`` so the Representation still
-        constructs and the marker/colour bookkeeping stays testable.
+        The relocated contour mapper (ADR-0014 §3) is a hard requirement:
+        ``_build_vtk_pipeline`` raises if it cannot be resolved rather than
+        silently degrading to a shader-less generic mapper.  The sphere
+        MARKER mappers remain plain ``vtkPolyDataMapper`` (generic geometry,
+        no custom shader).
         """
         # Spheroid pipeline ---------------------------------------------------
         self._parametric_ellipsoid = vtk.vtkParametricEllipsoid()

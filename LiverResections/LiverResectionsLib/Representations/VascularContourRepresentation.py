@@ -19,11 +19,10 @@ Scope of this skeleton
 ----------------------
 Per the T3 bounded slice this skeleton COMPOSES the contour overlays and
 wires the display-node fields it consumes, but it does NOT yet sever the
-overlays out of the v1 monolith (a separate follow-up).  The contour
-mappers are reachable only inside a Slicer process, so their use is
-gated behind ``hasattr`` / import guards and the generic VTK fallbacks
-keep the skeleton importable everywhere (same soft-VTK pattern as
-``ConfirmedRepresentation`` and ``FlattenedSurfaceRepresentation``).
+overlays out of the v1 monolith (a separate follow-up).  The relocated
+contour mappers (ADR-0014 §3) are a hard requirement: ``_make_contour_mapper``
+raises if they cannot be resolved from a launched Slicer process, rather than
+silently degrading to a shader-less generic mapper.
 
 References
 ----------
@@ -64,7 +63,7 @@ class VascularContourRepresentation:
     Introspection (used by unit tests)
     ----------------------------------
     * ``GetDistanceContourMapper()`` / ``GetSlicingContourMapper()`` —
-      the two contour mappers, or ``None`` when VTK is absent.
+      the two contour mappers, or ``None`` before the pipeline is built.
     * ``GetDistanceContourActor()`` / ``GetSlicingContourActor()`` —
       the matching actors.
     """
@@ -153,11 +152,11 @@ class VascularContourRepresentation:
     def _build_vtk_pipeline(self) -> None:
         """Construct the two contour mappers + their actors.
 
-        Prefers the relocated ``vtkOpenGLDistanceContourPolyDataMapper``
+        Requires the relocated ``vtkOpenGLDistanceContourPolyDataMapper``
         / ``vtkOpenGLSlicingContourPolyDataMapper``
-        (``LiverResections/VTKWidgets/``); falls back to a generic
-        ``vtkPolyDataMapper`` so the skeleton stays importable in a bare
-        VTK environment.
+        (``LiverResections/VTKWidgets/``, ADR-0014 §3); ``_make_contour_mapper``
+        raises if they cannot be resolved rather than silently degrading to a
+        shader-less generic mapper.
         """
         self._distance_contour_mapper = _make_contour_mapper(
             "vtkOpenGLDistanceContourPolyDataMapper"
