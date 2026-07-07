@@ -362,17 +362,24 @@ class DistanceSpheroidInitRepresentation:
             self._parametric_function_source.GetOutputPort()
         )
 
+        # The spheroid contour mapper is a hard requirement: a resolver miss is
+        # a misconfiguration (the LiverResections module is not loaded / not
+        # wrapped) that must surface LOUDLY, not degrade to a generic
+        # ``vtkPolyDataMapper`` whose fragment shader does no triaxial banding
+        # (ADR-0008 §2 — the no-VTK unit layer this once degraded for was never
+        # built).  The sphere-MARKER mappers stay plain (``_make_marker_entry``).
         mapper_class = _resolve_extractor_class(
             "vtkOpenGLDistanceContourPolyDataMapper"
         )
-        if mapper_class is not None:
-            self._spheroid_mapper = mapper_class()
-        else:
-            # Non-Slicer VTK build (unit-layer tests): the relocated
-            # mapper is not wrapped onto the path.  A generic mapper keeps
-            # the pipeline constructible; the triaxial banding is a no-op
-            # there but the marker/colour bookkeeping is still exercised.
-            self._spheroid_mapper = vtk.vtkPolyDataMapper()
+        if mapper_class is None:
+            raise RuntimeError(
+                "DistanceSpheroidInitRepresentation requires the relocated "
+                "vtkOpenGLDistanceContourPolyDataMapper (ADR-0014 §3); neither "
+                "the 'slicer' nor the 'vtk' namespace exposes it.  Load the "
+                "LiverResections module so its wrapped VTKWidgets classes are "
+                "on the path."
+            )
+        self._spheroid_mapper = mapper_class()
         self._spheroid_mapper.SetInputConnection(
             self._spheroid_polydata_filter.GetOutputPort()
         )

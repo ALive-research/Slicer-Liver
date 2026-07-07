@@ -217,11 +217,15 @@ class VascularContourRepresentation:
 
 
 def _make_contour_mapper(class_name: str) -> Any:
-    """Return a relocated contour mapper by class name, or a generic fallback.
+    """Return a relocated contour mapper by class name.
 
-    The custom contour mappers are reachable from a Slicer process via
-    the ``vtk`` module (wrapped) or the ``slicer`` namespace; a bare-VTK
-    pytest run gets the generic ``vtkPolyDataMapper`` fallback.
+    The custom contour mappers are reachable from a Slicer process via the
+    ``vtk`` module (wrapped) or the ``slicer`` namespace.  They are a hard
+    requirement: a resolver miss is a misconfiguration (the LiverResections
+    module is not loaded / not wrapped) that must surface LOUDLY, not degrade
+    to a generic ``vtkPolyDataMapper`` whose fragment shader draws no contour
+    (ADR-0008 §2 — the no-VTK unit layer this once degraded for was never
+    built).
     """
     factory = getattr(vtk, class_name, None)
     if factory is None:
@@ -231,9 +235,14 @@ def _make_contour_mapper(class_name: str) -> Any:
             factory = getattr(slicer, class_name, None)
         except Exception:
             factory = None
-    if factory is not None:
-        return factory()
-    return vtk.vtkPolyDataMapper()
+    if factory is None:
+        raise RuntimeError(
+            f"VascularContourRepresentation requires the relocated {class_name} "
+            "(ADR-0014 §3); neither the 'slicer' nor the 'vtk' namespace "
+            "exposes it.  Load the LiverResections module so its wrapped "
+            "VTKWidgets classes are on the path."
+        )
+    return factory()
 
 
 def _safe_get_strip_polydata(data_node: Any | None) -> Any | None:
