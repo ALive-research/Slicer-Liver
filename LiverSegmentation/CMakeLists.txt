@@ -51,6 +51,7 @@ slicerMacroBuildScriptedModule(
 # at qt-scripted-modules/LiverSegmentationLib/ToolWrappers/... unchanged.
 set(LiverSegmentationLib_PYTHON_SCRIPTS
   __init__.py
+  roles.py
   ToolWrappers/__init__.py
   ToolWrappers/TotalSegmentator.py
   )
