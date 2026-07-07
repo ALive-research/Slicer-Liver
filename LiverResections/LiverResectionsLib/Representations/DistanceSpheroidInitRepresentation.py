@@ -635,53 +635,45 @@ def _as_xyz_tuple(raw: Any) -> tuple[float, float, float]:
 
 
 def _resolve_extractor_class(name: str) -> Any | None:
-    """Resolve a VTK-wrapped ring-extractor class by name.
+    """Resolve a wrapped-C++ ring-extractor class by name, or ``None``.
 
-    The Algorithm-library classes are wrapped into Slicer's ``slicer``
-    namespace (``SlicerMacroBuildModuleLogic`` Python wrapping); the
-    plain ``vtk`` module is the fallback for non-Slicer VTK builds.
-    Returns ``None`` when neither namespace exposes the class — the
-    on-commit ring extraction degrades to a no-op when the extractor is
-    unreachable, so this stays resolve-or-``None`` (unlike the mapper
-    resolution, which is resolve-or-raise).
+    The ring extractors live in ``LiverResections/Algorithm/`` and are exposed
+    only on the module's Algorithm Python wrapping (ADR-0014 §3) — NOT on the
+    ``slicer`` or ``vtk`` namespaces.  Lazily imported so this module stays
+    importable where the wrapping is off the path (the bare-VTK unit layer);
+    the on-commit ring extraction then degrades to a no-op when the extractor
+    is unreachable (resolve-or-``None``, unlike the mapper resolve-or-raise).
     """
-    for module_name in ("slicer", "vtk"):
-        try:
-            module = __import__(module_name)
-        except ImportError:
-            continue
-        cls = getattr(module, name, None)
-        if cls is not None:
-            return cls
-    return None
+    try:
+        import vtkSlicerLiverResectionsModuleAlgorithmPython as algorithm
+    except ImportError:
+        return None
+    return getattr(algorithm, name, None)
 
 
 def _require_vtk_class(name: str) -> Any:
-    """Resolve a wrapped-C++ class by name from ``slicer`` then ``vtk``, or raise.
+    """Resolve a wrapped-C++ VTKWidgets class by name from ``slicer``, or raise.
 
-    The relocated custom mapper is wrapped into Slicer's ``slicer``
-    namespace (``SlicerMacroBuildModuleLogic`` Python wrapping); the plain
-    ``vtk`` module is the fallback for a non-Slicer VTK build.  Raises
-    ``RuntimeError`` when neither namespace exposes the class — a real
-    misconfiguration in production (ADR-0014 §3) must fail loudly rather
-    than degrade to a shader-less generic mapper.  Bare-VTK unit tests
-    (ADR-0008 §2) avoid this path by injecting a mapper instance instead.
+    The relocated custom mapper is wrapped into Slicer's ``slicer`` namespace
+    (ADR-0014 §3).  Raises ``RuntimeError`` when it is absent — a real
+    misconfiguration in production must fail loudly rather than degrade to a
+    shader-less generic mapper.  Bare-VTK unit tests (ADR-0008 §2) avoid this
+    path by injecting a mapper instance instead.
     """
-    for module_name in ("slicer", "vtk"):
-        try:
-            module = __import__(module_name)
-        except ImportError:
-            continue
-        cls = getattr(module, name, None)
-        if cls is not None:
-            return cls
-    raise RuntimeError(
-        f"{name} is not reachable from the 'slicer' or 'vtk' namespace. "
-        "It is a wrapped-C++ class relocated to LiverResections/VTKWidgets/ "
-        "(ADR-0014 §3) and available only inside a launched Slicer with the "
-        "module loaded.  Inject a mapper instance for bare-VTK unit tests "
-        "(ADR-0008 §2)."
-    )
+    try:
+        import slicer
+    except ImportError:
+        slicer = None
+    cls = getattr(slicer, name, None) if slicer is not None else None
+    if cls is None:
+        raise RuntimeError(
+            f"{name} is not reachable from the 'slicer' namespace. "
+            "It is a wrapped-C++ class relocated to LiverResections/VTKWidgets/ "
+            "(ADR-0014 §3) and available only inside a launched Slicer with the "
+            "module loaded.  Inject a mapper instance for bare-VTK unit tests "
+            "(ADR-0008 §2)."
+        )
+    return cls
 
 
 def _model_polydata(target_model: Any | None) -> Any | None:
