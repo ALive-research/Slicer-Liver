@@ -410,14 +410,16 @@ class ResectogramPipeline(_PipelineBase):
     def _attach_observer(self, node: Any) -> None:
         """Observe the node's modification events, routed to ``UpdatePipeline()``.
 
-        Observes ``ModifiedEvent`` AND the markups control-point edit events
-        (``PointModifiedEvent`` / ``PointPositionDefinedEvent``).  A
-        markups control-point DRAG does NOT advance the node's ``GetMTime``
-        and fires ``PointModifiedEvent`` rather than ``ModifiedEvent``, so a
-        ``ModifiedEvent``-only observer would leave the resectogram
-        non-reactive to surface edits (the dragging-changes-nothing failure
-        mode).  Stores every observer tag so ``cleanup()`` /
-        ``_detach_observer`` can detach precisely.
+        The v2 ``vtkMRMLBezierSurfaceNode`` carrier's ``SetControlPoint``
+        fires ``ModifiedEvent`` (ADR-0014 §"Fourth layer"), so observing it
+        carries a control-point edit to the resectogram; the geometry digest
+        (``_safe_get_control_points_digest``) then discriminates a real edit
+        from render-induced MTime churn.  The additional
+        ``PointModifiedEvent`` / ``PointPositionDefinedEvent`` observers are
+        defensive no-ops on the v2 carrier (those event ids do not exist on
+        it) — the v1 markups control-point path is retired (ADR-0014
+        §"Dissolution"; ADR-0032 §"Consequences").  Stores every observer tag
+        so ``cleanup()`` / ``_detach_observer`` can detach precisely.
         """
         if node is None or not hasattr(node, "AddObserver"):
             return
@@ -502,33 +504,36 @@ def _safe_get_scene_mtime(node: Any) -> int | None:
 
 
 def _safe_get_control_points_digest(node: Any) -> tuple:
-    """Return a digest of the data node's markups control-point positions.
+    """Return a digest of the data node's control-point positions.
 
     This digest is the SOLE memoisation key for ``UpdatePipeline`` (it does
     NOT fold in ``GetMTime``): a control-point edit changes the digest, while
     a render-induced ``Modified`` at fixed geometry does not, which is exactly
     the discrimination that keeps edits reactive while breaking the maximize
-    render storm.  A markups control-point DRAG advances only the
-    separately-timed control-point structure, not the node ``GetMTime``, so a
-    geometry digest is the correct reactivity signal.  Returns an empty tuple
-    when the node is missing the markups control-point accessors (stub nodes
-    in unit tests) or a read raises — the key is then a constant, so a
-    non-markups data node reconciles exactly once.
+    render storm.  A control-point edit advances the geometry digest (so
+    edit-reactivity is preserved), while render-induced MTime churn at fixed
+    geometry leaves it unchanged.
+
+    The v2 resection surface carrier ``vtkMRMLBezierSurfaceNode`` stores its
+    control polygon in a flat row-major grid read via ``GetControlGridVector``
+    (ADR-0014 §"Fourth layer"); the v1 markups control-point API is retired
+    (ADR-0014 §"Dissolution"; ADR-0032 §"Consequences").  Returns an empty
+    tuple when the node is missing the grid accessor (stub nodes in unit
+    tests) or a read raises — the key is then a constant, so a non-parametric
+    data node reconciles exactly once.
     """
     if node is None:
         return ()
-    count_getter = getattr(node, "GetNumberOfControlPoints", None)
-    position_getter = getattr(node, "GetNthControlPointPosition", None)
-    if count_getter is None or position_getter is None:
+    grid_getter = getattr(node, "GetControlGridVector", None)
+    if grid_getter is None:
         return ()
     try:
-        count = int(count_getter())
-        position = [0.0, 0.0, 0.0]
-        digest = []
-        for index in range(count):
-            position_getter(index, position)
-            digest.append((position[0], position[1], position[2]))
-        return tuple(digest)
+        grid = grid_getter()
+        usable = len(grid) - (len(grid) % 3)
+        return tuple(
+            (grid[base], grid[base + 1], grid[base + 2])
+            for base in range(0, usable, 3)
+        )
     except Exception:  # pragma: no cover - defensive
         return ()
 

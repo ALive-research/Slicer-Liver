@@ -7,29 +7,26 @@ This is the reference resectogram appearance: the flattened parametric
 image of a square ``(u, v)`` domain Bezier surface, rendered with the
 resectogram strip enabled and the Gaussian-blur post-pass DISABLED.
 
-Capture-then-rebaseline contract
---------------------------------
-Per the T3 plan these baselines capture against the v1 monolith FIRST
-(the v1 resectogram path reads the legacy
-``vtkMRMLMarkupsBezierSurfaceDisplayNode`` resectogram fields —
-``ShowResection2D`` / ``EnableFlexibleBoundary`` / ``TextureNumComps`` —
-and draws the flattened strip), establishing the pixels v2.0 must
-reproduce, then are RE-BASELINED to the v2.0 ResectogramPipeline once it
-lands.  The capture is maintainer-driven (``capture_baseline.py``); until
-a ``.sha512`` stub is committed under ``../Data/Baseline/`` the replay
-driver skips this scenario with a clear log line, so the
-``NotImplementedError``-free body below is reached only at capture time.
+Capture contract
+----------------
+The baseline is captured against the v2.0 ResectogramPipeline render path
+(the v1 markups render is retired — ADR-0014 §"Dissolution"; ADR-0032
+§"Consequences").  The capture is maintainer-driven
+(``capture_baseline.py``); until a ``.sha512`` stub is committed under
+``../Data/Baseline/`` the replay driver skips this scenario with a clear
+log line, so the body below is reached only at capture time.
 
 Scene shape
 -----------
 Mirrors ``BezierSurface4x4Planning.setup_scene`` — a synthetic parenchyma
-model + a 4-component distance-map volume + a hand-built
-``vtkMRMLMarkupsBezierSurfaceNode`` — and additionally enables the
-resectogram strip on its display node.  The blur toggle is NOT a field on
-the legacy display node (blur is net-new for v2.0, added by the
-implementer on ``vtkMRMLResectogramDisplayNode``), so this blur-OFF
-scenario is exactly the legacy resectogram appearance; ``describe()``
-records ``blur_enabled = False`` so the bundle metadata is unambiguous.
+model + a 4-component distance-map volume + a v2 ``vtkMRMLBezierSurfaceNode``
+carrier decorated by a ``vtkMRMLParametricSurfaceDisplayNode`` and
+orchestrated by a ``vtkMRMLResectionPlanNode`` wrapper (distance map +
+margins, ADR-0031) — and additionally attaches a
+``vtkMRMLResectogramDisplayNode`` carrying the strip appearance.  The blur
+toggle is a ``vtkMRMLResectogramDisplayNode`` field (net-new for v2.0);
+this blur-OFF scenario leaves it off, and ``describe()`` records
+``blur_enabled = False`` so the bundle metadata is unambiguous.
 
 No module-level scene handles: ``setup_scene`` RETURNS every node it
 creates so nothing leaks through a module global (the ``global``
@@ -191,79 +188,86 @@ def _build_resectogram_bezier(
     half_extent_v: float,
     enable_flexible_boundary: bool,
     distance_map: slicer.vtkMRMLScalarVolumeNode,
-) -> slicer.vtkMRMLNode:
-    """Hand-build the markups Bezier node with the resectogram strip enabled.
+) -> slicer.vtkMRMLBezierSurfaceNode:
+    """Build the v2 Bezier carrier + plan wrapper for the resectogram strip.
 
-    The v1 resectogram render path reads the legacy
-    ``vtkMRMLMarkupsBezierSurfaceDisplayNode`` resectogram fields
-    (``ShowResection2D`` / ``EnableFlexibleBoundary`` / ``TextureNumComps``
-    + the distance-map volume) when driving
-    ``vtkOpenGLResection2DPolyDataMapper``.  The control-point footprint
-    sets the ``(u, v)`` parametric extents the flattened strip maps.
+    Mirrors ``BezierSurface4x4Planning.setup_scene`` — a v2 data carrier
+    ``vtkMRMLBezierSurfaceNode`` decorated by a
+    ``vtkMRMLParametricSurfaceDisplayNode``, orchestrated by a
+    ``vtkMRMLResectionPlanNode`` wrapper that carries the distance-map
+    volume + the safety / risk margins (ADR-0031; ADR-0014 §"Fourth
+    layer").  The v1 markups Bezier render path is retired (ADR-0014
+    §"Dissolution"; ADR-0032 §"Consequences"); the resectogram is drawn by
+    the v2 ResectogramPipeline (ADR-0013 §6) keyed on the
+    ``vtkMRMLResectogramDisplayNode`` attached separately.  The
+    control-point footprint sets the ``(u, v)`` parametric extents the
+    flattened strip maps.
 
-    Returns the created markups Bezier surface node.
+    Returns the created v2 Bezier carrier.
     """
-    bezier = slicer.mrmlScene.AddNewNodeByClass(
-        "vtkMRMLMarkupsBezierSurfaceNode", "VisualTestResectogramBezier"
+    carrier = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLBezierSurfaceNode", "VisualTestResectogramBezier"
     )
-    for _ in range(16):
-        bezier.AddControlPoint(vtk.vtkVector3d(0.0, 0.0, 0.0))
-    bezier.CreateDefaultDisplayNodes()
-
-    bezier.SetResectionMargin(10.0)
-    bezier.SetUncertaintyMargin(2.0)
+    surface_display = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLParametricSurfaceDisplayNode", "VisualTestResectogramBezierDisplay"
+    )
+    carrier.SetAndObserveDisplayNodeID(surface_display.GetID())
 
     # Lay out the 4x4 control grid so the patch's u extent is
     # 2*half_extent_u and its v extent is 2*half_extent_v, centred on the
-    # parenchyma sphere's xy centre.  The u axis runs along i, v along j.
+    # parenchyma sphere's xy centre.  ``SetControlPoint(row, col, x, y, z)``
+    # is the Python-wrappable grid seam; u runs along the row, v along the
+    # column.
     cx, cy = PATCH_CENTER_XY
     base_x = cx - half_extent_u
     base_y = cy - half_extent_v
     spacing_u = (2.0 * half_extent_u) / 3.0  # 4 control points => 3 spans
     spacing_v = (2.0 * half_extent_v) / 3.0
-    for i in range(4):
-        for j in range(4):
-            idx = i * 4 + j
-            bezier.SetNthControlPointPosition(
-                idx,
-                base_x + spacing_u * i,
-                base_y + spacing_v * j,
+    for row in range(4):
+        for col in range(4):
+            carrier.SetControlPoint(
+                row,
+                col,
+                base_x + spacing_u * row,
+                base_y + spacing_v * col,
                 0.0,
             )
 
-    display = bezier.GetDisplayNode()
-    # ORDER MATTERS: TextureNumComps before the distance map so the
-    # subsequent texture upload reads the correct per-voxel stride.
-    display.SetTextureNumComps(4)
-    bezier.SetDistanceMapVolumeNode(distance_map)
-    display.SetClipOut(False)
-    display.SetVisibility(True)
+    surface_display.SetClipOut(False)
+    surface_display.SetVisibility(True)
 
-    # Enable the resectogram strip (the flattened 2D image) and the
-    # anisotropic aspect-ratio scaling per the scenario configuration.  The
-    # v1 monolith reads these legacy markups-display-node fields directly;
-    # the v2.0 path mirrors them onto the dedicated resectogram display node
-    # below.
-    display.SetShowResection2D(True)
-    display.SetEnableFlexibleBoundary(enable_flexible_boundary)
+    # The orchestrating plan wrapper carries the surface shader's
+    # path-specific inputs (ADR-0031): the distance-map volume + the safety
+    # / risk margins (the v1 shader inputs that lived on the markups node).
+    # The ``geometry`` reference to the carrier lets the ResectogramPipeline
+    # reverse-resolve this plan from the rendered surface.
+    plan = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLResectionPlanNode", "VisualTestResectogramResectionPlan"
+    )
+    plan.SetAndObserveGeometryNode(carrier)
+    plan.SetAndObserveDistanceMapVolumeNode(distance_map)
+    plan.SetSafetyMargin_mm(10.0)
+    plan.SetRiskMargin_mm(2.0)
 
-    return bezier
+    carrier.SetState(1)  # vtkMRMLBezierSurfaceNode::Planning
+
+    return carrier
 
 
 def _attach_resectogram_display_node(
-    bezier: slicer.vtkMRMLNode,
+    bezier: slicer.vtkMRMLBezierSurfaceNode,
     enable_flexible_boundary: bool,
 ) -> slicer.vtkMRMLNode:
     """Create + attach the v2.0 ``vtkMRMLResectogramDisplayNode``.
 
     The dedicated resectogram display node is the v2.0 LayerDM carrier
     (ADR-0013 §1) the registered ``ResectogramPipeline`` keys on: adding it
-    to the scene as a display node of the Bezier surface drives the
-    pipeline's ``FlattenedSurfaceRepresentation`` /
-    ``VascularContourRepresentation`` to render the flattened ``(u, v)``
-    strip.  Its resectogram fields mirror the legacy markups display node so
-    the v1 monolith and the v2.0 pipeline start from an identical visual
-    baseline (ADR-0025 §Context).
+    as a second display node of the v2 Bezier carrier drives the pipeline's
+    ``FlattenedSurfaceRepresentation`` / ``VascularContourRepresentation``
+    to render the flattened ``(u, v)`` strip.  Its resectogram fields carry
+    the strip appearance (``ShowResection2D`` / ``EnableFlexibleBoundary`` /
+    ``TextureNumComps``) — the v1 markups render path is retired (ADR-0014
+    §"Dissolution"; ADR-0032 §"Consequences").  ADR-0025 §Context.
 
     Returns the created display node so the caller owns teardown (the
     no-module-globals contract).
@@ -287,10 +291,10 @@ def setup_scene():
     """Populate the scene with the blur-off square-domain resectogram fixture.
 
     Idempotent under repeated invocation (clears the scene first).  Builds
-    the production LiverResections + LiverMarkups render inputs and enables
-    the resectogram strip; the v1 monolith renders the flattened image from
-    these fields, and the v2.0 ResectogramPipeline reproduces it after
-    re-baselining (ADR-0013 §6).
+    the v2 resection node graph (carrier + parametric-surface display node
+    + resection-plan wrapper) and attaches the resectogram display node;
+    the v2.0 ResectogramPipeline renders the flattened strip from these
+    inputs (ADR-0013 §6).
 
     Returns
     -------

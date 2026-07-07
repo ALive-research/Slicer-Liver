@@ -435,12 +435,13 @@ def test_combo_offers_resection_plan_node():
 
 
 def test_combo_does_not_offer_v1_markups_surface():
-    """The combo does NOT directly offer a v1 ``vtkMRMLMarkupsBezierSurfaceNode``.
+    """The combo does NOT list the retired ``vtkMRMLMarkupsBezierSurfaceNode``.
 
-    #501 slice 4 behaviour change: the v1 markups surface is no longer directly
-    selectable in the Stage-4 combo -- selection is on the plan wrapper.  A
-    scene holding ONLY a v1 surface leaves the combo with no plan to select.
-    Skip-pending on the still-v1 combo (ADR-0027).
+    The Stage-4 combo selects the plan wrapper (ADR-0014 §"Fourth layer"),
+    never a surface node.  The v1 markups Bezier surface is fully retired
+    (ADR-0014 §"Dissolution"; ADR-0032 §"Consequences") -- the class no
+    longer exists, so it cannot be instantiated; this pins that the
+    re-pointed combo's advertised node types never name it.
     """
     slicer = _slicer_or_skip()
     slicer.mrmlScene.Clear(0)
@@ -448,27 +449,15 @@ def test_combo_does_not_offer_v1_markups_surface():
     combo = _combo_or_skip(widget)
     _require_combo_repointed_or_skip(combo)
 
-    v1 = slicer.mrmlScene.AddNewNodeByClass(V1_MARKUPS_SURFACE_CLASS, "V1Surface")
-    if v1 is None:
-        pytest.skip(
-            f"{V1_MARKUPS_SURFACE_CLASS} not registered -- cannot verify it is "
-            "excluded from the re-pointed combo."
-        )
-
+    # The retired class is not registered, so a scene can never hold one;
+    # assert the combo's advertised node types do not name it (it selects
+    # the plan wrapper).
     node_types = _combo_node_types(combo)
     assert V1_MARKUPS_SURFACE_CLASS not in node_types, (
-        "the re-pointed combo must NOT list the v1 "
+        "the re-pointed combo must NOT list the retired "
         f"{V1_MARKUPS_SURFACE_CLASS} (it selects the "
         f"{PLAN_NODE_CLASS} wrapper); nodeTypes is {node_types}."
     )
-    # Selecting the v1 surface must not make it the combo's current node.
-    if hasattr(combo, "setCurrentNode"):
-        combo.setCurrentNode(v1)
-        current = combo.currentNode()
-        assert current is not v1, (
-            "the v1 markups surface must not be directly selectable in the "
-            f"re-pointed combo (ADR-0014 §'Fourth layer'); got {current!r}."
-        )
 
 
 # --------------------------------------------------------------------------- #
