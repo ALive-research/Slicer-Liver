@@ -48,7 +48,6 @@
 
 // Module includes
 #include <vtkSlicerLiverMarkupsLogic.h>
-#include <vtkMRMLMarkupsBezierSurfaceNode.h>
 #include <vtkMRMLMarkupsDistanceContourNode.h>
 #include <vtkMRMLMarkupsSlicingContourNode.h>
 
@@ -105,9 +104,14 @@ public:
       qCritical() << Q_FUNC_INFO << "vtkMRMLMarkupsDistanceContourNode isn't registered";
       return 1;
     }
-    if (!markupsLogic->IsMarkupsNodeRegistered("vtkMRMLMarkupsBezierSurfaceNode"))
+    // The v1 markups Bezier surface is fully retired (ADR-0014
+    // §"Dissolution"; ADR-0032 §"Consequences" — v1 render + node + the
+    // legacy `.lrp.fcsv` migration are gone).  The sole Bezier render is
+    // the v2 LayerDM path (ADR-0013 §5; ADR-0031).  Pin the retirement:
+    // the v1 markups Bezier type must NOT be a registered markups type.
+    if (markupsLogic->IsMarkupsNodeRegistered("vtkMRMLMarkupsBezierSurfaceNode"))
     {
-      qCritical() << Q_FUNC_INFO << "vtkMRMLMarkupsBezierSurfaceNode isn't registered";
+      qCritical() << Q_FUNC_INFO << "vtkMRMLMarkupsBezierSurfaceNode is still registered (v1 retired)";
       return 1;
     }
     return 0;
@@ -115,12 +119,13 @@ public:
 
   int checkDisplayNodes()
   {
-    auto bezierSurfaceNode = vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>::New();
+    // The v1 markups Bezier surface + its display node are retired
+    // (ADR-0014 §"Dissolution"; ADR-0032 §"Consequences").  Only the
+    // surviving contour markups are exercised here.
     auto distanceContourNode = vtkSmartPointer<vtkMRMLMarkupsDistanceContourNode>::New();
     auto slicingContourNode = vtkSmartPointer<vtkMRMLMarkupsSlicingContourNode>::New();
 
     int retval = 0;
-    retval = retval || checkDisplayNode(bezierSurfaceNode, "vtkMRMLMarkupsBezierSurfaceDisplayNode");
     retval = retval || checkDisplayNode(distanceContourNode, "vtkMRMLMarkupsDistanceContourDisplayNode");
     retval = retval || checkDisplayNode(slicingContourNode, "vtkMRMLMarkupsSlicingContourDisplayNode");
     return retval;
