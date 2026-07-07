@@ -69,9 +69,12 @@ SCT_MASS_CODE = "4147007"
 
 #: Stage-1 / Stage-2 hand-off: Stage 2 segments the portal-venous-phase
 #: volume Stage 1 flags with this attribute (ADR-0024 §"Per-structure
-#: micro-workflows").
-LIVER_ROLE_ATTRIBUTE = "LiverRole"
-LIVER_ROLE_PORTAL_VENOUS = "PortalVenous"
+#: micro-workflows").  Single source of truth is the shared role vocabulary
+#: that Case Setup (Stage 1) writes; re-exported here for the readers below.
+from LiverSegmentationLib.roles import (  # noqa: E402
+    LIVER_ROLE_ATTRIBUTE,
+    LIVER_ROLE_PORTAL_VENOUS,
+)
 
 
 #: Dotted name the TotalSegmentator wrapper lives under.  The wrapper sits in
@@ -422,6 +425,37 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
         if canonical is not None:
             return canonical
         return self._createSegmentationWithRole(ROLE_CANONICAL, "Anatomy: Canonical")
+
+    def importSegmentationAsCanonical(self, sourceSegmentationNode, assignments):
+        """Promote a loaded segmentation to the canonical node, SCT-tagging it.
+
+        The v2.0 path to a canonical segmentation WITHOUT in-app AI (deferred to
+        v2.1): the surgeon loads a segmentation and assigns each segment a
+        structure.  ``assignments`` maps ``segmentId -> (sctCode, meaning)``.
+        Marks ``sourceSegmentationNode`` as THE canonical node (ADR-0024
+        §"Output contract" — exactly one; any prior canonical is demoted) and
+        SCT-tags each assigned segment via :meth:`tagSegmentWithSct`, so
+        :meth:`isStructureAccepted` / :meth:`isStageComplete` report the
+        structures.  A no-op returning ``None`` when the source is missing / not
+        a segmentation, or no assignments are given.
+        """
+        if sourceSegmentationNode is None or not sourceSegmentationNode.IsA(
+            "vtkMRMLSegmentationNode"
+        ):
+            return None
+        if not assignments:
+            return None
+
+        # Exactly one canonical node: demote any prior canonical before
+        # promoting the loaded one.
+        existing = self._findCanonicalSegmentation()
+        if existing is not None and existing is not sourceSegmentationNode:
+            existing.SetAttribute(ROLE_ATTRIBUTE, None)
+
+        sourceSegmentationNode.SetAttribute(ROLE_ATTRIBUTE, ROLE_CANONICAL)
+        for segmentId, (code, meaning) in assignments.items():
+            self.tagSegmentWithSct(sourceSegmentationNode, segmentId, code, meaning)
+        return sourceSegmentationNode
 
     def createScratchSegmentation(self):
         """Mint an orchestrator-private scratch segmentation node.
