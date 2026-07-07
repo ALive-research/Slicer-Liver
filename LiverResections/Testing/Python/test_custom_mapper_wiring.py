@@ -156,11 +156,11 @@ def test_flattened_surface_uses_real_resection_2d_mapper():
 def test_vascular_contour_feeds_strip_into_real_mappers():
     """``update()`` feeds the strip polydata into both real contour mappers.
 
-    Pins the now-unguarded ``mapper.SetInputData(strip)`` path in
-    ``_apply_strip_input``: the type-probe (``getattr(mapper, "SetInputData",
-    None)``) was dropped once the contour mappers became a hard requirement
-    (ADR-0014 §3), so this exercises the direct call against the REAL mappers --
-    an accidental over-removal, or a mapper lacking ``SetInputData``, fails here.
+    Pins the ``_apply_strip_input`` path end-to-end against the REAL contour
+    mappers (the relocated custom classes under launched Slicer, ADR-0014 §3):
+    a data node exposing the strip polydata drives ``SetInputData`` on both, so
+    a regression in the strip feed -- or a mapper that cannot take the input --
+    fails here rather than silently painting nothing.
     """
     _slicer_or_skip()
     import vtk
