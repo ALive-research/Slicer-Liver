@@ -392,6 +392,37 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections;locator"
     )
 
+    # Locator SINGLETON on the logic (GL-free), ADR-0025 §Consumer -- the
+    # resolve-or-create half that guarantees "v2.0 has exactly one"
+    # vtkMRMLLocatorNode.  Pins a NEW vtkSlicerLiverResectionsLogic method
+    # EnsureLocatorNode() (ADR-0014 the logic layer, ADR-0004 C++/Python
+    # boundary) that resolves via GetFirstNodeByClass else mints via
+    # AddNewNodeByClass, wires a vtkMRMLLocatorDisplayNode (default Radius 2.0)
+    # through CreateDefaultDisplayNodes(), sets LocatorActive = true, and returns
+    # the node.  Invariant 1: the call leaves exactly one locator, wired +
+    # active; invariant 2: a second call returns the SAME node (same GetID) and
+    # mints no second one (idempotent); invariant 3: CreateResectionPlan calls it
+    # so opening a plan ensures the locator and a second plan does not add
+    # another (still exactly one).  Needs the registered logic singleton + the
+    # wrapped vtkMRMLLocatorNode / vtkMRMLLocatorDisplayNode, so it runs green
+    # under the launched-Slicer `pytest_launched` row and SKIPS CLEANLY here
+    # under bare pytest (no slicer.mrmlScene / no logic).  GL free -- no view /
+    # render window; only node + display state is asserted.  The shared launched
+    # scene is not assumed empty: each test clears pre-existing locators up front
+    # and tears down what it created.  RED / skip-pending (guards on
+    # hasattr(logic, "EnsureLocatorNode")) until the implementer lands the method
+    # (ADR-0027 §Conformance: the skip lifts at the implementation commit).
+    add_test(
+      NAME LiverResections_ensure_locator_node
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_ensure_locator_node.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_ensure_locator_node PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;locator"
+    )
+
     # #501 slice 2 -- the v2 resection control-point edit path on the LayerDM
     # Pipeline (ADR-0032: interaction routes through the Pipeline interaction
     # seam, no standalone vtkAbstractWidget).  Pins the GL-free edit kernel
