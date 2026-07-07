@@ -67,6 +67,7 @@ References
 .. _ADR-0013: ../../Docs/adr/0013-layerdm-pipeline-pattern.md
 .. _ADR-0015: ../../Docs/adr/0015-cpp-algorithm-library.md
 .. _ADR-0025: ../../Docs/adr/0025-locator-architecture.md
+.. _ADR-0032: ../../Docs/adr/0032-v2-interaction-via-layerdm-pipeline-seam.md
 """
 
 from __future__ import annotations
@@ -254,6 +255,89 @@ class ResectogramPipeline(_PipelineBase):
 
     def GetVascularContourRepresentation(self) -> Any | None:
         return self._vascular_contour
+
+    # ------------------------------------------------------------------ #
+    # Locator interaction seam (`ADR-0032`_ seam; `ADR-0025`_ §Producer)
+    # ------------------------------------------------------------------ #
+
+    def CanProcessInteractionEvent(self, eventData: Any):  # noqa: N802 - VTK verb
+        """Claim resectogram-view interaction when a surface is displayed.
+
+        The flattened strip IS the (u, v) parameter-domain image, so every
+        in-view pixel maps to a surface point -- the Pipeline can process a
+        click anywhere it has a data node.  ``distance2`` is 0: the strip owns
+        its standalone embedded view, so no other interactive Pipeline competes
+        for focus (`ADR-0025`_ §Click-to-reslice).
+        """
+        import sys
+
+        if self._data_node is None:
+            return False, sys.float_info.max
+        return True, 0.0
+
+    def ProcessInteractionEvent(self, eventData: Any) -> bool:  # noqa: N802 - VTK verb
+        """Source the click pixel and drive the locator producer.
+
+        Reads the VTK display-space pixel from
+        ``eventData.GetDisplayPosition()`` (bottom-left origin -- no Qt y-flip)
+        and composes the producer via ``_produce_from_display_position``.
+        Returns ``True`` iff a world point was produced (the interaction logic
+        keeps focus on a Pipeline that returns ``True``).
+        """
+        getter = getattr(eventData, "GetDisplayPosition", None)
+        if getter is None:
+            return False
+        return self._produce_from_display_position(getter()) is not None
+
+    def _produce_from_display_position(self, display_xy: Any) -> tuple | None:
+        """Map a resectogram display pixel to a locator pick (`ADR-0025`_ §Producer).
+
+        The GL-free seam core: resolve the four producer inputs off the live
+        Pipeline state -- the surface carrier (``GetDataNode()``), the scene's
+        single ``vtkMRMLLocatorNode`` (`ADR-0025`_ §Consumer), the ``mat_ratio``
+        (``GetFlattenedSurfaceRepresentation().GetMatRatioApplied()``, the
+        anisotropic scaling last applied to the strip, `ADR-0025`_ §Context) and
+        the strip renderer's render-window size -- then compose
+        ``ResectogramLocatorProducer`` (the exact 1:1 (u, v) mapping, no picker).
+
+        ``display_xy`` is a VTK display pixel (bottom-left origin).  Returns the
+        world point (also written onto the locator's ``PickedPositionWorld``),
+        or ``None`` on any degenerate input (no surface / no locator /
+        unresolved MatRatio / non-positive viewport) -- a no-op leaving the
+        locator untouched.
+        """
+        surface = self.GetDataNode()
+        if surface is None:
+            return None
+        locator = self._resolve_locator_node(surface)
+        if locator is None:
+            return None
+        representation = self.GetFlattenedSurfaceRepresentation()
+        if representation is None:
+            return None
+        mat_ratio = representation.GetMatRatioApplied()
+        if mat_ratio is None:
+            return None
+        renderer = representation.GetRenderer()
+        render_window = renderer.GetRenderWindow() if renderer is not None else None
+        if render_window is None:
+            return None
+        viewport_size = render_window.GetSize()
+
+        from LiverResectionsLib.ResectogramLocatorProducer import (
+            ResectogramLocatorProducer,
+        )
+
+        producer = ResectogramLocatorProducer(surface, locator)
+        return producer.produce(display_xy, viewport_size, mat_ratio)
+
+    @staticmethod
+    def _resolve_locator_node(surface: Any) -> Any | None:
+        """The scene's single cross-view ``vtkMRMLLocatorNode`` (`ADR-0025`_ §Consumer)."""
+        scene = getattr(surface, "GetScene", lambda: None)()
+        if scene is None:
+            return None
+        return scene.GetFirstNodeByClass("vtkMRMLLocatorNode")
 
     def GetUpdateCount(self) -> int:
         """Total ``UpdatePipeline()`` calls that did real work
