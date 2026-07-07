@@ -19,11 +19,15 @@ Scope of this skeleton
 ----------------------
 Per the T3 bounded slice this skeleton COMPOSES the contour overlays and
 wires the display-node fields it consumes, but it does NOT yet sever the
-overlays out of the v1 monolith (a separate follow-up).  The contour
-mappers are reachable only inside a Slicer process, so their use is
-gated behind ``hasattr`` / import guards and the generic VTK fallbacks
-keep the skeleton importable everywhere (same soft-VTK pattern as
-``ConfirmedRepresentation`` and ``FlattenedSurfaceRepresentation``).
+overlays out of the v1 monolith (a separate follow-up).  The two contour
+mappers are custom wrapped-C++ classes reachable only inside a Slicer
+process; they are injected, not silently discovered (ADR-0014 §3).  In
+production the ``distance_contour_mapper`` / ``slicing_contour_mapper``
+constructor arguments are ``None`` and this Representation resolves the
+real wrapped classes (raising if either is off the path — a real
+misconfiguration must not degrade to a shader-less generic mapper).  The
+bare-VTK unit layer (ADR-0008 §2) injects generic ``vtkPolyDataMapper``
+instances.
 
 References
 ----------
@@ -49,10 +53,18 @@ class VascularContourRepresentation:
 
     Constructor
     -----------
-    ``VascularContourRepresentation(renderer=None)``
+    ``VascularContourRepresentation(renderer=None, *,
+    distance_contour_mapper=None, slicing_contour_mapper=None)``
 
     * ``renderer`` — the ``vtkRenderer`` the contour actors are added
       to.  Optional; ``None`` is supported for unit tests.
+    * ``distance_contour_mapper`` / ``slicing_contour_mapper`` — the two
+      custom contour-mapper INSTANCES (dependency injection, ADR-0014
+      §3).  ``None`` (production) resolves the real
+      ``vtkOpenGLDistanceContourPolyDataMapper`` /
+      ``vtkOpenGLSlicingContourPolyDataMapper``, raising if either is off
+      the path.  Injected instances (bare-VTK unit layer, ADR-0008 §2)
+      are used as-is.
 
     Public methods
     --------------
@@ -69,7 +81,13 @@ class VascularContourRepresentation:
       the matching actors.
     """
 
-    def __init__(self, renderer: Any | None = None) -> None:
+    def __init__(
+        self,
+        renderer: Any | None = None,
+        *,
+        distance_contour_mapper: Any | None = None,
+        slicing_contour_mapper: Any | None = None,
+    ) -> None:
         self._renderer: Any | None = None
 
         self._distance_contour_mapper: Any | None = None
@@ -79,7 +97,7 @@ class VascularContourRepresentation:
 
         self._update_count: int = 0
 
-        self._build_vtk_pipeline()
+        self._build_vtk_pipeline(distance_contour_mapper, slicing_contour_mapper)
 
         if renderer is not None:
             self.SetRenderer(renderer)
@@ -150,24 +168,33 @@ class VascularContourRepresentation:
     # Internal helpers
     # ------------------------------------------------------------------ #
 
-    def _build_vtk_pipeline(self) -> None:
+    def _build_vtk_pipeline(
+        self,
+        distance_contour_mapper: Any | None,
+        slicing_contour_mapper: Any | None,
+    ) -> None:
         """Construct the two contour mappers + their actors.
 
-        Prefers the relocated ``vtkOpenGLDistanceContourPolyDataMapper``
-        / ``vtkOpenGLSlicingContourPolyDataMapper``
-        (``LiverResections/VTKWidgets/``); falls back to a generic
-        ``vtkPolyDataMapper`` so the skeleton stays importable in a bare
-        VTK environment.
+        Each mapper is injected, not silently discovered (ADR-0014 §3): a
+        ``None`` argument (production) resolves the real relocated
+        ``vtkOpenGLDistanceContourPolyDataMapper`` /
+        ``vtkOpenGLSlicingContourPolyDataMapper``, raising if it is off the
+        path; an injected instance (bare-VTK unit layer, ADR-0008 §2) is
+        used as-is.
         """
-        self._distance_contour_mapper = _make_contour_mapper(
-            "vtkOpenGLDistanceContourPolyDataMapper"
+        self._distance_contour_mapper = (
+            distance_contour_mapper
+            if distance_contour_mapper is not None
+            else _make_contour_mapper("vtkOpenGLDistanceContourPolyDataMapper")
         )
         self._distance_contour_actor = vtk.vtkActor()
         self._distance_contour_actor.SetMapper(self._distance_contour_mapper)
         self._distance_contour_actor.SetVisibility(False)
 
-        self._slicing_contour_mapper = _make_contour_mapper(
-            "vtkOpenGLSlicingContourPolyDataMapper"
+        self._slicing_contour_mapper = (
+            slicing_contour_mapper
+            if slicing_contour_mapper is not None
+            else _make_contour_mapper("vtkOpenGLSlicingContourPolyDataMapper")
         )
         self._slicing_contour_actor = vtk.vtkActor()
         self._slicing_contour_actor.SetMapper(self._slicing_contour_mapper)
@@ -217,23 +244,38 @@ class VascularContourRepresentation:
 
 
 def _make_contour_mapper(class_name: str) -> Any:
-    """Return a relocated contour mapper by class name, or a generic fallback.
+    """Return a relocated contour mapper instance by class name, or raise.
 
-    The custom contour mappers are reachable from a Slicer process via
-    the ``vtk`` module (wrapped) or the ``slicer`` namespace; a bare-VTK
-    pytest run gets the generic ``vtkPolyDataMapper`` fallback.
+    The custom contour mappers are reachable from a Slicer process via the
+    ``vtk`` module (wrapped) or the ``slicer`` namespace.  Raises
+    ``RuntimeError`` when neither namespace exposes the class — a real
+    misconfiguration in production (ADR-0014 §3) must fail loudly rather
+    than degrade to a shader-less generic mapper.  Bare-VTK unit tests
+    (ADR-0008 §2) avoid this path by injecting a mapper instance instead.
     """
-    factory = getattr(vtk, class_name, None)
+    factory = _require_vtk_class(class_name)
+    return factory()
+
+
+def _require_vtk_class(name: str) -> Any:
+    """Resolve a wrapped-C++ class by name from ``vtk`` then ``slicer``, or raise."""
+    factory = getattr(vtk, name, None)
     if factory is None:
         try:  # pragma: no cover — exercised inside Slicer
             import slicer
 
-            factory = getattr(slicer, class_name, None)
+            factory = getattr(slicer, name, None)
         except Exception:
             factory = None
-    if factory is not None:
-        return factory()
-    return vtk.vtkPolyDataMapper()
+    if factory is None:
+        raise RuntimeError(
+            f"{name} is not reachable from the 'vtk' or 'slicer' namespace. "
+            "It is a wrapped-C++ class relocated to LiverResections/VTKWidgets/ "
+            "(ADR-0014 §3) and available only inside a launched Slicer with the "
+            "module loaded.  Inject a mapper instance for bare-VTK unit tests "
+            "(ADR-0008 §2)."
+        )
+    return factory
 
 
 def _safe_get_strip_polydata(data_node: Any | None) -> Any | None:
