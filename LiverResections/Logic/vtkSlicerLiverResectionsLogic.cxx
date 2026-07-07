@@ -153,9 +153,45 @@ vtkMRMLResectionPlanNode* vtkSlicerLiverResectionsLogic::CreateResectionPlan(con
   // Pipeline reverse-resolves the plan from this back-reference (ADR-0031).
   plan->SetAndObserveGeometryNode(carrier);
 
+  // Ensure the cross-view locator node exists so a resectogram click has a
+  // node to write and the consumers (shader marker, click-to-reslice) have one
+  // to read (ADR-0025 §Consumer: exactly one in v2.0).
+  this->EnsureLocatorNode();
+
   // The plan starts in Init (ADR-0019); the control grid is seeded by the
   // placement step, not here.
   return plan;
+}
+
+//---------------------------------------------------------------------------
+vtkMRMLLocatorNode* vtkSlicerLiverResectionsLogic::EnsureLocatorNode()
+{
+  vtkMRMLScene* scene = this->GetMRMLScene();
+  if (scene == nullptr)
+  {
+    vtkErrorMacro("EnsureLocatorNode: no MRML scene is bound");
+    return nullptr;
+  }
+
+  // Resolve-or-create: reuse the single existing locator (ADR-0025 §Consumer:
+  // v2.0 has exactly one) rather than minting a second.
+  auto* locator = vtkMRMLLocatorNode::SafeDownCast(scene->GetFirstNodeByClass("vtkMRMLLocatorNode"));
+  if (locator == nullptr)
+  {
+    locator = vtkMRMLLocatorNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLLocatorNode"));
+  }
+  if (locator == nullptr)
+  {
+    vtkErrorMacro("EnsureLocatorNode: failed to instantiate the locator node");
+    return nullptr;
+  }
+
+  // The display node carries the marker radius (default > 0) + feeds the
+  // uLocatorRadius shader uniform; mark the locator active (persisted presence
+  // flag, ADR-0025 §"The node").
+  locator->CreateDefaultDisplayNodes();
+  locator->SetLocatorActive(true);
+  return locator;
 }
 
 //---------------------------------------------------------------------------

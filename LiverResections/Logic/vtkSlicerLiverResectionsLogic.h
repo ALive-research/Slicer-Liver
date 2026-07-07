@@ -58,6 +58,7 @@
 #include <itkImage.h>
 
 class vtkMRMLResectionPlanNode;
+class vtkMRMLLocatorNode;
 
 //------------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_LOGIC_EXPORT vtkSlicerLiverResectionsLogic : public vtkSlicerModuleLogic
@@ -104,6 +105,18 @@ public:
   /// control grid is seeded by the placement step, not here.  Returns
   /// nullptr when no MRML scene is bound or node instantiation fails.
   vtkMRMLResectionPlanNode* CreateResectionPlan(const char* name = nullptr);
+
+  /// Ensure the scene has exactly one cross-view locator node.
+  ///
+  /// Resolve-or-create the single ``vtkMRMLLocatorNode`` the ADR-0025
+  /// cross-view locator coordinates through (§Consumer: v2.0 has exactly
+  /// one): returns the existing node if present, otherwise mints one with
+  /// its default ``vtkMRMLLocatorDisplayNode`` (radius > 0, so the marker
+  /// is visible) and marks it active (the persisted presence flag,
+  /// ADR-0025 §"The node").  Idempotent — never mints a second.  Called
+  /// from ``CreateResectionPlan`` so the producer/consumer chain has a
+  /// node to write/read.  Returns nullptr when no MRML scene is bound.
+  vtkMRMLLocatorNode* EnsureLocatorNode();
 
 protected:
   vtkSlicerLiverResectionsLogic();
