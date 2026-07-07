@@ -76,18 +76,18 @@ classDiagram
     }
 
     class vtkOpenGLBezierResectionPolyDataMapper {
-        <<post T2-mapper-relocation>>
+        <<v2.0.0 — LiverResections/VTKWidgets>>
         Bezier surface render
         + grid-overlay shader (Planning)
         + parenchyma-trim shader (Confirmed)
         Both gated by uniform feeds
     }
     class vtkOpenGLDistanceContourPolyDataMapper {
-        <<post T2-mapper-relocation>>
+        <<v2.0.0 — LiverResections/VTKWidgets>>
         Distance-map contour shader
     }
     class vtkOpenGLResectogramPolyDataMapper {
-        <<post T2-mapper-relocation;<br/>T3 wire-up>>
+        <<v2.0.0 — LiverResections/VTKWidgets>>
         Resectogram texture path
     }
     class FragmentShader {
@@ -133,7 +133,7 @@ The class diagram shows:
   `(ResectionState, InitializationMode)` picks one active at a time.
 - **Representation → custom OpenGL mapper**: each Representation
   owns a (small) set of mappers; the mappers live under
-  `LiverResections/VTKWidgets/` post T2-mapper-relocation.
+  `LiverResections/VTKWidgets/` (relocated there, ADR-0014 §3).
 - **Mapper → fragment shader**: each mapper feeds uniforms to a
   GLSL fragment shader that does the actual pixel work.  The
   display node's fields (`GridVisibility`, `GridDivisions`,
@@ -150,7 +150,7 @@ sequenceDiagram
     participant Factory as vtkMRMLLayerDMPipelineFactory<br/>(upstream)
     participant Pipeline as LiverBezierSurfacePipeline
     participant Rep as BezierPlanningRepresentation
-    participant Mapper as vtkOpenGLBezierResectionPolyDataMapper<br/>(post T2-mapper-relocation)
+    participant Mapper as vtkOpenGLBezierResectionPolyDataMapper<br/>(LiverResections/VTKWidgets)
     participant GPU as GLSL fragment shader
 
     Note over User,Scene: User opens .lrp.json OR adds a resection via toolbar
@@ -192,14 +192,15 @@ sequenceDiagram
 | `vtkMRMLLayerDisplayableManager::RegisterInDefaultViews()` | ✓ landed (PR #369) |
 | `vtkMRMLLayerDMPipelineFactory::AddPipelineCreator(...)`   | ✓ landed (PR #369) |
 | `LiverBezierSurfacePipeline` (lifecycle, dispatch)         | ✓ landed (PR #354 + #369) |
-| `BezierPlanningRepresentation` (with generic mapper)       | ✓ landed (PR #354)  |
+| `BezierPlanningRepresentation` (drives the real mapper)    | ✓ landed (PR #354; real-mapper wiring in the #493/#501 cutover) |
 | `SlicingPlaneInitRepresentation`                           | ✓ landed (PR #358)  |
 | `DistanceSpheroidInitRepresentation`                       | ✓ landed (PR #359)  |
-| Custom OpenGL mappers (`vtkOpenGLBezierResectionPolyDataMapper`, …) | ⏳ **T2-mapper-relocation** |
-| Display-node fields → mapper uniforms              | ⏳ T2-mapper-relocation |
-| Fragment-shader grid overlay                       | ⏳ T2-mapper-relocation |
-| Parenchyma-trim shader (Confirmed state)           | ⏳ T2-mapper-relocation + ADR-0019 |
-| Resectogram texture path                           | ⏳ T3 |
+| Custom OpenGL mappers (`vtkOpenGLBezierResectionPolyDataMapper`, …) | ✓ landed — relocated to `LiverResections/VTKWidgets/` (ADR-0014 §3); a hard requirement (#498) |
+| Display-node fields → mapper uniforms              | ✓ landed (#493/#501 cutover) |
+| Fragment-shader grid overlay                       | ✓ landed (#493/#501 cutover) |
+| Parenchyma-trim shader (Confirmed state)           | ⏳ `ConfirmedRepresentation` still on a generic mapper — custom relocation not yet landed (ADR-0019) |
+| Resectogram texture path                           | ◐ real 2D mapper + wrapper-sourced distance-shading inputs landed (#509); the `FlattenedSurfaceRepresentation` GL texture-bind gate is still open |
+| v1 markups Bézier render + node + legacy `.lrp.fcsv` load  | ✓ fully retired (#493 / PR #512) |
 
 ## Notes
 
@@ -214,9 +215,13 @@ sequenceDiagram
   **(state, initMode) for the Pipeline's internal Representation
   table**.  ADR-0018 §3 commits sibling Pipelines (not a third axis)
   for the future Bezier vs NURBS divergence.
-- Today's Representations attach a **generic** `vtkPolyDataMapper`;
-  the custom OpenGL mappers under `LiverMarkups/VTKWidgets/` swap
-  in during **T2-mapper-relocation**.
+- The Representations drive their **real** custom OpenGL mappers
+  (`vtkOpenGLBezierResectionPolyDataMapper`, the contour + resection-2D
+  mappers), relocated to `LiverResections/VTKWidgets/` (ADR-0014 §3) and
+  now a hard requirement — a resolver miss raises rather than silently
+  degrading to a generic `vtkPolyDataMapper` (#498).  The lone exception
+  is `ConfirmedRepresentation`, whose parenchyma-trim mapper has not been
+  relocated yet and remains a generic `vtkPolyDataMapper`.
 
 [adr-0002]: ../adr/0002-migrate-to-slicerlayerdm.md
 
