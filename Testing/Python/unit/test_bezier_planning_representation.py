@@ -89,11 +89,26 @@ class _StubDataNode:
 
 @pytest.fixture
 def rep_module():
+    """Return a factory that constructs the Representation with an injected mapper.
+
+    The custom ``vtkOpenGLBezierResectionPolyDataMapper`` is off the path in
+    the bare-VTK unit layer (ADR-0008 §2), so production's resolve-or-raise
+    path cannot run here; each construction injects a generic
+    ``vtkPolyDataMapper`` instance via the ``surface_mapper`` seam (ADR-0014
+    §3).  The ``_make_rep`` factory keeps every construction site injecting.
+    """
+    import vtk
+
     from Representations.BezierPlanningRepresentation import (
         BezierPlanningRepresentation,
     )
 
-    return BezierPlanningRepresentation
+    def _make_rep(renderer=None):
+        return BezierPlanningRepresentation(
+            renderer, surface_mapper=vtk.vtkPolyDataMapper()
+        )
+
+    return _make_rep
 
 
 # --------------------------------------------------------------------------- #
