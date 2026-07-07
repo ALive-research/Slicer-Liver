@@ -66,22 +66,7 @@ from __future__ import annotations
 
 from typing import Any
 
-# --------------------------------------------------------------------------- #
-# VTK is a soft dependency — when running in a plain Python without VTK on
-# ``PYTHONPATH``, the import below fails and the unit tests that need a
-# real mapper skip via ``pytest.importorskip("vtk")``.  The Representation
-# can still be constructed (the lazy ``_get_vtk()`` returns ``None``); its
-# ``update()`` then becomes a no-op for the missing VTK case, which is
-# enough for the smoke-level tests.
-# --------------------------------------------------------------------------- #
-
-try:  # pragma: no cover — exercised inside Slicer / when VTK is available
-    import vtk
-
-    _HAS_VTK = True
-except ImportError:  # pragma: no cover — pure-Python path
-    vtk = None  # type: ignore[assignment]
-    _HAS_VTK = False
+import vtk
 
 
 # --------------------------------------------------------------------------- #
@@ -186,8 +171,7 @@ class BezierPlanningRepresentation:
         # wrapper, not the carrier.  ``None`` until the Pipeline wires it.
         self._resection_plan_node: Any | None = None
 
-        if _HAS_VTK:
-            self._build_vtk_pipeline()
+        self._build_vtk_pipeline()
 
         if renderer is not None:
             self.SetRenderer(renderer)
@@ -308,8 +292,6 @@ class BezierPlanningRepresentation:
         so a generic ``vtkPolyDataMapper`` over a plain ``vtkPolyData`` keeps
         the Representation constructible and the colour bookkeeping testable.
         """
-        assert vtk is not None  # for the type-checker — gated by _HAS_VTK
-
         mapper_class = _resolve_vtk_class(REAL_SURFACE_MAPPER_CLASS)
         source_class = _resolve_vtk_class(BEZIER_SURFACE_SOURCE_CLASS)
 
@@ -466,9 +448,6 @@ class BezierPlanningRepresentation:
         self._last_grid_signature = signature
         self._input_refresh_count += 1
 
-        if not _HAS_VTK:
-            return
-
         points = _make_points_from_flat(flat, control_count)
         if self._surface_source is not None:
             # Real path: drive the Bezier surface source with the control
@@ -493,7 +472,6 @@ class BezierPlanningRepresentation:
         returns renderable geometry without a render pass — the same eager
         update the v1 representation did (``BezierSurfaceSource->Update()``).
         """
-        assert vtk is not None
         source = self._surface_source
         if source is None:
             return
@@ -594,11 +572,8 @@ class BezierPlanningRepresentation:
         no distance map is wired, clear the image and reset the matrices to
         identity (the graceful no-distance-map fallback the shader supports).
 
-        A no-op on the generic fallback mapper (the getattr guard) and when
-        VTK is unavailable.
+        A no-op on the generic fallback mapper (the getattr guard).
         """
-        if not _HAS_VTK:
-            return
         mapper = self._surface_mapper
         if mapper is None or not hasattr(mapper, "SetDistanceMapImageData"):
             return  # generic fallback mapper — no distance-map shader surface
@@ -649,7 +624,6 @@ class BezierPlanningRepresentation:
         mapper.SetIjkToTextureMatrix(ijk_to_texture)
 
     def _refresh_surface_polydata(self, points: Any, rows: int, cols: int) -> None:
-        assert vtk is not None
         polydata = self._surface_polydata
         if polydata is None:
             return
@@ -679,7 +653,6 @@ class BezierPlanningRepresentation:
 def _identity_matrix() -> Any:
     """A fresh 4x4 identity ``vtkMatrix4x4`` (reset transform for the
     no-distance-map fallback)."""
-    assert vtk is not None
     m = vtk.vtkMatrix4x4()
     m.Identity()
     return m
@@ -759,7 +732,6 @@ def _make_points_from_flat(flat: tuple, control_count: int) -> Any:
     ``vtkPoints`` has ``control_count`` points (9 for 3×3, 16 for 4×4
     per ADR-0018 §1).
     """
-    assert vtk is not None
     points = vtk.vtkPoints()
     points.SetNumberOfPoints(control_count)
     for i in range(control_count):

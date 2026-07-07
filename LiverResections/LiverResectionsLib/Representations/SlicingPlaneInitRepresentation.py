@@ -86,21 +86,7 @@ from __future__ import annotations
 
 from typing import Any
 
-# --------------------------------------------------------------------------- #
-# VTK is a soft dependency — mirrors the pattern in
-# ``BezierPlanningRepresentation``.  When ``vtk`` is not importable the
-# Representation can still be constructed; ``update()`` then writes the
-# colour / opacity stubs without building any VTK pipeline, which is
-# enough for the smoke-level unit tests.  See ADR-0008 §2.
-# --------------------------------------------------------------------------- #
-
-try:  # pragma: no cover — exercised inside Slicer / when VTK is available
-    import vtk
-
-    _HAS_VTK = True
-except ImportError:  # pragma: no cover — pure-Python path
-    vtk = None  # type: ignore[assignment]
-    _HAS_VTK = False
+import vtk
 
 
 # --------------------------------------------------------------------------- #
@@ -220,8 +206,7 @@ class SlicingPlaneInitRepresentation:
         # plus origin + normal.  The per-frame visual feedback is the
         # shader's job; this Representation produces the discrete ring
         # once, on the Init->Planning commit boundary (ADR-0019).
-        if _HAS_VTK:
-            self._build_vtk_pipeline()
+        self._build_vtk_pipeline()
 
         if renderer is not None:
             self.SetRenderer(renderer)
@@ -263,7 +248,7 @@ class SlicingPlaneInitRepresentation:
         the data node, and stores the resulting ordered ring.  Returns
         the ring ``vtkPolyData`` (or ``None`` when extraction cannot run).
         """
-        if target_model is None or not _HAS_VTK:
+        if target_model is None:
             return None
         polydata = _model_polydata(target_model)
         if polydata is None:
@@ -342,10 +327,8 @@ class SlicingPlaneInitRepresentation:
     def _build_vtk_pipeline(self) -> None:
         """Construct the marker + plane actors.
 
-        Called from ``__init__`` only when ``vtk`` is importable.
+        Called from ``__init__``.
         """
-        assert vtk is not None  # for the type-checker — gated by _HAS_VTK
-
         # Two marker spheres — one per init point.
         for _ in range(2):
             sphere = vtk.vtkSphereSource()
@@ -476,9 +459,6 @@ class SlicingPlaneInitRepresentation:
         self._last_input_signature = signature
         self._input_refresh_count += 1
 
-        if not _HAS_VTK:
-            return
-
         self._refresh_marker_positions(init0, init1)
         self._refresh_plane(origin, normal, init0, init1)
 
@@ -509,7 +489,6 @@ class SlicingPlaneInitRepresentation:
         """
         if self._plane_source is None:
             return
-        assert vtk is not None
 
         plane = self._plane_source
 
