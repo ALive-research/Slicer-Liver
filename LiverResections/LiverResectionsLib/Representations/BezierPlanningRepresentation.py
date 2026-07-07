@@ -185,6 +185,12 @@ class BezierPlanningRepresentation:
         # wrapper, not the carrier.  ``None`` until the Pipeline wires it.
         self._resection_plan_node: Any | None = None
 
+        # The cross-view locator node (ADR-0025).  The consumer reads its
+        # picked world point + the display-node radius and drives the surface
+        # mapper's ``uLocatorPosition`` / ``uLocatorRadius`` uniforms; ``None``
+        # (or a zero radius) is the marker-off state.
+        self._locator_node: Any | None = None
+
         self._build_vtk_pipeline(surface_mapper)
 
         if renderer is not None:
@@ -218,6 +224,15 @@ class BezierPlanningRepresentation:
         """
         self._resection_plan_node = plan_node
 
+    def SetLocatorNode(self, locator_node: Any | None) -> None:
+        """Attach the cross-view ``vtkMRMLLocatorNode`` (ADR-0025).
+
+        The Pipeline resolves the scene's single locator node and calls this
+        before ``update()`` so the consumer can drive the surface shader's
+        locator marker.  ``None`` clears it (marker off).
+        """
+        self._locator_node = locator_node
+
     def update(
         self, display_node: Any | None, data_node: Any | None
     ) -> None:
@@ -237,6 +252,39 @@ class BezierPlanningRepresentation:
         # mapper (ADR-0031).  No-op on the generic fallback mapper / when no
         # plan node is wired.
         self._apply_resection_plan(self._resection_plan_node)
+        # Drive the locator marker uniforms off the locator node (ADR-0025).
+        self._apply_locator()
+
+    def _apply_locator(self) -> None:
+        """Thread the locator node's picked point + radius onto the mapper.
+
+        Reads ``GetPickedPositionWorld`` off the ``vtkMRMLLocatorNode`` and the
+        ``Radius`` off its display node, driving the surface mapper's
+        ``uLocatorPosition`` / ``uLocatorRadius`` uniforms (ADR-0025 §Rendering).
+        ``uLocatorRadius == 0`` is the marker-off state: used when no locator
+        node is wired.  A no-op on the generic fallback mapper (the getattr
+        guards) so the bare-VTK unit layer, which injects a plain
+        ``vtkPolyDataMapper``, still constructs + updates.
+        """
+        mapper = self._surface_mapper
+        if mapper is None:
+            return
+        set_position = getattr(mapper, "SetLocatorPosition", None)
+        set_radius = getattr(mapper, "SetLocatorRadius", None)
+        if set_position is None or set_radius is None:
+            return  # generic fallback mapper — no locator uniforms
+
+        node = self._locator_node
+        if node is None:
+            set_radius(0.0)  # marker off
+            return
+
+        position = node.GetPickedPositionWorld()
+        set_position(float(position[0]), float(position[1]), float(position[2]))
+
+        display_node = node.GetDisplayNode() if hasattr(node, "GetDisplayNode") else None
+        radius = display_node.GetRadius() if display_node is not None else 0.0
+        set_radius(float(radius))
 
     def cleanup(self) -> None:
         """Detach actors from the renderer and drop the VTK pipeline."""
@@ -250,6 +298,7 @@ class BezierPlanningRepresentation:
         self._surface_mapper = None
         self._surface_actor = None
         self._resection_plan_node = None
+        self._locator_node = None
 
     # ------------------------------------------------------------------ #
     # Introspection — used by the unit-layer tests

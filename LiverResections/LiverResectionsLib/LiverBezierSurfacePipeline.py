@@ -197,6 +197,15 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         # dispatch (reset when the display/data node changes).
         self._last_resection_scan_mtime: int | None = None
 
+        # The cross-view locator node (ADR-0025), reverse-resolved from the
+        # scene (v2.0 has exactly one).  Observed so its picked-point changes
+        # re-dispatch; threaded onto the active Representation's consumer seam.
+        # Discovery is gated on the scene ``MTime`` (like the plan scan) so a
+        # position update to an already-resolved locator rides its own observer
+        # rather than a per-tick class scan.
+        self._locator_node: Any | None = None
+        self._last_locator_scan_mtime: int | None = None
+
         # Observer tags so ``cleanup()`` can detach precisely.  Index
         # by ``id(node)`` because ``vtkObject`` subclasses are not
         # universally hashable on identity.
@@ -298,6 +307,8 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         self._last_update_key = None
         # Force a fresh plan reverse-resolution for the new data node.
         self._last_resection_scan_mtime = None
+        # Force a fresh locator re-resolution too (ADR-0025).
+        self._last_locator_scan_mtime = None
         # Restart SlicingPlane init-placement for the new carrier (slice 3a).
         self._slicing_plane_points_placed = 0
         # Restart DistanceSpheroid init-placement for the new carrier (slice 3b).
@@ -337,6 +348,29 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                 if resolved is not None:
                     self.SetResectionNode(resolved)
 
+        # Reverse-resolve the cross-view locator node (ADR-0025) — the scene's
+        # single ``vtkMRMLLocatorNode`` — and re-target its observer when it
+        # appears / disappears, so its picked-point changes re-dispatch.  Gated
+        # on the scene MTime like the plan scan: a picked-point update to an
+        # already-resolved locator arrives via its observer + the locator MTime
+        # in the key below, not a per-tick class scan.
+        if self._data_node is not None:
+            scene = self._data_node.GetScene()
+            scene_mtime = scene.GetMTime() if scene is not None else 0
+            if scene_mtime != self._last_locator_scan_mtime:
+                self._last_locator_scan_mtime = scene_mtime
+                found = (
+                    scene.GetFirstNodeByClass("vtkMRMLLocatorNode")
+                    if scene is not None
+                    else None
+                )
+                if found is not self._locator_node:
+                    if self._locator_node is not None:
+                        self._detach_observer(self._locator_node)
+                    self._locator_node = found
+                    if found is not None:
+                        self._attach_observer(found)
+
         # Build the dispatch key.  Falls back to ``0`` MTime for nodes
         # whose ``GetMTime`` is unavailable (defensive — stub nodes in
         # tests may not implement it).
@@ -345,8 +379,11 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         data_mtime = _safe_get_mtime(self._data_node)
         display_mtime = _safe_get_mtime(self._display_node)
         resection_mtime = _safe_get_mtime(self._resection_node)
+        locator_mtime = _safe_get_mtime(self._locator_node)
 
-        key = (state, init_mode, data_mtime, display_mtime, resection_mtime)
+        key = (
+            state, init_mode, data_mtime, display_mtime, resection_mtime, locator_mtime,
+        )
         if key == self._last_update_key:
             return  # idempotent short-circuit
         self._last_update_key = key
@@ -362,6 +399,10 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             # BezierPlanningRepresentation implements this; others ignore it.
             if hasattr(active, "SetResectionPlanNode"):
                 active.SetResectionPlanNode(self._resection_node)
+            # Thread the resolved locator node to the consumer seam (ADR-0025);
+            # only BezierPlanningRepresentation implements it, others ignore.
+            if hasattr(active, "SetLocatorNode"):
+                active.SetLocatorNode(self._locator_node)
             active.update(self._display_node, self._data_node)
 
         # Init-mode parameter mutations only MARK extraction pending; the
