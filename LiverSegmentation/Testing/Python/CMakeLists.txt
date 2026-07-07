@@ -110,6 +110,13 @@ set(_liverseg_pytest_files
   test_liversegmentation_structure_accepted_glyph.py
   test_liversegmentation_backend_status_row.py
   test_liversegmentation_segment_input_selection.py
+  # SLICE C -- Stage 2 produces the canonical, per-structure-SCT-tagged
+  # segmentation by LOADING one (in-app AI deferred to v2.1); pins the
+  # importSegmentationAsCanonical logic seam (ADR-0024 §"Output contract",
+  # ADR-0011).  Scene-needing (launched `pytest_launched` row); skips cleanly
+  # bare.  The vocab-collapse companion (C2) rides the existing pure-Python
+  # test_liversegmentation_import_purity.py row.
+  test_liversegmentation_import_as_canonical.py
   # T5.2-f -- shared Subject-Hierarchy folder utility reachability +
   # Anatomy placement through vtkSlicerSubjectHierarchyFolders
   # (ADR-0023 §"MRML scene organisation").  Wrapped-C++-from-Python
