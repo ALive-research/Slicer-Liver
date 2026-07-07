@@ -321,9 +321,7 @@ def test_seam_produces_picked_position_from_display_position():
     """
     slicer = _slicer_or_skip()
     carrier = _make_affine_carrier_or_skip(slicer, "SeamComposePos")
-    locator = slicer.mrmlScene.AddNewNodeByClass(LOCATOR_NODE_CLASS)
-    if locator is None:
-        pytest.skip(f"{LOCATOR_NODE_CLASS} not registered in this build.")
+    locator = _single_locator_or_skip(slicer)
 
     pipeline = _pipeline_or_skip(slicer)
     _inject_state(pipeline, carrier, mat_ratio=(1.0, 1.0), viewport_size=(256, 256))
@@ -355,6 +353,36 @@ def test_seam_produces_picked_position_from_display_position():
 # --------------------------------------------------------------------------- #
 
 
+def _single_locator_or_skip(slicer):
+    """The scene's single locator -- resolved, not minted-anew.
+
+    ``CreateResectionPlan`` now ensures exactly one ``vtkMRMLLocatorNode``
+    (ADR-0025 §Consumer), and the seam resolves THAT one via
+    ``GetFirstNodeByClass``.  Resolve the same node here (creating one only if
+    absent) rather than adding a second the seam would ignore.
+    """
+    scene = slicer.mrmlScene
+    node = scene.GetFirstNodeByClass(LOCATOR_NODE_CLASS)
+    if node is None:
+        node = scene.AddNewNodeByClass(LOCATOR_NODE_CLASS)
+    if node is None:
+        pytest.skip(f"{LOCATOR_NODE_CLASS} not registered in this build.")
+    return node
+
+
+def _clear_locators(slicer):
+    """Remove every locator node so the 'no locator in scene' path is genuine.
+
+    ``CreateResectionPlan`` ensures one, so a test that needs zero must strip it.
+    """
+    scene = slicer.mrmlScene
+    for _ in range(scene.GetNumberOfNodesByClass(LOCATOR_NODE_CLASS)):
+        node = scene.GetFirstNodeByClass(LOCATOR_NODE_CLASS)
+        if node is None:
+            break
+        scene.RemoveNode(node)
+
+
 def _degenerate_pipeline(slicer, *, with_locator, carrier, mat_ratio, viewport_size):
     """Build the Pipeline + inject the (possibly degenerate) state, plus a
     sentinel-seeded locator (when ``with_locator``) so a leak past the guard is
@@ -366,10 +394,10 @@ def _degenerate_pipeline(slicer, *, with_locator, carrier, mat_ratio, viewport_s
     locator = None
     sentinel = (11.0, 22.0, 33.0)
     if with_locator:
-        locator = slicer.mrmlScene.AddNewNodeByClass(LOCATOR_NODE_CLASS)
-        if locator is None:
-            pytest.skip(f"{LOCATOR_NODE_CLASS} not registered in this build.")
+        locator = _single_locator_or_skip(slicer)
         locator.SetPickedPositionWorld(*sentinel)
+    else:
+        _clear_locators(slicer)
     return seam, locator, sentinel
 
 
@@ -480,9 +508,7 @@ def test_process_interaction_event_drives_the_pick_from_display_position():
     """
     slicer = _slicer_or_skip()
     carrier = _make_affine_carrier_or_skip(slicer, "SeamProcessEvent")
-    locator = slicer.mrmlScene.AddNewNodeByClass(LOCATOR_NODE_CLASS)
-    if locator is None:
-        pytest.skip(f"{LOCATOR_NODE_CLASS} not registered in this build.")
+    locator = _single_locator_or_skip(slicer)
 
     pipeline = _pipeline_or_skip(slicer)
     _inject_state(pipeline, carrier, mat_ratio=(1.0, 1.0), viewport_size=(256, 256))

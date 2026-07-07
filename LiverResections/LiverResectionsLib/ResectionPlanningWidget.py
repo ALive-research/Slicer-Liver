@@ -156,6 +156,11 @@ class ResectionPlanningWidget(qt.QWidget):
         # The qvtk observer connections, tracked for symmetric removal.
         self._activeNodeObservationTag = None
         self._renderObservationTag = None
+        # The click-to-reslice consumer (ADR-0025 §Click-to-reslice): a plain
+        # Python observer (ADR-0013 §5 -- not a Pipeline/DM) that watches the
+        # scene's single vtkMRMLLocatorNode and reslices the orthogonal slice to
+        # the picked point.  This widget owns its lifetime.
+        self._locatorReslicer = None
 
         self._setupUi()
         self.refreshResectogramDrawer()
@@ -225,7 +230,27 @@ class ResectionPlanningWidget(qt.QWidget):
     def setMRMLScene(self, scene):  # noqa: N802 - Slicer/Qt verb convention
         self._mrmlScene = scene
         self._comboBox.setMRMLScene(scene)
+        self._updateLocatorReslicer(scene)
         self.refreshResectogramDrawer()
+
+    def _updateLocatorReslicer(self, scene):  # noqa: N802 - internal
+        """Own the click-to-reslice consumer's lifetime (ADR-0025 §Click-to-reslice).
+
+        Rebuilds the ``LocatorReslicer`` against the current scene (tearing down
+        any prior one) and drops it on a null scene.  The reslicer resolves the
+        single locator at construction; ``refreshResectogramDrawer`` re-resolves
+        it later so a locator created after the widget still gets observed.
+        """
+        if self._locatorReslicer is not None:
+            self._locatorReslicer.cleanup()
+            self._locatorReslicer = None
+        if scene is None:
+            return
+        try:
+            from LiverResectionsLib.LocatorReslicer import LocatorReslicer
+        except Exception:  # pragma: no cover - surfaces only when the lib is absent
+            return
+        self._locatorReslicer = LocatorReslicer(scene)
 
     def mrmlScene(self):  # noqa: N802 - Slicer/Qt verb convention
         return self._mrmlScene
@@ -297,6 +322,13 @@ class ResectionPlanningWidget(qt.QWidget):
         self.scheduleResectogramRender()
 
     def refreshResectogramDrawer(self):  # noqa: N802 - Slicer/Qt verb convention
+        # Re-resolve the locator the click-to-reslice consumer observes BEFORE
+        # the distance-map guards below (a locator minted after the widget --
+        # e.g. by CreateResectionPlan on Place -- must get observed regardless of
+        # whether the resectogram is drawable yet).
+        if self._locatorReslicer is not None:
+            self._locatorReslicer.refresh()
+
         plan = self._asResectionPlan(self._comboBox.currentNode())
         # The strip actors, the resectogram display node, and the render
         # observation all live on the plan's CARRIER (ADR-0014 §"Fourth layer");
@@ -734,6 +766,11 @@ class ResectionPlanningWidget(qt.QWidget):
         """
         if self._comboBox is not None:
             self._comboBox.setMRMLScene(None)
+        # The click-to-reslice consumer's locator observer (on a scene node that
+        # outlives this panel) -- detach symmetrically.
+        if self._locatorReslicer is not None:
+            self._locatorReslicer.cleanup()
+            self._locatorReslicer = None
         # VTK node observers (on scene nodes that outlive this panel).
         if self._activeResectionNode is not None and self._activeNodeObservationTag is not None:
             self._activeResectionNode.RemoveObserver(self._activeNodeObservationTag)
