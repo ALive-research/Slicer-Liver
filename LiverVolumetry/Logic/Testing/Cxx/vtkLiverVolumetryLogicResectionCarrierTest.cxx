@@ -36,50 +36,26 @@
 /**
  * \file vtkLiverVolumetryLogicResectionCarrierTest.cxx
  *
- * RED test-first scaffold (test-before-implementation) pinning the
- * carrier-acceptance invariant of the LiverVolumetry surface-generation
- * path -- the seam that turns a resection-plan geometry carrier into the
- * Bezier surface projected onto the target-segment label map, and thus
- * the boundary used to compute "volume bounded by a resection".
+ * Invariant test pinning the carrier-acceptance behaviour of the
+ * LiverVolumetry surface-generation path -- the seam that turns a
+ * resection-plan geometry carrier into the Bezier surface projected onto
+ * the target-segment label map, and thus the boundary used to compute
+ * "volume bounded by a resection".
  *
- * Why this test is RED now
- * ------------------------
+ * Carrier path
+ * ------------
  * In v2 the resection-plan geometry carrier is
  * ``vtkMRMLBezierSurfaceNode : vtkMRMLAbstractParametricSurfaceNode``
  * (the wrapper-vs-carrier geometry layer -- ADR-0014 §"Fourth layer").
  * Its 16 control points are read from the flat row-major control grid
  * ``GetControlGrid()`` (length ``3 * Rows * Cols``), per
  * ``vtkMRMLAbstractParametricSurfaceNode`` §"Control-polygon shape".
- *
- * ``vtkLiverVolumetryLogic``, however, still reaches the resection
- * geometry through the DISJOINT v1 Markups hierarchy
- * ``vtkMRMLMarkupsBezierSurfaceNode : vtkMRMLMarkupsNode``:
- *
- *   - ``GetResectionsProjectionITKImage`` downcasts each collection item
- *     with ``vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(item)``.
- *   - ``GenerateBezierSurface`` / ``GetRes`` read control points through
- *     the Markups API (``GetNumberOfControlPoints`` /
- *     ``GetNthControlPointPosition``).
- *
- * Because ``vtkMRMLBezierSurfaceNode`` is NOT a ``vtkMRMLMarkupsNode``,
- * the ``SafeDownCast`` returns ``nullptr``,
- * ``GenerateBezierSurface(Res, nullptr)`` early-returns an unpopulated
- * source, and the resection boundary is never projected -- the volume is
- * computed with NO resection boundary. That is the non-functional
- * behaviour this test characterises and then forbids.
- *
- * The RED hook (exact thing the fix must change)
- * ----------------------------------------------
- *   1. The downcast target in ``GetResectionsProjectionITKImage``
- *      (``~vtkLiverVolumetryLogic.cxx`` resection loop):
- *        ``vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(...)``
- *      must become ``vtkMRMLBezierSurfaceNode::SafeDownCast(...)``.
- *   2. The control-point re-sourcing in ``GenerateBezierSurface`` and
- *      ``GetRes``: the per-point reads via
- *      ``GetNumberOfControlPoints`` / ``GetNthControlPointPosition``
- *      must be re-sourced from the parametric carrier's flat grid
- *      ``GetControlGrid()`` (16 points at ``[i] -> grid[i*3 + {0,1,2}]``),
- *      with the parameter type widened to ``vtkMRMLBezierSurfaceNode*``.
+ * ``vtkLiverVolumetryLogic::GetResectionsProjectionITKImage`` downcasts
+ * each collection item to the parametric carrier and
+ * ``GenerateBezierSurface`` re-sources the 16 control points from
+ * ``GetControlGrid()``.  The v1 markups Bezier hierarchy the path once
+ * reached through is fully retired (ADR-0014 §"Dissolution"; ADR-0032
+ * §"Consequences").
  *
  * Test seam
  * ---------
@@ -90,17 +66,6 @@
  * ``vtkMRMLBezierSurfaceNode`` carrier with a known 4x4 grid via the
  * parametric ``SetControlGrid`` API and asserts the surface-generation
  * path reads those 16 points into a NON-EMPTY surface.
- *
- * Until the implementer widens the seam to accept the parametric carrier
- * (RED hook above), the new ``GenerateBezierSurfaceFromCarrier`` overload
- * this test calls does not exist, so the carrier-acceptance assertion is
- * gated behind a deliberate failure (see ``testCarrierProducesNonEmptySurface``).
- *
- * The companion characterization (``testProductionDowncastDropsCarrier``)
- * compiles and runs GREEN today: it pins the ROOT CAUSE -- the production
- * ``vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast`` of the v2 carrier
- * returns nullptr -- so a future regression that silently "fixes" the
- * symptom without retargeting the downcast is still caught.
  */
 
 // LiverVolumetry Logic include (system under test).
@@ -113,10 +78,6 @@
 // v2 resection-plan geometry carrier (the parametric hierarchy).
 // ADR-0014 §"Fourth layer" wrapper-vs-carrier geometry layer.
 #include "vtkMRMLBezierSurfaceNode.h"
-
-// v1 Markups geometry node (the DISJOINT hierarchy the production logic
-// still downcasts to -- the root cause being pinned).
-#include "vtkMRMLMarkupsBezierSurfaceNode.h"
 
 // MRML includes
 #include "vtkMRMLCoreTestingMacros.h"
@@ -167,31 +128,12 @@ vtkSmartPointer<vtkMRMLBezierSurfaceNode> makePopulatedCarrier()
 }
 
 //------------------------------------------------------------------------------
-// CHARACTERIZATION (GREEN today) -- pins the ROOT CAUSE of issue: the
-// production downcast in vtkLiverVolumetryLogic::GetResectionsProjectionITKImage
-// targets the DISJOINT v1 Markups hierarchy, so a v2 carrier is dropped
-// to nullptr and never projected.
-//
-// This is the exact downcast the fix must retarget. Keeping it as a
-// live assertion means a regression that re-introduces the markups
-// downcast (or feeds the markups node back into the collection) is
-// caught even after the symptom is fixed.
-// [ADR-0014 §"Fourth layer" wrapper-vs-carrier split]
-int testProductionDowncastDropsCarrier()
-{
-  vtkSmartPointer<vtkMRMLBezierSurfaceNode> carrier = makePopulatedCarrier();
-
-  // The v2 carrier carries its 16 control points (4x4) in the flat grid.
-  CHECK_INT(static_cast<int>(carrier->GetControlGridLength()), 4 * 4 * 3);
-
-  // The production code does exactly this downcast on every collection
-  // item; for the parametric carrier it yields nullptr because the two
-  // Bezier node families are disjoint subtrees of vtkMRMLNode.
-  vtkMRMLMarkupsBezierSurfaceNode* asMarkups = vtkMRMLMarkupsBezierSurfaceNode::SafeDownCast(carrier.GetPointer());
-  CHECK_NULL(asMarkups);
-
-  return EXIT_SUCCESS;
-}
+// The v1-downcast characterization (``testProductionDowncastDropsCarrier``)
+// is retired: the volumetry surface-generation path is now sourced off the
+// v2 ``vtkMRMLBezierSurfaceNode`` carrier, and the v1 markups Bezier node it
+// pinned as the root cause is fully removed (ADR-0014 §"Dissolution";
+// ADR-0032 §"Consequences").  The load-bearing invariant below covers the
+// carrier path directly.
 
 //------------------------------------------------------------------------------
 // RED invariant -- the volumetry surface-generation path, given a v2
@@ -235,7 +177,6 @@ int testCarrierProducesNonEmptySurface()
 //------------------------------------------------------------------------------
 int vtkLiverVolumetryLogicResectionCarrierTest(int, char*[])
 {
-  CHECK_EXIT_SUCCESS(testProductionDowncastDropsCarrier());
   CHECK_EXIT_SUCCESS(testCarrierProducesNonEmptySurface());
 
   std::cout << "vtkLiverVolumetryLogicResectionCarrierTest completed successfully" << std::endl;

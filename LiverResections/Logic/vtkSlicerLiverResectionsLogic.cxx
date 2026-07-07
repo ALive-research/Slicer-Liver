@@ -59,7 +59,6 @@
 #include "vtkMRMLLocatorDisplayNode.h"
 
 #include <vtkCommand.h>
-#include <vtkMRMLMarkupsBezierSurfaceNode.h>
 
 // MRML includes
 #include <vtkMRMLScene.h>

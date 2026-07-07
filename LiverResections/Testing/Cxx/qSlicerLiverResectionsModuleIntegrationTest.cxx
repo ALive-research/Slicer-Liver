@@ -54,8 +54,6 @@
 #include <qSlicerLiverMarkupsModule.h> //Needed to include qSlicerLiverMarkupsModule_INCLUDE_DIRS to find the files from the LiverMarkupsModule
 
 #include <vtkMRMLBezierSurfaceNode.h>
-#include <vtkMRMLMarkupsBezierSurfaceNode.h>
-#include <vtkMRMLMarkupsBezierSurfaceDisplayNode.h>
 
 // MRML includes
 #include <vtkMRMLScene.h>
@@ -194,8 +192,9 @@ int qSlicerLiverResectionsModuleIntegrationTest(int argc, char* argv[])
   delete markupsModule;
 
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsSlicingContourDisplayNode>::New());
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceDisplayNode>::New());
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>::New());
+  // The v1 markups Bezier surface + its display node are retired
+  // (ADR-0014 §"Dissolution"; ADR-0032 §"Consequences"); the v2 carrier
+  // is exercised below.
 
   // The v2 plan resolves its geometry through a typed node reference
   // to the Bezier carrier (ADR-0014); exercise that wiring.
