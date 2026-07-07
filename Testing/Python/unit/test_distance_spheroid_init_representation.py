@@ -113,11 +113,27 @@ class _StubDataNode:
 
 @pytest.fixture
 def rep_module():
+    """Return a factory that constructs the Representation with an injected mapper.
+
+    The custom ``vtkOpenGLDistanceContourPolyDataMapper`` (the spheroid
+    contour mapper) is off the path in the bare-VTK unit layer (ADR-0008 §2),
+    so production's resolve-or-raise path cannot run here; each construction
+    injects a generic ``vtkPolyDataMapper`` instance via the
+    ``spheroid_mapper`` seam (ADR-0014 §3).  The sphere-marker mappers are
+    genuinely generic and unaffected.
+    """
+    import vtk
+
     from Representations.DistanceSpheroidInitRepresentation import (
         DistanceSpheroidInitRepresentation,
     )
 
-    return DistanceSpheroidInitRepresentation
+    def _make_rep(renderer=None):
+        return DistanceSpheroidInitRepresentation(
+            renderer, spheroid_mapper=vtk.vtkPolyDataMapper()
+        )
+
+    return _make_rep
 
 
 # --------------------------------------------------------------------------- #

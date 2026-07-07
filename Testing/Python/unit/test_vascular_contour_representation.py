@@ -69,11 +69,29 @@ class _StubStripDataNode:
 
 @pytest.fixture
 def rep_module():
+    """Return a factory that constructs the Representation with injected mappers.
+
+    The two custom contour mappers (``vtkOpenGLDistanceContourPolyDataMapper``
+    / ``vtkOpenGLSlicingContourPolyDataMapper``) are off the path in the
+    bare-VTK unit layer (ADR-0008 §2), so production's resolve-or-raise path
+    cannot run here; each construction injects generic ``vtkPolyDataMapper``
+    instances via the ``distance_contour_mapper`` / ``slicing_contour_mapper``
+    seams (ADR-0014 §3).
+    """
+    import vtk
+
     from Representations.VascularContourRepresentation import (
         VascularContourRepresentation,
     )
 
-    return VascularContourRepresentation
+    def _make_rep(renderer=None):
+        return VascularContourRepresentation(
+            renderer,
+            distance_contour_mapper=vtk.vtkPolyDataMapper(),
+            slicing_contour_mapper=vtk.vtkPolyDataMapper(),
+        )
+
+    return _make_rep
 
 
 # --------------------------------------------------------------------------- #

@@ -119,11 +119,27 @@ class _StubDataNode:
 
 @pytest.fixture
 def rep_module():
+    """Return a factory that constructs the Representation with an injected mapper.
+
+    The custom ``vtkOpenGLResection2DPolyDataMapper`` is off the path in the
+    bare-VTK unit layer (ADR-0008 §2), so production's resolve-or-raise path
+    cannot run here; each construction injects a generic ``vtkPolyDataMapper``
+    instance via the ``resection_mapper_2d`` seam (ADR-0014 §3).  Some tests
+    then swap in a MatRatio stub over that mapper; the injection just gets the
+    construction past the resolve-or-raise gate.
+    """
+    import vtk
+
     from Representations.FlattenedSurfaceRepresentation import (
         FlattenedSurfaceRepresentation,
     )
 
-    return FlattenedSurfaceRepresentation
+    def _make_rep(renderer=None):
+        return FlattenedSurfaceRepresentation(
+            renderer, resection_mapper_2d=vtk.vtkPolyDataMapper()
+        )
+
+    return _make_rep
 
 
 # --------------------------------------------------------------------------- #
