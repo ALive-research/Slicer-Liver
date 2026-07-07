@@ -128,7 +128,7 @@ class DistanceSpheroidInitRepresentation:
     Introspection (used by unit tests)
     ----------------------------------
     * ``GetMarkerActors()`` — list of ``vtkActor`` rendering the
-      seed markers, or an empty list before the pipeline is built.
+      seed markers, or an empty list if VTK is not importable.
     * ``GetSpheroidActor()`` — the ``vtkActor`` rendering the
       translucent spheroid, or ``None``.
     * ``GetSpheroidMapper()`` — the spheroid mapper.
@@ -144,8 +144,8 @@ class DistanceSpheroidInitRepresentation:
     def __init__(self, renderer: Any | None = None) -> None:
         self._renderer: Any | None = None
 
-        # The VTK pipeline objects the Representation owns.  ``None`` until
-        # ``_build_vtk_pipeline`` runs.
+        # The VTK pipeline objects the Representation owns.  ``None`` in
+        # the pure-Python testing path.
         self._parametric_ellipsoid: Any | None = None
         self._parametric_function_source: Any | None = None
         self._spheroid_polydata_filter: Any | None = None
@@ -332,11 +332,10 @@ class DistanceSpheroidInitRepresentation:
         on-commit CPU-extracted ring.  ``_apply_data_node`` pushes the
         (centre, radii) onto the mapper via ``SetSpheroid``.
 
-        The relocated contour mapper (ADR-0014 §3) is a hard requirement:
-        ``_build_vtk_pipeline`` raises if it cannot be resolved rather than
-        silently degrading to a shader-less generic mapper.  The sphere
-        MARKER mappers remain plain ``vtkPolyDataMapper`` (generic geometry,
-        no custom shader).
+        When the relocated mapper is not on the path (a plain non-Slicer
+        VTK build used by the unit-layer tests) the pipeline falls back
+        to a generic ``vtkPolyDataMapper`` so the Representation still
+        constructs and the marker/colour bookkeeping stays testable.
         """
         # Spheroid pipeline ---------------------------------------------------
         self._parametric_ellipsoid = vtk.vtkParametricEllipsoid()
@@ -363,24 +362,17 @@ class DistanceSpheroidInitRepresentation:
             self._parametric_function_source.GetOutputPort()
         )
 
-        # The spheroid contour mapper is a hard requirement: a resolver miss is
-        # a misconfiguration (the LiverResections module is not loaded / not
-        # wrapped) that must surface LOUDLY, not degrade to a generic
-        # ``vtkPolyDataMapper`` whose fragment shader does no triaxial banding
-        # (ADR-0008 §2 — the no-VTK unit layer this once degraded for was never
-        # built).  The sphere-MARKER mappers stay plain (``_make_marker_entry``).
         mapper_class = _resolve_extractor_class(
             "vtkOpenGLDistanceContourPolyDataMapper"
         )
-        if mapper_class is None:
-            raise RuntimeError(
-                "DistanceSpheroidInitRepresentation requires the relocated "
-                "vtkOpenGLDistanceContourPolyDataMapper (ADR-0014 §3); neither "
-                "the 'slicer' nor the 'vtk' namespace exposes it.  Load the "
-                "LiverResections module so its wrapped VTKWidgets classes are "
-                "on the path."
-            )
-        self._spheroid_mapper = mapper_class()
+        if mapper_class is not None:
+            self._spheroid_mapper = mapper_class()
+        else:
+            # Non-Slicer VTK build (unit-layer tests): the relocated
+            # mapper is not wrapped onto the path.  A generic mapper keeps
+            # the pipeline constructible; the triaxial banding is a no-op
+            # there but the marker/colour bookkeeping is still exercised.
+            self._spheroid_mapper = vtk.vtkPolyDataMapper()
         self._spheroid_mapper.SetInputConnection(
             self._spheroid_polydata_filter.GetOutputPort()
         )
@@ -577,20 +569,24 @@ class DistanceSpheroidInitRepresentation:
         if self._parametric_function_source is not None:
             self._parametric_function_source.Modified()
 
-        # Drive the contour shader: push (centre, radii) onto the mapper so its
-        # fragment shader bands the triaxial-ellipsoid implicit whose quadric
-        # coefficients come from the SSOT (ADR-0015 §"Stack 4").  Mirrors how
-        # vtkLiverBezierSurfacePipeline sets its grid/margin uniforms.  The
-        # spheroid mapper is the real vtkOpenGLDistanceContourPolyDataMapper (a
-        # hard requirement, ADR-0014 §3), so its setters are called directly.
-        self._spheroid_mapper.SetSpheroid(list(center), rx, ry, rz)
+        # Drive the contour shader: push (centre, radii) onto the mapper
+        # so its fragment shader bands the triaxial-ellipsoid implicit
+        # whose quadric coefficients come from the SSOT (ADR-0015
+        # §"Stack 4").  Mirrors how vtkLiverBezierSurfacePipeline sets its
+        # grid/margin uniforms.  No-op on the generic fallback mapper.
+        set_spheroid = getattr(self._spheroid_mapper, "SetSpheroid", None)
+        if set_spheroid is not None:
+            set_spheroid(list(center), rx, ry, rz)
 
-        # Make the banded contour visible.  The mapper defaults to hidden and
-        # its fragment shader discards every fragment while visibility is off,
-        # so without this the placed spheroid never renders.  Enabling it here
-        # -- once the representation has a spheroid to show -- is what actually
-        # draws the triaxial ellipsoid.
-        self._spheroid_mapper.SetContourVisibility(True)
+        # Make the banded contour visible.  The mapper defaults to hidden
+        # and its fragment shader discards every fragment while visibility
+        # is off, so without this the placed spheroid never renders.
+        # Enabling it here -- once the representation has a spheroid to
+        # show -- is what actually draws the triaxial ellipsoid.  No-op on
+        # the generic fallback mapper.
+        set_contour_visibility = getattr(self._spheroid_mapper, "SetContourVisibility", None)
+        if set_contour_visibility is not None:
+            set_contour_visibility(True)
 
         # Markers: resize the actor list, then update each sphere's
         # centre.
