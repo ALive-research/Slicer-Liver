@@ -139,7 +139,7 @@ class FlattenedSurfaceRepresentation:
     Introspection (used by unit tests)
     ----------------------------------
     * ``GetResectionMapper2D()`` / ``GetResectionActor2D()`` — the 2D
-      mapper + actor pair, or ``None`` when VTK is absent.
+      mapper + actor pair, or ``None`` before the pipeline is built.
     * ``GetResectogramCamera()`` — the private overlay camera.
     * ``GetMatRatioApplied()`` — last ``MatRatio`` pushed onto the 2D
       mapper, or ``None`` before the first ``update()`` / when the
@@ -767,8 +767,8 @@ class FlattenedSurfaceRepresentation:
         reconciles the pass without rebuilding the assembly — the
         ``vtkSetMacro(BlurEnabled, bool)`` ``Modified()`` advances the display
         node's MTime, which ``ResectogramPipeline.UpdatePipeline`` already
-        keys on, so no new observer is needed.  No-op when VTK or the renderer
-        is unavailable (bare-VTK pytest path).
+        keys on, so no new observer is needed.  No-op when the renderer
+        is unavailable (no realized view).
         """
         renderer = self._renderer
         if renderer is None:

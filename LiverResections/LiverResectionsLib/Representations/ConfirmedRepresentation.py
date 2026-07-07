@@ -99,9 +99,9 @@ class ConfirmedRepresentation:
     Introspection (used by unit tests)
     ----------------------------------
     * ``GetSurfaceActor()`` / ``GetSurfaceMapper()`` — the actor +
-      mapper pair, or ``None`` when VTK is absent.
+      mapper pair, or ``None`` before the pipeline is built.
     * ``GetCurrentColor()`` / ``GetCurrentOpacity()`` — the values last
-      written to the actor property; stubs for tests without VTK.
+      written to the actor property.
     * ``GetClipOutApplied()`` — last ``SetResectionClipOut`` call's
       argument (``True`` when the relocated mapper accepted the call,
       ``None`` when the mapper does not expose the method).

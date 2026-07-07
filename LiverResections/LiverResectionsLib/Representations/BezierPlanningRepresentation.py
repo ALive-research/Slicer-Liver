@@ -23,10 +23,10 @@ launched Slicer this Representation drives the relocated, real
 patch built by ``vtkBezierSurfaceSource`` + ``vtkPolyDataNormals`` (the same
 pipeline shape v1's ``vtkSlicerBezierSurfaceRepresentation3D`` assembled),
 including the ``uvCoords`` the mapper's vertex shader reads and the
-display-node colour / grid uniforms.  When the wrapped classes are off the
-path — the bare-VTK unit layer — it falls back to a generic
-``vtkPolyDataMapper`` + ``vtkActor`` pair over the raw control mesh so the
-Representation still constructs (``_resolve_vtk_class`` selects the path).
+display-node colour / grid uniforms.  The wrapped mapper + tessellation source
+are a hard requirement: they are reachable inside any launched Slicer process
+(ADR-0014 §3), so ``_build_vtk_pipeline`` raises if they cannot be resolved
+rather than silently degrading to a shader-less generic mapper.
 
 The RAS/IJK transform matrices and the distance-map 3D texture binding are
 NOT wired here: the v2 ``vtkMRMLBezierSurfaceNode`` carries no distance-map
@@ -79,10 +79,10 @@ DEFAULT_RESECTION_COLOR = (1.0, 1.0, 1.0)
 DEFAULT_RESECTION_OPACITY = 1.0
 
 # The relocated real surface mapper + the Bezier tessellation source (ADR-0014
-# §3).  Both are wrapped-C++ classes reachable only inside a launched Slicer;
-# ``_resolve_vtk_class`` falls back to ``None`` in the bare-VTK unit layer, in
-# which case the Representation builds a generic ``vtkPolyDataMapper`` pipeline
-# so it still constructs (the structural / colour bookkeeping stays testable).
+# §3).  Both are wrapped-C++ classes reachable inside any launched Slicer
+# process; they are a hard requirement — ``_build_vtk_pipeline`` raises if
+# ``_resolve_vtk_class`` cannot resolve them, rather than silently degrading to
+# a shader-less generic ``vtkPolyDataMapper``.
 REAL_SURFACE_MAPPER_CLASS = "vtkOpenGLBezierResectionPolyDataMapper"
 BEZIER_SURFACE_SOURCE_CLASS = "vtkBezierSurfaceSource"
 
@@ -210,15 +210,10 @@ class BezierPlanningRepresentation:
         the actors fall back to invisible / default state instead of
         raising.
         """
-        # No-op when VTK is unavailable; the colour / opacity stubs
-        # below still update so the introspection helpers report
-        # consistent values for tests that drive ``update()`` without
-        # VTK.
         self._apply_display_node(display_node)
         self._apply_data_node(data_node)
         # Thread the wrapper's distance-map volume + margins onto the real
-        # mapper (ADR-0031).  No-op on the generic fallback mapper / when no
-        # plan node is wired.
+        # mapper (ADR-0031).  No-op when no plan node is wired.
         self._apply_resection_plan(self._resection_plan_node)
 
     def cleanup(self) -> None:
