@@ -152,5 +152,48 @@ def test_flattened_surface_uses_real_resection_2d_mapper():
     )
 
 
+def test_vascular_contour_feeds_strip_into_real_mappers():
+    """``update()`` feeds the strip polydata into both real contour mappers.
+
+    Pins the now-unguarded ``mapper.SetInputData(strip)`` path in
+    ``_apply_strip_input``: the type-probe (``getattr(mapper, "SetInputData",
+    None)``) was dropped once the contour mappers became a hard requirement
+    (ADR-0014 §3), so this exercises the direct call against the REAL mappers --
+    an accidental over-removal, or a mapper lacking ``SetInputData``, fails here.
+    """
+    _slicer_or_skip()
+    import vtk
+
+    rep_class = _import_or_skip(
+        "VascularContourRepresentation", "VascularContourRepresentation"
+    )
+    rep = rep_class()
+
+    # A data node exposing the conventional strip accessor
+    # (``_safe_get_strip_polydata``) with an identifiable 1-point polydata.
+    strip = vtk.vtkPolyData()
+    points = vtk.vtkPoints()
+    points.InsertNextPoint(0.0, 0.0, 0.0)
+    strip.SetPoints(points)
+
+    class _StripDataNode:
+        def GetStripPolyData(self):
+            return strip
+
+    rep.update(None, _StripDataNode())
+
+    for accessor in (rep.GetDistanceContourMapper, rep.GetSlicingContourMapper):
+        mapper = accessor()
+        assert mapper is not None, "the real contour mapper must be constructed."
+        fed = mapper.GetInput()
+        # Compare via point count, not object identity (VTK's Python wrapper is
+        # not guaranteed to be the same PyObject across GetInput() calls).
+        assert fed is not None and fed.GetNumberOfPoints() == 1, (
+            "update() must feed the strip polydata into the real contour mapper "
+            "via SetInputData (the unguarded direct call after the mapper became "
+            "a hard requirement, ADR-0014 §3)."
+        )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
