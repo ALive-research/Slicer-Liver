@@ -17,11 +17,6 @@
 #include "vtkMRMLResectionPlanNode.h"
 #include "vtkMRMLAbstractParametricSurfaceNode.h"
 #include "vtkMRMLBezierSurfaceNode.h"
-#include "vtkMRMLLiverResectionCSVStorageNode.h"
-
-// LiverMarkups MRML includes -- the legacy parse vehicle reads into a
-// markups Bezier-surface node (RAS control points).
-#include "vtkMRMLMarkupsBezierSurfaceNode.h"
 
 // MRML includes
 #include <vtkMRMLJsonElement.h>
@@ -76,10 +71,10 @@ bool vtkMRMLResectionPlanStorageNode::CanWriteFromReferenceNode(vtkMRMLNode* ref
 //------------------------------------------------------------------------------
 void vtkMRMLResectionPlanStorageNode::InitializeSupportedReadFileTypes()
 {
+  // Only the v2 ``.lrp.json`` schema is supported; the legacy
+  // ``.lrp.fcsv`` migration is retired (ADR-0014 §"Dissolution";
+  // ADR-0032 §"Consequences").
   this->SupportedReadFileTypes->InsertNextValue("Liver resection plan (.lrp.json)");
-  // Legacy v1 read-only upgrade path -- migrated to a v2 plan + carrier
-  // on load (see the header §"Legacy `.lrp.fcsv`").
-  this->SupportedReadFileTypes->InsertNextValue("Liver resection plan v1 (.lrp.fcsv)");
 }
 
 //------------------------------------------------------------------------------
@@ -133,21 +128,14 @@ int vtkMRMLResectionPlanStorageNode::ReadDataInternal(vtkMRMLNode* refNode)
     return 0;
   }
 
-  // Seamless v1 upgrade: a legacy ``.lrp.fcsv`` carries only the 16
-  // Bezier control points (per the v1 Markups-fiducial CSV format).
-  // The migration materialises a carrier + applies documented v2
-  // defaults for every legacy-absent field.  See the header
-  // §"Legacy `.lrp.fcsv`" and Docs/migrations/v1-to-v2.md.
-  if (endsWithLower(fullName, ".lrp.fcsv") || endsWithLower(fullName, ".fcsv"))
-  {
-    return this->ReadFcsv(fullName, plan);
-  }
-
+  // Only the v2 ``.lrp.json`` schema is read; the legacy ``.lrp.fcsv``
+  // migration is retired (ADR-0014 §"Dissolution"; ADR-0032
+  // §"Consequences") — such files no longer load.
   if (!endsWithLower(fullName, ".lrp.json") && !endsWithLower(fullName, ".json"))
   {
     vtkErrorToMessageCollectionMacro(this->GetUserMessages(),
                                      "vtkMRMLResectionPlanStorageNode::ReadDataInternal",
-                                     "Reading resection plan failed: unsupported file extension for '" << fullName << "' (expected .lrp.json or .lrp.fcsv)");
+                                     "Reading resection plan failed: unsupported file extension for '" << fullName << "' (expected .lrp.json)");
     return 0;
   }
   return this->ReadJson(fullName, plan);
@@ -337,108 +325,6 @@ private:
   bool Prev;
 };
 } // namespace
-
-//------------------------------------------------------------------------------
-int vtkMRMLResectionPlanStorageNode::ReadFcsv(const std::string& filePath, vtkMRMLResectionPlanNode* plan)
-{
-  // The v1 ``.lrp.fcsv`` is a 15-column Markups-fiducial CSV carrying
-  // only the Bezier control points.  Parse it with the legacy
-  // ``vtkMRMLLiverResectionCSVStorageNode`` as a read-only parse
-  // vehicle: it reads the LPS columns into a markups Bezier-surface
-  // node, converting to the markups RAS convention (negating X, Y).
-  // The 16 RAS control points are then lifted into a v2 Bezier carrier
-  // wired under the plan (wrapper-vs-carrier per ADR-0014 §"Fourth
-  // layer").  Every field absent from the legacy format (margins,
-  // order, state) is non-recoverable and keeps the plan node's
-  // construction-time defaults (margins = 0.0, orderIndex = -1,
-  // state = Init); see Docs/migrations/v1-to-v2.md.
-  //
-  // The parse vehicle is built off-scene (vtkNew) so the migration does
-  // not depend on the LiverMarkups Bezier-surface or the quarantined CSV
-  // storage node being registered in the plan's scene.  The CSV storage
-  // node reads the legacy control points directly into the markups
-  // Bezier-surface node -- no v1 resection wrapper is involved (ADR-0014
-  // §"Fourth layer").
-  vtkNew<vtkMRMLMarkupsBezierSurfaceNode> parseSurface;
-
-  vtkNew<vtkMRMLLiverResectionCSVStorageNode> csvStorage;
-  csvStorage->SetFileName(filePath.c_str());
-  if (!csvStorage->ReadData(parseSurface))
-  {
-    this->GetUserMessages()->AddMessages(csvStorage->GetUserMessages());
-    vtkErrorToMessageCollectionMacro(
-      this->GetUserMessages(), "vtkMRMLResectionPlanStorageNode::ReadFcsv", "Reading legacy resection plan failed: could not parse control points from '" << filePath << "'");
-    return 0;
-  }
-
-  const int pointCount = parseSurface->GetNumberOfControlPoints();
-  const int expectedRows = 4;
-  const int expectedPoints = expectedRows * expectedRows;
-  if (pointCount != expectedPoints)
-  {
-    vtkErrorToMessageCollectionMacro(this->GetUserMessages(),
-                                     "vtkMRMLResectionPlanStorageNode::ReadFcsv",
-                                     "Reading legacy resection plan failed: '" << filePath << "' carries " << pointCount
-                                                                               << " control points; the v1 Bezier control polygon requires " << expectedPoints << " (a "
-                                                                               << expectedRows << "x" << expectedRows << " grid)");
-    return 0;
-  }
-
-  // Materialise / resolve the v2 Bezier carrier and wire it under the
-  // plan.  Same resolve-or-create discipline as ReadJson.
-  vtkMRMLAbstractParametricSurfaceNode* surface = plan->GetGeometryNode();
-  vtkMRMLBezierSurfaceNode* carrier = vtkMRMLBezierSurfaceNode::SafeDownCast(surface);
-  if (carrier == nullptr)
-  {
-    vtkMRMLScene* scene = plan->GetScene();
-    if (scene == nullptr)
-    {
-      vtkErrorToMessageCollectionMacro(this->GetUserMessages(),
-                                       "vtkMRMLResectionPlanStorageNode::ReadFcsv",
-                                       "Reading legacy resection plan failed: plan '" << (plan->GetName() ? plan->GetName() : "<unnamed>")
-                                                                                      << "' has no scene; cannot instantiate the Bezier carrier");
-      return 0;
-    }
-    carrier = vtkMRMLBezierSurfaceNode::SafeDownCast(scene->AddNewNodeByClass("vtkMRMLBezierSurfaceNode"));
-    if (carrier == nullptr)
-    {
-      vtkErrorToMessageCollectionMacro(this->GetUserMessages(),
-                                       "vtkMRMLResectionPlanStorageNode::ReadFcsv",
-                                       "Reading legacy resection plan failed: could not instantiate the Bezier carrier for '" << filePath << "'");
-      return 0;
-    }
-    plan->SetAndObserveGeometryNode(carrier);
-  }
-
-  // SetSize / SetControlGrid are not state-guarded (unlike the
-  // init-mode subordinate setters), and a freshly-created carrier is in
-  // Init regardless, so no ScopedLoadingFromXML bypass is needed here.
-  carrier->SetSize(static_cast<unsigned int>(expectedRows));
-
-  double grid[vtkMRMLAbstractParametricSurfaceNode::MaxControlGridSize];
-  for (int i = 0; i < expectedPoints; ++i)
-  {
-    double position[3] = { 0.0, 0.0, 0.0 };
-    parseSurface->GetNthControlPointPosition(i, position);
-    grid[i * 3 + 0] = position[0];
-    grid[i * 3 + 1] = position[1];
-    grid[i * 3 + 2] = position[2];
-  }
-  carrier->SetControlGrid(grid);
-
-  // Loud upgrade: name every non-recoverable field that took a
-  // documented default, so the gap is visible to the user rather than
-  // silent.  Distinct from the Markups-fiducial deprecation warning the
-  // CSV parse itself emits.
-  vtkWarningToMessageCollectionMacro(this->GetUserMessages(),
-                                     "vtkMRMLResectionPlanStorageNode::ReadFcsv",
-                                     "Migrated legacy '" << filePath
-                                                         << "' to a v2 resection plan.  The v1 format carried only the Bezier control points; "
-                                                            "the safety margin and risk margin (defaulted to 0.0 mm), the resection order (orderIndex defaulted to -1), "
-                                                            "and the plan state (defaulted to Init) are not recoverable from the legacy file and took documented defaults.  "
-                                                            "Review these before clinical use (see Docs/migrations/v1-to-v2.md).");
-  return 1;
-}
 
 //------------------------------------------------------------------------------
 int vtkMRMLResectionPlanStorageNode::ReadJson(const std::string& filePath, vtkMRMLResectionPlanNode* plan)
