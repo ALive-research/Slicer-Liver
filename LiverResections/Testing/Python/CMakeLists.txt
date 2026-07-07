@@ -179,6 +179,27 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections;mapper-wiring"
     )
 
+    # Custom-OpenGL-mapper wiring -- the sibling Representations that carry a
+    # custom shader mapper (DistanceSpheroidInit -> DistanceContour;
+    # VascularContour -> DistanceContour + SlicingContour; FlattenedSurface ->
+    # Resection2D) drive the REAL relocated mappers (ADR-0014 §3), not the
+    # generic vtkPolyDataMapper.  Extends the Bezier surface-mapper invariant;
+    # the positive pin makes the no-real-mapper fallback removal safe (ADR-0008
+    # §2 -- the no-VTK unit layer the fallback aspired to was never built).
+    # Needs the wrapped mappers, so it runs green under the launched-Slicer
+    # `pytest_launched` row and SKIPS CLEANLY here under bare pytest (no
+    # slicer.mrmlScene / wrapped mapper classes off the path).  GL free.
+    add_test(
+      NAME LiverResections_custom_mapper_wiring
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_custom_mapper_wiring.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_custom_mapper_wiring PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;mapper-wiring"
+    )
+
     # T2 render-cutover slice 1c -- the LayerDM Pipeline reverse-resolves its
     # vtkMRMLResectionPlanNode wrapper from the data node's geometry
     # back-reference (ADR-0031), so the live render path threads the
