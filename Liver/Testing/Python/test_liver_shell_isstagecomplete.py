@@ -130,6 +130,26 @@ def _liver_widget():
     return widget
 
 
+def _liver_widget_no_setup():
+    """A ``LiverWidget`` WITHOUT ``setup()`` — for tests that only exercise the
+    completion predicates.
+
+    ``_stageIsComplete`` reads scene + module state and needs no sidebar/layout,
+    so skipping ``setup()`` keeps these tests verifiable headless
+    (``--no-main-window``), where ``setup()``'s ``self.layout`` is ``None``.
+    """
+    from conftest import _require_qt_widget  # type: ignore[import-not-found]
+    _require_qt_widget()
+
+    _import_slicer_or_skip()
+    try:
+        import qt  # type: ignore[import-not-found]
+        import Liver  # type: ignore[import-not-found]
+    except ImportError as exc:
+        pytest.skip(f"Liver scripted module not importable ({exc}).")
+    return Liver.LiverWidget(qt.QWidget())
+
+
 # =========================================================================== #
 # T2 — Symbol existence per stage
 # =========================================================================== #
@@ -380,3 +400,152 @@ def test_t3_stage4_semantics_confirmed_state_returns_true():
     plan = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLResectionPlanNode")
     plan.SetState(2)  # Confirmed
     assert logic.IsStageComplete() is True
+
+
+# =========================================================================== #
+# Stage-2 completion ROUTING — the shell delegates row 1 to the module logic
+# =========================================================================== #
+#
+# Contract: ``_stageIsComplete(1)`` must route to the LiverSegmentation module
+# logic's ``isStageComplete()`` (true iff a canonical segmentation holds >=1
+# SCT-tagged segment), NOT to the always-False ``_stage2IsComplete`` shell
+# stub.  The stub survives only as the graceful-degradation answer when the
+# module is ABSENT (pinned by ``test_t2_stage2_predicate_degrades_gracefully``
+# above, which exercises ``_stage2IsComplete`` directly).
+#
+# ``_STAGE_MODULE[1] == "liversegmentation"`` already maps row 1 to the module;
+# the fix removes the ``1:`` entry from ``_stageIsComplete``'s ``shellPredicate``
+# dict so row 1 falls through to the module-logic path.  These tests therefore
+# need the ``liversegmentation`` module registered (launched Slicer); they skip
+# cleanly bare and when the module is absent.
+#
+# ADR-0023 §"Per-stage state-indicator semantics" (Stage 2 soft-done);
+# ADR-0024 §"Output contract" (single canonical node); test-first per ADR-0027.
+
+
+def _liversegmentation_logic_or_skip():
+    """Resolve the Python ``LiverSegmentationLogic``, or skip.
+
+    Mirrors the sibling module suite's ``_logic_or_skip`` resolution: the
+    module must be registered (so the shell's module-logic path can find it)
+    AND the Python module importable (so we can drive its own accept/tag seams
+    to make ``isStageComplete()`` true).
+    """
+    slicer = _import_slicer_or_skip()
+    module = getattr(slicer.modules, "liversegmentation", None)
+    if module is None:
+        pytest.skip(
+            "'liversegmentation' module not registered -- Stage-2 completion "
+            "routes to the shell degrade-gracefully stub; the module-logic "
+            "route cannot be exercised.  Ensure --additional-module-paths "
+            "includes LiverSegmentation/."
+        )
+    try:
+        import LiverSegmentation  # type: ignore[import-not-found]
+    except ImportError as exc:
+        pytest.skip(
+            f"LiverSegmentation not importable ({exc}); "
+            "ensure --additional-module-paths includes LiverSegmentation/."
+        )
+    return slicer, LiverSegmentation.LiverSegmentationLogic()
+
+
+def _make_stage2_complete(logic):
+    """Land one canonical, SCT-tagged segment so ``isStageComplete()`` is True.
+
+    Uses the orchestrator's own accept/tag seams
+    (``getOrCreateCanonicalSegmentation`` + ``tagSegmentWithSct``) rather than a
+    hand-built node, so the routing test agrees with the module on what
+    "SCT-tagged canonical segment" means — the same construction the module's
+    own ``isStageComplete()`` semantics suite uses.
+    """
+    canonical = logic.getOrCreateCanonicalSegmentation()
+    segId = canonical.GetSegmentation().AddEmptySegment("liver", "Liver")
+    # Liver parenchyma SNOMED-CT code per ADR-0024 §"Output contract".
+    logic.tagSegmentWithSct(canonical, segId, "10200004", "Liver")
+
+
+def test_stage2_routing_delegates_to_module_logic_when_complete():
+    """``_stageIsComplete(1)`` is True when the module logic reports done.
+
+    Pins the Stage-2 routing invariant: with a canonical SCT-tagged
+    segmentation in the scene, the shell must return True for row 1 — proving
+    it delegated to ``LiverSegmentationLogic.isStageComplete()`` and did NOT
+    short-circuit on the always-False ``_stage2IsComplete`` stub.
+
+    RED-as-skip until the fix lands: the current ``shellPredicate`` dict routes
+    row 1 to the stub, so this asserts False and fails once reached.  Skips
+    cleanly while the module is absent (the degrade-gracefully path).
+
+    ADR-0023 §"Per-stage state-indicator semantics"; ADR-0024 §"Output contract".
+    """
+    slicer, logic = _liversegmentation_logic_or_skip()
+    _clear_scene()
+    _make_stage2_complete(logic)
+
+    widget = _liver_widget_no_setup()
+    try:
+        assert widget._stageIsComplete(1) is True, (
+            "_stageIsComplete(1) must delegate to the LiverSegmentation module "
+            "logic (True with a canonical SCT-tagged segment), not the "
+            "always-False _stage2IsComplete stub."
+        )
+    finally:
+        slicer.mrmlScene.Clear(0)
+
+
+def test_stage2_routing_false_without_canonical_segment():
+    """``_stageIsComplete(1)`` is False with no canonical SCT-tagged segment.
+
+    The module-logic route must still report False on an empty scene (the same
+    answer the stub gave), so removing the stub entry does not spuriously flip
+    Stage 2 to done.
+
+    ADR-0023 §"Per-stage state-indicator semantics" (soft-done is canonical-only).
+    """
+    slicer, logic = _liversegmentation_logic_or_skip()  # noqa: F841 — registration gate
+    _clear_scene()
+
+    widget = _liver_widget_no_setup()
+    assert widget._stageIsComplete(1) is False, (
+        "_stageIsComplete(1) must be False with no canonical SCT-tagged "
+        "segment (empty scene), whether via the stub or the module-logic route."
+    )
+
+
+def test_stage2_routing_does_not_regress_shell_rows():
+    """Rows 0/5 stay shell-owned; the injection override still wins.
+
+    Regression guard for the routing fix: removing the row-1 ``shellPredicate``
+    entry must not disturb the shell-owned rows (0 -> ``_stage1IsComplete``,
+    5 -> ``_stage6IsComplete``) nor the ``_injectedStageCompletion`` test
+    override (``_injectStageCompletionForTesting``), which short-circuits ALL
+    rows before any predicate dispatch.
+
+    ADR-0023 §"Shell composition (Option H)"; injection override pinned by
+    ``test_state_indicators_reflect_isstagecomplete``.
+    """
+    slicer = _import_slicer_or_skip()  # noqa: F841 — scene/widget gate
+    _clear_scene()
+    widget = _liver_widget_no_setup()
+
+    # Shell-owned rows: empty scene -> both False (Stage 1 has no LiverRole
+    # volume; Stage 6 has no logged write).  Unaffected by the row-1 change.
+    assert widget._stageIsComplete(0) is False
+    assert widget._stageIsComplete(5) is False
+
+    # The injection override must still short-circuit every row, including the
+    # now-module-routed row 1.
+    widget._injectStageCompletionForTesting([True, True, True, True, True, True])
+    try:
+        for row in range(6):
+            assert widget._stageIsComplete(row) is True, (
+                f"_injectedStageCompletion must override row {row} regardless "
+                "of the per-row routing."
+            )
+    finally:
+        widget._injectStageCompletionForTesting(None)
+
+
+if __name__ == "__main__":
+    raise SystemExit(pytest.main([__file__, "-q"]))
