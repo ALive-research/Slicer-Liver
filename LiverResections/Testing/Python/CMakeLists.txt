@@ -360,6 +360,38 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections;locator"
     )
 
+    # Locator D: click-to-reslice CONSUMER kernel (GL-free), ADR-0025
+    # §Click-to-reslice -- the slice-reslice half of the ADR-0025 locator
+    # architecture.  Pins a NEW LiverResectionsLib.LocatorReslicer (ADR-0004
+    # Python, ADR-0013 §5 no custom DM) whose STATIC kernel
+    # reslice_slice_to_world(slice_node, world_xyz) -> bool updates the
+    # vtkMRMLSliceNode's SliceToRAS (via JumpSliceByOffsetting) so the slice
+    # plane passes through the picked RAS world point, preserving orientation.
+    # Invariant 1 (the [test] pin): seed a KNOWN non-axial SliceToRAS, pick a
+    # world point OFF the plane, reslice, assert the point now lies in the plane
+    # (dot(normal, point - origin) == 0) and the normal direction is unchanged.
+    # Invariant 2: degenerate input (slice_node None / world_xyz None) is a
+    # no-op returning False, never raising.  Invariant 3 (secondary,
+    # skip-pending on the constructor/observe API): a LocatorReslicer(scene)
+    # observing the scene's single vtkMRMLLocatorNode reslices the Red slice on
+    # a picked position.  Needs the wrapped vtkMRMLSliceNode / vtkMRMLLocatorNode
+    # + the importable LocatorReslicer, so it runs green under the
+    # launched-Slicer `pytest_launched` row and SKIPS CLEANLY here under bare
+    # pytest (no slicer.mrmlScene / LiverResectionsLib off the path).  GL free --
+    # SliceToRAS lives on the bare node, no view/widget/render window.  RED /
+    # skip-pending until the implementer lands LocatorReslicer (ADR-0027
+    # §Conformance: the skip lifts at the implementation commit).
+    add_test(
+      NAME LiverResections_locator_reslice_consumer
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_locator_reslice_consumer.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_locator_reslice_consumer PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;locator"
+    )
+
     # #501 slice 2 -- the v2 resection control-point edit path on the LayerDM
     # Pipeline (ADR-0032: interaction routes through the Pipeline interaction
     # seam, no standalone vtkAbstractWidget).  Pins the GL-free edit kernel
