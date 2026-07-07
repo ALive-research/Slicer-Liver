@@ -48,19 +48,19 @@ import pytest
 
 
 class _StubDataNode:
-    """Minimal markups-like node exposing only the control-point accessors the
-    digest reads (``GetNumberOfControlPoints`` / ``GetNthControlPointPosition``).
+    """Minimal carrier-like node exposing only the accessor the digest reads.
+
+    The v2 ``vtkMRMLBezierSurfaceNode`` carrier surfaces its control polygon
+    as a flat row-major grid via ``GetControlGridVector`` (a tuple of ``3 * N``
+    floats; ADR-0014 §"Fourth layer").  The v1 markups control-point API is
+    retired (ADR-0014 §"Dissolution"; ADR-0032 §"Consequences").
     """
 
     def __init__(self, points):
         self._points = [list(p) for p in points]
 
-    def GetNumberOfControlPoints(self):  # noqa: N802 - mirrors the VTK accessor
-        return len(self._points)
-
-    def GetNthControlPointPosition(self, index, out):  # noqa: N802 - VTK verb
-        point = self._points[index]
-        out[0], out[1], out[2] = point[0], point[1], point[2]
+    def GetControlGridVector(self):  # noqa: N802 - mirrors the VTK accessor
+        return tuple(coord for point in self._points for coord in point)
 
     def move(self, index, position):
         self._points[index] = list(position)
