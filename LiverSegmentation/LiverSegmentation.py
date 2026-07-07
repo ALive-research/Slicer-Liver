@@ -320,6 +320,16 @@ class _StructureCard:
 
     def onRun(self):
         volume = self._widget.logic.selectInputVolume()
+        if volume is None:
+            # No portal-venous working volume tagged in Stage 1 -- do NOT run the
+            # backend on None (a silent no-op that reads as success); surface the
+            # missing hand-off instead (ADR-0024 Stage-1/Stage-2 hand-off).
+            self.statusLabel.setText(
+                "Tag a PortalVenous volume in Case Setup (Stage 1) first."
+            )
+            self.acceptButton.setEnabled(False)
+            self.rejectButton.setEnabled(False)
+            return
         self.progressBar.setVisible(True)
         try:
             self._scratch = self._widget.logic.segment(volume, self._sctCode)

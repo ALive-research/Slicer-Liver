@@ -627,11 +627,17 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     shellPredicate = {
       0: self._stage1IsComplete,
-      1: self._stage2IsComplete,  # Stage 2 stub — used when LiverSegmentation is absent.
       5: self._stage6IsComplete,
     }.get(row)
     if shellPredicate is not None:
       return shellPredicate()
+
+    # Stage 2 (row 1) routes to the LiverSegmentation module's own
+    # isStageComplete via the module-logic lookup below when the module is
+    # present; when it is absent the lookup returns False (the graceful-
+    # degradation semantics _stage2IsComplete documents).  It is NOT pinned to
+    # the always-False shell stub here, or a completed anatomy stage would never
+    # flip its indicator (ADR-0023 §Stage 2).
 
     moduleName = self._STAGE_MODULE.get(row)
     if moduleName is None:
@@ -639,22 +645,32 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     module = getattr(slicer.modules, moduleName, None)
     if module is None:
       return False
+
+    # C++ stage logics expose their predicate on the wrapped module logic
+    # (``IsStageComplete`` VTK convention / ``isStageComplete`` Python).
     try:
       logic = module.logic()
     except Exception:  # pragma: no cover — defensive
-      return False
-    if logic is None:
-      return False
-
-    # C++ logic exposes ``IsStageComplete`` (VTK convention);
-    # Python logic exposes ``isStageComplete`` (Python convention).
+      logic = None
     for attr in ("IsStageComplete", "isStageComplete"):
-      query = getattr(logic, attr, None)
+      query = getattr(logic, attr, None) if logic is not None else None
       if callable(query):
         try:
           return bool(query())
         except Exception:  # pragma: no cover — defensive
           return False
+
+    # LiverSegmentation is a SCRIPTED module: its ``isStageComplete`` lives on
+    # the Python ``LiverSegmentationLogic``, not the wrapped module logic that
+    # ``module.logic()`` returns.  Resolve a fresh instance — it reads the same
+    # scene, so no module widget need be built — so a completed anatomy stage
+    # flips its indicator instead of being pinned False (ADR-0023 §Stage 2).
+    if moduleName == "liversegmentation":
+      try:
+        import LiverSegmentation
+        return bool(LiverSegmentation.LiverSegmentationLogic().isStageComplete())
+      except Exception:  # pragma: no cover — defensive
+        return False
     return False
 
   def _stageIndicatorState(self, row):
