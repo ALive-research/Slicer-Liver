@@ -893,9 +893,12 @@ def _quad_source_bounds(plane: Any) -> tuple | None:
 def _make_resection_mapper_2d() -> Any:
     """Return the resectogram's 2D mapper.
 
-    Prefers the relocated ``vtkOpenGLResection2DPolyDataMapper``
-    (``LiverResections/VTKWidgets/``, reachable in a Slicer process);
-    falls back to a generic ``vtkPolyDataMapper``.
+    The relocated ``vtkOpenGLResection2DPolyDataMapper``
+    (``LiverResections/VTKWidgets/``) is a hard requirement: a resolver miss is
+    a misconfiguration (the LiverResections module is not loaded / not wrapped)
+    that must surface LOUDLY, not degrade to a generic ``vtkPolyDataMapper``
+    with no ``sampler3D`` to paint the distance-field band (ADR-0008 §2 — the
+    no-VTK unit layer this once degraded for was never built).
     """
     factory = getattr(vtk, "vtkOpenGLResection2DPolyDataMapper", None)
     if factory is None:
@@ -903,9 +906,15 @@ def _make_resection_mapper_2d() -> Any:
             from slicer import vtkOpenGLResection2DPolyDataMapper as factory  # type: ignore[no-redef]
         except Exception:
             factory = None
-    if factory is not None:
-        return factory()
-    return vtk.vtkPolyDataMapper()
+    if factory is None:
+        raise RuntimeError(
+            "FlattenedSurfaceRepresentation requires the relocated "
+            "vtkOpenGLResection2DPolyDataMapper (ADR-0014 §3); neither the "
+            "'slicer' nor the 'vtk' namespace exposes it.  Load the "
+            "LiverResections module so its wrapped VTKWidgets classes are on "
+            "the path."
+        )
+    return factory()
 
 
 def _make_gaussian_blur_pass() -> Any | None:

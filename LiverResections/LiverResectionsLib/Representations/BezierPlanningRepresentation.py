@@ -138,14 +138,11 @@ class BezierPlanningRepresentation:
     def __init__(self, renderer: Any | None = None) -> None:
         self._renderer: Any | None = None
 
-        # The VTK objects the Representation owns.  ``None`` in the
-        # pure-Python testing path.  On the real path the surface is the
+        # The VTK objects the Representation owns.  The surface is the
         # tessellated Bezier patch (``_surface_source`` -> ``_surface_normals``
-        # -> mapper); on the bare-VTK fallback it is the raw control mesh
-        # carried directly in ``_surface_polydata``.
+        # -> mapper).
         self._surface_source: Any | None = None
         self._surface_normals: Any | None = None
-        self._surface_polydata: Any | None = None
         self._surface_mapper: Any | None = None
         self._surface_actor: Any | None = None
 
@@ -232,7 +229,6 @@ class BezierPlanningRepresentation:
         # Drop strong references so VTK can free the resources.
         self._surface_source = None
         self._surface_normals = None
-        self._surface_polydata = None
         self._surface_mapper = None
         self._surface_actor = None
         self._resection_plan_node = None
@@ -250,15 +246,14 @@ class BezierPlanningRepresentation:
     def GetSurfacePolyData(self) -> Any | None:
         """Return the surface polydata the mapper renders.
 
-        On the real path this is the tessellated Bezier patch emitted by the
-        normals filter (one point per resolution cell, with per-point normals
-        and the ``uvCoords`` TCoords the mapper's vertex shader reads); on the
-        bare-VTK fallback it is the raw control mesh.  ``None`` when VTK is
-        absent or no ``update()`` has materialised geometry.
+        The tessellated Bezier patch emitted by the normals filter (one point
+        per resolution cell, with per-point normals and the ``uvCoords``
+        TCoords the mapper's vertex shader reads).  Empty until the first
+        ``update()`` feeds the control grid to the source.
         """
         if self._surface_normals is not None:
             return self._surface_normals.GetOutput()
-        return self._surface_polydata
+        return None
 
     def GetCurrentColor(self) -> tuple[float, float, float]:
         return self._current_color
@@ -276,42 +271,46 @@ class BezierPlanningRepresentation:
     def _build_vtk_pipeline(self) -> None:
         """Construct the surface actor.
 
-        Called from ``__init__`` only when ``vtk`` is importable.
+        The relocated ``vtkOpenGLBezierResectionPolyDataMapper`` (ADR-0014 §3)
+        renders the tessellated Bernstein patch built by
+        ``vtkBezierSurfaceSource`` + ``vtkPolyDataNormals`` — the same pipeline
+        shape the v1 ``vtkSlicerBezierSurfaceRepresentation3D`` ctor assembled.
+        The source emits the 2-component ``uvCoords`` (TCoords) the mapper's
+        vertex shader reads; the grid is a fragment-shader feature on that
+        mapper driven by ``GridDivisions`` / ``GridThickness`` /
+        ``ResectionGridColor`` uniforms (plumbed in ``_apply_display_node``),
+        NOT a separate actor.
 
-        Real path (inside Slicer): the relocated
-        ``vtkOpenGLBezierResectionPolyDataMapper`` (ADR-0014 §3) renders the
-        tessellated Bernstein patch built by ``vtkBezierSurfaceSource`` +
-        ``vtkPolyDataNormals`` — the same pipeline shape the v1
-        ``vtkSlicerBezierSurfaceRepresentation3D`` ctor assembled.  The source
-        emits the 2-component ``uvCoords`` (TCoords) the mapper's vertex shader
-        reads; the grid is a fragment-shader feature on that mapper driven by
-        ``GridDivisions`` / ``GridThickness`` / ``ResectionGridColor`` uniforms
-        (plumbed in ``_apply_display_node``), NOT a separate actor.
-
-        Bare-VTK fallback (unit layer): the wrapped classes are off the path,
-        so a generic ``vtkPolyDataMapper`` over a plain ``vtkPolyData`` keeps
-        the Representation constructible and the colour bookkeeping testable.
+        The custom mapper + source are a hard requirement: a resolver miss is a
+        misconfiguration (the LiverResections module is not loaded / not
+        wrapped) that must surface LOUDLY, not degrade to a shader-less generic
+        ``vtkPolyDataMapper`` that renders the wrong geometry silently
+        (ADR-0008 §2 — the no-VTK unit layer this once degraded for was never
+        built).
         """
         mapper_class = _resolve_vtk_class(REAL_SURFACE_MAPPER_CLASS)
         source_class = _resolve_vtk_class(BEZIER_SURFACE_SOURCE_CLASS)
+        if mapper_class is None or source_class is None:
+            raise RuntimeError(
+                "BezierPlanningRepresentation requires the relocated "
+                f"{REAL_SURFACE_MAPPER_CLASS} + {BEZIER_SURFACE_SOURCE_CLASS} "
+                "(ADR-0014 §3); neither the 'slicer' nor the 'vtk' namespace "
+                "exposes them.  Load the LiverResections module so its wrapped "
+                "VTKWidgets classes are on the path."
+            )
 
-        if mapper_class is not None and source_class is not None:
-            self._surface_source = source_class()
-            self._surface_source.SetResolution(
-                BEZIER_SURFACE_RESOLUTION, BEZIER_SURFACE_RESOLUTION
-            )
-            self._surface_normals = vtk.vtkPolyDataNormals()
-            self._surface_normals.SetInputConnection(
-                self._surface_source.GetOutputPort()
-            )
-            self._surface_mapper = mapper_class()
-            self._surface_mapper.SetInputConnection(
-                self._surface_normals.GetOutputPort()
-            )
-        else:
-            self._surface_polydata = vtk.vtkPolyData()
-            self._surface_mapper = vtk.vtkPolyDataMapper()
-            self._surface_mapper.SetInputData(self._surface_polydata)
+        self._surface_source = source_class()
+        self._surface_source.SetResolution(
+            BEZIER_SURFACE_RESOLUTION, BEZIER_SURFACE_RESOLUTION
+        )
+        self._surface_normals = vtk.vtkPolyDataNormals()
+        self._surface_normals.SetInputConnection(
+            self._surface_source.GetOutputPort()
+        )
+        self._surface_mapper = mapper_class()
+        self._surface_mapper.SetInputConnection(
+            self._surface_normals.GetOutputPort()
+        )
 
         self._surface_actor = vtk.vtkActor()
         self._surface_actor.SetMapper(self._surface_mapper)
@@ -449,17 +448,10 @@ class BezierPlanningRepresentation:
         self._input_refresh_count += 1
 
         points = _make_points_from_flat(flat, control_count)
-        if self._surface_source is not None:
-            # Real path: drive the Bezier surface source with the control
-            # grid; it tessellates the Bernstein patch and emits the
-            # ``uvCoords`` (TCoords) the mapper's vertex shader consumes.
-            self._feed_bezier_source(points, rows, cols)
-        else:
-            # Bare-VTK fallback: the "surface" is the raw control mesh
-            # (``control_count`` points + ``(rows-1)*(cols-1)`` quads) so the
-            # generic mapper has something to draw and the colour bookkeeping
-            # stays exercised in the unit layer.
-            self._refresh_surface_polydata(points, rows, cols)
+        # Drive the Bezier surface source with the control grid; it tessellates
+        # the Bernstein patch and emits the ``uvCoords`` (TCoords) the mapper's
+        # vertex shader consumes.
+        self._feed_bezier_source(points, rows, cols)
 
     def _feed_bezier_source(self, points: Any, rows: int, cols: int) -> None:
         """Push the control grid into the Bezier source and tessellate.
@@ -623,27 +615,6 @@ class BezierPlanningRepresentation:
         scaling.GetMatrix(ijk_to_texture)
         mapper.SetIjkToTextureMatrix(ijk_to_texture)
 
-    def _refresh_surface_polydata(self, points: Any, rows: int, cols: int) -> None:
-        polydata = self._surface_polydata
-        if polydata is None:
-            return
-        polydata.SetPoints(points)
-
-        cells = vtk.vtkCellArray()
-        # Connect the (rows×cols) control mesh into
-        # ((rows-1)×(cols-1)) quads.  ``ids`` indexes the flat
-        # ``0..control_count-1`` point array laid out row-major in
-        # (u, v).
-        for v in range(rows - 1):
-            for u in range(cols - 1):
-                quad = vtk.vtkQuad()
-                quad.GetPointIds().SetId(0, v * cols + u)
-                quad.GetPointIds().SetId(1, v * cols + (u + 1))
-                quad.GetPointIds().SetId(2, (v + 1) * cols + (u + 1))
-                quad.GetPointIds().SetId(3, (v + 1) * cols + u)
-                cells.InsertNextCell(quad)
-        polydata.SetPolys(cells)
-        polydata.Modified()
 
 # --------------------------------------------------------------------------- #
 # Helpers
@@ -663,9 +634,9 @@ def _resolve_vtk_class(name: str) -> Any | None:
 
     The relocated mapper + the Bezier surface source are wrapped into Slicer's
     ``slicer`` namespace (``SlicerMacroBuildModuleLogic`` Python wrapping); the
-    plain ``vtk`` module is the fallback for a non-Slicer VTK build.  Returns
-    ``None`` when neither namespace exposes the class (the bare-VTK unit layer),
-    which drives the generic-mapper fallback.  Mirrors
+    plain ``vtk`` module is checked too for a non-Slicer VTK build.  Returns
+    ``None`` when neither namespace exposes the class, which the caller treats
+    as a hard error (the LiverResections module is not loaded).  Mirrors
     ``DistanceSpheroidInitRepresentation._resolve_extractor_class``.
     """
     for module_name in ("slicer", "vtk"):
