@@ -40,8 +40,6 @@
 #include "vtkSlicerLiverMarkupsLogic.h"
 
 // Liver Markups MRML includes
-#include "vtkMRMLMarkupsBezierSurfaceNode.h"
-#include "vtkMRMLMarkupsBezierSurfaceDisplayNode.h"
 #include "vtkMRMLMarkupsSlicingContourNode.h"
 #include "vtkMRMLMarkupsSlicingContourDisplayNode.h"
 #include "vtkMRMLMarkupsDistanceContourNode.h"
@@ -92,7 +90,9 @@ void vtkSlicerLiverMarkupsLogic::RegisterNodes()
   // called in the module class
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsSlicingContourDisplayNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsDistanceContourDisplayNode>::New());
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceDisplayNode>::New());
+  // The v1 markups Bezier surface display node is retired (ADR-0014
+  // §"Dissolution"; ADR-0032 §"Consequences").  The v2 LayerDM path
+  // owns the Bezier render (ADR-0013 §5; ADR-0031).
 }
 
 //---------------------------------------------------------------------------
@@ -135,8 +135,9 @@ void vtkSlicerLiverMarkupsLogic::ObserveMRMLScene()
       selectionNode->AddNewPlaceNodeClassNameToList(distanceContourNode->GetClassName(), distanceContourNode->GetAddIcon(), distanceContourNode->GetMarkupType());
     }
 
-    auto bezierSurfaceNode = vtkSmartPointer<vtkMRMLMarkupsBezierSurfaceNode>::New();
-    selectionNode->AddNewPlaceNodeClassNameToList(bezierSurfaceNode->GetClassName(), bezierSurfaceNode->GetAddIcon(), bezierSurfaceNode->GetMarkupType());
+    // The v1 markups Bezier surface is retired (ADR-0014 §"Dissolution";
+    // ADR-0032 §"Consequences") — it is no longer offered as a placeable
+    // markups type; placement is a v2 Python action (ADR-0032 §"Decision").
 
     // trigger an update on the mouse mode toolbar
     this->GetMRMLScene()->EndState(vtkMRMLScene::BatchProcessState);
