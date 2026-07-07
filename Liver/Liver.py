@@ -220,6 +220,12 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._shellHost = None
     self._injectedStageCompletion = None
 
+    # Stage-1 Case Setup widgets (built in ``_buildStage1Page``); ``None``
+    # here so a pre-build ``_refreshCaseSetupTable`` short-circuits.
+    self._caseSetupVolumeCombo = None
+    self._caseSetupRoleCombo = None
+    self._caseSetupTable = None
+
   def setup(self):
     """Build the six-stage navigation shell.
 
@@ -247,6 +253,8 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def _onSceneChanged(self, caller=None, event=None):
     """Refresh per-stage indicators in response to scene events."""
     self._refreshStageIndicators()
+    # Newly loaded/removed volumes should appear in the Case Setup role table.
+    self._refreshCaseSetupTable()
 
   # ------------------------------------------------------------------ #
   # Liver-shell sidebar — composition + navigation (ADR-0023 Option H)
@@ -377,18 +385,125 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return self._buildUnavailablePage(self._STAGE_NAMES[index]), False
     return rep, True
 
-  def _buildStage1Page(self):
-    """Shell-owned Case Setup placeholder (ADR-0023 §Stage 1 / ADR-0029).
+  #: Human-facing dropdown labels for the machine-stable LiverRole values that
+  #: aren't already presentable (the stored value is decoupled from the label).
+  _CASE_SETUP_ROLE_LABELS = {"PortalVenous": "Portal venous"}
 
-    The functional UI for Stage 1 lands in a follow-up task (planner
-    §"Stage 1"); for T5.2-d the shell only reserves the page so the
-    sidebar contract is satisfied.
+  def _buildStage1Page(self):
+    """Shell-owned Case Setup UI (ADR-0023 §Stage 1 / ADR-0029; ADR-0004 Python).
+
+    Load volume(s) via Slicer's Add Data, then tag each with its
+    acquisition-phase role.  A scalar-volume selector + a role dropdown whose
+    "Assign role" writes the shared ``LiverRole`` attribute via
+    ``LiverSegmentationLib.roles.set_volume_role`` — the SAME vocabulary Stage 2
+    reads to pick its working volume — plus a table of tagged volumes.  Tagging
+    flips the Stage-1 completion indicator (``_stage1IsComplete`` reads the
+    attribute).  Degrades to a hint label when the shared roles module is
+    unreachable (a build without ``LiverSegmentationLib``).
     """
+    try:
+      from LiverSegmentationLib import roles
+    except Exception:  # pragma: no cover — surfaces only when the lib is absent
+      page = qt.QWidget()
+      layout = qt.QVBoxLayout(page)
+      layout.addWidget(qt.QLabel(
+        "Case Setup — volume-role tagging unavailable in this build."))
+      layout.addStretch(1)
+      return page
+
     page = qt.QWidget()
     layout = qt.QVBoxLayout(page)
-    layout.addWidget(qt.QLabel("Case Setup — load volumes and tag roles (Stage 1)."))
-    layout.addStretch(1)
+    layout.addWidget(qt.QLabel(
+      "Case Setup — load volume(s) via Add Data, then tag each with its "
+      "acquisition-phase role."))
+
+    row = qt.QHBoxLayout()
+    row.addWidget(qt.QLabel("Volume:"))
+    volumeCombo = slicer.qMRMLNodeComboBox()
+    volumeCombo.setObjectName("CaseSetupVolumeComboBox")
+    volumeCombo.nodeTypes = ["vtkMRMLScalarVolumeNode"]
+    volumeCombo.addEnabled = False
+    volumeCombo.removeEnabled = False
+    volumeCombo.noneEnabled = True
+    volumeCombo.setMRMLScene(slicer.mrmlScene)
+    volumeCombo.connect("currentNodeChanged(vtkMRMLNode*)", self._onCaseSetupVolumeChanged)
+    row.addWidget(volumeCombo, 1)
+
+    row.addWidget(qt.QLabel("Role:"))
+    roleCombo = qt.QComboBox()
+    roleCombo.setObjectName("CaseSetupRoleComboBox")
+    for value in roles.LIVER_ROLES:
+      roleCombo.addItem(self._caseSetupRoleLabel(value), value)
+    row.addWidget(roleCombo)
+
+    assignButton = qt.QPushButton("Assign role")
+    assignButton.setObjectName("CaseSetupAssignButton")
+    assignButton.connect("clicked()", self._onCaseSetupAssignRole)
+    row.addWidget(assignButton)
+    layout.addLayout(row)
+
+    table = qt.QTableWidget()
+    table.setObjectName("CaseSetupRoleTable")
+    table.setColumnCount(2)
+    table.setHorizontalHeaderLabels(["Volume", "Role"])
+    table.horizontalHeader().setStretchLastSection(True)
+    table.editTriggers = qt.QAbstractItemView.NoEditTriggers
+    table.selectionBehavior = qt.QAbstractItemView.SelectRows
+    layout.addWidget(table, 1)
+
+    self._caseSetupVolumeCombo = volumeCombo
+    self._caseSetupRoleCombo = roleCombo
+    self._caseSetupTable = table
+
+    self._refreshCaseSetupTable()
     return page
+
+  def _caseSetupRoleLabel(self, value):
+    """Human dropdown/table label for a stored ``LiverRole`` value."""
+    return self._CASE_SETUP_ROLE_LABELS.get(value, value)
+
+  def _onCaseSetupVolumeChanged(self, node):
+    """Reflect the selected volume's current role in the dropdown, if tagged."""
+    combo = self._caseSetupRoleCombo
+    if combo is None or node is None:
+      return
+    current = node.GetAttribute("LiverRole")
+    if current is None:
+      return
+    index = combo.findData(current)
+    if index >= 0:
+      combo.setCurrentIndex(index)
+
+  def _onCaseSetupAssignRole(self):
+    """Tag the selected volume with the chosen role, then refresh state."""
+    try:
+      from LiverSegmentationLib import roles
+    except Exception:  # pragma: no cover — surfaces only when the lib is absent
+      return
+    volumeCombo = self._caseSetupVolumeCombo
+    roleCombo = self._caseSetupRoleCombo
+    if volumeCombo is None or roleCombo is None:
+      return
+    volume = volumeCombo.currentNode()
+    if volume is None:
+      return
+    role = roleCombo.itemData(roleCombo.currentIndex)
+    roles.set_volume_role(volume, role)
+    self._refreshCaseSetupTable()
+    self._refreshStageIndicators()
+
+  def _refreshCaseSetupTable(self):
+    """Rebuild the volumes x role table from the scene's scalar volumes."""
+    table = self._caseSetupTable
+    if table is None:
+      return
+    volumes = list(slicer.util.getNodesByClass("vtkMRMLScalarVolumeNode"))
+    table.setRowCount(len(volumes))
+    for row, volume in enumerate(volumes):
+      role = volume.GetAttribute("LiverRole") or ""
+      table.setItem(row, 0, qt.QTableWidgetItem(volume.GetName()))
+      table.setItem(row, 1, qt.QTableWidgetItem(
+        self._caseSetupRoleLabel(role) if role else ""))
 
   def _buildResectionPlanningPage(self):
     """Return ``(page_widget, is_available)`` for the Stage-4 Python widget.
