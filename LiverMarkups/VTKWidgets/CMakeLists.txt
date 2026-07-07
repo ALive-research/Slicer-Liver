@@ -13,11 +13,9 @@ set(${KIT}_INCLUDE_DIRECTORIES
   ${vtkSlicer${MODULE_NAME}ModuleMRML_BINARY_DIR}
   ${vtkSlicerMarkupsModuleVTKWidgets_INCLUDE_DIRS}
   ${vtkSlicerMarkupsModuleVTKWidgets_INCLUDE_DIRS}
-  # The legacy ``vtkSlicer*Representation3D`` consumers here still
+  # The slicing- and distance-contour ``Representation3D`` classes here
   # consume the relocated mapper headers
-  # (``vtkOpenGLBezierResectionPolyDataMapper.h``,
-  # ``vtkOpenGLResection2DPolyDataMapper.h``,
-  # ``vtkOpenGLSlicingContourPolyDataMapper.h``,
+  # (``vtkOpenGLSlicingContourPolyDataMapper.h``,
   # ``vtkOpenGLDistanceContourPolyDataMapper.h``), which now live in
   # ``LiverResections/VTKWidgets/`` per ADR-0014 §3
   # (T2-mapper-relocation).  Because the top-level CMakeLists
@@ -28,15 +26,6 @@ set(${KIT}_INCLUDE_DIRECTORIES
   # resolved by CMake at generate time.
   ${CMAKE_SOURCE_DIR}/LiverResections/VTKWidgets
   ${CMAKE_BINARY_DIR}/LiverResections/VTKWidgets
-  # ``vtkSlicerBezierSurfaceRepresentation3D::UpdateControlPolygonGeometry``
-  # delegates to ``vtkSlicerLiverBezierControlPolygonGeometry`` in the
-  # LiverResections Algorithm library (ADR-0015 §1 — pure-VTK helpers
-  # shared between the legacy v1 representation here and the v2
-  # representation under ``LiverResections/VTKWidgets/``).  Same
-  # forward-reference caveat as the VTKWidgets entry above: source
-  # directory and binary directory both supplied explicitly.
-  ${CMAKE_SOURCE_DIR}/LiverResections/Algorithm
-  ${CMAKE_BINARY_DIR}/LiverResections/Algorithm
   )
 
 set(${KIT}_SRCS
@@ -52,12 +41,6 @@ set(${KIT}_SRCS
   vtkSlicerDistanceContourRepresentation3D.cxx
   vtkSlicerDistanceContourRepresentation2D.h
   vtkSlicerDistanceContourRepresentation2D.cxx
-  vtkSlicerBezierSurfaceWidget.h
-  vtkSlicerBezierSurfaceWidget.cxx
-  vtkSlicerBezierSurfaceRepresentation3D.h
-  vtkSlicerBezierSurfaceRepresentation3D.cxx
-  vtkSlicerBezierSurfaceRepresentation2D.h
-  vtkSlicerBezierSurfaceRepresentation2D.cxx
   vtkBezierSurfaceSource.h
   vtkBezierSurfaceSource.cxx
   vtkSlicerShaderHelper.h
@@ -69,15 +52,12 @@ set(${KIT}_SRCS
 set(${KIT}_TARGET_LIBRARIES
   vtkSlicer${MODULE_NAME}ModuleMRML
   vtkSlicerMarkupsModuleVTKWidgets
-  # The custom OpenGL poly-data mappers now ship from the
-  # LiverResections VTKWidgets target (ADR-0014 §3 lift-and-shift).
-  # Forward-reference resolved at CMake generate time; the source
-  # ordering caveat is documented under INCLUDE_DIRECTORIES above.
+  # The custom OpenGL poly-data mappers the contour Representation3D
+  # classes here consume now ship from the LiverResections VTKWidgets
+  # target (ADR-0014 §3 lift-and-shift).  Forward-reference resolved at
+  # CMake generate time; the source ordering caveat is documented under
+  # INCLUDE_DIRECTORIES above.
   vtkSlicerLiverResectionsModuleVTKWidgets
-  # ``vtkSlicerLiverBezierControlPolygonGeometry`` lives in the
-  # LiverResections Algorithm library (ADR-0015 §1).  Same forward-
-  # reference pattern.
-  vtkSlicerLiverResectionsModuleAlgorithm
   )
 
 #-----------------------------------------------------------------------------

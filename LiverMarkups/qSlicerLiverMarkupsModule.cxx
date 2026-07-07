@@ -40,7 +40,6 @@
 #include "qSlicerLiverMarkupsModule.h"
 
 // MRML includes
-#include "vtkMRMLMarkupsBezierSurfaceNode.h"
 #include "vtkMRMLMarkupsSlicingContourNode.h"
 #include "vtkMRMLMarkupsDistanceContourNode.h"
 
@@ -59,7 +58,6 @@
 // Liver Markups VTKWidgets includes
 #include "vtkSlicerSlicingContourWidget.h"
 #include "vtkSlicerDistanceContourWidget.h"
-#include "vtkSlicerBezierSurfaceWidget.h"
 
 // Slicer includes
 #include <qSlicerModuleManager.h>
@@ -175,9 +173,10 @@ void qSlicerLiverMarkupsModule::setup()
   vtkNew<vtkSlicerDistanceContourWidget> distanceContourWidget;
   markupsLogic->RegisterMarkupsNode(distanceContourNode, distanceContourWidget, createPushButton);
 
-  vtkNew<vtkMRMLMarkupsBezierSurfaceNode> bezierSurfaceNode;
-  vtkNew<vtkSlicerBezierSurfaceWidget> bezierSurfaceWidget;
-  markupsLogic->RegisterMarkupsNode(bezierSurfaceNode, bezierSurfaceWidget);
+  // The v1 markups Bezier surface is retired (ADR-0014 §"Dissolution";
+  // ADR-0032 §"Consequences").  The Bezier resection surface is rendered
+  // and edited exclusively through the v2 LayerDM Pipeline path
+  // (ADR-0013 §5; ADR-0031); no markups node is registered for it.
 }
 
 //-----------------------------------------------------------------------------
@@ -196,8 +195,7 @@ vtkMRMLAbstractLogic* qSlicerLiverMarkupsModule::createLogic()
 QStringList qSlicerLiverMarkupsModule::associatedNodeTypes() const
 {
   return QStringList() << "vtkMRMLMarkupsSlicingContourNode"
-                       << "vtkMRMLMarkupsDistanceContourNode"
-                       << "vtkMRMLMarkupsBezierSurfaceNode";
+                       << "vtkMRMLMarkupsDistanceContourNode";
 }
 
 //-----------------------------------------------------------------------------
