@@ -41,17 +41,7 @@ from __future__ import annotations
 
 from typing import Any
 
-# --------------------------------------------------------------------------- #
-# VTK is a soft dependency (see module docstring).
-# --------------------------------------------------------------------------- #
-
-try:  # pragma: no cover — exercised inside Slicer / when VTK is available
-    import vtk
-
-    _HAS_VTK = True
-except ImportError:  # pragma: no cover — pure-Python path
-    vtk = None  # type: ignore[assignment]
-    _HAS_VTK = False
+import vtk
 
 
 class VascularContourRepresentation:
@@ -89,8 +79,7 @@ class VascularContourRepresentation:
 
         self._update_count: int = 0
 
-        if _HAS_VTK:
-            self._build_vtk_pipeline()
+        self._build_vtk_pipeline()
 
         if renderer is not None:
             self.SetRenderer(renderer)
@@ -170,8 +159,6 @@ class VascularContourRepresentation:
         ``vtkPolyDataMapper`` so the skeleton stays importable in a bare
         VTK environment.
         """
-        assert vtk is not None  # gated by _HAS_VTK
-
         self._distance_contour_mapper = _make_contour_mapper(
             "vtkOpenGLDistanceContourPolyDataMapper"
         )
@@ -236,7 +223,6 @@ def _make_contour_mapper(class_name: str) -> Any:
     the ``vtk`` module (wrapped) or the ``slicer`` namespace; a bare-VTK
     pytest run gets the generic ``vtkPolyDataMapper`` fallback.
     """
-    assert vtk is not None
     factory = getattr(vtk, class_name, None)
     if factory is None:
         try:  # pragma: no cover — exercised inside Slicer

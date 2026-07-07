@@ -71,22 +71,7 @@ from __future__ import annotations
 
 from typing import Any
 
-# --------------------------------------------------------------------------- #
-# VTK is a soft dependency — when running in a plain Python without VTK on
-# ``PYTHONPATH``, the import below fails and the unit tests that need a
-# real mapper skip via ``pytest.importorskip("vtk")``.  The Representation
-# can still be constructed (the lazy ``_get_vtk()`` returns ``None``); its
-# ``update()`` then becomes a no-op for the missing VTK case, which is
-# enough for the smoke-level tests.
-# --------------------------------------------------------------------------- #
-
-try:  # pragma: no cover — exercised inside Slicer / when VTK is available
-    import vtk
-
-    _HAS_VTK = True
-except ImportError:  # pragma: no cover — pure-Python path
-    vtk = None  # type: ignore[assignment]
-    _HAS_VTK = False
+import vtk
 
 
 # --------------------------------------------------------------------------- #
@@ -204,8 +189,7 @@ class DistanceSpheroidInitRepresentation:
         # to ``LiverResections/VTKWidgets/`` per ADR-0014 §3.  The
         # public API of this Representation does not change — only the
         # spheroid mapper field's concrete type.
-        if _HAS_VTK:
-            self._build_vtk_pipeline()
+        self._build_vtk_pipeline()
 
         if renderer is not None:
             self.SetRenderer(renderer)
@@ -252,7 +236,7 @@ class DistanceSpheroidInitRepresentation:
         ring.  Returns the ring ``vtkPolyData`` (or ``None`` when
         extraction cannot run).
         """
-        if target_model is None or not _HAS_VTK:
+        if target_model is None:
             return None
         polydata = _model_polydata(target_model)
         if polydata is None:
@@ -353,8 +337,6 @@ class DistanceSpheroidInitRepresentation:
         to a generic ``vtkPolyDataMapper`` so the Representation still
         constructs and the marker/colour bookkeeping stays testable.
         """
-        assert vtk is not None  # for the type-checker — gated by _HAS_VTK
-
         # Spheroid pipeline ---------------------------------------------------
         self._parametric_ellipsoid = vtk.vtkParametricEllipsoid()
         # Sensible default radii so a freshly-constructed Representation
@@ -401,7 +383,6 @@ class DistanceSpheroidInitRepresentation:
 
     def _make_marker_entry(self) -> tuple[Any, Any, Any]:
         """Construct one ``(sphere_source, mapper, actor)`` triple."""
-        assert vtk is not None
         sphere = vtk.vtkSphereSource()
         sphere.SetRadius(DEFAULT_MARKER_RADIUS)
         sphere.SetCenter(0.0, 0.0, 0.0)
@@ -423,8 +404,6 @@ class DistanceSpheroidInitRepresentation:
         and inherit the most recently applied colour.  Removed actors
         are detached and their strong refs dropped.
         """
-        if not _HAS_VTK:
-            return
         current = len(self._marker_entries)
         if n == current:
             return
@@ -576,12 +555,6 @@ class DistanceSpheroidInitRepresentation:
             return  # idempotent short-circuit
         self._last_input_signature = signature
         self._input_refresh_count += 1
-
-        if not _HAS_VTK:
-            # Pure-Python path: still resize the (empty) marker list
-            # bookkeeping so test introspection of GetMarkerActors()
-            # length stays accurate even without VTK.
-            return
 
         # Spheroid: push radii into the parametric ellipsoid + recenter
         # via the transform filter.

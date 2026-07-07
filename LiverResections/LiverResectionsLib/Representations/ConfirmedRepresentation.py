@@ -52,19 +52,7 @@ from __future__ import annotations
 
 from typing import Any
 
-# --------------------------------------------------------------------------- #
-# VTK is a soft dependency — same pattern as BezierPlanningRepresentation: a
-# pure-Python pytest run skips the VTK-only branches, while a Slicer process
-# (or an environment with VTK on PYTHONPATH) exercises the full pipeline.
-# --------------------------------------------------------------------------- #
-
-try:  # pragma: no cover — exercised inside Slicer / when VTK is available
-    import vtk
-
-    _HAS_VTK = True
-except ImportError:  # pragma: no cover — pure-Python path
-    vtk = None  # type: ignore[assignment]
-    _HAS_VTK = False
+import vtk
 
 
 # --------------------------------------------------------------------------- #
@@ -152,8 +140,7 @@ class ConfirmedRepresentation:
         # ``vtkOpenGLBezierResectionPolyDataMapper.h``); the
         # ``hasattr`` gate in ``_apply_data_node`` flips on
         # automatically once the swap happens.
-        if _HAS_VTK:
-            self._build_vtk_pipeline()
+        self._build_vtk_pipeline()
 
         if renderer is not None:
             self.SetRenderer(renderer)
@@ -238,8 +225,6 @@ class ConfirmedRepresentation:
         ``vtkOpenGLBezierResectionPolyDataMapper.h`` for the full
         uniform surface.
         """
-        assert vtk is not None  # gated by _HAS_VTK
-
         self._surface_polydata = vtk.vtkPolyData()
         self._surface_mapper = vtk.vtkPolyDataMapper()
         self._surface_mapper.SetInputData(self._surface_polydata)
@@ -331,15 +316,11 @@ class ConfirmedRepresentation:
         self._last_grid_signature = signature
         self._input_refresh_count += 1
 
-        if not _HAS_VTK:
-            return
-
         points = _make_points_from_flat(flat)
         self._refresh_surface_polydata(points)
         self._apply_trim_shader()
 
     def _refresh_surface_polydata(self, points: Any) -> None:
-        assert vtk is not None
         polydata = self._surface_polydata
         if polydata is None:
             return
@@ -397,7 +378,6 @@ def _as_color_tuple(raw: Any) -> tuple[float, float, float]:
 
 def _make_points_from_flat(flat: tuple) -> Any:
     """Build a ``vtkPoints`` from a 48-double row-major control grid."""
-    assert vtk is not None
     points = vtk.vtkPoints()
     points.SetNumberOfPoints(16)
     for i in range(16):

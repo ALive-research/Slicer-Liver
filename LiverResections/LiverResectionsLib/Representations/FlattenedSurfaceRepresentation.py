@@ -88,17 +88,7 @@ from __future__ import annotations
 
 from typing import Any
 
-# --------------------------------------------------------------------------- #
-# VTK is a soft dependency (see module docstring).
-# --------------------------------------------------------------------------- #
-
-try:  # pragma: no cover — exercised inside Slicer / when VTK is available
-    import vtk
-
-    _HAS_VTK = True
-except ImportError:  # pragma: no cover — pure-Python path
-    vtk = None  # type: ignore[assignment]
-    _HAS_VTK = False
+import vtk
 
 
 # --------------------------------------------------------------------------- #
@@ -210,8 +200,7 @@ class FlattenedSurfaceRepresentation:
         self._last_surface_signature: tuple | None = None
         self._input_refresh_count: int = 0
 
-        if _HAS_VTK:
-            self._build_vtk_pipeline()
+        self._build_vtk_pipeline()
 
         if renderer is not None:
             self.SetRenderer(renderer)
@@ -331,8 +320,6 @@ class FlattenedSurfaceRepresentation:
         public API is invariant across the fallback — only the concrete
         mapper / source types flip.
         """
-        assert vtk is not None  # gated by _HAS_VTK
-
         self._bezier_plane = _make_flattened_quad_source()
         _initialise_flattened_quad(self._bezier_plane)
 
@@ -424,7 +411,7 @@ class FlattenedSurfaceRepresentation:
         points, or the legacy 16-point grid is not yet complete — the caller
         then degrades to the prior fixed-quad fallback (no crash).
         """
-        if not _HAS_VTK or data_node is None:
+        if data_node is None:
             return None
 
         control_points = _read_control_points(data_node)
@@ -784,7 +771,7 @@ class FlattenedSurfaceRepresentation:
         is unavailable (bare-VTK pytest path).
         """
         renderer = self._renderer
-        if renderer is None or not _HAS_VTK:
+        if renderer is None:
             return
         if not hasattr(renderer, "SetPass"):
             return
@@ -848,8 +835,6 @@ def _make_flattened_quad_source() -> Any | None:
     ``BezierPlane`` (reachable in a Slicer process); falls back to a
     generic ``vtkPlaneSource`` so the skeleton stays importable.
     """
-    if not _HAS_VTK:
-        return None
     factory = getattr(vtk, "vtkBezierSurfaceSource", None)
     if factory is None:
         try:  # pragma: no cover — exercised inside Slicer
@@ -912,7 +897,6 @@ def _make_resection_mapper_2d() -> Any:
     (``LiverResections/VTKWidgets/``, reachable in a Slicer process);
     falls back to a generic ``vtkPolyDataMapper``.
     """
-    assert vtk is not None
     factory = getattr(vtk, "vtkOpenGLResection2DPolyDataMapper", None)
     if factory is None:
         try:  # pragma: no cover — exercised inside Slicer
@@ -934,8 +918,6 @@ def _make_gaussian_blur_pass() -> Any | None:
     (older VTK / bare environment), leaving the renderer on its default
     forward pass.
     """
-    if not _HAS_VTK:
-        return None
     blur_factory = getattr(vtk, "vtkGaussianBlurPass", None)
     steps_factory = getattr(vtk, "vtkRenderStepsPass", None)
     if blur_factory is None or steps_factory is None:
@@ -975,10 +957,9 @@ def _import_wrapped_class(name: str) -> Any | None:
     namespace; returns ``None`` in a bare-VTK pytest run where the wrapped
     class is not importable, so the calling branch degrades gracefully.
     """
-    if _HAS_VTK:
-        factory = getattr(vtk, name, None)
-        if factory is not None:
-            return factory
+    factory = getattr(vtk, name, None)
+    if factory is not None:
+        return factory
     try:  # pragma: no cover — exercised inside Slicer
         import slicer  # type: ignore[import-not-found]
 
@@ -1058,7 +1039,7 @@ def _read_control_points(data_node: Any | None) -> Any | None:
     mid-placement), or a read raises — the caller then keeps the fixed-quad
     fallback.
     """
-    if not _HAS_VTK or data_node is None:
+    if data_node is None:
         return None
     grid_getter = getattr(data_node, "GetControlGridVector", None)
     if grid_getter is None:
