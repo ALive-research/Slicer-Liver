@@ -271,6 +271,36 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections;locator;mapper-wiring"
     )
 
+    # Locator PRODUCER core (GL-free), ADR-0025 Slice B -- the pixel -> (u,v) ->
+    # world -> node chain the resectogram producer composes (ADR-0025 §Producer:
+    # the resectogram IS the (u,v) parameter-domain image, so a pixel maps EXACTLY
+    # to a Bezier world point by direct EvaluateSurface -- NO vtkCellPicker).
+    # Three invariants: (1) vtkMRMLBezierSurfaceNode.EvaluateSurface(u,v) on a
+    # KNOWN affine 4x4 grid matches the hand-computed world point at the
+    # (0,0)/(1,1) corners + an interior point (ADR-0025 §Conformance [test]);
+    # (2) the pure static vtkLiverResectogramPixelMapping.PixelToUV inverts the
+    # matRatio placement -- centre -> (0.5,0.5) for any ratio, isotropic -> plain
+    # linear (ADR-0025 §Context); (3) ResectogramLocatorProducer.produce composes
+    # 2->1, writes the vtkMRMLLocatorNode's PickedPositionWorld to the world point
+    # the pixel maps to and returns it, with a degenerate viewport a no-op
+    # returning None (ADR-0025 §Producer, ADR-0004 Python producer).  The Qt
+    # event-filter click sourcing + click->marker end-to-end are the interaction
+    # layer, verified on the interactive :0 pass -- OUT of scope here.  Needs the
+    # wrapped Algorithm/MRML classes, so all invariants run green under the
+    # launched-Slicer `pytest_launched` row and SKIP CLEANLY here under bare
+    # pytest (no slicer.mrmlScene / wrapped classes off the path).  GL free -- no
+    # render window.
+    add_test(
+      NAME LiverResections_resectogram_locator_producer
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_resectogram_locator_producer.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_resectogram_locator_producer PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;locator;mapper-wiring"
+    )
+
     # #501 slice 2 -- the v2 resection control-point edit path on the LayerDM
     # Pipeline (ADR-0032: interaction routes through the Pipeline interaction
     # seam, no standalone vtkAbstractWidget).  Pins the GL-free edit kernel
