@@ -136,6 +136,27 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections;ring-extraction"
     )
 
+    # Ring-extractor CLASS RESOLUTION -- the Init-mode ring extractors
+    # (vtkLiverPlaneRingExtractor / vtkLiverSpheroidRingExtractor) are
+    # Algorithm-library classes (ADR-0014 §3), exposed inside a launched Slicer
+    # ONLY on vtkSlicerLiverResectionsModuleAlgorithmPython -- NOT on the slicer
+    # or vtk namespaces.  Pins that _resolve_extractor_class returns a real class
+    # (not None) so run_ring_extraction is not a silent no-op, plus a behavioral
+    # smoke: a plane through a sphere centre yields a non-empty ring.  Needs the
+    # wrapped Algorithm classes, so it runs under the launched-Slicer
+    # `pytest_launched` row and SKIPS CLEANLY here under bare pytest (the
+    # Algorithm wrapping is off the path).  GL free -- no render window.
+    add_test(
+      NAME LiverResections_ring_extractor_resolution
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_resections_ring_extractor_resolution.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_ring_extractor_resolution PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;ring-extraction"
+    )
+
     # Per-point control-grid setter is Python-wrappable -- vtkMRMLBezierSurfaceNode
     # SetControlPoint(row, col, x, y, z) is reachable from Python (the flat
     # SetControlGrid(const double*) is not) and round-trips via
