@@ -132,14 +132,12 @@ class VascularTerritories(ScriptedLoadableModule):
       return
     self._cppLogic = vtkSlicerVascularTerritoriesLogic()
     self._cppLogic.SetMRMLScene(slicer.mrmlScene)
-    # Expose the specialized Logic on ``slicer.modules.vascularterritories``
-    # so test helpers and downstream code can fetch it (the default
-    # ``slicer.modules.vascularterritories.logic()`` returns a generic
-    # ``vtkSlicerScriptedLoadableModuleLogic`` because this is a
-    # scripted module).
-    module = getattr(slicer.modules, "vascularterritories", None)
-    if module is not None:
-      module.specializedLogic = self._cppLogic
+    # The specialized Logic is reachable as
+    # ``slicer.modules.vascularterritories.self()._cppLogic`` (the scripted
+    # module's Python instance).  Do NOT assign it onto the C++ module
+    # object -- qSlicerScriptedLoadableModule refuses new attributes, which
+    # raised at every startup and left downstream consumers (the Stage-3
+    # IsStageComplete contract) resolving the generic scripted logic.
 
 #
 # Register sample data sets in Sample Data module

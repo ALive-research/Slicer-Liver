@@ -733,13 +733,30 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       logic = module.logic()
     except Exception:  # pragma: no cover — defensive
       logic = None
-    for attr in ("IsStageComplete", "isStageComplete"):
-      query = getattr(logic, attr, None) if logic is not None else None
-      if callable(query):
-        try:
-          return bool(query())
-        except Exception:  # pragma: no cover — defensive
-          return False
+    # SCRIPTED modules wrap their C++ stage logic as ``self()._cppLogic``
+    # (VascularTerritories): ``module.logic()`` returns the generic
+    # ``vtkSlicerScriptedLoadableModuleLogic`` shim, which never carries the
+    # predicate -- and the C++ module object refuses new attributes, so the
+    # specialized logic cannot be grafted onto it.  Query the Python module
+    # instance's ``_cppLogic`` alongside the plain logic.
+    candidates = [logic]
+    # The scripted module's Python instance registers itself as
+    # ``slicer.modules.<ModuleName>Instance`` (the ScriptedLoadableModule
+    # convention); ``module.name`` gives the CamelCase module name.
+    try:
+      instance = getattr(slicer.modules, module.name + "Instance", None)
+    except Exception:  # pragma: no cover — defensive
+      instance = None
+    if instance is not None:
+      candidates.append(getattr(instance, "_cppLogic", None))
+    for candidate in candidates:
+      for attr in ("IsStageComplete", "isStageComplete"):
+        query = getattr(candidate, attr, None) if candidate is not None else None
+        if callable(query):
+          try:
+            return bool(query())
+          except Exception:  # pragma: no cover — defensive
+            return False
 
     # LiverSegmentation is a SCRIPTED module: its ``isStageComplete`` lives on
     # the Python ``LiverSegmentationLogic``, not the wrapped module logic that
