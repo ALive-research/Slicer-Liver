@@ -54,6 +54,7 @@ slicerMacroBuildScriptedModule(
 set(LiverSegmentationLib_PYTHON_SCRIPTS
   __init__.py
   roles.py
+  distance_maps.py
   ToolWrappers/__init__.py
   ToolWrappers/TotalSegmentator.py
   )

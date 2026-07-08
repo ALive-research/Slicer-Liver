@@ -122,6 +122,11 @@ set(_liverseg_pytest_files
   # (ADR-0023 §"MRML scene organisation").  Wrapped-C++-from-Python
   # reachability is launched-only; skips cleanly under bare pytest.
   test_liversegmentation_subject_hierarchy_folders_reachability.py
+  # #538 -- Stage-2 distance-map computation port.  Pins the PURE SimpleITK
+  # core (signed Maurer per channel + compose); runs bare when SimpleITK +
+  # NumPy are present, skips cleanly otherwise.  The Slicer-coupled
+  # segment-export layer is exercised in the launched harness.
+  test_distance_maps.py
 )
 
 foreach(_pytest_file IN LISTS _liverseg_pytest_files)
