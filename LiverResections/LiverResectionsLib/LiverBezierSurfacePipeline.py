@@ -637,27 +637,19 @@ class LiverBezierSurfacePipeline(_PipelineBase):
     # ------------------------------------------------------------------ #
 
     #: Pick radius (display pixels) within which a click grabs a control point.
-    _CONTROL_POINT_PICK_RADIUS_PX = 20.0
-
     def CanProcessInteractionEvent(self, eventData: Any):  # noqa: N802 - VTK verb
-        """Return ``(canProcess, distance2)`` for the LayerDM interaction logic.
+        """Decline pointer events -- the surface Pipeline no longer edits.
 
-        The pipeline can process the event iff the carrier is editable
-        (Planning, ADR-0019) and the cursor is within
-        ``_CONTROL_POINT_PICK_RADIUS_PX`` of a control point in display space.
-        ``distance2`` is the squared display distance to the nearest control
-        point (smaller wins focus in the interaction logic).
+        ADR-0033 re-sited the Planning per-point drag onto the control
+        polygon's own Pipeline (``ControlPolygonPipeline``), which returns a
+        real display-space distance to the nearest handle for LayerDM's
+        focus arbitration.  The Init-mode placements handled by
+        ``ProcessInteractionEvent`` below are driven by the Stage-4
+        placement flow, not by pointer-focus claims.
         """
+        del eventData
         import sys
 
-        if _safe_get_state(self._data_node) != STATE_PLANNING:
-            return False, sys.float_info.max
-        renderer = self._safe_get_renderer()
-        if renderer is None:
-            return False, sys.float_info.max
-        _, distance2 = self._nearest_control_point_in_display(renderer, eventData)
-        if distance2 <= self._CONTROL_POINT_PICK_RADIUS_PX * self._CONTROL_POINT_PICK_RADIUS_PX:
-            return True, distance2
         return False, sys.float_info.max
 
     def ProcessInteractionEvent(self, eventData: Any) -> bool:  # noqa: N802 - VTK verb
@@ -666,8 +658,8 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         * ``Init`` + ``SlicingPlane`` — PLACE the next slicing-plane init point
           at the cursor's world position (back-projected onto the focal plane,
           since there is no picked point yet to supply depth).
-        * ``Planning`` — EDIT: move the nearest control point to the cursor's
-          world position (back-projected onto that point's depth).
+        * ``Planning`` — no-op here: the per-point edit lives on
+          ``ControlPolygonPipeline`` (ADR-0033).
 
         Returns True iff geometry changed (the interaction logic keeps focus on
         a pipeline that returns True).
@@ -690,15 +682,8 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                 return False
             return self._place_distance_spheroid_init_point(world) is not None
 
-        if state == STATE_PLANNING:
-            idx, distance2 = self._nearest_control_point_in_display(renderer, eventData)
-            if idx is None or distance2 > self._CONTROL_POINT_PICK_RADIUS_PX * self._CONTROL_POINT_PICK_RADIUS_PX:
-                return False
-            world = self._event_world_at_control_point(renderer, eventData, idx)
-            if world is None:
-                return False
-            return self._apply_world_point_to_nearest_control_point(world) is not None
-
+        # The Planning per-point drag lives on ControlPolygonPipeline
+        # (ADR-0033); this Pipeline handles only the Init placements above.
         return False
 
     def _place_slicing_plane_init_point(self, world: Any) -> int | None:
@@ -789,114 +774,6 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             renderer.WorldToDisplay()
             _fx, _fy, fz = renderer.GetDisplayPoint()
             renderer.SetDisplayPoint(float(ex), float(ey), fz)
-            renderer.DisplayToWorld()
-            wx, wy, wz, ww = renderer.GetWorldPoint()
-        except Exception:  # pragma: no cover - defensive
-            return None
-        if ww == 0.0:
-            return None
-        return (wx / ww, wy / ww, wz / ww)
-
-    def _apply_world_point_to_nearest_control_point(self, world: Any) -> int | None:
-        """Move the carrier's nearest control point to RAS ``world``.
-
-        The GL-free interaction kernel (ADR-0032): takes a world point
-        directly (no renderer / picking), finds the carrier's control point
-        nearest ``world``, moves it there via ``SetControlPoint``, and returns
-        its flat row-major index (``row * Cols + col``).  A no-op returning
-        ``None`` when the carrier is absent or not editable — editing is
-        allowed only in the ``Planning`` state (ADR-0019); ``Init`` has no
-        control polygon yet and ``Confirmed`` is read-only audit data.
-        """
-        carrier = self._data_node
-        if carrier is None or _safe_get_state(carrier) != STATE_PLANNING:
-            return None
-        rows_getter = getattr(carrier, "GetRows", None)
-        cols_getter = getattr(carrier, "GetCols", None)
-        grid_getter = getattr(carrier, "GetControlGridVector", None)
-        set_point = getattr(carrier, "SetControlPoint", None)
-        if None in (rows_getter, cols_getter, grid_getter, set_point):
-            return None
-        try:
-            rows = int(rows_getter())
-            cols = int(cols_getter())
-            grid = grid_getter()
-            wx, wy, wz = float(world[0]), float(world[1]), float(world[2])
-        except Exception:  # pragma: no cover - defensive
-            return None
-
-        best_idx = None
-        best_d2 = None
-        for i in range(rows * cols):
-            dx = grid[i * 3 + 0] - wx
-            dy = grid[i * 3 + 1] - wy
-            dz = grid[i * 3 + 2] - wz
-            d2 = dx * dx + dy * dy + dz * dz
-            if best_d2 is None or d2 < best_d2:
-                best_d2 = d2
-                best_idx = i
-        if best_idx is None:
-            return None
-        set_point(best_idx // cols, best_idx % cols, wx, wy, wz)
-        return best_idx
-
-    def _nearest_control_point_in_display(self, renderer: Any, eventData: Any):
-        """Return ``(flat_index, distance2)`` of the control point nearest the
-        event's display position, projecting each control point world→display.
-
-        ``(None, inf)`` when there is no carrier / grid.  Pure geometry given a
-        renderer — the display projection needs the renderer's active camera.
-        """
-        import sys
-
-        carrier = self._data_node
-        grid_getter = getattr(carrier, "GetControlGridVector", None) if carrier else None
-        cols_getter = getattr(carrier, "GetCols", None) if carrier else None
-        rows_getter = getattr(carrier, "GetRows", None) if carrier else None
-        if None in (grid_getter, cols_getter, rows_getter):
-            return None, sys.float_info.max
-        try:
-            grid = grid_getter()
-            rows = int(rows_getter())
-            cols = int(cols_getter())
-            ex, ey = eventData.GetDisplayPosition()
-        except Exception:  # pragma: no cover - defensive
-            return None, sys.float_info.max
-
-        best_idx = None
-        best_d2 = sys.float_info.max
-        for i in range(rows * cols):
-            renderer.SetWorldPoint(grid[i * 3 + 0], grid[i * 3 + 1], grid[i * 3 + 2], 1.0)
-            renderer.WorldToDisplay()
-            dx, dy, _dz = renderer.GetDisplayPoint()
-            d2 = (dx - ex) ** 2 + (dy - ey) ** 2
-            if d2 < best_d2:
-                best_d2 = d2
-                best_idx = i
-        return best_idx, best_d2
-
-    def _event_world_at_control_point(self, renderer: Any, eventData: Any, idx: int):
-        """Back-project the event's display position onto the depth of control
-        point ``idx``, returning the RAS ``(x, y, z)`` the point should move to.
-
-        Uses the picked control point's current depth (display z) so a drag
-        slides the point in the camera-facing plane through its own depth —
-        the conventional control-point drag behaviour.  ``None`` on failure.
-        """
-        carrier = self._data_node
-        grid_getter = getattr(carrier, "GetControlGridVector", None) if carrier else None
-        cols_getter = getattr(carrier, "GetCols", None) if carrier else None
-        if None in (grid_getter, cols_getter):
-            return None
-        try:
-            grid = grid_getter()
-            ex, ey = eventData.GetDisplayPosition()
-            # Display z (depth) of the picked control point.
-            renderer.SetWorldPoint(grid[idx * 3 + 0], grid[idx * 3 + 1], grid[idx * 3 + 2], 1.0)
-            renderer.WorldToDisplay()
-            _dx, _dy, dz = renderer.GetDisplayPoint()
-            # Cursor display position at that depth -> world.
-            renderer.SetDisplayPoint(float(ex), float(ey), dz)
             renderer.DisplayToWorld()
             wx, wy, wz, ww = renderer.GetWorldPoint()
         except Exception:  # pragma: no cover - defensive
