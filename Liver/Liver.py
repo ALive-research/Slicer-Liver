@@ -387,7 +387,24 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         rep = None
     if rep is None:
       return self._buildUnavailablePage(self._STAGE_NAMES[index]), False
+    self._suppressEmbeddedDeveloperTools(rep)
     return rep, True
+
+  @staticmethod
+  def _suppressEmbeddedDeveloperTools(rep):
+    """Hide an embedded scripted sub-module's own developer-tools collapsible.
+
+    Each embedded scripted stage widget runs ``ScriptedLoadableModuleWidget.setup``,
+    which (with Developer Mode enabled) appends its own "Reload & Test"
+    collapsible.  Inside the shell that duplicates the shell's single developer
+    section, so the embedded one is hidden here -- the shell owns the one at the
+    top.  Loadable (C++) module reps have no such collapsible; the guards make
+    this a no-op for them and when Developer Mode is off.
+    """
+    inner = rep.self() if hasattr(rep, "self") else None
+    button = getattr(inner, "reloadCollapsibleButton", None)
+    if button is not None:
+      button.setVisible(False)
 
   #: Human-facing dropdown labels for the machine-stable LiverRole values that
   #: aren't already presentable (the stored value is decoupled from the label).

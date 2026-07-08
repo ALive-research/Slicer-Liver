@@ -279,3 +279,83 @@ def test_state_indicators_reflect_isstagecomplete():
                 f"Row {row} mocked as pending; expected 'pending', "
                 f"got {state!r}."
             )
+
+
+# --------------------------------------------------------------------------- #
+# Embedded developer-tools suppression — one shell, one "Reload & Test" section.
+# --------------------------------------------------------------------------- #
+#
+# Each embedded scripted stage widget runs
+# ``ScriptedLoadableModuleWidget.setup``, which (with Developer Mode on)
+# appends its OWN "Reload & Test" collapsible.  Inside the shell that would
+# duplicate the shell's single developer section, so ``_resolveStagePage``
+# hides the embedded one via ``_suppressEmbeddedDeveloperTools``.  The helper
+# is pure Python (operates on a rep's ``.self().reloadCollapsibleButton``), so
+# it is pinned here with a fake rep -- no launched view required beyond the
+# ``import Liver`` guard.
+
+def _import_liver_or_skip():
+    from conftest import _import_slicer_or_skip  # type: ignore[import-not-found]
+
+    _import_slicer_or_skip()
+    try:
+        import Liver  # type: ignore[import-not-found]
+    except ImportError as exc:
+        pytest.skip(
+            f"Liver scripted module not importable ({exc}); "
+            "ensure the additional-module-paths include Liver/."
+        )
+    return Liver
+
+
+class _FakeButton:
+    def __init__(self):
+        self.visible = True
+
+    def setVisible(self, value):  # noqa: N802 - Qt verb
+        self.visible = value
+
+
+class _FakeInner:
+    def __init__(self, button):
+        self.reloadCollapsibleButton = button
+
+
+class _FakeRep:
+    def __init__(self, inner):
+        self._inner = inner
+
+    def self(self):
+        return self._inner
+
+
+def test_embedded_developer_tools_hidden_on_scripted_rep():
+    """A scripted sub-module rep's own developer collapsible is hidden."""
+    Liver = _import_liver_or_skip()
+
+    button = _FakeButton()
+    rep = _FakeRep(_FakeInner(button))
+
+    Liver.LiverWidget._suppressEmbeddedDeveloperTools(rep)
+
+    assert button.visible is False, (
+        "The embedded scripted stage's own 'Reload & Test' collapsible must "
+        "be hidden -- the shell owns the single developer section at the top."
+    )
+
+
+def test_embedded_developer_tools_suppression_is_noop_for_loadable_rep():
+    """Reps without a ``.self()``/collapsible (loadable C++, Developer Mode off)
+    are left untouched and raise nothing."""
+    Liver = _import_liver_or_skip()
+
+    class _RepNoSelf:
+        pass
+
+    class _RepNoButton:
+        def self(self):
+            return object()
+
+    # Neither shape has a reloadCollapsibleButton; the call must be a safe no-op.
+    Liver.LiverWidget._suppressEmbeddedDeveloperTools(_RepNoSelf())
+    Liver.LiverWidget._suppressEmbeddedDeveloperTools(_RepNoButton())
