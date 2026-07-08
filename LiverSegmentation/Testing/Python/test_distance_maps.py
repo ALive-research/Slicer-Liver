@@ -24,7 +24,17 @@ def _deps_or_skip():
         import SimpleITK as sitk  # type: ignore[import-not-found]
     except ImportError as exc:  # pragma: no cover - env-dependent
         pytest.skip(f"SimpleITK / NumPy unavailable ({exc}).")
-    return np, sitk
+    try:
+        # LiverSegmentationLib is on the path in the launched harness + when the
+        # module dir is staged; the bare CTest row runs from the source root
+        # without it, so skip cleanly there (mirrors test_case_setup_volume_roles).
+        from LiverSegmentationLib import distance_maps  # type: ignore[import-not-found]
+    except ImportError as exc:  # pragma: no cover - bare-row path
+        pytest.skip(
+            f"LiverSegmentationLib not importable ({exc}) -- bare pytest row "
+            "lacks the module path; runs under the launched harness."
+        )
+    return np, sitk, distance_maps
 
 
 def _cube_labelmap(np, sitk, size=20, half=4):
@@ -37,10 +47,9 @@ def _cube_labelmap(np, sitk, size=20, half=4):
 
 def test_signed_distance_is_negative_inside_positive_outside():
     """Signed Maurer map: inside the label < 0, outside > 0 (v1 flag parity)."""
-    np, sitk = _deps_or_skip()
-    from LiverSegmentationLib.distance_maps import signed_distance_map
+    np, sitk, distance_maps = _deps_or_skip()
 
-    d = signed_distance_map(_cube_labelmap(np, sitk))
+    d = distance_maps.signed_distance_map(_cube_labelmap(np, sitk))
     arr = sitk.GetArrayFromImage(d)
     c = arr.shape[0] // 2
     assert arr[c, c, c] < 0.0, "voxel inside the label must have negative distance"
@@ -49,19 +58,17 @@ def test_signed_distance_is_negative_inside_positive_outside():
 
 def test_compose_yields_one_component_per_present_channel():
     """Only the present (non-None) channels compose, in order."""
-    np, sitk = _deps_or_skip()
-    from LiverSegmentationLib.distance_maps import compose_distance_map
+    np, sitk, distance_maps = _deps_or_skip()
 
     a = _cube_labelmap(np, sitk)
     b = _cube_labelmap(np, sitk)
-    composed = compose_distance_map([a, None, b, None])
+    composed = distance_maps.compose_distance_map([a, None, b, None])
     assert composed is not None
     assert composed.GetNumberOfComponentsPerPixel() == 2
 
 
 def test_compose_returns_none_when_no_channels_present():
     """No channels -> nothing to compose (caller treats as a no-op)."""
-    _np, _sitk = _deps_or_skip()
-    from LiverSegmentationLib.distance_maps import compose_distance_map
+    _np, _sitk, distance_maps = _deps_or_skip()
 
-    assert compose_distance_map([None, None, None, None]) is None
+    assert distance_maps.compose_distance_map([None, None, None, None]) is None
