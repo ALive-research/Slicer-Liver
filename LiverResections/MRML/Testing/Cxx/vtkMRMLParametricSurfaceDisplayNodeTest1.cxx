@@ -72,8 +72,12 @@ int testDefaults()
 
   CHECK_DOUBLE(node->GetResectionOpacity(), 1.0f);
   CHECK_BOOL(node->GetGridVisibility(), false);
-  CHECK_DOUBLE(node->GetGridDivisions(), 0.0f);
-  CHECK_DOUBLE(node->GetGridThickness(), 0.0f);
+  // Grid defaults match the resection mapper's own (divisions 20, thickness
+  // factor 9.5) so a fresh display node renders the control-grid overlay --
+  // the earlier 0/0 defaults overwrote the mapper uniforms and suppressed
+  // the grid entirely.
+  CHECK_DOUBLE(node->GetGridDivisions(), 20.0f);
+  CHECK_DOUBLE(node->GetGridThickness(), 9.5f);
   CHECK_BOOL(node->GetGrid3DVisibility(), true);
   CHECK_BOOL(node->GetGrid2DVisibility(), false);
   CHECK_BOOL(node->GetWidgetVisibility(), true);
