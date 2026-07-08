@@ -20,6 +20,10 @@ from .LiverBezierSurfacePipeline import (
     LiverBezierSurfacePipeline,
     registerPipelineCreator,
 )
+from .ControlPolygonPipeline import (
+    ControlPolygonPipeline,
+    registerControlPolygonPipelineCreator,
+)
 from .ResectogramPipeline import (
     ResectogramPipeline,
     registerResectogramPipelineCreator,
@@ -32,6 +36,8 @@ from .ResectogramViewManager import (
 __all__ = [
     "LiverBezierSurfacePipeline",
     "registerPipelineCreator",
+    "ControlPolygonPipeline",
+    "registerControlPolygonPipelineCreator",
     "ResectogramPipeline",
     "registerResectogramPipelineCreator",
     "ResectogramViewManager",
