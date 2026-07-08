@@ -125,11 +125,44 @@ def main(argv: list[str] | None = None) -> int:
         argv = sys.argv
 
     _unshadow_pypi_packaging()
+    _sync_slicer_modules_attributes()
     _log_module_registration_snapshot()
 
     import pytest
 
     return int(pytest.main(_test_roots(argv)))
+
+
+def _sync_slicer_modules_attributes() -> None:
+    """Populate ``slicer.modules.<name>`` from the module manager (issue #460).
+
+    ``slicer.modules.<name>`` is set by ``slicerqt.setSlicerModules`` via the
+    ``moduleManager.moduleLoaded(QString)`` signal (Slicer ``slicerqt.py``).
+    That signal-driven Python attribute LAGS in the CI launched harness -- the
+    modules are fully registered on the C++ ``moduleManager()`` (verified: all
+    modules present) but the ``slicer.modules`` attributes are not yet set when
+    the driver runs pytest immediately at ``--python-script`` time.  Tests that
+    check ``getattr(slicer.modules, name)`` then skip/fail with a false
+    ``'<name>' module not registered``.
+
+    Replicate ``setSlicerModules`` SYNCHRONOUSLY for every registered module --
+    a pure ``moduleManager()`` read + ``setattr``, NO ``processEvents`` /
+    signal-connect (those crash the harness during startup).  Idempotent: for
+    modules whose attribute is already set it re-assigns the same object.
+    Best-effort: never raises.
+    """
+    try:
+        import slicer  # type: ignore[import-not-found]
+
+        manager = slicer.app.moduleManager()
+        if manager is None:
+            return
+        for name in manager.modulesNames():
+            module = manager.module(name)
+            if module is not None:
+                setattr(slicer.modules, name.lower(), module)
+    except Exception as exc:  # pragma: no cover - best-effort, must not break the run
+        print(f"[launched #460] slicer.modules sync skipped: {exc!r}", flush=True)
 
 
 def _log_module_registration_snapshot() -> None:
