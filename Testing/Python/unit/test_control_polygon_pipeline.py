@@ -141,7 +141,11 @@ def test_display_styling_reaches_the_actors(pipeline_module, polygon_nodes):
 
     assert pipeline.GetHandlesActor().GetProperty().GetColor() == pytest.approx((0.1, 0.2, 0.3))
     assert pipeline.GetEdgesActor().GetProperty().GetColor() == pytest.approx((0.4, 0.5, 0.6))
-    assert pipeline.GetEdgesActor().GetProperty().GetLineWidth() == pytest.approx(3.0)
+    assert pipeline._edges_tube.GetRadius() == pytest.approx(3.0), (
+        "EdgeWidth is the edge TUBE radius (world units) -- edges render "
+        "as vtkTubeFilter tubes, not GL lines (pixel line width reads "
+        "hairline-thin at liver scale)."
+    )
     pipeline.cleanup()
 
 

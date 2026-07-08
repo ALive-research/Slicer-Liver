@@ -65,8 +65,8 @@ int testDefaults()
 {
   vtkNew<vtkMRMLControlPolygonDisplayNode> node;
 
-  // HandleRadius matches the retired v1 widget's glyph radius (ADR-0033).
-  CHECK_DOUBLE(node->GetHandleRadius(), 2.5);
+  // HandleRadius sized for a liver-scale scene (v1's 2.5 read too small).
+  CHECK_DOUBLE(node->GetHandleRadius(), 4.0);
   double handleColor[3] = { 0.0, 0.0, 0.0 };
   node->GetHandleColor(handleColor);
   CHECK_DOUBLE(handleColor[0], 1.0);
