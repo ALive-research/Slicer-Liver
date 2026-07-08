@@ -105,6 +105,10 @@ class ControlPolygonPipeline(_PipelineBase):
         # observer callback's render-request gate (see ``_on_node_modified``).
         self._last_render_key: tuple | None = None
 
+        # Flat row-major index of the handle currently GRABBED by the
+        # press/move/release gesture — None when no drag is in flight.
+        self._drag_index: int | None = None
+
         # -- handles: control-point sphere glyphs ------------------------- #
         self._handles_polydata = vtk.vtkPolyData()
         self._handles_polydata.SetPoints(vtk.vtkPoints())
@@ -223,6 +227,7 @@ class ControlPolygonPipeline(_PipelineBase):
             self._detach_observer(node)
         self._display_node = None
         self._data_node = None
+        self._drag_index = None
 
     # ------------------------------------------------------------------ #
     # Interaction -- the Planning per-point drag (ADR-0033, ex ADR-0032)
@@ -231,18 +236,35 @@ class ControlPolygonPipeline(_PipelineBase):
     def CanProcessInteractionEvent(self, eventData: Any):  # noqa: N802 - VTK verb
         """Return ``(canProcess, distance2)`` for the LayerDM focus logic.
 
-        Claims the event iff the carrier is editable (``Planning``,
-        ADR-0019) and the cursor is within ``CONTROL_POINT_PICK_RADIUS_PX``
-        of a handle in display space.  ``distance2`` is the real squared
-        display distance to the nearest handle -- the meaningful arbitration
-        value ADR-0033 moves here for.
+        The per-point edit is a press/move/release GRAB, not proximity
+        chasing: without a grab, only a LEFT-BUTTON PRESS within
+        ``CONTROL_POINT_PICK_RADIUS_PX`` of a handle is claimed (with the
+        real squared display distance as the arbitration value, ADR-0033);
+        while a handle is grabbed, mouse moves and the ending release are
+        claimed unconditionally (distance2 0 -- the grab owns the gesture).
+        A hover move never edits: claiming bare moves made a released mouse
+        keep deforming the surface on mere proximity.
         """
         import sys
 
         if _safe_get_state(self._data_node) != STATE_PLANNING:
+            self._drag_index = None  # a state flip mid-gesture drops the grab
             return False, sys.float_info.max
         renderer = self._safe_get_renderer()
         if renderer is None:
+            self._drag_index = None
+            return False, sys.float_info.max
+
+        etype = _event_type(eventData)
+        if self._drag_index is not None:
+            if etype in (
+                vtk.vtkCommand.MouseMoveEvent,
+                vtk.vtkCommand.LeftButtonReleaseEvent,
+            ):
+                return True, 0.0
+            return False, sys.float_info.max
+
+        if etype != vtk.vtkCommand.LeftButtonPressEvent:
             return False, sys.float_info.max
         _, distance2 = self._nearest_control_point_in_display(renderer, eventData)
         if distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX:
@@ -250,23 +272,80 @@ class ControlPolygonPipeline(_PipelineBase):
         return False, sys.float_info.max
 
     def ProcessInteractionEvent(self, eventData: Any) -> bool:  # noqa: N802 - VTK verb
-        """Move the nearest control point to the cursor (Planning edit).
+        """Drive the press/move/release grab (Planning edit).
 
-        Returns True iff geometry changed (the interaction logic keeps focus
-        on a pipeline that returns True).
+        Press within the pick radius grabs the nearest handle and returns
+        True (the interaction logic keeps focus on a pipeline that returns
+        True); moves while grabbed edit THE GRABBED handle -- not whichever
+        is momentarily nearest -- so the gesture cannot hop between points;
+        the release clears the grab and returns False, releasing the focus.
         """
         renderer = self._safe_get_renderer()
         if renderer is None:
+            self._drag_index = None
             return False
         if _safe_get_state(self._data_node) != STATE_PLANNING:
+            self._drag_index = None
             return False
-        idx, distance2 = self._nearest_control_point_in_display(renderer, eventData)
-        if idx is None or distance2 > CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX:
+
+        etype = _event_type(eventData)
+
+        if self._drag_index is None:
+            if etype != vtk.vtkCommand.LeftButtonPressEvent:
+                return False
+            idx, distance2 = self._nearest_control_point_in_display(renderer, eventData)
+            if (
+                idx is None
+                or distance2 > CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
+            ):
+                return False
+            self._drag_index = idx
+            world = self._event_world_at_control_point(renderer, eventData, idx)
+            if world is not None:
+                self._apply_world_point_to_control_point(idx, world)
+            return True
+
+        if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
+            self._drag_index = None
+            return False  # grab over -- release the focus
+
+        if etype == vtk.vtkCommand.MouseMoveEvent:
+            world = self._event_world_at_control_point(
+                renderer, eventData, self._drag_index
+            )
+            if world is None:
+                return True  # keep the grab; this move just didn't resolve
+            self._apply_world_point_to_control_point(self._drag_index, world)
+            return True
+
+        return False
+
+    def _apply_world_point_to_control_point(self, index: int, world: Any) -> bool:
+        """Move the carrier's control point ``index`` to RAS ``world``.
+
+        The grabbed-index write kernel: unlike the nearest-point kernel it
+        never re-picks, so a drag cannot hop to another handle mid-gesture.
+        Refuses outside ``Planning`` (ADR-0019).
+        """
+        carrier = self._data_node
+        if carrier is None or _safe_get_state(carrier) != STATE_PLANNING:
             return False
-        world = self._event_world_at_control_point(renderer, eventData, idx)
-        if world is None:
+        cols_getter = getattr(carrier, "GetCols", None)
+        set_point = getattr(carrier, "SetControlPoint", None)
+        if None in (cols_getter, set_point):
             return False
-        return self._apply_world_point_to_nearest_control_point(world) is not None
+        try:
+            cols = int(cols_getter())
+            set_point(
+                int(index) // cols,
+                int(index) % cols,
+                float(world[0]),
+                float(world[1]),
+                float(world[2]),
+            )
+        except Exception:  # pragma: no cover - defensive
+            return False
+        return True
 
     def _apply_world_point_to_nearest_control_point(self, world: Any) -> int | None:
         """Move the carrier's nearest control point to RAS ``world``.
@@ -516,6 +595,22 @@ class ControlPolygonPipeline(_PipelineBase):
                 request_render()
             except Exception:  # pragma: no cover - defensive (stub bases)
                 pass
+
+
+def _event_type(eventData: Any) -> int | None:  # noqa: N803 - VTK arg name
+    """Read the VTK event-type id off ``eventData`` defensively.
+
+    ``None`` for events lacking ``GetType`` (stubs) or on a read failure —
+    the callers then decline, so the grab state machine never raises from
+    the interaction hot path.
+    """
+    getter = getattr(eventData, "GetType", None)
+    if getter is None:
+        return None
+    try:
+        return int(getter())
+    except Exception:  # pragma: no cover - defensive
+        return None
 
 
 def _control_points_digest(node: Any) -> tuple:
