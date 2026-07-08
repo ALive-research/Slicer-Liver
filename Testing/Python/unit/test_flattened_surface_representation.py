@@ -548,11 +548,21 @@ class _FakeTextureHelper:
 
 
 class _FakeRenderWindow:
-    def __init__(self, initialized=True):
-        self._initialized = initialized
+    """Fake window whose context can be made current or not (realization).
 
-    def GetInitialized(self):  # noqa: N802 - VTK verb
-        return self._initialized
+    Mirrors the Qt-managed ``vtkGenericOpenGLRenderWindow`` reality: the
+    usable-context probe is MakeCurrent + IsCurrent -- ``GetInitialized()``
+    is never set on Qt-owned contexts and must not be used as a gate.
+    """
+
+    def __init__(self, initialized=True):
+        self._current = initialized
+
+    def MakeCurrent(self):  # noqa: N802 - VTK verb
+        pass
+
+    def IsCurrent(self):  # noqa: N802 - VTK verb
+        return self._current
 
 
 class _FakeImage3D:
