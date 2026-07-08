@@ -143,6 +143,26 @@ class ControlPolygonPipeline(_PipelineBase):
         self._handles_actor.SetVisibility(False)
         self._edges_actor.SetVisibility(False)
 
+        # -- hover halo: glow highlight for the handle under the cursor --- #
+        # A slightly larger sphere on a PRIVATE overlay renderer carrying a
+        # vtkOutlineGlowPass (the blur-to-halo pass).  The overlay renderer
+        # is required because qMRMLThreeDView resets SetPass(nullptr) on the
+        # view renderer on every view-node ModifiedEvent (the resectogram
+        # blur-pass precedent).  Hover state is fed by the arbitration
+        # moves CanProcessInteractionEvent already receives -- bare moves
+        # stay declined, so camera interaction is untouched.
+        self._hover_index: int | None = None
+        self._halo_sphere = vtk.vtkSphereSource()
+        self._halo_sphere.SetPhiResolution(16)
+        self._halo_sphere.SetThetaResolution(16)
+        self._halo_mapper = vtk.vtkPolyDataMapper()
+        self._halo_mapper.SetInputConnection(self._halo_sphere.GetOutputPort())
+        self._halo_actor = vtk.vtkActor()
+        self._halo_actor.SetMapper(self._halo_mapper)
+        self._halo_actor.GetProperty().SetColor(1.0, 0.9, 0.2)
+        self._halo_actor.SetVisibility(False)
+        self._halo_renderer: Any | None = None
+
     # ------------------------------------------------------------------ #
     # LayerDM lifecycle
     # ------------------------------------------------------------------ #
@@ -197,8 +217,53 @@ class ControlPolygonPipeline(_PipelineBase):
             display = base_getter() if base_getter is not None else None
             if display is not None:
                 self.SetDisplayNode(display)
+        self._attach_halo_renderer(renderer)
         self._last_update_key = None
         self.UpdatePipeline()
+
+    def _attach_halo_renderer(self, renderer: Any) -> None:
+        """Build the private glow overlay on ``renderer``'s window.
+
+        A dedicated overlay ``vtkRenderer`` (camera shared with the view
+        renderer) carries the halo actor and a ``vtkOutlineGlowPass`` -- the
+        blur-to-halo pass -- so qMRMLThreeDView's SetPass(nullptr) reset on
+        the VIEW renderer never clobbers it (the resectogram blur-pass
+        precedent).  Degrades to the plain halo sphere when the pass class
+        or the render window is unavailable (bare unit layer).
+        """
+        window = getattr(renderer, "GetRenderWindow", None)
+        window = window() if window is not None else None
+        if window is None or self._halo_renderer is not None:
+            return
+        try:
+            overlay = vtk.vtkRenderer()
+            overlay.SetLayer(max(1, window.GetNumberOfLayers()))
+            window.SetNumberOfLayers(overlay.GetLayer() + 1)
+            overlay.InteractiveOff()
+            overlay.SetActiveCamera(renderer.GetActiveCamera())
+            overlay.AddActor(self._halo_actor)
+            glow = getattr(vtk, "vtkOutlineGlowPass", None)
+            steps = getattr(vtk, "vtkRenderStepsPass", None)
+            if glow is not None and steps is not None:
+                glow_pass = glow()
+                glow_pass.SetDelegatePass(steps())
+                overlay.SetPass(glow_pass)
+            window.AddRenderer(overlay)
+            self._halo_renderer = overlay
+        except Exception:  # pragma: no cover - defensive (fake renderers)
+            self._halo_renderer = None
+
+    def _detach_halo_renderer(self) -> None:
+        overlay = self._halo_renderer
+        self._halo_renderer = None
+        if overlay is None:
+            return
+        try:
+            window = overlay.GetRenderWindow()
+            if window is not None:
+                window.RemoveRenderer(overlay)
+        except Exception:  # pragma: no cover - defensive
+            pass
 
     def OnRendererRemoved(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
         if renderer is not None:
@@ -246,6 +311,9 @@ class ControlPolygonPipeline(_PipelineBase):
         self._display_node = None
         self._data_node = None
         self._drag_index = None
+        self._hover_index = None
+        self._halo_actor.SetVisibility(False)
+        self._detach_halo_renderer()
 
     # ------------------------------------------------------------------ #
     # Interaction -- the Planning per-point drag (ADR-0033, ex ADR-0032)
@@ -282,12 +350,58 @@ class ControlPolygonPipeline(_PipelineBase):
                 return True, 0.0
             return False, sys.float_info.max
 
+        if etype == vtk.vtkCommand.MouseMoveEvent:
+            # Bare hover: update the halo highlight as a SIDE EFFECT of the
+            # arbitration call and decline -- camera moves stay unclaimed.
+            idx, distance2 = self._nearest_control_point_in_display(renderer, eventData)
+            within = (
+                idx is not None
+                and distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
+            )
+            self._set_hover(idx if within else None)
+            return False, sys.float_info.max
         if etype != vtk.vtkCommand.LeftButtonPressEvent:
             return False, sys.float_info.max
         _, distance2 = self._nearest_control_point_in_display(renderer, eventData)
         if distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX:
             return True, distance2
         return False, sys.float_info.max
+
+    def _set_hover(self, index: int | None) -> None:
+        """Show/move the halo on handle ``index`` (``None`` hides it).
+
+        Idempotent per hover change: repositions the halo, syncs its radius
+        to the handle glyphs (scaled up so the glow reads as a ring), and
+        requests exactly one render when the hovered handle actually
+        changed.
+        """
+        if index == self._hover_index:
+            return
+        self._hover_index = index
+        if index is None:
+            self._halo_actor.SetVisibility(False)
+        else:
+            carrier = self._data_node
+            grid_getter = getattr(carrier, "GetControlGridVector", None) if carrier else None
+            if grid_getter is None:
+                return
+            try:
+                grid = grid_getter()
+                base = int(index) * 3
+                self._halo_sphere.SetRadius(self._handle_sphere.GetRadius() * 1.35)
+                self._halo_actor.SetPosition(grid[base], grid[base + 1], grid[base + 2])
+                self._halo_actor.SetVisibility(True)
+            except Exception:  # pragma: no cover - defensive
+                return
+        request_render = getattr(self, "RequestRender", None)
+        if request_render is not None:
+            try:
+                request_render()
+            except Exception:  # pragma: no cover - defensive (stub bases)
+                pass
+
+    def GetHaloActor(self) -> Any:  # noqa: N802 - VTK verb
+        return self._halo_actor
 
     def ProcessInteractionEvent(self, eventData: Any) -> bool:  # noqa: N802 - VTK verb
         """Drive the press/move/release grab (Planning edit).
@@ -325,6 +439,7 @@ class ControlPolygonPipeline(_PipelineBase):
 
         if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
             self._drag_index = None
+            self._set_hover(None)
             return False  # grab over -- release the focus
 
         if etype == vtk.vtkCommand.MouseMoveEvent:
@@ -334,6 +449,8 @@ class ControlPolygonPipeline(_PipelineBase):
             if world is None:
                 return True  # keep the grab; this move just didn't resolve
             self._apply_world_point_to_control_point(self._drag_index, world)
+            hover, self._hover_index = self._drag_index, None
+            self._set_hover(hover)  # halo follows the grabbed handle
             return True
 
         return False

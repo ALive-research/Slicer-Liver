@@ -358,3 +358,51 @@ def test_styling_survives_renderer_churn(pipeline_module, polygon_nodes):
         display.GetEdgeWidth()
     ), "the display styling must reach the edge tubes after the churn"
     pipeline.cleanup()
+
+
+def test_hover_highlights_nearest_handle(pipeline_module, polygon_nodes):
+    """A bare hover near a handle shows the halo; far away hides it.
+
+    Hover detection is a SIDE EFFECT of the arbitration moves the LayerDM
+    logic already sends through ``CanProcessInteractionEvent``: the bare
+    move is still DECLINED (camera interaction untouched), but the halo
+    actor is positioned on the hovered handle and a render is requested --
+    exactly once per hover change, not per move event.
+    """
+    import vtk
+
+    data, display = polygon_nodes
+    pipeline = pipeline_module.ControlPolygonPipeline()
+    pipeline._control_polygon_geometry = _FakeGeometry
+    pipeline.SetDisplayNode(display)
+    _seed_grid(data)
+    data.SetState(1)  # Planning
+
+    pipeline._safe_get_renderer = lambda: object()
+    pipeline._nearest_control_point_in_display = lambda r, e: (5, 4.0)
+    renders = []
+    pipeline.RequestRender = lambda: renders.append(1)
+
+    move = _TypedEvent(vtk.vtkCommand.MouseMoveEvent)
+    can, _ = pipeline.CanProcessInteractionEvent(move)
+    assert can is False, "bare hover moves stay declined"
+    assert pipeline.GetHaloActor().GetVisibility() == 1, (
+        "hovering within the pick radius must show the halo"
+    )
+    assert tuple(pipeline.GetHaloActor().GetPosition()) == pytest.approx(
+        (10.0, 10.0, 5.0)
+    ), "the halo sits on the hovered handle (index 5)"
+    n = len(renders)
+    assert n >= 1, "the hover change requests a render"
+
+    pipeline.CanProcessInteractionEvent(move)  # same hover -- no re-request
+    assert len(renders) == n, "an unchanged hover must not re-request renders"
+
+    pipeline._nearest_control_point_in_display = (
+        lambda r, e: (None, 1e12)
+    )  # cursor far from every handle
+    pipeline.CanProcessInteractionEvent(move)
+    assert pipeline.GetHaloActor().GetVisibility() == 0, (
+        "leaving the pick radius hides the halo"
+    )
+    pipeline.cleanup()
