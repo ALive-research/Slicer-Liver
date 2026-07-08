@@ -127,6 +127,11 @@ set(_liverseg_pytest_files
   # NumPy are present, skips cleanly otherwise.  The Slicer-coupled
   # segment-export layer is exercised in the launched harness.
   test_distance_maps.py
+  # #539 -- promoting a loaded segmentation to canonical also creates the
+  # closed-surface representation + enables 3D visibility, so the anatomy
+  # renders through Planning.  Scene-needing (segmentation converter); runs
+  # under the launched `pytest_launched` row, skips cleanly bare.
+  test_liversegmentation_segment_surface_representation.py
 )
 
 foreach(_pytest_file IN LISTS _liverseg_pytest_files)
