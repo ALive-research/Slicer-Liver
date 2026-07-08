@@ -219,6 +219,7 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(std::map<vtkShader:
                                "uniform float uLocatorRadius;\n"
                                "in vec2 uvCoordsOutput;\n"
                                "in vec4 vertexWCVSOutputBS;\n"
+                               "in vec4 vertexMCVSOutputBS;\n"
                                "vec4 fragPositionMCBS = vertexWCVSOutputBS;\n"
                                "uniform vec3 uPortalContourColor;\n"
                                "uniform vec3 uHepaticContourColor;\n"
@@ -340,7 +341,7 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(std::map<vtkShader:
     // the same anatomical point as the 3D surface marker -- the 1:1
     // correspondence.  Drawn last (over grid/border); radius 0 = off.
     "if (uLocatorRadius > 0.0 && distance(vertexMCVSOutputBS.xyz, uLocatorPosition) < uLocatorRadius) {\n"
-    "  ambientColor = vec3(1.0, 1.0, 1.0);\n"
+    "  ambientColor = vec3(1.0, 0.0, 0.0);\n"
     "  diffuseColor = vec3(0.0);\n"
     "}\n");
   vtkShaderProgram::Substitute(FSSource,

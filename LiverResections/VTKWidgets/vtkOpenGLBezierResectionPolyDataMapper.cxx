@@ -321,7 +321,7 @@ void vtkOpenGLBezierResectionPolyDataMapper::ReplaceShaderValues(std::map<vtkSha
     // they overlap.  uLocatorRadius == 0 is the off state.  The colour is
     // a placeholder white; the locator display node will drive it later.
     "  if (uLocatorRadius > 0.0 && distance(vertexRASVSOutput.xyz, uLocatorPosition) < uLocatorRadius) {\n"
-    "    ambientColor = vec3(1.0, 1.0, 1.0);\n"
+    "    ambientColor = vec3(1.0, 0.0, 0.0);\n"
     "    diffuseColor = vec3(0.0);\n"
     "  }\n"
     "}\n");

@@ -51,7 +51,9 @@ vtkMRMLNodeNewMacro(vtkMRMLLocatorDisplayNode);
 
 //------------------------------------------------------------------------------
 vtkMRMLLocatorDisplayNode::vtkMRMLLocatorDisplayNode()
-  : Radius(2.0)
+  // 5 mm reads clearly as the projected marker disc on a liver-scale
+  // surface; 2 mm was sub-perceptual in hands-on use.
+  : Radius(5.0)
 {
   // Seed a sensible default locator colour on the inherited
   // vtkMRMLDisplayNode Color member (a warm yellow); the base node
