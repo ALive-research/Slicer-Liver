@@ -272,11 +272,21 @@ class _FakeInteractionEventData:
     display->world and is therefore :0-only).
     """
 
-    def __init__(self, display_xy):
+    def __init__(self, display_xy, event_type="__leftpress__"):
         self._display_xy = tuple(display_xy)
+        # Default to a left-button press -- the seam commits on click only
+        # (ADR-0025 click-to-reslice), so the common test fixture is a click.
+        if event_type == "__leftpress__":
+            import vtk
+
+            event_type = vtk.vtkCommand.LeftButtonPressEvent
+        self._event_type = event_type
 
     def GetDisplayPosition(self):  # noqa: N802 - VTK verb
         return self._display_xy
+
+    def GetType(self):  # noqa: N802 - VTK verb
+        return self._event_type
 
 
 def _inject_state(pipeline, carrier, mat_ratio, viewport_size):
@@ -564,6 +574,50 @@ def test_can_process_interaction_event_gated_on_data_node():
         "displayed (the strip maps every in-view pixel)."
     )
     assert distance2 == pytest.approx(0.0)
+
+
+def test_can_process_declines_mouse_move_commits_on_click_only():
+    """Invariant 4b: the seam commits the locator on a LEFT-BUTTON PRESS only,
+    never on a mouse-move/hover (ADR-0025 click-to-reslice).
+
+    Without this filter the seam claimed (and processed) every move event, so
+    the marker tracked the cursor and parked at the (0, 0) corner on the
+    spurious move fired when the cursor left the view.  A move must be declined
+    even when a surface is displayed; ``ProcessInteractionEvent`` on a move must
+    be a no-op returning ``False``.
+    """
+    import sys
+
+    import vtk
+
+    slicer = _slicer_or_skip()
+    carrier = _make_affine_carrier_or_skip(slicer, "SeamMoveDeclined")
+    locator = _single_locator_or_skip(slicer)
+
+    pipeline = _pipeline_or_skip(slicer)
+    _inject_state(pipeline, carrier, mat_ratio=(1.0, 1.0), viewport_size=(256, 256))
+    _seam_or_skip_pending(pipeline)
+
+    move = _FakeInteractionEventData(
+        (10.0, 10.0), event_type=vtk.vtkCommand.MouseMoveEvent
+    )
+    can, distance2 = pipeline.CanProcessInteractionEvent(move)
+    assert can is False, (
+        "CanProcessInteractionEvent must DECLINE a mouse-move even with a "
+        "surface displayed -- the resectogram commits on click only."
+    )
+    assert distance2 == pytest.approx(sys.float_info.max)
+
+    handled = pipeline.ProcessInteractionEvent(move)
+    assert handled is False, (
+        "ProcessInteractionEvent on a mouse-move must be a no-op returning "
+        "False -- no locator write on hover."
+    )
+    written = tuple(locator.GetPickedPositionWorld())
+    assert written == pytest.approx((0.0, 0.0, 0.0), abs=WORLD_TOL), (
+        "A declined move must leave the locator untouched (still at its unset "
+        f"origin); got {written}."
+    )
 
 
 # --------------------------------------------------------------------------- #
