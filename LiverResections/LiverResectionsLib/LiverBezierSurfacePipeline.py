@@ -1080,6 +1080,31 @@ def _safe_get_mtime(node: Any) -> int:
 _REGISTERED = False
 
 
+def _is_resectogram_view(viewNode: Any) -> bool:  # noqa: N803 - VTK arg name
+    """Whether ``viewNode`` is the dedicated resectogram singleton view.
+
+    That view is owned solely by the ``ResectogramPipeline`` (the
+    flattened strip + locator click seam, ADR-0023 §Stage-4); the
+    surface-family creators must decline it, or the deformable 3D
+    surface pipeline is instantiated INSIDE the flattened 2D strip.
+    Recognised by the MRML ``SingletonTag`` the view manager mints the
+    view with; defensively False for anything lacking the accessor.
+    """
+    tag_getter = getattr(viewNode, "GetSingletonTag", None)
+    if tag_getter is None:
+        return False
+    try:
+        from .ResectogramViewManager import RESECTOGRAM_VIEW_SINGLETON_TAG
+    except ImportError:  # pragma: no cover - top-level import path
+        from ResectogramViewManager import (  # type: ignore[no-redef]
+            RESECTOGRAM_VIEW_SINGLETON_TAG,
+        )
+    try:
+        return tag_getter() == RESECTOGRAM_VIEW_SINGLETON_TAG
+    except Exception:  # pragma: no cover - defensive
+        return False
+
+
 def registerPipelineCreator() -> None:
     """Register the ``LiverBezierSurfacePipeline`` creator with LayerDM.
 
@@ -1127,6 +1152,11 @@ def registerPipelineCreator() -> None:
         # there so other registered creators (or no creator at all)
         # handle the slice path.
         if not isinstance(viewNode, vtkMRMLViewNode):
+            return None
+        # The resectogram singleton view is the ResectogramPipeline's
+        # alone (ADR-0023 §Stage-4) — decline it so the deformable 3D
+        # surface never renders inside the flattened strip.
+        if _is_resectogram_view(viewNode):
             return None
         if not isinstance(node, vtkMRMLParametricSurfaceDisplayNode):
             return None
