@@ -276,3 +276,36 @@ def test_pipeline_hides_inactive_representation_on_state_switch(
         "pipeline's renderer."
     )
     pipeline.cleanup()
+
+
+def test_geometry_edit_requests_render(pipeline_module, bezier_nodes):
+    """A control-point edit must request a render; MTime churn must not.
+
+    The observer callback re-runs ``UpdatePipeline`` but historically never
+    requested a render, so a Planning drag mutated the surface polydata while
+    the 3D view stayed frozen until an unrelated render (camera orbit)
+    repainted it.  The request is gated on the control-point GEOMETRY digest
+    (the ResectogramPipeline pattern): a render-induced ``Modified`` at fixed
+    geometry must NOT re-request (render feedback loop).
+    """
+    data, display = bezier_nodes
+    pipeline = pipeline_module.LiverBezierSurfacePipeline()
+    pipeline.SetDisplayNode(display)
+    data.SetState(1)  # Planning
+
+    renders = []
+    pipeline.RequestRender = lambda: renders.append(1)
+
+    data.SetControlPoint(0, 0, 1.0, 2.0, 3.0)
+    assert renders, (
+        "a control-point edit must request a render -- without it the 3D "
+        "view repaints only on the next unrelated render (frozen drag)."
+    )
+
+    before = len(renders)
+    data.Modified()  # no geometry change -- render-churn signature
+    assert len(renders) == before, (
+        "a Modified at fixed geometry must not re-request a render "
+        "(the render feedback-loop guard)."
+    )
+    pipeline.cleanup()
