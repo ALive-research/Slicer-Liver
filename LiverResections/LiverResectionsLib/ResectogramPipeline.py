@@ -456,7 +456,62 @@ class ResectogramPipeline(_PipelineBase):
         )
 
         producer = ResectogramLocatorProducer(surface, locator)
+        # Prefer the CAMERA-exact inversion: the window-fraction PixelToUV
+        # assumes the quad fills the viewport edge-to-edge (the v1
+        # sub-viewport), which the standalone view's parallel-camera framing
+        # (margins + aspect letterboxing) does not satisfy -- the marker
+        # landed offset from the cursor.  Falls back to the fraction path on
+        # stub renderers (the GL-free seam tests).
+        uv = self._display_to_uv(display_xy, renderer, mat_ratio, representation)
+        if uv is not None:
+            return producer.produce_from_uv(uv[0], uv[1])
         return producer.produce(display_xy, viewport_size, mat_ratio)
+
+    @staticmethod
+    def _display_to_uv(
+        display_xy: Any, renderer: Any, mat_ratio: Any, representation: Any
+    ) -> tuple[float, float] | None:
+        """Invert a display pixel to the strip's ``(u, v)`` via the camera.
+
+        The mapper scales the quad in CLIP space about the window centre
+        (``gl_Position = matRatio * MCDC * vertexMC``), so the inverse undoes
+        the MatRatio about the window centre in display space, runs the
+        renderer's ``DisplayToWorld`` (exact under the strip's parallel
+        camera regardless of depth) and normalises against the flattened
+        quad's actual bounds.  ``None`` on stub renderers / degenerate input
+        (the caller then uses the window-fraction fallback).
+        """
+        set_display = getattr(renderer, "SetDisplayPoint", None)
+        to_world = getattr(renderer, "DisplayToWorld", None)
+        get_world = getattr(renderer, "GetWorldPoint", None)
+        if None in (set_display, to_world, get_world):
+            return None
+        try:
+            window = renderer.GetRenderWindow()
+            width, height = window.GetSize()
+            if width <= 0 or height <= 0:
+                return None
+            rx = float(mat_ratio[0]) or 1.0
+            ry = float(mat_ratio[1]) or 1.0
+            px = width / 2.0 + (float(display_xy[0]) - width / 2.0) / rx
+            py = height / 2.0 + (float(display_xy[1]) - height / 2.0) / ry
+            set_display(px, py, 0.5)
+            to_world()
+            world = get_world()
+            w = world[3] if len(world) > 3 and world[3] not in (0.0,) else 1.0
+            wx, wy = world[0] / w, world[1] / w
+            plane = representation.GetBezierPlane()
+            if plane is None:
+                return None
+            plane.Update()
+            bounds = plane.GetOutput().GetBounds()
+            if bounds[1] <= bounds[0] or bounds[3] <= bounds[2]:
+                return None
+            u = (wx - bounds[0]) / (bounds[1] - bounds[0])
+            v = (wy - bounds[2]) / (bounds[3] - bounds[2])
+            return (u, v)
+        except Exception:  # pragma: no cover - defensive (stub renderers)
+            return None
 
     @staticmethod
     def _resolve_locator_node(surface: Any) -> Any | None:

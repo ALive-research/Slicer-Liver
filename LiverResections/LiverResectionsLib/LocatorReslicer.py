@@ -120,28 +120,48 @@ class LocatorReslicer:
         red = self._scene.GetNodeByID(_RED_SLICE_NODE_ID)
         if red is not None:
             self.reslice_slice_to_world(red, world)
-        self._place_crosshair(world)
+        self._update_marker_model(locator, world)
 
-    def _place_crosshair(self, world_xyz: Any) -> None:
-        """Land the pick on the scene's crosshair node (slice-view marker).
+    def _update_marker_model(self, locator: Any, world_xyz: Any) -> None:
+        """Land the pick on a small red sphere model -- the slice-view marker.
 
-        The reslice alone moves the slice plane but leaves no visible mark;
-        the singleton ``vtkMRMLCrosshairNode`` is Slicer's native slice-view
-        marker, so every pick sets its RAS position and ensures a visible
-        mode -- the locator then reads 1:1 across the resectogram, the 3D
-        surface, AND the slice views (ADR-0025 §Consumer).  A no-op when the
-        scene carries no crosshair node (bare test scenes).
+        A dot marker (not the crosshair's cross-lines, which read as a second
+        conflicting cue): a sphere model node with 2D slice-intersection
+        visibility ON and 3D visibility OFF (the 3D disc is shader-drawn on
+        the surface itself), so every slice view shows a red dot/ring where
+        its plane cuts the sphere -- the locator reads as ONE marker across
+        the resectogram, the 3D surface, and the slices (ADR-0025 §Consumer).
+        Radius follows the locator display node.  A no-op without a scene.
         """
         if self._scene is None or world_xyz is None:
             return
-        crosshair = self._scene.GetFirstNodeByClass("vtkMRMLCrosshairNode")
-        if crosshair is None:
-            return
         try:
-            crosshair.SetCrosshairRAS(
-                float(world_xyz[0]), float(world_xyz[1]), float(world_xyz[2])
-            )
-            if crosshair.GetCrosshairMode() == crosshair.NoCrosshair:
-                crosshair.SetCrosshairMode(crosshair.ShowBasic)
+            import vtk
+
+            node = None
+            for i in range(self._scene.GetNumberOfNodesByClass("vtkMRMLModelNode")):
+                candidate = self._scene.GetNthNodeByClass(i, "vtkMRMLModelNode")
+                if candidate is not None and candidate.GetAttribute("LiverLocatorMarker") == "True":
+                    node = candidate
+                    break
+            if node is None:
+                node = self._scene.AddNewNodeByClass("vtkMRMLModelNode", "LocatorMarker")
+                node.SetAttribute("LiverLocatorMarker", "True")
+                node.CreateDefaultDisplayNodes()
+                display = node.GetDisplayNode()
+                if display is not None:
+                    display.SetColor(1.0, 0.0, 0.0)
+                    display.SetVisibility2D(True)
+                    display.SetVisibility3D(False)
+                    display.SetSliceIntersectionThickness(2)
+            display_node = locator.GetDisplayNode() if hasattr(locator, "GetDisplayNode") else None
+            radius = display_node.GetRadius() if display_node is not None else 5.0
+            sphere = vtk.vtkSphereSource()
+            sphere.SetCenter(float(world_xyz[0]), float(world_xyz[1]), float(world_xyz[2]))
+            sphere.SetRadius(float(radius))
+            sphere.SetPhiResolution(16)
+            sphere.SetThetaResolution(16)
+            sphere.Update()
+            node.SetAndObservePolyData(sphere.GetOutput())
         except Exception:  # pragma: no cover - defensive
             return

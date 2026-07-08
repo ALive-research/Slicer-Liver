@@ -403,36 +403,63 @@ if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
 
 
-def test_pick_places_the_crosshair_in_slice_views():
-    """A locator pick must also place the visible crosshair (ADR-0025).
+def test_pick_places_the_dot_marker_in_slice_views():
+    """A locator pick must place the slice-view DOT marker (ADR-0025).
 
-    The reslice alone moves the slice plane but leaves no visible mark; the
-    scene's singleton ``vtkMRMLCrosshairNode`` is the native slice-view
-    marker, so the reslicer sets its RAS position and a visible mode on
-    every pick -- the locator reads 1:1 across the resectogram, the 3D
-    surface, AND the slice views.
+    The reslice alone moves the slice plane but leaves no visible mark.  The
+    marker is a small red sphere model with slice-intersection visibility ON
+    and 3D visibility OFF (the surface disc is shader-drawn), NOT the
+    crosshair -- its cross-lines read as a second, conflicting cue.  Pins:
+    the model exists (attribute-tagged), sits centred on the pick, is red,
+    2D-visible and 3D-hidden; a second pick MOVES it (no node multiplication).
     """
     slicer = _slicer_or_skip()
     reslicer_cls = _reslicer_class_or_skip_pending()
 
     scene = slicer.mrmlScene
-    crosshair = scene.GetFirstNodeByClass("vtkMRMLCrosshairNode")
-    if crosshair is None:
-        crosshair = scene.AddNewNodeByClass("vtkMRMLCrosshairNode")
-    crosshair.SetCrosshairMode(crosshair.NoCrosshair)
+
+    def _marker_nodes():
+        return [
+            scene.GetNthNodeByClass(i, "vtkMRMLModelNode")
+            for i in range(scene.GetNumberOfNodesByClass("vtkMRMLModelNode"))
+            if scene.GetNthNodeByClass(i, "vtkMRMLModelNode").GetAttribute(
+                "LiverLocatorMarker"
+            )
+            == "True"
+        ]
+
+    for stale in _marker_nodes():
+        scene.RemoveNode(stale)
 
     locator = scene.AddNewNodeByClass("vtkMRMLLocatorNode")
     try:
         reslicer = reslicer_cls(scene)
         locator.SetPickedPositionWorld(12.0, -34.0, 56.0)
 
-        ras = tuple(crosshair.GetCrosshairRAS())
-        assert ras == pytest.approx((12.0, -34.0, 56.0)), (
-            "the pick must land on the crosshair node (slice-view marker)"
+        markers = _marker_nodes()
+        assert len(markers) == 1, "exactly one dot-marker model per scene"
+        marker = markers[0]
+        bounds = marker.GetPolyData().GetBounds()
+        centre = tuple((bounds[2 * i] + bounds[2 * i + 1]) / 2.0 for i in range(3))
+        assert centre == pytest.approx((12.0, -34.0, 56.0), abs=1e-3), (
+            "the marker sphere must be centred on the pick"
         )
-        assert crosshair.GetCrosshairMode() != crosshair.NoCrosshair, (
-            "the crosshair must be made visible on pick"
+        display = marker.GetDisplayNode()
+        assert display is not None
+        assert tuple(display.GetColor()) == pytest.approx((1.0, 0.0, 0.0))
+        assert display.GetVisibility2D(), "slice views must show the dot"
+        assert not display.GetVisibility3D(), (
+            "3D stays shader-drawn on the surface -- no duplicate sphere"
         )
+
+        locator.SetPickedPositionWorld(-5.0, 6.0, -7.0)
+        markers = _marker_nodes()
+        assert len(markers) == 1, "a second pick must MOVE the marker, not add one"
+        bounds = markers[0].GetPolyData().GetBounds()
+        centre = tuple((bounds[2 * i] + bounds[2 * i + 1]) / 2.0 for i in range(3))
+        assert centre == pytest.approx((-5.0, 6.0, -7.0), abs=1e-3)
         reslicer.cleanup()
     finally:
         scene.RemoveNode(locator)
+        for stale in _marker_nodes():
+            scene.RemoveNode(stale)
