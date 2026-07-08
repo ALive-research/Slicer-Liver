@@ -72,12 +72,12 @@ int testDefaults()
 
   CHECK_DOUBLE(node->GetResectionOpacity(), 1.0f);
   CHECK_BOOL(node->GetGridVisibility(), false);
-  // Grid defaults match the resection mapper's own (divisions 20, thickness
-  // factor 9.5) so a fresh display node renders the control-grid overlay --
-  // the earlier 0/0 defaults overwrote the mapper uniforms and suppressed
-  // the grid entirely.
-  CHECK_DOUBLE(node->GetGridDivisions(), 20.0f);
-  CHECK_DOUBLE(node->GetGridThickness(), 9.5f);
+  // Grid OFF by default (0 divisions / 0 thickness): with the 1:1 locator
+  // marker carrying the resectogram<->surface correspondence, the
+  // procedural grid overlay is visual noise; it stays settable for
+  // debugging via the setters.
+  CHECK_DOUBLE(node->GetGridDivisions(), 0.0f);
+  CHECK_DOUBLE(node->GetGridThickness(), 0.0f);
   CHECK_BOOL(node->GetGrid3DVisibility(), true);
   CHECK_BOOL(node->GetGrid2DVisibility(), false);
   CHECK_BOOL(node->GetWidgetVisibility(), true);
