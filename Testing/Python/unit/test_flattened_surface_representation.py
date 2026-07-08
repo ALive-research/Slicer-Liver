@@ -505,3 +505,118 @@ def test_blur_reconcile_tolerates_no_renderer(rep_module):
     rep.update(_StubDisplayNode(blur_enabled=True), _StubDataNode())
     assert not rep.IsBlurPassAttached()
     rep.cleanup()
+
+
+# --------------------------------------------------------------------------- #
+# Distance-map texture build discipline (resectogram render-blocker class).
+# --------------------------------------------------------------------------- #
+#
+# The resectogram strip rendered permanently white because the texture build
+# path had three defects, each pinned GL-free here through injected seams:
+#
+#   1. ``TextureNumComps`` (display node) defaults to 0 and nothing writes it,
+#      so ``CreateSeq3DFromRaw`` was asked for a 0-component texture -- format
+#      resolution fails deterministically.  The image KNOWS its component
+#      count; the build must fall back to it.
+#   2. ``CreateSeq3DFromRaw``'s boolean result was ignored (a VTK error is not
+#      a Python exception), so a FAILED upload was bound to the mapper and the
+#      already-bound idempotency guard prevented every retry.
+#   3. A not-yet-realized render window (``GetInitialized()`` False) has an
+#      empty texture-format table; attempting the upload there fails noisily.
+#      The build must defer (return None) so a later update retries.
+
+
+class _FakeTextureHelper:
+    """Records CreateSeq3DFromRaw args; configurable success/failure."""
+
+    instances: list = []
+    create_result = True
+
+    def __init__(self):
+        self.calls = []
+        _FakeTextureHelper.instances.append(self)
+
+    def SetContext(self, ctx):  # noqa: N802 - VTK verb
+        self.context = ctx
+
+    def SetBorderColor(self, *rgba):  # noqa: N802 - VTK verb
+        pass
+
+    def CreateSeq3DFromRaw(self, nx, ny, nz, comps, dtype, ptr, seq):  # noqa: N802
+        self.calls.append(dict(dims=(nx, ny, nz), comps=comps))
+        return _FakeTextureHelper.create_result
+
+
+class _FakeRenderWindow:
+    def __init__(self, initialized=True):
+        self._initialized = initialized
+
+    def GetInitialized(self):  # noqa: N802 - VTK verb
+        return self._initialized
+
+
+class _FakeImage3D:
+    def GetDimensions(self):  # noqa: N802 - VTK verb
+        return (8, 8, 8)
+
+    def GetNumberOfScalarComponents(self):  # noqa: N802 - VTK verb
+        return 4
+
+    def GetScalarPointer(self):  # noqa: N802 - VTK verb
+        return None
+
+
+def _texture_build_rep(rep_module, monkeypatch, initialized=True):
+    import Representations.FlattenedSurfaceRepresentation as fsr
+
+    _FakeTextureHelper.instances = []
+    _FakeTextureHelper.create_result = True
+    monkeypatch.setattr(
+        fsr, "_import_texture_object_helper", lambda: _FakeTextureHelper
+    )
+    rep = rep_module()
+    monkeypatch.setattr(
+        rep, "_render_window", lambda: _FakeRenderWindow(initialized=initialized)
+    )
+    return rep
+
+
+def test_texture_build_derives_comps_from_image_when_display_unset(
+    rep_module, monkeypatch
+):
+    """Display ``TextureNumComps`` 0 (the unset default) -> the image's
+    component count reaches the upload, not 0."""
+    rep = _texture_build_rep(rep_module, monkeypatch)
+    texture = rep._create_distance_map_texture(_FakeImage3D(), 0)
+    assert texture is not None
+    assert _FakeTextureHelper.instances[-1].calls[-1]["comps"] == 4, (
+        "a 0 (unset) display TextureNumComps must fall back to the image's "
+        "component count -- a 0-component upload fails format resolution "
+        "deterministically."
+    )
+
+
+def test_texture_build_returns_none_on_failed_upload(rep_module, monkeypatch):
+    """A False CreateSeq3DFromRaw -> None (deferred retry), NOT a broken
+    texture that the caller binds and the idempotency guard then pins."""
+    rep = _texture_build_rep(rep_module, monkeypatch)
+    _FakeTextureHelper.create_result = False
+    texture = rep._create_distance_map_texture(_FakeImage3D(), 4)
+    assert texture is None, (
+        "a failed upload must not be handed to the caller -- binding it "
+        "permanently wedges the resectogram (already-bound guard blocks "
+        "every retry)."
+    )
+
+
+def test_texture_build_defers_until_window_initialized(rep_module, monkeypatch):
+    """An unrealized render window -> None without attempting the upload."""
+    rep = _texture_build_rep(rep_module, monkeypatch, initialized=False)
+    texture = rep._create_distance_map_texture(_FakeImage3D(), 4)
+    assert texture is None
+    assert _FakeTextureHelper.instances == [] or not any(
+        h.calls for h in _FakeTextureHelper.instances
+    ), (
+        "no upload may be attempted on a not-yet-realized window (empty "
+        "texture-format table -> guaranteed noisy failure)."
+    )
