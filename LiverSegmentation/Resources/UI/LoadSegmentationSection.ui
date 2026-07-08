@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>LoadSegmentationSection</class>
+ <widget class="QGroupBox" name="LoadSegmentationSection">
+  <property name="title">
+   <string>Load an existing segmentation</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QLabel" name="LoadSegmentationIntroLabel">
+     <property name="text">
+      <string>Load a segmentation via Add Data, select it here, assign each segment a structure, then Import as the canonical segmentation.</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="qMRMLNodeComboBox" name="LoadSegmentationComboBox">
+     <property name="nodeTypes">
+      <stringlist>
+       <string>vtkMRMLSegmentationNode</string>
+      </stringlist>
+     </property>
+     <property name="addEnabled">
+      <bool>false</bool>
+     </property>
+     <property name="removeEnabled">
+      <bool>false</bool>
+     </property>
+     <property name="noneEnabled">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTableWidget" name="LoadSegmentationAssignTable">
+     <property name="editTriggers">
+      <set>QAbstractItemView::NoEditTriggers</set>
+     </property>
+     <column>
+      <property name="text">
+       <string>Segment</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Structure</string>
+      </property>
+     </column>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="ImportSegmentationButton">
+     <property name="text">
+      <string>Import as canonical segmentation</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>qMRMLNodeComboBox</class>
+   <extends>QWidget</extends>
+   <header>qMRMLNodeComboBox.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
