@@ -226,6 +226,10 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._caseSetupRoleCombo = None
     self._caseSetupTable = None
 
+    # Stage-6 Export widgets (built in ``_buildStage6Page``).
+    self._exportPlanCombo = None
+    self._exportStatusLabel = None
+
   def setup(self):
     """Build the six-stage navigation shell.
 
@@ -529,16 +533,90 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return widget, True
 
   def _buildStage6Page(self):
-    """Shell-owned Export placeholder (ADR-0023 §Stage 6).
+    """Shell-owned Export UI (ADR-0023 §Stage 6; ADR-0004 Python).
 
-    Real Export UI lands in a follow-up; T5.2-d ships only the page
-    placeholder + the "last write OK" predicate.
+    Select a resection plan and Save it to a ``.lrp.json`` (schema v2, via
+    ``vtkMRMLResectionPlanStorageNode``).  A successful write records
+    ``Stage6.LastWriteOK`` on the shell state node, flipping ``_stage6IsComplete``.
     """
     page = qt.QWidget()
     layout = qt.QVBoxLayout(page)
-    layout.addWidget(qt.QLabel("Export — save the resection plan to disk (Stage 6)."))
+    layout.addWidget(qt.QLabel(
+      "Export — select a resection plan and save it to disk (Stage 6)."))
+
+    row = qt.QHBoxLayout()
+    row.addWidget(qt.QLabel("Plan:"))
+    combo = slicer.qMRMLNodeComboBox()
+    combo.setObjectName("ExportPlanComboBox")
+    combo.nodeTypes = ["vtkMRMLResectionPlanNode"]
+    combo.addEnabled = False
+    combo.removeEnabled = False
+    combo.noneEnabled = True
+    combo.setMRMLScene(slicer.mrmlScene)
+    row.addWidget(combo, 1)
+    saveButton = qt.QPushButton("Save…")
+    saveButton.setObjectName("ExportSaveButton")
+    saveButton.connect("clicked()", self._onExportSaveClicked)
+    row.addWidget(saveButton)
+    layout.addLayout(row)
+
+    self._exportStatusLabel = qt.QLabel("")
+    self._exportStatusLabel.setObjectName("ExportStatusLabel")
+    layout.addWidget(self._exportStatusLabel)
     layout.addStretch(1)
+
+    self._exportPlanCombo = combo
     return page
+
+  def _onExportSaveClicked(self):
+    """Prompt for a path and export the selected plan (the :0 entry point)."""
+    combo = self._exportPlanCombo
+    plan = combo.currentNode() if combo is not None else None
+    if plan is None:
+      if self._exportStatusLabel is not None:
+        self._exportStatusLabel.setText("Select a resection plan to export.")
+      return
+    path = qt.QFileDialog.getSaveFileName(
+      None, "Export resection plan", "", "Liver resection plan (*.lrp.json)")
+    if not path:
+      return
+    ok = self._exportResectionPlan(plan, path)
+    if self._exportStatusLabel is not None:
+      self._exportStatusLabel.setText("Saved." if ok else "Export failed.")
+    self._refreshStageIndicators()
+
+  def _liverShellStateNode(self):
+    """Get-or-create the shell's scene-level state node (survives save/load).
+
+    A ``vtkMRMLScriptedModuleNode`` named ``LiverShellState`` under module
+    ``Liver`` -- the standard pattern for module-owned scene-level state
+    (ADR-0023 §"Shell composition (Option H)").
+    """
+    for node in slicer.util.getNodesByClass("vtkMRMLScriptedModuleNode"):
+      if node.GetModuleName() == "Liver" and node.GetName() == "LiverShellState":
+        return node
+    node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScriptedModuleNode", "LiverShellState")
+    node.SetModuleName("Liver")
+    return node
+
+  def _recordStage6Write(self, ok):
+    """Record 'last write OK' so ``_stage6IsComplete`` reflects it."""
+    self._liverShellStateNode().SetParameter(
+      "Stage6.LastWriteOK", "True" if ok else "False")
+
+  def _exportResectionPlan(self, planNode, path):
+    """Write ``planNode`` to ``path`` (.lrp.json); record success.
+
+    Returns ``True`` iff the write succeeded, recording ``Stage6.LastWriteOK``.
+    A no-op returning ``False`` on a missing plan / path (does NOT mark the
+    stage complete).
+    """
+    if planNode is None or not path:
+      return False
+    ok = bool(slicer.util.saveNode(planNode, path))
+    if ok:
+      self._recordStage6Write(True)
+    return ok
 
   def _buildUnavailablePage(self, stageName):
     """Placeholder shown when a stage's owning module is not registered."""
