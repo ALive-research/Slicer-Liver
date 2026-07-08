@@ -62,8 +62,12 @@
 
 // MRML includes
 #include <vtkMRMLScene.h>
+#include <vtkMRMLScalarVolumeNode.h>
 #include <vtkMRMLSelectionNode.h>
 #include <vtkMRMLSegmentationNode.h>
+
+#include <string>
+#include <vector>
 
 // VTK includes
 #include <vtkObjectFactory.h>
@@ -157,6 +161,24 @@ vtkMRMLResectionPlanNode* vtkSlicerLiverResectionsLogic::CreateResectionPlan(con
   // node to write and the consumers (shader marker, click-to-reslice) have one
   // to read (ADR-0025 §Consumer: exactly one in v2.0).
   this->EnsureLocatorNode();
+
+  // The Stage-2 canonical import computes a distance-map volume tagged
+  // DistanceMap/Computed (the v1 selector contract).  Auto-attach it so
+  // Planning opens with the plan's distance-map input ready (ADR-0031: the
+  // map lives on the plan wrapper) -- no map in the scene leaves the
+  // reference unset, exactly as before.  Untagged vector volumes are ignored.
+  std::vector<vtkMRMLNode*> vectorVolumes;
+  scene->GetNodesByClass("vtkMRMLVectorVolumeNode", vectorVolumes);
+  for (vtkMRMLNode* candidate : vectorVolumes)
+  {
+    const char* isDistanceMap = candidate->GetAttribute("DistanceMap");
+    const char* isComputed = candidate->GetAttribute("Computed");
+    if (isDistanceMap && isComputed && std::string(isDistanceMap) == "True" && std::string(isComputed) == "True")
+    {
+      plan->SetAndObserveDistanceMapVolumeNode(vtkMRMLScalarVolumeNode::SafeDownCast(candidate));
+      break;
+    }
+  }
 
   // The plan starts in Init (ADR-0019); the control grid is seeded by the
   // placement step, not here.

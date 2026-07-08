@@ -542,7 +542,69 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
         # them visible, so the anatomy renders through to Planning (#539) --
         # otherwise the main 3D view is empty entering Stage 4.
         self.ensureSurfaceRepresentation(sourceSegmentationNode)
+        # The canonical import is the explicit human action completing Stage 2
+        # (ADR-0023 Stage-2 hand-off), so it also computes the composed
+        # distance map Stage 4 consumes (ADR-0031: the map is the resection
+        # plan's input) -- Planning then opens with the map ready.
+        self.ensureDistanceMap(sourceSegmentationNode)
         return sourceSegmentationNode
+
+    #: Downsampling applied to the auto-computed distance map.  A full-res
+    #: 4-channel float map of a 512-cubed CT is on the order of a gigabyte;
+    #: halving each axis keeps the memory footprint workable while remaining
+    #: adequate for the resection shader's margin bands.  A Stage-4 recompute
+    #: control can re-expose the choice later (the v1 GUI had a spinbox).
+    DISTANCE_MAP_DOWNSAMPLING = 2.0
+
+    #: Name + attribute contract of the auto-computed distance-map volume
+    #: (the tags the v1 distance-map selectors filtered on).
+    DISTANCE_MAP_NODE_NAME = "DistanceMap"
+
+    def ensureDistanceMap(self, segmentationNode):
+        """Compute the composed distance map for the canonical segmentation.
+
+        Resolves the Stage-1 reference volume (``LiverRole='PortalVenous'``,
+        via :meth:`selectInputVolume`), resolves-or-creates the tagged
+        ``vtkMRMLVectorVolumeNode`` output, and runs the per-channel
+        signed-Maurer compute (``LiverSegmentationLib.distance_maps``).
+        Returns the output node, or ``None`` when there is nothing to do --
+        no segmentation, no reference volume, or no SCT-tagged channel
+        resolves (graceful degradation; the canonical import itself must
+        never fail on the map).
+        """
+        if segmentationNode is None:
+            return None
+        reference = self.selectInputVolume()
+        if reference is None:
+            return None
+
+        from LiverSegmentationLib import distance_maps
+
+        # Resolve-or-create the single tagged output so a re-import
+        # recomputes in place instead of piling up volumes.
+        output = None
+        for node in slicer.util.getNodesByClass("vtkMRMLVectorVolumeNode"):
+            if node.GetAttribute("DistanceMap") == "True":
+                output = node
+                break
+        created = output is None
+        if created:
+            output = slicer.mrmlScene.AddNewNodeByClass(
+                "vtkMRMLVectorVolumeNode", self.DISTANCE_MAP_NODE_NAME
+            )
+
+        computed = distance_maps.compute_distance_map_for_segmentation(
+            segmentationNode,
+            reference,
+            output,
+            downsampling_rate=self.DISTANCE_MAP_DOWNSAMPLING,
+        )
+        if computed is None and created:
+            # No channel resolved (e.g. no SCT-tagged segments): drop the
+            # node we minted rather than leaving an empty untagged shell.
+            slicer.mrmlScene.RemoveNode(output)
+            return None
+        return computed
 
     def ensureSurfaceRepresentation(self, segmentationNode):
         """Create the 3D closed-surface representation + make it visible.
