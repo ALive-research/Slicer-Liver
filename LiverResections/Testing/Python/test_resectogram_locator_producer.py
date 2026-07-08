@@ -200,7 +200,7 @@ def _make_affine_carrier_or_skip(slicer, name):
 
     Grid ``P[r][c] = (x = c*10, y = r*10, z = 0)``.  For a deg-3 tensor Bezier
     this makes the surface EXACTLY affine in (u, v):
-        x = 30 * v,  y = 30 * u,  z = 0
+        x = 30 * u,  y = 30 * v,  z = 0  (strip convention)
     (the index-linear control net Bezier reproduces the affine map; verified by
     hand -- see the module docstring).  So the corners and any interior point
     have a trivially hand-computable expected world point.
@@ -238,12 +238,14 @@ def _make_affine_carrier_or_skip(slicer, name):
 def _expected_world_for_uv(u, v):
     """The hand-computed world point of the affine grid at (u, v).
 
-    x = 30 * v, y = 30 * u, z = 0 (see ``_make_affine_carrier_or_skip``).  NOTE
+    x = 30 * u, y = 30 * v, z = 0 in STRIP convention (u = column fraction
+    drives x); the producer owns the transposition onto the carrier's
+    row-first EvaluateSurface (see ``_make_affine_carrier_or_skip``).  NOTE
     the ordering: EvaluateSurface(u, v) samples Bernstein(i, degU, u) over ROWS
     (y = r*10) and Bernstein(j, degV, v) over COLS (x = c*10), so u drives y and
     v drives x.  Pinning this ordering guards a u/v swap in the producer.
     """
-    return (30.0 * v, 30.0 * u, 0.0)
+    return (30.0 * u, 30.0 * v, 0.0)
 
 
 def _eval_world(carrier, u, v):
@@ -332,22 +334,24 @@ def test_evaluate_surface_corners_are_grid_corner_control_points():
 
 
 def test_evaluate_surface_interior_matches_hand_computed_point():
-    """Invariant 1b: an interior (u, v) matches the hand-computed world point.
+    """Invariant 1b: the CARRIER's raw EvaluateSurface is row-first.
 
-    EvaluateSurface(0.25, 0.75) on the affine grid must be (30*0.75, 30*0.25, 0)
+    The raw carrier convention: the FIRST parameter walks rows (y), so
+    EvaluateSurface(0.25, 0.75) on the affine grid is (30*0.75, 30*0.25, 0)
     = (22.5, 7.5, 0).  A non-corner point exercises the full tensor-product
-    Bernstein sum AND pins the u->y / v->x ordering the producer must preserve
-    (ADR-0025 §Producer: the exact 1:1 mapping).
+    Bernstein sum.  The STRIP-convention (u drives x) mapping is the
+    PRODUCER's job -- it transposes onto this raw call (see
+    ``produce_from_uv``); the producer-level tests pin that half.
     """
     slicer = _slicer_or_skip()
     carrier = _make_affine_carrier_or_skip(slicer, "LocatorProducerEvalInterior")
 
-    u, v = 0.25, 0.75
-    got = _eval_world(carrier, u, v)
-    assert got == pytest.approx(_expected_world_for_uv(u, v), abs=WORLD_TOL), (
-        f"EvaluateSurface({u}, {v}) must be the hand-computed affine world point "
-        f"{_expected_world_for_uv(u, v)} (x = 30*v, y = 30*u); got {got}.  A "
-        "u/v swap or a Bernstein-weight error fails here."
+    first, second = 0.25, 0.75
+    got = _eval_world(carrier, first, second)
+    assert got == pytest.approx((30.0 * second, 30.0 * first, 0.0), abs=WORLD_TOL), (
+        f"raw EvaluateSurface({first}, {second}) must be the row-first affine "
+        f"point (x = 30*second, y = 30*first); got {got}.  A Bernstein-weight "
+        "error or an upstream carrier convention change fails here."
     )
 
 

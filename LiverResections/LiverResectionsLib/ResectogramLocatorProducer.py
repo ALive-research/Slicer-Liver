@@ -98,7 +98,12 @@ class ResectogramLocatorProducer:
         surface = self._surface_node
         if surface is None:
             return None
-        polydata = surface.EvaluateSurface(float(u), float(v))
+        # The carrier's EvaluateSurface walks ROWS with its FIRST parameter,
+        # i.e. it consumes (v, u) in the strip's convention (u = horizontal /
+        # column fraction).  Passing (u, v) straight through transposed the
+        # pick: a click at the strip's bottom-right corner produced the
+        # surface's top-left point (the marker-offset bug found live).
+        polydata = surface.EvaluateSurface(float(v), float(u))
         if polydata is None or polydata.GetNumberOfPoints() < 1:
             return None
         world = polydata.GetPoint(0)
