@@ -23,10 +23,12 @@ import pytest
 
 
 def _logic_or_skip():
-    from conftest import _import_slicer_or_skip, _require_mrml_scene
+    # The shared support module, not `conftest`: with multiple pytest roots the
+    # first root's conftest wins the name and the underscore re-exports differ.
+    from slicer_pytest_support import import_slicer_or_skip, require_mrml_scene
 
-    slicer = _import_slicer_or_skip()
-    _require_mrml_scene()
+    require_mrml_scene()
+    slicer = import_slicer_or_skip()
     module = getattr(slicer.modules, "liverresections", None)
     if module is None:
         pytest.skip("liverresections module not registered in this build.")
