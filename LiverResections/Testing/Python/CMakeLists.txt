@@ -95,6 +95,23 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections"
     )
 
+    # Packaging-parity invariant: every .py in the LiverResectionsLib source
+    # sub-package must appear in LiverResectionsLib_PYTHON_SCRIPTS, or it is
+    # never built/packaged (the #516/#524 LocatorReslicer +
+    # ResectogramLocatorProducer omission).  Pure-Python -- parses two files,
+    # no Slicer -- so it runs (not skips) in this bare row and catches the drift
+    # deterministically.
+    add_test(
+      NAME LiverResections_packaging_parity
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_liverresectionslib_packaging_parity.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_packaging_parity PROPERTIES
+      LABELS "pytest;module-layer;LiverResections"
+    )
+
     # T5.2-f -- Subject-Hierarchy collection invariant (ADR-0023
     # §"MRML scene organisation"): the wrapper vtkMRMLLiverResectionNode
     # collects under a scene-root "Resections" folder; the hidden Bezier
