@@ -467,6 +467,15 @@ jobs:
           # any Python coverage data.
           /tmp/coverage-venv/bin/pip install 'gcovr>=7' 'pytest-cov>=5' 'pytest>=8' 'numpy>=1.24'
           echo "/tmp/coverage-venv/bin" >> "$GITHUB_PATH"
+          # Python coverage must run under SLICER's Python (PythonSlicer):
+          # the venv's plain python3 cannot import vtk / slicer / SimpleITK,
+          # so the unit layer collection-errors and ~nothing executes --
+          # which is why the ``py`` flag reported 0.2% while the SAME tests
+          # pass in build-test (whose CTest rows use Slicer's Python).
+          # pytest is already importable from Slicer's Python; add
+          # pytest-cov (and its ``coverage`` dependency) beside it.
+          PYTHONSLICER="${Slicer_DIR}/../python-install/bin/PythonSlicer"
+          "${PYTHONSLICER}" -m pip install 'pytest-cov>=5'
 
       - name: Verify Slicer build tree
         if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
@@ -569,12 +578,13 @@ jobs:
           set -euo pipefail
           cd build-coverage
           # Same exclusion set as build-test (LiverBezierVisualTest_* +
-          # pytest_launched, the latter soft-gated pending issue #460's
-          # launched-harness module-registration race); coverage % drift
-          # between the two jobs is acceptable as long as the same set of
-          # tests actually runs in both.
-          # fail_ci_if_error is false on the upload step so a single
-          # failed instrumented test does not block the rest of the PR.
+          # pytest_launched); the launched row runs SEPARATELY below with
+          # Python-coverage env injected, so excluding it here avoids a
+          # double run.  Coverage % drift between the two jobs is
+          # acceptable as long as the same set of tests actually runs in
+          # both.  fail_ci_if_error is false on the upload step so a
+          # single failed instrumented test does not block the rest of
+          # the PR.
           ctest -V --no-tests=error \
                 --exclude-regex '^(LiverBezierVisualTest_.*|pytest_launched)$' || true
 
@@ -619,52 +629,94 @@ jobs:
           XML
             }
 
-      - name: Run pytest with coverage
+      # Python coverage, leg 1 of 2 — BARE run under Slicer's Python.
+      #
+      # Runs the same three roots as the launched row.  Must use
+      # PythonSlicer, not the venv's plain python3: the unit layer
+      # (Testing/Python/unit) imports vtk/numpy and the module suites
+      # import SimpleITK — under plain python3 they collection-error /
+      # skip and pytest-cov measured ~nothing (the ``py`` flag reported
+      # 0.2% with every Representation at 0% while the SAME tests pass
+      # in build-test).  ``--cov`` on the SOURCE trees also enumerates
+      # never-imported files at 0%, giving the scripted modules honest
+      # visibility in the report.  Data-file only (no XML yet): leg 2
+      # appends launched-run data and the combine step below emits the
+      # final XML.
+      - name: Python coverage (bare, Slicer Python)
         if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
+        env:
+          COVERAGE_RCFILE: ${{ github.workspace }}/.coveragerc
+          COVERAGE_FILE: ${{ github.workspace }}/.coverage.bare
         run: |
           set -euo pipefail
-          # Per ADR-0021 §"Out of scope", Slicer-launcher Python
-          # coverage (wrapped MRML bindings) is opt-in per test and may
-          # not be reachable from a plain pytest invocation in the
-          # image.  Run what we can: discover the two pytest roots
-          # (``Testing/Python/`` declared in pytest.ini as the project
-          # default, plus ``LiverResections/Testing/Python/`` for the
-          # module-local test_harness suite) and emit a Cobertura XML
-          # measuring the actual Python source module
-          # ``LiverResections/LiverResectionsLib``.
-          #
-          # The earlier discovery path (``LiverResectionsLib`` from the
-          # repo root) matched no directory: the module lives at
-          # ``LiverResections/LiverResectionsLib`` and the tests live
-          # under ``Testing/Python/`` and ``LiverResections/Testing/Python/``.
-          # ``find`` returned nothing, the ``else`` branch fired, and an
-          # empty coverage-py.xml shipped to Codecov.
-          test_roots=()
-          [ -d Testing/Python ] && test_roots+=(Testing/Python)
-          [ -d LiverResections/Testing/Python ] && test_roots+=(LiverResections/Testing/Python)
-          if [ ${#test_roots[@]} -gt 0 ] && \
-             find "${test_roots[@]}" \( -name 'test_*.py' -o -name '*_test.py' \) -print -quit | grep -q .; then
-            # ``--continue-on-collection-errors``: one bad module
-            # (e.g. a missing optional dep) shouldn't abort the
-            # entire session and prevent pytest-cov from writing the
-            # XML for the modules that DO collect.  Belt-and-braces
-            # alongside the numpy install above — there will always
-            # be a future test module that imports something opt-
-            # ional, and we want partial Python coverage rather than
-            # none in that case.
-            python3 -m pytest "${test_roots[@]}" \
-              --continue-on-collection-errors \
-              --cov=LiverResections/LiverResectionsLib \
-              --cov-report=xml:coverage-py.xml \
-              --cov-report=term \
-              || true
-          else
-            echo "::notice::No pytest tests discovered under Testing/Python or LiverResections/Testing/Python — emitting empty coverage-py.xml."
+          PYTHONSLICER="${Slicer_DIR}/../python-install/bin/PythonSlicer"
+          "${PYTHONSLICER}" -m pytest \
+              Testing/Python \
+              LiverResections/Testing/Python \
+              LiverSegmentation/Testing/Python \
+            --continue-on-collection-errors \
+            --cov=Liver \
+            --cov=LiverSegmentation \
+            --cov=LiverResections/LiverResectionsLib \
+            --cov=LiverVolumetry \
+            --cov=VascularTerritories \
+            --cov-report= \
+            || true
+
+      # Python coverage, leg 2 of 2 — the LAUNCHED row, with coverage
+      # injected via PYTEST_ADDOPTS (pytest.main in
+      # run_pytest_launched.py honours it).  The launched app imports
+      # the STAGED module tree, so --cov targets the build's
+      # qt-scripted-modules dir; .coveragerc [paths] + the fix script
+      # below fold those records back onto the source files.
+      # Non-blocking (|| true): the launched row itself is exercised as
+      # a gate in build-test; here it only contributes coverage data.
+      - name: Python coverage (launched row)
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
+        env:
+          COVERAGE_RCFILE: ${{ github.workspace }}/.coveragerc
+          COVERAGE_FILE: ${{ github.workspace }}/.coverage.launched
+        run: |
+          set -euo pipefail
+          staged="$(ls -d "$GITHUB_WORKSPACE"/build-coverage/lib/Slicer-*/qt-scripted-modules 2>/dev/null | head -1 || true)"
+          if [ -z "${staged}" ]; then
+            echo "::warning::No staged qt-scripted-modules dir found — skipping launched Python coverage."
+            exit 0
+          fi
+          export PYTEST_ADDOPTS="--cov=${staged} --cov-report= -p no:cacheprovider"
+          cd build-coverage
+          ctest -V --no-tests=error --tests-regex '^pytest_launched$' || true
+
+      # Merge the two legs into coverage-py.xml.  ``coverage combine``
+      # applies the .coveragerc [paths] aliases (staged Lib packages ->
+      # source); fix_coverage_paths.py then normalizes to repo-relative
+      # paths, remaps the flat staged scripted modules
+      # (qt-scripted-modules/<Module>.py -> <Module>/<Module>.py), and
+      # merges duplicate per-file records.  Any failure falls back to an
+      # empty Cobertura skeleton so the Codecov upload step still has a
+      # file (it tolerates empty coverage but errors on missing files).
+      - name: Generate coverage-py.xml (combine + remap)
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
+        env:
+          COVERAGE_RCFILE: ${{ github.workspace }}/.coveragerc
+        run: |
+          set -euo pipefail
+          PYTHONSLICER="${Slicer_DIR}/../python-install/bin/PythonSlicer"
+          {
+            data_files=()
+            [ -f .coverage.bare ] && data_files+=(.coverage.bare)
+            [ -f .coverage.launched ] && data_files+=(.coverage.launched)
+            [ ${#data_files[@]} -gt 0 ] \
+              && "${PYTHONSLICER}" -m coverage combine "${data_files[@]}" \
+              && "${PYTHONSLICER}" -m coverage xml -o coverage-py.xml \
+              && python3 .github/scripts/fix_coverage_paths.py coverage-py.xml "$GITHUB_WORKSPACE"
+          } || {
+            echo "::warning::Python coverage combine/remap produced no usable data — uploading empty coverage-py.xml."
             cat > coverage-py.xml <<'XML'
           <?xml version="1.0" ?>
           <coverage version="0"><sources/><packages/></coverage>
           XML
-          fi
+          }
 
       - name: Upload coverage to Codecov
         if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'

@@ -1,0 +1,31 @@
+# Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
+# Distributed under the OSI-approved BSD 3-Clause License.
+#
+# coverage.py configuration for the Python coverage measurement
+# (ADR-0021; CI wiring in .github/workflows/ci.yml, coverage job).
+#
+# [run] omit: test code must not count toward source coverage --
+# mirrors the gcovr `--exclude '.*Testing.*'` on the C++ side.
+#
+# [paths]: the launched-Slicer coverage leg measures the STAGED module
+# tree (``<build>/lib/Slicer-*/qt-scripted-modules/...``) because the
+# launched app imports the staged copies, not the source files.  These
+# aliases let ``coverage combine`` fold the staged records back onto the
+# source files so bare + launched legs merge into one per-file record.
+# coverage.py's aliasing is directory-prefix based, so only the Python
+# sub-PACKAGES can be remapped here; the flat staged scripted modules
+# (``qt-scripted-modules/<Module>.py``) are remapped afterwards by
+# .github/scripts/fix_coverage_paths.py.
+
+[run]
+omit =
+    */Testing/*
+    */__pycache__/*
+
+[paths]
+liverresectionslib =
+    LiverResections/LiverResectionsLib/
+    */qt-scripted-modules/LiverResectionsLib/
+liversegmentationlib =
+    LiverSegmentation/LiverSegmentationLib/
+    */qt-scripted-modules/LiverSegmentationLib/
