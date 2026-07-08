@@ -186,6 +186,17 @@ class ControlPolygonPipeline(_PipelineBase):
         if renderer is not None:
             renderer.AddActor(self._edges_actor)
             renderer.AddActor(self._handles_actor)
+        # ``OnRendererRemoved`` -> ``cleanup()`` cleared the node handles;
+        # re-derive them from the base's retained display node, or the
+        # renderer churn leaves the pipeline displayless forever and every
+        # styling field silently stays at the raw VTK defaults (the
+        # tiny-handles / hairline-white-edges failure mode).  Mirrors the
+        # ResectogramPipeline's OnRendererAdded re-attach.
+        if self._display_node is None:
+            base_getter = getattr(self, "GetDisplayNode", None)
+            display = base_getter() if base_getter is not None else None
+            if display is not None:
+                self.SetDisplayNode(display)
         self._last_update_key = None
         self.UpdatePipeline()
 
