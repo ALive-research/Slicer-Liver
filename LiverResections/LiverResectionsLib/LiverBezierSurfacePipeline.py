@@ -219,6 +219,11 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         # invariant.
         self._last_update_key: tuple | None = None
 
+        # Last (state, initMode, geometry-digest) a render was requested
+        # for — the observer callback's render-request gate (see
+        # ``_on_node_modified``).
+        self._last_render_key: tuple | None = None
+
         # SlicingPlane Init-placement progress (ADR-0032 slice 3a): how many
         # of the fixed two slicing-plane init points have been placed on the
         # current carrier.  The node has no on-node placed-count (the array is
@@ -1069,14 +1074,39 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             pass
 
     def _on_node_modified(self, caller: Any, event: str) -> None:
-        """VTK observer callback — re-runs ``UpdatePipeline()``.
+        """VTK observer callback — re-runs ``UpdatePipeline()`` + repaints.
 
         Signature matches what VTK passes ``AddObserver`` callbacks:
         ``(caller, event_name_or_id)``.  Both arguments are unused —
         ``UpdatePipeline()`` re-reads node state directly.
+
+        Requests a render when the VISIBLE dispatch inputs — the
+        ``(state, initMode)`` tuple and the control-point geometry digest —
+        actually changed (the ResectogramPipeline pattern): without the
+        request, a Planning drag mutates the surface polydata while the 3D
+        view stays frozen until an unrelated render (e.g. a camera orbit)
+        repaints it.  Gating on the digest rather than ``GetMTime`` keeps a
+        render-induced ``Modified`` at fixed geometry from re-requesting —
+        the render feedback-loop guard.
         """
         del caller, event  # observers route uniformly into UpdatePipeline()
         self.UpdatePipeline()
+
+        render_key = (
+            _safe_get_state(self._data_node),
+            _safe_get_init_mode(self._data_node),
+            _control_points_digest(self._data_node),
+        )
+        if render_key == self._last_render_key:
+            return
+        self._last_render_key = render_key
+
+        request_render = getattr(self, "RequestRender", None)
+        if request_render is not None:
+            try:
+                request_render()
+            except Exception:  # pragma: no cover - defensive (stub bases)
+                pass
 
 
 # --------------------------------------------------------------------------- #
@@ -1125,6 +1155,31 @@ def _safe_get_mtime(node: Any) -> int:
         return int(getter())
     except Exception:  # pragma: no cover - defensive
         return 0
+
+
+def _control_points_digest(node: Any) -> tuple:
+    """Digest of the carrier's control-point positions (render-request gate).
+
+    Mirrors the ResectogramPipeline's memo digest: a control-point edit
+    changes the digest, a render-induced ``Modified`` at fixed geometry does
+    not — the discrimination that keeps drags repainting live while blocking
+    a render feedback loop.  Empty tuple for nodes missing the grid accessor
+    (stubs) or on a read failure.
+    """
+    if node is None:
+        return ()
+    grid_getter = getattr(node, "GetControlGridVector", None)
+    if grid_getter is None:
+        return ()
+    try:
+        grid = grid_getter()
+        usable = len(grid) - (len(grid) % 3)
+        return tuple(
+            (grid[base], grid[base + 1], grid[base + 2])
+            for base in range(0, usable, 3)
+        )
+    except Exception:  # pragma: no cover - defensive
+        return ()
 
 
 # --------------------------------------------------------------------------- #
