@@ -8,6 +8,10 @@ set(KIT ${PROJECT_NAME})
 #-----------------------------------------------------------------------------
 set(KIT_TEST_SRCS
   vtkSlicerVascularTerritoriesLogicTest1.cxx
+  # Liver segment resolved by SCT structure tag (ADR-0011 liver code), NOT the
+  # segment name "liver", so the Stage-2 canonical segmentation (SCT-tagged,
+  # arbitrary segment names) feeds Stage 3 (ADR-0024 §Output contract).
+  vtkSlicerVascularTerritoriesLogicLiverSegmentIdTest.cxx
   # CHARACTERIZATION of the CURRENT Subject-Hierarchy collection
   # behaviour (ADR-0023 §"MRML scene organisation"), landed per
   # ADR-0003 §"refactors that preserve behaviour" / ADR-0027 BEFORE the

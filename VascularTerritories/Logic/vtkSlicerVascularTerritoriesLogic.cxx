@@ -49,6 +49,8 @@
 
 #include <vtkMRMLLabelMapVolumeNode.h>
 #include <vtkMRMLSegmentationNode.h>
+#include <vtkSegmentation.h>
+#include <vtkSegment.h>
 #include <vtkMRMLModelNode.h>
 #include <vtkMRMLDisplayNode.h>
 
@@ -292,6 +294,13 @@ void vtkSlicerVascularTerritoriesLogic::InitializeCenterlineSearchModel(vtkMRMLM
   {
     std::cout << "Error: No PointData in centerline model" << std::endl;
   }
+}
+
+//----------------------------------------------------------------------------
+std::string vtkSlicerVascularTerritoriesLogic::GetLiverSegmentId(vtkMRMLSegmentationNode* vtkNotUsed(segmentationNode))
+{
+  // STUB (RED): the real body scans segments for the SCT liver tag.
+  return "";
 }
 
 void vtkSlicerVascularTerritoriesLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNode* vascularTerritorySegmentationNode,

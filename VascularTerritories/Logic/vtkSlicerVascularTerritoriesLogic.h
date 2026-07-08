@@ -48,6 +48,8 @@
 #include <vtkObject.h>
 #include <vtkSmartPointer.h>
 
+#include <string>
+
 // Forward delcarations
 class vtkKdTreePointLocator;
 class vtkMRMLLabelMapVolumeNode;
@@ -112,6 +114,14 @@ public:
                                      vtkMRMLModelNode* centerlineModel,
                                      vtkMRMLColorNode* colormap);
   void preprocessAndDecimate(vtkPolyData* surfacePolyData, vtkPolyData* returnPolyData);
+
+  /// Return the segment id of the liver parenchyma in ``segmentationNode``,
+  /// resolved by its SNOMED-CT structure tag (ADR-0011 liver code 10200004 in
+  /// the segment's ``TerminologyEntry`` tag), NOT by the segment name "liver".
+  /// This matches what Stage 2 writes (an SCT-tagged canonical segmentation
+  /// with arbitrary segment names).  Empty string when there is no scene / no
+  /// segmentation / no SCT-liver-tagged segment.
+  std::string GetLiverSegmentId(vtkMRMLSegmentationNode* segmentationNode);
 
 protected:
   vtkSlicerVascularTerritoriesLogic();
