@@ -318,3 +318,43 @@ def test_drag_is_press_grab_move_release(pipeline_module, polygon_nodes):
         "released-mouse-still-edits failure mode."
     )
     pipeline.cleanup()
+
+
+class _ChurnRenderer:
+    def AddActor(self, actor):  # noqa: N802 - VTK verb
+        pass
+
+    def RemoveActor(self, actor):  # noqa: N802 - VTK verb
+        pass
+
+
+def test_styling_survives_renderer_churn(pipeline_module, polygon_nodes):
+    """Renderer churn must not leave the pipeline displayless.
+
+    The manager's lifecycle removes and re-adds the renderer around
+    ``SetDisplayNode`` (and on view rebuilds).  ``OnRendererRemoved`` ->
+    ``cleanup()`` clears the node handles; ``OnRendererAdded`` must
+    re-derive them from the base's retained display node, or the pipeline
+    runs displayless forever and every styling field silently stays at the
+    raw VTK defaults (0.5-radius spheres, hairline white lines -- the
+    'tiny control points' failure mode observed live).
+    """
+    data, display = polygon_nodes
+    pipeline = pipeline_module.ControlPolygonPipeline()
+    pipeline._control_polygon_geometry = _FakeGeometry
+    pipeline.SetDisplayNode(display)
+    _seed_grid(data)
+    data.SetState(1)  # Planning
+
+    renderer = _ChurnRenderer()
+    pipeline.OnRendererRemoved(renderer)  # cleanup() clears the node handles
+    pipeline.OnRendererAdded(renderer)    # must re-derive + restyle
+
+    assert pipeline.GetDataNode() is data, "the carrier must be re-derived"
+    assert pipeline._handle_sphere.GetRadius() == pytest.approx(
+        display.GetHandleRadius()
+    ), "the display styling must reach the glyph source after the churn"
+    assert pipeline._edges_tube.GetRadius() == pytest.approx(
+        display.GetEdgeWidth()
+    ), "the display styling must reach the edge tubes after the churn"
+    pipeline.cleanup()
