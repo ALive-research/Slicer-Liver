@@ -239,3 +239,78 @@ def test_geometry_edit_requests_render(pipeline_module, polygon_nodes):
         "(the render feedback-loop guard)."
     )
     pipeline.cleanup()
+
+
+class _TypedEvent:
+    """Interaction event stub carrying a VTK event type + display position."""
+
+    def __init__(self, etype, pos=(0.0, 0.0)):
+        self._etype = etype
+        self._pos = pos
+
+    def GetType(self):  # noqa: N802 - VTK verb
+        return self._etype
+
+    def GetDisplayPosition(self):  # noqa: N802 - VTK verb
+        return self._pos
+
+
+def test_drag_is_press_grab_move_release(pipeline_module, polygon_nodes):
+    """The per-point drag is a press/move/release GRAB, not proximity chasing.
+
+    A hover move near a handle must never edit; a left-button press within
+    the pick radius grabs ONE handle; moves while grabbed edit THAT handle
+    (even if the cursor drifts nearer another one); the release ends the
+    grab (returns False so the focus is released) and subsequent hover
+    moves are declined again.
+    """
+    import vtk
+
+    data, display = polygon_nodes
+    pipeline = pipeline_module.ControlPolygonPipeline()
+    pipeline.SetDisplayNode(display)
+    _seed_grid(data)
+    data.SetState(1)  # Planning
+
+    # GL-free seams: a live-renderer stand-in + deterministic pick geometry.
+    pipeline._safe_get_renderer = lambda: object()
+    pipeline._nearest_control_point_in_display = lambda r, e: (5, 4.0)
+    pipeline._event_world_at_control_point = lambda r, e, i: (50.0, 60.0, 5.0)
+
+    move = _TypedEvent(vtk.vtkCommand.MouseMoveEvent)
+    press = _TypedEvent(vtk.vtkCommand.LeftButtonPressEvent)
+    release = _TypedEvent(vtk.vtkCommand.LeftButtonReleaseEvent)
+
+    can, _ = pipeline.CanProcessInteractionEvent(move)
+    assert can is False, "a hover move (no grab) must not be claimed"
+    assert pipeline.ProcessInteractionEvent(move) is False
+
+    can, d2 = pipeline.CanProcessInteractionEvent(press)
+    assert can is True and d2 == pytest.approx(4.0)
+    assert pipeline.ProcessInteractionEvent(press) is True, "press begins the grab"
+
+    can, _ = pipeline.CanProcessInteractionEvent(move)
+    assert can is True, "moves while grabbed are claimed"
+    # The cursor now reads nearer ANOTHER handle -- the grab must stick to 5.
+    pipeline._nearest_control_point_in_display = lambda r, e: (0, 1.0)
+    assert pipeline.ProcessInteractionEvent(move) is True
+    grid = data.GetControlGridVector()
+    assert (grid[15], grid[16], grid[17]) == pytest.approx((50.0, 60.0, 5.0)), (
+        "the move edits the GRABBED handle (index 5), not the nearest one"
+    )
+    assert (grid[0], grid[1], grid[2]) == pytest.approx((0.0, 0.0, 5.0)), (
+        "handle 0 (now nearest) must be untouched mid-grab"
+    )
+
+    can, _ = pipeline.CanProcessInteractionEvent(release)
+    assert can is True, "the release while grabbed is claimed (ends the grab)"
+    assert pipeline.ProcessInteractionEvent(release) is False, (
+        "release ends the grab and releases the focus"
+    )
+
+    can, _ = pipeline.CanProcessInteractionEvent(move)
+    assert can is False, (
+        "after release, hover moves must be declined again -- the "
+        "released-mouse-still-edits failure mode."
+    )
+    pipeline.cleanup()
