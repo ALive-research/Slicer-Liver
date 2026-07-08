@@ -213,20 +213,17 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         Editor (ADR-0024 §"Per-structure micro-workflows").  The card holds
         its own scratch node between Run and Accept/Reject.
         """
-        page = qt.QWidget()
-        layout = qt.QVBoxLayout(page)
-
-        card = _StructureCard(self, title, sctCode)
-        layout.addWidget(card.runButton)
-        layout.addWidget(card.statusLabel)
-        layout.addWidget(card.progressBar)
-
-        actions = qt.QHBoxLayout()
-        actions.addWidget(card.acceptButton)
-        actions.addWidget(card.rejectButton)
-        actions.addWidget(card.editButton)
-        layout.addLayout(actions)
-        layout.addStretch(1)
+        # Layout authored in ``Resources/UI/StructureCard.ui`` (one reusable
+        # designer file backs all four cards); the controller binds the
+        # loaded widgets (view/controller split, ADR-0029).
+        page = slicer.util.loadUI(self.resourcePath("UI/StructureCard.ui"))
+        view = slicer.util.childWidgetVariables(page)
+        card = _StructureCard(self, title, sctCode, view=view)
+        # The widget owns its card controllers explicitly (previously they
+        # survived only through PythonQt signal references).
+        if not hasattr(self, "_structureCards"):
+            self._structureCards = []
+        self._structureCards.append(card)
         return page
 
     def _buildBackendStatusRow(self):
@@ -374,18 +371,34 @@ class _StructureCard:
     Accept/Reject; delegates all node lifecycle to the orchestrator.
     """
 
-    def __init__(self, widget, title, sctCode):
+    def __init__(self, widget, title, sctCode, view=None):
         self._widget = widget
         self._sctCode = sctCode
         self._scratch = None
 
-        self.runButton = qt.QPushButton(f"Run TotalSegmentator ({title})")
-        self.statusLabel = qt.QLabel("Idle")
-        self.progressBar = qt.QProgressBar()
+        if view is not None:
+            # VIEW/CONTROLLER split (ADR-0029): the widgets come from the
+            # designer-authored ``Resources/UI/StructureCard.ui`` as a
+            # ``childWidgetVariables`` namespace -- BIND them, do not build.
+            self.runButton = view.RunButton
+            self.statusLabel = view.StatusLabel
+            self.progressBar = view.ProgressBar
+            self.acceptButton = view.AcceptButton
+            self.rejectButton = view.RejectButton
+            self.editButton = view.EditButton
+            self.runButton.setText(f"Run TotalSegmentator ({title})")
+            self.statusLabel.setText("Idle")
+        else:
+            # Programmatic fallback -- the GL-free unit path (and any host
+            # without resourcePath) constructs the same six widgets.
+            self.runButton = qt.QPushButton(f"Run TotalSegmentator ({title})")
+            self.statusLabel = qt.QLabel("Idle")
+            self.progressBar = qt.QProgressBar()
+            self.acceptButton = qt.QPushButton("Accept")
+            self.rejectButton = qt.QPushButton("Reject")
+            self.editButton = qt.QPushButton("Edit in Segment Editor")
+
         self.progressBar.setVisible(False)
-        self.acceptButton = qt.QPushButton("Accept")
-        self.rejectButton = qt.QPushButton("Reject")
-        self.editButton = qt.QPushButton("Edit in Segment Editor")
         self.acceptButton.setEnabled(False)
         self.rejectButton.setEnabled(False)
 
