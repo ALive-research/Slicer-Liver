@@ -268,7 +268,7 @@ def test_t2_stage6_predicate_exists_on_shell():
     Red-fails on ``60c78df``: ``LiverWidget`` has no
     ``_stage6IsComplete`` member.
     """
-    widget = _liver_widget()
+    widget = _liver_widget_no_setup()  # predicate needs no sidebar/layout
     assert callable(getattr(widget, "_stage6IsComplete", None))
     result = widget._stage6IsComplete()
     assert isinstance(result, bool)
@@ -545,6 +545,82 @@ def test_stage2_routing_does_not_regress_shell_rows():
             )
     finally:
         widget._injectStageCompletionForTesting(None)
+
+
+# =========================================================================== #
+# Stage-6 Export — writing a plan flips the completion predicate
+# =========================================================================== #
+#
+# Contract (ADR-0023 §Stage 6): the shell-owned Export writes the resection
+# plan (.lrp.json via vtkMRMLResectionPlanStorageNode) and, on success, records
+# "last write OK" on the LiverShellState node so _stage6IsComplete flips true.
+# The testable seam is the shell's export core (_exportResectionPlan /
+# _recordStage6Write); the file dialog + Save button are :0-only.  Tests
+# skip-pending until the seam lands (ADR-0027).
+
+
+def _resection_plan_or_skip():
+    """Mint a resection plan via the C++ create-API, or skip."""
+    logic = _resections_logic()
+    if not hasattr(logic, "CreateResectionPlan"):
+        pytest.skip("vtkSlicerLiverResectionsLogic has no CreateResectionPlan.")
+    plan = logic.CreateResectionPlan("ExportTest")
+    if plan is None:
+        pytest.skip("CreateResectionPlan returned None.")
+    return plan
+
+
+def test_stage6_export_writes_plan_and_marks_complete(tmp_path):
+    """_exportResectionPlan writes the .lrp.json and flips Stage 6 complete."""
+    _clear_scene()
+    widget = _liver_widget_no_setup()
+    if not hasattr(widget, "_exportResectionPlan"):
+        pytest.skip("LiverWidget._exportResectionPlan not present -- Stage-6 "
+                    "export seam has not landed (ADR-0027).")
+    plan = _resection_plan_or_skip()
+    path = str(tmp_path / "plan.lrp.json")
+
+    assert widget._stage6IsComplete() is False
+    result = widget._exportResectionPlan(plan, path)
+    assert result is True, (
+        f"_exportResectionPlan must return True on a successful write; got {result!r}."
+    )
+    import os
+    assert os.path.exists(path), (
+        f"_exportResectionPlan must write the .lrp.json to {path}."
+    )
+    assert widget._stage6IsComplete() is True, (
+        "a successful export must record Stage6.LastWriteOK so _stage6IsComplete "
+        "flips true (ADR-0023 §Stage 6)."
+    )
+
+
+def test_stage6_record_write_flips_predicate():
+    """_recordStage6Write(True/False) drives _stage6IsComplete."""
+    _clear_scene()
+    widget = _liver_widget_no_setup()
+    if not hasattr(widget, "_recordStage6Write"):
+        pytest.skip("LiverWidget._recordStage6Write not present (ADR-0027).")
+
+    widget._recordStage6Write(True)
+    assert widget._stage6IsComplete() is True
+    widget._recordStage6Write(False)
+    assert widget._stage6IsComplete() is False
+
+
+def test_stage6_export_none_plan_is_noop(tmp_path):
+    """Exporting no plan is a no-op returning False; Stage 6 stays incomplete."""
+    _clear_scene()
+    widget = _liver_widget_no_setup()
+    if not hasattr(widget, "_exportResectionPlan"):
+        pytest.skip("LiverWidget._exportResectionPlan not present (ADR-0027).")
+    result = widget._exportResectionPlan(None, str(tmp_path / "none.lrp.json"))
+    assert result is False, (
+        "_exportResectionPlan(None, ...) must be a no-op returning False."
+    )
+    assert widget._stage6IsComplete() is False, (
+        "a failed/degenerate export must not mark Stage 6 complete."
+    )
 
 
 if __name__ == "__main__":
