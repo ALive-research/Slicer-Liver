@@ -171,20 +171,18 @@ def _segment_id_for_sct(segmentation: Any, sct_code: str) -> Any:
 
     Scans the segments' ``TerminologyEntry`` tag for the ``SCT^<code>^`` marker
     the canonical import writes (ADR-0011), mirroring the C++ resolver in
-    ``vtkSlicerVascularTerritoriesLogic::GetLiverSegmentId``.
+    ``vtkSlicerVascularTerritoriesLogic::GetLiverSegmentId`` and the Python
+    reader ``LiverSegmentationLogic._sctTagTexts`` (``vtk.reference`` out-param:
+    ``vtkSegment.GetTag`` takes a ``std::string&``, not a Python list).
     """
+    import vtk
+
     marker = f"SCT^{sct_code}^"
     for i in range(segmentation.GetNumberOfSegments()):
         segment = segmentation.GetNthSegment(i)
-        entry = vtk_tag(segment, "TerminologyEntry")
-        if entry and marker in entry:
+        entry = vtk.reference("")
+        if not segment.GetTag("TerminologyEntry", entry):
+            continue
+        if marker in str(entry):
             return segmentation.GetNthSegmentID(i)
     return None
-
-
-def vtk_tag(segment: Any, tag_name: str) -> str:
-    """Read a VTK segment tag, returning ``""`` when unset."""
-    holder = [""]
-    if segment.GetTag(tag_name, holder):
-        return holder[0]
-    return ""
