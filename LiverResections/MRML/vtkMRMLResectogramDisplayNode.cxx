@@ -52,7 +52,9 @@ vtkMRMLNodeNewMacro(vtkMRMLResectogramDisplayNode);
 
 //------------------------------------------------------------------------------
 vtkMRMLResectogramDisplayNode::vtkMRMLResectogramDisplayNode()
-  : ShowResection2D(false)
+  // TRUE by default: this node keys only the dedicated strip pipeline,
+  // and the resectogram singleton view exists solely to show the strip.
+  : ShowResection2D(true)
   , MirrorDisplay(false)
   , EnableFlexibleBoundary(false)
   , TextureNumComps(0)
