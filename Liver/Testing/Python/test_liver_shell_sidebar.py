@@ -295,8 +295,16 @@ def test_state_indicators_reflect_isstagecomplete():
 # ``import Liver`` guard.
 
 def _import_liver_or_skip():
-    from conftest import _import_slicer_or_skip  # type: ignore[import-not-found]
+    from conftest import (  # type: ignore[import-not-found]
+        _import_slicer_or_skip,
+        _require_qt_widget,
+    )
 
+    # LiverWidget subclasses ScriptedLoadableModuleWidget, whose class body needs
+    # qt.QWidget; the bare pytest row leaves it undefined (import Liver succeeds
+    # but Liver.LiverWidget is absent).  Guard on QWidget first, mirroring
+    # _instantiate_liver_widget, so this skips cleanly bare and runs launched.
+    _require_qt_widget()
     _import_slicer_or_skip()
     try:
         import Liver  # type: ignore[import-not-found]
@@ -304,6 +312,11 @@ def _import_liver_or_skip():
         pytest.skip(
             f"Liver scripted module not importable ({exc}); "
             "ensure the additional-module-paths include Liver/."
+        )
+    if not hasattr(Liver, "LiverWidget"):
+        pytest.skip(
+            "Liver.LiverWidget unavailable (no launched qSlicerApplication); "
+            "the developer-tools suppression seam runs under the launched harness."
         )
     return Liver
 
