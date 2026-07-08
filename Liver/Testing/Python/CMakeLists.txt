@@ -175,7 +175,16 @@ set(_liver_additional_module_paths
 # Same test roots as the bare ``pytest_scaffold`` entries, plus the Stage-2
 # surgeon-UI invariant tree: its scene/widget tests SKIP under bare pytest and
 # only execute meaningfully inside a launched qSlicerApplication (ADR-0024).
+# Root ORDER is load-bearing: pytest prepends every root's conftest dir to
+# sys.path at session start, so the LAST-listed root wins any test's plain
+# `import conftest`.  LiverSegmentation's tests import their conftest by
+# name (23 sites), so its root stays LAST; the Liver shell root -- whose
+# tests import the shared slicer_pytest_support instead -- goes first.
 set(_launched_test_roots
+  # The Liver shell's own suites: widget-level, so they skip under the
+  # bare rows -- omitting this root meant they executed NOWHERE in CI
+  # and drifted silently (11 failures accumulated unseen).
+  "${CMAKE_SOURCE_DIR}/Liver/Testing/Python"
   "${CMAKE_SOURCE_DIR}/Testing/Python"
   "${CMAKE_SOURCE_DIR}/LiverResections/Testing/Python"
   "${CMAKE_SOURCE_DIR}/LiverSegmentation/Testing/Python"
