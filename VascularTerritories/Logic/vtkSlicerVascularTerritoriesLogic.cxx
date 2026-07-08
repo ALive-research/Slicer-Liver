@@ -297,9 +297,38 @@ void vtkSlicerVascularTerritoriesLogic::InitializeCenterlineSearchModel(vtkMRMLM
 }
 
 //----------------------------------------------------------------------------
-std::string vtkSlicerVascularTerritoriesLogic::GetLiverSegmentId(vtkMRMLSegmentationNode* vtkNotUsed(segmentationNode))
+std::string vtkSlicerVascularTerritoriesLogic::GetLiverSegmentId(vtkMRMLSegmentationNode* segmentationNode)
 {
-  // STUB (RED): the real body scans segments for the SCT liver tag.
+  if (!segmentationNode)
+  {
+    return "";
+  }
+  vtkSegmentation* segmentation = segmentationNode->GetSegmentation();
+  if (!segmentation)
+  {
+    return "";
+  }
+  // Match the liver by its SNOMED-CT structure code in the TerminologyEntry
+  // tag (ADR-0011 liver code), NOT by the segment name -- Stage 2 emits an
+  // SCT-tagged canonical segmentation with arbitrary segment names.  Substring
+  // match on scheme+code, tolerant of the meaning string (mirrors the Stage-2
+  // isStructureAccepted check).
+  const std::string liverToken = "SCT^10200004";
+  std::vector<std::string> segmentIds;
+  segmentation->GetSegmentIDs(segmentIds);
+  for (const std::string& segmentId : segmentIds)
+  {
+    vtkSegment* segment = segmentation->GetSegment(segmentId);
+    if (!segment)
+    {
+      continue;
+    }
+    std::string tag;
+    if (segment->GetTag("TerminologyEntry", tag) && tag.find(liverToken) != std::string::npos)
+    {
+      return segmentId;
+    }
+  }
   return "";
 }
 
@@ -326,8 +355,10 @@ void vtkSlicerVascularTerritoriesLogic::calculateVascularTerritoryMap(vtkMRMLSeg
     return;
   }
 
-  // Get voxels tagged as liver
-  std::string segmentId = segmentation->GetSegmentation()->GetSegmentIdBySegmentName("liver");
+  // Get voxels tagged as liver -- resolved by SCT structure tag (ADR-0011),
+  // not the segment name, so the Stage-2 SCT-tagged canonical segmentation
+  // feeds Stage 3 (ADR-0024 §Output contract).
+  std::string segmentId = this->GetLiverSegmentId(segmentation);
   // Check metadata for segmentation
   vtkSegmentation* segm = segmentation->GetSegmentation();
   int numberOfSegments = segm->GetNumberOfSegments();
