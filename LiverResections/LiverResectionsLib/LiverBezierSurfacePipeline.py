@@ -314,6 +314,26 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         # Restart DistanceSpheroid init-placement for the new carrier (slice 3b).
         self._distance_spheroid_points_placed = 0
 
+    def OnReferenceToDisplayNodeAdded(self, fromNode: Any, role: Any = None) -> None:  # noqa: N802 - VTK verb
+        """Adopt the displayable when it links to our display node late.
+
+        The production creation ordering (``CreateDefaultDisplayNodes``) adds
+        the display node to the scene -- firing the LayerDM creator and
+        ``SetDisplayNode`` -- BEFORE ``SetAndObserveDisplayNodeID`` links it
+        to the carrier, so the data node derived as ``None``.  The LayerDM
+        manager calls this hook at the exact link moment with ``fromNode`` ==
+        the referencing displayable (the carrier); adopt it and re-dispatch.
+        Without this the Pipeline stays permanently data-node-less (no
+        observers, no dispatch, the default unit patch renders).
+        """
+        if self._data_node is None and fromNode is not None and fromNode is not self._display_node:
+            self._data_node = fromNode
+            self._attach_observer(fromNode)
+            self._last_update_key = None
+            self._last_resection_scan_mtime = None
+            self._last_locator_scan_mtime = None
+        self.UpdatePipeline()
+
     def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
         """Dispatch the active Representation by ``(state, initMode)``.
 
@@ -326,6 +346,23 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         changes (and on ``ResetDisplay()``).
         """
         self._ensure_representations()
+
+        # Late-bind the data node (the production creation ordering):
+        # ``CreateDefaultDisplayNodes`` adds the display node to the scene --
+        # firing the LayerDM creator and this Pipeline's ``SetDisplayNode`` --
+        # BEFORE ``SetAndObserveDisplayNodeID`` links it to the carrier, so
+        # ``GetDisplayableNode()`` was None at derivation time.  Re-derive
+        # here; adopting also attaches the carrier observer so subsequent
+        # control-grid edits re-dispatch.
+        if self._data_node is None and self._display_node is not None:
+            getter = getattr(self._display_node, "GetDisplayableNode", None)
+            displayable = getter() if getter is not None else None
+            if displayable is not None:
+                self._data_node = displayable
+                self._attach_observer(displayable)
+                self._last_update_key = None
+                self._last_resection_scan_mtime = None
+                self._last_locator_scan_mtime = None
 
         # Reverse-resolve the orchestrating wrapper when no explicit one was
         # set (ADR-0031).  The LayerDM creator hands the Pipeline only the
