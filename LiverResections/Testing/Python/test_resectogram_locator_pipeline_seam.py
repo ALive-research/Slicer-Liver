@@ -47,7 +47,7 @@ world -> node) in isolation.  THIS file pins the PIPELINE SEAM: that
 and composes them, reusing the SAME known affine 4x4 control grid + the SAME
 pixel(64,192)/viewport(256x256)/ratio(1,1) -> (u,v)=(0.25,0.75) -> world
 composition anchor, so the expected world point is already known
-((22.5, 7.5, 0.0), x = 30*v, y = 30*u).
+((7.5, 22.5, 0.0), x = 30*u, y = 30*v in strip convention).
 
 WHY LAUNCHED-SLICER / RUN-VS-SKIP
 ---------------------------------
@@ -134,7 +134,8 @@ def _make_affine_carrier_or_skip(slicer, name):
 
     IDENTICAL grid to ``test_resectogram_locator_producer.py``:
     ``P[r][c] = (x = c*10, y = r*10, z = 0)`` makes the deg-3 tensor Bezier
-    EXACTLY affine in (u, v): ``x = 30*v, y = 30*u, z = 0`` -- so
+    EXACTLY affine: the producer maps strip (u, v) so x = 30*u,
+    y = 30*v -- so
     ``EvaluateSurface(0.25, 0.75)`` is the hand-computed (22.5, 7.5, 0.0).
     Reused verbatim so the seam's composed world point is already known.
     """
@@ -169,12 +170,16 @@ def _make_affine_carrier_or_skip(slicer, name):
 
 
 def _expected_world_for_uv(u, v):
-    """The hand-computed world point of the affine grid at (u, v).
+    """The hand-computed world point of the affine grid at strip (u, v).
 
-    ``x = 30*v, y = 30*u, z = 0`` (see ``_make_affine_carrier_or_skip``); the
-    same anchor the sibling producer test uses.  u drives y, v drives x.
+    STRIP convention: u is the horizontal (column) fraction and drives x;
+    v is the vertical (row) fraction and drives y -- ``x = 30*u, y = 30*v``
+    on the affine grid.  The producer owns the transposition onto the
+    carrier's row-first ``EvaluateSurface`` (the marker-offset bug: passing
+    (u, v) straight through put the bottom-right click on the top-left
+    surface corner).
     """
-    return (30.0 * v, 30.0 * u, 0.0)
+    return (30.0 * u, 30.0 * v, 0.0)
 
 
 def _pipeline_or_skip(slicer):
@@ -337,7 +342,7 @@ def test_seam_produces_picked_position_from_display_position():
     _inject_state(pipeline, carrier, mat_ratio=(1.0, 1.0), viewport_size=(256, 256))
     seam = _seam_or_skip_pending(pipeline)
 
-    expected = _expected_world_for_uv(0.25, 0.75)  # (22.5, 7.5, 0.0)
+    expected = _expected_world_for_uv(0.25, 0.75)  # (7.5, 22.5, 0.0)
 
     returned = seam((64.0, 192.0))
 
@@ -347,7 +352,7 @@ def test_seam_produces_picked_position_from_display_position():
     )
     assert tuple(returned) == pytest.approx(expected, abs=WORLD_TOL), (
         f"the seam must compose display (64, 192) -> (u, v) = (0.25, 0.75) -> "
-        f"world {expected} (x = 30*v, y = 30*u; VTK bottom-left origin, no Qt "
+        f"world {expected} (x = 30*u, y = 30*v; VTK bottom-left origin, no Qt "
         f"y-flip); got {tuple(returned)}."
     )
     written = tuple(locator.GetPickedPositionWorld())
@@ -524,7 +529,7 @@ def test_process_interaction_event_drives_the_pick_from_display_position():
     _inject_state(pipeline, carrier, mat_ratio=(1.0, 1.0), viewport_size=(256, 256))
     _seam_or_skip_pending(pipeline)  # skips-pending until the seam lands
 
-    expected = _expected_world_for_uv(0.25, 0.75)  # (22.5, 7.5, 0.0)
+    expected = _expected_world_for_uv(0.25, 0.75)  # (7.5, 22.5, 0.0)
     handled = pipeline.ProcessInteractionEvent(
         _FakeInteractionEventData((64.0, 192.0))
     )
