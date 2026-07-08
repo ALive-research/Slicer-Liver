@@ -243,14 +243,10 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         sub-affordance of the Liver shell's Stage 6; this local row migrates
         there when that panel lands.
         """
-        row = qt.QWidget()
-        layout = qt.QHBoxLayout(row)
-        self._backendStatusLabel = qt.QLabel()
-        layout.addWidget(self._backendStatusLabel)
-        layout.addStretch(1)
-        preDownload = qt.QPushButton("Pre-download AI backend")
-        preDownload.connect("clicked()", self.onPreDownload)
-        layout.addWidget(preDownload)
+        row = slicer.util.loadUI(self.resourcePath("UI/BackendStatusRow.ui"))
+        ui = slicer.util.childWidgetVariables(row)
+        self._backendStatusLabel = ui.BackendStatusLabel
+        ui.PreDownloadButton.connect("clicked()", self.onPreDownload)
         return row
 
     def _buildLoadSegmentationSection(self):
@@ -261,35 +257,16 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         segments a structure, and Import -> the logic promotes it to canonical
         and SCT-tags the assigned segments (``importSegmentationAsCanonical``).
         """
-        box = qt.QGroupBox("Load an existing segmentation")
-        box.setObjectName("LoadSegmentationSection")
-        layout = qt.QVBoxLayout(box)
-        layout.addWidget(qt.QLabel(
-            "Load a segmentation via Add Data, select it here, assign each "
-            "segment a structure, then Import as the canonical segmentation."))
-
-        combo = slicer.qMRMLNodeComboBox()
-        combo.setObjectName("LoadSegmentationComboBox")
-        combo.nodeTypes = ["vtkMRMLSegmentationNode"]
-        combo.addEnabled = False
-        combo.removeEnabled = False
-        combo.noneEnabled = True
+        box = slicer.util.loadUI(self.resourcePath("UI/LoadSegmentationSection.ui"))
+        ui = slicer.util.childWidgetVariables(box)
+        combo = ui.LoadSegmentationComboBox
+        # Bind the selector's scene explicitly -- the root is a plain QGroupBox,
+        # so there is no qMRMLWidget setMRMLScene to propagate.
         combo.setMRMLScene(slicer.mrmlScene)
         combo.connect("currentNodeChanged(vtkMRMLNode*)", self._onLoadSegmentationSelected)
-        layout.addWidget(combo)
-
-        table = qt.QTableWidget()
-        table.setObjectName("LoadSegmentationAssignTable")
-        table.setColumnCount(2)
-        table.setHorizontalHeaderLabels(["Segment", "Structure"])
+        table = ui.LoadSegmentationAssignTable
         table.horizontalHeader().setStretchLastSection(True)
-        table.editTriggers = qt.QAbstractItemView.NoEditTriggers
-        layout.addWidget(table)
-
-        importButton = qt.QPushButton("Import as canonical segmentation")
-        importButton.setObjectName("ImportSegmentationButton")
-        importButton.connect("clicked()", self._onImportSegmentationAsCanonical)
-        layout.addWidget(importButton)
+        ui.ImportSegmentationButton.connect("clicked()", self._onImportSegmentationAsCanonical)
 
         self._loadSegCombo = combo
         self._loadSegTable = table
