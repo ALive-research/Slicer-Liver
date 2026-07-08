@@ -12,6 +12,7 @@ set(KIT_TEST_SRCS
   vtkMRMLBezierSurfaceNodeTest1.cxx
   vtkMRMLParametricSurfaceDisplayNodeTest1.cxx
   vtkMRMLResectogramDisplayNodeTest1.cxx
+  vtkMRMLControlPolygonDisplayNodeTest1.cxx
   vtkMRMLAbstractParametricSurfaceNodeTest1.cxx
   vtkMRMLResectionPlanNodeTest1.cxx
   vtkMRMLResectionPlanStorageNodeTest1.cxx
@@ -52,6 +53,7 @@ slicerMacroConfigureModuleCxxTestDriver(
 SIMPLE_TEST(vtkMRMLBezierSurfaceNodeTest1)
 SIMPLE_TEST(vtkMRMLParametricSurfaceDisplayNodeTest1)
 SIMPLE_TEST(vtkMRMLResectogramDisplayNodeTest1)
+SIMPLE_TEST(vtkMRMLControlPolygonDisplayNodeTest1)
 SIMPLE_TEST(vtkMRMLAbstractParametricSurfaceNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanNodeTest1)
 SIMPLE_TEST(vtkMRMLResectionPlanStorageNodeTest1)
