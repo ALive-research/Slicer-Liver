@@ -55,6 +55,7 @@
 #include "vtkMRMLResectogramDisplayNode.h"
 #include "vtkMRMLResectionPlanNode.h"
 #include "vtkMRMLResectionPlanStorageNode.h"
+#include "vtkMRMLControlPolygonDisplayNode.h"
 #include "vtkMRMLLocatorNode.h"
 #include "vtkMRMLLocatorDisplayNode.h"
 
@@ -207,6 +208,11 @@ void vtkSlicerLiverResectionsLogic::RegisterNodes()
   // persistence flows through the plan storage node below.
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLParametricSurfaceDisplayNode>::New());
+
+  // Control-polygon display aspect (ADR-0033): the carrier's SECOND display
+  // node, keying the ControlPolygonPipeline (handles + edges + the
+  // per-point drag) independently of the surface display above.
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLControlPolygonDisplayNode>::New());
 
   // T3 ResectogramPipeline display node (ADR-0013 §1 + §5).  The
   // resectogram is the flattened 2D image of the Bezier (u, v) domain

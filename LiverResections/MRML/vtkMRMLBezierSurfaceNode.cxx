@@ -39,6 +39,7 @@
 
 // This module MRML includes
 #include "vtkMRMLBezierSurfaceNode.h"
+#include "vtkMRMLControlPolygonDisplayNode.h"
 #include "vtkMRMLParametricSurfaceDisplayNode.h"
 
 // MRML includes
@@ -391,6 +392,14 @@ void vtkMRMLBezierSurfaceNode::CreateDefaultDisplayNodes()
   auto displayNode = vtkSmartPointer<vtkMRMLParametricSurfaceDisplayNode>::New();
   this->GetScene()->AddNode(displayNode);
   this->SetAndObserveDisplayNodeID(displayNode->GetID());
+
+  // The control polygon is a first-class display aspect with its OWN display
+  // node (ADR-0033): mint it alongside the surface display so the
+  // ControlPolygonPipeline renders the handles + edges and hosts the
+  // per-point drag, independently visible/stylable from the surface.
+  auto controlPolygonDisplayNode = vtkSmartPointer<vtkMRMLControlPolygonDisplayNode>::New();
+  this->GetScene()->AddNode(controlPolygonDisplayNode);
+  this->AddAndObserveDisplayNodeID(controlPolygonDisplayNode->GetID());
 }
 
 //------------------------------------------------------------------------------

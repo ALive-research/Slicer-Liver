@@ -15,6 +15,8 @@ set(${KIT}_SRCS
   vtkMRMLParametricSurfaceDisplayNode.cxx
   vtkMRMLResectogramDisplayNode.h
   vtkMRMLResectogramDisplayNode.cxx
+  vtkMRMLControlPolygonDisplayNode.h
+  vtkMRMLControlPolygonDisplayNode.cxx
   vtkMRMLResectionPlanNode.h
   vtkMRMLResectionPlanNode.cxx
   vtkMRMLResectionPlanStorageNode.h
