@@ -76,8 +76,11 @@ public:
     , ResectionOpacity(1.0f)
     , InterpolatedMargins(false)
     , ResectionClipOut(false)
-    , GridDivisions(20)
-    , GridThicknessFactor(9.5f)
+    // Grid OFF by default -- the 1:1 locator marker carries the
+    // resectogram<->surface correspondence; the display node's values
+    // overwrite these uniforms on every update anyway.
+    , GridDivisions(0)
+    , GridThicknessFactor(0.0f)
     , LocatorPosition{ 0.0f, 0.0f, 0.0f }
     , LocatorRadius(0.0f)
   {

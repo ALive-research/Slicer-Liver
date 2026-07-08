@@ -74,6 +74,10 @@ public:
     , ResectionColor{ 1.0f, 1.0f, 1.0f }
     , ResectionGridColor{ 0.0f, 0.0f, 0.0f }
     , InterpolatedMargins(false)
+    // Grid uniforms OFF (and, previously, UNINITIALIZED -- the strip's
+    // stray grid came from indeterminate values reaching the shader).
+    , GridDivisions(0)
+    , GridThicknessFactor(0.0f)
     , ShowResection2D(false)
     , PortalContourThickness(0.3f)
     , HepaticContourThickness(0.3f)
