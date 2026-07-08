@@ -309,3 +309,41 @@ def test_geometry_edit_requests_render(pipeline_module, bezier_nodes):
         "(the render feedback-loop guard)."
     )
     pipeline.cleanup()
+
+
+def test_locator_pick_requests_render(pipeline_module, bezier_nodes):
+    """A locator picked-point write must repaint the surface marker.
+
+    The render-request gate keys on the control-point geometry digest,
+    which a locator pick does not change -- without folding the picked
+    position into the key, the uLocatorPosition uniform updates but the
+    view repaints only on the next unrelated render (invisible marker).
+    A Modified at an unchanged pick must still not re-request (loop guard).
+    """
+    import slicer
+
+    data, display = bezier_nodes
+    scene = slicer.mrmlScene
+    locator = scene.AddNewNodeByClass("vtkMRMLLocatorNode")
+    try:
+        pipeline = pipeline_module.LiverBezierSurfacePipeline()
+        pipeline.SetDisplayNode(display)
+        data.SetState(1)  # Planning
+        pipeline.UpdatePipeline()  # resolves + observes the locator
+
+        renders = []
+        pipeline.RequestRender = lambda: renders.append(1)
+
+        locator.SetPickedPositionWorld(10.0, 20.0, 30.0)
+        assert renders, (
+            "a locator pick must request a render -- the marker uniform "
+            "otherwise repaints only on the next unrelated render."
+        )
+        before = len(renders)
+        locator.Modified()  # unchanged pick -- render-churn signature
+        assert len(renders) == before, (
+            "a Modified at an unchanged pick must not re-request (loop guard)"
+        )
+        pipeline.cleanup()
+    finally:
+        scene.RemoveNode(locator)

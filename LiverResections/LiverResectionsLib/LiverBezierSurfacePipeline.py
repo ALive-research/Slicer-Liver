@@ -958,13 +958,15 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         ``UpdatePipeline()`` re-reads node state directly.
 
         Requests a render when the VISIBLE dispatch inputs — the
-        ``(state, initMode)`` tuple and the control-point geometry digest —
-        actually changed (the ResectogramPipeline pattern): without the
-        request, a Planning drag mutates the surface polydata while the 3D
-        view stays frozen until an unrelated render (e.g. a camera orbit)
-        repaints it.  Gating on the digest rather than ``GetMTime`` keeps a
-        render-induced ``Modified`` at fixed geometry from re-requesting —
-        the render feedback-loop guard.
+        ``(state, initMode)`` tuple, the control-point geometry digest, and
+        the locator's picked world position (the ``uLocatorPosition`` marker
+        uniform, ADR-0025 §Rendering) — actually changed (the
+        ResectogramPipeline pattern): without the request, a Planning drag
+        mutates the surface polydata (and a resectogram pick moves the
+        marker) while the 3D view stays frozen until an unrelated render
+        (e.g. a camera orbit) repaints it.  Gating on positions rather than
+        ``GetMTime`` keeps a render-induced ``Modified`` at fixed geometry
+        from re-requesting — the render feedback-loop guard.
         """
         del caller, event  # observers route uniformly into UpdatePipeline()
         self.UpdatePipeline()
@@ -973,6 +975,7 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             _safe_get_state(self._data_node),
             _safe_get_init_mode(self._data_node),
             _control_points_digest(self._data_node),
+            _safe_get_picked_position(self._locator_node),
         )
         if render_key == self._last_render_key:
             return
@@ -1032,6 +1035,23 @@ def _safe_get_mtime(node: Any) -> int:
         return int(getter())
     except Exception:  # pragma: no cover - defensive
         return 0
+
+
+def _safe_get_picked_position(node: Any) -> tuple | None:
+    """The locator's ``PickedPositionWorld`` as a tuple; ``None`` sans node.
+
+    Part of the render-request gate: a pick CHANGE repaints the marker, a
+    render-churned ``Modified`` at an unchanged pick does not.
+    """
+    if node is None:
+        return None
+    getter = getattr(node, "GetPickedPositionWorld", None)
+    if getter is None:
+        return None
+    try:
+        return tuple(float(v) for v in getter())
+    except Exception:  # pragma: no cover - defensive
+        return None
 
 
 def _control_points_digest(node: Any) -> tuple:
