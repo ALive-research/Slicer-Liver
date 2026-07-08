@@ -23,6 +23,7 @@
 
 set(LiverResectionsLib_PYTHON_SCRIPTS
   __init__.py
+  ControlPolygonPipeline.py
   DistanceMaps.py
   LiverBezierSurfacePipeline.py
   LocatorReslicer.py
