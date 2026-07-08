@@ -66,7 +66,7 @@
  * \par Field roster
  *
  *   - ``HandleRadius`` — control-point handle sphere radius in world
- *     units (default 4.0; the v1 widget's 2.5 read too small over a
+ *     units (default 6.0; the v1 widget's 2.5 read too small over a
  *     liver-scale scene).
  *   - ``HandleColor`` — handle sphere colour.
  *   - ``EdgeColor`` — polygon edge colour.

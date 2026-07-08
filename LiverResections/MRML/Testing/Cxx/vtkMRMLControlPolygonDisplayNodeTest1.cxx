@@ -66,7 +66,7 @@ int testDefaults()
   vtkNew<vtkMRMLControlPolygonDisplayNode> node;
 
   // HandleRadius sized for a liver-scale scene (v1's 2.5 read too small).
-  CHECK_DOUBLE(node->GetHandleRadius(), 4.0);
+  CHECK_DOUBLE(node->GetHandleRadius(), 6.0);
   double handleColor[3] = { 0.0, 0.0, 0.0 };
   node->GetHandleColor(handleColor);
   CHECK_DOUBLE(handleColor[0], 1.0);
@@ -74,10 +74,10 @@ int testDefaults()
   CHECK_DOUBLE(handleColor[2], 1.0);
   double edgeColor[3] = { 0.0, 0.0, 0.0 };
   node->GetEdgeColor(edgeColor);
-  CHECK_DOUBLE(edgeColor[0], 0.7);
-  CHECK_DOUBLE(edgeColor[1], 0.7);
-  CHECK_DOUBLE(edgeColor[2], 0.7);
-  CHECK_DOUBLE(node->GetEdgeWidth(), 1.0);
+  CHECK_DOUBLE(edgeColor[0], 1.0);
+  CHECK_DOUBLE(edgeColor[1], 0.0);
+  CHECK_DOUBLE(edgeColor[2], 0.0);
+  CHECK_DOUBLE(node->GetEdgeWidth(), 1.5);
 
   CHECK_STRING(node->GetNodeTagName(), "ControlPolygonDisplay");
   return EXIT_SUCCESS;
