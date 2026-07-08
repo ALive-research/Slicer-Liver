@@ -157,17 +157,20 @@ void vtkOpenGLBezierResectionPolyDataMapper::BuildBufferObjects(vtkRenderer* ren
       int dimensions[3] = { 0, 0, 0 };
       image->GetDimensions(dimensions);
 
-      // Build only when there is an INITIALIZED GL context, the image is
-      // non-empty, and its scalars are allocated: Create3DFromRaw on a
-      // null/short buffer would upload garbage or abort, and on a
-      // not-yet-realized context vtkOpenGLState's texture-format table is
-      // still empty, so format resolution fails ("Failed to determine
-      // texture parameters") even though the hardware supports the format.
-      // Otherwise leave DistanceMapTexture untouched and do NOT advance
-      // DistanceMapBuiltMTime, so the shader takes its no-distance-map path
-      // and a later render retries once the image/context is valid
-      // (ADR-0003: MRML and GL state must not diverge).
-      const bool canBuild = renWin != nullptr && renWin->GetInitialized() && dimensions[0] > 0 && dimensions[1] > 0 && dimensions[2] > 0 && image->GetScalarPointer() != nullptr;
+      // Build only when there is a live GL context, the image is non-empty,
+      // and its scalars are allocated: Create3DFromRaw on a null/short buffer
+      // would upload garbage or abort.  NOTE: do NOT gate on
+      // renWin->GetInitialized() here -- a Qt-managed
+      // vtkGenericOpenGLRenderWindow never sets that flag (Qt owns the
+      // context), so the gate would defer the build forever.  This method
+      // runs inside the render pass, where the context is current by
+      // construction; upload validity is judged by Create3DFromRaw's result
+      // below.  Otherwise leave DistanceMapTexture untouched and do NOT
+      // advance DistanceMapBuiltMTime, so the shader takes its
+      // no-distance-map path and a later render retries once the
+      // image/context is valid (ADR-0003: MRML and GL state must not
+      // diverge).
+      const bool canBuild = renWin != nullptr && dimensions[0] > 0 && dimensions[1] > 0 && dimensions[2] > 0 && image->GetScalarPointer() != nullptr;
       if (canBuild)
       {
         vtkNew<vtkTextureObject> texture;

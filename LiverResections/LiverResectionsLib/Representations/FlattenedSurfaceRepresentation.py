@@ -652,13 +652,23 @@ class FlattenedSurfaceRepresentation:
         render_window = self._render_window()
         if render_window is None:
             return None
-        # Defer until the GL context is REALIZED: before the window's first
-        # render the vtkOpenGLState texture-format table is still empty, so
-        # the upload fails noisily ("Failed to determine texture parameters")
-        # even though the hardware supports the format.  Returning None takes
-        # the caller's deferred path and a later update retries.
-        initialized = getattr(render_window, "GetInitialized", None)
-        if initialized is not None and not initialized():
+        # This bind runs OUTSIDE the render pass (Representation.update()), so
+        # the GL context must be made current explicitly -- and before the
+        # window's first render there is no usable context at all (the
+        # vtkOpenGLState texture-format table is empty, so the upload fails
+        # noisily).  Probe with MakeCurrent/IsCurrent: not-current after the
+        # attempt means not-yet-realized -> return None so the caller's
+        # deferred path retries on a later update.  NOTE: GetInitialized() is
+        # NOT a usable gate here -- a Qt-managed vtkGenericOpenGLRenderWindow
+        # never sets it (Qt owns the context) and it would defer forever.
+        make_current = getattr(render_window, "MakeCurrent", None)
+        if make_current is not None:
+            try:
+                make_current()
+            except Exception:  # pragma: no cover - defensive
+                return None
+        is_current = getattr(render_window, "IsCurrent", None)
+        if is_current is not None and not is_current():
             return None
         # The display node's TextureNumComps defaults to 0 (unset) and the
         # workflow never writes it; a 0-component upload fails format
