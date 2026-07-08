@@ -630,3 +630,73 @@ def test_texture_build_defers_until_window_initialized(rep_module, monkeypatch):
         "no upload may be attempted on a not-yet-realized window (empty "
         "texture-format table -> guaranteed noisy failure)."
     )
+
+
+class _StubMapperWithTexture(_StubMapperWithMatRatio):
+    """MatRatio stub extended with the distance-map texture accessors."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.texture = None
+
+    def SetDistanceMapTextureObject(self, texture) -> None:  # noqa: N802
+        self.texture = texture
+
+    def GetDistanceMapTextureObject(self):  # noqa: N802 - VTK verb
+        return self.texture
+
+    def SetRasToIjkMatrixT(self, _matrix) -> None:  # noqa: N802 - VTK verb
+        pass
+
+    def SetIjkToTextureMatrixT(self, _matrix) -> None:  # noqa: N802 - VTK verb
+        pass
+
+
+class _StubDistanceMapVolume:
+    def __init__(self, image) -> None:
+        self._image = image
+
+    def GetImageData(self):  # noqa: N802 - VTK verb
+        return self._image
+
+    def GetRASToIJKMatrix(self, _matrix) -> None:  # noqa: N802 - VTK verb
+        pass
+
+
+class _StubResectionPlanNode:
+    def __init__(self, volume) -> None:
+        self._volume = volume
+
+    def GetDistanceMapVolumeNode(self):  # noqa: N802 - VTK verb
+        return self._volume
+
+
+def test_effective_comps_survive_subsequent_updates(rep_module, monkeypatch):
+    """A later ``update()`` must not clobber the bind-time effective comps.
+
+    The display node's ``TextureNumComps`` defaults to 0 (unset) and nothing
+    writes it, so ``_apply_display_node`` -- which runs on EVERY update,
+    BEFORE the texture path -- must not push that 0 over the effective
+    component count derived at bind time.  Comps 0 disables the shader's
+    ``uTextureNumComps > 2`` margin-band branch: the strip renders grid-only
+    (empty) from the second reconcile onwards (any drag / blur / camera
+    update) even though the texture stays bound.
+    """
+    rep = _texture_build_rep(rep_module, monkeypatch)
+    mapper = _StubMapperWithTexture()
+    rep._resection_mapper_2d = mapper
+    rep.SetResectionPlanNode(
+        _StubResectionPlanNode(_StubDistanceMapVolume(_FakeImage3D()))
+    )
+
+    display = _StubDisplayNode(texture_num_comps=0)  # the real-world default
+    rep.update(display, _StubDataNode())
+    assert mapper.texture is not None, "precondition: the texture bound"
+    assert mapper.texture_num_comps == 4, "precondition: image comps pushed"
+
+    rep.update(display, _StubDataNode())  # any later reconcile
+    assert mapper.texture_num_comps == 4, (
+        "the display default (0) clobbered the bind-time effective "
+        "TextureNumComps on a subsequent update -- the already-bound "
+        "short-circuit never re-pushes it, so the strip goes grid-only."
+    )
