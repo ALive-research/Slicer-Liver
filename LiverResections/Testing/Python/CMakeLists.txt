@@ -112,6 +112,23 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections"
     )
 
+    # #538 trigger, plan side -- CreateResectionPlan auto-attaches the
+    # scene's computed distance map (DistanceMap='True' + Computed='True')
+    # via SetAndObserveDistanceMapVolumeNode (ADR-0031), so Planning opens
+    # ready after the Stage-2 canonical import.  Scene + wrapped-C++
+    # needing: runs under the launched `pytest_launched` row, skips
+    # cleanly here under bare pytest.
+    add_test(
+      NAME LiverResections_plan_distance_map_autoattach
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_resection_plan_distance_map_autoattach.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_plan_distance_map_autoattach PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;distance-map"
+    )
+
     # T5.2-f -- Subject-Hierarchy collection invariant (ADR-0023
     # §"MRML scene organisation"): the wrapper vtkMRMLLiverResectionNode
     # collects under a scene-root "Resections" folder; the hidden Bezier

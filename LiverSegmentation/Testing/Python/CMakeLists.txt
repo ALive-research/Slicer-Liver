@@ -132,6 +132,12 @@ set(_liverseg_pytest_files
   # renders through Planning.  Scene-needing (segmentation converter); runs
   # under the launched `pytest_launched` row, skips cleanly bare.
   test_liversegmentation_segment_surface_representation.py
+  # #538 trigger -- importing the canonical segmentation also computes the
+  # tagged distance map (reference volume from the Stage-1 LiverRole tag;
+  # resolve-or-create output; graceful degradation without a reference).
+  # Scene-needing (converter + SimpleITK); launched `pytest_launched` row,
+  # skips cleanly bare.
+  test_liversegmentation_distance_map_on_import.py
 )
 
 foreach(_pytest_file IN LISTS _liverseg_pytest_files)
