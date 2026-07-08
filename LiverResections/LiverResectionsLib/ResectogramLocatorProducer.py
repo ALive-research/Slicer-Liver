@@ -85,7 +85,20 @@ class ResectogramLocatorProducer:
             uv_out,
         )
 
-        polydata = surface.EvaluateSurface(uv_out[0], uv_out[1])
+        return self.produce_from_uv(uv_out[0], uv_out[1])
+
+    def produce_from_uv(self, u: float, v: float) -> tuple[float, float, float] | None:
+        """Evaluate ``S(u, v)`` and write the world point onto the locator.
+
+        The UV seam: callers that already know the exact parametric
+        coordinates (the camera-based display->world inversion on the
+        standalone strip view) skip the window-fraction ``PixelToUV``
+        approximation entirely.  Same return/no-op contract as ``produce``.
+        """
+        surface = self._surface_node
+        if surface is None:
+            return None
+        polydata = surface.EvaluateSurface(float(u), float(v))
         if polydata is None or polydata.GetNumberOfPoints() < 1:
             return None
         world = polydata.GetPoint(0)
