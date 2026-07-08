@@ -78,6 +78,8 @@ public:
     // stray grid came from indeterminate values reaching the shader).
     , GridDivisions(0)
     , GridThicknessFactor(0.0f)
+    , LocatorPosition{ 0.0f, 0.0f, 0.0f }
+    , LocatorRadius(0.0f)
     , ShowResection2D(false)
     , PortalContourThickness(0.3f)
     , HepaticContourThickness(0.3f)
@@ -103,6 +105,8 @@ public:
   bool InterpolatedMargins;
   unsigned int GridDivisions;
   float GridThicknessFactor;
+  float LocatorPosition[3];
+  float LocatorRadius;
   bool ShowResection2D;
   float PortalContourThickness;
   float HepaticContourThickness;
@@ -211,6 +215,8 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(std::map<vtkShader:
                                "uniform vec3 uResectionGridColor;\n"
                                "uniform int uGridDivisions;\n"
                                "uniform float uGridThickness;\n"
+                               "uniform vec3 uLocatorPosition;\n"
+                               "uniform float uLocatorRadius;\n"
                                "in vec2 uvCoordsOutput;\n"
                                "in vec4 vertexWCVSOutputBS;\n"
                                "vec4 fragPositionMCBS = vertexWCVSOutputBS;\n"
@@ -325,6 +331,16 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(std::map<vtkShader:
     "  diffuseColor = vec3(0.0);\n"
     "} else if ((uvCoordsOutput.x > 0.5 && uvCoordsOutput.y < borderSize) || (uvCoordsOutput.x > 1.0 - borderSize && uvCoordsOutput.y < 0.5) ) {\n"
     "  ambientColor = topRightColor;\n"
+    "  diffuseColor = vec3(0.0);\n"
+    "}\n"
+
+    // Locator marker (ADR-0025): the strip is the (u, v) image of the real
+    // surface, so testing the REAL surface position (vertexMCVSOutputBS,
+    // the BSPoints attribute) against uLocatorPosition paints the dot at
+    // the same anatomical point as the 3D surface marker -- the 1:1
+    // correspondence.  Drawn last (over grid/border); radius 0 = off.
+    "if (uLocatorRadius > 0.0 && distance(vertexMCVSOutputBS.xyz, uLocatorPosition) < uLocatorRadius) {\n"
+    "  ambientColor = vec3(1.0, 1.0, 1.0);\n"
     "  diffuseColor = vec3(0.0);\n"
     "}\n");
   vtkShaderProgram::Substitute(FSSource,
@@ -451,6 +467,16 @@ void vtkOpenGLResection2DPolyDataMapper::SetMapperShaderParameters(vtkOpenGLHelp
   if (cellBO.Program->IsUniformUsed("uGridThickness"))
   {
     cellBO.Program->SetUniformf("uGridThickness", this->Impl->GridThicknessFactor);
+  }
+
+  if (cellBO.Program->IsUniformUsed("uLocatorPosition"))
+  {
+    cellBO.Program->SetUniform3f("uLocatorPosition", this->Impl->LocatorPosition);
+  }
+
+  if (cellBO.Program->IsUniformUsed("uLocatorRadius"))
+  {
+    cellBO.Program->SetUniformf("uLocatorRadius", this->Impl->LocatorRadius);
   }
 
   if (cellBO.Program->IsUniformUsed("uHepaticContourColor"))
@@ -850,5 +876,39 @@ void vtkOpenGLResection2DPolyDataMapper::SetMatRatio(float matR[2])
 {
   this->Impl->MatRatio[0] = matR[0];
   this->Impl->MatRatio[1] = matR[1];
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+const float* vtkOpenGLResection2DPolyDataMapper::GetLocatorPosition() const
+{
+  return this->Impl->LocatorPosition;
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLResection2DPolyDataMapper::SetLocatorPosition(float position[3])
+{
+  this->SetLocatorPosition(position[0], position[1], position[2]);
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLResection2DPolyDataMapper::SetLocatorPosition(float x, float y, float z)
+{
+  this->Impl->LocatorPosition[0] = x;
+  this->Impl->LocatorPosition[1] = y;
+  this->Impl->LocatorPosition[2] = z;
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+float vtkOpenGLResection2DPolyDataMapper::GetLocatorRadius() const
+{
+  return this->Impl->LocatorRadius;
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLResection2DPolyDataMapper::SetLocatorRadius(float radius)
+{
+  this->Impl->LocatorRadius = radius;
   this->Modified();
 }

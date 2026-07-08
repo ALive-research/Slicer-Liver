@@ -213,6 +213,11 @@ class FlattenedSurfaceRepresentation:
         # which live on the carrier (ADR-0014 §"Fourth layer").
         self._resection_plan_node: Any | None = None
 
+        # The cross-view ``vtkMRMLLocatorNode`` (ADR-0025), threaded by the
+        # ResectogramPipeline like the plan node; drives the 2D mapper's
+        # uLocatorPosition / uLocatorRadius marker uniforms.
+        self._locator_node: Any | None = None
+
         # Last MatRatio pushed onto the 2D mapper.  ``None`` until the
         # first ``update()`` runs OR the mapper does not expose
         # ``SetMatRatio`` (generic-mapper fallback path).
@@ -255,6 +260,38 @@ class FlattenedSurfaceRepresentation:
         """
         self._resection_plan_node = plan_node
 
+    def SetLocatorNode(self, locator_node: Any | None) -> None:  # noqa: N802 - VTK verb
+        """Attach the cross-view locator node (ADR-0025); ``None`` clears."""
+        self._locator_node = locator_node
+
+    def _apply_locator(self) -> None:
+        """Thread the locator pick + radius onto the 2D mapper's uniforms.
+
+        Mirrors ``BezierPlanningRepresentation._apply_locator``: the 2D
+        mapper tests the REAL surface position (the ``BSPoints`` attribute)
+        against ``uLocatorPosition``, so the strip dot sits at the same
+        anatomical point as the 3D surface marker -- the ADR-0025 1:1
+        correspondence.  Radius 0 is the marker-off state (no locator, no
+        display node); a no-op on the generic fallback mapper.
+        """
+        mapper = self._resection_mapper_2d
+        if mapper is None:
+            return
+        set_position = getattr(mapper, "SetLocatorPosition", None)
+        set_radius = getattr(mapper, "SetLocatorRadius", None)
+        if set_position is None or set_radius is None:
+            return  # generic fallback mapper -- no locator uniforms
+
+        node = self._locator_node
+        if node is None:
+            set_radius(0.0)  # marker off
+            return
+        position = node.GetPickedPositionWorld()
+        set_position(float(position[0]), float(position[1]), float(position[2]))
+        display_node = node.GetDisplayNode() if hasattr(node, "GetDisplayNode") else None
+        radius = display_node.GetRadius() if display_node is not None else 0.0
+        set_radius(float(radius))
+
     def update(self, display_node: Any | None, data_node: Any | None) -> None:
         """Reconcile the resectogram against the current display + data nodes.
 
@@ -263,6 +300,7 @@ class FlattenedSurfaceRepresentation:
         """
         self._apply_display_node(display_node)
         self._apply_data_node(display_node, data_node)
+        self._apply_locator()
         self._pose_overlay_camera(display_node)
         self._reconcile_blur_pass(display_node)
 
@@ -281,6 +319,7 @@ class FlattenedSurfaceRepresentation:
                     pass
         self._distance_map_volume = None
         self._effective_texture_num_comps = 0
+        self._locator_node = None
 
         if self._renderer is not None:
             self._detach_blur_pass(self._renderer)

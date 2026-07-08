@@ -700,3 +700,53 @@ def test_effective_comps_survive_subsequent_updates(rep_module, monkeypatch):
         "TextureNumComps on a subsequent update -- the already-bound "
         "short-circuit never re-pushes it, so the strip goes grid-only."
     )
+
+
+class _StubLocatorDisplay:
+    def GetRadius(self):  # noqa: N802 - VTK verb
+        return 2.0
+
+
+class _StubLocatorNode:
+    def GetPickedPositionWorld(self):  # noqa: N802 - VTK verb
+        return (10.0, 20.0, 30.0)
+
+    def GetDisplayNode(self):  # noqa: N802 - VTK verb
+        return _StubLocatorDisplay()
+
+
+class _StubMapperWithLocator(_StubMapperWithMatRatio):
+    def __init__(self) -> None:
+        super().__init__()
+        self.locator_position = None
+        self.locator_radius = None
+
+    def SetLocatorPosition(self, x, y, z):  # noqa: N802 - VTK verb
+        self.locator_position = (x, y, z)
+
+    def SetLocatorRadius(self, radius):  # noqa: N802 - VTK verb
+        self.locator_radius = radius
+
+
+def test_locator_marker_reaches_the_2d_mapper(rep_module):
+    """The strip pushes the locator pick + radius onto the 2D mapper.
+
+    The 1:1 correspondence marker (ADR-0025): the 2D mapper tests the REAL
+    surface position (BSPoints) against uLocatorPosition, so the strip dot
+    sits at the same anatomical point as the 3D surface marker.  Radius 0
+    (marker off) when no locator node is wired.
+    """
+    rep = rep_module()
+    mapper = _StubMapperWithLocator()
+    rep._resection_mapper_2d = mapper
+
+    rep.update(_StubDisplayNode(), _StubDataNode())
+    assert mapper.locator_radius == pytest.approx(0.0), (
+        "no locator node wired -> the marker must be OFF (radius 0)"
+    )
+
+    rep.SetLocatorNode(_StubLocatorNode())
+    rep.update(_StubDisplayNode(), _StubDataNode())
+    assert mapper.locator_position == pytest.approx((10.0, 20.0, 30.0))
+    assert mapper.locator_radius == pytest.approx(2.0)
+    rep.cleanup()

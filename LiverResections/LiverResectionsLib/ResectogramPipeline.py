@@ -199,6 +199,11 @@ class ResectogramPipeline(_PipelineBase):
                 self._resection_node = self._resolve_resection_node()
         if self._flattened_surface is not None:
             self._flattened_surface.SetResectionPlanNode(self._resection_node)
+            # Thread the cross-view locator (ADR-0025) so the strip's 2D
+            # mapper paints the 1:1 correspondence marker.
+            self._flattened_surface.SetLocatorNode(
+                self._resolve_locator_node(self._data_node)
+            )
 
         key = _safe_get_control_points_digest(self._data_node)
         if key == self._last_update_key:
@@ -368,7 +373,8 @@ class ResectogramPipeline(_PipelineBase):
                 if self._event_type(eventData) == vtk.vtkCommand.MouseMoveEvent:
                     getter = getattr(eventData, "GetDisplayPosition", None)
                     if getter is not None:
-                        self._produce_from_display_position(getter())
+                        if self._produce_from_display_position(getter()) is not None:
+                            self._refresh_locator_marker()
                     return True  # keep the gesture even on a degenerate move
             except Exception:  # pragma: no cover - defensive
                 pass
@@ -382,7 +388,30 @@ class ResectogramPipeline(_PipelineBase):
         produced = self._produce_from_display_position(getter()) is not None
         if produced:
             self._reslicing = True
+            self._refresh_locator_marker()
         return produced
+
+    def _refresh_locator_marker(self) -> None:
+        """Re-push the locator uniforms on the strip + request a repaint.
+
+        A pick writes the locator node but does NOT change the control-point
+        geometry digest ``UpdatePipeline`` memoises on, so the strip's own
+        marker (ADR-0025 1:1 correspondence) is refreshed directly here.
+        """
+        representation = self._flattened_surface
+        if representation is None:
+            return
+        try:
+            representation.SetLocatorNode(self._resolve_locator_node(self._data_node))
+            representation._apply_locator()
+        except Exception:  # pragma: no cover - defensive (stub reps)
+            return
+        request_render = getattr(self, "RequestRender", None)
+        if request_render is not None:
+            try:
+                request_render()
+            except Exception:  # pragma: no cover - defensive (stub bases)
+                pass
 
     def _produce_from_display_position(self, display_xy: Any) -> tuple | None:
         """Map a resectogram display pixel to a locator pick (`ADR-0025`_ §Producer).
