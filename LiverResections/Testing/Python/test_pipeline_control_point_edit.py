@@ -101,16 +101,19 @@ def _slicer_or_skip():
 
 
 def _make_pipeline_or_skip():
+    # ADR-0033 re-sited the Planning per-point drag onto the control
+    # polygon's own Pipeline (superseding the ADR-0032 siting on the
+    # surface Pipeline these invariants originally pinned).
     try:
-        from LiverResectionsLib.LiverBezierSurfacePipeline import (
-            LiverBezierSurfacePipeline,
+        from LiverResectionsLib.ControlPolygonPipeline import (
+            ControlPolygonPipeline,
         )
     except Exception as exc:  # pragma: no cover - import-environment dependent
         pytest.skip(
-            f"LiverBezierSurfacePipeline not importable ({exc!r}) -- LayerDMLib "
+            f"ControlPolygonPipeline not importable ({exc!r}) -- LayerDMLib "
             "not reachable in this environment."
         )
-    return LiverBezierSurfacePipeline()
+    return ControlPolygonPipeline()
 
 
 def _resection_logic_or_skip(slicer):
