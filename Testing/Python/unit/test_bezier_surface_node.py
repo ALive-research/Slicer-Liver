@@ -488,8 +488,12 @@ def test_display_defaults(mrml_module):
     assert list(node.GetResectionGridColor()) == pytest.approx([0.0, 0.0, 0.0])
     assert node.GetResectionOpacity() == pytest.approx(1.0)
     assert node.GetGridVisibility() is False
-    assert node.GetGridDivisions() == pytest.approx(0.0)
-    assert node.GetGridThickness() == pytest.approx(0.0)
+    # Grid defaults match the resection mapper's own (divisions 20,
+    # thickness factor 9.5) so a fresh display node renders the control-grid
+    # overlay -- the earlier 0/0 defaults overwrote the mapper uniforms and
+    # suppressed the grid entirely.
+    assert node.GetGridDivisions() == pytest.approx(20.0)
+    assert node.GetGridThickness() == pytest.approx(9.5)
     assert node.GetGrid3DVisibility() is True
     assert node.GetGrid2DVisibility() is False
     assert node.GetWidgetVisibility() is True

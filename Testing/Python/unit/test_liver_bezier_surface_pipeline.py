@@ -221,3 +221,58 @@ def test_pipeline_reference_added_hook_adopts_displayable(pipeline_module):
     finally:
         scene.RemoveNode(display)
         scene.RemoveNode(data)
+
+
+class _FakeRenderer:
+    """Records AddActor/RemoveActor so attach state is observable."""
+
+    def __init__(self):
+        self.actors = []
+
+    def AddActor(self, actor):  # noqa: N802 - VTK verb
+        if actor not in self.actors:
+            self.actors.append(actor)
+
+    def RemoveActor(self, actor):  # noqa: N802 - VTK verb
+        if actor in self.actors:
+            self.actors.remove(actor)
+
+
+def test_pipeline_hides_inactive_representation_on_state_switch(
+    pipeline_module, bezier_nodes, monkeypatch
+):
+    """Init -> Planning must DETACH the init representation's actors.
+
+    All four Representations are constructed against the renderer, so the
+    SlicingPlaneInit plane + marker spheres stayed attached (and visible at
+    the origin) after the carrier switched to Planning -- the stray 'second
+    resection with a control point' seen in the 3D view.  Dispatch must leave
+    only the ACTIVE representation's actors on the renderer.
+    """
+    data, display = bezier_nodes
+    fake = _FakeRenderer()
+    pipeline = pipeline_module.LiverBezierSurfacePipeline()
+    monkeypatch.setattr(pipeline, "_safe_get_renderer", lambda: fake)
+    pipeline.SetDisplayNode(display)
+
+    # Init state (default): dispatch attaches the init representation.
+    pipeline.UpdatePipeline()
+    init_rep = pipeline.GetRepresentation("SlicingPlaneInit")
+    planning_rep = pipeline.GetRepresentation("BezierPlanning")
+    assert init_rep is not None and planning_rep is not None
+
+    data.SetState(1)  # Planning
+    pipeline.UpdatePipeline()
+
+    init_renderer = getattr(init_rep, "_renderer", "missing")
+    assert init_renderer is None, (
+        "the inactive SlicingPlaneInit representation must be detached from "
+        "the renderer after the Init -> Planning switch (its plane + marker "
+        "spheres otherwise linger as a stray second surface)."
+    )
+    planning_renderer = getattr(planning_rep, "_renderer", "missing")
+    assert planning_renderer is fake, (
+        "the ACTIVE BezierPlanning representation must be attached to the "
+        "pipeline's renderer."
+    )
+    pipeline.cleanup()

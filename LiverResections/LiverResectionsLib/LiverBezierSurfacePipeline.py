@@ -429,6 +429,24 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         self._current_representation_name = active_name
 
         active = self._representations.get(active_name) if active_name else None
+
+        # Only the ACTIVE Representation's actors may sit on the renderer.
+        # All four are constructed against the renderer, so without this the
+        # inactive ones linger -- most visibly the SlicingPlaneInit plane +
+        # marker spheres surviving the Init -> Planning switch as a stray
+        # second surface (ADR-0013 §6: constructed once, reused; but only the
+        # dispatched one renders).  SetRenderer(None) detaches idempotently;
+        # re-attach the active one only when it lost its renderer (avoids
+        # duplicate AddActor calls).
+        renderer = self._safe_get_renderer()
+        for rep in self._representations.values():
+            if rep is None or rep is active:
+                continue
+            if getattr(rep, "_renderer", None) is not None:
+                rep.SetRenderer(None)
+        if active is not None and renderer is not None and getattr(active, "_renderer", None) is not renderer:
+            active.SetRenderer(renderer)
+
         if active is not None:
             # Thread the orchestrating wrapper to Representations that consume
             # its path-specific inputs (the Planning surface reads the
