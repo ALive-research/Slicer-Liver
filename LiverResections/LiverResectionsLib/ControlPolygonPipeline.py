@@ -125,10 +125,17 @@ class ControlPolygonPipeline(_PipelineBase):
         self._handles_actor.SetMapper(self._handles_mapper)
 
         # -- edges: the control polygon ----------------------------------- #
+        # Rendered as world-space TUBES, not GL lines: line width is a pixel
+        # quantity that reads hairline-thin over a liver-scale scene, while
+        # a tube shares the handles' world metric (the display node's
+        # EdgeWidth is the tube radius in mm).
         self._edges_polydata = vtk.vtkPolyData()
         self._edges_polydata.SetPoints(vtk.vtkPoints())
+        self._edges_tube = vtk.vtkTubeFilter()
+        self._edges_tube.SetInputData(self._edges_polydata)
+        self._edges_tube.SetNumberOfSides(12)
         self._edges_mapper = vtk.vtkPolyDataMapper()
-        self._edges_mapper.SetInputData(self._edges_polydata)
+        self._edges_mapper.SetInputConnection(self._edges_tube.GetOutputPort())
         self._edges_actor = vtk.vtkActor()
         self._edges_actor.SetMapper(self._edges_mapper)
 
@@ -519,7 +526,7 @@ class ControlPolygonPipeline(_PipelineBase):
         edge_width = getattr(display, "GetEdgeWidth", None) if display else None
         if edge_width is not None:
             try:
-                self._edges_actor.GetProperty().SetLineWidth(float(edge_width()))
+                self._edges_tube.SetRadius(float(edge_width()))
             except Exception:  # pragma: no cover - defensive
                 pass
 

@@ -66,11 +66,13 @@
  * \par Field roster
  *
  *   - ``HandleRadius`` — control-point handle sphere radius in world
- *     units (default 2.5, matching the retired v1 widget's glyph
- *     radius).
+ *     units (default 4.0; the v1 widget's 2.5 read too small over a
+ *     liver-scale scene).
  *   - ``HandleColor`` — handle sphere colour.
  *   - ``EdgeColor`` — polygon edge colour.
- *   - ``EdgeWidth`` — polygon edge line width in pixels.
+ *   - ``EdgeWidth`` — polygon edge TUBE radius in world units (the
+ *     edges render as vtkTubeFilter tubes, not GL lines, so they share
+ *     the handles' world metric).
  *
  * Base ``vtkMRMLDisplayNode`` supplies the independent ``Visibility``
  * and per-view ``ViewNodeIDs`` (ADR-0033 §Decision 1).
@@ -116,7 +118,7 @@ public:
   vtkSetVector3Macro(EdgeColor, double);
   vtkGetVector3Macro(EdgeColor, double);
 
-  /// Polygon edge line width, pixels.
+  /// Polygon edge tube radius, world units.
   vtkSetMacro(EdgeWidth, double);
   vtkGetMacro(EdgeWidth, double);
 

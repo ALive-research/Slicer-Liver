@@ -51,9 +51,9 @@ vtkMRMLNodeNewMacro(vtkMRMLControlPolygonDisplayNode);
 
 //------------------------------------------------------------------------------
 vtkMRMLControlPolygonDisplayNode::vtkMRMLControlPolygonDisplayNode()
-  // HandleRadius matches the retired v1 widget's glyph radius so the v2
-  // handles read at the familiar size (ADR-0033).
-  : HandleRadius(2.5)
+  // HandleRadius reads clearly over a liver-scale (~200 mm) scene; the v1
+  // widget's 2.5 glyph radius proved too small in hands-on use (ADR-0033).
+  : HandleRadius(4.0)
   , HandleColor{ 1.0, 1.0, 1.0 }
   , EdgeColor{ 0.7, 0.7, 0.7 }
   , EdgeWidth(1.0)
