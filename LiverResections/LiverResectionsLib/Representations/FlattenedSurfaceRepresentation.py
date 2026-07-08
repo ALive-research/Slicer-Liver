@@ -588,7 +588,13 @@ class FlattenedSurfaceRepresentation:
             self._distance_map_volume = volume
             return
 
+        # The display node's TextureNumComps defaults to 0 (unset); fall back
+        # to the image's own component count so both the upload and the
+        # shader's uTextureNumComps branch (>2 selects the multi-channel
+        # margin-band path) see the real value.
         num_comps = _safe_get_int(display_node, "GetTextureNumComps", default=0)
+        if num_comps <= 0:
+            num_comps = image_data.GetNumberOfScalarComponents()
         texture = self._create_distance_map_texture(image_data, num_comps)
         if texture is None:
             # The GL render window is not live yet (texture build deferred):
@@ -605,6 +611,9 @@ class FlattenedSurfaceRepresentation:
         # attribute survives to outlive the C++ teardown).
         self._distance_map_volume = volume
         bind(texture)
+        set_comps = getattr(mapper, "SetTextureNumComps", None)
+        if set_comps is not None:
+            set_comps(int(num_comps))
         self._apply_distance_map_matrices(volume, image_data)
         del texture
 
@@ -643,6 +652,19 @@ class FlattenedSurfaceRepresentation:
         render_window = self._render_window()
         if render_window is None:
             return None
+        # Defer until the GL context is REALIZED: before the window's first
+        # render the vtkOpenGLState texture-format table is still empty, so
+        # the upload fails noisily ("Failed to determine texture parameters")
+        # even though the hardware supports the format.  Returning None takes
+        # the caller's deferred path and a later update retries.
+        initialized = getattr(render_window, "GetInitialized", None)
+        if initialized is not None and not initialized():
+            return None
+        # The display node's TextureNumComps defaults to 0 (unset) and the
+        # workflow never writes it; a 0-component upload fails format
+        # resolution deterministically.  The image knows its own count.
+        if int(num_comps) <= 0:
+            num_comps = image_data.GetNumberOfScalarComponents()
         try:
             texture = helper_factory()
             texture.SetContext(render_window)
@@ -657,7 +679,11 @@ class FlattenedSurfaceRepresentation:
                 texture.SetMagnificationFilter(linear)
             texture.SetBorderColor(1000.0, 1000.0, 0.0, 0.0)
             dimensions = image_data.GetDimensions()
-            texture.CreateSeq3DFromRaw(
+            # A VTK upload failure is NOT a Python exception: check the
+            # boolean result.  Handing a failed texture to the caller binds
+            # it, and the already-bound idempotency guard then blocks every
+            # retry -- the resectogram stays white for the session.
+            if not texture.CreateSeq3DFromRaw(
                 dimensions[0],
                 dimensions[1],
                 dimensions[2],
@@ -665,7 +691,8 @@ class FlattenedSurfaceRepresentation:
                 vtk.VTK_FLOAT,
                 image_data.GetScalarPointer(),
                 0,
-            )
+            ):
+                return None
         except Exception:  # pragma: no cover - defensive
             return None
         return texture

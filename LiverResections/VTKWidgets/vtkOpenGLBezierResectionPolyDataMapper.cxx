@@ -157,13 +157,17 @@ void vtkOpenGLBezierResectionPolyDataMapper::BuildBufferObjects(vtkRenderer* ren
       int dimensions[3] = { 0, 0, 0 };
       image->GetDimensions(dimensions);
 
-      // Build only when there is a live GL context, the image is non-empty,
-      // and its scalars are allocated: Create3DFromRaw on a null/short buffer
-      // would upload garbage or abort.  Otherwise leave DistanceMapTexture
-      // untouched and do NOT advance DistanceMapBuiltMTime, so the shader takes
-      // its no-distance-map path and a later render retries once the
-      // image/context is valid (ADR-0003: MRML and GL state must not diverge).
-      const bool canBuild = renWin != nullptr && dimensions[0] > 0 && dimensions[1] > 0 && dimensions[2] > 0 && image->GetScalarPointer() != nullptr;
+      // Build only when there is an INITIALIZED GL context, the image is
+      // non-empty, and its scalars are allocated: Create3DFromRaw on a
+      // null/short buffer would upload garbage or abort, and on a
+      // not-yet-realized context vtkOpenGLState's texture-format table is
+      // still empty, so format resolution fails ("Failed to determine
+      // texture parameters") even though the hardware supports the format.
+      // Otherwise leave DistanceMapTexture untouched and do NOT advance
+      // DistanceMapBuiltMTime, so the shader takes its no-distance-map path
+      // and a later render retries once the image/context is valid
+      // (ADR-0003: MRML and GL state must not diverge).
+      const bool canBuild = renWin != nullptr && renWin->GetInitialized() && dimensions[0] > 0 && dimensions[1] > 0 && dimensions[2] > 0 && image->GetScalarPointer() != nullptr;
       if (canBuild)
       {
         vtkNew<vtkTextureObject> texture;
@@ -174,10 +178,18 @@ void vtkOpenGLBezierResectionPolyDataMapper::BuildBufferObjects(vtkRenderer* ren
         texture->SetMinificationFilter(vtkTextureObject::Linear);
         texture->SetMagnificationFilter(vtkTextureObject::Linear);
         texture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
-        texture->Create3DFromRaw(dimensions[0], dimensions[1], dimensions[2], image->GetNumberOfScalarComponents(), image->GetScalarType(), image->GetScalarPointer());
 
-        this->Impl->DistanceMapTexture = texture;
-        this->Impl->DistanceMapBuiltMTime = image->GetMTime();
+        // Cache the texture + advance the built-MTime ONLY on a successful
+        // upload.  Caching an upload that failed (e.g. the one-shot
+        // format-resolution failure on an early, half-realized context)
+        // permanently wedges the mapper: the MTime guard never retries, the
+        // broken texture breaks the draw, and the surface renders invisible
+        // for the rest of the session.
+        if (texture->Create3DFromRaw(dimensions[0], dimensions[1], dimensions[2], image->GetNumberOfScalarComponents(), image->GetScalarType(), image->GetScalarPointer()))
+        {
+          this->Impl->DistanceMapTexture = texture;
+          this->Impl->DistanceMapBuiltMTime = image->GetMTime();
+        }
       }
     }
   }
