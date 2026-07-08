@@ -101,6 +101,10 @@ class ControlPolygonPipeline(_PipelineBase):
         self._last_update_key: Any | None = None
         self._update_count = 0
 
+        # Last (state, geometry-digest) a render was requested for — the
+        # observer callback's render-request gate (see ``_on_node_modified``).
+        self._last_render_key: tuple | None = None
+
         # -- handles: control-point sphere glyphs ------------------------- #
         self._handles_polydata = vtk.vtkPolyData()
         self._handles_polydata.SetPoints(vtk.vtkPoints())
@@ -487,8 +491,56 @@ class ControlPolygonPipeline(_PipelineBase):
             pass
 
     def _on_node_modified(self, caller: Any, event: str) -> None:
+        """Re-run ``UpdatePipeline`` and repaint when the geometry changed.
+
+        The render request is gated on the (state, control-point geometry
+        digest) tuple actually changing (the ResectogramPipeline pattern):
+        a Planning drag advances the digest and repaints the handles live;
+        a render-induced ``Modified`` at fixed geometry does not re-request,
+        so no render feedback loop.
+        """
         del caller, event
         self.UpdatePipeline()
+
+        render_key = (
+            _safe_get_state(self._data_node),
+            _control_points_digest(self._data_node),
+        )
+        if render_key == self._last_render_key:
+            return
+        self._last_render_key = render_key
+
+        request_render = getattr(self, "RequestRender", None)
+        if request_render is not None:
+            try:
+                request_render()
+            except Exception:  # pragma: no cover - defensive (stub bases)
+                pass
+
+
+def _control_points_digest(node: Any) -> tuple:
+    """Digest of the carrier's control-point positions (render-request gate).
+
+    Mirrors the ResectogramPipeline's memo digest: a control-point edit
+    changes the digest, a render-induced ``Modified`` at fixed geometry does
+    not — the discrimination that keeps drags repainting live while blocking
+    a render feedback loop.  Empty tuple for nodes missing the grid accessor
+    (stubs) or on a read failure.
+    """
+    if node is None:
+        return ()
+    grid_getter = getattr(node, "GetControlGridVector", None)
+    if grid_getter is None:
+        return ()
+    try:
+        grid = grid_getter()
+        usable = len(grid) - (len(grid) % 3)
+        return tuple(
+            (grid[base], grid[base + 1], grid[base + 2])
+            for base in range(0, usable, 3)
+        )
+    except Exception:  # pragma: no cover - defensive
+        return ()
 
 
 def registerControlPolygonPipelineCreator() -> None:  # noqa: N802 - project convention

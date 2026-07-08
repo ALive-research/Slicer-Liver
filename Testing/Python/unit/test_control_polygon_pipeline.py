@@ -204,3 +204,38 @@ def test_late_bound_displayable_is_adopted(pipeline_module):
     finally:
         scene.RemoveNode(display)
         scene.RemoveNode(data)
+
+
+def test_geometry_edit_requests_render(pipeline_module, polygon_nodes):
+    """A control-point edit must request a render; MTime churn must not.
+
+    The observer callback re-runs ``UpdatePipeline`` but historically never
+    requested a render, so a Planning drag moved the handles/edges polydata
+    while the 3D view stayed frozen until an unrelated render (camera orbit)
+    repainted it.  The request is gated on the (state, geometry-digest)
+    tuple (the ResectogramPipeline pattern) so a render-induced ``Modified``
+    at fixed geometry cannot open a render feedback loop.
+    """
+    data, display = polygon_nodes
+    pipeline = pipeline_module.ControlPolygonPipeline()
+    pipeline._control_polygon_geometry = _FakeGeometry
+    pipeline.SetDisplayNode(display)
+    _seed_grid(data)
+    data.SetState(1)  # Planning
+
+    renders = []
+    pipeline.RequestRender = lambda: renders.append(1)
+
+    data.SetControlPoint(0, 0, 1.0, 2.0, 3.0)
+    assert renders, (
+        "a control-point edit must request a render -- without it the "
+        "handles freeze mid-drag until an unrelated render repaints them."
+    )
+
+    before = len(renders)
+    data.Modified()  # no geometry change -- render-churn signature
+    assert len(renders) == before, (
+        "a Modified at fixed geometry must not re-request a render "
+        "(the render feedback-loop guard)."
+    )
+    pipeline.cleanup()
