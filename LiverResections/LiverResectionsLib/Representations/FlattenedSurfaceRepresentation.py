@@ -196,6 +196,16 @@ class FlattenedSurfaceRepresentation:
         # C++ pipeline on the Python heap (a vtkDebugLeaks trip).
         self._distance_map_volume: Any | None = None
 
+        # The effective texture component count derived at bind time (the
+        # display node's ``TextureNumComps`` when set, else the image's own
+        # component count).  ``_apply_display_node`` runs on EVERY update,
+        # BEFORE the texture path, and the display field defaults to 0
+        # (unset); without this record it would push that 0 over the value
+        # the bind derived, and the already-bound short-circuit would never
+        # re-push it — comps 0 disables the shader's margin-band branch, so
+        # the strip goes grid-only from the second reconcile onwards.
+        self._effective_texture_num_comps: int = 0
+
         # The orchestrating ``vtkMRMLResectionPlanNode`` wrapper, set by the
         # ResectogramPipeline via ``SetResectionPlanNode`` (ADR-0031).  It
         # carries the distance-shading input set the flattened strip reads --
@@ -270,6 +280,7 @@ class FlattenedSurfaceRepresentation:
                 except Exception:  # pragma: no cover - defensive
                     pass
         self._distance_map_volume = None
+        self._effective_texture_num_comps = 0
 
         if self._renderer is not None:
             self._detach_blur_pass(self._renderer)
@@ -370,6 +381,11 @@ class FlattenedSurfaceRepresentation:
         texture_num_comps = _safe_get_int(
             display_node, "GetTextureNumComps", default=0
         )
+        if texture_num_comps <= 0:
+            # Display field unset (the default): fall back to the effective
+            # count derived at bind time so a routine reconcile does not
+            # clobber it (see ``_effective_texture_num_comps``).
+            texture_num_comps = self._effective_texture_num_comps
 
         if self._resection_actor_2d is not None:
             self._resection_actor_2d.SetVisibility(bool(show_2d))
@@ -586,6 +602,7 @@ class FlattenedSurfaceRepresentation:
             # sampling a volume that is gone (the v1 warning branch).
             bind(None)
             self._distance_map_volume = volume
+            self._effective_texture_num_comps = 0
             return
 
         # The display node's TextureNumComps defaults to 0 (unset); fall back
@@ -604,6 +621,7 @@ class FlattenedSurfaceRepresentation:
             # stays False, so the idempotency guard above does not short it).
             bind(None)
             self._distance_map_volume = volume
+            self._effective_texture_num_comps = 0
             return
 
         # Hand the texture to the mapper's vtkSmartPointer and drop the
@@ -611,6 +629,10 @@ class FlattenedSurfaceRepresentation:
         # attribute survives to outlive the C++ teardown).
         self._distance_map_volume = volume
         bind(texture)
+        # Record the effective count so ``_apply_display_node`` (which runs
+        # first on every later update, off the display's unset-0 default)
+        # does not clobber it once the already-bound short-circuit engages.
+        self._effective_texture_num_comps = int(num_comps)
         set_comps = getattr(mapper, "SetTextureNumComps", None)
         if set_comps is not None:
             set_comps(int(num_comps))
