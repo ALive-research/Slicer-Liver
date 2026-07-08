@@ -301,3 +301,50 @@ def test_card_run_with_portalvenous_volume_still_segments(monkeypatch):
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def test_card_binds_an_injected_view():
+    """The card is a CONTROLLER: given a view namespace, it binds -- not builds.
+
+    The .ui-authored card (ADR-0029 designer-editable panels) supplies the
+    six widgets as a ``childWidgetVariables`` namespace; the controller must
+    adopt them (same public attribute names as the programmatic fallback),
+    stamp the per-structure Run text, apply the initial enabled/hidden
+    state, and wire the signals -- without constructing replacement widgets.
+    """
+    from conftest import _import_slicer_or_skip
+
+    _import_slicer_or_skip()
+    _require_qt_widget_or_skip()
+    import qt
+
+    try:
+        import LiverSegmentation as module
+    except ImportError as exc:
+        pytest.skip(f"LiverSegmentation module not importable ({exc}).")
+
+    class _View:
+        pass
+
+    view = _View()
+    view.RunButton = qt.QPushButton("placeholder")
+    view.StatusLabel = qt.QLabel("placeholder")
+    view.ProgressBar = qt.QProgressBar()
+    view.AcceptButton = qt.QPushButton("Accept")
+    view.RejectButton = qt.QPushButton("Reject")
+    view.EditButton = qt.QPushButton("Edit in Segment Editor")
+
+    class _StandInWidget:
+        logic = None
+
+    card = module._StructureCard(_StandInWidget(), "Liver", "10200004", view=view)
+    assert card.runButton is view.RunButton, "the controller must BIND the view"
+    assert card.statusLabel is view.StatusLabel
+    assert card.progressBar is view.ProgressBar
+    assert card.runButton.text == "Run TotalSegmentator (Liver)", (
+        "the controller stamps the per-structure Run text on the bound view"
+    )
+    assert card.statusLabel.text == "Idle"
+    assert card.acceptButton.enabled is False
+    assert card.rejectButton.enabled is False
+    assert card.progressBar.visible is False
