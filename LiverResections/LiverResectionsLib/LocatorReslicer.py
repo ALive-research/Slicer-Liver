@@ -116,7 +116,32 @@ class LocatorReslicer:
         getter = getattr(locator, "GetPickedPositionWorld", None)
         if getter is None:
             return
+        world = getter()
         red = self._scene.GetNodeByID(_RED_SLICE_NODE_ID)
-        if red is None:
+        if red is not None:
+            self.reslice_slice_to_world(red, world)
+        self._place_crosshair(world)
+
+    def _place_crosshair(self, world_xyz: Any) -> None:
+        """Land the pick on the scene's crosshair node (slice-view marker).
+
+        The reslice alone moves the slice plane but leaves no visible mark;
+        the singleton ``vtkMRMLCrosshairNode`` is Slicer's native slice-view
+        marker, so every pick sets its RAS position and ensures a visible
+        mode -- the locator then reads 1:1 across the resectogram, the 3D
+        surface, AND the slice views (ADR-0025 §Consumer).  A no-op when the
+        scene carries no crosshair node (bare test scenes).
+        """
+        if self._scene is None or world_xyz is None:
             return
-        self.reslice_slice_to_world(red, getter())
+        crosshair = self._scene.GetFirstNodeByClass("vtkMRMLCrosshairNode")
+        if crosshair is None:
+            return
+        try:
+            crosshair.SetCrosshairRAS(
+                float(world_xyz[0]), float(world_xyz[1]), float(world_xyz[2])
+            )
+            if crosshair.GetCrosshairMode() == crosshair.NoCrosshair:
+                crosshair.SetCrosshairMode(crosshair.ShowBasic)
+        except Exception:  # pragma: no cover - defensive
+            return

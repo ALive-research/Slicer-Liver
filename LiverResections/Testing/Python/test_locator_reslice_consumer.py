@@ -401,3 +401,38 @@ def test_locator_observer_reslices_red_slice_on_picked_position():
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def test_pick_places_the_crosshair_in_slice_views():
+    """A locator pick must also place the visible crosshair (ADR-0025).
+
+    The reslice alone moves the slice plane but leaves no visible mark; the
+    scene's singleton ``vtkMRMLCrosshairNode`` is the native slice-view
+    marker, so the reslicer sets its RAS position and a visible mode on
+    every pick -- the locator reads 1:1 across the resectogram, the 3D
+    surface, AND the slice views.
+    """
+    slicer = _slicer_or_skip()
+    reslicer_cls = _reslicer_class_or_skip_pending()
+
+    scene = slicer.mrmlScene
+    crosshair = scene.GetFirstNodeByClass("vtkMRMLCrosshairNode")
+    if crosshair is None:
+        crosshair = scene.AddNewNodeByClass("vtkMRMLCrosshairNode")
+    crosshair.SetCrosshairMode(crosshair.NoCrosshair)
+
+    locator = scene.AddNewNodeByClass("vtkMRMLLocatorNode")
+    try:
+        reslicer = reslicer_cls(scene)
+        locator.SetPickedPositionWorld(12.0, -34.0, 56.0)
+
+        ras = tuple(crosshair.GetCrosshairRAS())
+        assert ras == pytest.approx((12.0, -34.0, 56.0)), (
+            "the pick must land on the crosshair node (slice-view marker)"
+        )
+        assert crosshair.GetCrosshairMode() != crosshair.NoCrosshair, (
+            "the crosshair must be made visible on pick"
+        )
+        reslicer.cleanup()
+    finally:
+        scene.RemoveNode(locator)
