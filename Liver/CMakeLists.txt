@@ -23,6 +23,7 @@ set(MODULE_PYTHON_RESOURCES
   Resources/UI/DistanceMapsWidget.ui
   Resources/UI/ResectogramWidget.ui
   Resources/UI/StageExportWidget.ui
+  Resources/UI/StageCaseSetupWidget.ui
   )
 
 #-----------------------------------------------------------------------------

@@ -432,45 +432,29 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       layout.addStretch(1)
       return page
 
-    page = qt.QWidget()
-    layout = qt.QVBoxLayout(page)
-    layout.addWidget(qt.QLabel(
-      "Case Setup — load volume(s) via Add Data, then tag each with its "
-      "acquisition-phase role."))
+    # Static panel authored in ``Resources/UI/StageCaseSetupWidget.ui``
+    # (designer-editable, the Stage-6 Export pattern); only the runtime
+    # wiring -- role population, signals, scene binding, the code-populated
+    # volumes-x-roles table refresh -- stays here.
+    page = slicer.util.loadUI(self.resourcePath("UI/StageCaseSetupWidget.ui"))
+    page.setMRMLScene(slicer.mrmlScene)
+    ui = slicer.util.childWidgetVariables(page)
 
-    row = qt.QHBoxLayout()
-    row.addWidget(qt.QLabel("Volume:"))
-    volumeCombo = slicer.qMRMLNodeComboBox()
-    volumeCombo.setObjectName("CaseSetupVolumeComboBox")
-    volumeCombo.nodeTypes = ["vtkMRMLScalarVolumeNode"]
-    volumeCombo.addEnabled = False
-    volumeCombo.removeEnabled = False
-    volumeCombo.noneEnabled = True
+    volumeCombo = ui.CaseSetupVolumeComboBox
+    # Bind the selector's scene explicitly -- the root qMRMLWidget's
+    # setMRMLScene does not reliably propagate to the child selector at
+    # build time (before the page is parented/shown).
     volumeCombo.setMRMLScene(slicer.mrmlScene)
     volumeCombo.connect("currentNodeChanged(vtkMRMLNode*)", self._onCaseSetupVolumeChanged)
-    row.addWidget(volumeCombo, 1)
 
-    row.addWidget(qt.QLabel("Role:"))
-    roleCombo = qt.QComboBox()
-    roleCombo.setObjectName("CaseSetupRoleComboBox")
+    roleCombo = ui.CaseSetupRoleComboBox
     for value in roles.LIVER_ROLES:
       roleCombo.addItem(self._caseSetupRoleLabel(value), value)
-    row.addWidget(roleCombo)
 
-    assignButton = qt.QPushButton("Assign role")
-    assignButton.setObjectName("CaseSetupAssignButton")
-    assignButton.connect("clicked()", self._onCaseSetupAssignRole)
-    row.addWidget(assignButton)
-    layout.addLayout(row)
+    ui.CaseSetupAssignButton.connect("clicked()", self._onCaseSetupAssignRole)
 
-    table = qt.QTableWidget()
-    table.setObjectName("CaseSetupRoleTable")
-    table.setColumnCount(2)
-    table.setHorizontalHeaderLabels(["Volume", "Role"])
+    table = ui.CaseSetupRoleTable
     table.horizontalHeader().setStretchLastSection(True)
-    table.editTriggers = qt.QAbstractItemView.NoEditTriggers
-    table.selectionBehavior = qt.QAbstractItemView.SelectRows
-    layout.addWidget(table, 1)
 
     self._caseSetupVolumeCombo = volumeCombo
     self._caseSetupRoleCombo = roleCombo
