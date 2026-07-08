@@ -651,5 +651,67 @@ def test_resolve_locator_node_none_when_surface_has_no_scene():
     assert pipeline_cls._resolve_locator_node(_SurfaceWithoutScene()) is None
 
 
+# --------------------------------------------------------------------------- #
+# Invariant 6 -- press/drag/release continuous reslice
+# --------------------------------------------------------------------------- #
+
+
+def test_drag_reslices_continuously_between_press_and_release():
+    """A held button drags the reslice: press grabs, moves keep producing,
+    release ends the gesture.
+
+    The click-only seam (invariant 4b) stops HOVER moves from writing the
+    locator, but the surgeon dragging around the strip expects the slice to
+    follow continuously.  The two compose as a grab: a left-button press
+    starts reslicing (and writes the first pick), mouse moves while the
+    button is held keep writing, and the release ends the gesture (returns
+    False, releasing the interaction focus).  A move after the release is
+    declined again -- hover still never reslices.
+    """
+    import vtk
+
+    slicer = _slicer_or_skip()
+    carrier = _make_affine_carrier_or_skip(slicer, "SeamDragReslice")
+    locator = _single_locator_or_skip(slicer)
+
+    pipeline = _pipeline_or_skip(slicer)
+    _inject_state(pipeline, carrier, mat_ratio=(1.0, 1.0), viewport_size=(256, 256))
+    _seam_or_skip_pending(pipeline)
+
+    press = _FakeInteractionEventData((64.0, 64.0))
+    assert pipeline.ProcessInteractionEvent(press) is True, "press writes + grabs"
+    after_press = tuple(locator.GetPickedPositionWorld())
+
+    move = _FakeInteractionEventData(
+        (128.0, 96.0), event_type=vtk.vtkCommand.MouseMoveEvent
+    )
+    can, _ = pipeline.CanProcessInteractionEvent(move)
+    assert can is True, (
+        "moves while the button is held must be claimed -- the continuous "
+        "drag-reslice gesture."
+    )
+    assert pipeline.ProcessInteractionEvent(move) is True
+    after_move = tuple(locator.GetPickedPositionWorld())
+    assert max(abs(a - b) for a, b in zip(after_move, after_press)) > WORLD_TOL, (
+        "a drag move must RE-write the locator (continuous reslice); the "
+        "pick did not change."
+    )
+
+    release = _FakeInteractionEventData(
+        (128.0, 96.0), event_type=vtk.vtkCommand.LeftButtonReleaseEvent
+    )
+    can, _ = pipeline.CanProcessInteractionEvent(release)
+    assert can is True, "the ending release is claimed (closes the gesture)"
+    assert pipeline.ProcessInteractionEvent(release) is False, (
+        "release ends the gesture and releases the focus"
+    )
+
+    hover = _FakeInteractionEventData(
+        (10.0, 10.0), event_type=vtk.vtkCommand.MouseMoveEvent
+    )
+    can, _ = pipeline.CanProcessInteractionEvent(hover)
+    assert can is False, "hover after release must be declined again (4b)"
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

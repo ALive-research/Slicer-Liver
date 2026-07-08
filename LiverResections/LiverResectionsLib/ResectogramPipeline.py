@@ -136,6 +136,12 @@ class ResectogramPipeline(_PipelineBase):
         self._resection_node: Any | None = None
         self._last_resection_scan_mtime: int | None = None
 
+        # Whether a press-grabbed drag-reslice gesture is in flight: a
+        # left-button press starts it, mouse moves keep producing picks
+        # while it holds, the release ends it (see
+        # ``CanProcessInteractionEvent``).
+        self._reslicing: bool = False
+
     # ------------------------------------------------------------------ #
     # LayerDM lifecycle overrides
     # ------------------------------------------------------------------ #
@@ -280,22 +286,55 @@ class ResectogramPipeline(_PipelineBase):
 
         if self._data_node is None:
             return False, sys.float_info.max
-        # Commit on a LEFT-BUTTON PRESS only, never on move/hover: the strip
-        # maps every in-view pixel, but claiming move events made the marker
-        # track the cursor and park at the (0, 0) corner on the spurious move
-        # fired when the cursor left the view (`ADR-0025`_ §Click-to-reslice).
+        # The reslice is a press/drag/release GESTURE: a left-button press
+        # starts it, moves are claimed only WHILE it holds (the continuous
+        # drag-reslice), and the ending release closes it.  A bare hover
+        # move is still declined: claiming ungrabbed moves made the marker
+        # track the cursor and park at the (0, 0) corner on the spurious
+        # move fired when the cursor left the view (`ADR-0025`_
+        # §Click-to-reslice).
+        etype = self._event_type(eventData)
+        if self._reslicing:
+            try:
+                import vtk
+
+                if etype in (
+                    vtk.vtkCommand.MouseMoveEvent,
+                    vtk.vtkCommand.LeftButtonReleaseEvent,
+                ):
+                    return True, 0.0
+            except Exception:  # pragma: no cover - defensive
+                pass
+            return False, sys.float_info.max
         if not self._is_commit_event(eventData):
             return False, sys.float_info.max
         return True, 0.0
 
     @staticmethod
+    def _event_type(eventData: Any) -> int | None:  # noqa: N803 - VTK arg name
+        """Read the VTK event-type id off ``eventData`` defensively.
+
+        ``None`` for events lacking ``GetType`` (stubs) or on a read failure,
+        so the gesture state machine never raises from the interaction hot
+        path.
+        """
+        getter = getattr(eventData, "GetType", None)
+        if getter is None:
+            return None
+        try:
+            return int(getter())
+        except Exception:  # pragma: no cover - defensive
+            return None
+
+    @staticmethod
     def _is_commit_event(eventData: Any) -> bool:  # noqa: N803 - VTK arg name
         """True iff ``eventData`` is a left-button press.
 
-        The resectogram commits the locator on click only; a move/hover leaves
-        the marker where it was last clicked.  Tolerant of an event lacking
-        ``GetType`` (declines) and of ``vtk`` being unavailable (declines) so
-        the GL-free seam never raises from the interaction hot path.
+        The press is the only event that can START the reslice gesture; a
+        move/hover without a gesture in flight leaves the marker where it
+        was.  Tolerant of an event lacking ``GetType`` (declines) and of
+        ``vtk`` being unavailable (declines) so the GL-free seam never
+        raises from the interaction hot path.
         """
         getter = getattr(eventData, "GetType", None)
         if getter is None:
@@ -308,23 +347,42 @@ class ResectogramPipeline(_PipelineBase):
             return False
 
     def ProcessInteractionEvent(self, eventData: Any) -> bool:  # noqa: N802 - VTK verb
-        """Source the click pixel and drive the locator producer.
+        """Drive the press/drag/release reslice gesture.
 
         Reads the VTK display-space pixel from
-        ``eventData.GetDisplayPosition()`` (bottom-left origin -- no Qt y-flip)
-        and composes the producer via ``_produce_from_display_position``.
-        Returns ``True`` iff a world point was produced (the interaction logic
-        keeps focus on a Pipeline that returns ``True``).
+        ``eventData.GetDisplayPosition()`` (bottom-left origin -- no Qt
+        y-flip) and composes the producer via
+        ``_produce_from_display_position``.  A press writes the first pick
+        and opens the gesture; moves while it holds keep writing (the slice
+        follows the drag continuously); the release closes the gesture and
+        returns ``False``, releasing the interaction focus.  A bare hover
+        move can never write the locator even if dispatched directly.
         """
-        # Defence-in-depth: the LayerDM logic only routes here after
-        # CanProcessInteractionEvent claimed the event, but re-check so a move
-        # can never write the locator even if dispatched directly.
+        if self._reslicing:
+            try:
+                import vtk
+
+                if self._event_type(eventData) == vtk.vtkCommand.LeftButtonReleaseEvent:
+                    self._reslicing = False
+                    return False  # gesture over -- release the focus
+                if self._event_type(eventData) == vtk.vtkCommand.MouseMoveEvent:
+                    getter = getattr(eventData, "GetDisplayPosition", None)
+                    if getter is not None:
+                        self._produce_from_display_position(getter())
+                    return True  # keep the gesture even on a degenerate move
+            except Exception:  # pragma: no cover - defensive
+                pass
+            return False
+
         if not self._is_commit_event(eventData):
             return False
         getter = getattr(eventData, "GetDisplayPosition", None)
         if getter is None:
             return False
-        return self._produce_from_display_position(getter()) is not None
+        produced = self._produce_from_display_position(getter()) is not None
+        if produced:
+            self._reslicing = True
+        return produced
 
     def _produce_from_display_position(self, display_xy: Any) -> tuple | None:
         """Map a resectogram display pixel to a locator pick (`ADR-0025`_ §Producer).
@@ -396,6 +454,7 @@ class ResectogramPipeline(_PipelineBase):
             self._detach_observer(node)
         self._observer_tags.clear()
         self._observed_node_refs.clear()
+        self._reslicing = False
 
         for rep in (self._flattened_surface, self._vascular_contour):
             if rep is not None:
