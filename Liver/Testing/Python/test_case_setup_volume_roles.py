@@ -88,9 +88,9 @@ SCALAR_VOLUME_CLASS = "vtkMRMLScalarVolumeNode"
 
 def _slicer_or_skip():
     """Return the launched-Slicer ``slicer`` module, or skip under bare pytest."""
-    from conftest import (  # type: ignore[import-not-found]
-        _import_slicer_or_skip,
-        _require_mrml_scene,
+    from slicer_pytest_support import (
+        import_slicer_or_skip as _import_slicer_or_skip,
+        require_mrml_scene as _require_mrml_scene,
     )
 
     _require_mrml_scene()
