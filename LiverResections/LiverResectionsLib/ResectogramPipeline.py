@@ -280,7 +280,32 @@ class ResectogramPipeline(_PipelineBase):
 
         if self._data_node is None:
             return False, sys.float_info.max
+        # Commit on a LEFT-BUTTON PRESS only, never on move/hover: the strip
+        # maps every in-view pixel, but claiming move events made the marker
+        # track the cursor and park at the (0, 0) corner on the spurious move
+        # fired when the cursor left the view (`ADR-0025`_ §Click-to-reslice).
+        if not self._is_commit_event(eventData):
+            return False, sys.float_info.max
         return True, 0.0
+
+    @staticmethod
+    def _is_commit_event(eventData: Any) -> bool:  # noqa: N803 - VTK arg name
+        """True iff ``eventData`` is a left-button press.
+
+        The resectogram commits the locator on click only; a move/hover leaves
+        the marker where it was last clicked.  Tolerant of an event lacking
+        ``GetType`` (declines) and of ``vtk`` being unavailable (declines) so
+        the GL-free seam never raises from the interaction hot path.
+        """
+        getter = getattr(eventData, "GetType", None)
+        if getter is None:
+            return False
+        try:
+            import vtk
+
+            return getter() == vtk.vtkCommand.LeftButtonPressEvent
+        except Exception:  # pragma: no cover - defensive; vtk always present in-app
+            return False
 
     def ProcessInteractionEvent(self, eventData: Any) -> bool:  # noqa: N802 - VTK verb
         """Source the click pixel and drive the locator producer.
@@ -291,6 +316,11 @@ class ResectogramPipeline(_PipelineBase):
         Returns ``True`` iff a world point was produced (the interaction logic
         keeps focus on a Pipeline that returns ``True``).
         """
+        # Defence-in-depth: the LayerDM logic only routes here after
+        # CanProcessInteractionEvent claimed the event, but re-check so a move
+        # can never write the locator even if dispatched directly.
+        if not self._is_commit_event(eventData):
+            return False
         getter = getattr(eventData, "GetDisplayPosition", None)
         if getter is None:
             return False
