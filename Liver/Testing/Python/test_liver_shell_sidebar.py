@@ -84,9 +84,9 @@ def _instantiate_liver_widget():
     # Widget-level tests need qt.QWidget — bare ``PythonSlicer -m pytest``
     # leaves PythonQt's qt module importable but without QWidget.  Skip
     # gracefully when the launched-Slicer harness isn't in play.
-    from conftest import (  # type: ignore[import-not-found]
-        _import_slicer_or_skip,
-        _require_qt_widget,
+    from slicer_pytest_support import (
+        import_slicer_or_skip as _import_slicer_or_skip,
+        require_qt_widget as _require_qt_widget,
     )
     _require_qt_widget()
 
@@ -101,6 +101,7 @@ def _instantiate_liver_widget():
         )
 
     parent = qt.QWidget()
+    qt.QVBoxLayout(parent)  # ScriptedLoadableModuleWidget reads parent.layout()
     widget = Liver.LiverWidget(parent)
     widget.setup()
     return widget
@@ -295,9 +296,9 @@ def test_state_indicators_reflect_isstagecomplete():
 # ``import Liver`` guard.
 
 def _import_liver_or_skip():
-    from conftest import (  # type: ignore[import-not-found]
-        _import_slicer_or_skip,
-        _require_qt_widget,
+    from slicer_pytest_support import (
+        import_slicer_or_skip as _import_slicer_or_skip,
+        require_qt_widget as _require_qt_widget,
     )
 
     # LiverWidget subclasses ScriptedLoadableModuleWidget, whose class body needs

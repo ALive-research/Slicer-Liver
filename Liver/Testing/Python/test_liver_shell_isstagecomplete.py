@@ -51,9 +51,11 @@ import pytest
 # --------------------------------------------------------------------------- #
 
 # Re-export under the names this file's call sites already use.
-from conftest import (  # type: ignore[import-not-found]  # noqa: E402
-    _import_slicer_or_skip,
-    _require_mrml_scene as _require_mrml_scene_or_skip,
+# Shared support module, NOT `from conftest import`: with multiple pytest
+# roots the first root's conftest wins the module name (launched harness).
+from slicer_pytest_support import (  # noqa: E402
+    import_slicer_or_skip as _import_slicer_or_skip,
+    require_mrml_scene as _require_mrml_scene_or_skip,
 )
 
 
@@ -77,15 +79,30 @@ def _resections_logic():
 
 
 def _territories_logic():
-    """Resolve the C++ ``vtkSlicerVascularTerritoriesLogic`` instance."""
+    """Resolve the C++ ``vtkSlicerVascularTerritoriesLogic`` instance.
+
+    VascularTerritories is a SCRIPTED module: ``module.logic()`` returns the
+    generic scripted-logic shim, and the C++ module object refuses grafted
+    attributes -- the specialized logic lives on the Python module instance
+    as ``module.self()._cppLogic`` (the same route the Liver shell queries).
+    """
     slicer = _import_slicer_or_skip()
-    try:
-        return slicer.modules.vascularterritories.logic()
-    except AttributeError as exc:
+    module = getattr(slicer.modules, "vascularterritories", None)
+    if module is None:
         pytest.skip(
-            f"VascularTerritories module not available ({exc}); "
-            "ensure --additional-module-paths includes VascularTerritories."
+            "VascularTerritories module not available; ensure "
+            "--additional-module-paths includes VascularTerritories."
         )
+    instance = getattr(slicer.modules, "VascularTerritoriesInstance", None)
+    logic = getattr(instance, "_cppLogic", None)
+    if instance is None:
+        pytest.skip(
+            "VascularTerritories module instance not registered "
+            "(slicer.modules.VascularTerritoriesInstance missing)."
+        )
+    if logic is None:
+        pytest.skip("VascularTerritories specialized logic not built.")
+    return logic
 
 
 def _volumetry_logic():
@@ -112,8 +129,8 @@ def _volumetry_logic():
 
 def _liver_widget():
     """Instantiate a fresh ``LiverWidget`` rooted on a throwaway parent."""
-    from conftest import _require_qt_widget  # type: ignore[import-not-found]
-    _require_qt_widget()
+    from slicer_pytest_support import require_qt_widget
+    require_qt_widget()
 
     _import_slicer_or_skip()
     try:
@@ -125,9 +142,41 @@ def _liver_widget():
             "ensure --additional-module-paths includes Liver/."
         )
     parent = qt.QWidget()
+    qt.QVBoxLayout(parent)  # ScriptedLoadableModuleWidget reads parent.layout()
     widget = Liver.LiverWidget(parent)
     widget.setup()
     return widget
+
+
+def _remove_shell_singletons():
+    """Remove the singleton nodes ``LiverWidget.setup()`` mints.
+
+    ``setup()`` composes the stage pages, which ensure the resectogram
+    singleton view (+ its camera).  Singletons SURVIVE ``scene.Clear()``,
+    so the launched leak-guard fixture sees the scene grown past its
+    baseline unless the test removes them explicitly.
+    """
+    import slicer
+
+    scene = slicer.mrmlScene
+    doomed = []
+    for i in range(scene.GetNumberOfNodesByClass("vtkMRMLViewNode")):
+        node = scene.GetNthNodeByClass(i, "vtkMRMLViewNode")
+        if node is not None and node.GetSingletonTag() == "LiverResectogram":
+            doomed.append(node)
+    for i in range(scene.GetNumberOfNodesByClass("vtkMRMLCameraNode")):
+        node = scene.GetNthNodeByClass(i, "vtkMRMLCameraNode")
+        if node is not None and (node.GetActiveTag() or "").startswith("vtkMRMLViewNode") and any(
+            d.GetID() == node.GetActiveTag() for d in doomed
+        ):
+            doomed.append(node)
+        elif node is not None and "Resectogram" in (node.GetName() or ""):
+            doomed.append(node)
+    # Module PARAMETER nodes (singleton vtkMRMLScriptedModuleNode) are
+    # deliberately NOT removed: live widgets re-mint them on removal, and
+    # the leak-guard fixture excludes singleton-tagged nodes by design.
+    for node in doomed:
+        scene.RemoveNode(node)
 
 
 def _liver_widget_no_setup():
@@ -138,8 +187,8 @@ def _liver_widget_no_setup():
     so skipping ``setup()`` keeps these tests verifiable headless
     (``--no-main-window``), where ``setup()``'s ``self.layout`` is ``None``.
     """
-    from conftest import _require_qt_widget  # type: ignore[import-not-found]
-    _require_qt_widget()
+    from slicer_pytest_support import require_qt_widget
+    require_qt_widget()
 
     _import_slicer_or_skip()
     try:
@@ -147,7 +196,9 @@ def _liver_widget_no_setup():
         import Liver  # type: ignore[import-not-found]
     except ImportError as exc:
         pytest.skip(f"Liver scripted module not importable ({exc}).")
-    return Liver.LiverWidget(qt.QWidget())
+    parent = qt.QWidget()
+    qt.QVBoxLayout(parent)  # ScriptedLoadableModuleWidget reads parent.layout()
+    return Liver.LiverWidget(parent)
 
 
 # =========================================================================== #
@@ -170,13 +221,16 @@ def test_t2_stage1_predicate_exists_on_shell():
     ``_stage1IsComplete`` member.
     """
     widget = _liver_widget()
-    assert callable(getattr(widget, "_stage1IsComplete", None)), (
-        "LiverWidget._stage1IsComplete() not found."
-    )
-    result = widget._stage1IsComplete()
-    assert isinstance(result, bool), (
-        f"_stage1IsComplete() must return bool; got {type(result).__name__}."
-    )
+    try:
+        assert callable(getattr(widget, "_stage1IsComplete", None)), (
+            "LiverWidget._stage1IsComplete() not found."
+        )
+        result = widget._stage1IsComplete()
+        assert isinstance(result, bool), (
+            f"_stage1IsComplete() must return bool; got {type(result).__name__}."
+        )
+    finally:
+        _remove_shell_singletons()
 
 
 def test_t2_stage2_predicate_degrades_gracefully():
@@ -191,17 +245,21 @@ def test_t2_stage2_predicate_degrades_gracefully():
     ``_stage2IsComplete`` member.
     """
     widget = _liver_widget()
-    assert callable(getattr(widget, "_stage2IsComplete", None)), (
-        "LiverWidget._stage2IsComplete() not found."
-    )
-    # In the v2.0 sidebar, LiverSegmentation module is absent (the
-    # LiverSegmentation work is a v2.1 deliverable).  Predicate must
-    # still resolve cleanly.
-    result = widget._stage2IsComplete()
-    assert result is False, (
-        "Stage 2 predicate must return False while LiverSegmentation "
-        "module is absent; the sidebar entry should be disabled-greyed."
-    )
+    try:
+        assert callable(getattr(widget, "_stage2IsComplete", None)), (
+            "LiverWidget._stage2IsComplete() not found."
+        )
+        # Graceful degradation: the predicate must resolve cleanly and
+        # return a bool whether or not LiverSegmentation is in the build
+        # (it IS present in v2.0 -- the anatomy import shipped -- so the
+        # value tracks the scene, False on an empty one).
+        result = widget._stage2IsComplete()
+        assert result is False, (
+            "Stage 2 predicate must return False on an empty scene; the "
+            "sidebar entry should read pending."
+        )
+    finally:
+        _remove_shell_singletons()
 
 
 def test_t2_stage3_predicate_exists_on_territories_logic():
@@ -296,7 +354,10 @@ def test_t3_stage1_semantics_empty_scene_returns_false():
     """
     _clear_scene()
     widget = _liver_widget()
-    assert widget._stage1IsComplete() is False
+    try:
+        assert widget._stage1IsComplete() is False
+    finally:
+        _remove_shell_singletons()
 
 
 def test_t3_stage1_semantics_tagged_volume_returns_true():
@@ -312,12 +373,15 @@ def test_t3_stage1_semantics_tagged_volume_returns_true():
     widget = _liver_widget()
 
     volume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode")
-    # ``LiverRole`` is the per-volume role tag from ADR-0023 §"Decision"
-    # item 1 ("assign per-volume role tags").  Convention pending
-    # implementer; the test pins only the attribute presence.
-    volume.SetAttribute("LiverRole", "PortalVenous")
+    try:
+        # ``LiverRole`` is the per-volume role tag from ADR-0023 §"Decision"
+        # item 1 ("assign per-volume role tags").
+        volume.SetAttribute("LiverRole", "PortalVenous")
 
-    assert widget._stage1IsComplete() is True
+        assert widget._stage1IsComplete() is True
+    finally:
+        slicer.mrmlScene.RemoveNode(volume)
+        _remove_shell_singletons()
 
 
 def test_t3_stage3_semantics_empty_scene_returns_false():

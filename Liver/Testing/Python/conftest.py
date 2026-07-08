@@ -77,15 +77,36 @@ def _launched_scene_cleanup():
         return
 
     baseline = scene.GetNumberOfNodes()
+    baseline_ids = {
+        scene.GetNthNode(i).GetID()
+        for i in range(baseline)
+        if scene.GetNthNode(i) is not None
+    }
 
     yield
 
     scene.Clear(0)
     remaining = scene.GetNumberOfNodes()
-    assert remaining <= baseline, (
+    # SINGLETON-tagged nodes are scene-owned framework state (module
+    # parameter nodes, singleton views): they exist the moment any code
+    # touches their module, survive Clear() BY DESIGN, are re-minted by
+    # live widgets if removed, and the scene reclaims them at app
+    # shutdown -- they cannot trip vtkDebugLeaks.  Only NON-singleton
+    # growth indicates a real test leak.
+    survivors = [
+        scene.GetNthNode(i)
+        for i in range(remaining)
+        if scene.GetNthNode(i) is not None
+        and scene.GetNthNode(i).GetID() not in baseline_ids
+        and not scene.GetNthNode(i).GetSingletonTag()
+    ]
+    named = ", ".join(
+        f"{n.GetClassName()}(name={n.GetName()!r})" for n in survivors
+    )
+    assert not survivors, (
         "MRML scene GREW past its pre-test baseline even after Clear(): "
-        f"{remaining} node(s) remain vs {baseline} at test start.  A node "
-        "Clear() cannot reclaim survives to process shutdown and trips "
-        "vtkDebugLeaks, failing the launched harness.  Tear down every node "
-        "the test created."
+        f"{len(survivors)} non-singleton node(s) the test created survive.  "
+        "A node Clear() cannot reclaim survives to process shutdown and "
+        "trips vtkDebugLeaks, failing the launched harness.  Tear down "
+        f"every node the test created.  Survivors: [{named}]"
     )
