@@ -538,7 +538,32 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
         sourceSegmentationNode.SetAttribute(ROLE_ATTRIBUTE, ROLE_CANONICAL)
         for segmentId, (code, meaning) in assignments.items():
             self.tagSegmentWithSct(sourceSegmentationNode, segmentId, code, meaning)
+        # Give the canonical segments a 3D closed-surface representation + make
+        # them visible, so the anatomy renders through to Planning (#539) --
+        # otherwise the main 3D view is empty entering Stage 4.
+        self.ensureSurfaceRepresentation(sourceSegmentationNode)
         return sourceSegmentationNode
+
+    def ensureSurfaceRepresentation(self, segmentationNode):
+        """Create the 3D closed-surface representation + make it visible.
+
+        Loaded segmentations arrive with only a binary-labelmap representation,
+        so the 3D view shows nothing.  Generate the closed-surface
+        representation and turn on 3D visibility so the canonical anatomy
+        renders (ADR-0023 §Stage 2 hand-off; #539).  Tolerant of a ``None``
+        node and of segments lacking a labelmap source (a no-op then).
+        """
+        if segmentationNode is None:
+            return
+        # "Closed surface" is the canonical name
+        # (vtkSegmentationConverter closed-surface representation).
+        segmentationNode.CreateClosedSurfaceRepresentation()
+        if segmentationNode.GetDisplayNode() is None:
+            segmentationNode.CreateDefaultDisplayNodes()
+        displayNode = segmentationNode.GetDisplayNode()
+        if displayNode is not None:
+            displayNode.SetVisibility(True)
+            displayNode.SetVisibility3D(True)
 
     def createScratchSegmentation(self):
         """Mint an orchestrator-private scratch segmentation node.
