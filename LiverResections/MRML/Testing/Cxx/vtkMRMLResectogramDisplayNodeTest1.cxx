@@ -43,7 +43,11 @@ int testDefaults()
 {
   vtkNew<vtkMRMLResectogramDisplayNode> node;
 
-  CHECK_BOOL(node->GetShowResection2D(), false);
+  // ShowResection2D defaults TRUE: this display node keys only the
+  // dedicated strip pipeline, and its singleton view exists solely to
+  // show the strip -- invisible-by-default renders the view empty
+  // (grid/border only) until some UI flips a toggle nothing owns.
+  CHECK_BOOL(node->GetShowResection2D(), true);
   CHECK_BOOL(node->GetMirrorDisplay(), false);
   CHECK_BOOL(node->GetEnableFlexibleBoundary(), false);
   CHECK_INT(node->GetTextureNumComps(), 0);
@@ -62,8 +66,9 @@ int testSettersAndGetters()
 {
   vtkNew<vtkMRMLResectogramDisplayNode> node;
 
-  node->SetShowResection2D(true);
-  CHECK_BOOL(node->GetShowResection2D(), true);
+  // Exercise the NON-default value (default is now true).
+  node->SetShowResection2D(false);
+  CHECK_BOOL(node->GetShowResection2D(), false);
   node->SetMirrorDisplay(true);
   CHECK_BOOL(node->GetMirrorDisplay(), true);
   node->SetEnableFlexibleBoundary(true);
@@ -84,7 +89,9 @@ int testXMLRoundTrip()
   vtkNew<vtkMRMLScene> scene;
   source->SetScene(scene.GetPointer());
 
-  source->SetShowResection2D(true);
+  // ShowResection2D uses the NON-default false so the round-trip proves
+  // the XML attribute is actually written and read (default is true).
+  source->SetShowResection2D(false);
   source->SetMirrorDisplay(true);
   source->SetEnableFlexibleBoundary(true);
   source->SetTextureNumComps(4);
@@ -153,7 +160,8 @@ int testXMLRoundTrip()
 int testCopyContent()
 {
   vtkNew<vtkMRMLResectogramDisplayNode> source;
-  source->SetShowResection2D(true);
+  // NON-default false so CopyContent must actually transfer it.
+  source->SetShowResection2D(false);
   source->SetTextureNumComps(4);
   source->SetBlurEnabled(true);
   source->SetBlurRadius(3.5);
@@ -161,7 +169,7 @@ int testCopyContent()
   vtkNew<vtkMRMLResectogramDisplayNode> sink;
   sink->CopyContent(source.GetPointer(), /*deepCopy=*/true);
 
-  CHECK_BOOL(sink->GetShowResection2D(), true);
+  CHECK_BOOL(sink->GetShowResection2D(), false);
   CHECK_INT(sink->GetTextureNumComps(), 4);
   CHECK_BOOL(sink->GetBlurEnabled(), true);
   CHECK_DOUBLE(sink->GetBlurRadius(), 3.5);
@@ -191,7 +199,8 @@ int testCopyContent()
 int testModifiedEventsOnSetters()
 {
   vtkNew<vtkMRMLResectogramDisplayNode> node;
-  EXPECT_MTIME_ADVANCES(node, node->SetShowResection2D(true));
+  // false: the setter must CHANGE the value to fire Modified (default true).
+  EXPECT_MTIME_ADVANCES(node, node->SetShowResection2D(false));
   EXPECT_MTIME_ADVANCES(node, node->SetMirrorDisplay(true));
   EXPECT_MTIME_ADVANCES(node, node->SetEnableFlexibleBoundary(true));
   EXPECT_MTIME_ADVANCES(node, node->SetTextureNumComps(4));
