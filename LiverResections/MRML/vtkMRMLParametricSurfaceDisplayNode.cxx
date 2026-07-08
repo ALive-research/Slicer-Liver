@@ -57,9 +57,14 @@ vtkMRMLParametricSurfaceDisplayNode::vtkMRMLParametricSurfaceDisplayNode()
   , ResectionMarginColor{ 1.0f, 0.0f, 0.0f }
   , UncertaintyMarginColor{ 1.0f, 1.0f, 0.0f }
   , ResectionOpacity(1.0f)
+  // Grid defaults MATCH the mapper's own (vtkOpenGLBezierResectionPolyDataMapper
+  // ctor: GridDivisions 20, GridThicknessFactor 9.5): the display node's
+  // values overwrite the mapper uniforms on every update, so 0-division /
+  // 0-thickness defaults rendered NO control-grid overlay on the Planning
+  // surface (the shader draws the grid procedurally from these; v1 parity).
   , GridVisibility(false)
-  , GridDivisions(0.0f)
-  , GridThickness(0.0f)
+  , GridDivisions(20.0f)
+  , GridThickness(9.5f)
   , Grid3DVisibility(true)
   , Grid2DVisibility(false)
   , WidgetVisibility(true)
