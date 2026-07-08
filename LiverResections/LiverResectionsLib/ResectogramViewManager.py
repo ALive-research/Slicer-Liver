@@ -109,7 +109,13 @@ class ResectogramViewManager:
             self._view_node = existing
             return existing
 
-        view = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLViewNode")
+        # Configure BEFORE AddNode: LayerDM pipeline creators are consulted
+        # the moment the node enters the scene, and the surface-family
+        # creators exclude this view BY its singleton tag (ADR-0023
+        # §Stage-4) -- an add-then-tag order leaks deformable surface
+        # pipelines into the flattened strip.
+        view = slicer.mrmlScene.CreateNodeByClass("vtkMRMLViewNode")
+        view.UnRegister(None)
         view.SetName(_RESECTOGRAM_VIEW_LAYOUT_NAME)
         view.SetSingletonTag(RESECTOGRAM_VIEW_SINGLETON_TAG)
         view.SetLayoutName(_RESECTOGRAM_VIEW_LAYOUT_NAME)
@@ -118,6 +124,7 @@ class ResectogramViewManager:
         # and axis labels (the Hyperprobe precedent does the same).
         view.SetBoxVisible(False)
         view.SetAxisLabelsVisible(False)
+        view = slicer.mrmlScene.AddNode(view)
         self._view_node = view
         return view
 

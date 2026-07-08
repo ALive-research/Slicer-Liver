@@ -604,6 +604,24 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections;resectogram;stage4"
     )
 
+    # The resectogram view node must carry its singleton tag AT scene-add
+    # time (ADR-0023 §Stage-4): LayerDM pipeline creators are consulted the
+    # moment a view node enters the scene, and the surface-family creators
+    # exclude the strip view BY that tag -- an add-then-tag order leaks
+    # deformable surface pipelines into the flattened strip.  Runs under
+    # the launched `pytest_launched` row (needs slicer.mrmlScene); SKIPS
+    # CLEANLY here under bare pytest.
+    add_test(
+      NAME LiverResections_resectogram_view_tag_at_add
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_resectogram_view_tag_at_add.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_resectogram_view_tag_at_add PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;resectogram;stage4"
+    )
+
     # T3-g3 -- custom enlarge/restore of the embedded resectogram widget
     # (ADR-0023 §Stage-4).  Slicer's built-in double-click maximize is unusable
     # (it realises a SECOND layout-managed widget on the singleton view node
