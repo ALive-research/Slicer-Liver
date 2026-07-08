@@ -191,6 +191,11 @@ add_test(
     # removed build trees otherwise surface as "The shared library was not
     # found." at module registration and the launched tests skip).
     --testing
+    # Diagnostic for the #460 launched-registration gap: dumps the module
+    # discovery/instantiation/load process so a CI log shows WHICH modules fail
+    # (liverresections / liversegmentation / core cameras+segmentations were
+    # absent from slicer.modules) and why.  Cheap; remove once #460 is closed.
+    --verbose-module-discovery
     # Generated AdditionalLauncherSettings.ini: puts this build's and the
     # SlicerLayerDisplayableManager dependency's library + PYTHONPATH entries on
     # the launcher so the module .so files and their LayerDM-linked dependencies

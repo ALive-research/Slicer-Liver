@@ -125,10 +125,36 @@ def main(argv: list[str] | None = None) -> int:
         argv = sys.argv
 
     _unshadow_pypi_packaging()
+    _log_module_registration_snapshot()
 
     import pytest
 
     return int(pytest.main(_test_roots(argv)))
+
+
+def _log_module_registration_snapshot() -> None:
+    """Print the registered-module set + factory failures (issue #460 diagnostic).
+
+    A pure STATE READ -- no ``processEvents`` / signal-connect (those crash the
+    launched harness during startup).  Shows exactly which modules are on
+    ``slicer.modules`` at the moment pytest collects, so a CI log reveals why
+    launched tests skip ``'<name>' module not registered``.  Best-effort:
+    never raises, never blocks the run.  Remove once #460 is understood.
+    """
+    try:
+        import slicer  # type: ignore[import-not-found]
+
+        manager = slicer.app.moduleManager()
+        names = sorted(manager.modulesNames()) if manager is not None else []
+        print(f"[launched-diag #460] {len(names)} modules registered: {names}", flush=True)
+
+        factory = manager.factoryManager() if manager is not None else None
+        for attr in ("ignoredModuleNames", "failedModuleNames"):
+            getter = getattr(factory, attr, None)
+            if getter is not None:
+                print(f"[launched-diag #460] {attr}: {sorted(getter())}", flush=True)
+    except Exception as exc:  # pragma: no cover - diagnostic must never break the run
+        print(f"[launched-diag #460] snapshot unavailable: {exc!r}", flush=True)
 
 
 def _exit(code: int) -> None:
