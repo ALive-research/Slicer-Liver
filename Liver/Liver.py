@@ -535,37 +535,23 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def _buildStage6Page(self):
     """Shell-owned Export UI (ADR-0023 §Stage 6; ADR-0004 Python).
 
-    Select a resection plan and Save it to a ``.lrp.json`` (schema v2, via
-    ``vtkMRMLResectionPlanStorageNode``).  A successful write records
-    ``Stage6.LastWriteOK`` on the shell state node, flipping ``_stage6IsComplete``.
+    The static panel is authored in ``Resources/UI/StageExportWidget.ui`` (a
+    designer-editable layout) and loaded here; only the runtime wiring — scene
+    binding + the Save signal — stays in code.  Select a resection plan and
+    Save it to a ``.lrp.json`` (schema v2, via ``vtkMRMLResectionPlanStorageNode``);
+    a successful write records ``Stage6.LastWriteOK`` on the shell state node,
+    flipping ``_stage6IsComplete``.
     """
-    page = qt.QWidget()
-    layout = qt.QVBoxLayout(page)
-    layout.addWidget(qt.QLabel(
-      "Export — select a resection plan and save it to disk (Stage 6)."))
-
-    row = qt.QHBoxLayout()
-    row.addWidget(qt.QLabel("Plan:"))
-    combo = slicer.qMRMLNodeComboBox()
-    combo.setObjectName("ExportPlanComboBox")
-    combo.nodeTypes = ["vtkMRMLResectionPlanNode"]
-    combo.addEnabled = False
-    combo.removeEnabled = False
-    combo.noneEnabled = True
-    combo.setMRMLScene(slicer.mrmlScene)
-    row.addWidget(combo, 1)
-    saveButton = qt.QPushButton("Save…")
-    saveButton.setObjectName("ExportSaveButton")
-    saveButton.connect("clicked()", self._onExportSaveClicked)
-    row.addWidget(saveButton)
-    layout.addLayout(row)
-
-    self._exportStatusLabel = qt.QLabel("")
-    self._exportStatusLabel.setObjectName("ExportStatusLabel")
-    layout.addWidget(self._exportStatusLabel)
-    layout.addStretch(1)
-
-    self._exportPlanCombo = combo
+    page = slicer.util.loadUI(self.resourcePath("UI/StageExportWidget.ui"))
+    page.setMRMLScene(slicer.mrmlScene)
+    ui = slicer.util.childWidgetVariables(page)
+    # Bind the selector's scene explicitly -- the root qMRMLWidget's
+    # setMRMLScene does not reliably propagate to the child selector at
+    # build time (before the page is parented/shown).
+    ui.ExportPlanComboBox.setMRMLScene(slicer.mrmlScene)
+    ui.ExportSaveButton.connect("clicked()", self._onExportSaveClicked)
+    self._exportPlanCombo = ui.ExportPlanComboBox
+    self._exportStatusLabel = ui.ExportStatusLabel
     return page
 
   def _onExportSaveClicked(self):

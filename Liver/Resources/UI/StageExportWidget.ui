@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>StageExportWidget</class>
+ <widget class="qMRMLWidget" name="StageExportWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>380</width>
+    <height>150</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QLabel" name="ExportIntroLabel">
+     <property name="text">
+      <string>Export — select a resection plan and save it to disk (Stage 6).</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="planRow">
+     <item>
+      <widget class="QLabel" name="PlanLabel">
+       <property name="text">
+        <string>Plan:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="qMRMLNodeComboBox" name="ExportPlanComboBox">
+       <property name="nodeTypes">
+        <stringlist>
+         <string>vtkMRMLResectionPlanNode</string>
+        </stringlist>
+       </property>
+       <property name="addEnabled">
+        <bool>false</bool>
+       </property>
+       <property name="removeEnabled">
+        <bool>false</bool>
+       </property>
+       <property name="noneEnabled">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="ExportSaveButton">
+       <property name="text">
+        <string>Save…</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QLabel" name="ExportStatusLabel">
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>qMRMLWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLNodeComboBox</class>
+   <extends>QWidget</extends>
+   <header>qMRMLNodeComboBox.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
