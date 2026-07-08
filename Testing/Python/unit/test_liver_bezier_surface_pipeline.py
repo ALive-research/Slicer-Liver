@@ -153,3 +153,71 @@ def test_pipeline_update_is_idempotent(pipeline_module, bezier_nodes):
     assert second == first, "UpdatePipeline must be idempotent on no-change"
 
     pipeline.cleanup()
+
+
+def test_pipeline_adopts_late_bound_displayable(pipeline_module):
+    """A data node linked AFTER SetDisplayNode is adopted on the next update.
+
+    The production creation ordering (``CreateDefaultDisplayNodes``) adds the
+    display node to the scene -- firing the LayerDM creator and this
+    Pipeline's ``SetDisplayNode`` -- BEFORE ``SetAndObserveDisplayNodeID``
+    links it to the carrier.  ``GetDisplayableNode()`` is None at that
+    moment; without late re-derivation the Pipeline stays permanently
+    data-node-less (no observers, no dispatch, default unit patch renders).
+    ``UpdatePipeline`` must re-derive and adopt the displayable once the
+    link exists.
+    """
+    import slicer
+
+    scene = slicer.mrmlScene
+    data = scene.AddNewNodeByClass("vtkMRMLBezierSurfaceNode")
+    display = scene.AddNewNodeByClass("vtkMRMLParametricSurfaceDisplayNode")
+    try:
+        pipeline = pipeline_module.LiverBezierSurfacePipeline()
+        # Production ordering: display handed over BEFORE the carrier link.
+        pipeline.SetDisplayNode(display)
+        assert pipeline.GetDataNode() is None, "no link yet -- nothing to derive"
+
+        data.AddAndObserveDisplayNodeID(display.GetID())
+        pipeline.UpdatePipeline()
+        assert pipeline.GetDataNode() is data, (
+            "UpdatePipeline must re-derive the data node once the display "
+            "node is linked to its displayable -- otherwise the Pipeline "
+            "created during CreateDefaultDisplayNodes never dispatches."
+        )
+        pipeline.cleanup()
+    finally:
+        scene.RemoveNode(display)
+        scene.RemoveNode(data)
+
+
+def test_pipeline_reference_added_hook_adopts_displayable(pipeline_module):
+    """``OnReferenceToDisplayNodeAdded`` adopts the referencing displayable.
+
+    This is the LayerDM manager's designed late-binding notification: its
+    node-reference observer calls the hook with ``fromNode`` == the
+    displayable that just referenced our display node.  The Pipeline must
+    adopt it as the data node and re-dispatch -- this is the PRODUCTION path
+    that revives a Pipeline created during ``CreateDefaultDisplayNodes``
+    (before the display<->displayable link existed).
+    """
+    import slicer
+
+    scene = slicer.mrmlScene
+    data = scene.AddNewNodeByClass("vtkMRMLBezierSurfaceNode")
+    display = scene.AddNewNodeByClass("vtkMRMLParametricSurfaceDisplayNode")
+    try:
+        pipeline = pipeline_module.LiverBezierSurfacePipeline()
+        pipeline.SetDisplayNode(display)
+        assert pipeline.GetDataNode() is None
+
+        data.AddAndObserveDisplayNodeID(display.GetID())
+        pipeline.OnReferenceToDisplayNodeAdded(data, "display")
+        assert pipeline.GetDataNode() is data, (
+            "the reference-added hook must adopt the referencing displayable "
+            "as the data node (LayerDM late binding)."
+        )
+        pipeline.cleanup()
+    finally:
+        scene.RemoveNode(display)
+        scene.RemoveNode(data)
