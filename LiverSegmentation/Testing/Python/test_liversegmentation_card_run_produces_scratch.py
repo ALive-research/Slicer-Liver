@@ -317,9 +317,12 @@ def test_card_run_paints_busy_state_before_the_blocking_backend_call(monkeypatch
 
     seen = {}
 
+    import qt
+
     def _blocking_segment(volume, sctTarget, progressCallback=None):
         seen["busy_visible"] = bool(card.progressBar.visible)
         seen["status"] = str(card.statusLabel.text)
+        seen["wait_cursor"] = qt.QApplication.overrideCursor() is not None
         return None
 
     monkeypatch.setattr(orch, "segment", _blocking_segment)
@@ -332,6 +335,14 @@ def test_card_run_paints_busy_state_before_the_blocking_backend_call(monkeypatch
     assert seen.get("status"), "a starting status message must already be shown"
     assert "idle" not in seen["status"].lower(), (
         f"the status must signal processing, not {seen['status']!r}."
+    )
+    assert seen.get("wait_cursor"), (
+        "the wait cursor must be active during the blocking backend call "
+        "(the v1 setOverrideCursor(WaitCursor) idiom)."
+    )
+    assert qt.QApplication.overrideCursor() is None, (
+        "the wait cursor must be RESTORED after onRun returns -- a stuck "
+        "spinner outlives the inference otherwise."
     )
 
 
