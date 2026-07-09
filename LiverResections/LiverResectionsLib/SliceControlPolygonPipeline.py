@@ -54,13 +54,20 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
 _REGISTERED = False
 
 #: Distance (mm) over which the projection fades to fully transparent --
-#: the above/below-the-plane cue.  On-plane points render fully opaque.
-FADE_DISTANCE_MM = 30.0
+#: the above/below-the-plane cue.  Short by design: only control points
+#: NEAR the plane (the manipulable ones) are present in a slice at all.
+FADE_DISTANCE_MM = 15.0
 
 #: Manipulable range == visible range (the markups rule: anything you can
 #: see, you can grab).  A point at exactly FADE_DISTANCE_MM has alpha 0 --
 #: invisible AND unpickable; there is no visible-but-dead band.
 PICK_RANGE_MM = FADE_DISTANCE_MM
+
+#: Dash pattern for the polygon edges (XY pixels): the SCAFFOLD reads
+#: dashed, the solid slice contour is the RESULT -- a structural
+#: differentiation, not colour-only.
+DASH_LENGTH_PX = 8.0
+GAP_LENGTH_PX = 5.0
 
 
 def _creator_accepts_view(viewNode: Any) -> bool:  # noqa: N803 - VTK arg name
@@ -118,6 +125,25 @@ class SliceControlPolygonPipeline(_PipelineBase):
         self._handles_actor.SetMapper(self._handles_mapper)
         self._handles_actor.SetVisibility(False)
 
+        # Hover ring: the 2D analogue of the 3D glow halo -- a larger
+        # circle on the hovered/grabbed projected handle.
+        self._ring_polydata = vtk.vtkPolyData()
+        self._ring_polydata.SetPoints(vtk.vtkPoints())
+        self._ring_glyph_source = vtk.vtkGlyphSource2D()
+        self._ring_glyph_source.SetGlyphTypeToCircle()
+        self._ring_glyph_source.FilledOff()
+        self._ring_glyph_source.SetScale(14.0)
+        self._ring_glyph = vtk.vtkGlyph2D()
+        self._ring_glyph.SetInputData(self._ring_polydata)
+        self._ring_glyph.SetSourceConnection(self._ring_glyph_source.GetOutputPort())
+        self._ring_glyph.ScalingOff()
+        self._ring_mapper = vtk.vtkPolyDataMapper2D()
+        self._ring_mapper.SetInputConnection(self._ring_glyph.GetOutputPort())
+        self._ring_actor = vtk.vtkActor2D()
+        self._ring_actor.SetMapper(self._ring_mapper)
+        self._ring_actor.GetProperty().SetLineWidth(2.0)
+        self._ring_actor.SetVisibility(False)
+
         # Edges: projected polygon lines with per-vertex RGBA fading.
         self._edges_polydata = vtk.vtkPolyData()
         self._edges_polydata.SetPoints(vtk.vtkPoints())
@@ -173,6 +199,7 @@ class SliceControlPolygonPipeline(_PipelineBase):
         if renderer is not None:
             renderer.AddActor2D(self._edges_actor)
             renderer.AddActor2D(self._handles_actor)
+            renderer.AddActor2D(self._ring_actor)
         if self._display_node is None:
             base_getter = getattr(self, "GetDisplayNode", None)
             display = base_getter() if base_getter is not None else None
@@ -186,6 +213,7 @@ class SliceControlPolygonPipeline(_PipelineBase):
             try:
                 renderer.RemoveActor2D(self._handles_actor)
                 renderer.RemoveActor2D(self._edges_actor)
+                renderer.RemoveActor2D(self._ring_actor)
             except Exception:  # pragma: no cover - defensive
                 pass
         self._renderer = None
@@ -199,6 +227,7 @@ class SliceControlPolygonPipeline(_PipelineBase):
         self._drag_index = None
         self._handles_actor.SetVisibility(False)
         self._edges_actor.SetVisibility(False)
+        self._ring_actor.SetVisibility(False)
 
     # ------------------------------------------------------------------ #
     # Reconciliation
@@ -292,25 +321,68 @@ class SliceControlPolygonPipeline(_PipelineBase):
             self._handles_polydata.GetPointData().SetScalars(handle_rgba)
             self._handles_polydata.Modified()
 
-            edge_points = vtk.vtkPoints()
-            edge_points.DeepCopy(points)
-            lines = vtk.vtkCellArray()
-            for r in range(rows):
-                line = vtk.vtkPolyLine()
-                line.GetPointIds().SetNumberOfIds(cols)
-                for c in range(cols):
-                    line.GetPointIds().SetId(c, r * cols + c)
-                lines.InsertNextCell(line)
-            for c in range(cols):
-                line = vtk.vtkPolyLine()
-                line.GetPointIds().SetNumberOfIds(rows)
+            # DASHED edges (manual segmentation -- GL line stipple is not
+            # portable): each grid edge is emitted as alternating dash
+            # segments, so the scaffold reads structurally distinct from
+            # the solid resection contour.
+            dash_points = vtk.vtkPoints()
+            dash_rgba = vtk.vtkUnsignedCharArray()
+            dash_rgba.SetNumberOfComponents(4)
+            dash_lines = vtk.vtkCellArray()
+
+            def _edge_pairs():
                 for r in range(rows):
-                    line.GetPointIds().SetId(r, r * cols + c)
-                lines.InsertNextCell(line)
-            self._edges_polydata.SetPoints(edge_points)
-            self._edges_polydata.SetLines(lines)
-            self._edges_polydata.GetPointData().SetScalars(edge_rgba)
+                    for c in range(cols - 1):
+                        yield r * cols + c, r * cols + c + 1
+                for c in range(cols):
+                    for r in range(rows - 1):
+                        yield r * cols + c, (r + 1) * cols + c
+
+            for a, b in _edge_pairs():
+                ax, ay = self._projected_xy[a]
+                bx, by = self._projected_xy[b]
+                ca = edge_rgba.GetTuple4(a)
+                cb = edge_rgba.GetTuple4(b)
+                length = ((bx - ax) ** 2 + (by - ay) ** 2) ** 0.5
+                if length <= 0.0:
+                    continue
+                period = DASH_LENGTH_PX + GAP_LENGTH_PX
+                t = 0.0
+                while t < length:
+                    t_end = min(t + DASH_LENGTH_PX, length)
+                    f0, f1 = t / length, t_end / length
+                    i0 = dash_points.InsertNextPoint(
+                        ax + (bx - ax) * f0, ay + (by - ay) * f0, 0.0
+                    )
+                    i1 = dash_points.InsertNextPoint(
+                        ax + (bx - ax) * f1, ay + (by - ay) * f1, 0.0
+                    )
+                    for f, _i in ((f0, i0), (f1, i1)):
+                        dash_rgba.InsertNextTuple4(*[
+                            int(ca[k] + (cb[k] - ca[k]) * f) for k in range(4)
+                        ])
+                    seg = vtk.vtkLine()
+                    seg.GetPointIds().SetId(0, i0)
+                    seg.GetPointIds().SetId(1, i1)
+                    dash_lines.InsertNextCell(seg)
+                    t += period
+            self._edges_polydata.SetPoints(dash_points)
+            self._edges_polydata.SetLines(dash_lines)
+            self._edges_polydata.GetPointData().SetScalars(dash_rgba)
             self._edges_polydata.Modified()
+
+            # Hover ring: the 2D halo on the hovered/grabbed handle.
+            target = grabbed if grabbed >= 0 else hovered
+            if 0 <= target < len(self._projected_xy):
+                ring_points = vtk.vtkPoints()
+                ring_points.InsertNextPoint(*self._projected_xy[target], 0.0)
+                self._ring_polydata.SetPoints(ring_points)
+                self._ring_polydata.Modified()
+                rgb = HALO_GRAB_COLOR if grabbed >= 0 else HALO_HOVER_COLOR
+                self._ring_actor.GetProperty().SetColor(*rgb)
+                self._ring_actor.SetVisibility(True)
+            else:
+                self._ring_actor.SetVisibility(False)
             return True
         except Exception:  # pragma: no cover - defensive
             return False
