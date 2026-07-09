@@ -264,36 +264,57 @@ class FlattenedSurfaceRepresentation:
         """Attach the cross-view locator node (ADR-0025); ``None`` clears."""
         self._locator_node = locator_node
 
-    def _apply_locator(self) -> None:
-        """Thread the locator pick + radius onto the 2D mapper's uniforms.
+    def SetPickedUV(self, uv: Any) -> None:  # noqa: N802 - VTK verb
+        """Record the picked strip ``(u, v)`` (set by the pick producer)."""
+        self._picked_uv = (float(uv[0]), float(uv[1])) if uv is not None else None
 
-        Mirrors ``BezierPlanningRepresentation._apply_locator``: the 2D
-        mapper tests the REAL surface position (the ``BSPoints`` attribute)
-        against ``uLocatorPosition``, so the strip dot sits at the same
-        anatomical point as the 3D surface marker -- the ADR-0025 1:1
-        correspondence.  Radius 0 is the marker-off state (no locator, no
-        display node); a no-op on the generic fallback mapper.
+    def _apply_locator(self) -> None:
+        """Drive the strip's circle marker from the locator state.
+
+        The SHADER disc is kept OFF for the strip (radius 0 on the 2D
+        mapper): it tests the REAL 3D surface positions, so the (u, v)
+        flattening rendered it distorted.  Instead a world-space circle
+        actor sits at the picked (u, v) on the flat quad -- round by
+        construction, rescaled by the camera on zoom/pan, with the
+        MatRatio squeeze applied to its centre about the camera focal
+        point (the ratio scales clip-space offsets).  Visibility follows
+        the locator display's gesture-scoped switch.
         """
         mapper = self._resection_mapper_2d
-        if mapper is None:
-            return
-        set_position = getattr(mapper, "SetLocatorPosition", None)
-        set_radius = getattr(mapper, "SetLocatorRadius", None)
-        if set_position is None or set_radius is None:
-            return  # generic fallback mapper -- no locator uniforms
+        if mapper is not None:
+            set_radius = getattr(mapper, "SetLocatorRadius", None)
+            if set_radius is not None:
+                set_radius(0.0)  # the distorted shader disc stays off
 
         node = self._locator_node
-        if node is None:
-            set_radius(0.0)  # marker off
+        display_node = node.GetDisplayNode() if node is not None and hasattr(node, "GetDisplayNode") else None
+        visible = (
+            bool(getattr(display_node, "GetVisibility", lambda: False)())
+            if display_node is not None
+            else False
+        )
+        uv = self._picked_uv
+        if not visible or uv is None or self._bezier_plane is None:
+            if self._marker_actor is not None:
+                self._marker_actor.SetVisibility(False)
             return
-        position = node.GetPickedPositionWorld()
-        set_position(float(position[0]), float(position[1]), float(position[2]))
-        display_node = node.GetDisplayNode() if hasattr(node, "GetDisplayNode") else None
-        radius = display_node.GetRadius() if display_node is not None else 0.0
-        # Gesture-scoped marker: the display's base Visibility is the
-        # switch (press shows, release hides); invisible pushes radius 0.
-        visible = getattr(display_node, "GetVisibility", lambda: True)() if display_node is not None else False
-        set_radius(float(radius) if visible else 0.0)
+        try:
+            self._bezier_plane.Update()
+            bounds = self._bezier_plane.GetOutput().GetBounds()
+            cx = bounds[0] + (bounds[1] - bounds[0]) * uv[0]
+            cy = bounds[2] + (bounds[3] - bounds[2]) * uv[1]
+            ratio = self._mat_ratio_applied or (1.0, 1.0)
+            camera = self._resectogram_camera
+            focal = camera.GetFocalPoint() if camera is not None else (0.0, 0.0, 0.0)
+            cx = focal[0] + (cx - focal[0]) * float(ratio[0])
+            cy = focal[1] + (cy - focal[1]) * float(ratio[1])
+            radius = display_node.GetRadius() if display_node is not None else 2.0
+            self._marker_source.SetRadius(float(radius))
+            # Slightly proud of the quad so the circle wins the z-fight.
+            self._marker_source.SetCenter(cx, cy, 0.5)
+            self._marker_actor.SetVisibility(True)
+        except Exception:  # pragma: no cover - defensive
+            self._marker_actor.SetVisibility(False)
 
     def update(self, display_node: Any | None, data_node: Any | None) -> None:
         """Reconcile the resectogram against the current display + data nodes.
@@ -323,6 +344,10 @@ class FlattenedSurfaceRepresentation:
         self._distance_map_volume = None
         self._effective_texture_num_comps = 0
         self._locator_node = None
+        self._picked_uv = None
+        self._marker_actor = None
+        self._marker_mapper = None
+        self._marker_source = None
 
         if self._renderer is not None:
             self._detach_blur_pass(self._renderer)
@@ -406,14 +431,39 @@ class FlattenedSurfaceRepresentation:
 
         self._resectogram_camera = vtk.vtkCamera()
 
+        # Locator marker: a WORLD-SPACE circle on the flat quad (replaces
+        # the shader disc for the strip -- the disc is round on the 3D
+        # surface, so the (u, v) flattening rendered it distorted).  A
+        # world actor rides the camera, so zoom/pan rescale it with the
+        # strip; the MatRatio squeeze is applied to its CENTER about the
+        # camera focal point (the ratio scales clip-space offsets).
+        self._marker_source = vtk.vtkRegularPolygonSource()
+        self._marker_source.SetNumberOfSides(32)
+        self._marker_source.SetNormal(0.0, 0.0, 1.0)
+        self._marker_source.SetRadius(2.0)
+        self._marker_mapper = vtk.vtkPolyDataMapper()
+        self._marker_mapper.SetInputConnection(self._marker_source.GetOutputPort())
+        self._marker_actor = vtk.vtkActor()
+        self._marker_actor.SetMapper(self._marker_mapper)
+        self._marker_actor.GetProperty().SetColor(1.0, 0.0, 0.0)
+        self._marker_actor.SetVisibility(False)
+        self._picked_uv: tuple | None = None
+
     def _attach_actors(self, renderer: Any) -> None:
         if self._resection_actor_2d is not None and hasattr(renderer, "AddActor"):
             renderer.AddActor(self._resection_actor_2d)
+        if self._marker_actor is not None and hasattr(renderer, "AddActor"):
+            renderer.AddActor(self._marker_actor)
 
     def _detach_actors(self, renderer: Any) -> None:
         if self._resection_actor_2d is not None and hasattr(renderer, "RemoveActor"):
             try:
                 renderer.RemoveActor(self._resection_actor_2d)
+            except Exception:  # pragma: no cover - defensive
+                pass
+        if self._marker_actor is not None and hasattr(renderer, "RemoveActor"):
+            try:
+                renderer.RemoveActor(self._marker_actor)
             except Exception:  # pragma: no cover - defensive
                 pass
 
