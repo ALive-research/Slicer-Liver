@@ -396,8 +396,7 @@ class ControlPolygonPipeline(_PipelineBase):
             try:
                 grid = grid_getter()
                 base = int(index) * 3
-                scale = HALO_GRAB_SCALE if self._drag_index is not None else HALO_HOVER_SCALE
-                self._halo_sphere.SetRadius(self._handle_sphere.GetRadius() * scale)
+                self._halo_sphere.SetRadius(self._handle_sphere.GetRadius() * HALO_HOVER_SCALE)
                 self._halo_actor.SetPosition(grid[base], grid[base + 1], grid[base + 2])
                 self._halo_actor.SetVisibility(True)
             except Exception:  # pragma: no cover - defensive
@@ -408,6 +407,31 @@ class ControlPolygonPipeline(_PipelineBase):
                 request_render()
             except Exception:  # pragma: no cover - defensive (stub bases)
                 pass
+
+    def _set_grabbed_point_color(self, index: int | None) -> None:
+        """Colour the grabbed HANDLE itself (per-point glyph scalars).
+
+        The grabbed control point turns HALO_GRAB_COLOR; ``None`` restores
+        the uniform display HandleColor on all points.  Direct RGB scalars
+        on the glyph input; the mapper colours by them when present.
+        """
+        try:
+            points = self._handles_polydata.GetPoints()
+            n = points.GetNumberOfPoints() if points is not None else 0
+            base = [int(c * 255) for c in self._handles_actor.GetProperty().GetColor()]
+            colors = vtk.vtkUnsignedCharArray()
+            colors.SetNumberOfComponents(3)
+            colors.SetName("HandleColors")
+            grab = [int(c * 255) for c in HALO_GRAB_COLOR]
+            for i in range(n):
+                colors.InsertNextTuple3(*(grab if i == index else base))
+            self._handles_polydata.GetPointData().SetScalars(colors)
+            self._handles_glyph.SetColorModeToColorByScalar()
+            self._handles_mapper.SetColorModeToDirectScalars()
+            self._handles_mapper.SetScalarVisibility(index is not None)
+            self._handles_polydata.Modified()
+        except Exception:  # pragma: no cover - defensive
+            return
 
     def GetHaloActor(self) -> Any:  # noqa: N802 - VTK verb
         return self._halo_actor
@@ -441,7 +465,7 @@ class ControlPolygonPipeline(_PipelineBase):
             ):
                 return False
             self._drag_index = idx
-            self._halo_actor.GetProperty().SetColor(*HALO_GRAB_COLOR)
+            self._set_grabbed_point_color(idx)
             hover, self._hover_index = idx, None
             self._set_hover(hover)  # halo jumps to the grabbed handle
             world = self._event_world_at_control_point(renderer, eventData, idx)
@@ -451,7 +475,7 @@ class ControlPolygonPipeline(_PipelineBase):
 
         if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
             self._drag_index = None
-            self._halo_actor.GetProperty().SetColor(*HALO_HOVER_COLOR)
+            self._set_grabbed_point_color(None)
             self._set_hover(None)
             return False  # grab over -- release the focus
 

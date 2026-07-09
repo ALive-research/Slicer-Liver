@@ -242,6 +242,20 @@ class ResectogramViewManager:
             slicer.vtkMRMLScene.NodeAddedEvent, _onNodeAdded
         )
         self._observed_scene = scene
+        # Slicer's show-in-3D logic REWRITES the slice display nodes'
+        # ViewNodeIDs on every toggle, clobbering the deny; re-deny on
+        # their Modified (idempotent: _setViewNodeIDsIfChanged only writes
+        # on a real change, so no observer loop).
+        self._slice_display_tags = []
+        for i in range(scene.GetNumberOfNodesByClass("vtkMRMLSliceDisplayNode")):
+            node = scene.GetNthNodeByClass(i, "vtkMRMLSliceDisplayNode")
+            if node is None:
+                continue
+            tag = node.AddObserver(
+                "ModifiedEvent",
+                lambda caller, event: self._onDisplayNodeAdded(slicer, caller),
+            )
+            self._slice_display_tags.append((node, tag))
 
     def _onDisplayNodeAdded(self, slicer: Any, node: Any) -> None:  # noqa: N802
         view = self._view_node
@@ -272,6 +286,12 @@ class ResectogramViewManager:
                 pass
         self._scene_observer_tag = None
         self._observed_scene = None
+        for node, tag in getattr(self, "_slice_display_tags", []):
+            try:
+                node.RemoveObserver(tag)
+            except Exception:  # pragma: no cover - defensive
+                pass
+        self._slice_display_tags = []
 
     @staticmethod
     def _restrictAnatomyAwayFromView(  # noqa: N802 - Slicer/Qt verb convention
