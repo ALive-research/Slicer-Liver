@@ -69,6 +69,19 @@ PICK_RANGE_MM = FADE_DISTANCE_MM
 DASH_LENGTH_PX = 8.0
 GAP_LENGTH_PX = 5.0
 
+#: Maximum lightness shift for the above/below-plane cue (the markups
+#: signed-distance convention): points ABOVE the plane tint toward white,
+#: points BELOW toward black, graded by distance.  Sign-neutral hue, so it
+#: composes with any display colour and stays colourblind-legible.
+SIDE_TINT_MAX = 0.55
+
+
+def _side_tint(rgb: list, signed_distance: float) -> list:
+    """Blend ``rgb`` toward white (above) or black (below) by distance."""
+    fraction = min(1.0, abs(signed_distance) / FADE_DISTANCE_MM) * SIDE_TINT_MAX
+    target = 255 if signed_distance > 0 else 0
+    return [int(c + (target - c) * fraction) for c in rgb]
+
 
 def _creator_accepts_view(viewNode: Any) -> bool:  # noqa: N803 - VTK arg name
     """True iff ``viewNode`` is a slice view (this pipeline's home)."""
@@ -111,7 +124,7 @@ class SliceControlPolygonPipeline(_PipelineBase):
         self._handle_glyph_source = vtk.vtkGlyphSource2D()
         self._handle_glyph_source.SetGlyphTypeToCircle()
         self._handle_glyph_source.FilledOff()
-        self._handle_glyph_source.SetScale(8.0)
+        self._handle_glyph_source.SetScale(13.0)
         self._handles_glyph = vtk.vtkGlyph2D()
         self._handles_glyph.SetInputData(self._handles_polydata)
         self._handles_glyph.SetSourceConnection(
@@ -132,7 +145,7 @@ class SliceControlPolygonPipeline(_PipelineBase):
         self._ring_glyph_source = vtk.vtkGlyphSource2D()
         self._ring_glyph_source.SetGlyphTypeToCircle()
         self._ring_glyph_source.FilledOff()
-        self._ring_glyph_source.SetScale(14.0)
+        self._ring_glyph_source.SetScale(20.0)
         self._ring_glyph = vtk.vtkGlyph2D()
         self._ring_glyph.SetInputData(self._ring_polydata)
         self._ring_glyph.SetSourceConnection(self._ring_glyph_source.GetOutputPort())
@@ -285,6 +298,10 @@ class SliceControlPolygonPipeline(_PipelineBase):
                     edge_rgb = [int(c * 255) for c in display.GetEdgeColor()]
                 except Exception:  # pragma: no cover - defensive
                     pass
+            # Mid-tone base: the default HandleColor is pure white, which
+            # leaves no headroom for the lighter-above tint -- pull the
+            # slice base toward 78% so the sign cue reads BOTH ways.
+            handle_rgb = [int(c * 0.78) for c in handle_rgb]
 
             points = vtk.vtkPoints()
             handle_rgba = vtk.vtkUnsignedCharArray()
@@ -304,9 +321,10 @@ class SliceControlPolygonPipeline(_PipelineBase):
                 px, py = xy[0] / w, xy[1] / w
                 points.InsertNextPoint(px, py, 0.0)
                 self._projected_xy.append((px, py))
-                distance = abs(
-                    sum(n * (p - o) for n, p, o in zip(normal, (x, y, z), origin))
+                signed = sum(
+                    n * (p - o) for n, p, o in zip(normal, (x, y, z), origin)
                 )
+                distance = abs(signed)
                 self._plane_distances.append(distance)
                 in_range.append(distance < PICK_RANGE_MM)
                 alpha = max(0.0, 1.0 - distance / FADE_DISTANCE_MM)
@@ -316,8 +334,14 @@ class SliceControlPolygonPipeline(_PipelineBase):
                 elif i == hovered:
                     handle_rgba.InsertNextTuple4(*hover_rgb, 255)
                 else:
-                    handle_rgba.InsertNextTuple4(*handle_rgb, int(alpha * 255))
-                edge_rgba.InsertNextTuple4(*edge_rgb, int(alpha * 255))
+                    # The markups signed-distance cue: above-plane points
+                    # tint toward white, below-plane toward black.
+                    handle_rgba.InsertNextTuple4(
+                        *_side_tint(handle_rgb, signed), int(alpha * 255)
+                    )
+                edge_rgba.InsertNextTuple4(
+                    *_side_tint(edge_rgb, signed), int(alpha * 255)
+                )
 
             visible_points = vtk.vtkPoints()
             visible_rgba = vtk.vtkUnsignedCharArray()
