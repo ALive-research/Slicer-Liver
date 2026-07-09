@@ -218,6 +218,12 @@ class SliceControlPolygonPipeline(_PipelineBase):
             display = base_getter() if base_getter is not None else None
             if display is not None:
                 self.SetDisplayNode(display)
+        # Re-attach the slice-node observer too: cleanup() detached it with
+        # the rest, and the view node is not re-set after churn -- without
+        # this, reslicing stops reprojecting (the stale-trace bug, round
+        # two; mirrors the contour pipeline).
+        if self._slice_node is not None:
+            self._attach_observer(self._slice_node)
         self._last_update_key = None
         self.UpdatePipeline()
 
