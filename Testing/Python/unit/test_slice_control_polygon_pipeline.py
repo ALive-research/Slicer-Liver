@@ -98,7 +98,10 @@ def test_projection_follows_the_grid(pipeline_module, polygon_nodes):
     data.SetState(1)  # Planning -> visible
     pipeline.UpdatePipeline()
     handles = pipeline.GetHandlesPolyData()
-    assert handles is not None and handles.GetNumberOfPoints() == 16
+    # The raised point (30 mm off-plane) is beyond the manipulable range
+    # and therefore NOT PRESENT at all (2D alpha is unreliable, so
+    # presence is the cutoff): 15 of 16 points project.
+    assert handles is not None and handles.GetNumberOfPoints() == 15
     assert pipeline.GetHandlesActor().GetVisibility() == 1
     assert pipeline.GetEdgesActor().GetVisibility() == 1
     pipeline.cleanup()
@@ -114,18 +117,18 @@ def test_fading_tracks_distance_to_the_plane(pipeline_module, polygon_nodes):
     data.SetState(1)
     pipeline.UpdatePipeline()
 
-    scalars = pipeline.GetHandlesPolyData().GetPointData().GetScalars()
+    handles = pipeline.GetHandlesPolyData()
+    assert handles.GetNumberOfPoints() == 15, (
+        "the raised point (beyond the manipulable range) must be ABSENT -- "
+        "presence IS the cutoff; only points a slice can edit appear in it."
+    )
+    scalars = handles.GetPointData().GetScalars()
     assert scalars is not None and scalars.GetNumberOfComponents() == 4, (
-        "handles carry per-point RGBA scalars (the fading channel)"
+        "present handles carry per-point RGBA scalars (the near-range fade)"
     )
-    on_plane_alpha = scalars.GetTuple4(5)[3]
-    raised_alpha = scalars.GetTuple4(0)[3]
-    assert on_plane_alpha == pytest.approx(255, abs=1), "on-plane = fully opaque"
-    assert raised_alpha < on_plane_alpha, (
-        "a point 30 mm off-plane must FADE (alpha below the on-plane value)"
-    )
-    assert raised_alpha <= 255 * (1.0 - 30.0 / pipeline_module.FADE_DISTANCE_MM) + 1 or raised_alpha < 30, (
-        "the fade must track distance (30 mm beyond the fade span reads ~0)"
+    alphas = [scalars.GetTuple4(i)[3] for i in range(handles.GetNumberOfPoints())]
+    assert all(a == pytest.approx(255, abs=1) for a in alphas), (
+        "all PRESENT points here are on-plane -> fully opaque"
     )
     pipeline.cleanup()
 
@@ -246,10 +249,12 @@ def test_hover_publishes_cross_view_highlight(pipeline_module, polygon_nodes):
     pipeline.UpdatePipeline()
     scalars = pipeline.GetHandlesPolyData().GetPointData().GetScalars()
     hover = tuple(int(c * 255) for c in pipeline_module.HALO_HOVER_COLOR)
-    assert tuple(scalars.GetTuple4(5))[:3] == pytest.approx(hover), (
+    # Grid point 5 sits at PRESENT index 4: the raised point 0 is beyond
+    # the manipulable range and absent from the projected polydata.
+    assert tuple(scalars.GetTuple4(4))[:3] == pytest.approx(hover), (
         "the hovered point takes the hover colour in the projection"
     )
-    assert scalars.GetTuple4(5)[3] == pytest.approx(255), (
+    assert scalars.GetTuple4(4)[3] == pytest.approx(255), (
         "the hovered point renders fully opaque"
     )
     pipeline.cleanup()

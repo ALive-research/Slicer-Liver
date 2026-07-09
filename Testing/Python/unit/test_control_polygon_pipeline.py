@@ -94,8 +94,10 @@ def test_handles_and_edges_follow_the_grid(pipeline_module, polygon_nodes):
     assert handles.GetNumberOfPoints() == 16
     assert handles.GetPoint(5) == pytest.approx((10.0, 10.0, 5.0))
     edges = pipeline.GetEdgesPolyData()
-    assert edges.GetNumberOfPoints() == 16
-    assert edges.GetNumberOfLines() == 4
+    # The builder's polylines are emitted as world-space DASH segments
+    # (the cross-view scaffold language), so the cell count exceeds the
+    # builder's 4 rows.
+    assert edges.GetNumberOfLines() > 4
     assert _FakeGeometry.calls == [(4, 4)], "cells built once, with (rows, cols)"
     pipeline.cleanup()
 
