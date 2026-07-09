@@ -59,6 +59,10 @@ CONTROL_POINT_PICK_RADIUS_PX = 20.0
 #: Halo colours: warm hover cue vs the distinct GRABBED (active-drag) cue.
 HALO_HOVER_COLOR = (1.0, 0.9, 0.2)
 HALO_GRAB_COLOR = (0.3, 1.0, 0.4)
+#: Halo radius scale vs the handle: hover ring vs the larger GRAB ring
+#: (the size jump reads even where the glow blur washes the hue out).
+HALO_HOVER_SCALE = 1.35
+HALO_GRAB_SCALE = 1.9
 
 _REGISTERED = False
 
@@ -392,7 +396,8 @@ class ControlPolygonPipeline(_PipelineBase):
             try:
                 grid = grid_getter()
                 base = int(index) * 3
-                self._halo_sphere.SetRadius(self._handle_sphere.GetRadius() * 1.35)
+                scale = HALO_GRAB_SCALE if self._drag_index is not None else HALO_HOVER_SCALE
+                self._halo_sphere.SetRadius(self._handle_sphere.GetRadius() * scale)
                 self._halo_actor.SetPosition(grid[base], grid[base + 1], grid[base + 2])
                 self._halo_actor.SetVisibility(True)
             except Exception:  # pragma: no cover - defensive

@@ -297,13 +297,14 @@ class ResectogramViewManager:
             slicer, resectogramViewID
         )
 
-        count = scene.GetNumberOfNodesByClass("vtkMRMLDisplayableNode")
+        # Walk EVERY display node directly: display nodes hanging off
+        # non-displayable owners (vtkMRMLSliceDisplayNode on the slice
+        # nodes -- the slice-in-3D representation) are invisible to a
+        # displayable-based walk and leaked into the strip.
+        count = scene.GetNumberOfNodesByClass("vtkMRMLDisplayNode")
         for index in range(count):
-            node = scene.GetNthNodeByClass(index, "vtkMRMLDisplayableNode")
-            if node is None:
-                continue
-            for dIndex in range(node.GetNumberOfDisplayNodes()):
-                display = node.GetNthDisplayNode(dIndex)
+            display = scene.GetNthNodeByClass(index, "vtkMRMLDisplayNode")
+            if True:
                 if display is None or display.IsA("vtkMRMLResectogramDisplayNode"):
                     continue
 
@@ -363,6 +364,13 @@ class ResectogramViewManager:
         """
         scene = slicer.mrmlScene
         ids = []
+        # ALL non-strip views -- 3D AND slice: a display node restricted
+        # only to 3D views would stop rendering in the slice views (the
+        # vtkMRMLSliceDisplayNode slice-in-3D case).
+        for index in range(scene.GetNumberOfNodesByClass("vtkMRMLSliceNode")):
+            node = scene.GetNthNodeByClass(index, "vtkMRMLSliceNode")
+            if node is not None:
+                ids.append(node.GetID())
         count = scene.GetNumberOfNodesByClass("vtkMRMLViewNode")
         for index in range(count):
             node = scene.GetNthNodeByClass(index, "vtkMRMLViewNode")
