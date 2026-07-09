@@ -463,3 +463,55 @@ def test_pick_places_the_dot_marker_in_slice_views():
         scene.RemoveNode(locator)
         for stale in _marker_nodes():
             scene.RemoveNode(stale)
+
+
+def test_pick_jumps_all_slice_views():
+    """A locator pick reslices EVERY slice view onto the picked point.
+
+    The single-slice (Red-only) behaviour left the other planes stale --
+    their markers/contours rendered but their offsets never moved.  Each
+    slice node's plane must pass through the pick afterwards (orientation
+    preserved: JumpSliceByOffsetting translates along the normal only).
+    """
+    slicer = _slicer_or_skip()
+    reslicer_cls = _reslicer_class_or_skip_pending()
+
+    scene = slicer.mrmlScene
+    # Mint two slice nodes with distinct orientations: the headless
+    # launched scene carries no default Red/Yellow/Green, and this pin
+    # must ASSERT (not skip) that every slice node jumps.  The pick also
+    # mints the dot-marker model; both are torn down below.
+    minted = []
+    for orientation in ("Axial", "Sagittal"):
+        node = scene.AddNewNodeByClass("vtkMRMLSliceNode")
+        node.SetOrientation(orientation)
+        minted.append(node)
+    slice_nodes = [
+        scene.GetNthNodeByClass(i, "vtkMRMLSliceNode")
+        for i in range(scene.GetNumberOfNodesByClass("vtkMRMLSliceNode"))
+    ]
+
+    locator = scene.AddNewNodeByClass("vtkMRMLLocatorNode")
+    try:
+        reslicer = reslicer_cls(scene)
+        pick = (23.0, -41.0, 67.0)
+        locator.SetPickedPositionWorld(*pick)
+
+        for node in slice_nodes:
+            to_ras = node.GetSliceToRAS()
+            origin = [to_ras.GetElement(r, 3) for r in range(3)]
+            normal = [to_ras.GetElement(r, 2) for r in range(3)]
+            distance = abs(sum(n * (p - o) for n, p, o in zip(normal, pick, origin)))
+            assert distance < 1e-3, (
+                f"{node.GetName()}: plane must pass through the pick "
+                f"(plane-to-point distance {distance:.4f})."
+            )
+        reslicer.cleanup()
+    finally:
+        scene.RemoveNode(locator)
+        for node in minted:
+            scene.RemoveNode(node)
+        for i in range(scene.GetNumberOfNodesByClass("vtkMRMLModelNode") - 1, -1, -1):
+            model = scene.GetNthNodeByClass(i, "vtkMRMLModelNode")
+            if model is not None and model.GetAttribute("LiverLocatorMarker") == "True":
+                scene.RemoveNode(model)
