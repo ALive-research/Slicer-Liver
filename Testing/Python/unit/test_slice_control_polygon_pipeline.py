@@ -253,3 +253,40 @@ def test_hover_publishes_cross_view_highlight(pipeline_module, polygon_nodes):
         "the hovered point renders fully opaque"
     )
     pipeline.cleanup()
+
+
+def test_edges_are_dashed_and_ring_marks_the_hover(pipeline_module, polygon_nodes):
+    """Structural differentiation + the 2D hover halo.
+
+    The polygon edges render as MANY short dash segments (never a handful
+    of solid polylines -- the scaffold reads structurally distinct from the
+    solid resection contour), and hovering shows a ring on the projected
+    handle, the 2D analogue of the 3D glow halo.
+    """
+    import vtk
+
+    data, display = polygon_nodes
+    pipeline = pipeline_module.SliceControlPolygonPipeline()
+    pipeline._slice_node = _AxialSliceNodeAt(0.0)
+    pipeline.SetDisplayNode(display)
+    # Wide spacing (40 px edges) so each edge holds SEVERAL dashes.
+    for r in range(4):
+        for c in range(4):
+            data.SetControlPoint(r, c, float(c) * 40.0, float(r) * 40.0, 0.0)
+    data.SetState(1)
+    pipeline.UpdatePipeline()
+
+    edges = pipeline._edges_polydata
+    assert edges.GetNumberOfLines() > 24, (
+        "edges must be emitted as dash SEGMENTS (24 grid edges -> many "
+        "dashes), not solid polylines."
+    )
+    assert pipeline._ring_actor.GetVisibility() == 0, "no hover -> no ring"
+
+    move = _TypedEvent(vtk.vtkCommand.MouseMoveEvent, (40.0, 40.0))  # point 5
+    pipeline.CanProcessInteractionEvent(move)
+    pipeline.UpdatePipeline()
+    assert pipeline._ring_actor.GetVisibility() == 1, (
+        "the hover must raise the 2D ring -- the slice analogue of the halo"
+    )
+    pipeline.cleanup()
