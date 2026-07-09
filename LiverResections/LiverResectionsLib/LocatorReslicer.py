@@ -40,11 +40,10 @@ from __future__ import annotations
 from typing import Any
 
 _LOCATOR_NODE_CLASS = "vtkMRMLLocatorNode"
-#: The orthogonal slice driven by a resectogram click (v2.0 scope: Red only).
 
 
 class LocatorReslicer:
-    """Observes the single locator node and reslices the Red slice to its pick."""
+    """Observes the single locator node and jumps ALL slice views to its pick."""
 
     def __init__(self, scene: Any) -> None:
         self._scene = scene
