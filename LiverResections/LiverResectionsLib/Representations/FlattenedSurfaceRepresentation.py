@@ -347,14 +347,17 @@ class FlattenedSurfaceRepresentation:
         self._effective_texture_num_comps = 0
         self._locator_node = None
         self._picked_uv = None
-        self._marker_actor = None
-        self._marker_mapper = None
-        self._marker_source = None
 
+        # Detach BEFORE dropping the actor handles: nulling the marker actor
+        # first would make _detach_actors skip it and leak it into the
+        # renderer on every teardown.
         if self._renderer is not None:
             self._detach_blur_pass(self._renderer)
             self._detach_actors(self._renderer)
             self._renderer = None
+        self._marker_actor = None
+        self._marker_mapper = None
+        self._marker_source = None
         self._bezier_plane = None
         self._resection_mapper_2d = None
         self._resection_actor_2d = None

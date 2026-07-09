@@ -807,3 +807,30 @@ def test_locator_marker_gates_on_display_visibility(rep_module):
         "(the gesture-scoped switch)."
     )
     rep.cleanup()
+
+
+def test_cleanup_detaches_the_marker_actor_from_the_renderer(
+    rep_module, vtk_module
+):
+    """``cleanup()`` must REMOVE the marker actor from the renderer.
+
+    Nulling the actor handle before the detach walk would make the walk
+    skip it, leaking one orphaned circle actor into the renderer per
+    teardown (renderer-churn cycles accumulate them).
+    """
+    renderer = vtk_module.vtkRenderer()
+    rep = rep_module(renderer)
+    marker = rep._marker_actor
+    assert marker is not None
+    actors = renderer.GetActors()
+    actors.InitTraversal()
+    attached = [actors.GetNextActor() for _ in range(actors.GetNumberOfItems())]
+    assert marker in attached, "the marker actor attaches with the quad actor"
+
+    rep.cleanup()
+
+    actors = renderer.GetActors()
+    assert actors.GetNumberOfItems() == 0, (
+        "cleanup() left an actor on the renderer -- the marker (or quad) "
+        "actor leaked past teardown."
+    )
