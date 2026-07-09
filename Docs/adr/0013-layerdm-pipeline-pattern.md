@@ -8,6 +8,24 @@
   *shape* those diagrams will record).
 - **PR:** _filled in on merge_
 
+## Amendments
+
+- **2026-07-09 — per-view-type Pipeline dispatch.**  §1's "exactly one
+  Pipeline subclass per display-node type" is refined: the creator
+  registry keys on the **(view type, display-node type) pair**, so one
+  display-node type may carry one Pipeline per *view type* — e.g.
+  `vtkMRMLControlPolygonDisplayNode` is rendered by
+  `ControlPolygonPipeline` in 3D views and by
+  `SliceControlPolygonPipeline` in slice views, and the resection
+  surface's slice projection ships as `SliceContourPipeline` alongside
+  the 3D surface Pipeline.  Registered creators dispatch on the view
+  node's type (`vtkMRMLSliceNode` vs `vtkMRMLViewNode`, plus singleton
+  tags for dedicated views); within a single view type the
+  exactly-one contract is unchanged.  This is the same compositional
+  axis §1 already grants across *display nodes* (one data node, many
+  display nodes), extended across *view families* for one display
+  node.
+
 ## Context
 
 [ADR-0002](0002-migrate-to-slicerlayerdm.md) commits Slicer-Liver to
