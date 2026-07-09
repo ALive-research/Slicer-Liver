@@ -457,3 +457,30 @@ def test_remote_hover_colors_the_3d_handles(pipeline_module, polygon_nodes):
     )
     assert pipeline._handles_mapper.GetScalarVisibility() == 1
     pipeline.cleanup()
+
+
+def test_remote_hover_raises_the_3d_halo(pipeline_module, polygon_nodes):
+    """A hover published from a slice view shows the SAME 3D halo."""
+    data, display = polygon_nodes
+    pipeline = pipeline_module.ControlPolygonPipeline()
+    pipeline._control_polygon_geometry = _FakeGeometry
+    pipeline.SetDisplayNode(display)
+    _seed_grid(data)
+    data.SetState(1)
+    pipeline.UpdatePipeline()
+    assert pipeline.GetHaloActor().GetVisibility() == 0
+
+    display.SetHoveredControlPoint(5)  # written by a slice pipeline
+    pipeline.UpdatePipeline()
+    assert pipeline.GetHaloActor().GetVisibility() == 1, (
+        "the display-channel hover must raise the 3D halo -- hovering in a "
+        "slice view reads identically to hovering in 3D."
+    )
+    assert tuple(pipeline.GetHaloActor().GetPosition()) == pytest.approx(
+        (10.0, 10.0, 5.0)
+    ), "the halo sits on the channel-hovered handle"
+
+    display.SetHoveredControlPoint(-1)
+    pipeline.UpdatePipeline()
+    assert pipeline.GetHaloActor().GetVisibility() == 0, "channel clear hides it"
+    pipeline.cleanup()

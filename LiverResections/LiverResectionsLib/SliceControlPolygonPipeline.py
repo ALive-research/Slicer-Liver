@@ -57,10 +57,10 @@ _REGISTERED = False
 #: the above/below-the-plane cue.  On-plane points render fully opaque.
 FADE_DISTANCE_MM = 30.0
 
-#: Only control points within this plane distance are MANIPULABLE from a
-#: slice view (the markups short-range convention); visibility fades to
-#: zero at FADE_DISTANCE_MM regardless.
-PICK_RANGE_MM = 15.0
+#: Manipulable range == visible range (the markups rule: anything you can
+#: see, you can grab).  A point at exactly FADE_DISTANCE_MM has alpha 0 --
+#: invisible AND unpickable; there is no visible-but-dead band.
+PICK_RANGE_MM = FADE_DISTANCE_MM
 
 
 def _creator_accepts_view(viewNode: Any) -> bool:  # noqa: N803 - VTK arg name
@@ -409,9 +409,9 @@ class SliceControlPolygonPipeline(_PipelineBase):
             return None, sys.float_info.max
         best_idx, best_d2 = None, sys.float_info.max
         for i, (px, py) in enumerate(self._projected_xy):
-            # Markups short-range convention: points beyond PICK_RANGE_MM
-            # from the plane are not manipulable from this slice.
-            if i < len(self._plane_distances) and self._plane_distances[i] > PICK_RANGE_MM:
+            # Markups rule: pickable iff visible -- a fully faded point
+            # (>= PICK_RANGE_MM == FADE_DISTANCE_MM) is not manipulable.
+            if i < len(self._plane_distances) and self._plane_distances[i] >= PICK_RANGE_MM:
                 continue
             d2 = (px - ex) ** 2 + (py - ey) ** 2
             if d2 < best_d2:
