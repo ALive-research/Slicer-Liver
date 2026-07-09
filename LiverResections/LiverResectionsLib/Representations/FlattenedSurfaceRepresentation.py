@@ -115,6 +115,11 @@ _FLATTENED_QUAD_CONTROL_GRID = tuple(
     for x in (-60.0, -20.0, 20.0, 60.0)
 )
 
+# Strip marker radius as a fraction of the locator display radius: the
+# strip is a dense 2D readout and a full-size disc dominates it, so the
+# circle draws smaller than the 3D/slice markers.
+_MARKER_RADIUS_FACTOR = 0.6
+
 
 class FlattenedSurfaceRepresentation:
     """VTK assembly for the resectogram's flattened surface.
@@ -309,9 +314,7 @@ class FlattenedSurfaceRepresentation:
             cx = focal[0] + (cx - focal[0]) * float(ratio[0])
             cy = focal[1] + (cy - focal[1]) * float(ratio[1])
             radius = display_node.GetRadius() if display_node is not None else 2.0
-            # Smaller than the 3D/slice markers: the strip is a dense 2D
-            # readout and a full-size disc dominates it.
-            self._marker_source.SetRadius(float(radius) * 0.6)
+            self._marker_source.SetRadius(float(radius) * _MARKER_RADIUS_FACTOR)
             # Slightly proud of the quad so the circle wins the z-fight.
             self._marker_source.SetCenter(cx, cy, 0.5)
             self._marker_actor.SetVisibility(True)
