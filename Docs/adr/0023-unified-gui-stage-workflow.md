@@ -8,6 +8,14 @@
 
 ## Amendments
 
+- **2026-07-09 — Stage-2 panel becomes the anatomy segments table.**
+  [ADR-0034](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0034-stage2-segments-table.md)
+  re-designs the Stage-2 panel as a single pre-seeded segments table
+  (retiring the per-structure tabs), adds the per-structure tool
+  registry and the background job queue, and pilots the
+  Validate-and-next completion seam (predicate + explain API + red-marked
+  unresolved rows) that the phase-contracts work will generalise.
+
 - **2026-05-25 — Wrapper-vs-carrier pattern; `.lrp.json` content
   roster trim; territories interface tightening.**  The post-PR #430
   design review introduced the wrapper-vs-carrier pattern (see
