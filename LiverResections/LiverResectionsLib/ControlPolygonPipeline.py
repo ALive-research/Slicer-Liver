@@ -64,6 +64,12 @@ HALO_GRAB_COLOR = (0.3, 1.0, 0.4)
 HALO_HOVER_SCALE = 1.35
 HALO_GRAB_SCALE = 1.9
 
+#: World-space dash pattern for the polygon edge tubes -- the same
+#: dashed-scaffold language the slice projections use, so the control
+#: polygon reads consistently across every view.
+DASH_LENGTH_MM = 6.0
+GAP_LENGTH_MM = 4.0
+
 _REGISTERED = False
 
 
@@ -721,8 +727,11 @@ class ControlPolygonPipeline(_PipelineBase):
 
         self._handles_polydata.SetPoints(points)
         self._handles_polydata.Modified()
-        self._edges_polydata.SetPoints(points)
 
+        # DASHED edge tubes: the Algorithm builder stays the topology SSOT
+        # (which points connect), but each of its polyline runs is emitted
+        # as world-space dash segments before tubing -- the same dashed-
+        # scaffold language the slice projections use.
         shape = (rows, cols)
         if shape != self._edge_cells_shape:
             geometry = self._control_polygon_geometry
@@ -732,9 +741,48 @@ class ControlPolygonPipeline(_PipelineBase):
             if geometry is not None:
                 cells = geometry.BuildControlPolygonCells(rows, cols)
                 if cells is not None:
-                    self._edges_polydata.SetLines(cells)
+                    self._edge_cells = cells
                     self._edge_cells_shape = shape
+        self._rebuild_dashed_edges(points)
         self._edges_polydata.Modified()
+
+    def _rebuild_dashed_edges(self, points: Any) -> None:
+        """Emit the builder's polylines as world-space dash segments."""
+        cells = getattr(self, "_edge_cells", None)
+        if cells is None:
+            return
+        dash_points = vtk.vtkPoints()
+        dash_lines = vtk.vtkCellArray()
+        try:
+            cells.InitTraversal()
+            ids = vtk.vtkIdList()
+            while cells.GetNextCell(ids):
+                for k in range(ids.GetNumberOfIds() - 1):
+                    a = points.GetPoint(ids.GetId(k))
+                    b = points.GetPoint(ids.GetId(k + 1))
+                    length = sum((b[j] - a[j]) ** 2 for j in range(3)) ** 0.5
+                    if length <= 0.0:
+                        continue
+                    period = DASH_LENGTH_MM + GAP_LENGTH_MM
+                    t = 0.0
+                    while t < length:
+                        t_end = min(t + DASH_LENGTH_MM, length)
+                        f0, f1 = t / length, t_end / length
+                        i0 = dash_points.InsertNextPoint(
+                            *(a[j] + (b[j] - a[j]) * f0 for j in range(3))
+                        )
+                        i1 = dash_points.InsertNextPoint(
+                            *(a[j] + (b[j] - a[j]) * f1 for j in range(3))
+                        )
+                        seg = vtk.vtkLine()
+                        seg.GetPointIds().SetId(0, i0)
+                        seg.GetPointIds().SetId(1, i1)
+                        dash_lines.InsertNextCell(seg)
+                        t += period
+        except Exception:  # pragma: no cover - defensive
+            return
+        self._edges_polydata.SetPoints(dash_points)
+        self._edges_polydata.SetLines(dash_lines)
 
     def _apply_display_node(self) -> None:
         """Push the display node's styling onto the actors."""

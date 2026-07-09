@@ -291,6 +291,7 @@ class SliceControlPolygonPipeline(_PipelineBase):
             handle_rgba.SetNumberOfComponents(4)
             edge_rgba = vtk.vtkUnsignedCharArray()
             edge_rgba.SetNumberOfComponents(4)
+            in_range = []  # HARD presence cutoff (2D alpha is unreliable)
             hovered, grabbed = self._interaction_state()
             hover_rgb = [int(c * 255) for c in HALO_HOVER_COLOR]
             grab_rgb = [int(c * 255) for c in HALO_GRAB_COLOR]
@@ -307,6 +308,7 @@ class SliceControlPolygonPipeline(_PipelineBase):
                     sum(n * (p - o) for n, p, o in zip(normal, (x, y, z), origin))
                 )
                 self._plane_distances.append(distance)
+                in_range.append(distance < PICK_RANGE_MM)
                 alpha = max(0.0, 1.0 - distance / FADE_DISTANCE_MM)
                 if i == grabbed:
                     # Cross-view highlight: full alpha, grab colour.
@@ -317,8 +319,16 @@ class SliceControlPolygonPipeline(_PipelineBase):
                     handle_rgba.InsertNextTuple4(*handle_rgb, int(alpha * 255))
                 edge_rgba.InsertNextTuple4(*edge_rgb, int(alpha * 255))
 
-            self._handles_polydata.SetPoints(points)
-            self._handles_polydata.GetPointData().SetScalars(handle_rgba)
+            visible_points = vtk.vtkPoints()
+            visible_rgba = vtk.vtkUnsignedCharArray()
+            visible_rgba.SetNumberOfComponents(4)
+            for i, ok in enumerate(in_range):
+                if not ok:
+                    continue  # beyond the manipulable range: NOT present
+                visible_points.InsertNextPoint(*points.GetPoint(i))
+                visible_rgba.InsertNextTuple4(*(int(v) for v in handle_rgba.GetTuple4(i)))
+            self._handles_polydata.SetPoints(visible_points)
+            self._handles_polydata.GetPointData().SetScalars(visible_rgba)
             self._handles_polydata.Modified()
 
             # DASHED edges (manual segmentation -- GL line stipple is not
@@ -339,6 +349,8 @@ class SliceControlPolygonPipeline(_PipelineBase):
                         yield r * cols + c, (r + 1) * cols + c
 
             for a, b in _edge_pairs():
+                if not (in_range[a] and in_range[b]):
+                    continue  # scaffold segments to absent points vanish too
                 ax, ay = self._projected_xy[a]
                 bx, by = self._projected_xy[b]
                 ca = edge_rgba.GetTuple4(a)
