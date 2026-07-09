@@ -41,7 +41,6 @@ from typing import Any
 
 _LOCATOR_NODE_CLASS = "vtkMRMLLocatorNode"
 #: The orthogonal slice driven by a resectogram click (v2.0 scope: Red only).
-_RED_SLICE_NODE_ID = "vtkMRMLSliceNodeRed"
 
 
 class LocatorReslicer:
@@ -117,9 +116,14 @@ class LocatorReslicer:
         if getter is None:
             return
         world = getter()
-        red = self._scene.GetNodeByID(_RED_SLICE_NODE_ID)
-        if red is not None:
-            self.reslice_slice_to_world(red, world)
+        # Jump EVERY slice view onto the pick (orientation preserved --
+        # JumpSliceByOffsetting translates along each plane's own normal):
+        # the earlier Red-only jump left the other planes stale while their
+        # markers/contours rendered, which read as broken.
+        for i in range(self._scene.GetNumberOfNodesByClass("vtkMRMLSliceNode")):
+            slice_node = self._scene.GetNthNodeByClass(i, "vtkMRMLSliceNode")
+            if slice_node is not None:
+                self.reslice_slice_to_world(slice_node, world)
         self._update_marker_model(locator, world)
 
     def _update_marker_model(self, locator: Any, world_xyz: Any) -> None:
