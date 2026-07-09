@@ -424,11 +424,14 @@ def test_grab_changes_the_halo_color(pipeline_module, polygon_nodes):
     press = _TypedEvent(vtk.vtkCommand.LeftButtonPressEvent)
     release = _TypedEvent(vtk.vtkCommand.LeftButtonReleaseEvent)
     assert pipeline.ProcessInteractionEvent(press) is True
-    assert pipeline.GetHaloActor().GetProperty().GetColor() == pytest.approx(
-        pipeline_module.HALO_GRAB_COLOR
-    ), "the grabbed handle must read as ACTIVE via the halo colour"
+    scalars = pipeline._handles_polydata.GetPointData().GetScalars()
+    grab = tuple(int(c * 255) for c in pipeline_module.HALO_GRAB_COLOR)
+    assert scalars is not None and tuple(scalars.GetTuple3(5)) == pytest.approx(grab), (
+        "the grabbed HANDLE itself must take the grab colour (per-point scalar)"
+    )
+    assert pipeline._handles_mapper.GetScalarVisibility() == 1
     pipeline.ProcessInteractionEvent(release)
-    assert pipeline.GetHaloActor().GetProperty().GetColor() == pytest.approx(
-        pipeline_module.HALO_HOVER_COLOR
-    ), "release restores the hover colour"
+    assert pipeline._handles_mapper.GetScalarVisibility() == 0, (
+        "release restores the uniform display HandleColor"
+    )
     pipeline.cleanup()
