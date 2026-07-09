@@ -422,9 +422,17 @@ class _StructureCard:
             return
         # Indeterminate busy bar + streamed backend lines: the inference runs
         # minutes-long OUT of process; the callback keeps the GUI painting.
+        # Paint the busy state BEFORE the blocking call starts -- the first
+        # callback line arrives only after the backend's slow startup, and
+        # without an explicit event-loop flush the surgeon sees no signal at
+        # all ("no signaling that there is processing going on").
         self.progressBar.setRange(0, 0)
         self.progressBar.setVisible(True)
         self.runButton.setEnabled(False)
+        self.statusLabel.setText(
+            "Starting TotalSegmentator — this can take a few minutes…"
+        )
+        slicer.app.processEvents()
 
         def _progress(line):
             self.statusLabel.setText(line[-80:])

@@ -184,3 +184,19 @@ def test_declined_backend_surfaces_as_typed_exception(monkeypatch):
             logic.segment(volume, module.SCT_LIVER_CODE)
     finally:
         slicer.mrmlScene.RemoveNode(volume)
+
+
+def test_stream_splitter_handles_carriage_return_progress():
+    """tqdm-style \\r updates must stream as pieces, not sit in a buffer."""
+    _slicer_or_skip()
+    wrapper = _wrapper_module()
+
+    pieces = wrapper._split_stream_pieces(b"Downloading: 10%\rDownloading: 55%\rDownl")
+    assert pieces[:-1] == ["Downloading: 10%", "Downloading: 55%"], (
+        "carriage-return-separated progress must split into pieces"
+    )
+    assert pieces[-1] == b"Downl", "the unterminated rest carries over raw"
+
+    pieces = wrapper._split_stream_pieces(b"line one\nline two\n")
+    assert pieces[:-1] == ["line one", "line two"]
+    assert pieces[-1] == b""
