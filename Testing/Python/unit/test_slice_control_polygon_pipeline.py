@@ -297,6 +297,40 @@ def test_edges_are_dashed_and_ring_marks_the_hover(pipeline_module, polygon_node
     pipeline.cleanup()
 
 
+def test_ring_hides_when_the_carrier_leaves_planning(
+    pipeline_module, polygon_nodes
+):
+    """Leaving Planning hides the hover ring with the rest of the scaffold.
+
+    The ring is driven by the hover channel, not the state gate: a hover
+    active at the moment the carrier transitions Planning -> Confirmed
+    left a stale ring floating in the slice with no handles under it.
+    """
+    import vtk
+
+    data, display = polygon_nodes
+    pipeline = pipeline_module.SliceControlPolygonPipeline()
+    pipeline._slice_node = _AxialSliceNodeAt(0.0)
+    pipeline.SetDisplayNode(display)
+    for r in range(4):
+        for c in range(4):
+            data.SetControlPoint(r, c, float(c) * 40.0, float(r) * 40.0, 0.0)
+    data.SetState(1)
+    pipeline.UpdatePipeline()
+    move = _TypedEvent(vtk.vtkCommand.MouseMoveEvent, (40.0, 40.0))
+    pipeline.CanProcessInteractionEvent(move)
+    pipeline.UpdatePipeline()
+    assert pipeline._ring_actor.GetVisibility() == 1, "precondition: hover ring up"
+
+    data.SetState(2)  # Planning -> Confirmed (the legal forward transition)
+    pipeline.UpdatePipeline()
+    assert pipeline._ring_actor.GetVisibility() == 0, (
+        "the hover ring must hide with the scaffold when the carrier "
+        "leaves Planning -- a stale ring floats over no handles."
+    )
+    pipeline.cleanup()
+
+
 def test_side_tint_tracks_the_signed_distance(pipeline_module, polygon_nodes):
     """Above-plane points tint lighter, below-plane darker (markups cue)."""
     data, display = polygon_nodes
