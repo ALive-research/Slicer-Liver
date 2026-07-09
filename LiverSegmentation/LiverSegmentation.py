@@ -432,6 +432,9 @@ class _StructureCard:
         self.statusLabel.setText(
             "Starting TotalSegmentator — this can take a few minutes…"
         )
+        # The v1 idiom: a spinning wait cursor for the whole blocking span
+        # (restored in the finally below, symmetric even on failure).
+        qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
         slicer.app.processEvents()
 
         def _progress(line):
@@ -455,6 +458,7 @@ class _StructureCard:
             self.statusLabel.setText(f"Segmentation failed: {str(exc)[-160:]}")
             return
         finally:
+            qt.QApplication.restoreOverrideCursor()
             self.progressBar.setVisible(False)
             self.progressBar.setRange(0, 100)
             self.runButton.setEnabled(True)
