@@ -111,7 +111,9 @@ class ControlPolygonPipeline(_PipelineBase):
         # Injectable Algorithm-builder seam (bare-VTK unit layer); resolved
         # lazily from the wrapping on first use in production.
         self._control_polygon_geometry: Any | None = None
-        #: (rows, cols) the current edge cells were built for.
+        #: Edge topology from the Algorithm builder + the (rows, cols) it
+        #: was built for.
+        self._edge_cells: Any | None = None
         self._edge_cells_shape: tuple | None = None
 
         self._last_update_key: Any | None = None
@@ -750,7 +752,7 @@ class ControlPolygonPipeline(_PipelineBase):
 
     def _rebuild_dashed_edges(self, points: Any) -> None:
         """Emit the builder's polylines as world-space dash segments."""
-        cells = getattr(self, "_edge_cells", None)
+        cells = self._edge_cells
         if cells is None:
             # No topology yet: clear rather than render stale content --
             # a leftover solid line must never masquerade as the scaffold.
