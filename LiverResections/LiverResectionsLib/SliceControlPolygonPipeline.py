@@ -75,6 +75,18 @@ GAP_LENGTH_PX = 5.0
 #: composes with any display colour and stays colourblind-legible.
 SIDE_TINT_MAX = 0.55
 
+#: Mid-tone factor applied to the display HandleColor before tinting: the
+#: default handle colour is pure white, which leaves no headroom for the
+#: lighter-above tint -- pulling the base toward mid-tone makes BOTH tint
+#: directions visible.
+HANDLE_MIDTONE_FACTOR = 0.78
+
+#: Slice handle / hover-ring glyph diameters (XY pixels).  Larger than the
+#: default markups glyphs: the handles are grab targets, and the ring must
+#: read as a halo AROUND one.
+HANDLE_GLYPH_SCALE_PX = 13.0
+RING_GLYPH_SCALE_PX = 20.0
+
 
 def _side_tint(rgb: list, signed_distance: float) -> list:
     """Blend ``rgb`` toward white (above) or black (below) by distance."""
@@ -124,7 +136,7 @@ class SliceControlPolygonPipeline(_PipelineBase):
         self._handle_glyph_source = vtk.vtkGlyphSource2D()
         self._handle_glyph_source.SetGlyphTypeToCircle()
         self._handle_glyph_source.FilledOff()
-        self._handle_glyph_source.SetScale(13.0)
+        self._handle_glyph_source.SetScale(HANDLE_GLYPH_SCALE_PX)
         self._handles_glyph = vtk.vtkGlyph2D()
         self._handles_glyph.SetInputData(self._handles_polydata)
         self._handles_glyph.SetSourceConnection(
@@ -145,7 +157,7 @@ class SliceControlPolygonPipeline(_PipelineBase):
         self._ring_glyph_source = vtk.vtkGlyphSource2D()
         self._ring_glyph_source.SetGlyphTypeToCircle()
         self._ring_glyph_source.FilledOff()
-        self._ring_glyph_source.SetScale(20.0)
+        self._ring_glyph_source.SetScale(RING_GLYPH_SCALE_PX)
         self._ring_glyph = vtk.vtkGlyph2D()
         self._ring_glyph.SetInputData(self._ring_polydata)
         self._ring_glyph.SetSourceConnection(self._ring_glyph_source.GetOutputPort())
@@ -309,10 +321,7 @@ class SliceControlPolygonPipeline(_PipelineBase):
                     edge_rgb = [int(c * 255) for c in display.GetEdgeColor()]
                 except Exception:  # pragma: no cover - defensive
                     pass
-            # Mid-tone base: the default HandleColor is pure white, which
-            # leaves no headroom for the lighter-above tint -- pull the
-            # slice base toward 78% so the sign cue reads BOTH ways.
-            handle_rgb = [int(c * 0.78) for c in handle_rgb]
+            handle_rgb = [int(c * HANDLE_MIDTONE_FACTOR) for c in handle_rgb]
 
             points = vtk.vtkPoints()
             handle_rgba = vtk.vtkUnsignedCharArray()
