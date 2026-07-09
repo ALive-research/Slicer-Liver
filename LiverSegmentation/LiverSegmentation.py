@@ -68,6 +68,19 @@ SCT_PORTAL_VEIN_CODE = "32764006"
 SCT_HEPATIC_VEIN_CODE = "8993003"
 SCT_MASS_CODE = "4147007"
 
+#: Per-structure visual defaults applied when a segment is SCT-tagged (the
+#: single funnel both the AI-accept and the import paths pass through).
+#: v1 parity: the vessel colours are the v1 display node's canonical
+#: contour colours (hepatic (0,151,206)/255, portal (216,101,79)/255); the
+#: parenchyma renders TRANSLUCENT (v1 opacity 0.2) so interior structures
+#: read; liver/mass colours are the Slicer generic-anatomy values.
+STRUCTURE_VISUAL_DEFAULTS = {
+    SCT_LIVER_CODE: {"color": (221 / 255.0, 130 / 255.0, 101 / 255.0), "opacity3d": 0.2},
+    SCT_PORTAL_VEIN_CODE: {"color": (216 / 255.0, 101 / 255.0, 79 / 255.0), "opacity3d": 1.0},
+    SCT_HEPATIC_VEIN_CODE: {"color": (0.0, 151 / 255.0, 206 / 255.0), "opacity3d": 1.0},
+    SCT_MASS_CODE: {"color": (144 / 255.0, 238 / 255.0, 144 / 255.0), "opacity3d": 1.0},
+}
+
 #: Stage-1 / Stage-2 hand-off: Stage 2 segments the portal-venous-phase
 #: volume Stage 1 flags with this attribute (ADR-0024 §"Per-structure
 #: micro-workflows").  Single source of truth is the shared role vocabulary
@@ -883,6 +896,16 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
             "~^^~Anatomic codes - DICOM master list~^^~^^"
         )
         segment.SetTag(TERMINOLOGY_ENTRY_TAG, tag)
+        # Apply the structure's visual defaults at the same funnel: every
+        # tagged segment (AI accept OR import) gets its v1-parity colour, and
+        # the parenchyma its translucent 3D opacity, instead of the generic
+        # import green.
+        defaults = STRUCTURE_VISUAL_DEFAULTS.get(str(code))
+        if defaults is not None:
+            segment.SetColor(*defaults["color"])
+            display = segmentationNode.GetDisplayNode()
+            if display is not None:
+                display.SetSegmentOpacity3D(segmentId, defaults["opacity3d"])
 
     #
     # Internal helpers.

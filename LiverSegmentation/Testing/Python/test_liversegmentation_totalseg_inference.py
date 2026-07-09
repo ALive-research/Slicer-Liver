@@ -200,3 +200,51 @@ def test_stream_splitter_handles_carriage_return_progress():
     pieces = wrapper._split_stream_pieces(b"line one\nline two\n")
     assert pieces[:-1] == ["line one", "line two"]
     assert pieces[-1] == b""
+
+
+def test_sct_tagging_applies_the_structure_visual_defaults():
+    """Tagging a segment applies the v1-parity colour + 3D opacity.
+
+    Every AI-produced segment arrived solid green (the generic import
+    default) -- v1's look was per-structure: translucent parenchyma so
+    interior structures read, and the canonical vessel colours the v1
+    display node carried (hepatic (0,151,206)/255; portal
+    (216,101,79)/255).  tagSegmentWithSct is the single funnel every
+    path (AI accept, import) goes through, so the defaults apply there.
+    """
+    slicer = _slicer_or_skip()
+    logic = _logic_or_skip(slicer)
+    import LiverSegmentation as module
+
+    node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
+    try:
+        node.CreateDefaultDisplayNodes()
+        seg_liver = node.GetSegmentation().AddEmptySegment("l", "Liver")
+        seg_hepatic = node.GetSegmentation().AddEmptySegment("h", "Hepatic vein")
+
+        logic.tagSegmentWithSct(node, seg_liver, module.SCT_LIVER_CODE, "Liver")
+        logic.tagSegmentWithSct(
+            node, seg_hepatic, module.SCT_HEPATIC_VEIN_CODE, "Hepatic vein"
+        )
+
+        import pytest as _pytest
+
+        liver_color = node.GetSegmentation().GetSegment(seg_liver).GetColor()
+        assert tuple(liver_color) == _pytest.approx(
+            (221 / 255.0, 130 / 255.0, 101 / 255.0), abs=1e-3
+        ), "the liver segment must get the standard liver colour, not green"
+        hepatic_color = node.GetSegmentation().GetSegment(seg_hepatic).GetColor()
+        assert tuple(hepatic_color) == _pytest.approx(
+            (0.0, 151 / 255.0, 206 / 255.0), abs=1e-3
+        ), "the hepatic vein must get the v1 canonical vessel blue"
+
+        display = node.GetDisplayNode()
+        assert display.GetSegmentOpacity3D(seg_liver) == _pytest.approx(0.2), (
+            "the parenchyma renders translucent (v1 opacity 0.2) so the "
+            "interior structures read"
+        )
+        assert display.GetSegmentOpacity3D(seg_hepatic) == _pytest.approx(1.0), (
+            "vessels stay opaque"
+        )
+    finally:
+        slicer.mrmlScene.RemoveNode(node)
