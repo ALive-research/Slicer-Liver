@@ -647,6 +647,14 @@ class ResectionPlanningWidget(qt.QWidget):
     def _onObservedSurfacePointModified(self, caller, event):
         self.scheduleResectogramRender()
 
+    def showEvent(self, event):  # noqa: N802 - Qt override
+        # Re-entering the module re-shows this panel with the embedded GL
+        # view's last frame discarded -- the strip reads BLACK until the
+        # next render request.  Kick one after the show has been processed
+        # (same one-turn deferral as the initial auto-populate kick).
+        # QWidget's own showEvent is a no-op, so no super chaining needed.
+        qt.QTimer.singleShot(0, self.scheduleResectogramRender)
+
     def scheduleResectogramRender(self):  # noqa: N802 - Slicer/Qt verb convention
         # Same realized-GL-context requirement as the embed: forcing a render
         # drives the distance-map texture upload; no live view to repaint

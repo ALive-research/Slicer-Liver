@@ -706,5 +706,31 @@ def test_place_resection_mints_and_selects_plan():
     )
 
 
+def test_reshow_kicks_a_resectogram_render():
+    """Re-showing the panel must request one embedded-view render.
+
+    Re-entering the module re-shows this panel with the embedded GL
+    view's last frame discarded -- without a fresh render request the
+    strip reads BLACK until some other interaction repaints it.  The
+    kick is deferred one event-loop turn (the show must be processed
+    before a forceRender can hit a realized surface), so the pin drains
+    the queue before asserting.
+    """
+    import qt  # type: ignore[import-not-found]
+    import slicer  # type: ignore[import-not-found]
+
+    widget = _widget_or_skip(slicer)
+    kicks = []
+    widget.scheduleResectogramRender = lambda: kicks.append(1)
+
+    widget.show()
+    qt.QApplication.processEvents()
+    assert kicks, (
+        "showEvent must schedule a resectogram render -- re-entering the "
+        "module otherwise leaves the strip black until a manual redraw."
+    )
+    widget.hide()
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
