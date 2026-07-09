@@ -295,3 +295,30 @@ def test_edges_are_dashed_and_ring_marks_the_hover(pipeline_module, polygon_node
         "the hover must raise the 2D ring -- the slice analogue of the halo"
     )
     pipeline.cleanup()
+
+
+def test_side_tint_tracks_the_signed_distance(pipeline_module, polygon_nodes):
+    """Above-plane points tint lighter, below-plane darker (markups cue)."""
+    data, display = polygon_nodes
+    pipeline = pipeline_module.SliceControlPolygonPipeline()
+    pipeline._slice_node = _AxialSliceNodeAt(0.0)
+    pipeline.SetDisplayNode(display)
+    for r in range(4):
+        for c in range(4):
+            data.SetControlPoint(r, c, float(c) * 10.0, float(r) * 10.0, 0.0)
+    data.SetControlPoint(0, 1, 10.0, 0.0, 8.0)   # above the plane
+    data.SetControlPoint(0, 2, 20.0, 0.0, -8.0)  # below the plane
+    data.SetState(1)
+    pipeline.UpdatePipeline()
+
+    scalars = pipeline.GetHandlesPolyData().GetPointData().GetScalars()
+    on_plane = sum(scalars.GetTuple4(0)[:3])
+    above = sum(scalars.GetTuple4(1)[:3])
+    below = sum(scalars.GetTuple4(2)[:3])
+    assert above > on_plane, (
+        "an ABOVE-plane point must tint LIGHTER than an on-plane one"
+    )
+    assert below < on_plane, (
+        "a BELOW-plane point must tint DARKER than an on-plane one"
+    )
+    pipeline.cleanup()
