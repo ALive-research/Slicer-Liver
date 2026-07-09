@@ -156,21 +156,30 @@ def _disable_quit_on_last_window_closed() -> None:
 def _exit(code: int) -> None:
     """Terminate the process even when running inside Slicer.
 
-    Inside a launched Slicer a plain ``sys.exit`` is swallowed by the
-    interpreter wrapper and the process hangs in the QApplication event
-    loop; route through ``slicer.util.exit`` instead.  Fall back to
-    ``sys.exit`` for the standalone CPython invocation (the harness
-    self-test in ``test_run_pytest_launched_contract.py``, or a local
-    lint run).  Same shape as ``replay_test._exit``.
+    Inside a launched Slicer the pytest verdict is already decided when
+    this runs, but the ORDERLY teardown path (``slicer.util.exit`` ->
+    QApplication shutdown -> VTK/GL context destruction) aborts in glibc
+    with heap corruption on this stack -- an exit-time crash that turned
+    fully green launched rows into CTest failures the moment the row
+    became a hard gate.  The harness therefore hard-exits via
+    ``os._exit`` after flushing the streams: the process reports pytest's
+    exit code and skips the corrupting teardown entirely.  Trade-off:
+    at-exit leak reporting is forfeited in this row; the per-test scene
+    leak guard in conftest covers leak detection DURING the run.
+
+    Fall back to ``sys.exit`` for the standalone CPython invocation (the
+    harness self-test in ``test_run_pytest_launched_contract.py``, or a
+    local lint run).  Same shape as ``replay_test._exit``.
     """
     if os.environ.get(_FORCE_SYSEXIT_ENV) == "1":
         sys.exit(code)
     try:
-        import slicer  # type: ignore[import-not-found]
-
-        slicer.util.exit(code)
+        import slicer  # type: ignore[import-not-found]  # noqa: F401
     except ImportError:
         sys.exit(code)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(int(code))
 
 
 if __name__ == "__main__":
