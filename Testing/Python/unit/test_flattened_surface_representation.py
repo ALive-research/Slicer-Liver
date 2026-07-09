@@ -728,27 +728,56 @@ class _StubMapperWithLocator(_StubMapperWithMatRatio):
         self.locator_radius = radius
 
 
-def test_locator_marker_reaches_the_2d_mapper(rep_module):
-    """The strip pushes the locator pick + radius onto the 2D mapper.
+def test_locator_marker_is_a_round_world_actor(rep_module):
+    """The strip marker is a world-space circle; the shader disc stays OFF.
 
-    The 1:1 correspondence marker (ADR-0025): the 2D mapper tests the REAL
-    surface position (BSPoints) against uLocatorPosition, so the strip dot
-    sits at the same anatomical point as the 3D surface marker.  Radius 0
-    (marker off) when no locator node is wired.
+    The shader disc tested the REAL 3D surface positions, so the (u, v)
+    flattening rendered it distorted.  The marker is now a circle actor on
+    the flat quad at the picked (u, v) -- round by construction, rescaled by
+    the camera on zoom/pan -- and the 2D mapper's locator radius is forced
+    to 0 so the distorted disc never draws.
     """
+
+    class _VisibleDisplay(_StubLocatorDisplay):
+        def GetVisibility(self):  # noqa: N802 - VTK verb
+            return True
+
+    class _VisibleLocator(_StubLocatorNode):
+        def GetDisplayNode(self):  # noqa: N802 - VTK verb
+            return _VisibleDisplay()
+
     rep = rep_module()
     mapper = _StubMapperWithLocator()
     rep._resection_mapper_2d = mapper
 
     rep.update(_StubDisplayNode(), _StubDataNode())
     assert mapper.locator_radius == pytest.approx(0.0), (
-        "no locator node wired -> the marker must be OFF (radius 0)"
+        "the distorted shader disc must stay OFF for the strip"
     )
+    assert rep._marker_actor.GetVisibility() == 0, "no pick -> no marker"
 
-    rep.SetLocatorNode(_StubLocatorNode())
+    rep.SetLocatorNode(_VisibleLocator())
+    rep.SetPickedUV((0.25, 0.75))
     rep.update(_StubDisplayNode(), _StubDataNode())
-    assert mapper.locator_position == pytest.approx((10.0, 20.0, 30.0))
-    assert mapper.locator_radius == pytest.approx(2.0)
+    assert mapper.locator_radius == pytest.approx(0.0), "shader disc still off"
+    assert rep._marker_actor.GetVisibility() == 1, (
+        "a visible pick raises the circle marker actor"
+    )
+    plane = rep.GetBezierPlane()
+    plane.Update()
+    b = plane.GetOutput().GetBounds()
+    expected = (
+        b[0] + (b[1] - b[0]) * 0.25,
+        b[2] + (b[3] - b[2]) * 0.75,
+    )
+    centre = rep._marker_source.GetCenter()
+    assert (centre[0], centre[1]) == pytest.approx(expected), (
+        "the circle sits at the picked (u, v) on the flat quad"
+    )
+    assert rep._marker_source.GetRadius() == pytest.approx(2.0), (
+        "radius follows the locator display node (world units, so camera "
+        "zoom/pan rescale it with the strip)"
+    )
     rep.cleanup()
 
 
@@ -767,9 +796,10 @@ def test_locator_marker_gates_on_display_visibility(rep_module):
     mapper = _StubMapperWithLocator()
     rep._resection_mapper_2d = mapper
     rep.SetLocatorNode(_HiddenLocator())
+    rep.SetPickedUV((0.5, 0.5))
     rep.update(_StubDisplayNode(), _StubDataNode())
-    assert mapper.locator_radius == pytest.approx(0.0), (
-        "locator display Visibility false -> the marker uniforms must be "
-        "pushed OFF (radius 0), the gesture-scoped hide."
+    assert rep._marker_actor.GetVisibility() == 0, (
+        "locator display Visibility false -> the circle marker hides "
+        "(the gesture-scoped switch)."
     )
     rep.cleanup()

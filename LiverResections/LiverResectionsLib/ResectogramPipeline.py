@@ -491,6 +491,7 @@ class ResectogramPipeline(_PipelineBase):
         # stub renderers (the GL-free seam tests).
         uv = self._display_to_uv(display_xy, renderer, mat_ratio, representation)
         if uv is not None:
+            representation.SetPickedUV(uv)  # drives the strip's circle marker
             return producer.produce_from_uv(uv[0], uv[1])
         return producer.produce(display_xy, viewport_size, mat_ratio)
 
