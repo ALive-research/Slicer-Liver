@@ -347,3 +347,33 @@ def test_locator_pick_requests_render(pipeline_module, bezier_nodes):
         pipeline.cleanup()
     finally:
         scene.RemoveNode(locator)
+
+
+def test_marker_visibility_toggle_requests_render(pipeline_module, bezier_nodes):
+    """Hiding the marker at a FIXED pick must still repaint the surface."""
+    import slicer
+
+    data, display = bezier_nodes
+    scene = slicer.mrmlScene
+    locator = scene.AddNewNodeByClass("vtkMRMLLocatorNode")
+    locator.CreateDefaultDisplayNodes()
+    try:
+        pipeline = pipeline_module.LiverBezierSurfacePipeline()
+        pipeline.SetDisplayNode(display)
+        data.SetState(1)
+        pipeline.UpdatePipeline()
+
+        locator.SetPickedPositionWorld(1.0, 2.0, 3.0)
+        renders = []
+        pipeline.RequestRender = lambda: renders.append(1)
+
+        ldisplay = locator.GetDisplayNode()
+        ldisplay.SetVisibility(not ldisplay.GetVisibility())
+        locator.Modified()
+        assert renders, (
+            "a marker visibility flip at a fixed pick must request a render "
+            "-- the release-hides-the-marker gesture repaints through here."
+        )
+        pipeline.cleanup()
+    finally:
+        scene.RemoveNode(locator)
