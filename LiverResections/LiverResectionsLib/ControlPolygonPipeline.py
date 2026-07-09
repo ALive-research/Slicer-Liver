@@ -312,6 +312,7 @@ class ControlPolygonPipeline(_PipelineBase):
         if visible:
             self._refresh_geometry()
         self._apply_display_node()
+        self._apply_interaction_scalars()
 
     def cleanup(self) -> None:
         for node in list(self._observed_node_refs):
@@ -386,6 +387,7 @@ class ControlPolygonPipeline(_PipelineBase):
         if index == self._hover_index:
             return
         self._hover_index = index
+        self._publish_interaction_state(hovered=(-1 if index is None else index))
         if index is None:
             self._halo_actor.SetVisibility(False)
         else:
@@ -408,27 +410,60 @@ class ControlPolygonPipeline(_PipelineBase):
             except Exception:  # pragma: no cover - defensive (stub bases)
                 pass
 
-    def _set_grabbed_point_color(self, index: int | None) -> None:
-        """Colour the grabbed HANDLE itself (per-point glyph scalars).
+    def _publish_interaction_state(self, hovered=None, grabbed=None) -> None:
+        """Write hover/grab onto the DISPLAY node (cross-view channel).
 
-        The grabbed control point turns HALO_GRAB_COLOR; ``None`` restores
-        the uniform display HandleColor on all points.  Direct RGB scalars
-        on the glyph input; the mapper colours by them when present.
+        Every pipeline observing the control-polygon display node -- the 3D
+        one and the slice projections -- highlights the same point,
+        whichever view the cursor is in (the markups active-control-point
+        convention).  Writes only on change so mouse moves do not storm
+        Modified events.  ``None`` leaves a channel untouched; use -1 to
+        clear.
         """
+        display = self._display_node
+        if display is None:
+            return
+        try:
+            if hovered is not None:
+                value = -1 if hovered == -1 else int(hovered)
+                if display.GetHoveredControlPoint() != value:
+                    display.SetHoveredControlPoint(value)
+            if grabbed is not None:
+                value = -1 if grabbed == -1 else int(grabbed)
+                if display.GetGrabbedControlPoint() != value:
+                    display.SetGrabbedControlPoint(value)
+        except Exception:  # pragma: no cover - defensive (stub displays)
+            return
+
+    def _apply_interaction_scalars(self) -> None:
+        """Colour the hovered/grabbed HANDLES from the display-node state.
+
+        Derives per-point glyph scalars from the display node's
+        HoveredControlPoint / GrabbedControlPoint, so highlights raised in
+        OTHER views (the slice projections) colour this 3D view too.
+        """
+        display = self._display_node
+        try:
+            hovered = display.GetHoveredControlPoint() if display is not None else -1
+            grabbed = display.GetGrabbedControlPoint() if display is not None else -1
+        except Exception:  # pragma: no cover - defensive (stub displays)
+            hovered, grabbed = -1, -1
         try:
             points = self._handles_polydata.GetPoints()
             n = points.GetNumberOfPoints() if points is not None else 0
             base = [int(c * 255) for c in self._handles_actor.GetProperty().GetColor()]
+            grab = [int(c * 255) for c in HALO_GRAB_COLOR]
+            hover = [int(c * 255) for c in HALO_HOVER_COLOR]
             colors = vtk.vtkUnsignedCharArray()
             colors.SetNumberOfComponents(3)
             colors.SetName("HandleColors")
-            grab = [int(c * 255) for c in HALO_GRAB_COLOR]
             for i in range(n):
-                colors.InsertNextTuple3(*(grab if i == index else base))
+                rgb = grab if i == grabbed else (hover if i == hovered else base)
+                colors.InsertNextTuple3(*rgb)
             self._handles_polydata.GetPointData().SetScalars(colors)
             self._handles_glyph.SetColorModeToColorByScalar()
             self._handles_mapper.SetColorModeToDirectScalars()
-            self._handles_mapper.SetScalarVisibility(index is not None)
+            self._handles_mapper.SetScalarVisibility(grabbed >= 0 or hovered >= 0)
             self._handles_polydata.Modified()
         except Exception:  # pragma: no cover - defensive
             return
@@ -465,7 +500,8 @@ class ControlPolygonPipeline(_PipelineBase):
             ):
                 return False
             self._drag_index = idx
-            self._set_grabbed_point_color(idx)
+            self._publish_interaction_state(grabbed=idx)
+            self._apply_interaction_scalars()
             hover, self._hover_index = idx, None
             self._set_hover(hover)  # halo jumps to the grabbed handle
             world = self._event_world_at_control_point(renderer, eventData, idx)
@@ -475,7 +511,8 @@ class ControlPolygonPipeline(_PipelineBase):
 
         if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
             self._drag_index = None
-            self._set_grabbed_point_color(None)
+            self._publish_interaction_state(grabbed=-1)
+            self._apply_interaction_scalars()
             self._set_hover(None)
             return False  # grab over -- release the focus
 
@@ -753,9 +790,18 @@ class ControlPolygonPipeline(_PipelineBase):
         del caller, event
         self.UpdatePipeline()
 
+        display = self._display_node
+        try:
+            interaction = (
+                display.GetHoveredControlPoint() if display is not None else -1,
+                display.GetGrabbedControlPoint() if display is not None else -1,
+            )
+        except Exception:  # pragma: no cover - defensive (stub displays)
+            interaction = (-1, -1)
         render_key = (
             _safe_get_state(self._data_node),
             _control_points_digest(self._data_node),
+            interaction,
         )
         if render_key == self._last_render_key:
             return

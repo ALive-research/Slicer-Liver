@@ -79,6 +79,10 @@ int testDefaults()
   CHECK_DOUBLE(edgeColor[2], 0.0);
   CHECK_DOUBLE(node->GetEdgeWidth(), 1.5);
 
+  // Transient cross-view interaction state: nothing hovered/grabbed.
+  CHECK_INT(node->GetHoveredControlPoint(), -1);
+  CHECK_INT(node->GetGrabbedControlPoint(), -1);
+
   CHECK_STRING(node->GetNodeTagName(), "ControlPolygonDisplay");
   return EXIT_SUCCESS;
 }
@@ -103,6 +107,10 @@ int testSettersAndGetters()
   CHECK_DOUBLE(edgeColor[2], 0.6);
   node->SetEdgeWidth(2.5);
   CHECK_DOUBLE(node->GetEdgeWidth(), 2.5);
+  node->SetHoveredControlPoint(5);
+  CHECK_INT(node->GetHoveredControlPoint(), 5);
+  node->SetGrabbedControlPoint(7);
+  CHECK_INT(node->GetGrabbedControlPoint(), 7);
   return EXIT_SUCCESS;
 }
 

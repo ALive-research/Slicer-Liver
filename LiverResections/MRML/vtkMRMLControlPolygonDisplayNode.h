@@ -122,6 +122,19 @@ public:
   vtkSetMacro(EdgeWidth, double);
   vtkGetMacro(EdgeWidth, double);
 
+  /// Flat row-major index of the HOVERED control point (-1 = none).
+  /// TRANSIENT interaction state shared across views (the markups
+  /// active-control-point convention): every pipeline observing this
+  /// display node highlights the same point, whichever view the cursor
+  /// is in.  Not serialized.
+  vtkSetMacro(HoveredControlPoint, int);
+  vtkGetMacro(HoveredControlPoint, int);
+
+  /// Flat row-major index of the GRABBED control point (-1 = none).
+  /// TRANSIENT, cross-view, not serialized (see HoveredControlPoint).
+  vtkSetMacro(GrabbedControlPoint, int);
+  vtkGetMacro(GrabbedControlPoint, int);
+
 protected:
   vtkMRMLControlPolygonDisplayNode();
   ~vtkMRMLControlPolygonDisplayNode() override;
@@ -134,6 +147,8 @@ private:
   double HandleColor[3];
   double EdgeColor[3];
   double EdgeWidth;
+  int HoveredControlPoint;
+  int GrabbedControlPoint;
 };
 
 #endif //__vtkmrmlcontrolpolygondisplaynode_h_
