@@ -6,6 +6,22 @@
 - **Diagrams:** N/A
 - **PR:** _filled in on merge_
 
+## Amendments
+
+- **2026-07-09 — v2.0.0 absorbs the v2.1 feature plan.**  Maintainer
+  decision: v2.0.0 tags when the FULL planned feature set is usable
+  end-to-end, not before.  Everything this ADR's §"Out of v2.0.0
+  scope" deferred to v2.1.0 moves INTO v2.0.0 scope: the LiverSegments
+  / LiverVolumetry / Modeling LayerDM display-node migrations, the
+  cross-module locator unification, the feature issues previously
+  milestoned v2.1.0, and the ADR-0020 / ADR-0022 implementations
+  (their "target v2.1" annotations read "target v2.0" from this
+  date).  The §Context MINOR-vs-MAJOR reasoning is unaffected — the
+  absorbed work remains scene-compatible and additive; it simply
+  ships before the tag rather than after it.  The v2.0.0 release
+  tracker is the single work queue; the v2.1 tracker holds only
+  post-release carries.
+
 ## Context
 
 [ADR-0002](0002-migrate-to-slicerlayerdm.md) commits Slicer-Liver to

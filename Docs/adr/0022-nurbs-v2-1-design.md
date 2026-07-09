@@ -1,6 +1,6 @@
 # 0022. NURBS v2.1 design (data node, schema v3, fitter library, rendering integration)
 
-- **Status:** Accepted (target v2.1)
+- **Status:** Accepted (target v2.0 — re-baselined 2026-07-09; originally v2.1)
 - **Date:** 2026-05-19
 - **Deciders:** Rafael Palomar
 - **Diagrams:**
@@ -8,6 +8,15 @@
   - `Docs/architecture/surface-representation-taxonomy.md` (NURBS branch expanded with schema-v3 fields)
   - `Docs/architecture/rendering-pipeline.md` (NURBS evaluator in TES, paired with Bezier per [ADR-0020][adr-0020])
 - **PR:** _filled in on merge_
+
+## Amendments
+
+- **2026-07-09 — retargeted to v2.0.**  The v2.0.0 scope re-baseline
+  ([ADR-0012's Amendments](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0012-layerdm-migration-v2-scope.md))
+  absorbs the v2.1 feature plan into v2.0.0; this ADR's
+  implementation ships before the v2.0.0 tag.  The title's and
+  body's "v2.1" reads as the pre-re-baseline target label, not a
+  schedule commitment.
 
 ## Context
 

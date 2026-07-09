@@ -44,7 +44,7 @@ Slicer-Liver extension.  Per ADR-0023 §"Shell composition (Option H)"
 it composes — but does not compute — six surgeon-facing stages on a
 vertical sidebar driving a content stack:
 
-  1. Case Setup            (shell-owned placeholder; ADR-0029)
+  1. Case Setup            (shell-owned page; ADR-0029)
   2. Anatomy Definition    (LiverSegmentation.widgetRepresentation();
                             degrades gracefully when the module is
                             absent from the build per Stage 2
@@ -52,7 +52,7 @@ vertical sidebar driving a content stack:
   3. Vascular Territories  (VascularTerritories.widgetRepresentation())
   4. Resection Planning    (LiverResections.widgetRepresentation())
   5. Volumetry             (LiverVolumetry.widgetRepresentation())
-  6. Export                (shell-owned placeholder)
+  6. Export                (shell-owned page)
 
 Per-stage completion is queried via ``IsStageComplete()`` on the C++
 logic of stages 3/4 and ``isStageComplete()`` on the Python logic of
@@ -236,8 +236,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     No domain logic; no per-module widget wiring beyond the
     composition step.  Stages 2-5 reach into their owning module's
     ``widgetRepresentation()`` cache; stages 1 and 6 ship shell-owned
-    placeholders (real UIs land in follow-up tasks — see ADR-0023
-    §Stage 1 / §Stage 6 + ADR-0029).
+    pages (Case Setup per ADR-0029; Export per ADR-0023 §Stage 6).
     """
     ScriptedLoadableModuleWidget.setup(self)
 
@@ -316,7 +315,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     Idempotent — calling twice replaces the previous widget cleanly.
     Stages 2-5 surface the cached widgetRepresentation() of their
-    owning Slicer module; stages 1 and 6 host shell-owned placeholders.
+    owning Slicer module; stages 1 and 6 host shell-owned pages.
     Stage 2 (LiverSegmentation) degrades gracefully when the module is
     absent from the build: tab disabled-greyed; predicate returns
     False.
@@ -361,7 +360,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def _resolveStagePage(self, index):
     """Return ``(page_widget, is_available)`` for stage ``index``.
 
-    Stages 1 and 6 return shell-owned placeholders; stages 2-5 return
+    Stages 1 and 6 return shell-owned pages; stages 2-5 return
     the cached ``widgetRepresentation()`` of the matching Slicer
     module, or a "module not available" placeholder when the module
     is not registered.
