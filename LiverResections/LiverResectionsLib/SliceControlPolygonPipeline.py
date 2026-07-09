@@ -33,6 +33,8 @@ try:  # pragma: no cover - exercised once per import path
     )
     from .ControlPolygonPipeline import (
         CONTROL_POINT_PICK_RADIUS_PX,
+        HALO_GRAB_COLOR,
+        HALO_HOVER_COLOR,
         _control_points_digest,
         _event_type,
     )
@@ -43,6 +45,8 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
     )
     from ControlPolygonPipeline import (  # type: ignore[no-redef]
         CONTROL_POINT_PICK_RADIUS_PX,
+        HALO_GRAB_COLOR,
+        HALO_HOVER_COLOR,
         _control_points_digest,
         _event_type,
     )
@@ -52,6 +56,11 @@ _REGISTERED = False
 #: Distance (mm) over which the projection fades to fully transparent --
 #: the above/below-the-plane cue.  On-plane points render fully opaque.
 FADE_DISTANCE_MM = 30.0
+
+#: Only control points within this plane distance are MANIPULABLE from a
+#: slice view (the markups short-range convention); visibility fades to
+#: zero at FADE_DISTANCE_MM regardless.
+PICK_RANGE_MM = 15.0
 
 
 def _creator_accepts_view(viewNode: Any) -> bool:  # noqa: N803 - VTK arg name
@@ -86,6 +95,8 @@ class SliceControlPolygonPipeline(_PipelineBase):
         self._drag_index: int | None = None
         #: XY-space positions of the projected handles (pick arbitration).
         self._projected_xy: list = []
+        #: Per-point |distance| to the slice plane (the pick-range gate).
+        self._plane_distances: list = []
 
         # Handles: projected points as 2D cross glyphs with RGBA fading.
         self._handles_polydata = vtk.vtkPolyData()
@@ -251,7 +262,11 @@ class SliceControlPolygonPipeline(_PipelineBase):
             handle_rgba.SetNumberOfComponents(4)
             edge_rgba = vtk.vtkUnsignedCharArray()
             edge_rgba.SetNumberOfComponents(4)
+            hovered, grabbed = self._interaction_state()
+            hover_rgb = [int(c * 255) for c in HALO_HOVER_COLOR]
+            grab_rgb = [int(c * 255) for c in HALO_GRAB_COLOR]
             self._projected_xy = []
+            self._plane_distances = []
             for i in range(rows * cols):
                 x, y, z = grid[i * 3], grid[i * 3 + 1], grid[i * 3 + 2]
                 xy = ras_to_xy.MultiplyPoint((x, y, z, 1.0))
@@ -262,8 +277,15 @@ class SliceControlPolygonPipeline(_PipelineBase):
                 distance = abs(
                     sum(n * (p - o) for n, p, o in zip(normal, (x, y, z), origin))
                 )
+                self._plane_distances.append(distance)
                 alpha = max(0.0, 1.0 - distance / FADE_DISTANCE_MM)
-                handle_rgba.InsertNextTuple4(*handle_rgb, int(alpha * 255))
+                if i == grabbed:
+                    # Cross-view highlight: full alpha, grab colour.
+                    handle_rgba.InsertNextTuple4(*grab_rgb, 255)
+                elif i == hovered:
+                    handle_rgba.InsertNextTuple4(*hover_rgb, 255)
+                else:
+                    handle_rgba.InsertNextTuple4(*handle_rgb, int(alpha * 255))
                 edge_rgba.InsertNextTuple4(*edge_rgb, int(alpha * 255))
 
             self._handles_polydata.SetPoints(points)
@@ -327,6 +349,15 @@ class SliceControlPolygonPipeline(_PipelineBase):
             ):
                 return True, 0.0
             return False, sys.float_info.max
+        if etype == vtk.vtkCommand.MouseMoveEvent:
+            # Bare hover: publish the cross-view highlight and decline.
+            idx, distance2 = self._nearest_handle_in_display(eventData)
+            within = (
+                idx is not None
+                and distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
+            )
+            self._publish_interaction_state(hovered=(idx if within else -1))
+            return False, sys.float_info.max
         if etype != vtk.vtkCommand.LeftButtonPressEvent:
             return False, sys.float_info.max
         _, distance2 = self._nearest_handle_in_display(eventData)
@@ -350,10 +381,12 @@ class SliceControlPolygonPipeline(_PipelineBase):
             ):
                 return False
             self._drag_index = idx
+            self._publish_interaction_state(grabbed=idx)
             return True
 
         if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
             self._drag_index = None
+            self._publish_interaction_state(grabbed=-1)
             return False
 
         if etype == vtk.vtkCommand.MouseMoveEvent:
@@ -376,6 +409,10 @@ class SliceControlPolygonPipeline(_PipelineBase):
             return None, sys.float_info.max
         best_idx, best_d2 = None, sys.float_info.max
         for i, (px, py) in enumerate(self._projected_xy):
+            # Markups short-range convention: points beyond PICK_RANGE_MM
+            # from the plane are not manipulable from this slice.
+            if i < len(self._plane_distances) and self._plane_distances[i] > PICK_RANGE_MM:
+                continue
             d2 = (px - ex) ** 2 + (py - ey) ** 2
             if d2 < best_d2:
                 best_idx, best_d2 = i, d2
@@ -453,6 +490,34 @@ class SliceControlPolygonPipeline(_PipelineBase):
         except ValueError:
             pass
 
+    def _interaction_state(self) -> tuple:
+        """(hovered, grabbed) read off the display node; (-1, -1) sans it."""
+        display = self._display_node
+        try:
+            return (
+                display.GetHoveredControlPoint() if display is not None else -1,
+                display.GetGrabbedControlPoint() if display is not None else -1,
+            )
+        except Exception:  # pragma: no cover - defensive (stub displays)
+            return (-1, -1)
+
+    def _publish_interaction_state(self, hovered=None, grabbed=None) -> None:
+        """Write hover/grab onto the display node (cross-view channel)."""
+        display = self._display_node
+        if display is None:
+            return
+        try:
+            if hovered is not None:
+                value = -1 if hovered == -1 else int(hovered)
+                if display.GetHoveredControlPoint() != value:
+                    display.SetHoveredControlPoint(value)
+            if grabbed is not None:
+                value = -1 if grabbed == -1 else int(grabbed)
+                if display.GetGrabbedControlPoint() != value:
+                    display.SetGrabbedControlPoint(value)
+        except Exception:  # pragma: no cover - defensive (stub displays)
+            return
+
     def _on_node_modified(self, caller: Any, event: str) -> None:
         del caller, event
         self.UpdatePipeline()
@@ -461,6 +526,7 @@ class SliceControlPolygonPipeline(_PipelineBase):
             _safe_get_state(self._data_node),
             _control_points_digest(self._data_node),
             self._slice_matrix_digest(self._slice_node),
+            self._interaction_state(),
         )
         if render_key == self._last_render_key:
             return

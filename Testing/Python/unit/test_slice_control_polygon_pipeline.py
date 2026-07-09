@@ -200,3 +200,56 @@ def test_creator_accepts_slice_views_only(pipeline_module):
     view_node.UnRegister(None)
     assert accepts(view_node) is False
     assert accepts(None) is False
+
+
+def test_far_points_are_not_manipulable(pipeline_module, polygon_nodes):
+    """Points beyond PICK_RANGE_MM from the plane cannot be picked."""
+    data, display = polygon_nodes
+    pipeline = pipeline_module.SliceControlPolygonPipeline()
+    pipeline._slice_node = _AxialSliceNodeAt(0.0)
+    pipeline.SetDisplayNode(display)
+    _seed_grid(data, z=0.0)  # point 0 is 30 mm above (beyond the 15 mm range)
+    data.SetState(1)
+    pipeline.UpdatePipeline()
+
+    class _At:
+        def GetDisplayPosition(self):  # noqa: N802 - VTK verb
+            return (0.0, 0.0)  # exactly on point 0's projection
+
+    idx, _ = pipeline._nearest_handle_in_display(_At())
+    assert idx != 0, (
+        "the raised point (30 mm off-plane) must be EXCLUDED from slice-side "
+        "picking (markups short-range manipulation)."
+    )
+    pipeline.cleanup()
+
+
+def test_hover_publishes_cross_view_highlight(pipeline_module, polygon_nodes):
+    """A slice hover writes the display channel; the projection colours it."""
+    import vtk
+
+    data, display = polygon_nodes
+    pipeline = pipeline_module.SliceControlPolygonPipeline()
+    pipeline._slice_node = _AxialSliceNodeAt(0.0)
+    pipeline.SetDisplayNode(display)
+    _seed_grid(data, z=0.0)
+    data.SetState(1)
+    pipeline.UpdatePipeline()
+
+    move = _TypedEvent(vtk.vtkCommand.MouseMoveEvent, (10.0, 10.0))  # point 5
+    can, _ = pipeline.CanProcessInteractionEvent(move)
+    assert can is False, "hover moves stay unclaimed"
+    assert display.GetHoveredControlPoint() == 5, (
+        "the hover must publish onto the display node -- the cross-view "
+        "highlight channel every pipeline observes."
+    )
+    pipeline.UpdatePipeline()
+    scalars = pipeline.GetHandlesPolyData().GetPointData().GetScalars()
+    hover = tuple(int(c * 255) for c in pipeline_module.HALO_HOVER_COLOR)
+    assert tuple(scalars.GetTuple4(5))[:3] == pytest.approx(hover), (
+        "the hovered point takes the hover colour in the projection"
+    )
+    assert scalars.GetTuple4(5)[3] == pytest.approx(255), (
+        "the hovered point renders fully opaque"
+    )
+    pipeline.cleanup()

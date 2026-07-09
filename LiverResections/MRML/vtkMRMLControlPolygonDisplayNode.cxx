@@ -57,6 +57,9 @@ vtkMRMLControlPolygonDisplayNode::vtkMRMLControlPolygonDisplayNode()
   , HandleColor{ 1.0, 1.0, 1.0 }
   , EdgeColor{ 1.0, 0.0, 0.0 }
   , EdgeWidth(1.5)
+  // Transient cross-view interaction state (not serialized).
+  , HoveredControlPoint(-1)
+  , GrabbedControlPoint(-1)
 {
 }
 
@@ -104,6 +107,8 @@ void vtkMRMLControlPolygonDisplayNode::CopyContent(vtkMRMLNode* anode, bool deep
   vtkMRMLCopyVectorMacro(HandleColor, double, 3);
   vtkMRMLCopyVectorMacro(EdgeColor, double, 3);
   vtkMRMLCopyFloatMacro(EdgeWidth);
+  vtkMRMLCopyIntMacro(HoveredControlPoint);
+  vtkMRMLCopyIntMacro(GrabbedControlPoint);
   vtkMRMLCopyEndMacro();
 }
 
@@ -117,5 +122,7 @@ void vtkMRMLControlPolygonDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
   vtkMRMLPrintVectorMacro(HandleColor, double, 3);
   vtkMRMLPrintVectorMacro(EdgeColor, double, 3);
   vtkMRMLPrintFloatMacro(EdgeWidth);
+  vtkMRMLPrintIntMacro(HoveredControlPoint);
+  vtkMRMLPrintIntMacro(GrabbedControlPoint);
   vtkMRMLPrintEndMacro();
 }

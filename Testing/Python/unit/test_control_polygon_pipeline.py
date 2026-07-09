@@ -435,3 +435,25 @@ def test_grab_changes_the_halo_color(pipeline_module, polygon_nodes):
         "release restores the uniform display HandleColor"
     )
     pipeline.cleanup()
+
+
+def test_remote_hover_colors_the_3d_handles(pipeline_module, polygon_nodes):
+    """A hover raised in ANOTHER view (display channel) colours this one."""
+    data, display = polygon_nodes
+    pipeline = pipeline_module.ControlPolygonPipeline()
+    pipeline._control_polygon_geometry = _FakeGeometry
+    pipeline.SetDisplayNode(display)
+    _seed_grid(data)
+    data.SetState(1)
+    pipeline.UpdatePipeline()
+
+    display.SetHoveredControlPoint(5)  # e.g. written by a slice pipeline
+    pipeline.UpdatePipeline()
+    scalars = pipeline._handles_polydata.GetPointData().GetScalars()
+    hover = tuple(int(c * 255) for c in pipeline_module.HALO_HOVER_COLOR)
+    assert scalars is not None and tuple(scalars.GetTuple3(5)) == pytest.approx(hover), (
+        "the display-channel hover must colour the 3D handles too -- the "
+        "cross-view highlight."
+    )
+    assert pipeline._handles_mapper.GetScalarVisibility() == 1
+    pipeline.cleanup()
