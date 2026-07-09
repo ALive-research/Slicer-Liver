@@ -309,7 +309,9 @@ class FlattenedSurfaceRepresentation:
             cx = focal[0] + (cx - focal[0]) * float(ratio[0])
             cy = focal[1] + (cy - focal[1]) * float(ratio[1])
             radius = display_node.GetRadius() if display_node is not None else 2.0
-            self._marker_source.SetRadius(float(radius))
+            # Smaller than the 3D/slice markers: the strip is a dense 2D
+            # readout and a full-size disc dominates it.
+            self._marker_source.SetRadius(float(radius) * 0.6)
             # Slightly proud of the quad so the circle wins the z-fight.
             self._marker_source.SetCenter(cx, cy, 0.5)
             self._marker_actor.SetVisibility(True)
@@ -441,11 +443,16 @@ class FlattenedSurfaceRepresentation:
         self._marker_source.SetNumberOfSides(32)
         self._marker_source.SetNormal(0.0, 0.0, 1.0)
         self._marker_source.SetRadius(2.0)
+        # OUTLINE circle, not filled: the marker must not occlude the
+        # distance-shading content it points at.
+        self._marker_source.GeneratePolygonOff()
+        self._marker_source.GeneratePolylineOn()
         self._marker_mapper = vtk.vtkPolyDataMapper()
         self._marker_mapper.SetInputConnection(self._marker_source.GetOutputPort())
         self._marker_actor = vtk.vtkActor()
         self._marker_actor.SetMapper(self._marker_mapper)
         self._marker_actor.GetProperty().SetColor(1.0, 0.0, 0.0)
+        self._marker_actor.GetProperty().SetLineWidth(2.0)
         self._marker_actor.SetVisibility(False)
         self._picked_uv: tuple | None = None
 

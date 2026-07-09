@@ -774,9 +774,13 @@ def test_locator_marker_is_a_round_world_actor(rep_module):
     assert (centre[0], centre[1]) == pytest.approx(expected), (
         "the circle sits at the picked (u, v) on the flat quad"
     )
-    assert rep._marker_source.GetRadius() == pytest.approx(2.0), (
-        "radius follows the locator display node (world units, so camera "
-        "zoom/pan rescale it with the strip)"
+    assert rep._marker_source.GetRadius() == pytest.approx(2.0 * 0.6), (
+        "radius follows the locator display node at the strip's 0.6 scale "
+        "(world units, so camera zoom/pan rescale it with the strip)"
+    )
+    assert rep._marker_source.GetGeneratePolygon() == 0, (
+        "the strip marker is an OUTLINE circle -- it must not occlude the "
+        "distance-shading content it points at."
     )
     rep.cleanup()
 
