@@ -322,3 +322,38 @@ def test_side_tint_tracks_the_signed_distance(pipeline_module, polygon_nodes):
         "a BELOW-plane point must tint DARKER than an on-plane one"
     )
     pipeline.cleanup()
+
+
+def test_ring_respects_the_range_and_lone_points_keep_their_scaffold(
+    pipeline_module, polygon_nodes
+):
+    """The highlight never surfaces far points; visible points keep dashes."""
+    data, display = polygon_nodes
+    pipeline = pipeline_module.SliceControlPolygonPipeline()
+    pipeline._slice_node = _AxialSliceNodeAt(0.0)
+    pipeline.SetDisplayNode(display)
+    # Everything far above the plane EXCEPT point 5 (on-plane).
+    for r in range(4):
+        for c in range(4):
+            data.SetControlPoint(r, c, float(c) * 40.0, float(r) * 40.0, 100.0)
+    data.SetControlPoint(1, 1, 40.0, 40.0, 0.0)
+    data.SetState(1)
+
+    display.SetGrabbedControlPoint(0)  # grabbed FAR point (e.g. from 3D)
+    pipeline.UpdatePipeline()
+    assert pipeline._ring_actor.GetVisibility() == 0, (
+        "the grab highlight must NOT surface a point this plane cannot "
+        "reach -- no ring for out-of-range points."
+    )
+    assert pipeline._edges_polydata.GetNumberOfLines() > 0, (
+        "the lone in-range point must keep its connecting scaffold dashes "
+        "(either-endpoint edge gating)."
+    )
+
+    display.SetGrabbedControlPoint(5)  # the on-plane point
+    pipeline.UpdatePipeline()
+    assert pipeline._ring_actor.GetVisibility() == 1, (
+        "an in-range grabbed point rings normally"
+    )
+    display.SetGrabbedControlPoint(-1)
+    pipeline.cleanup()

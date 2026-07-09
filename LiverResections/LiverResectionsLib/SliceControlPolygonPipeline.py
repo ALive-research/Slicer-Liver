@@ -373,8 +373,11 @@ class SliceControlPolygonPipeline(_PipelineBase):
                         yield r * cols + c, (r + 1) * cols + c
 
             for a, b in _edge_pairs():
-                if not (in_range[a] and in_range[b]):
-                    continue  # scaffold segments to absent points vanish too
+                if not (in_range[a] or in_range[b]):
+                    continue  # both endpoints absent: no scaffold here
+                # EITHER endpoint in range: draw the connecting dashes so a
+                # visible point never floats without its scaffold (the
+                # tint/fade along the run still shows the far end receding).
                 ax, ay = self._projected_xy[a]
                 bx, by = self._projected_xy[b]
                 ca = edge_rgba.GetTuple4(a)
@@ -407,9 +410,11 @@ class SliceControlPolygonPipeline(_PipelineBase):
             self._edges_polydata.GetPointData().SetScalars(dash_rgba)
             self._edges_polydata.Modified()
 
-            # Hover ring: the 2D halo on the hovered/grabbed handle.
+            # Hover ring: the 2D halo on the hovered/grabbed handle --
+            # only when that point is PRESENT in this slice (the highlight
+            # must not surface points the plane cannot reach).
             target = grabbed if grabbed >= 0 else hovered
-            if 0 <= target < len(self._projected_xy):
+            if 0 <= target < len(self._projected_xy) and in_range[target]:
                 ring_points = vtk.vtkPoints()
                 ring_points.InsertNextPoint(*self._projected_xy[target], 0.0)
                 self._ring_polydata.SetPoints(ring_points)
