@@ -210,6 +210,34 @@ def test_ensure_locator_node_creates_exactly_one_wired_active():
         _remove_locator(scene, locator)
 
 
+def test_ensure_locator_node_display_starts_hidden():
+    """Invariant 1b: the ensured locator's display starts HIDDEN.
+
+    The marker is gesture-scoped (the strip press flips the display
+    Visibility on; release clears it), so ``EnsureLocatorNode`` must leave
+    ``Visibility`` false -- an ensured locator must not paint a stray
+    marker before the first pick gesture.
+    """
+    slicer = _slicer_or_skip()
+    logic = _resection_logic_or_skip(slicer)
+    ensure = _ensure_method_or_skip_pending(logic)
+    scene = slicer.mrmlScene
+
+    _clear_existing_locators(slicer)
+    locator = None
+    try:
+        locator = ensure()
+        assert locator is not None, "EnsureLocatorNode() returned None."
+        display = locator.GetDisplayNode()
+        assert display is not None, "no display node wired."
+        assert not bool(display.GetVisibility()), (
+            "EnsureLocatorNode() must leave the locator display HIDDEN "
+            "(gesture-scoped marker: visible only between press and release)."
+        )
+    finally:
+        _remove_locator(scene, locator)
+
+
 # --------------------------------------------------------------------------- #
 # Invariant 2 -- idempotent: the second call returns the same singleton
 # --------------------------------------------------------------------------- #
