@@ -32,6 +32,10 @@ from .SliceContourPipeline import (
     SliceContourPipeline,
     registerSliceContourPipelineCreator,
 )
+from .SliceControlPolygonPipeline import (
+    SliceControlPolygonPipeline,
+    registerSliceControlPolygonPipelineCreator,
+)
 from .ResectogramViewManager import (
     RESECTOGRAM_VIEW_SINGLETON_TAG,
     ResectogramViewManager,
@@ -41,6 +45,8 @@ __all__ = [
     "LiverBezierSurfacePipeline",
     "registerPipelineCreator",
     "SliceContourPipeline",
+    "SliceControlPolygonPipeline",
+    "registerSliceControlPolygonPipelineCreator",
     "registerSliceContourPipelineCreator",
     "ControlPolygonPipeline",
     "registerControlPolygonPipelineCreator",
