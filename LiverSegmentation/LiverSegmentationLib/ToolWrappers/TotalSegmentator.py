@@ -286,21 +286,51 @@ def runInference(input_path, output_dir, sct_code, progress_callback=None) -> No
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
     )
     tail: list = []
     assert process.stdout is not None
-    for line in process.stdout:
-        line = line.rstrip()
-        if not line:
-            continue
-        tail.append(line)
-        del tail[:-20]
+    # Byte-chunk read split on BOTH newline kinds: the backend's tqdm
+    # progress refreshes with bare carriage returns, which a readline
+    # loop would sit on for the whole download/predict phase — exactly
+    # the silent stretch the progress surface exists for.
+    buffer = b""
+    while True:
+        chunk = process.stdout.read1(4096)
+        if not chunk:
+            break
+        buffer += chunk
+        *pieces, buffer = _split_stream_pieces(buffer)
+        for piece in pieces:
+            tail.append(piece)
+            del tail[:-20]
+            if progress_callback is not None:
+                progress_callback(piece)
+    remainder = buffer.decode("utf-8", "replace").strip()
+    if remainder:
+        tail.append(remainder)
         if progress_callback is not None:
-            progress_callback(line)
+            progress_callback(remainder)
     returncode = process.wait()
     if returncode != 0:
         raise RuntimeError(
             "TotalSegmentator failed (exit %d):\n%s" % (returncode, "\n".join(tail))
         )
+
+
+def _split_stream_pieces(buffer: bytes) -> list:
+    """Split ``buffer`` on ``\\r``/``\\n``; last element is the unterminated rest.
+
+    Returns decoded, stripped pieces (empties dropped) with the raw
+    undecoded remainder as the final element — the streaming loop's
+    carry-over.
+    """
+    import re
+
+    parts = re.split(rb"[\r\n]", buffer)
+    remainder = parts.pop()
+    pieces = [
+        part.decode("utf-8", "replace").strip()
+        for part in parts
+        if part.strip()
+    ]
+    return [*pieces, remainder]

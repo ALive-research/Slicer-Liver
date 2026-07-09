@@ -299,6 +299,42 @@ def test_card_run_with_portalvenous_volume_still_segments(monkeypatch):
     )
 
 
+def test_card_run_paints_busy_state_before_the_blocking_backend_call(monkeypatch):
+    """The busy signal must be VISIBLE before segment() starts blocking.
+
+    Pressing Run gave no processing signal: the busy bar + status were set
+    but Qt never repainted before the minutes-long blocking backend call
+    (the first repaint came only with the first backend output line, itself
+    delayed by the subprocess's slow startup).  onRun must set the busy
+    state AND flush the event loop BEFORE entering segment(); this pin
+    reads the card's state from INSIDE the (mocked) blocking call.
+    """
+    slicer, orch = _orchestrator_or_skip()
+    slicer.mrmlScene.Clear(0)
+    _add_input_volume(slicer)
+
+    card = _make_card_or_skip(slicer, orch, SCT_LIVER_CODE)
+
+    seen = {}
+
+    def _blocking_segment(volume, sctTarget, progressCallback=None):
+        seen["busy_visible"] = bool(card.progressBar.visible)
+        seen["status"] = str(card.statusLabel.text)
+        return None
+
+    monkeypatch.setattr(orch, "segment", _blocking_segment)
+    card.onRun()
+
+    assert seen.get("busy_visible"), (
+        "the busy/progress bar must already be visible when the blocking "
+        "backend call starts -- 'no signaling that there is processing'."
+    )
+    assert seen.get("status"), "a starting status message must already be shown"
+    assert "idle" not in seen["status"].lower(), (
+        f"the status must signal processing, not {seen['status']!r}."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
 
