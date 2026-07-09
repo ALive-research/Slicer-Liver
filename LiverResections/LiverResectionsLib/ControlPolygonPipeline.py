@@ -57,12 +57,12 @@ CONTROL_POLYGON_GEOMETRY_CLASS = "vtkSlicerLiverBezierControlPolygonGeometry"
 CONTROL_POINT_PICK_RADIUS_PX = 20.0
 
 #: Halo colours: warm hover cue vs the distinct GRABBED (active-drag) cue.
+#: The grab cue is carried by the HANDLE colour (per-point glyph scalars),
+#: not by a larger halo -- the glow blur washes a halo hue out.
 HALO_HOVER_COLOR = (1.0, 0.9, 0.2)
 HALO_GRAB_COLOR = (0.3, 1.0, 0.4)
-#: Halo radius scale vs the handle: hover ring vs the larger GRAB ring
-#: (the size jump reads even where the glow blur washes the hue out).
+#: Halo radius scale vs the handle sphere.
 HALO_HOVER_SCALE = 1.35
-HALO_GRAB_SCALE = 1.9
 
 #: World-space dash pattern for the polygon edge tubes -- the same
 #: dashed-scaffold language the slice projections use, so the control
