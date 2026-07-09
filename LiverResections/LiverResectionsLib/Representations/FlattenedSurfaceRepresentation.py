@@ -290,7 +290,10 @@ class FlattenedSurfaceRepresentation:
         set_position(float(position[0]), float(position[1]), float(position[2]))
         display_node = node.GetDisplayNode() if hasattr(node, "GetDisplayNode") else None
         radius = display_node.GetRadius() if display_node is not None else 0.0
-        set_radius(float(radius))
+        # Gesture-scoped marker: the display's base Visibility is the
+        # switch (press shows, release hides); invisible pushes radius 0.
+        visible = getattr(display_node, "GetVisibility", lambda: True)() if display_node is not None else False
+        set_radius(float(radius) if visible else 0.0)
 
     def update(self, display_node: Any | None, data_node: Any | None) -> None:
         """Reconcile the resectogram against the current display + data nodes.

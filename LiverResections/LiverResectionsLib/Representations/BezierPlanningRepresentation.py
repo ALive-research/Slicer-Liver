@@ -284,7 +284,10 @@ class BezierPlanningRepresentation:
 
         display_node = node.GetDisplayNode() if hasattr(node, "GetDisplayNode") else None
         radius = display_node.GetRadius() if display_node is not None else 0.0
-        set_radius(float(radius))
+        # Gesture-scoped marker: the display's base Visibility is the
+        # switch (press shows, release hides); invisible pushes radius 0.
+        visible = getattr(display_node, "GetVisibility", lambda: True)() if display_node is not None else False
+        set_radius(float(radius) if visible else 0.0)
 
     def cleanup(self) -> None:
         """Detach actors from the renderer and drop the VTK pipeline."""

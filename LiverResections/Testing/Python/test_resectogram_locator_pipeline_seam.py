@@ -720,3 +720,42 @@ def test_drag_reslices_continuously_between_press_and_release():
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def test_marker_visibility_is_gesture_scoped():
+    """Press shows the marker, release hides it (transient-probe semantics).
+
+    The locator display node's base ``Visibility`` is the marker switch all
+    consumers gate on: the strip gesture flips it true on the opening press
+    and false on the closing release, so the marker never lingers like an
+    annotation.  The reslice itself is unaffected (planes stay jumped).
+    """
+    import vtk
+
+    slicer = _slicer_or_skip()
+    carrier = _make_affine_carrier_or_skip(slicer, "SeamMarkerGesture")
+    locator = _single_locator_or_skip(slicer)
+    display = locator.GetDisplayNode()
+    if display is None:
+        locator.CreateDefaultDisplayNodes()
+        display = locator.GetDisplayNode()
+    if display is None:
+        pytest.skip("locator display node unavailable in this build.")
+    display.SetVisibility(False)
+
+    pipeline = _pipeline_or_skip(slicer)
+    _inject_state(pipeline, carrier, mat_ratio=(1.0, 1.0), viewport_size=(256, 256))
+    _seam_or_skip_pending(pipeline)
+
+    press = _FakeInteractionEventData((64.0, 64.0))
+    assert pipeline.ProcessInteractionEvent(press) is True
+    assert display.GetVisibility(), "the opening press must SHOW the marker"
+
+    release = _FakeInteractionEventData(
+        (64.0, 64.0), event_type=vtk.vtkCommand.LeftButtonReleaseEvent
+    )
+    pipeline.ProcessInteractionEvent(release)
+    assert not display.GetVisibility(), (
+        "the closing release must HIDE the marker -- it is a transient "
+        "probe, not a markup-like annotation."
+    )
