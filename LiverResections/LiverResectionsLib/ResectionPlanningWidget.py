@@ -161,6 +161,12 @@ class ResectionPlanningWidget(qt.QWidget):
         # scene's single vtkMRMLLocatorNode and reslices the orthogonal slice to
         # the picked point.  This widget owns its lifetime.
         self._locatorReslicer = None
+        # The single long-lived view manager for the dedicated resectogram
+        # view.  ONE instance per widget: the manager attaches the default-deny
+        # scene + slice-display observers, so a fresh manager per drawer
+        # refresh would stack a new observer set on every re-open.  This
+        # widget owns its lifetime (detached in cleanup()).
+        self._resectogramViewManager = None
 
         self._setupUi()
         self.refreshResectogramDrawer()
@@ -391,7 +397,9 @@ class ResectionPlanningWidget(qt.QWidget):
         # strip alone in it (display-node + view-node + camera configuration;
         # no custom DisplayableManager, ADR-0013 §5).  Per ADR-0004 the
         # view-manager class is Python and is imported + called DIRECTLY here.
-        manager = ResectogramViewManager()
+        if self._resectogramViewManager is None:
+            self._resectogramViewManager = ResectogramViewManager()
+        manager = self._resectogramViewManager
         view = manager.ensureViewNode()
         manager.configureView(view, displayNode, carrier)
 
@@ -771,6 +779,11 @@ class ResectionPlanningWidget(qt.QWidget):
         if self._locatorReslicer is not None:
             self._locatorReslicer.cleanup()
             self._locatorReslicer = None
+        # The view manager's default-deny observers (on the scene + slice
+        # display nodes, both of which outlive this panel).
+        if self._resectogramViewManager is not None:
+            self._resectogramViewManager.cleanup()
+            self._resectogramViewManager = None
         # VTK node observers (on scene nodes that outlive this panel).
         if self._activeResectionNode is not None and self._activeNodeObservationTag is not None:
             self._activeResectionNode.RemoveObserver(self._activeNodeObservationTag)
