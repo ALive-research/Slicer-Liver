@@ -56,6 +56,10 @@ CONTROL_POLYGON_GEOMETRY_CLASS = "vtkSlicerLiverBezierControlPolygonGeometry"
 #: value, unchanged by the ADR-0033 re-siting).
 CONTROL_POINT_PICK_RADIUS_PX = 20.0
 
+#: Halo colours: warm hover cue vs the distinct GRABBED (active-drag) cue.
+HALO_HOVER_COLOR = (1.0, 0.9, 0.2)
+HALO_GRAB_COLOR = (0.3, 1.0, 0.4)
+
 _REGISTERED = False
 
 
@@ -159,7 +163,7 @@ class ControlPolygonPipeline(_PipelineBase):
         self._halo_mapper.SetInputConnection(self._halo_sphere.GetOutputPort())
         self._halo_actor = vtk.vtkActor()
         self._halo_actor.SetMapper(self._halo_mapper)
-        self._halo_actor.GetProperty().SetColor(1.0, 0.9, 0.2)
+        self._halo_actor.GetProperty().SetColor(*HALO_HOVER_COLOR)
         self._halo_actor.SetVisibility(False)
         self._halo_renderer: Any | None = None
 
@@ -432,6 +436,9 @@ class ControlPolygonPipeline(_PipelineBase):
             ):
                 return False
             self._drag_index = idx
+            self._halo_actor.GetProperty().SetColor(*HALO_GRAB_COLOR)
+            hover, self._hover_index = idx, None
+            self._set_hover(hover)  # halo jumps to the grabbed handle
             world = self._event_world_at_control_point(renderer, eventData, idx)
             if world is not None:
                 self._apply_world_point_to_control_point(idx, world)
@@ -439,6 +446,7 @@ class ControlPolygonPipeline(_PipelineBase):
 
         if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
             self._drag_index = None
+            self._halo_actor.GetProperty().SetColor(*HALO_HOVER_COLOR)
             self._set_hover(None)
             return False  # grab over -- release the focus
 
