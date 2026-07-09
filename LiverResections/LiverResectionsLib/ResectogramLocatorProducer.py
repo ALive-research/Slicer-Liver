@@ -111,4 +111,8 @@ class ResectogramLocatorProducer:
 
         if self._locator_node is not None:
             self._locator_node.SetPickedPositionWorld(point[0], point[1], point[2])
+            # The strip coordinate of the same pick rides the locator too
+            # (ADR-0025: the node is the locator-state carrier); the strip
+            # Representation reads it back to place its circle marker.
+            self._locator_node.SetPickedUV(float(u), float(v))
         return point

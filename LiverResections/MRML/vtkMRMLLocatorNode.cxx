@@ -59,6 +59,9 @@ vtkMRMLLocatorNode::vtkMRMLLocatorNode()
   this->PickedPositionWorld[0] = 0.0;
   this->PickedPositionWorld[1] = 0.0;
   this->PickedPositionWorld[2] = 0.0;
+  // Sentinel "no pick yet": consumers treat any negative component as unset.
+  this->PickedUV[0] = -1.0;
+  this->PickedUV[1] = -1.0;
 }
 
 //------------------------------------------------------------------------------
@@ -125,6 +128,7 @@ void vtkMRMLLocatorNode::CopyContent(vtkMRMLNode* anode, bool deepCopy /*=true*/
   vtkMRMLCopyBeginMacro(anode);
   vtkMRMLCopyBooleanMacro(LocatorActive);
   vtkMRMLCopyVectorMacro(PickedPositionWorld, double, 3);
+  vtkMRMLCopyVectorMacro(PickedUV, double, 2);
   vtkMRMLCopyEndMacro();
 }
 
@@ -136,5 +140,6 @@ void vtkMRMLLocatorNode::PrintSelf(ostream& os, vtkIndent indent)
   vtkMRMLPrintBeginMacro(os, indent);
   vtkMRMLPrintBooleanMacro(LocatorActive);
   vtkMRMLPrintVectorMacro(PickedPositionWorld, double, 3);
+  vtkMRMLPrintVectorMacro(PickedUV, double, 2);
   vtkMRMLPrintEndMacro();
 }

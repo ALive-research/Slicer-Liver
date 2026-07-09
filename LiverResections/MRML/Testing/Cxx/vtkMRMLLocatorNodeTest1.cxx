@@ -216,6 +216,32 @@ int testCopyContentCarriesPresence()
 }
 
 //------------------------------------------------------------------------------
+// Invariant -- the picked (u, v) defaults to the (-1, -1) "no pick"
+// sentinel, follows its setter, and rides CopyContent beside its
+// PickedPositionWorld sibling (same transient family, same copy rule).
+int testPickedUV()
+{
+  vtkNew<vtkMRMLLocatorNode> node;
+  double uv[2] = { 0.0, 0.0 };
+  node->GetPickedUV(uv);
+  CHECK_DOUBLE_TOLERANCE(uv[0], -1.0, 1e-9);
+  CHECK_DOUBLE_TOLERANCE(uv[1], -1.0, 1e-9);
+
+  const double picked[2] = { 0.25, 0.75 };
+  node->SetPickedUV(picked);
+  node->GetPickedUV(uv);
+  CHECK_DOUBLE_TOLERANCE(uv[0], 0.25, 1e-9);
+  CHECK_DOUBLE_TOLERANCE(uv[1], 0.75, 1e-9);
+
+  vtkNew<vtkMRMLLocatorNode> sink;
+  sink->CopyContent(node.GetPointer());
+  sink->GetPickedUV(uv);
+  CHECK_DOUBLE_TOLERANCE(uv[0], 0.25, 1e-9);
+  CHECK_DOUBLE_TOLERANCE(uv[1], 0.75, 1e-9);
+  return EXIT_SUCCESS;
+}
+
+//------------------------------------------------------------------------------
 // Invariant 4 -- CreateDefaultDisplayNodes creates exactly one
 // vtkMRMLLocatorDisplayNode and wires it as the node's display node.
 // (ADR-0025 §"The node" -- one display node for v2.0.)
@@ -287,6 +313,7 @@ int vtkMRMLLocatorNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testInstantiable());
   CHECK_EXIT_SUCCESS(testPresencePersistsPositionDoesNot());
   CHECK_EXIT_SUCCESS(testCopyContentCarriesPresence());
+  CHECK_EXIT_SUCCESS(testPickedUV());
   CHECK_EXIT_SUCCESS(testCreateDefaultDisplayNodes());
   CHECK_EXIT_SUCCESS(testDisplayNodeRoundTrip());
 
