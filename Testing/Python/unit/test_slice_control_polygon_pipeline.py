@@ -391,3 +391,54 @@ def test_ring_respects_the_range_and_lone_points_keep_their_scaffold(
     )
     display.SetGrabbedControlPoint(-1)
     pipeline.cleanup()
+
+
+def test_reslicing_still_reprojects_after_renderer_churn(
+    pipeline_module, polygon_nodes
+):
+    """The slice-node observer must survive OnRendererRemoved/Added churn.
+
+    Mirrors the contour pipeline's churn pin: cleanup() (via
+    OnRendererRemoved) detaches every observer including the slice
+    node's; OnRendererAdded must re-attach it or reslicing after churn
+    stops updating the projected polygon.
+    """
+    import slicer
+    import vtk
+
+    data, display = polygon_nodes
+    scene = slicer.mrmlScene
+    slice_node = scene.AddNewNodeByClass("vtkMRMLSliceNode")
+    try:
+        pipeline = pipeline_module.SliceControlPolygonPipeline()
+        pipeline.SetViewNode(slice_node)
+        pipeline.SetDisplayNode(display)
+        for r in range(4):
+            for c in range(4):
+                data.SetControlPoint(r, c, float(c) * 40.0, float(r) * 40.0, 0.0)
+        data.SetState(1)
+        slice_node.Modified()
+        pipeline.UpdatePipeline()
+        assert pipeline._handles_actor.GetVisibility() == 1, "precondition"
+
+        renderer = vtk.vtkRenderer()
+        pipeline.OnRendererRemoved(renderer)
+        pipeline.OnRendererAdded(renderer)
+
+        renders = []
+        pipeline.RequestRender = lambda: renders.append(1)
+        slice_node.GetSliceToRAS().SetElement(2, 3, 500.0)  # far off the grid
+        slice_node.Modified()
+        assert renders, (
+            "after renderer churn a slice-pose change must STILL reach the "
+            "pipeline -- OnRendererAdded must re-attach the slice-node "
+            "observer that cleanup() detached."
+        )
+        handles = pipeline.GetHandlesPolyData()
+        assert handles.GetNumberOfPoints() == 0, (
+            "the post-churn reprojection at the far plane must empty the "
+            "scaffold (no points in range; presence is the cutoff)."
+        )
+        pipeline.cleanup()
+    finally:
+        scene.RemoveNode(slice_node)
