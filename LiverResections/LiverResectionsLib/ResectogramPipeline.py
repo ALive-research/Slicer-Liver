@@ -369,6 +369,7 @@ class ResectogramPipeline(_PipelineBase):
 
                 if self._event_type(eventData) == vtk.vtkCommand.LeftButtonReleaseEvent:
                     self._reslicing = False
+                    self._set_locator_marker_visible(False)
                     return False  # gesture over -- release the focus
                 if self._event_type(eventData) == vtk.vtkCommand.MouseMoveEvent:
                     getter = getattr(eventData, "GetDisplayPosition", None)
@@ -388,8 +389,30 @@ class ResectogramPipeline(_PipelineBase):
         produced = self._produce_from_display_position(getter()) is not None
         if produced:
             self._reslicing = True
+            self._set_locator_marker_visible(True)
             self._refresh_locator_marker()
         return produced
+
+    def _set_locator_marker_visible(self, visible: bool) -> None:
+        """Flip the marker switch: the locator DISPLAY node's Visibility.
+
+        Gesture-scoped semantics (the locator is a transient probe, not an
+        annotation): the opening press shows the marker, the closing release
+        hides it.  All consumers -- the 3D shader disc, the strip disc, the
+        slice dot model -- gate on this field.  ``locator.Modified()`` kicks
+        the consumers observing the locator node itself.
+        """
+        locator = self._resolve_locator_node(self._data_node)
+        if locator is None:
+            return
+        display = locator.GetDisplayNode() if hasattr(locator, "GetDisplayNode") else None
+        if display is None:
+            return
+        try:
+            display.SetVisibility(bool(visible))
+            locator.Modified()
+        except Exception:  # pragma: no cover - defensive
+            return
 
     def _refresh_locator_marker(self) -> None:
         """Re-push the locator uniforms on the strip + request a repaint.

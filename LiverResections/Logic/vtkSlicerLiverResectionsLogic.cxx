@@ -214,6 +214,12 @@ vtkMRMLLocatorNode* vtkSlicerLiverResectionsLogic::EnsureLocatorNode()
   // flag, ADR-0025 §"The node").
   locator->CreateDefaultDisplayNodes();
   locator->SetLocatorActive(true);
+  // Gesture-scoped marker: hidden until the first pick gesture opens
+  // (the strip press flips the display Visibility; release clears it).
+  if (vtkMRMLDisplayNode* displayNode = locator->GetDisplayNode())
+  {
+    displayNode->SetVisibility(false);
+  }
   return locator;
 }
 

@@ -750,3 +750,26 @@ def test_locator_marker_reaches_the_2d_mapper(rep_module):
     assert mapper.locator_position == pytest.approx((10.0, 20.0, 30.0))
     assert mapper.locator_radius == pytest.approx(2.0)
     rep.cleanup()
+
+
+def test_locator_marker_gates_on_display_visibility(rep_module):
+    """An invisible locator display pushes radius 0 (marker off)."""
+
+    class _HiddenDisplay(_StubLocatorDisplay):
+        def GetVisibility(self):  # noqa: N802 - VTK verb
+            return False
+
+    class _HiddenLocator(_StubLocatorNode):
+        def GetDisplayNode(self):  # noqa: N802 - VTK verb
+            return _HiddenDisplay()
+
+    rep = rep_module()
+    mapper = _StubMapperWithLocator()
+    rep._resection_mapper_2d = mapper
+    rep.SetLocatorNode(_HiddenLocator())
+    rep.update(_StubDisplayNode(), _StubDataNode())
+    assert mapper.locator_radius == pytest.approx(0.0), (
+        "locator display Visibility false -> the marker uniforms must be "
+        "pushed OFF (radius 0), the gesture-scoped hide."
+    )
+    rep.cleanup()

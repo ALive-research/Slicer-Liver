@@ -160,6 +160,13 @@ class LocatorReslicer:
                     display.SetSliceIntersectionThickness(2)
             display_node = locator.GetDisplayNode() if hasattr(locator, "GetDisplayNode") else None
             radius = display_node.GetRadius() if display_node is not None else 5.0
+            # Gesture-scoped marker (same switch the shader discs gate on).
+            marker_visible = (
+                bool(display_node.GetVisibility()) if display_node is not None else True
+            )
+            model_display = node.GetDisplayNode()
+            if model_display is not None:
+                model_display.SetVisibility2D(marker_visible)
             sphere = vtk.vtkSphereSource()
             sphere.SetCenter(float(world_xyz[0]), float(world_xyz[1]), float(world_xyz[2]))
             sphere.SetRadius(float(radius))
