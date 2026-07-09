@@ -6,6 +6,20 @@
 - **Diagrams:** inline below; see also [`Docs/architecture/gui-stage-flow.md`](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/architecture/gui-stage-flow.md) for the cross-stage context.
 - **PR:** <filled on merge>
 
+## Amendments
+
+- **2026-07-09 — Stage-2 segments table supersedes the tab UI and the
+  scratch-merge review mechanism.**  [ADR-0034](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0034-stage2-segments-table.md)
+  replaces the four per-structure tabs and the separate import section
+  with one pre-seeded anatomy segments table, and moves the review
+  contract from node level (scratch node merged into canonical on
+  Accept) to segment level (results land in the canonical node as
+  pending-review; a per-segment confirm tag records the attestation).
+  This ADR's lazy-install contract, terminology bridges,
+  canonical-singleton rule, and per-structure micro-workflow tool
+  choices are UNCHANGED; the micro-workflow map is promoted into
+  ADR-0034's per-structure tool registry.
+
 ## Context
 
 Slicer-Liver v2.0.0's Stage 2 (Anatomy Definition) per
