@@ -708,6 +708,15 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
                 scratchSegmentation, segmentId
             )
         slicer.mrmlScene.RemoveNode(scratch)
+        # The Accept is the AI path's explicit human action growing the
+        # canonical node (the import path's twin), so it runs the same two
+        # post-merge steps: the 3D closed-surface representation (the main
+        # 3D view is otherwise empty entering Stage 4) and the composed
+        # distance map Stage 4 consumes (ADR-0031).  Both degrade gracefully
+        # when their inputs are absent; the recompute lands the newly
+        # accepted segment's channel in place.
+        self.ensureSurfaceRepresentation(canonical)
+        self.ensureDistanceMap(canonical)
         return canonical
 
     def reject(self, scratch):

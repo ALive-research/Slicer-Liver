@@ -171,3 +171,42 @@ def test_import_without_reference_volume_still_succeeds():
         "without a reference volume no distance map can be computed; none "
         "must be minted."
     )
+
+
+def test_accept_computes_tagged_distance_map_and_surface_rep():
+    """The AI path (Run -> Accept) must produce the map + 3D rep too.
+
+    Every prior end-to-end pass built the canonical node via
+    ``importSegmentationAsCanonical`` (which computes the distance map and
+    the closed-surface representation).  A surgeon going PURE-AI (per-card
+    Run + Accept, no import) reached Stage 4 with NO distance map and no
+    3D anatomy -- ``accept()`` must run the same two post-merge steps.
+    """
+    slicer, logic = _logic_or_skip()
+    slicer.mrmlScene.Clear(0)
+    _require_seam(logic)
+    _require_segmentations_module(slicer)
+
+    _reference_volume(slicer)
+
+    # A scratch node with one real-geometry, SCT-tagged segment -- the shape
+    # a card's Run leaves behind for Accept.
+    scratch, segId = _source_segmentation_with_geometry(slicer)
+    scratch.SetAttribute("LiverSegmentation.Role", "scratch")
+    logic.tagSegmentWithSct(scratch, segId, SCT_LIVER_CODE, "Liver")
+
+    logic.accept(scratch)
+
+    maps = _distance_map_volumes(slicer)
+    assert len(maps) == 1, (
+        "Accept must compute the DistanceMap-tagged vector volume exactly "
+        "like the import path -- the pure-AI Stage-2 path otherwise reaches "
+        f"Planning with no map; found {len(maps)}."
+    )
+    canonical = logic.getOrCreateCanonicalSegmentation()
+    assert canonical.GetSegmentation().ContainsRepresentation(
+        "Closed surface"
+    ), (
+        "Accept must ensure the 3D closed-surface representation -- the "
+        "main 3D view is otherwise empty entering Stage 4 on the AI path."
+    )
