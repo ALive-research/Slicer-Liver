@@ -211,6 +211,16 @@ int testCopyContent()
   // Mutating source must not affect sink (deep-copy semantics).
   source->SetHandleRadius(1.0);
   CHECK_DOUBLE(sink->GetHandleRadius(), 4.0);
+
+  // TRANSIENT interaction state must NOT ride CopyContent (the markups
+  // ActiveComponent precedent): a copy must not inherit a live hover/grab,
+  // just as the fields are excluded from the XML round-trip.
+  source->SetHoveredControlPoint(5);
+  source->SetGrabbedControlPoint(7);
+  vtkNew<vtkMRMLControlPolygonDisplayNode> transientSink;
+  transientSink->CopyContent(source.GetPointer(), /*deepCopy=*/true);
+  CHECK_INT(transientSink->GetHoveredControlPoint(), -1);
+  CHECK_INT(transientSink->GetGrabbedControlPoint(), -1);
   return EXIT_SUCCESS;
 }
 

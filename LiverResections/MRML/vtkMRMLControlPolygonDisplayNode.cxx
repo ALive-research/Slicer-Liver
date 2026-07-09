@@ -102,13 +102,15 @@ void vtkMRMLControlPolygonDisplayNode::CopyContent(vtkMRMLNode* anode, bool deep
   MRMLNodeModifyBlocker blocker(this);
   Superclass::CopyContent(anode, deepCopy);
 
+  // HoveredControlPoint / GrabbedControlPoint are TRANSIENT interaction
+  // state (the markups ActiveComponent precedent): copying a node must not
+  // clone a live hover/grab onto the copy, so they are excluded here just
+  // as they are from the XML round-trip.
   vtkMRMLCopyBeginMacro(anode);
   vtkMRMLCopyFloatMacro(HandleRadius);
   vtkMRMLCopyVectorMacro(HandleColor, double, 3);
   vtkMRMLCopyVectorMacro(EdgeColor, double, 3);
   vtkMRMLCopyFloatMacro(EdgeWidth);
-  vtkMRMLCopyIntMacro(HoveredControlPoint);
-  vtkMRMLCopyIntMacro(GrabbedControlPoint);
   vtkMRMLCopyEndMacro();
 }
 
