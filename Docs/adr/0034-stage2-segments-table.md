@@ -65,7 +65,7 @@ exists*, so the empty state teaches the goal:
 | 👁 | 🟥 | Liver parenchyma | TotalSeg (fast) | ✓ Confirmed | 🔒 ✎ |
 | 👁 | 🟦 | Portal vein | — | ○ Missing | ▶ ✎ |
 | 👁 | 🟪 | Hepatic vein | TotalSeg | ⟳ Running… | ✕ |
-| 👁 | 🟨 | Tumors | imported | ● Review | ✔ ✗ ✎ |
+| 👁 | 🟨 | Tumors | imported | ● Review | ✔ ✎ |
 
 - Rows are pre-seeded from the structure vocabulary (Liver parenchyma,
   Portal vein, Hepatic vein, Tumors — the [ADR-0024][adr-0024] SCT
@@ -97,7 +97,15 @@ anything counts — is unchanged):
   implementation choice, not a contract.
 - **Confirm is per segment**: a scene-persistent per-segment tag
   (beside the SCT terminology tag) records the surgeon's attestation.
-  Confirm (✔ / 🔒) supersedes Accept; Discard (✗) supersedes Reject.
+  Confirm (✔ / 🔒) supersedes Accept.
+- **There is no Reject/Discard primary action** (maintainer call,
+  2026-07-09 walkthrough): with an explicit confirm gate, rejection is
+  redundant as a first-class gesture — an unsatisfying `● Review`
+  result is *superseded* by a re-Run, *repaired* via Edit, or *cleared*
+  by Mark-absent (whose semantics include removing the unconfirmed
+  segment).  Destructive removal without replacement lives, at most,
+  in a row overflow menu — never beside Confirm where a mis-click
+  discards work.
 - Only **confirmed** segments count downstream: the stage-completion
   predicate becomes *every row Confirmed or Marked-absent* (replacing
   the soft ≥ 1-tagged-segment predicate), and downstream stages that
