@@ -78,8 +78,14 @@ class _StubDataNode:
     def __init__(self, control_grid: tuple = (0.0,) * 48) -> None:
         self.control_grid = control_grid
 
-    def GetControlGrid(self):
+    def GetControlGridVector(self):
         return self.control_grid
+
+    def GetRows(self) -> int:
+        return 4
+
+    def GetCols(self) -> int:
+        return 4
 
 
 # --------------------------------------------------------------------------- #

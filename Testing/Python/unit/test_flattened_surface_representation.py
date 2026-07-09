@@ -242,6 +242,10 @@ def test_mat_ratio_isotropic_when_no_sampled_surface(rep_module):
         def GetSampledSurfacePoints(self):
             return None
 
+        def GetControlGridVector(self):  # noqa: N802 - VTK verb
+            # Incomplete grid (mid-placement): no Bezier evaluation either.
+            return ()
+
     rep.update(display, _EmptyDataNode())
     assert mapper.mat_ratio == pytest.approx([1.0, 1.0])
     rep.cleanup()
@@ -705,6 +709,11 @@ def test_effective_comps_survive_subsequent_updates(rep_module, monkeypatch):
 class _StubLocatorDisplay:
     def GetRadius(self):  # noqa: N802 - VTK verb
         return 2.0
+
+    def GetVisibility(self):  # noqa: N802 - VTK verb
+        # Matches the marker-off default the Representation assumed for a
+        # display lacking the accessor; visible variants override this.
+        return False
 
 
 class _StubLocatorNode:

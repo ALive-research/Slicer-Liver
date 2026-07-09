@@ -292,11 +292,9 @@ class FlattenedSurfaceRepresentation:
                 set_radius(0.0)  # the distorted shader disc stays off
 
         node = self._locator_node
-        display_node = node.GetDisplayNode() if node is not None and hasattr(node, "GetDisplayNode") else None
+        display_node = node.GetDisplayNode() if node is not None else None
         visible = (
-            bool(getattr(display_node, "GetVisibility", lambda: False)())
-            if display_node is not None
-            else False
+            bool(display_node.GetVisibility()) if display_node is not None else False
         )
         uv = self._picked_uv
         if not visible or uv is None or self._bezier_plane is None:
@@ -695,12 +693,18 @@ class FlattenedSurfaceRepresentation:
         already_bound = self._mapper_has_distance_map_texture(mapper)
         # Source the distance-map volume from the WRAPPER (ADR-0031), NOT the
         # data node / carrier — the distance map is a wrapper-owned input of
-        # the resection plan (ADR-0014 §"Fourth layer").
-        volume = _safe_call_getter(self._resection_plan_node, "GetDistanceMapVolumeNode")
+        # the resection plan (ADR-0014 §"Fourth layer").  A ``None`` plan (no
+        # owning wrapper) or a ``None`` volume is a real state — the
+        # no-distance-map fallback.
+        volume = (
+            self._resection_plan_node.GetDistanceMapVolumeNode()
+            if self._resection_plan_node is not None
+            else None
+        )
         if volume is self._distance_map_volume and already_bound:
             return  # unchanged + already bound — idempotent (ADR-0013 §3)
 
-        image_data = _safe_call_getter(volume, "GetImageData")
+        image_data = volume.GetImageData() if volume is not None else None
         if image_data is None:
             # No distance map (or no image data): drop any stale texture so
             # the mapper falls back to its no-distance-map path instead of
@@ -1175,26 +1179,6 @@ def _import_texture_object_helper() -> Any | None:
     return _import_wrapped_class("vtkMultiTextureObjectHelper")
 
 
-def _safe_call_getter(node: Any | None, getter_name: str) -> Any | None:
-    """Return ``node.<getter_name>()`` defensively, or ``None``.
-
-    Tolerant of a missing node, a missing accessor (stub nodes in unit
-    tests), or a raising getter.  Used to read the distance-map volume off
-    the data node (``GetDistanceMapVolumeNode`` — the same source the
-    scenario sets via ``SetDistanceMapVolumeNode``) and the volume's
-    ``GetImageData``.
-    """
-    if node is None:
-        return None
-    getter = getattr(node, getter_name, None)
-    if getter is None:
-        return None
-    try:
-        return getter()
-    except Exception:  # pragma: no cover - defensive
-        return None
-
-
 def _sampled_surface_resolution(sampled: Any) -> tuple[int, int]:
     """Best-effort ``(samplesU, samplesV)`` for a sampled surface grid.
 
@@ -1221,20 +1205,13 @@ def _read_control_points(data_node: Any | None) -> Any | None:
     control grid from the flat row-major vector ``GetControlGridVector``
     (length ``3 * 16`` = 48; ADR-0014 §"Fourth layer", ADR-0018 §1).  The v1
     markups control-point API is retired (ADR-0014 §"Dissolution"; ADR-0032
-    §"Consequences").  Returns ``None`` defensively when the accessor is
-    absent (stub data nodes), the grid is incomplete (< 16 defined points,
-    mid-placement), or a read raises — the caller then keeps the fixed-quad
-    fallback.
+    §"Consequences").  Returns ``None`` when there is no data node or the
+    grid is incomplete (< 16 defined points, mid-placement) — the caller
+    then keeps the fixed-quad fallback.
     """
     if data_node is None:
         return None
-    grid_getter = getattr(data_node, "GetControlGridVector", None)
-    if grid_getter is None:
-        return None
-    try:
-        grid = grid_getter()
-    except Exception:  # pragma: no cover - defensive
-        return None
+    grid = data_node.GetControlGridVector()
     if len(grid) != 16 * 3:  # the 16-point invariant (the only fed grid)
         return None
     points = vtk.vtkPoints()

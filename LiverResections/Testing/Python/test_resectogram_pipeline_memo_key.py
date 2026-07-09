@@ -62,6 +62,10 @@ class _StubDataNode:
     def GetControlGridVector(self):  # noqa: N802 - mirrors the VTK accessor
         return tuple(coord for point in self._points for coord in point)
 
+    def GetScene(self):  # noqa: N802 - mirrors the MRML accessor
+        # Not in any scene: the plan reverse-resolution scan is skipped.
+        return None
+
     def move(self, index, position):
         self._points[index] = list(position)
 

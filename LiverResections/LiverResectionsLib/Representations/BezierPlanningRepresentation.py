@@ -282,11 +282,11 @@ class BezierPlanningRepresentation:
         position = node.GetPickedPositionWorld()
         set_position(float(position[0]), float(position[1]), float(position[2]))
 
-        display_node = node.GetDisplayNode() if hasattr(node, "GetDisplayNode") else None
+        display_node = node.GetDisplayNode()
         radius = display_node.GetRadius() if display_node is not None else 0.0
         # Gesture-scoped marker: the display's base Visibility is the
         # switch (press shows, release hides); invisible pushes radius 0.
-        visible = getattr(display_node, "GetVisibility", lambda: True)() if display_node is not None else False
+        visible = bool(display_node.GetVisibility()) if display_node is not None else False
         set_radius(float(radius) if visible else 0.0)
 
     def cleanup(self) -> None:
@@ -467,33 +467,22 @@ class BezierPlanningRepresentation:
         if data_node is None:
             return
 
-        # Prefer ``GetControlGridVector`` (``const std::vector<double>&`` ->
-        # a Python tuple) over ``GetControlGrid`` (``const double*``): VTK
+        # Read ``GetControlGridVector`` (``const std::vector<double>&`` ->
+        # a Python tuple), NOT ``GetControlGrid`` (``const double*``): VTK
         # cannot wrap a bare pointer return into an indexable buffer — from
         # Python it surfaces as an opaque pointer-string (``'_..._p_double'``)
         # whose ``[0]`` is the character ``'_'``, not a coordinate.  The
-        # vector accessor round-trips cleanly.  Stub data nodes in the
-        # unit-layer tests expose only ``GetControlGrid`` (a plain list), so
-        # fall back to it.
-        grid_getter = getattr(data_node, "GetControlGridVector", None)
-        if grid_getter is None:
-            grid_getter = getattr(data_node, "GetControlGrid", None)
-        if grid_getter is None:
-            return
+        # vector accessor round-trips cleanly.
 
         # Resolve (rows, cols) from the node — required to size the
-        # iteration over the flat control-grid return.  Default to 4×4 when
-        # the accessors are absent (legacy stubs in unit tests); the
-        # array-length check below catches any drift.
-        rows = int(getattr(data_node, "GetRows", lambda: 4)())
-        cols = int(getattr(data_node, "GetCols", lambda: 4)())
+        # iteration over the flat control-grid return; the array-length
+        # check below catches any drift.
+        rows = int(data_node.GetRows())
+        cols = int(data_node.GetCols())
         control_count = rows * cols
         flat_length = 3 * control_count
 
-        try:
-            raw = grid_getter()
-        except Exception:  # pragma: no cover - defensive
-            return
+        raw = data_node.GetControlGridVector()
         if raw is None:
             return
 

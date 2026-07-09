@@ -300,9 +300,7 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             # The data node lives on the display node's
             # ``GetDisplayableNode()`` accessor — the conventional
             # MRML back-reference.
-            getter = getattr(displayNode, "GetDisplayableNode", None)
-            if getter is not None:
-                self._data_node = getter()
+            self._data_node = displayNode.GetDisplayableNode()
             self._attach_observer(displayNode)
             if self._data_node is not None:
                 self._attach_observer(self._data_node)
@@ -331,13 +329,16 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         Without this the Pipeline stays permanently data-node-less (no
         observers, no dispatch, the default unit patch renders).
         """
-        if self._data_node is None and fromNode is not None and fromNode is not self._display_node:
-            self._data_node = fromNode
-            self._attach_observer(fromNode)
-            self._last_update_key = None
-            self._last_resection_scan_mtime = None
-            self._last_locator_scan_mtime = None
-        self.UpdatePipeline()
+        try:
+            if self._data_node is None and fromNode is not None and fromNode is not self._display_node:
+                self._data_node = fromNode
+                self._attach_observer(fromNode)
+                self._last_update_key = None
+                self._last_resection_scan_mtime = None
+                self._last_locator_scan_mtime = None
+            self.UpdatePipeline()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
     def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
         """Dispatch the active Representation by ``(state, initMode)``.
@@ -350,6 +351,13 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         invokes when the display node, data node, or view state
         changes (and on ``ResetDisplay()``).
         """
+        try:
+            self._reconcile()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
+
+    def _reconcile(self) -> None:
+        """``UpdatePipeline``'s body — plain attribute access throughout."""
         self._ensure_representations()
 
         # Late-bind the data node (the production creation ordering):
@@ -360,8 +368,7 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         # here; adopting also attaches the carrier observer so subsequent
         # control-grid edits re-dispatch.
         if self._data_node is None and self._display_node is not None:
-            getter = getattr(self._display_node, "GetDisplayableNode", None)
-            displayable = getter() if getter is not None else None
+            displayable = self._display_node.GetDisplayableNode()
             if displayable is not None:
                 self._data_node = displayable
                 self._attach_observer(displayable)
@@ -447,9 +454,9 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         for rep in self._representations.values():
             if rep is None or rep is active:
                 continue
-            if getattr(rep, "_renderer", None) is not None:
+            if rep._renderer is not None:
                 rep.SetRenderer(None)
-        if active is not None and renderer is not None and getattr(active, "_renderer", None) is not renderer:
+        if active is not None and renderer is not None and active._renderer is not renderer:
             active.SetRenderer(renderer)
 
         if active is not None:
@@ -482,16 +489,22 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         until ``GetRenderer()`` returns a non-None value.
         """
         del renderer  # accessed via self.GetRenderer() inside the helper
-        self._ensure_representations()
-        # Re-emit a dispatch so the active Representation re-attaches
-        # its actors against the new renderer.
-        self._last_update_key = None
-        self.UpdatePipeline()
+        try:
+            self._ensure_representations()
+            # Re-emit a dispatch so the active Representation re-attaches
+            # its actors against the new renderer.
+            self._last_update_key = None
+            self.UpdatePipeline()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
     def OnRendererRemoved(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
         """Tear down Representations when the renderer goes away."""
         del renderer
-        self.cleanup()
+        try:
+            self.cleanup()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
     # ------------------------------------------------------------------ #
     # Public extras (orchestrating-state node + introspection)
@@ -529,8 +542,8 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         so a second ``commit()`` is a no-op (one-shot per resection).
         """
         state = _safe_get_state(self._data_node)
-        # Tolerate stub data nodes with no state accessor (None): treat a
-        # missing state as still-in-Init so the single transition fires.
+        # ``None`` state means no carrier is attached yet: treat it as
+        # still-in-Init so the single transition fires.
         if state not in (None, STATE_INIT):
             return
 
@@ -541,12 +554,8 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         # transition cannot re-fire (ADR-0019: irreversible 2-state
         # automaton; init data freezes to read-only audit data).
         self._pending_extraction = False
-        setter = getattr(self._data_node, "SetState", None)
-        if setter is not None:
-            try:
-                setter(STATE_PLANNING)
-            except Exception:  # pragma: no cover - defensive
-                pass
+        if self._data_node is not None:
+            self._data_node.SetState(STATE_PLANNING)
 
     def _resolve_target_model(self) -> Any | None:
         """Return the weakref'd target organ model node (ADR-0014 §1).
@@ -557,13 +566,9 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         Representations feed the extractor FROM here, not a hard-coded
         path or a silent ``None`` no-op.
         """
-        getter = getattr(self._data_node, "GetTargetModelNode", None)
-        if getter is None:
+        if self._data_node is None:
             return None
-        try:
-            return getter()
-        except Exception:  # pragma: no cover - defensive
-            return None
+        return self._data_node.GetTargetModelNode()
 
     def _resolve_resection_node(self) -> Any | None:
         """Reverse-resolve the ``vtkMRMLResectionPlanNode`` wrapper.
@@ -579,25 +584,17 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         data_node = self._data_node
         if data_node is None:
             return None
-        scene = getattr(data_node, "GetScene", lambda: None)()
+        scene = data_node.GetScene()
         if scene is None:
             return None
-        try:
-            plans = scene.GetNodesByClass("vtkMRMLResectionPlanNode")
-        except Exception:  # pragma: no cover - defensive
-            return None
+        plans = scene.GetNodesByClass("vtkMRMLResectionPlanNode")
         if plans is None:
             return None
         plans.InitTraversal()
         item = plans.GetNextItemAsObject()
         while item is not None:
-            getter = getattr(item, "GetGeometryNode", None)
-            if getter is not None:
-                try:
-                    if getter() is data_node:
-                        return item
-                except Exception:  # pragma: no cover - defensive
-                    pass
+            if item.GetGeometryNode() is data_node:
+                return item
             item = plans.GetNextItemAsObject()
         return None
 
@@ -664,27 +661,30 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         Returns True iff geometry changed (the interaction logic keeps focus on
         a pipeline that returns True).
         """
-        renderer = self._safe_get_renderer()
-        if renderer is None:
+        try:
+            renderer = self._safe_get_renderer()
+            if renderer is None:
+                return False
+            carrier = self._data_node
+            state = _safe_get_state(carrier)
+
+            if state == STATE_INIT and _safe_get_init_mode(carrier) == INIT_MODE_SLICING_PLANE:
+                world = self._event_world_on_focal_plane(renderer, eventData)
+                if world is None:
+                    return False
+                return self._place_slicing_plane_init_point(world) is not None
+
+            if state == STATE_INIT and _safe_get_init_mode(carrier) == INIT_MODE_DISTANCE_SPHEROID:
+                world = self._event_world_on_focal_plane(renderer, eventData)
+                if world is None:
+                    return False
+                return self._place_distance_spheroid_init_point(world) is not None
+
+            # The Planning per-point drag lives on ControlPolygonPipeline
+            # (ADR-0033); this Pipeline handles only the Init placements above.
             return False
-        carrier = self._data_node
-        state = _safe_get_state(carrier)
-
-        if state == STATE_INIT and _safe_get_init_mode(carrier) == INIT_MODE_SLICING_PLANE:
-            world = self._event_world_on_focal_plane(renderer, eventData)
-            if world is None:
-                return False
-            return self._place_slicing_plane_init_point(world) is not None
-
-        if state == STATE_INIT and _safe_get_init_mode(carrier) == INIT_MODE_DISTANCE_SPHEROID:
-            world = self._event_world_on_focal_plane(renderer, eventData)
-            if world is None:
-                return False
-            return self._place_distance_spheroid_init_point(world) is not None
-
-        # The Planning per-point drag lives on ControlPolygonPipeline
-        # (ADR-0033); this Pipeline handles only the Init placements above.
-        return False
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            return False
 
     def _place_slicing_plane_init_point(self, world: Any) -> int | None:
         """Place the next slicing-plane init point at RAS ``world``.
@@ -705,14 +705,12 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             return None
         if _safe_get_init_mode(carrier) != INIT_MODE_SLICING_PLANE:
             return None
-        set_point = getattr(carrier, "SetSlicingPlaneInitPoint", None)
-        if set_point is None or self._slicing_plane_points_placed >= 2:
+        if self._slicing_plane_points_placed >= 2:
             return None
         index = self._slicing_plane_points_placed
-        try:
-            placed = set_point(index, [float(world[0]), float(world[1]), float(world[2])])
-        except Exception:  # pragma: no cover - defensive
-            return None
+        placed = carrier.SetSlicingPlaneInitPoint(
+            index, [float(world[0]), float(world[1]), float(world[2])]
+        )
         if placed is False:  # the node's Init-only guard rejected it
             return None
         self._slicing_plane_points_placed += 1
@@ -738,21 +736,13 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             return None
         if _safe_get_init_mode(carrier) != INIT_MODE_DISTANCE_SPHEROID:
             return None
-        set_point = getattr(carrier, "SetDistanceSpheroidInitPoint", None)
-        get_count = getattr(carrier, "GetNumberOfDistanceSpheroidInitPoints", None)
-        if set_point is None or get_count is None:
-            return None
-        try:
-            capacity = int(get_count())
-        except Exception:  # pragma: no cover - defensive
-            return None
+        capacity = int(carrier.GetNumberOfDistanceSpheroidInitPoints())
         if self._distance_spheroid_points_placed >= capacity:
             return None
         index = self._distance_spheroid_points_placed
-        try:
-            placed = set_point(index, [float(world[0]), float(world[1]), float(world[2])])
-        except Exception:  # pragma: no cover - defensive
-            return None
+        placed = carrier.SetDistanceSpheroidInitPoint(
+            index, [float(world[0]), float(world[1]), float(world[2])]
+        )
         if placed is False:  # the node's Init-only guard rejected it
             return None
         self._distance_spheroid_points_placed += 1
@@ -886,20 +876,13 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         self._representations_initialised = True
 
     def _safe_get_renderer(self) -> Any | None:
-        """Return ``self.GetRenderer()`` if available, else ``None``.
+        """Return ``self.GetRenderer()`` (``None`` until the manager
+        attaches a renderer).
 
-        The base ``vtkMRMLLayerDMPipelineI::GetRenderer`` is supplied
-        once the manager attaches the Pipeline to a renderer.  Tests
-        that construct the Pipeline before a renderer is wired need
-        the ``None`` fallback.
+        Kept as a named seam: interaction tests monkeypatch it to stand
+        in a live renderer without a GL context.
         """
-        getter = getattr(self, "GetRenderer", None)
-        if getter is None:
-            return None
-        try:
-            return getter()
-        except Exception:  # pragma: no cover - defensive
-            return None
+        return self.GetRenderer()
 
     def _select_representation(
         self, state: int | None, init_mode: int | None
@@ -969,86 +952,61 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         from re-requesting — the render feedback-loop guard.
         """
         del caller, event  # observers route uniformly into UpdatePipeline()
-        self.UpdatePipeline()
+        try:
+            self.UpdatePipeline()
 
-        render_key = (
-            _safe_get_state(self._data_node),
-            _safe_get_init_mode(self._data_node),
-            _control_points_digest(self._data_node),
-            _safe_get_picked_position(self._locator_node),
-            _safe_get_locator_visibility(self._locator_node),
-        )
-        if render_key == self._last_render_key:
-            return
-        self._last_render_key = render_key
+            render_key = (
+                _safe_get_state(self._data_node),
+                _safe_get_init_mode(self._data_node),
+                _control_points_digest(self._data_node),
+                _safe_get_picked_position(self._locator_node),
+                _safe_get_locator_visibility(self._locator_node),
+            )
+            if render_key == self._last_render_key:
+                return
+            self._last_render_key = render_key
 
-        request_render = getattr(self, "RequestRender", None)
-        if request_render is not None:
-            try:
-                request_render()
-            except Exception:  # pragma: no cover - defensive (stub bases)
-                pass
+            self.RequestRender()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
 
 # --------------------------------------------------------------------------- #
-# Safe accessors — tolerant of stub nodes that omit GetMTime / GetState etc.
+# Safe accessors — a ``None`` NODE is a real state (mid-teardown, not yet
+# linked); the accessors themselves are always-present carrier / locator API
+# and are called directly.
 # --------------------------------------------------------------------------- #
 
 
 def _safe_get_state(node: Any) -> int | None:
-    """Read ``GetState()`` off ``node`` defensively.
-
-    Returns ``None`` if the node is ``None`` or does not implement
-    ``GetState()``.
-    """
+    """``GetState()`` as an int; ``None`` when no node is attached."""
     if node is None:
         return None
-    getter = getattr(node, "GetState", None)
-    if getter is None:
-        return None
-    try:
-        return int(getter())
-    except Exception:  # pragma: no cover - defensive
-        return None
+    return int(node.GetState())
 
 
 def _safe_get_init_mode(node: Any) -> int | None:
-    """Read ``GetInitMode()`` off ``node`` defensively."""
+    """``GetInitMode()`` as an int; ``None`` when no node is attached."""
     if node is None:
         return None
-    getter = getattr(node, "GetInitMode", None)
-    if getter is None:
-        return None
-    try:
-        return int(getter())
-    except Exception:  # pragma: no cover - defensive
-        return None
+    return int(node.GetInitMode())
 
 
 def _safe_get_mtime(node: Any) -> int:
-    """Read ``GetMTime()`` off ``node`` defensively; 0 when unavailable."""
+    """``GetMTime()`` as an int; 0 when no node is attached."""
     if node is None:
         return 0
-    getter = getattr(node, "GetMTime", None)
-    if getter is None:
-        return 0
-    try:
-        return int(getter())
-    except Exception:  # pragma: no cover - defensive
-        return 0
+    return int(node.GetMTime())
 
 
 def _safe_get_locator_visibility(node: Any) -> bool | None:
     """The locator display's Visibility (the marker switch); None sans node."""
     if node is None:
         return None
-    display = node.GetDisplayNode() if hasattr(node, "GetDisplayNode") else None
+    display = node.GetDisplayNode()
     if display is None:
         return None
-    try:
-        return bool(display.GetVisibility())
-    except Exception:  # pragma: no cover - defensive
-        return None
+    return bool(display.GetVisibility())
 
 
 def _safe_get_picked_position(node: Any) -> tuple | None:
@@ -1059,13 +1017,7 @@ def _safe_get_picked_position(node: Any) -> tuple | None:
     """
     if node is None:
         return None
-    getter = getattr(node, "GetPickedPositionWorld", None)
-    if getter is None:
-        return None
-    try:
-        return tuple(float(v) for v in getter())
-    except Exception:  # pragma: no cover - defensive
-        return None
+    return tuple(float(v) for v in node.GetPickedPositionWorld())
 
 
 def _control_points_digest(node: Any) -> tuple:
@@ -1074,23 +1026,16 @@ def _control_points_digest(node: Any) -> tuple:
     Mirrors the ResectogramPipeline's memo digest: a control-point edit
     changes the digest, a render-induced ``Modified`` at fixed geometry does
     not — the discrimination that keeps drags repainting live while blocking
-    a render feedback loop.  Empty tuple for nodes missing the grid accessor
-    (stubs) or on a read failure.
+    a render feedback loop.  Empty tuple when no carrier is attached.
     """
     if node is None:
         return ()
-    grid_getter = getattr(node, "GetControlGridVector", None)
-    if grid_getter is None:
-        return ()
-    try:
-        grid = grid_getter()
-        usable = len(grid) - (len(grid) % 3)
-        return tuple(
-            (grid[base], grid[base + 1], grid[base + 2])
-            for base in range(0, usable, 3)
-        )
-    except Exception:  # pragma: no cover - defensive
-        return ()
+    grid = node.GetControlGridVector()
+    usable = len(grid) - (len(grid) % 3)
+    return tuple(
+        (grid[base], grid[base + 1], grid[base + 2])
+        for base in range(0, usable, 3)
+    )
 
 
 # --------------------------------------------------------------------------- #
