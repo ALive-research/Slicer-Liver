@@ -66,9 +66,11 @@ HALO_GRAB_SCALE = 1.9
 
 #: World-space dash pattern for the polygon edge tubes -- the same
 #: dashed-scaffold language the slice projections use, so the control
-#: polygon reads consistently across every view.
-DASH_LENGTH_MM = 6.0
-GAP_LENGTH_MM = 4.0
+#: polygon reads consistently across every view.  The gap is deliberately
+#: wide relative to the tube diameter (~3 mm): world-space gaps close up
+#: optically at low zoom / glancing angles, which read as a solid line.
+DASH_LENGTH_MM = 7.0
+GAP_LENGTH_MM = 7.0
 
 _REGISTERED = False
 
@@ -750,6 +752,10 @@ class ControlPolygonPipeline(_PipelineBase):
         """Emit the builder's polylines as world-space dash segments."""
         cells = getattr(self, "_edge_cells", None)
         if cells is None:
+            # No topology yet: clear rather than render stale content --
+            # a leftover solid line must never masquerade as the scaffold.
+            self._edges_polydata.SetPoints(vtk.vtkPoints())
+            self._edges_polydata.SetLines(vtk.vtkCellArray())
             return
         dash_points = vtk.vtkPoints()
         dash_lines = vtk.vtkCellArray()
