@@ -128,6 +128,52 @@ def test_display_nodes_added_after_configure_stay_out_of_the_strip():
         scene.RemoveNode(anatomy)
 
 
+def test_slice_display_rewrite_is_re_denied_without_recursing():
+    """Slicer's show-in-3D toggle REWRITES slice-display ViewNodeIDs; the
+    manager re-denies on their ModifiedEvent.  The deny itself WRITES
+    ViewNodeIDs (firing the very event it observes), so this pin also
+    proves the handler converges instead of recursing: the test finishing
+    at all IS the non-recursion assertion.
+    """
+    slicer = _slicer_or_skip_local()
+    try:
+        from LiverResectionsLib.ResectogramViewManager import ResectogramViewManager
+    except Exception:
+        pytest.skip("ResectogramViewManager not importable.")
+
+    scene = slicer.mrmlScene
+    anatomy = scene.AddNewNodeByClass("vtkMRMLViewNode")
+    sliceDisplay = scene.AddNewNodeByClass("vtkMRMLSliceDisplayNode")
+    if sliceDisplay is None:
+        pytest.skip("vtkMRMLSliceDisplayNode not registered in this scene.")
+    manager = ResectogramViewManager()
+    view = manager.ensureViewNode()
+    try:
+        # Attach AFTER the slice display exists so the re-deny observer
+        # covers it (production order: configureView runs against the
+        # main layout's already-present slice displays).
+        manager._attachDefaultDenyObserver(slicer)
+
+        # Simulate the show-in-3D rewrite: Slicer re-grants the strip view.
+        sliceDisplay.AddViewNodeID(view.GetID())
+
+        ids = [
+            sliceDisplay.GetNthViewNodeID(i)
+            for i in range(sliceDisplay.GetNumberOfViewNodeIDs())
+        ]
+        assert view.GetID() not in ids, (
+            "a slice-display ViewNodeIDs rewrite that re-grants the strip "
+            "view must be re-denied on its ModifiedEvent."
+        )
+    finally:
+        manager.cleanup()
+        node = manager.getViewNode()
+        if node is not None:
+            scene.RemoveNode(node)
+        scene.RemoveNode(sliceDisplay)
+        scene.RemoveNode(anatomy)
+
+
 def _slicer_or_skip_local():
     from slicer_pytest_support import import_slicer_or_skip, require_mrml_scene
 

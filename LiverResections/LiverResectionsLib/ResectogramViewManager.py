@@ -94,6 +94,12 @@ class ResectogramViewManager:
         # observed scene, attached by configureView, detached by cleanup().
         self._scene_observer_tag: int | None = None
         self._observed_scene: Any | None = None
+        # Re-entrancy latch for the deny handler: the deny WRITES ViewNodeIDs,
+        # which fires the very ModifiedEvent the handler observes.  The
+        # change-guarded write converges on its own, but the latch makes the
+        # non-recursion structural rather than dependent on the guard's
+        # order-sensitive list compare.
+        self._in_deny = False
 
     def ensureViewNode(self) -> Any:  # noqa: N802 - Slicer/Qt verb convention
         """Return the dedicated resectogram view node, creating it once.
@@ -259,8 +265,9 @@ class ResectogramViewManager:
 
     def _onDisplayNodeAdded(self, slicer: Any, node: Any) -> None:  # noqa: N802
         view = self._view_node
-        if view is None or node is None:
+        if view is None or node is None or self._in_deny:
             return
+        self._in_deny = True
         try:
             if not node.IsA("vtkMRMLDisplayNode") or node.IsA("vtkMRMLResectogramDisplayNode"):
                 return
@@ -276,6 +283,8 @@ class ResectogramViewManager:
             self._setViewNodeIDsIfChanged(node, target)
         except Exception:  # pragma: no cover - observer must never raise
             return
+        finally:
+            self._in_deny = False
 
     def cleanup(self) -> None:
         """Detach the default-deny observer (symmetric with configureView)."""
@@ -324,22 +333,21 @@ class ResectogramViewManager:
         count = scene.GetNumberOfNodesByClass("vtkMRMLDisplayNode")
         for index in range(count):
             display = scene.GetNthNodeByClass(index, "vtkMRMLDisplayNode")
-            if True:
-                if display is None or display.IsA("vtkMRMLResectogramDisplayNode"):
-                    continue
+            if display is None or display.IsA("vtkMRMLResectogramDisplayNode"):
+                continue
 
-                existing = [
-                    display.GetNthViewNodeID(i)
-                    for i in range(display.GetNumberOfViewNodeIDs())
-                ]
-                # Drop the resectogram view if it was previously allowed; keep
-                # any other explicit restriction the node already carried.
-                kept = [
-                    viewID for viewID in existing if viewID != resectogramViewID
-                ]
-                target = kept if kept else anatomyViewIDs
+            existing = [
+                display.GetNthViewNodeID(i)
+                for i in range(display.GetNumberOfViewNodeIDs())
+            ]
+            # Drop the resectogram view if it was previously allowed; keep
+            # any other explicit restriction the node already carried.
+            kept = [
+                viewID for viewID in existing if viewID != resectogramViewID
+            ]
+            target = kept if kept else anatomyViewIDs
 
-                ResectogramViewManager._setViewNodeIDsIfChanged(display, target)
+            ResectogramViewManager._setViewNodeIDsIfChanged(display, target)
 
     @staticmethod
     def _setViewNodeIDsIfChanged(  # noqa: N802 - Slicer/Qt verb convention
