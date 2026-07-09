@@ -70,6 +70,10 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           mkdir -p /tmp/mermaid-extracts
+          # ubuntu-24.04 restricts unprivileged user namespaces (AppArmor),
+          # so Puppeteer's bundled Chromium cannot build its sandbox on the
+          # runner; render with --no-sandbox (CI-only, throwaway inputs).
+          printf '{"args": ["--no-sandbox"]}\n' > /tmp/puppeteer-ci.json
           fail=0
           for f in Docs/architecture/*.md; do
             echo "::group::Validating Mermaid fences in $f"
@@ -82,7 +86,7 @@ jobs:
             ' "$f"
             for mmd in /tmp/mermaid-extracts/"$(basename "$f" .md)"-*.mmd; do
               [ -e "$mmd" ] || continue
-              if ! mmdc -i "$mmd" -o "${mmd%.mmd}.svg" --quiet; then
+              if ! mmdc -p /tmp/puppeteer-ci.json -i "$mmd" -o "${mmd%.mmd}.svg" --quiet; then
                 echo "::error file=$f::Mermaid syntax error in fence (extracted to $mmd)"
                 fail=1
               fi
