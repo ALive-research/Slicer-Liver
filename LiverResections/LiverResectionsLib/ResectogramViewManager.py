@@ -90,6 +90,10 @@ class ResectogramViewManager:
 
     def __init__(self) -> None:
         self._view_node: Any | None = None
+        # Default-deny scene observer (see _onDisplayNodeAdded): tag +
+        # observed scene, attached by configureView, detached by cleanup().
+        self._scene_observer_tag: int | None = None
+        self._observed_scene: Any | None = None
 
     def ensureViewNode(self) -> Any:  # noqa: N802 - Slicer/Qt verb convention
         """Return the dedicated resectogram view node, creating it once.
@@ -180,6 +184,7 @@ class ResectogramViewManager:
             self._setViewNodeIDsIfChanged(displayNode, [resectogramViewID])
 
         self._restrictAnatomyAwayFromView(slicer, resectogramViewID)
+        self._attachDefaultDenyObserver(slicer)
         self._applyViewNodeBackground(viewNode)
         self._frameCamera(slicer, viewNode, displayNode)
 
@@ -210,6 +215,63 @@ class ResectogramViewManager:
             return
         viewNode.SetBackgroundColor(*target)
         viewNode.SetBackgroundColor2(*target)
+
+    def _attachDefaultDenyObserver(self, slicer: Any) -> None:  # noqa: N802
+        """WHITELIST the strip view: default-deny every display node on arrival.
+
+        The configure-time sweep only covers display nodes present at that
+        moment; anything created later (slice-in-3D models, future nodes)
+        defaulted to the all-views EMPTY ViewNodeIDs and leaked into the
+        strip.  A scene ``NodeAddedEvent`` observer restricts every arriving
+        display node away from the resectogram view unless it is on the
+        allowlist (the resectogram display node itself) -- only what the
+        strip wants ever appears in it.
+        """
+        if self._scene_observer_tag is not None:
+            return
+        import vtk
+
+        scene = slicer.mrmlScene
+
+        @vtk.calldata_type(vtk.VTK_OBJECT)
+        def _onNodeAdded(caller, event, callData):  # noqa: N803 - VTK callback
+            self._onDisplayNodeAdded(slicer, callData)
+
+        self._onNodeAddedCallback = _onNodeAdded  # keep the closure alive
+        self._scene_observer_tag = scene.AddObserver(
+            slicer.vtkMRMLScene.NodeAddedEvent, _onNodeAdded
+        )
+        self._observed_scene = scene
+
+    def _onDisplayNodeAdded(self, slicer: Any, node: Any) -> None:  # noqa: N802
+        view = self._view_node
+        if view is None or node is None:
+            return
+        try:
+            if not node.IsA("vtkMRMLDisplayNode") or node.IsA("vtkMRMLResectogramDisplayNode"):
+                return
+            resectogramViewID = view.GetID()
+            existing = [
+                node.GetNthViewNodeID(i)
+                for i in range(node.GetNumberOfViewNodeIDs())
+            ]
+            kept = [viewID for viewID in existing if viewID != resectogramViewID]
+            target = kept if kept else self._anatomyViewNodeIDs(
+                slicer, resectogramViewID
+            )
+            self._setViewNodeIDsIfChanged(node, target)
+        except Exception:  # pragma: no cover - observer must never raise
+            return
+
+    def cleanup(self) -> None:
+        """Detach the default-deny observer (symmetric with configureView)."""
+        if self._observed_scene is not None and self._scene_observer_tag is not None:
+            try:
+                self._observed_scene.RemoveObserver(self._scene_observer_tag)
+            except Exception:  # pragma: no cover - defensive
+                pass
+        self._scene_observer_tag = None
+        self._observed_scene = None
 
     @staticmethod
     def _restrictAnatomyAwayFromView(  # noqa: N802 - Slicer/Qt verb convention

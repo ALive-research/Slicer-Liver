@@ -77,3 +77,59 @@ def test_singleton_tag_visible_to_node_added_observers():
         node = manager.getViewNode()
         if node is not None:
             scene.RemoveNode(node)
+
+
+def test_display_nodes_added_after_configure_stay_out_of_the_strip():
+    """WHITELIST semantics: a display node arriving later is denied.
+
+    The configure-time sweep covers only nodes present at that moment;
+    slice-in-3D models (and any future display node) arrive later with the
+    all-views EMPTY ViewNodeIDs and leaked into the strip.  The manager's
+    default-deny observer must restrict every arriving display node away
+    from the resectogram view -- only the allowlisted resectogram display
+    ever appears in it.
+    """
+    slicer = _slicer_or_skip_local()
+    try:
+        from LiverResectionsLib.ResectogramViewManager import ResectogramViewManager
+    except Exception:
+        pytest.skip("ResectogramViewManager not importable.")
+
+    scene = slicer.mrmlScene
+    # An anatomy view must exist for the deny-target to be non-empty
+    # (production always has View1); mint one so the pin is order-free.
+    anatomy = scene.AddNewNodeByClass("vtkMRMLViewNode")
+    manager = ResectogramViewManager()
+    view = manager.ensureViewNode()
+    try:
+        manager._attachDefaultDenyObserver(slicer)
+
+        model = scene.AddNewNodeByClass("vtkMRMLModelNode")
+        model.CreateDefaultDisplayNodes()
+        display = model.GetDisplayNode()
+        ids = [
+            display.GetNthViewNodeID(i)
+            for i in range(display.GetNumberOfViewNodeIDs())
+        ]
+        assert ids, (
+            "an arriving display node must not keep the all-views EMPTY "
+            "ViewNodeIDs -- that leaks it into the strip."
+        )
+        assert view.GetID() not in ids, (
+            "the strip view must be DENIED by default to arriving display "
+            "nodes (whitelist semantics)."
+        )
+        manager.cleanup()
+        scene.RemoveNode(model)
+    finally:
+        node = manager.getViewNode()
+        if node is not None:
+            scene.RemoveNode(node)
+        scene.RemoveNode(anatomy)
+
+
+def _slicer_or_skip_local():
+    from slicer_pytest_support import import_slicer_or_skip, require_mrml_scene
+
+    require_mrml_scene()
+    return import_slicer_or_skip()
