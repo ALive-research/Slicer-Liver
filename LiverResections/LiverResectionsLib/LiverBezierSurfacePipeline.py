@@ -976,6 +976,7 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             _safe_get_init_mode(self._data_node),
             _control_points_digest(self._data_node),
             _safe_get_picked_position(self._locator_node),
+            _safe_get_locator_visibility(self._locator_node),
         )
         if render_key == self._last_render_key:
             return
@@ -1035,6 +1036,19 @@ def _safe_get_mtime(node: Any) -> int:
         return int(getter())
     except Exception:  # pragma: no cover - defensive
         return 0
+
+
+def _safe_get_locator_visibility(node: Any) -> bool | None:
+    """The locator display's Visibility (the marker switch); None sans node."""
+    if node is None:
+        return None
+    display = node.GetDisplayNode() if hasattr(node, "GetDisplayNode") else None
+    if display is None:
+        return None
+    try:
+        return bool(display.GetVisibility())
+    except Exception:  # pragma: no cover - defensive
+        return None
 
 
 def _safe_get_picked_position(node: Any) -> tuple | None:

@@ -413,6 +413,10 @@ class ResectogramPipeline(_PipelineBase):
             locator.Modified()
         except Exception:  # pragma: no cover - defensive
             return
+        # Re-push the strip's own uniforms + repaint: the strip pipeline's
+        # reconciliation keys on geometry, which a visibility flip does not
+        # touch, and the produce path only runs on picks -- not on release.
+        self._refresh_locator_marker()
 
     def _refresh_locator_marker(self) -> None:
         """Re-push the locator uniforms on the strip + request a repaint.
