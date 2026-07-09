@@ -809,6 +809,55 @@ def test_locator_marker_gates_on_display_visibility(rep_module):
     rep.cleanup()
 
 
+def test_locator_marker_centre_squeezed_by_mat_ratio_about_focal(rep_module):
+    """A non-unity MatRatio squeezes the marker CENTRE about the camera focal.
+
+    The 2D mapper's MatRatio scales clip-space offsets, so the world-space
+    circle must apply the same squeeze to its centre -- offset from the
+    camera focal point scaled per-axis -- or the marker drifts off the
+    picked (u, v) whenever the flattened domain is non-square.  Only the
+    isotropic (1, 1) path was pinned before.
+    """
+
+    class _VisibleDisplay(_StubLocatorDisplay):
+        def GetVisibility(self):  # noqa: N802 - VTK verb
+            return True
+
+    class _VisibleLocator(_StubLocatorNode):
+        def GetDisplayNode(self):  # noqa: N802 - VTK verb
+            return _VisibleDisplay()
+
+    rep = rep_module()
+    rep._resection_mapper_2d = _StubMapperWithLocator()
+    rep.SetLocatorNode(_VisibleLocator())
+    rep.SetPickedUV((0.25, 0.75))
+    rep.update(_StubDisplayNode(), _StubDataNode())
+
+    plane = rep.GetBezierPlane()
+    plane.Update()
+    b = plane.GetOutput().GetBounds()
+    raw = (
+        b[0] + (b[1] - b[0]) * 0.25,
+        b[2] + (b[3] - b[2]) * 0.75,
+    )
+    focal = rep._resectogram_camera.GetFocalPoint()
+
+    # Inject the anisotropic squeeze and re-apply the locator alone (update()
+    # would recompute MatRatio from the stub nodes and overwrite it).
+    rep._mat_ratio_applied = (0.5, 1.0)
+    rep._apply_locator()
+
+    centre = rep._marker_source.GetCenter()
+    expected_x = focal[0] + (raw[0] - focal[0]) * 0.5
+    expected_y = focal[1] + (raw[1] - focal[1]) * 1.0
+    assert (centre[0], centre[1]) == pytest.approx((expected_x, expected_y)), (
+        "the marker centre must be squeezed about the camera focal point by "
+        "the per-axis MatRatio (clip-space offsets scale, so world offsets "
+        "from the focal must scale identically)."
+    )
+    rep.cleanup()
+
+
 def test_cleanup_detaches_the_marker_actor_from_the_renderer(
     rep_module, vtk_module
 ):
