@@ -261,6 +261,11 @@ class SliceControlPolygonPipeline(_PipelineBase):
         visible = state == STATE_PLANNING and self._reproject()
         self._handles_actor.SetVisibility(bool(visible))
         self._edges_actor.SetVisibility(bool(visible))
+        if not visible:
+            # The ring is driven by the hover channel inside _reproject; a
+            # hover live at the moment the carrier leaves Planning would
+            # otherwise strand the ring over no handles.
+            self._ring_actor.SetVisibility(False)
 
     def _reproject(self) -> bool:
         """Project handles + edges into XY with distance fading."""
