@@ -145,3 +145,38 @@ def test_creator_accepts_slice_views_only(pipeline_module):
     view_node.UnRegister(None)
     assert accepts(view_node) is False, "3D views belong to the surface pipeline"
     assert accepts(None) is False
+
+
+def test_reslicing_recuts_the_contour(pipeline_module, surface_nodes):
+    """Moving the slice plane must recut + repaint the projection."""
+    import slicer
+
+    data, display = surface_nodes
+    scene = slicer.mrmlScene
+    slice_node = scene.AddNewNodeByClass("vtkMRMLSliceNode")
+    try:
+        pipeline = pipeline_module.SliceContourPipeline()
+        pipeline.SetViewNode(slice_node)
+        pipeline.SetDisplayNode(display)
+        _seed_flat_grid(data, z=10.0)
+        data.SetState(1)
+
+        slice_node.GetSliceToRAS().SetElement(2, 3, 10.0)  # through the grid
+        slice_node.Modified()
+        pipeline.UpdatePipeline()
+        assert pipeline.GetContourActor().GetVisibility() == 1
+
+        renders = []
+        pipeline.RequestRender = lambda: renders.append(1)
+        slice_node.GetSliceToRAS().SetElement(2, 3, 500.0)  # far away
+        slice_node.Modified()
+        assert renders, (
+            "a slice-pose change must reach the pipeline (slice-node "
+            "observer) and request a repaint -- the stale-trace bug."
+        )
+        assert pipeline.GetContourActor().GetVisibility() == 0, (
+            "the recut at the far plane must empty + hide the contour."
+        )
+        pipeline.cleanup()
+    finally:
+        scene.RemoveNode(slice_node)

@@ -119,7 +119,15 @@ class SliceContourPipeline(_PipelineBase):
 
     def SetViewNode(self, viewNode: Any) -> None:  # noqa: N802 - VTK verb
         super().SetViewNode(viewNode)
+        # Observe the slice node OURSELVES: reslicing modifies the slice
+        # node, and without this observer the contour keeps rendering the
+        # stale cut (the digest keys on the pose but nothing re-runs the
+        # reconciliation).
+        if self._slice_node is not None:
+            self._detach_observer(self._slice_node)
         self._slice_node = viewNode
+        if viewNode is not None:
+            self._attach_observer(viewNode)
         self._last_update_key = None
 
     def SetDisplayNode(self, displayNode: Any) -> None:  # noqa: N802 - VTK verb
