@@ -94,6 +94,9 @@ class ResectogramViewManager:
         # observed scene, attached by configureView, detached by cleanup().
         self._scene_observer_tag: int | None = None
         self._observed_scene: Any | None = None
+        # Per-slice-display re-deny observers: (node, tag) pairs, attached by
+        # _attachDefaultDenyObserver, detached by cleanup().
+        self._slice_display_tags: list = []
         # Re-entrancy latch for the deny handler: the deny WRITES ViewNodeIDs,
         # which fires the very ModifiedEvent the handler observes.  The
         # change-guarded write converges on its own, but the latch makes the
@@ -295,7 +298,7 @@ class ResectogramViewManager:
                 pass
         self._scene_observer_tag = None
         self._observed_scene = None
-        for node, tag in getattr(self, "_slice_display_tags", []):
+        for node, tag in self._slice_display_tags:
             try:
                 node.RemoveObserver(tag)
             except Exception:  # pragma: no cover - defensive
