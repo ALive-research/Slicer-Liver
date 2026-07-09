@@ -50,7 +50,9 @@ jobs:
   # ---------------------------------------------------------------------------
   docs-lint:
     name: docs-lint (Mermaid + Markdown links)
-    runs-on: ubuntu-22.04
+    # ubuntu-24.04 (glibc 2.39): lychee release binaries are built against
+    # glibc >= 2.38 and no longer start on 22.04's glibc 2.35.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -94,6 +96,9 @@ jobs:
       - name: Check Markdown links via lychee
         uses: lycheeverse/lychee-action@v2
         with:
+          # Pinned so a floating "latest" lychee cannot silently change the
+          # runtime requirements again (the CI-pinning discipline).
+          lycheeVersion: v0.24.2
           args: >-
             --no-progress
             --offline
