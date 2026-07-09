@@ -95,6 +95,9 @@ class SliceContourPipeline(_PipelineBase):
         self._observed_node_refs: list = []
         self._last_update_key: tuple | None = None
         self._last_render_key: tuple | None = None
+        #: Geometry digest of the LAST tessellation feed: pose-only recuts
+        #: (reslicing) reuse the cached patch instead of re-tessellating.
+        self._last_fed_geometry: tuple | None = None
 
         # RAS-space assembly: tessellated patch -> plane cut.
         self._surface_source: Any | None = None  # lazy (wrapped class)
@@ -220,13 +223,20 @@ class SliceContourPipeline(_PipelineBase):
             grid = grid_getter()
             if len(grid) < 48:
                 return None
-            points = vtk.vtkPoints()
-            for base in range(0, 48, 3):
-                points.InsertNextPoint(grid[base], grid[base + 1], grid[base + 2])
             if self._surface_source is None:
                 self._surface_source = source_cls()
                 self._surface_source.SetResolution(20, 20)
-            self._surface_source.SetControlPoints(points)
+            geometry = _control_points_digest(carrier)
+            if geometry != self._last_fed_geometry:
+                # Feed (and re-tessellate) ONLY on real geometry change: a
+                # fresh vtkPoints always marks the source modified, so an
+                # unconditional feed re-tessellated the full patch on every
+                # pose-only recut -- three pipelines x every reslice event.
+                points = vtk.vtkPoints()
+                for base in range(0, 48, 3):
+                    points.InsertNextPoint(grid[base], grid[base + 1], grid[base + 2])
+                self._surface_source.SetControlPoints(points)
+                self._last_fed_geometry = geometry
 
             to_ras = slice_node.GetSliceToRAS()
             self._cut_plane.SetOrigin(
