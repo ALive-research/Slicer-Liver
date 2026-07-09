@@ -313,6 +313,7 @@ class ControlPolygonPipeline(_PipelineBase):
             self._refresh_geometry()
         self._apply_display_node()
         self._apply_interaction_scalars()
+        self._sync_halo_from_channel(visible)
 
     def cleanup(self) -> None:
         for node in list(self._observed_node_refs):
@@ -433,6 +434,39 @@ class ControlPolygonPipeline(_PipelineBase):
                 if display.GetGrabbedControlPoint() != value:
                     display.SetGrabbedControlPoint(value)
         except Exception:  # pragma: no cover - defensive (stub displays)
+            return
+
+    def _sync_halo_from_channel(self, polygon_visible: bool) -> None:
+        """Drive the glow halo from the display-node interaction channel.
+
+        The channel is the single source of truth, so a hover raised in a
+        SLICE view shows the same 3D halo a local hover does; the grabbed
+        point wins over a hover, and the halo repositions on every carrier
+        reconcile (drags move the point under it).
+        """
+        display = self._display_node
+        try:
+            hovered = display.GetHoveredControlPoint() if display is not None else -1
+            grabbed = display.GetGrabbedControlPoint() if display is not None else -1
+        except Exception:  # pragma: no cover - defensive (stub displays)
+            hovered, grabbed = -1, -1
+        target = grabbed if grabbed >= 0 else hovered
+        if not polygon_visible or target < 0:
+            self._halo_actor.SetVisibility(False)
+            return
+        carrier = self._data_node
+        grid_getter = getattr(carrier, "GetControlGridVector", None) if carrier else None
+        if grid_getter is None:
+            return
+        try:
+            grid = grid_getter()
+            base = int(target) * 3
+            if len(grid) < base + 3:
+                return
+            self._halo_sphere.SetRadius(self._handle_sphere.GetRadius() * HALO_HOVER_SCALE)
+            self._halo_actor.SetPosition(grid[base], grid[base + 1], grid[base + 2])
+            self._halo_actor.SetVisibility(True)
+        except Exception:  # pragma: no cover - defensive
             return
 
     def _apply_interaction_scalars(self) -> None:
