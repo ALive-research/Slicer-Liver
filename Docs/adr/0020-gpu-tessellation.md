@@ -1,10 +1,19 @@
 # 0020. GPU rendering of parametric surfaces and their widgets (v2.1 target)
 
-- **Status:** Accepted (target v2.1)
+- **Status:** Accepted (target v2.0 — re-baselined 2026-07-09; originally v2.1)
 - **Date:** 2026-05-18
 - **Deciders:** Rafael Palomar
 - **Diagrams:** N/A (deferred; class diagram lands with the ADR-0020 enabler PR)
 - **PR:** _filled in on merge_
+
+## Amendments
+
+- **2026-07-09 — retargeted to v2.0.**  The v2.0.0 scope re-baseline
+  ([ADR-0012's Amendments](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0012-layerdm-migration-v2-scope.md))
+  absorbs the v2.1 feature plan into v2.0.0; this ADR's
+  implementation ships before the v2.0.0 tag.  Every "v2.1" in the
+  body below reads as the pre-re-baseline target label, not a
+  schedule commitment.
 
 ## Context
 
