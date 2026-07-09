@@ -406,3 +406,29 @@ def test_hover_highlights_nearest_handle(pipeline_module, polygon_nodes):
         "leaving the pick radius hides the halo"
     )
     pipeline.cleanup()
+
+
+def test_grab_changes_the_halo_color(pipeline_module, polygon_nodes):
+    """Press flips the halo to the grab colour; release restores hover."""
+    import vtk
+
+    data, display = polygon_nodes
+    pipeline = pipeline_module.ControlPolygonPipeline()
+    pipeline.SetDisplayNode(display)
+    _seed_grid(data)
+    data.SetState(1)
+    pipeline._safe_get_renderer = lambda: object()
+    pipeline._nearest_control_point_in_display = lambda r, e: (5, 4.0)
+    pipeline._event_world_at_control_point = lambda r, e, i: (1.0, 2.0, 5.0)
+
+    press = _TypedEvent(vtk.vtkCommand.LeftButtonPressEvent)
+    release = _TypedEvent(vtk.vtkCommand.LeftButtonReleaseEvent)
+    assert pipeline.ProcessInteractionEvent(press) is True
+    assert pipeline.GetHaloActor().GetProperty().GetColor() == pytest.approx(
+        pipeline_module.HALO_GRAB_COLOR
+    ), "the grabbed handle must read as ACTIVE via the halo colour"
+    pipeline.ProcessInteractionEvent(release)
+    assert pipeline.GetHaloActor().GetProperty().GetColor() == pytest.approx(
+        pipeline_module.HALO_HOVER_COLOR
+    ), "release restores the hover colour"
+    pipeline.cleanup()
