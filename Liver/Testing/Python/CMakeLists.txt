@@ -204,7 +204,6 @@ add_test(
     # discovery/instantiation/load process so a CI log shows WHICH modules fail
     # (liverresections / liversegmentation / core cameras+segmentations were
     # absent from slicer.modules) and why.  Cheap; remove once #460 is closed.
-    --verbose-module-discovery
     # Generated AdditionalLauncherSettings.ini: puts this build's and the
     # SlicerLayerDisplayableManager dependency's library + PYTHONPATH entries on
     # the launcher so the module .so files and their LayerDM-linked dependencies
