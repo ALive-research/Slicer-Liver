@@ -344,21 +344,15 @@ jobs:
 
       # ---------------------------------------------------------------------
       # Launched-Slicer pytest harness (pytest_launched).
-      # SOFT-GATED (continue-on-error) pending issue #460: the launched
-      # harness flakily fails to register scripted modules in this CI
-      # environment (most visibly `liversegmentation`, whose registration
-      # RED-pin hard-fails when the module is intermittently absent from
-      # slicer.modules), even though the modules build cleanly here and
-      # register reliably in a local launched run.  The row still RUNS and
-      # reports (its per-pytest breakdown stays visible in the log via -V),
-      # so a genuine regression in the widget-level invariants still shows up
-      # — it just does not block the merge while the #460 registration race
-      # is outstanding.  Promote back to the gating step above once launched
-      # module registration is deterministic in CI.
+      # HARD GATE: the registration flake that soft-gated this row was
+      # root-caused and fixed (quitOnLastWindowClosed under
+      # --no-main-window queued an app quit that mass-unloaded modules
+      # mid-suite; the driver now disables the flag), and the row has
+      # since caught real drift (the Liver shell suites).  A launched
+      # failure blocks the merge like every other test row.
       # ---------------------------------------------------------------------
-      - name: Test (CTest — launched pytest, soft-gated #460)
+      - name: Test (CTest — launched pytest)
         if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
-        continue-on-error: true
         run: |
           set -euo pipefail
           cd build
