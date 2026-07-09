@@ -197,9 +197,7 @@ class ControlPolygonPipeline(_PipelineBase):
         self._display_node = displayNode
         self._data_node = None
         if displayNode is not None:
-            getter = getattr(displayNode, "GetDisplayableNode", None)
-            if getter is not None:
-                self._data_node = getter()
+            self._data_node = displayNode.GetDisplayableNode()
             self._attach_observer(displayNode)
             if self._data_node is not None:
                 self._attach_observer(self._data_node)
@@ -213,31 +211,36 @@ class ControlPolygonPipeline(_PipelineBase):
         whose displayable link does not exist yet; the LayerDM manager calls
         this hook at the exact link moment with ``fromNode`` == the carrier.
         """
-        if self._data_node is None and fromNode is not None and fromNode is not self._display_node:
-            self._data_node = fromNode
-            self._attach_observer(fromNode)
-            self._last_update_key = None
-        self.UpdatePipeline()
+        try:
+            if self._data_node is None and fromNode is not None and fromNode is not self._display_node:
+                self._data_node = fromNode
+                self._attach_observer(fromNode)
+                self._last_update_key = None
+            self.UpdatePipeline()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
     def OnRendererAdded(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
-        self._renderer = renderer
-        if renderer is not None:
-            renderer.AddActor(self._edges_actor)
-            renderer.AddActor(self._handles_actor)
-        # ``OnRendererRemoved`` -> ``cleanup()`` cleared the node handles;
-        # re-derive them from the base's retained display node, or the
-        # renderer churn leaves the pipeline displayless forever and every
-        # styling field silently stays at the raw VTK defaults (the
-        # tiny-handles / hairline-white-edges failure mode).  Mirrors the
-        # ResectogramPipeline's OnRendererAdded re-attach.
-        if self._display_node is None:
-            base_getter = getattr(self, "GetDisplayNode", None)
-            display = base_getter() if base_getter is not None else None
-            if display is not None:
-                self.SetDisplayNode(display)
-        self._attach_halo_renderer(renderer)
-        self._last_update_key = None
-        self.UpdatePipeline()
+        try:
+            self._renderer = renderer
+            if renderer is not None:
+                renderer.AddActor(self._edges_actor)
+                renderer.AddActor(self._handles_actor)
+            # ``OnRendererRemoved`` -> ``cleanup()`` cleared the node handles;
+            # re-derive them from the base's retained display node, or the
+            # renderer churn leaves the pipeline displayless forever and every
+            # styling field silently stays at the raw VTK defaults (the
+            # tiny-handles / hairline-white-edges failure mode).  Mirrors the
+            # ResectogramPipeline's OnRendererAdded re-attach.
+            if self._display_node is None:
+                display = self.GetDisplayNode()
+                if display is not None:
+                    self.SetDisplayNode(display)
+            self._attach_halo_renderer(renderer)
+            self._last_update_key = None
+            self.UpdatePipeline()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
     def _attach_halo_renderer(self, renderer: Any) -> None:
         """Build the private glow overlay on ``renderer``'s window.
@@ -284,22 +287,28 @@ class ControlPolygonPipeline(_PipelineBase):
             pass
 
     def OnRendererRemoved(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
-        if renderer is not None:
-            try:
+        try:
+            if renderer is not None:
                 renderer.RemoveActor(self._handles_actor)
                 renderer.RemoveActor(self._edges_actor)
-            except Exception:  # pragma: no cover - defensive
-                pass
-        self._renderer = None
-        self.cleanup()
+            self._renderer = None
+            self.cleanup()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
     def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
         """Reconcile handles + edges against the carrier grid and display."""
+        try:
+            self._reconcile()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
+
+    def _reconcile(self) -> None:
+        """``UpdatePipeline``'s body — plain attribute access throughout."""
         # Late-bind the data node (creation-ordering tolerance; see
         # OnReferenceToDisplayNodeAdded).
         if self._data_node is None and self._display_node is not None:
-            getter = getattr(self._display_node, "GetDisplayableNode", None)
-            displayable = getter() if getter is not None else None
+            displayable = self._display_node.GetDisplayableNode()
             if displayable is not None:
                 self._data_node = displayable
                 self._attach_observer(displayable)
@@ -353,39 +362,42 @@ class ControlPolygonPipeline(_PipelineBase):
         """
         import sys
 
-        if _safe_get_state(self._data_node) != STATE_PLANNING:
-            self._drag_index = None  # a state flip mid-gesture drops the grab
-            return False, sys.float_info.max
-        renderer = self._safe_get_renderer()
-        if renderer is None:
-            self._drag_index = None
-            return False, sys.float_info.max
+        try:
+            if _safe_get_state(self._data_node) != STATE_PLANNING:
+                self._drag_index = None  # a state flip mid-gesture drops the grab
+                return False, sys.float_info.max
+            renderer = self._safe_get_renderer()
+            if renderer is None:
+                self._drag_index = None
+                return False, sys.float_info.max
 
-        etype = _event_type(eventData)
-        if self._drag_index is not None:
-            if etype in (
-                vtk.vtkCommand.MouseMoveEvent,
-                vtk.vtkCommand.LeftButtonReleaseEvent,
-            ):
-                return True, 0.0
-            return False, sys.float_info.max
+            etype = _event_type(eventData)
+            if self._drag_index is not None:
+                if etype in (
+                    vtk.vtkCommand.MouseMoveEvent,
+                    vtk.vtkCommand.LeftButtonReleaseEvent,
+                ):
+                    return True, 0.0
+                return False, sys.float_info.max
 
-        if etype == vtk.vtkCommand.MouseMoveEvent:
-            # Bare hover: update the halo highlight as a SIDE EFFECT of the
-            # arbitration call and decline -- camera moves stay unclaimed.
-            idx, distance2 = self._nearest_control_point_in_display(renderer, eventData)
-            within = (
-                idx is not None
-                and distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
-            )
-            self._set_hover(idx if within else None)
+            if etype == vtk.vtkCommand.MouseMoveEvent:
+                # Bare hover: update the halo highlight as a SIDE EFFECT of the
+                # arbitration call and decline -- camera moves stay unclaimed.
+                idx, distance2 = self._nearest_control_point_in_display(renderer, eventData)
+                within = (
+                    idx is not None
+                    and distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
+                )
+                self._set_hover(idx if within else None)
+                return False, sys.float_info.max
+            if etype != vtk.vtkCommand.LeftButtonPressEvent:
+                return False, sys.float_info.max
+            _, distance2 = self._nearest_control_point_in_display(renderer, eventData)
+            if distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX:
+                return True, distance2
             return False, sys.float_info.max
-        if etype != vtk.vtkCommand.LeftButtonPressEvent:
+        except Exception:  # pragma: no cover - C++ boundary must never raise
             return False, sys.float_info.max
-        _, distance2 = self._nearest_control_point_in_display(renderer, eventData)
-        if distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX:
-            return True, distance2
-        return False, sys.float_info.max
 
     def _set_hover(self, index: int | None) -> None:
         """Show/move the halo on handle ``index`` (``None`` hides it).
@@ -403,23 +415,14 @@ class ControlPolygonPipeline(_PipelineBase):
             self._halo_actor.SetVisibility(False)
         else:
             carrier = self._data_node
-            grid_getter = getattr(carrier, "GetControlGridVector", None) if carrier else None
-            if grid_getter is None:
+            if carrier is None:
                 return
-            try:
-                grid = grid_getter()
-                base = int(index) * 3
-                self._halo_sphere.SetRadius(self._handle_sphere.GetRadius() * HALO_HOVER_SCALE)
-                self._halo_actor.SetPosition(grid[base], grid[base + 1], grid[base + 2])
-                self._halo_actor.SetVisibility(True)
-            except Exception:  # pragma: no cover - defensive
-                return
-        request_render = getattr(self, "RequestRender", None)
-        if request_render is not None:
-            try:
-                request_render()
-            except Exception:  # pragma: no cover - defensive (stub bases)
-                pass
+            grid = carrier.GetControlGridVector()
+            base = int(index) * 3
+            self._halo_sphere.SetRadius(self._handle_sphere.GetRadius() * HALO_HOVER_SCALE)
+            self._halo_actor.SetPosition(grid[base], grid[base + 1], grid[base + 2])
+            self._halo_actor.SetVisibility(True)
+        self.RequestRender()
 
     def _publish_interaction_state(self, hovered=None, grabbed=None) -> None:
         """Write hover/grab onto the DISPLAY node (cross-view channel).
@@ -434,17 +437,14 @@ class ControlPolygonPipeline(_PipelineBase):
         display = self._display_node
         if display is None:
             return
-        try:
-            if hovered is not None:
-                value = -1 if hovered == -1 else int(hovered)
-                if display.GetHoveredControlPoint() != value:
-                    display.SetHoveredControlPoint(value)
-            if grabbed is not None:
-                value = -1 if grabbed == -1 else int(grabbed)
-                if display.GetGrabbedControlPoint() != value:
-                    display.SetGrabbedControlPoint(value)
-        except Exception:  # pragma: no cover - defensive (stub displays)
-            return
+        if hovered is not None:
+            value = -1 if hovered == -1 else int(hovered)
+            if display.GetHoveredControlPoint() != value:
+                display.SetHoveredControlPoint(value)
+        if grabbed is not None:
+            value = -1 if grabbed == -1 else int(grabbed)
+            if display.GetGrabbedControlPoint() != value:
+                display.SetGrabbedControlPoint(value)
 
     def _sync_halo_from_channel(self, polygon_visible: bool) -> None:
         """Drive the glow halo from the display-node interaction channel.
@@ -455,29 +455,22 @@ class ControlPolygonPipeline(_PipelineBase):
         reconcile (drags move the point under it).
         """
         display = self._display_node
-        try:
-            hovered = display.GetHoveredControlPoint() if display is not None else -1
-            grabbed = display.GetGrabbedControlPoint() if display is not None else -1
-        except Exception:  # pragma: no cover - defensive (stub displays)
-            hovered, grabbed = -1, -1
+        hovered = display.GetHoveredControlPoint() if display is not None else -1
+        grabbed = display.GetGrabbedControlPoint() if display is not None else -1
         target = grabbed if grabbed >= 0 else hovered
         if not polygon_visible or target < 0:
             self._halo_actor.SetVisibility(False)
             return
         carrier = self._data_node
-        grid_getter = getattr(carrier, "GetControlGridVector", None) if carrier else None
-        if grid_getter is None:
+        if carrier is None:
             return
-        try:
-            grid = grid_getter()
-            base = int(target) * 3
-            if len(grid) < base + 3:
-                return
-            self._halo_sphere.SetRadius(self._handle_sphere.GetRadius() * HALO_HOVER_SCALE)
-            self._halo_actor.SetPosition(grid[base], grid[base + 1], grid[base + 2])
-            self._halo_actor.SetVisibility(True)
-        except Exception:  # pragma: no cover - defensive
+        grid = carrier.GetControlGridVector()
+        base = int(target) * 3
+        if len(grid) < base + 3:
             return
+        self._halo_sphere.SetRadius(self._handle_sphere.GetRadius() * HALO_HOVER_SCALE)
+        self._halo_actor.SetPosition(grid[base], grid[base + 1], grid[base + 2])
+        self._halo_actor.SetVisibility(True)
 
     def _apply_interaction_scalars(self) -> None:
         """Colour the hovered/grabbed HANDLES from the display-node state.
@@ -487,30 +480,24 @@ class ControlPolygonPipeline(_PipelineBase):
         OTHER views (the slice projections) colour this 3D view too.
         """
         display = self._display_node
-        try:
-            hovered = display.GetHoveredControlPoint() if display is not None else -1
-            grabbed = display.GetGrabbedControlPoint() if display is not None else -1
-        except Exception:  # pragma: no cover - defensive (stub displays)
-            hovered, grabbed = -1, -1
-        try:
-            points = self._handles_polydata.GetPoints()
-            n = points.GetNumberOfPoints() if points is not None else 0
-            base = [int(c * 255) for c in self._handles_actor.GetProperty().GetColor()]
-            grab = [int(c * 255) for c in HALO_GRAB_COLOR]
-            hover = [int(c * 255) for c in HALO_HOVER_COLOR]
-            colors = vtk.vtkUnsignedCharArray()
-            colors.SetNumberOfComponents(3)
-            colors.SetName("HandleColors")
-            for i in range(n):
-                rgb = grab if i == grabbed else (hover if i == hovered else base)
-                colors.InsertNextTuple3(*rgb)
-            self._handles_polydata.GetPointData().SetScalars(colors)
-            self._handles_glyph.SetColorModeToColorByScalar()
-            self._handles_mapper.SetColorModeToDirectScalars()
-            self._handles_mapper.SetScalarVisibility(grabbed >= 0 or hovered >= 0)
-            self._handles_polydata.Modified()
-        except Exception:  # pragma: no cover - defensive
-            return
+        hovered = display.GetHoveredControlPoint() if display is not None else -1
+        grabbed = display.GetGrabbedControlPoint() if display is not None else -1
+        points = self._handles_polydata.GetPoints()
+        n = points.GetNumberOfPoints() if points is not None else 0
+        base = [int(c * 255) for c in self._handles_actor.GetProperty().GetColor()]
+        grab = [int(c * 255) for c in HALO_GRAB_COLOR]
+        hover = [int(c * 255) for c in HALO_HOVER_COLOR]
+        colors = vtk.vtkUnsignedCharArray()
+        colors.SetNumberOfComponents(3)
+        colors.SetName("HandleColors")
+        for i in range(n):
+            rgb = grab if i == grabbed else (hover if i == hovered else base)
+            colors.InsertNextTuple3(*rgb)
+        self._handles_polydata.GetPointData().SetScalars(colors)
+        self._handles_glyph.SetColorModeToColorByScalar()
+        self._handles_mapper.SetColorModeToDirectScalars()
+        self._handles_mapper.SetScalarVisibility(grabbed >= 0 or hovered >= 0)
+        self._handles_polydata.Modified()
 
     def GetHaloActor(self) -> Any:  # noqa: N802 - VTK verb
         return self._halo_actor
@@ -524,54 +511,57 @@ class ControlPolygonPipeline(_PipelineBase):
         is momentarily nearest -- so the gesture cannot hop between points;
         the release clears the grab and returns False, releasing the focus.
         """
-        renderer = self._safe_get_renderer()
-        if renderer is None:
-            self._drag_index = None
-            return False
-        if _safe_get_state(self._data_node) != STATE_PLANNING:
-            self._drag_index = None
-            return False
-
-        etype = _event_type(eventData)
-
-        if self._drag_index is None:
-            if etype != vtk.vtkCommand.LeftButtonPressEvent:
+        try:
+            renderer = self._safe_get_renderer()
+            if renderer is None:
+                self._drag_index = None
                 return False
-            idx, distance2 = self._nearest_control_point_in_display(renderer, eventData)
-            if (
-                idx is None
-                or distance2 > CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
-            ):
+            if _safe_get_state(self._data_node) != STATE_PLANNING:
+                self._drag_index = None
                 return False
-            self._drag_index = idx
-            self._publish_interaction_state(grabbed=idx)
-            self._apply_interaction_scalars()
-            hover, self._hover_index = idx, None
-            self._set_hover(hover)  # halo jumps to the grabbed handle
-            world = self._event_world_at_control_point(renderer, eventData, idx)
-            if world is not None:
-                self._apply_world_point_to_control_point(idx, world)
-            return True
 
-        if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
-            self._drag_index = None
-            self._publish_interaction_state(grabbed=-1)
-            self._apply_interaction_scalars()
-            self._set_hover(None)
-            return False  # grab over -- release the focus
+            etype = _event_type(eventData)
 
-        if etype == vtk.vtkCommand.MouseMoveEvent:
-            world = self._event_world_at_control_point(
-                renderer, eventData, self._drag_index
-            )
-            if world is None:
-                return True  # keep the grab; this move just didn't resolve
-            self._apply_world_point_to_control_point(self._drag_index, world)
-            hover, self._hover_index = self._drag_index, None
-            self._set_hover(hover)  # halo follows the grabbed handle
-            return True
+            if self._drag_index is None:
+                if etype != vtk.vtkCommand.LeftButtonPressEvent:
+                    return False
+                idx, distance2 = self._nearest_control_point_in_display(renderer, eventData)
+                if (
+                    idx is None
+                    or distance2 > CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
+                ):
+                    return False
+                self._drag_index = idx
+                self._publish_interaction_state(grabbed=idx)
+                self._apply_interaction_scalars()
+                hover, self._hover_index = idx, None
+                self._set_hover(hover)  # halo jumps to the grabbed handle
+                world = self._event_world_at_control_point(renderer, eventData, idx)
+                if world is not None:
+                    self._apply_world_point_to_control_point(idx, world)
+                return True
 
-        return False
+            if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
+                self._drag_index = None
+                self._publish_interaction_state(grabbed=-1)
+                self._apply_interaction_scalars()
+                self._set_hover(None)
+                return False  # grab over -- release the focus
+
+            if etype == vtk.vtkCommand.MouseMoveEvent:
+                world = self._event_world_at_control_point(
+                    renderer, eventData, self._drag_index
+                )
+                if world is None:
+                    return True  # keep the grab; this move just didn't resolve
+                self._apply_world_point_to_control_point(self._drag_index, world)
+                hover, self._hover_index = self._drag_index, None
+                self._set_hover(hover)  # halo follows the grabbed handle
+                return True
+
+            return False
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            return False
 
     def _apply_world_point_to_control_point(self, index: int, world: Any) -> bool:
         """Move the carrier's control point ``index`` to RAS ``world``.
@@ -583,21 +573,14 @@ class ControlPolygonPipeline(_PipelineBase):
         carrier = self._data_node
         if carrier is None or _safe_get_state(carrier) != STATE_PLANNING:
             return False
-        cols_getter = getattr(carrier, "GetCols", None)
-        set_point = getattr(carrier, "SetControlPoint", None)
-        if None in (cols_getter, set_point):
-            return False
-        try:
-            cols = int(cols_getter())
-            set_point(
-                int(index) // cols,
-                int(index) % cols,
-                float(world[0]),
-                float(world[1]),
-                float(world[2]),
-            )
-        except Exception:  # pragma: no cover - defensive
-            return False
+        cols = int(carrier.GetCols())
+        carrier.SetControlPoint(
+            int(index) // cols,
+            int(index) % cols,
+            float(world[0]),
+            float(world[1]),
+            float(world[2]),
+        )
         return True
 
     def _apply_world_point_to_nearest_control_point(self, world: Any) -> int | None:
@@ -612,19 +595,10 @@ class ControlPolygonPipeline(_PipelineBase):
         carrier = self._data_node
         if carrier is None or _safe_get_state(carrier) != STATE_PLANNING:
             return None
-        rows_getter = getattr(carrier, "GetRows", None)
-        cols_getter = getattr(carrier, "GetCols", None)
-        grid_getter = getattr(carrier, "GetControlGridVector", None)
-        set_point = getattr(carrier, "SetControlPoint", None)
-        if None in (rows_getter, cols_getter, grid_getter, set_point):
-            return None
-        try:
-            rows = int(rows_getter())
-            cols = int(cols_getter())
-            grid = grid_getter()
-            wx, wy, wz = float(world[0]), float(world[1]), float(world[2])
-        except Exception:  # pragma: no cover - defensive
-            return None
+        rows = int(carrier.GetRows())
+        cols = int(carrier.GetCols())
+        grid = carrier.GetControlGridVector()
+        wx, wy, wz = float(world[0]), float(world[1]), float(world[2])
 
         best_idx = None
         best_d2 = None
@@ -638,7 +612,7 @@ class ControlPolygonPipeline(_PipelineBase):
                 best_idx = i
         if best_idx is None:
             return None
-        set_point(best_idx // cols, best_idx % cols, wx, wy, wz)
+        carrier.SetControlPoint(best_idx // cols, best_idx % cols, wx, wy, wz)
         return best_idx
 
     def _nearest_control_point_in_display(self, renderer: Any, eventData: Any):
@@ -646,18 +620,12 @@ class ControlPolygonPipeline(_PipelineBase):
         import sys
 
         carrier = self._data_node
-        grid_getter = getattr(carrier, "GetControlGridVector", None) if carrier else None
-        cols_getter = getattr(carrier, "GetCols", None) if carrier else None
-        rows_getter = getattr(carrier, "GetRows", None) if carrier else None
-        if None in (grid_getter, cols_getter, rows_getter):
+        if carrier is None:
             return None, sys.float_info.max
-        try:
-            grid = grid_getter()
-            rows = int(rows_getter())
-            cols = int(cols_getter())
-            ex, ey = eventData.GetDisplayPosition()
-        except Exception:  # pragma: no cover - defensive
-            return None, sys.float_info.max
+        grid = carrier.GetControlGridVector()
+        rows = int(carrier.GetRows())
+        cols = int(carrier.GetCols())
+        ex, ey = eventData.GetDisplayPosition()
 
         best_idx = None
         best_d2 = sys.float_info.max
@@ -672,14 +640,16 @@ class ControlPolygonPipeline(_PipelineBase):
         return best_idx, best_d2
 
     def _event_world_at_control_point(self, renderer: Any, eventData: Any, idx: int):
-        """Back-project the event pixel onto control point ``idx``'s depth."""
+        """Back-project the event pixel onto control point ``idx``'s depth.
+
+        The try/except is FLOW, not a guard: a move that fails to resolve
+        returns ``None`` so the caller keeps the grab alive.
+        """
         carrier = self._data_node
-        grid_getter = getattr(carrier, "GetControlGridVector", None) if carrier else None
-        cols_getter = getattr(carrier, "GetCols", None) if carrier else None
-        if None in (grid_getter, cols_getter):
+        if carrier is None:
             return None
         try:
-            grid = grid_getter()
+            grid = carrier.GetControlGridVector()
             ex, ey = eventData.GetDisplayPosition()
             renderer.SetWorldPoint(grid[idx * 3 + 0], grid[idx * 3 + 1], grid[idx * 3 + 2], 1.0)
             renderer.WorldToDisplay()
@@ -702,32 +672,22 @@ class ControlPolygonPipeline(_PipelineBase):
         if state != STATE_PLANNING:
             return False
         display = self._display_node
-        vis_getter = getattr(display, "GetVisibility", None) if display else None
-        if vis_getter is not None:
-            try:
-                return bool(vis_getter())
-            except Exception:  # pragma: no cover - defensive
-                return True
-        return True
+        if display is None:
+            return True
+        return bool(display.GetVisibility())
 
     def _refresh_geometry(self) -> None:
         """Rebuild handle points + polygon edges from the carrier grid."""
         carrier = self._data_node
-        grid_getter = getattr(carrier, "GetControlGridVector", None) if carrier else None
-        if grid_getter is None:
-            grid_getter = getattr(carrier, "GetControlGrid", None) if carrier else None
-        if grid_getter is None:
+        if carrier is None:
             return
-        rows = int(getattr(carrier, "GetRows", lambda: 4)())
-        cols = int(getattr(carrier, "GetCols", lambda: 4)())
-        try:
-            raw = grid_getter()
-            points = vtk.vtkPoints()
-            points.SetNumberOfPoints(rows * cols)
-            for i in range(rows * cols):
-                points.SetPoint(i, float(raw[i * 3]), float(raw[i * 3 + 1]), float(raw[i * 3 + 2]))
-        except Exception:  # pragma: no cover - defensive
-            return
+        raw = carrier.GetControlGridVector()
+        rows = int(carrier.GetRows())
+        cols = int(carrier.GetCols())
+        points = vtk.vtkPoints()
+        points.SetNumberOfPoints(rows * cols)
+        for i in range(rows * cols):
+            points.SetPoint(i, float(raw[i * 3]), float(raw[i * 3 + 1]), float(raw[i * 3 + 2]))
 
         self._handles_polydata.SetPoints(points)
         self._handles_polydata.Modified()
@@ -878,47 +838,35 @@ class ControlPolygonPipeline(_PipelineBase):
         so no render feedback loop.
         """
         del caller, event
-        self.UpdatePipeline()
-
-        display = self._display_node
         try:
+            self.UpdatePipeline()
+
+            display = self._display_node
             interaction = (
                 display.GetHoveredControlPoint() if display is not None else -1,
                 display.GetGrabbedControlPoint() if display is not None else -1,
             )
-        except Exception:  # pragma: no cover - defensive (stub displays)
-            interaction = (-1, -1)
-        render_key = (
-            _safe_get_state(self._data_node),
-            _control_points_digest(self._data_node),
-            interaction,
-        )
-        if render_key == self._last_render_key:
-            return
-        self._last_render_key = render_key
+            render_key = (
+                _safe_get_state(self._data_node),
+                _control_points_digest(self._data_node),
+                interaction,
+            )
+            if render_key == self._last_render_key:
+                return
+            self._last_render_key = render_key
 
-        request_render = getattr(self, "RequestRender", None)
-        if request_render is not None:
-            try:
-                request_render()
-            except Exception:  # pragma: no cover - defensive (stub bases)
-                pass
+            self.RequestRender()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
 
-def _event_type(eventData: Any) -> int | None:  # noqa: N803 - VTK arg name
-    """Read the VTK event-type id off ``eventData`` defensively.
+def _event_type(eventData: Any) -> int:  # noqa: N803 - VTK arg name
+    """The VTK event-type id off ``eventData``.
 
-    ``None`` for events lacking ``GetType`` (stubs) or on a read failure —
-    the callers then decline, so the grab state machine never raises from
-    the interaction hot path.
+    Called only inside the never-raise interaction boundaries, so plain
+    attribute access is fine here.
     """
-    getter = getattr(eventData, "GetType", None)
-    if getter is None:
-        return None
-    try:
-        return int(getter())
-    except Exception:  # pragma: no cover - defensive
-        return None
+    return int(eventData.GetType())
 
 
 def _control_points_digest(node: Any) -> tuple:
@@ -927,23 +875,16 @@ def _control_points_digest(node: Any) -> tuple:
     Mirrors the ResectogramPipeline's memo digest: a control-point edit
     changes the digest, a render-induced ``Modified`` at fixed geometry does
     not — the discrimination that keeps drags repainting live while blocking
-    a render feedback loop.  Empty tuple for nodes missing the grid accessor
-    (stubs) or on a read failure.
+    a render feedback loop.  Empty tuple when no carrier is attached.
     """
     if node is None:
         return ()
-    grid_getter = getattr(node, "GetControlGridVector", None)
-    if grid_getter is None:
-        return ()
-    try:
-        grid = grid_getter()
-        usable = len(grid) - (len(grid) % 3)
-        return tuple(
-            (grid[base], grid[base + 1], grid[base + 2])
-            for base in range(0, usable, 3)
-        )
-    except Exception:  # pragma: no cover - defensive
-        return ()
+    grid = node.GetControlGridVector()
+    usable = len(grid) - (len(grid) % 3)
+    return tuple(
+        (grid[base], grid[base + 1], grid[base + 2])
+        for base in range(0, usable, 3)
+    )
 
 
 def registerControlPolygonPipelineCreator() -> None:  # noqa: N802 - project convention
@@ -975,14 +916,16 @@ def registerControlPolygonPipelineCreator() -> None:  # noqa: N802 - project con
         )
 
     def tryCreate(viewNode, node):
-        if not isinstance(viewNode, vtkMRMLViewNode):
+        try:
+            if not isinstance(viewNode, vtkMRMLViewNode):
+                return None
+            if viewNode.GetSingletonTag() == RESECTOGRAM_VIEW_SINGLETON_TAG:
+                return None
+            if not isinstance(node, vtkMRMLControlPolygonDisplayNode):
+                return None
+            return ControlPolygonPipeline()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
             return None
-        tag_getter = getattr(viewNode, "GetSingletonTag", None)
-        if tag_getter is not None and tag_getter() == RESECTOGRAM_VIEW_SINGLETON_TAG:
-            return None
-        if not isinstance(node, vtkMRMLControlPolygonDisplayNode):
-            return None
-        return ControlPolygonPipeline()
 
     creator = vtkMRMLLayerDMPipelineScriptedCreator()
     creator.SetPythonCallback(tryCreate)

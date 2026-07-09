@@ -68,15 +68,14 @@ def _resolve_surface_source() -> Any | None:
 
 
 def _creator_accepts_view(viewNode: Any) -> bool:  # noqa: N803 - VTK arg name
-    """True iff ``viewNode`` is a slice view (this pipeline's home)."""
-    if viewNode is None:
-        return False
-    is_a = getattr(viewNode, "IsA", None)
-    if is_a is None:
-        return False
+    """True iff ``viewNode`` is a slice view (this pipeline's home).
+
+    Part of the creator callback: LayerDM invokes it for every
+    ``(view, node)`` pair, so it must never raise.
+    """
     try:
-        return bool(is_a("vtkMRMLSliceNode"))
-    except Exception:  # pragma: no cover - defensive
+        return viewNode is not None and bool(viewNode.IsA("vtkMRMLSliceNode"))
+    except Exception:  # pragma: no cover - C++ boundary must never raise
         return False
 
 
@@ -143,47 +142,50 @@ class SliceContourPipeline(_PipelineBase):
         self._display_node = displayNode
         self._data_node = None
         if displayNode is not None:
-            getter = getattr(displayNode, "GetDisplayableNode", None)
-            if getter is not None:
-                self._data_node = getter()
+            self._data_node = displayNode.GetDisplayableNode()
             self._attach_observer(displayNode)
             if self._data_node is not None:
                 self._attach_observer(self._data_node)
         self._last_update_key = None
 
     def OnReferenceToDisplayNodeAdded(self, fromNode: Any, role: Any = None) -> None:  # noqa: N802
-        if self._data_node is None and fromNode is not None and fromNode is not self._display_node:
-            self._data_node = fromNode
-            self._attach_observer(fromNode)
-            self._last_update_key = None
-        self.UpdatePipeline()
+        try:
+            if self._data_node is None and fromNode is not None and fromNode is not self._display_node:
+                self._data_node = fromNode
+                self._attach_observer(fromNode)
+                self._last_update_key = None
+            self.UpdatePipeline()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
     def OnRendererAdded(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
-        self._renderer = renderer
-        if renderer is not None:
-            renderer.AddActor2D(self._contour_actor)
-        # Re-derive after renderer churn (cleanup clears the node handles).
-        if self._display_node is None:
-            base_getter = getattr(self, "GetDisplayNode", None)
-            display = base_getter() if base_getter is not None else None
-            if display is not None:
-                self.SetDisplayNode(display)
-        # Re-attach the slice-node observer too: cleanup() detached it with
-        # the rest, and the view node is not re-set after churn -- without
-        # this, reslicing stops recutting (the stale-trace bug, round two).
-        if self._slice_node is not None:
-            self._attach_observer(self._slice_node)
-        self._last_update_key = None
-        self.UpdatePipeline()
+        try:
+            self._renderer = renderer
+            if renderer is not None:
+                renderer.AddActor2D(self._contour_actor)
+            # Re-derive after renderer churn (cleanup clears the node handles).
+            if self._display_node is None:
+                display = self.GetDisplayNode()
+                if display is not None:
+                    self.SetDisplayNode(display)
+            # Re-attach the slice-node observer too: cleanup() detached it with
+            # the rest, and the view node is not re-set after churn -- without
+            # this, reslicing stops recutting (the stale-trace bug, round two).
+            if self._slice_node is not None:
+                self._attach_observer(self._slice_node)
+            self._last_update_key = None
+            self.UpdatePipeline()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
     def OnRendererRemoved(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
-        if renderer is not None:
-            try:
+        try:
+            if renderer is not None:
                 renderer.RemoveActor2D(self._contour_actor)
-            except Exception:  # pragma: no cover - defensive
-                pass
-        self._renderer = None
-        self.cleanup()
+            self._renderer = None
+            self.cleanup()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
     def cleanup(self) -> None:
         for node in list(self._observed_node_refs):
@@ -197,6 +199,13 @@ class SliceContourPipeline(_PipelineBase):
     # ------------------------------------------------------------------ #
 
     def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
+        try:
+            self._reconcile()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
+
+    def _reconcile(self) -> None:
+        """``UpdatePipeline``'s body — plain attribute access throughout."""
         slice_node = self._slice_node
         state = _safe_get_state(self._data_node)
         key = (
@@ -218,14 +227,11 @@ class SliceContourPipeline(_PipelineBase):
         carrier = self._data_node
         if carrier is None or slice_node is None:
             return None
-        grid_getter = getattr(carrier, "GetControlGridVector", None)
-        if grid_getter is None:
-            return None
         source_cls = _resolve_surface_source()
         if source_cls is None:
             return None
         try:
-            grid = grid_getter()
+            grid = carrier.GetControlGridVector()
             if len(grid) < 48:
                 return None
             if self._surface_source is None:
@@ -323,22 +329,20 @@ class SliceContourPipeline(_PipelineBase):
     def _on_node_modified(self, caller: Any, event: str) -> None:
         """Reconcile + repaint when the visible inputs actually changed."""
         del caller, event
-        self.UpdatePipeline()
+        try:
+            self.UpdatePipeline()
 
-        render_key = (
-            _safe_get_state(self._data_node),
-            _control_points_digest(self._data_node),
-            self._slice_matrix_digest(self._slice_node),
-        )
-        if render_key == self._last_render_key:
-            return
-        self._last_render_key = render_key
-        request_render = getattr(self, "RequestRender", None)
-        if request_render is not None:
-            try:
-                request_render()
-            except Exception:  # pragma: no cover - defensive (stub bases)
-                pass
+            render_key = (
+                _safe_get_state(self._data_node),
+                _control_points_digest(self._data_node),
+                self._slice_matrix_digest(self._slice_node),
+            )
+            if render_key == self._last_render_key:
+                return
+            self._last_render_key = render_key
+            self.RequestRender()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
 
 # --------------------------------------------------------------------------- #

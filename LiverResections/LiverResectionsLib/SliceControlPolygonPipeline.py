@@ -96,15 +96,14 @@ def _side_tint(rgb: list, signed_distance: float) -> list:
 
 
 def _creator_accepts_view(viewNode: Any) -> bool:  # noqa: N803 - VTK arg name
-    """True iff ``viewNode`` is a slice view (this pipeline's home)."""
-    if viewNode is None:
-        return False
-    is_a = getattr(viewNode, "IsA", None)
-    if is_a is None:
-        return False
+    """True iff ``viewNode`` is a slice view (this pipeline's home).
+
+    Part of the creator callback: LayerDM invokes it for every
+    ``(view, node)`` pair, so it must never raise.
+    """
     try:
-        return bool(is_a("vtkMRMLSliceNode"))
-    except Exception:  # pragma: no cover - defensive
+        return viewNode is not None and bool(viewNode.IsA("vtkMRMLSliceNode"))
+    except Exception:  # pragma: no cover - C++ boundary must never raise
         return False
 
 
@@ -204,51 +203,54 @@ class SliceControlPolygonPipeline(_PipelineBase):
         self._display_node = displayNode
         self._data_node = None
         if displayNode is not None:
-            getter = getattr(displayNode, "GetDisplayableNode", None)
-            if getter is not None:
-                self._data_node = getter()
+            self._data_node = displayNode.GetDisplayableNode()
             self._attach_observer(displayNode)
             if self._data_node is not None:
                 self._attach_observer(self._data_node)
         self._last_update_key = None
 
     def OnReferenceToDisplayNodeAdded(self, fromNode: Any, role: Any = None) -> None:  # noqa: N802
-        if self._data_node is None and fromNode is not None and fromNode is not self._display_node:
-            self._data_node = fromNode
-            self._attach_observer(fromNode)
-            self._last_update_key = None
-        self.UpdatePipeline()
+        try:
+            if self._data_node is None and fromNode is not None and fromNode is not self._display_node:
+                self._data_node = fromNode
+                self._attach_observer(fromNode)
+                self._last_update_key = None
+            self.UpdatePipeline()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
     def OnRendererAdded(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
-        self._renderer = renderer
-        if renderer is not None:
-            renderer.AddActor2D(self._edges_actor)
-            renderer.AddActor2D(self._handles_actor)
-            renderer.AddActor2D(self._ring_actor)
-        if self._display_node is None:
-            base_getter = getattr(self, "GetDisplayNode", None)
-            display = base_getter() if base_getter is not None else None
-            if display is not None:
-                self.SetDisplayNode(display)
-        # Re-attach the slice-node observer too: cleanup() detached it with
-        # the rest, and the view node is not re-set after churn -- without
-        # this, reslicing stops reprojecting (the stale-trace bug, round
-        # two; mirrors the contour pipeline).
-        if self._slice_node is not None:
-            self._attach_observer(self._slice_node)
-        self._last_update_key = None
-        self.UpdatePipeline()
+        try:
+            self._renderer = renderer
+            if renderer is not None:
+                renderer.AddActor2D(self._edges_actor)
+                renderer.AddActor2D(self._handles_actor)
+                renderer.AddActor2D(self._ring_actor)
+            if self._display_node is None:
+                display = self.GetDisplayNode()
+                if display is not None:
+                    self.SetDisplayNode(display)
+            # Re-attach the slice-node observer too: cleanup() detached it with
+            # the rest, and the view node is not re-set after churn -- without
+            # this, reslicing stops reprojecting (the stale-trace bug, round
+            # two; mirrors the contour pipeline).
+            if self._slice_node is not None:
+                self._attach_observer(self._slice_node)
+            self._last_update_key = None
+            self.UpdatePipeline()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
     def OnRendererRemoved(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
-        if renderer is not None:
-            try:
+        try:
+            if renderer is not None:
                 renderer.RemoveActor2D(self._handles_actor)
                 renderer.RemoveActor2D(self._edges_actor)
                 renderer.RemoveActor2D(self._ring_actor)
-            except Exception:  # pragma: no cover - defensive
-                pass
-        self._renderer = None
-        self.cleanup()
+            self._renderer = None
+            self.cleanup()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
     def cleanup(self) -> None:
         for node in list(self._observed_node_refs):
@@ -265,6 +267,13 @@ class SliceControlPolygonPipeline(_PipelineBase):
     # ------------------------------------------------------------------ #
 
     def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
+        try:
+            self._reconcile()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
+
+    def _reconcile(self) -> None:
+        """``UpdatePipeline``'s body — plain attribute access throughout."""
         state = _safe_get_state(self._data_node)
         key = (
             state,
@@ -291,14 +300,9 @@ class SliceControlPolygonPipeline(_PipelineBase):
         slice_node = self._slice_node
         if carrier is None or slice_node is None:
             return False
-        grid_getter = getattr(carrier, "GetControlGridVector", None)
-        rows_getter = getattr(carrier, "GetRows", None)
-        cols_getter = getattr(carrier, "GetCols", None)
-        if None in (grid_getter, rows_getter, cols_getter):
-            return False
         try:
-            grid = grid_getter()
-            rows, cols = int(rows_getter()), int(cols_getter())
+            grid = carrier.GetControlGridVector()
+            rows, cols = int(carrier.GetRows()), int(carrier.GetCols())
             if len(grid) < rows * cols * 3:
                 return False
 
@@ -471,61 +475,67 @@ class SliceControlPolygonPipeline(_PipelineBase):
     def CanProcessInteractionEvent(self, eventData: Any):  # noqa: N802 - VTK verb
         import sys
 
-        if _safe_get_state(self._data_node) != STATE_PLANNING:
-            self._drag_index = None
+        try:
+            if _safe_get_state(self._data_node) != STATE_PLANNING:
+                self._drag_index = None
+                return False, sys.float_info.max
+            etype = _event_type(eventData)
+            if self._drag_index is not None:
+                if etype in (
+                    vtk.vtkCommand.MouseMoveEvent,
+                    vtk.vtkCommand.LeftButtonReleaseEvent,
+                ):
+                    return True, 0.0
+                return False, sys.float_info.max
+            if etype == vtk.vtkCommand.MouseMoveEvent:
+                # Bare hover: publish the cross-view highlight and decline.
+                idx, distance2 = self._nearest_handle_in_display(eventData)
+                within = (
+                    idx is not None
+                    and distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
+                )
+                self._publish_interaction_state(hovered=(idx if within else -1))
+                return False, sys.float_info.max
+            if etype != vtk.vtkCommand.LeftButtonPressEvent:
+                return False, sys.float_info.max
+            _, distance2 = self._nearest_handle_in_display(eventData)
+            if distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX:
+                return True, distance2
             return False, sys.float_info.max
-        etype = _event_type(eventData)
-        if self._drag_index is not None:
-            if etype in (
-                vtk.vtkCommand.MouseMoveEvent,
-                vtk.vtkCommand.LeftButtonReleaseEvent,
-            ):
-                return True, 0.0
+        except Exception:  # pragma: no cover - C++ boundary must never raise
             return False, sys.float_info.max
-        if etype == vtk.vtkCommand.MouseMoveEvent:
-            # Bare hover: publish the cross-view highlight and decline.
-            idx, distance2 = self._nearest_handle_in_display(eventData)
-            within = (
-                idx is not None
-                and distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
-            )
-            self._publish_interaction_state(hovered=(idx if within else -1))
-            return False, sys.float_info.max
-        if etype != vtk.vtkCommand.LeftButtonPressEvent:
-            return False, sys.float_info.max
-        _, distance2 = self._nearest_handle_in_display(eventData)
-        if distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX:
-            return True, distance2
-        return False, sys.float_info.max
 
     def ProcessInteractionEvent(self, eventData: Any) -> bool:  # noqa: N802 - VTK verb
-        if _safe_get_state(self._data_node) != STATE_PLANNING:
-            self._drag_index = None
-            return False
-        etype = _event_type(eventData)
-
-        if self._drag_index is None:
-            if etype != vtk.vtkCommand.LeftButtonPressEvent:
+        try:
+            if _safe_get_state(self._data_node) != STATE_PLANNING:
+                self._drag_index = None
                 return False
-            idx, distance2 = self._nearest_handle_in_display(eventData)
-            if (
-                idx is None
-                or distance2 > CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
-            ):
+            etype = _event_type(eventData)
+
+            if self._drag_index is None:
+                if etype != vtk.vtkCommand.LeftButtonPressEvent:
+                    return False
+                idx, distance2 = self._nearest_handle_in_display(eventData)
+                if (
+                    idx is None
+                    or distance2 > CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
+                ):
+                    return False
+                self._drag_index = idx
+                self._publish_interaction_state(grabbed=idx)
+                return True
+
+            if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
+                self._drag_index = None
+                self._publish_interaction_state(grabbed=-1)
                 return False
-            self._drag_index = idx
-            self._publish_interaction_state(grabbed=idx)
-            return True
 
-        if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
-            self._drag_index = None
-            self._publish_interaction_state(grabbed=-1)
+            if etype == vtk.vtkCommand.MouseMoveEvent:
+                self._move_grabbed_to(eventData)
+                return True
             return False
-
-        if etype == vtk.vtkCommand.MouseMoveEvent:
-            self._move_grabbed_to(eventData)
-            return True
-        return False
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            return False
 
     def _nearest_handle_in_display(self, eventData: Any):
         """``(flat_index, distance2)`` of the projected handle nearest the pixel.
@@ -536,10 +546,7 @@ class SliceControlPolygonPipeline(_PipelineBase):
         """
         import sys
 
-        try:
-            ex, ey = eventData.GetDisplayPosition()
-        except Exception:  # pragma: no cover - defensive
-            return None, sys.float_info.max
+        ex, ey = eventData.GetDisplayPosition()
         best_idx, best_d2 = None, sys.float_info.max
         for i, (px, py) in enumerate(self._projected_xy):
             # Markups rule: pickable iff visible -- a fully faded point
@@ -626,62 +633,49 @@ class SliceControlPolygonPipeline(_PipelineBase):
     def _interaction_state(self) -> tuple:
         """(hovered, grabbed) read off the display node; (-1, -1) sans it."""
         display = self._display_node
-        try:
-            return (
-                display.GetHoveredControlPoint() if display is not None else -1,
-                display.GetGrabbedControlPoint() if display is not None else -1,
-            )
-        except Exception:  # pragma: no cover - defensive (stub displays)
-            return (-1, -1)
+        return (
+            display.GetHoveredControlPoint() if display is not None else -1,
+            display.GetGrabbedControlPoint() if display is not None else -1,
+        )
 
     def _publish_interaction_state(self, hovered=None, grabbed=None) -> None:
         """Write hover/grab onto the display node (cross-view channel)."""
         display = self._display_node
         if display is None:
             return
-        try:
-            if hovered is not None:
-                value = -1 if hovered == -1 else int(hovered)
-                if display.GetHoveredControlPoint() != value:
-                    display.SetHoveredControlPoint(value)
-            if grabbed is not None:
-                value = -1 if grabbed == -1 else int(grabbed)
-                if display.GetGrabbedControlPoint() != value:
-                    display.SetGrabbedControlPoint(value)
-        except Exception:  # pragma: no cover - defensive (stub displays)
-            return
+        if hovered is not None:
+            value = -1 if hovered == -1 else int(hovered)
+            if display.GetHoveredControlPoint() != value:
+                display.SetHoveredControlPoint(value)
+        if grabbed is not None:
+            value = -1 if grabbed == -1 else int(grabbed)
+            if display.GetGrabbedControlPoint() != value:
+                display.SetGrabbedControlPoint(value)
 
     def _on_node_modified(self, caller: Any, event: str) -> None:
         del caller, event
-        self.UpdatePipeline()
+        try:
+            self.UpdatePipeline()
 
-        render_key = (
-            _safe_get_state(self._data_node),
-            _control_points_digest(self._data_node),
-            self._slice_matrix_digest(self._slice_node),
-            self._interaction_state(),
-        )
-        if render_key == self._last_render_key:
-            return
-        self._last_render_key = render_key
-        request_render = getattr(self, "RequestRender", None)
-        if request_render is not None:
-            try:
-                request_render()
-            except Exception:  # pragma: no cover - defensive (stub bases)
-                pass
+            render_key = (
+                _safe_get_state(self._data_node),
+                _control_points_digest(self._data_node),
+                self._slice_matrix_digest(self._slice_node),
+                self._interaction_state(),
+            )
+            if render_key == self._last_render_key:
+                return
+            self._last_render_key = render_key
+            self.RequestRender()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
 
 def _safe_get_mtime(node: Any) -> int:
+    """``GetMTime()`` as an int; 0 when no node is attached."""
     if node is None:
         return 0
-    getter = getattr(node, "GetMTime", None)
-    if getter is None:
-        return 0
-    try:
-        return int(getter())
-    except Exception:  # pragma: no cover - defensive
-        return 0
+    return int(node.GetMTime())
 
 
 # --------------------------------------------------------------------------- #

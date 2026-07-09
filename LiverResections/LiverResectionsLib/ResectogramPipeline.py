@@ -184,6 +184,13 @@ class ResectogramPipeline(_PipelineBase):
         the control-point structure, not the node ``GetMTime``, so the digest
         is the correct reactivity signal on both counts.
         """
+        try:
+            self._reconcile()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
+
+    def _reconcile(self) -> None:
+        """``UpdatePipeline``'s body — plain attribute access throughout."""
         self._ensure_representations()
 
         # Reverse-resolve the owning plan wrapper (scene-MTime-gated so a bare
@@ -225,6 +232,13 @@ class ResectogramPipeline(_PipelineBase):
         ``GetRenderer()`` returns a non-None value.
         """
         del renderer  # accessed via self.GetRenderer() inside the helper
+        try:
+            self._on_renderer_added()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
+
+    def _on_renderer_added(self) -> None:
+        """``OnRendererAdded``'s body — plain attribute access throughout."""
         self._ensure_representations()
         # ``OnRendererRemoved`` -> ``cleanup()`` detaches the node observers
         # (they are bundled with the renderer-scoped Representation teardown),
@@ -244,7 +258,10 @@ class ResectogramPipeline(_PipelineBase):
     def OnRendererRemoved(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
         """Tear down Representations when the renderer goes away."""
         del renderer
-        self.cleanup()
+        try:
+            self.cleanup()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
     # ------------------------------------------------------------------ #
     # Introspection — used by the workflow / unit tests
@@ -289,47 +306,39 @@ class ResectogramPipeline(_PipelineBase):
         """
         import sys
 
-        if self._data_node is None:
-            return False, sys.float_info.max
-        # The reslice is a press/drag/release GESTURE: a left-button press
-        # starts it, moves are claimed only WHILE it holds (the continuous
-        # drag-reslice), and the ending release closes it.  A bare hover
-        # move is still declined: claiming ungrabbed moves made the marker
-        # track the cursor and park at the (0, 0) corner on the spurious
-        # move fired when the cursor left the view (`ADR-0025`_
-        # §Click-to-reslice).
-        etype = self._event_type(eventData)
-        if self._reslicing:
-            try:
+        try:
+            if self._data_node is None:
+                return False, sys.float_info.max
+            # The reslice is a press/drag/release GESTURE: a left-button press
+            # starts it, moves are claimed only WHILE it holds (the continuous
+            # drag-reslice), and the ending release closes it.  A bare hover
+            # move is still declined: claiming ungrabbed moves made the marker
+            # track the cursor and park at the (0, 0) corner on the spurious
+            # move fired when the cursor left the view (`ADR-0025`_
+            # §Click-to-reslice).
+            if self._reslicing:
                 import vtk
 
-                if etype in (
+                if self._event_type(eventData) in (
                     vtk.vtkCommand.MouseMoveEvent,
                     vtk.vtkCommand.LeftButtonReleaseEvent,
                 ):
                     return True, 0.0
-            except Exception:  # pragma: no cover - defensive
-                pass
+                return False, sys.float_info.max
+            if not self._is_commit_event(eventData):
+                return False, sys.float_info.max
+            return True, 0.0
+        except Exception:  # pragma: no cover - C++ boundary must never raise
             return False, sys.float_info.max
-        if not self._is_commit_event(eventData):
-            return False, sys.float_info.max
-        return True, 0.0
 
     @staticmethod
-    def _event_type(eventData: Any) -> int | None:  # noqa: N803 - VTK arg name
-        """Read the VTK event-type id off ``eventData`` defensively.
+    def _event_type(eventData: Any) -> int:  # noqa: N803 - VTK arg name
+        """The VTK event-type id off ``eventData``.
 
-        ``None`` for events lacking ``GetType`` (stubs) or on a read failure,
-        so the gesture state machine never raises from the interaction hot
-        path.
+        Called only inside the never-raise interaction boundaries, so plain
+        attribute access is fine here.
         """
-        getter = getattr(eventData, "GetType", None)
-        if getter is None:
-            return None
-        try:
-            return int(getter())
-        except Exception:  # pragma: no cover - defensive
-            return None
+        return int(eventData.GetType())
 
     @staticmethod
     def _is_commit_event(eventData: Any) -> bool:  # noqa: N803 - VTK arg name
@@ -337,19 +346,11 @@ class ResectogramPipeline(_PipelineBase):
 
         The press is the only event that can START the reslice gesture; a
         move/hover without a gesture in flight leaves the marker where it
-        was.  Tolerant of an event lacking ``GetType`` (declines) and of
-        ``vtk`` being unavailable (declines) so the GL-free seam never
-        raises from the interaction hot path.
+        was.
         """
-        getter = getattr(eventData, "GetType", None)
-        if getter is None:
-            return False
-        try:
-            import vtk
+        import vtk
 
-            return getter() == vtk.vtkCommand.LeftButtonPressEvent
-        except Exception:  # pragma: no cover - defensive; vtk always present in-app
-            return False
+        return eventData.GetType() == vtk.vtkCommand.LeftButtonPressEvent
 
     def ProcessInteractionEvent(self, eventData: Any) -> bool:  # noqa: N802 - VTK verb
         """Drive the press/drag/release reslice gesture.
@@ -363,8 +364,8 @@ class ResectogramPipeline(_PipelineBase):
         returns ``False``, releasing the interaction focus.  A bare hover
         move can never write the locator even if dispatched directly.
         """
-        if self._reslicing:
-            try:
+        try:
+            if self._reslicing:
                 import vtk
 
                 if self._event_type(eventData) == vtk.vtkCommand.LeftButtonReleaseEvent:
@@ -372,26 +373,25 @@ class ResectogramPipeline(_PipelineBase):
                     self._set_locator_marker_visible(False)
                     return False  # gesture over -- release the focus
                 if self._event_type(eventData) == vtk.vtkCommand.MouseMoveEvent:
-                    getter = getattr(eventData, "GetDisplayPosition", None)
-                    if getter is not None:
-                        if self._produce_from_display_position(getter()) is not None:
-                            self._refresh_locator_marker()
+                    position = eventData.GetDisplayPosition()
+                    if self._produce_from_display_position(position) is not None:
+                        self._refresh_locator_marker()
                     return True  # keep the gesture even on a degenerate move
-            except Exception:  # pragma: no cover - defensive
-                pass
-            return False
+                return False
 
-        if not self._is_commit_event(eventData):
+            if not self._is_commit_event(eventData):
+                return False
+            produced = (
+                self._produce_from_display_position(eventData.GetDisplayPosition())
+                is not None
+            )
+            if produced:
+                self._reslicing = True
+                self._set_locator_marker_visible(True)
+                self._refresh_locator_marker()
+            return produced
+        except Exception:  # pragma: no cover - C++ boundary must never raise
             return False
-        getter = getattr(eventData, "GetDisplayPosition", None)
-        if getter is None:
-            return False
-        produced = self._produce_from_display_position(getter()) is not None
-        if produced:
-            self._reslicing = True
-            self._set_locator_marker_visible(True)
-            self._refresh_locator_marker()
-        return produced
 
     def _set_locator_marker_visible(self, visible: bool) -> None:
         """Flip the marker switch: the locator DISPLAY node's Visibility.
@@ -405,14 +405,11 @@ class ResectogramPipeline(_PipelineBase):
         locator = self._resolve_locator_node(self._data_node)
         if locator is None:
             return
-        display = locator.GetDisplayNode() if hasattr(locator, "GetDisplayNode") else None
+        display = locator.GetDisplayNode()
         if display is None:
             return
-        try:
-            display.SetVisibility(bool(visible))
-            locator.Modified()
-        except Exception:  # pragma: no cover - defensive
-            return
+        display.SetVisibility(bool(visible))
+        locator.Modified()
         # Re-push the strip's own uniforms + repaint: the strip pipeline's
         # reconciliation keys on geometry, which a visibility flip does not
         # touch, and the produce path only runs on picks -- not on release.
@@ -433,12 +430,7 @@ class ResectogramPipeline(_PipelineBase):
             representation._apply_locator()
         except Exception:  # pragma: no cover - defensive (stub reps)
             return
-        request_render = getattr(self, "RequestRender", None)
-        if request_render is not None:
-            try:
-                request_render()
-            except Exception:  # pragma: no cover - defensive (stub bases)
-                pass
+        self.RequestRender()
 
     def _produce_from_display_position(self, display_xy: Any) -> tuple | None:
         """Map a resectogram display pixel to a locator pick (`ADR-0025`_ §Producer).
@@ -544,7 +536,7 @@ class ResectogramPipeline(_PipelineBase):
     @staticmethod
     def _resolve_locator_node(surface: Any) -> Any | None:
         """The scene's single cross-view ``vtkMRMLLocatorNode`` (`ADR-0025`_ §Consumer)."""
-        scene = getattr(surface, "GetScene", lambda: None)()
+        scene = surface.GetScene() if surface is not None else None
         if scene is None:
             return None
         return scene.GetFirstNodeByClass("vtkMRMLLocatorNode")
@@ -590,7 +582,7 @@ class ResectogramPipeline(_PipelineBase):
         if self._representations_initialised:
             return
 
-        renderer = self._safe_get_renderer()
+        renderer = self.GetRenderer()
 
         # Local imports to avoid a circular import.  Two import paths
         # supported, mirroring the Bezier Pipeline:
@@ -634,43 +626,19 @@ class ResectogramPipeline(_PipelineBase):
         data_node = self._data_node
         if data_node is None:
             return None
-        scene = getattr(data_node, "GetScene", lambda: None)()
+        scene = data_node.GetScene()
         if scene is None:
             return None
-        try:
-            plans = scene.GetNodesByClass("vtkMRMLResectionPlanNode")
-        except Exception:  # pragma: no cover - defensive
-            return None
+        plans = scene.GetNodesByClass("vtkMRMLResectionPlanNode")
         if plans is None:
             return None
         plans.InitTraversal()
         item = plans.GetNextItemAsObject()
         while item is not None:
-            getter = getattr(item, "GetGeometryNode", None)
-            if getter is not None:
-                try:
-                    if getter() is data_node:
-                        return item
-                except Exception:  # pragma: no cover - defensive
-                    pass
+            if item.GetGeometryNode() is data_node:
+                return item
             item = plans.GetNextItemAsObject()
         return None
-
-    def _safe_get_renderer(self) -> Any | None:
-        """Return ``self.GetRenderer()`` if available, else ``None``.
-
-        The base ``vtkMRMLLayerDMPipelineI::GetRenderer`` is supplied
-        once the manager attaches the Pipeline to a renderer.  Tests that
-        construct the Pipeline before a renderer is wired need the
-        ``None`` fallback.
-        """
-        getter = getattr(self, "GetRenderer", None)
-        if getter is None:
-            return None
-        try:
-            return getter()
-        except Exception:  # pragma: no cover - defensive
-            return None
 
     def _reattach_node_observers(self) -> None:
         """(Re-)wire the display + data node observers, idempotently.
@@ -695,9 +663,7 @@ class ResectogramPipeline(_PipelineBase):
         if self._display_node is None:
             return
 
-        getter = getattr(self._display_node, "GetDisplayableNode", None)
-        if getter is not None:
-            self._data_node = getter()
+        self._data_node = self._display_node.GetDisplayableNode()
         self._attach_observer(self._display_node)
         if self._data_node is not None:
             self._attach_observer(self._data_node)
@@ -761,21 +727,20 @@ class ResectogramPipeline(_PipelineBase):
         repaints live without the framework's own display-node event path.
         """
         del caller, event  # observers route uniformly into UpdatePipeline()
-        before = self._update_count
-        self.UpdatePipeline()
-        if self._update_count == before:
-            return  # short-circuited: no geometry change, no render
+        try:
+            before = self._update_count
+            self.UpdatePipeline()
+            if self._update_count == before:
+                return  # short-circuited: no geometry change, no render
 
-        request_render = getattr(self, "RequestRender", None)
-        if request_render is not None:
-            try:
-                request_render()
-            except Exception:  # pragma: no cover - defensive (stub bases)
-                pass
+            self.RequestRender()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
 
 # --------------------------------------------------------------------------- #
-# Safe accessors — tolerant of stub nodes that omit the markups accessors.
+# Safe accessors — a ``None`` node (or a node outside any scene) is a real
+# state; the accessors themselves are always-present MRML API.
 # --------------------------------------------------------------------------- #
 
 
@@ -786,16 +751,10 @@ def _safe_get_scene_mtime(node: Any) -> int | None:
     surface with no owning plan does not re-scan on every render — the scan
     re-runs only when the scene has changed since the last miss.
     """
-    scene = getattr(node, "GetScene", lambda: None)() if node is not None else None
+    scene = node.GetScene() if node is not None else None
     if scene is None:
         return None
-    getter = getattr(scene, "GetMTime", None)
-    if getter is None:
-        return None
-    try:
-        return int(getter())
-    except Exception:  # pragma: no cover - defensive
-        return None
+    return int(scene.GetMTime())
 
 
 def _safe_get_control_points_digest(node: Any) -> tuple:
@@ -813,24 +772,17 @@ def _safe_get_control_points_digest(node: Any) -> tuple:
     control polygon in a flat row-major grid read via ``GetControlGridVector``
     (ADR-0014 §"Fourth layer"); the v1 markups control-point API is retired
     (ADR-0014 §"Dissolution"; ADR-0032 §"Consequences").  Returns an empty
-    tuple when the node is missing the grid accessor (stub nodes in unit
-    tests) or a read raises — the key is then a constant, so a non-parametric
-    data node reconciles exactly once.
+    tuple when no data node is attached — the key is then a constant, so a
+    node-less pipeline reconciles exactly once.
     """
     if node is None:
         return ()
-    grid_getter = getattr(node, "GetControlGridVector", None)
-    if grid_getter is None:
-        return ()
-    try:
-        grid = grid_getter()
-        usable = len(grid) - (len(grid) % 3)
-        return tuple(
-            (grid[base], grid[base + 1], grid[base + 2])
-            for base in range(0, usable, 3)
-        )
-    except Exception:  # pragma: no cover - defensive
-        return ()
+    grid = node.GetControlGridVector()
+    usable = len(grid) - (len(grid) % 3)
+    return tuple(
+        (grid[base], grid[base + 1], grid[base + 2])
+        for base in range(0, usable, 3)
+    )
 
 
 # --------------------------------------------------------------------------- #
