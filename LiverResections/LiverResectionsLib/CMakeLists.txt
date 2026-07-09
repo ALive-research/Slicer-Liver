@@ -30,6 +30,7 @@ set(LiverResectionsLib_PYTHON_SCRIPTS
   ResectionPlanningWidget.py
   ResectogramLocatorProducer.py
   ResectogramPipeline.py
+  SliceContourPipeline.py
   ResectogramViewManager.py
   Representations/__init__.py
   Representations/BezierPlanningRepresentation.py
