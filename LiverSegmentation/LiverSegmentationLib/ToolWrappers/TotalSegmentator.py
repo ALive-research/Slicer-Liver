@@ -44,6 +44,46 @@ TOTALSEGMENTATOR_REQUIREMENT = "TotalSegmentator>=2.4.0"
 #: The importable backend package name (distinct from the PyPI project name).
 BACKEND_MODULE_NAME = "totalsegmentator"
 
+#: Backend task specs per structure-card SCT code.  Mirrors the
+#: ``Resources/Terminology/LabelToSCT/TotalSegmentator.json`` bridge
+#: (ADR-0011); ``labels`` names the per-class output files the backend
+#: writes into the output directory.  ``fast`` marks tasks with a
+#: CPU-viable 3 mm fast variant (``total`` only; ``liver_vessels`` has
+#: none).  Hepatic vein maps to the combined ``liver_vessels`` class —
+#: deliberately over-inclusive until the Kumar-Oram per-vessel
+#: refinement lands (the bridge JSON records the same caveat for the
+#: combined portal label).
+INFERENCE_TARGETS = {
+    # Liver (SCT 10200004)
+    "10200004": {
+        "task": "total",
+        "roi_subset": ["liver"],
+        "labels": ["liver"],
+        "fast": True,
+    },
+    # Portal vein (SCT 32764006) — TS combines portal + splenic.
+    "32764006": {
+        "task": "total",
+        "roi_subset": ["portal_vein_and_splenic_vein"],
+        "labels": ["portal_vein_and_splenic_vein"],
+        "fast": True,
+    },
+    # Hepatic vein (SCT 8993003) — combined intrahepatic vessels.
+    "8993003": {
+        "task": "liver_vessels",
+        "roi_subset": None,
+        "labels": ["liver_vessels"],
+        "fast": False,
+    },
+    # Mass (SCT 4147007)
+    "4147007": {
+        "task": "liver_vessels",
+        "roi_subset": None,
+        "labels": ["liver_tumor"],
+        "fast": False,
+    },
+}
+
 
 class TotalSegmentatorNotInstalled(RuntimeError):
     """Raised when the backend is absent and install was declined or failed."""
@@ -157,3 +197,110 @@ def run(parent=None, confirm=True):
     import importlib
 
     return importlib.import_module(BACKEND_MODULE_NAME)
+
+
+def resolveExecutable() -> str | None:
+    """Path to the ``TotalSegmentator`` console script, or ``None``.
+
+    ``pip_install`` inside Slicer lands console scripts beside the Python
+    interpreter (``python-install/bin/``); derive that location from the
+    installed backend package so the resolve works regardless of the
+    launcher's ``PATH``.  Falls back to a plain ``PATH`` lookup.  Import
+    stays inside the call path (the import-purity invariant).
+    """
+    import importlib
+    import os
+    import shutil
+
+    try:
+        backend = importlib.import_module(BACKEND_MODULE_NAME)
+    except ImportError:
+        return shutil.which("TotalSegmentator")
+
+    # site-packages/totalsegmentator/__init__.py -> python-install/bin/
+    package_dir = os.path.dirname(os.path.abspath(backend.__file__))
+    prefix = os.path.dirname(os.path.dirname(os.path.dirname(package_dir)))
+    candidate = os.path.join(prefix, "bin", "TotalSegmentator")
+    if os.path.isfile(candidate):
+        return candidate
+    return shutil.which("TotalSegmentator")
+
+
+def detectDevice() -> str:
+    """``"gpu"`` when an NVIDIA driver is visible, else ``"cpu"``.
+
+    The backend's default device is GPU and errors out without CUDA; an
+    explicit device keeps the CPU-only path deterministic.
+    """
+    import shutil
+
+    return "gpu" if shutil.which("nvidia-smi") else "cpu"
+
+
+def buildCommand(executable, input_path, output_dir, sct_code, device) -> list:
+    """The backend command line for one structure target (pure, testable).
+
+    Per-class file output (no ``--ml``): the backend writes
+    ``<output_dir>/<label>.nii.gz`` per class, which the orchestrator
+    loads by name — no class-index bookkeeping.
+    """
+    spec = INFERENCE_TARGETS[str(sct_code)]
+    command = [
+        str(executable),
+        "-i",
+        str(input_path),
+        "-o",
+        str(output_dir),
+        "--task",
+        spec["task"],
+    ]
+    if spec["roi_subset"]:
+        command += ["--roi_subset", *spec["roi_subset"]]
+    if spec["fast"]:
+        command.append("--fast")
+    command += ["--device", str(device)]
+    return command
+
+
+def runInference(input_path, output_dir, sct_code, progress_callback=None) -> None:
+    """Run one structure's inference as a SUBPROCESS, streaming progress.
+
+    Out-of-process keeps the Slicer GUI alive during the minutes-long
+    inference; each backend stdout/stderr line reaches
+    ``progress_callback`` (the structure card's status surface).  Raises
+    ``RuntimeError`` with the output tail on a non-zero exit, and
+    :class:`TotalSegmentatorNotInstalled` when no executable resolves.
+    """
+    import subprocess
+
+    executable = resolveExecutable()
+    if executable is None:
+        raise TotalSegmentatorNotInstalled(
+            "TotalSegmentator console script not found; run the install first."
+        )
+
+    command = buildCommand(executable, input_path, output_dir, sct_code, detectDevice())
+    logging.info("TotalSegmentator invocation: %s", " ".join(command))
+
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    tail: list = []
+    assert process.stdout is not None
+    for line in process.stdout:
+        line = line.rstrip()
+        if not line:
+            continue
+        tail.append(line)
+        del tail[:-20]
+        if progress_callback is not None:
+            progress_callback(line)
+    returncode = process.wait()
+    if returncode != 0:
+        raise RuntimeError(
+            "TotalSegmentator failed (exit %d):\n%s" % (returncode, "\n".join(tail))
+        )

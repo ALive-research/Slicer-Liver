@@ -29,6 +29,7 @@ the Stage-2 sidebar indicator (Python-convention predicate, ADR-0023
 """
 
 import logging
+import os
 
 import qt
 import slicer
@@ -419,11 +420,36 @@ class _StructureCard:
             self.acceptButton.setEnabled(False)
             self.rejectButton.setEnabled(False)
             return
+        # Indeterminate busy bar + streamed backend lines: the inference runs
+        # minutes-long OUT of process; the callback keeps the GUI painting.
+        self.progressBar.setRange(0, 0)
         self.progressBar.setVisible(True)
+        self.runButton.setEnabled(False)
+
+        def _progress(line):
+            self.statusLabel.setText(line[-80:])
+            slicer.app.processEvents()
+
+        wrapper = _totalSegmentatorWrapper()
         try:
-            self._scratch = self._widget.logic.segment(volume, self._sctCode)
+            self._scratch = self._widget.logic.segment(
+                volume, self._sctCode, progressCallback=_progress
+            )
+        except wrapper.TotalSegmentatorNotInstalled:
+            self.statusLabel.setText(
+                "TotalSegmentator is not installed — Run again to install "
+                f"({wrapper.TOTALSEGMENTATOR_DOWNLOAD_SIZE}), or use Edit in "
+                "Segment Editor."
+            )
+            return
+        except Exception as exc:  # noqa: BLE001 — surface any backend failure
+            logging.error("TotalSegmentator run failed: %s", exc)
+            self.statusLabel.setText(f"Segmentation failed: {str(exc)[-160:]}")
+            return
         finally:
             self.progressBar.setVisible(False)
+            self.progressBar.setRange(0, 100)
+            self.runButton.setEnabled(True)
         self.statusLabel.setText("Review the result, then Accept or Reject.")
         self.acceptButton.setEnabled(True)
         self.rejectButton.setEnabled(True)
@@ -703,31 +729,115 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
                 return node
         return None
 
-    def segment(self, volume, sctTarget):
+    def segment(self, volume, sctTarget, progressCallback=None):
         """Run the AI backend for one structure, landing output in scratch.
 
-        The wrapper's ``run()`` was a stub; this is the orchestrator-owned
-        entry point a card's Run drives.  All TotalSegmentator invocation
-        funnels through the single :meth:`_runTotalSegmentator` seam so CI can
-        stub it (a real inference needs a multi-GB model + GPU).  Returns the
+        The orchestrator-owned entry point a card's Run drives.  All
+        TotalSegmentator invocation funnels through the single
+        :meth:`_runTotalSegmentator` seam so CI can stub it (a real inference
+        needs a multi-GB model + GPU).  ``progressCallback`` receives the
+        backend's output lines (the card's status surface).  Returns the
         scratch ``vtkMRMLSegmentationNode`` holding the structure's pending
-        output (ADR-0024 §"Output contract").
+        output (ADR-0024 §"Output contract"); raises the wrapper's
+        ``TotalSegmentatorNotInstalled`` when the backend is unavailable so
+        the card can route the surgeon to the manual path.
         """
-        return self._runTotalSegmentator(volume, sctTarget)
+        return self._runTotalSegmentator(
+            volume, sctTarget, progressCallback=progressCallback
+        )
 
-    def _runTotalSegmentator(self, volume, sctTarget):
+    def _runTotalSegmentator(self, volume, sctTarget, progressCallback=None):
         """The single monkeypatchable backend-invocation seam.
 
         Kept import-pure: the TotalSegmentator backend is reached only through
-        the lazy-install wrapper's ``run()`` call path (ADR-0024 §"Lazy
-        install"), never imported at module-import time.  CI stubs this method
-        to exercise the Run/Accept/Reject bookkeeping without an inference.
+        the lazy-install wrapper's call path (ADR-0024 §"Lazy install"), never
+        imported at module-import time.  CI stubs this method (or the
+        wrapper's ``runInference``) to exercise the Run/Accept/Reject
+        bookkeeping without an inference.
+
+        The real wiring: export the input volume to a temp NIfTI, run the
+        backend OUT OF PROCESS (GUI stays alive; progress streams to the
+        callback), then import each per-label output file into the scratch
+        node as an SCT-tagged segment (the LabelToSCT bridge mapping,
+        ADR-0011, mirrored by the wrapper's ``INFERENCE_TARGETS``).
         """
-        _totalSegmentatorWrapper().run()
-        # A real backend wiring populates a scratch node from the inference
-        # output and SCT-tags it from the LabelToSCT bridge (ADR-0011); the
-        # end-to-end inference path lands with the backend integration.
-        return self.createScratchSegmentation()
+        import shutil
+        import tempfile
+
+        wrapper = _totalSegmentatorWrapper()
+        if not wrapper.ensureBackendInstalled():
+            raise wrapper.TotalSegmentatorNotInstalled(
+                "TotalSegmentator backend is not available; use the Segment "
+                "Editor manual path or retry the install."
+            )
+
+        spec = wrapper.INFERENCE_TARGETS.get(str(sctTarget))
+        if spec is None:
+            raise ValueError(f"no TotalSegmentator target for SCT {sctTarget!r}")
+        meaning = self._structureMeaning(sctTarget)
+
+        workdir = tempfile.mkdtemp(prefix="LiverSegTotalSeg-")
+        try:
+            input_path = os.path.join(workdir, "input.nii.gz")
+            if not slicer.util.saveNode(volume, input_path):
+                raise RuntimeError("could not export the input volume for inference")
+            output_dir = os.path.join(workdir, "out")
+            os.makedirs(output_dir, exist_ok=True)
+
+            wrapper.runInference(
+                input_path, output_dir, sctTarget, progress_callback=progressCallback
+            )
+
+            scratch = self.createScratchSegmentation()
+            imported = 0
+            for label in spec["labels"]:
+                label_path = os.path.join(output_dir, f"{label}.nii.gz")
+                if not os.path.isfile(label_path):
+                    continue
+                imported += self._importLabelFileAsSegment(
+                    scratch, label_path, sctTarget, meaning
+                )
+            if imported == 0:
+                raise RuntimeError(
+                    "TotalSegmentator produced no output for "
+                    f"{meaning!r} (labels {spec['labels']})."
+                )
+            # 3D preview so the surgeon can judge the result before Accept.
+            self.ensureSurfaceRepresentation(scratch)
+            return scratch
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
+
+    def _structureMeaning(self, sctTarget):
+        """Human meaning for a structure-card SCT code (the tab vocabulary)."""
+        meanings = {
+            SCT_LIVER_CODE: "Liver",
+            SCT_PORTAL_VEIN_CODE: "Portal vein",
+            SCT_HEPATIC_VEIN_CODE: "Hepatic vein",
+            SCT_MASS_CODE: "Mass",
+        }
+        return meanings.get(str(sctTarget), str(sctTarget))
+
+    def _importLabelFileAsSegment(self, scratch, label_path, code, meaning):
+        """Import one backend label file into ``scratch``; return segments added."""
+        labelmap = slicer.util.loadLabelVolume(label_path)
+        if labelmap is None:
+            return 0
+        try:
+            before = scratch.GetSegmentation().GetNumberOfSegments()
+            ok = slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(
+                labelmap, scratch
+            )
+            after = scratch.GetSegmentation().GetNumberOfSegments()
+            if not ok or after <= before:
+                return 0
+            for index in range(before, after):
+                segment_id = scratch.GetSegmentation().GetNthSegmentID(index)
+                scratch.GetSegmentation().GetSegment(segment_id).SetName(meaning)
+                self.tagSegmentWithSct(scratch, segment_id, code, meaning)
+            return after - before
+        finally:
+            slicer.mrmlScene.RemoveNode(labelmap)
 
     #
     # SCT tagging (ADR-0011 dispatch; bridge under repo-root
