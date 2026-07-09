@@ -112,6 +112,14 @@ public:
   vtkSetVector3Macro(PickedPositionWorld, double);
   vtkGetVector3Macro(PickedPositionWorld, double);
 
+  /// TRANSIENT live picked (u, v) in the flattened parametric domain —
+  /// the resectogram-strip coordinate of the same pick (ADR-0025
+  /// §Context: the strip is the 1:1 (u, v) image).  Sentinel (-1, -1)
+  /// means "no pick yet"; consumers must treat any negative component
+  /// as unset.  Same persistence rule as PickedPositionWorld.
+  vtkSetVector2Macro(PickedUV, double);
+  vtkGetVector2Macro(PickedUV, double);
+
   /// PERSISTED presence flag — "a locator exists / is shown".
   /// Round-trips through Copy / WriteXML / ReadXMLAttributes.
   vtkSetMacro(LocatorActive, bool);
@@ -126,6 +134,7 @@ private:
   void operator=(const vtkMRMLLocatorNode&) = delete;
 
   double PickedPositionWorld[3];
+  double PickedUV[2];
   bool LocatorActive;
 };
 

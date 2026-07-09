@@ -269,10 +269,6 @@ class FlattenedSurfaceRepresentation:
         """Attach the cross-view locator node (ADR-0025); ``None`` clears."""
         self._locator_node = locator_node
 
-    def SetPickedUV(self, uv: Any) -> None:  # noqa: N802 - VTK verb
-        """Record the picked strip ``(u, v)`` (set by the pick producer)."""
-        self._picked_uv = (float(uv[0]), float(uv[1])) if uv is not None else None
-
     def _apply_locator(self) -> None:
         """Drive the strip's circle marker from the locator state.
 
@@ -284,6 +280,11 @@ class FlattenedSurfaceRepresentation:
         MatRatio squeeze applied to its centre about the camera focal
         point (the ratio scales clip-space offsets).  Visibility follows
         the locator display's gesture-scoped switch.
+
+        BOTH marker inputs live on the locator node (ADR-0025: the node
+        is the locator-state carrier): the gesture-scoped display
+        Visibility AND the picked ``(u, v)`` (``GetPickedUV``; any
+        negative component is the "no pick yet" sentinel).
         """
         mapper = self._resection_mapper_2d
         if mapper is not None:
@@ -296,7 +297,11 @@ class FlattenedSurfaceRepresentation:
         visible = (
             bool(display_node.GetVisibility()) if display_node is not None else False
         )
-        uv = self._picked_uv
+        uv = None
+        if node is not None:
+            picked = node.GetPickedUV()
+            if picked is not None and picked[0] >= 0.0 and picked[1] >= 0.0:
+                uv = (float(picked[0]), float(picked[1]))
         if not visible or uv is None or self._bezier_plane is None:
             if self._marker_actor is not None:
                 self._marker_actor.SetVisibility(False)
@@ -347,7 +352,6 @@ class FlattenedSurfaceRepresentation:
         self._distance_map_volume = None
         self._effective_texture_num_comps = 0
         self._locator_node = None
-        self._picked_uv = None
 
         # Detach BEFORE dropping the actor handles: nulling the marker actor
         # first would make _detach_actors skip it and leak it into the
@@ -458,7 +462,6 @@ class FlattenedSurfaceRepresentation:
         self._marker_actor.GetProperty().SetColor(1.0, 0.0, 0.0)
         self._marker_actor.GetProperty().SetLineWidth(2.0)
         self._marker_actor.SetVisibility(False)
-        self._picked_uv: tuple | None = None
 
     def _attach_actors(self, renderer: Any) -> None:
         if self._resection_actor_2d is not None and hasattr(renderer, "AddActor"):

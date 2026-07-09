@@ -481,9 +481,12 @@ class ResectogramPipeline(_PipelineBase):
         # (margins + aspect letterboxing) does not satisfy -- the marker
         # landed offset from the cursor.  Falls back to the fraction path on
         # stub renderers (the GL-free seam tests).
+        # The producer writes BOTH the world point AND the picked (u, v)
+        # onto the locator node (ADR-0025: the node is the locator-state
+        # carrier); the strip Representation reads the (u, v) back off the
+        # locator to place its circle marker.
         uv = self._display_to_uv(display_xy, renderer, mat_ratio, representation)
         if uv is not None:
-            representation.SetPickedUV(uv)  # drives the strip's circle marker
             return producer.produce_from_uv(uv[0], uv[1])
         return producer.produce(display_xy, viewport_size, mat_ratio)
 

@@ -454,6 +454,12 @@ def test_producer_writes_picked_position_from_pixel():
         f"PickedPositionWorld (ADR-0025 §Producer); got {written}, expected "
         f"{expected}."
     )
+    written_uv = tuple(locator.GetPickedUV())
+    assert written_uv == pytest.approx((0.25, 0.75), abs=1e-9), (
+        "produce() must also write the picked (u, v) onto the locator node "
+        "(ADR-0025: the node is the locator-state carrier; the strip "
+        f"Representation reads it back to place its marker); got {written_uv}."
+    )
 
 
 def test_producer_degenerate_input_is_no_op_returning_none():

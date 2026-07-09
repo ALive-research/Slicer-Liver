@@ -717,8 +717,15 @@ class _StubLocatorDisplay:
 
 
 class _StubLocatorNode:
+    def __init__(self, uv=(-1.0, -1.0)):
+        # (-1, -1) is the node's "no pick yet" sentinel.
+        self.uv = uv
+
     def GetPickedPositionWorld(self):  # noqa: N802 - VTK verb
         return (10.0, 20.0, 30.0)
+
+    def GetPickedUV(self):  # noqa: N802 - VTK verb
+        return self.uv
 
     def GetDisplayNode(self):  # noqa: N802 - VTK verb
         return _StubLocatorDisplay()
@@ -765,8 +772,9 @@ def test_locator_marker_is_a_round_world_actor(rep_module):
     )
     assert rep._marker_actor.GetVisibility() == 0, "no pick -> no marker"
 
-    rep.SetLocatorNode(_VisibleLocator())
-    rep.SetPickedUV((0.25, 0.75))
+    # The picked (u, v) is carried by the LOCATOR NODE (ADR-0025: the node
+    # is the locator-state carrier) -- the representation reads it there.
+    rep.SetLocatorNode(_VisibleLocator((0.25, 0.75)))
     rep.update(_StubDisplayNode(), _StubDataNode())
     assert mapper.locator_radius == pytest.approx(0.0), "shader disc still off"
     assert rep._marker_actor.GetVisibility() == 1, (
@@ -794,6 +802,32 @@ def test_locator_marker_is_a_round_world_actor(rep_module):
     rep.cleanup()
 
 
+def test_locator_marker_stays_off_at_the_no_pick_sentinel(rep_module):
+    """A visible display with the (-1, -1) sentinel UV shows NO marker.
+
+    The locator node carries (-1, -1) until the first pick gesture; the
+    representation must treat any negative component as "no pick" rather
+    than drawing a circle off the quad.
+    """
+
+    class _VisibleDisplay(_StubLocatorDisplay):
+        def GetVisibility(self):  # noqa: N802 - VTK verb
+            return True
+
+    class _VisibleLocator(_StubLocatorNode):
+        def GetDisplayNode(self):  # noqa: N802 - VTK verb
+            return _VisibleDisplay()
+
+    rep = rep_module()
+    rep._resection_mapper_2d = _StubMapperWithLocator()
+    rep.SetLocatorNode(_VisibleLocator())  # sentinel (-1, -1)
+    rep.update(_StubDisplayNode(), _StubDataNode())
+    assert rep._marker_actor.GetVisibility() == 0, (
+        "the (-1, -1) sentinel means no pick yet -- no marker."
+    )
+    rep.cleanup()
+
+
 def test_locator_marker_gates_on_display_visibility(rep_module):
     """An invisible locator display pushes radius 0 (marker off)."""
 
@@ -808,8 +842,7 @@ def test_locator_marker_gates_on_display_visibility(rep_module):
     rep = rep_module()
     mapper = _StubMapperWithLocator()
     rep._resection_mapper_2d = mapper
-    rep.SetLocatorNode(_HiddenLocator())
-    rep.SetPickedUV((0.5, 0.5))
+    rep.SetLocatorNode(_HiddenLocator((0.5, 0.5)))
     rep.update(_StubDisplayNode(), _StubDataNode())
     assert rep._marker_actor.GetVisibility() == 0, (
         "locator display Visibility false -> the circle marker hides "
@@ -838,8 +871,7 @@ def test_locator_marker_centre_squeezed_by_mat_ratio_about_focal(rep_module):
 
     rep = rep_module()
     rep._resection_mapper_2d = _StubMapperWithLocator()
-    rep.SetLocatorNode(_VisibleLocator())
-    rep.SetPickedUV((0.25, 0.75))
+    rep.SetLocatorNode(_VisibleLocator((0.25, 0.75)))
     rep.update(_StubDisplayNode(), _StubDataNode())
 
     plane = rep.GetBezierPlane()
