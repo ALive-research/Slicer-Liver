@@ -202,24 +202,17 @@ def test_extractor_not_invoked_per_drag_only_on_commit(monkeypatch):
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "T2-target-mesh-weakref not yet implemented: the Init Representation's "
-        "TODO(T2-target-mesh-weakref) consume sites do not yet feed the "
-        "extractor the weakref'd target mesh (ADR-0014 §1).  Invariant-first "
-        "RED pin (ADR-0027); strict=True flips this to a hard failure the moment "
-        "the feature lands, forcing removal of this marker."
-    ),
-)
 def test_init_representation_reads_target_via_weakref(monkeypatch):
     """Extraction consumes the weakref'd target mesh, not a None/hard-coded path.
 
     ADR-0014 §1: the Init Representation reaches the target mesh through
     ``vtkMRMLBezierSurfaceNode``'s weak ``target`` reference
-    (``GetTargetModelNode()``).  Pins that the
-    ``TODO(T2-target-mesh-weakref)`` consume sites feed the extractor the
-    weakref'd mesh.  RED until those sites are wired.
+    (``GetTargetModelNode()``).  Pins that the commit path feeds the
+    extractor the weakref'd mesh.  (Formerly a strict-xfail RED pin; its
+    fixture never gave the carrier a DISPLAY node, so the pipeline could
+    not bind the carrier at all -- the consume-site wire itself was
+    present.  The fixture now attaches the display node the production
+    pipeline binds through.)
     """
     slicer = _slicer_or_skip()
     pipeline = _make_pipeline_or_skip()
@@ -254,7 +247,16 @@ def test_init_representation_reads_target_via_weakref(monkeypatch):
 
     monkeypatch.setattr(pipeline, extract_attr, _capture_extract, raising=True)
 
-    pipeline.SetDisplayNode(getattr(bezier, "GetDisplayNode", lambda: None)())
+    # Bind the pipeline the way production does: through the carrier's
+    # display node (the fixture formerly passed None here, leaving the
+    # pipeline with no carrier and masking the working consume site).
+    display = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLParametricSurfaceDisplayNode"
+    )
+    if display is None:
+        pytest.skip("vtkMRMLParametricSurfaceDisplayNode not registered.")
+    bezier.AddAndObserveDisplayNodeID(display.GetID())
+    pipeline.SetDisplayNode(display)
     pipeline.commit()
 
     assert seen["mesh_source"] is not None, (
