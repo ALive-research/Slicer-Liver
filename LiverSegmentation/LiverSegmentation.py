@@ -331,6 +331,9 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
             return
         self.logic.importSegmentationAsCanonical(node, assignments)
         self._refreshTabGlyphs()
+        # Same re-centre as the card's Accept: the imported anatomy's
+        # surface model lands outside the default camera framing.
+        slicer.util.resetThreeDViews()
 
     def onPreDownload(self):
         """Pre-download the AI backend without minting a node.
@@ -488,6 +491,10 @@ class _StructureCard:
         self.rejectButton.setEnabled(False)
         self.statusLabel.setText("Accepted.")
         self._widget._refreshTabGlyphs()
+        # The accepted surface model lands outside the default camera
+        # framing; re-centre the 3D views on the new anatomy (GUI-level
+        # concern, so it lives here and not in the logic's accept()).
+        slicer.util.resetThreeDViews()
 
     def onReject(self):
         if self._scratch is None:

@@ -280,3 +280,52 @@ def test_visual_defaults_survive_accept_onto_the_canonical_node():
         "onto the canonical node -- it lives on the display node and does "
         "not travel with the copied segment."
     )
+
+
+def test_accept_reframes_the_threed_views(monkeypatch):
+    """Accepting the first anatomy must re-centre the 3D view.
+
+    The surface model generated on Accept lands outside the default
+    camera framing -- the surgeon saw an empty/off-centre 3D view until
+    a manual re-centre.  The card's Accept requests a 3D re-frame
+    (``slicer.util.resetThreeDViews``); pinned GL-free at that seam.
+    """
+    slicer = _slicer_or_skip()
+    import LiverSegmentation as module
+
+    logic = _logic_or_skip(slicer)
+    scratch = logic.createScratchSegmentation()
+    scratch.GetSegmentation().AddEmptySegment("s", "Synthetic")
+
+    class _CardHost:
+        pass
+
+    host = _CardHost()
+    host.logic = logic
+    host._refreshTabGlyphs = lambda: None
+
+    class _WidgetStandIn:
+        pass
+
+    stand_in = _WidgetStandIn()
+    stand_in.logic = logic
+    stand_in._refreshTabGlyphs = lambda: None
+
+    card = module._StructureCard.__new__(module._StructureCard)
+    card._widget = stand_in
+    card._scratch = scratch
+    import qt
+
+    card.acceptButton = qt.QPushButton()
+    card.rejectButton = qt.QPushButton()
+    card.statusLabel = qt.QLabel()
+
+    reframes = []
+    monkeypatch.setattr(slicer.util, "resetThreeDViews", lambda: reframes.append(1))
+
+    card.onAccept()
+
+    assert reframes, (
+        "onAccept must request a 3D-view re-frame after the surface model "
+        "lands -- the new anatomy is otherwise outside the camera framing."
+    )
