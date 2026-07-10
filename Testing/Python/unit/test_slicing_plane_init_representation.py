@@ -1,24 +1,33 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital.  All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
-"""Python unit tests for ``SlicingPlaneInitRepresentation`` — T2.2 stack, iteration 2.
+"""Python unit tests for ``SlicingPlaneInitRepresentation``.
 
-Mirrors ``test_bezier_planning_representation.py``: per ADR-0008 §2
-Representations are the smallest unit-testable VTK assembly and have
-no Slicer dependency.  Two layers of assertions:
+Per ADR-0008 §2 Representations are the smallest unit-testable VTK
+assembly and have no Slicer dependency.  Two layers of assertions:
 
 * Pure-Python checks against the introspection helpers
   (``GetCurrentColor``, ``GetCurrentOpacity``, ``GetInputRefreshCount``).
-  These run with or without VTK on ``PYTHONPATH``.
 
 * VTK-mediated checks against the real ``vtkActor`` /
-  ``vtkPlaneSource`` / ``vtkSphereSource`` outputs, gated by
-  ``pytest.importorskip("vtk")``.
+  ``vtkSphereSource`` outputs and the recorded contour-mapper calls.
+
+The plane visualisation is the v1 SHADER contour: the whole target
+liver mesh renders through ``vtkOpenGLSlicingContourPolyDataMapper``
+and the fragment shader keeps only a band around the plane — the band
+IS the plane visualisation; no plane square is ever rendered.  The
+wrapped mapper is off the path in the bare-VTK unit layer, so every
+construction injects a fake through the ``slicing_contour_mapper``
+seam (ADR-0014 §3, the ``FlattenedSurfaceRepresentation`` pattern);
+the fake subclasses ``vtk.vtkPolyDataMapper`` so a real
+``vtkActor().SetMapper`` accepts it, and records the plane-uniform /
+visibility / input-connection calls the tests pin.
 
 References
 ----------
 * ADR-0008 §2 — Representation tests, unit layer.
 * ADR-0013 §6 — Representations as composable VTK pipelines.
 * ADR-0014 §2 — names this Representation.
+* ADR-0014 §3 — the injection seam for relocated wrapped mappers.
 * ADR-0014 §4 — init data accessors on the data node.
 """
 
@@ -28,6 +37,16 @@ import pathlib
 import sys
 
 import pytest
+
+vtk = pytest.importorskip(
+    "vtk",
+    reason=(
+        "vtk not importable; the Representation module itself imports "
+        "vtk, so the whole suite needs it.  Run inside Slicer's Python "
+        "or in any environment where the bundled vtk wheel is on "
+        "sys.path."
+    ),
+)
 
 # --------------------------------------------------------------------------- #
 # Repo geometry — Representations live at
@@ -42,9 +61,69 @@ if str(PY_DIR) not in sys.path:
 
 
 # --------------------------------------------------------------------------- #
-# Stub nodes — same minimal-API approach as ``test_bezier_planning_
-# representation.py``.  Kept local to avoid cross-test coupling.
+# Test doubles
 # --------------------------------------------------------------------------- #
+
+
+class _FakeSlicingContourMapper(vtk.vtkPolyDataMapper):
+    """Recording stand-in for ``vtkOpenGLSlicingContourPolyDataMapper``.
+
+    Subclasses ``vtk.vtkPolyDataMapper`` so a real ``vtkActor`` accepts
+    it via ``SetMapper``; the Python-side overrides record the calls
+    the Representation is expected to make (plane uniforms, contour
+    visibility, mesh input connection) without any GL context.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.input_connections: list = []
+        self.plane_positions: list[tuple] = []
+        self.plane_normals: list[tuple] = []
+        self.thickness: float | None = None
+        self.visibility_calls: list[bool] = []
+
+    def SetInputConnection(self, conn) -> None:  # noqa: N802 - VTK verb
+        self.input_connections.append(conn)
+
+    def SetPlanePositionWorld(self, x, y, z) -> None:  # noqa: N802
+        self.plane_positions.append((float(x), float(y), float(z)))
+
+    def SetPlaneNormalWorld(self, x, y, z) -> None:  # noqa: N802
+        self.plane_normals.append((float(x), float(y), float(z)))
+
+    def SetContourThickness(self, value) -> None:  # noqa: N802
+        self.thickness = float(value)
+
+    def SetContourVisibility(self, value) -> None:  # noqa: N802
+        self.visibility_calls.append(bool(value))
+
+    @property
+    def visibility(self) -> bool | None:
+        """The last visibility written, or ``None`` when never set."""
+        return self.visibility_calls[-1] if self.visibility_calls else None
+
+
+def _sphere_polydata():
+    """A small non-empty ``vtkPolyData`` standing in for the liver mesh."""
+    source = vtk.vtkSphereSource()
+    source.Update()
+    return source.GetOutput()
+
+
+class _StubTargetModel:
+    """Minimal target-model double: real polydata behind the model-node
+    accessors the Representation feeds the contour mapper from."""
+
+    def __init__(self, polydata=None) -> None:
+        self._polydata = polydata if polydata is not None else _sphere_polydata()
+        self._producer = vtk.vtkTrivialProducer()
+        self._producer.SetOutput(self._polydata)
+
+    def GetPolyData(self):  # noqa: N802 - VTK verb
+        return self._polydata
+
+    def GetPolyDataConnection(self):  # noqa: N802 - VTK verb
+        return self._producer.GetOutputPort()
 
 
 class _StubDisplayNode:
@@ -70,11 +149,13 @@ class _StubDataNode:
         normal: tuple = (0.0, 0.0, 1.0),
         init0: tuple = (-5.0, 0.0, 0.0),
         init1: tuple = (5.0, 0.0, 0.0),
+        target=None,
     ) -> None:
         self.origin = origin
         self.normal = normal
         self.init0 = init0
         self.init1 = init1
+        self.target = target
 
     def GetSlicingPlaneOrigin(self):
         return self.origin
@@ -89,6 +170,9 @@ class _StubDataNode:
             return self.init1
         return None
 
+    def GetTargetModelNode(self):
+        return self.target
+
 
 # --------------------------------------------------------------------------- #
 # Fixtures
@@ -97,15 +181,29 @@ class _StubDataNode:
 
 @pytest.fixture
 def rep_module():
+    """Return a factory constructing the Representation with an injected
+    fake contour mapper.
+
+    The wrapped ``vtkOpenGLSlicingContourPolyDataMapper`` is off the path
+    in the bare-VTK unit layer (ADR-0008 §2), so each construction injects
+    a ``_FakeSlicingContourMapper`` via the ``slicing_contour_mapper`` seam
+    (ADR-0014 §3).  Tests read the fake back through the Representation's
+    ``GetContourMapper()``.
+    """
     from Representations.SlicingPlaneInitRepresentation import (
         SlicingPlaneInitRepresentation,
     )
 
-    return SlicingPlaneInitRepresentation
+    def _make(renderer=None):
+        return SlicingPlaneInitRepresentation(
+            renderer, slicing_contour_mapper=_FakeSlicingContourMapper()
+        )
+
+    return _make
 
 
 # --------------------------------------------------------------------------- #
-# Pure-Python assertions (run with or without VTK)
+# Pure-Python assertions
 # --------------------------------------------------------------------------- #
 
 
@@ -165,8 +263,9 @@ def test_representation_opacity_round_trip(rep_module):
 
 
 def test_representation_input_refresh_idempotency(rep_module):
-    """The idempotency memo on (origin, normal, init0, init1) skips a
-    redundant refresh; mutating any of those inputs advances the counter.
+    """The idempotency memo on (origin, normal, init0, init1, target)
+    skips a redundant refresh; mutating any of those inputs advances the
+    counter.
     """
     rep = rep_module()
     display = _StubDisplayNode()
@@ -203,6 +302,11 @@ def test_representation_input_refresh_idempotency(rep_module):
     data.init1 = (8.0, 0.0, 0.0)
     rep.update(display, data)
     assert rep.GetInputRefreshCount() == first + 4
+
+    # Swapping the target model forces a refresh (contour re-feed).
+    data.target = _StubTargetModel()
+    rep.update(display, data)
+    assert rep.GetInputRefreshCount() == first + 5
     rep.cleanup()
 
 
@@ -211,38 +315,55 @@ def test_representation_input_refresh_idempotency(rep_module):
 # --------------------------------------------------------------------------- #
 
 
-@pytest.fixture
-def vtk_module():
-    """Import the ``vtk`` module or skip the test."""
-    return pytest.importorskip(
-        "vtk",
-        reason=(
-            "vtk not importable; skip the VTK-mediated Representation "
-            "tests.  Run inside Slicer's Python or in any environment "
-            "where the bundled vtk wheel is on sys.path."
-        ),
+def test_representation_construct_builds_actors(rep_module):
+    """Construction yields two marker actors + the contour actor/mapper
+    pair, with the v1 band thickness preset and the contour hidden."""
+    from Representations.SlicingPlaneInitRepresentation import (
+        CONTOUR_THICKNESS_WORLD,
     )
 
-
-def test_representation_construct_builds_actors(rep_module, vtk_module):
-    """With VTK available, construction yields two marker actors and one
-    plane actor."""
     rep = rep_module()
     assert rep.GetMarkerActor(0) is not None
     assert rep.GetMarkerActor(1) is not None
     # Only two marker actors — index 2 is out of range.
     assert rep.GetMarkerActor(2) is None
-    assert rep.GetPlaneActor() is not None
-    assert rep.GetPlaneSource() is not None
+    assert rep.GetContourActor() is not None
+    mapper = rep.GetContourMapper()
+    assert mapper is not None
+    assert mapper.thickness == pytest.approx(CONTOUR_THICKNESS_WORLD)
+    # Hidden until a carrier plane + target mesh arrive.
+    assert mapper.visibility is False
     rep.cleanup()
     # After cleanup() actors are released.
     assert rep.GetMarkerActor(0) is None
-    assert rep.GetPlaneActor() is None
+    assert rep.GetContourActor() is None
+    assert rep.GetContourMapper() is None
 
 
-def test_representation_marker_positions_match_init_points(
-    rep_module, vtk_module
+def test_representation_construct_without_wrapping_degrades_to_markers_only(
+    monkeypatch,
 ):
+    """With no injected mapper AND the wrapping off the path (production
+    resolver returns ``None``) the Representation still constructs —
+    markers only, no contour actor, and updates do not raise."""
+    import Representations.SlicingPlaneInitRepresentation as mod
+
+    monkeypatch.setattr(mod, "_resolve_slicing_contour_mapper", lambda: None)
+    rep = mod.SlicingPlaneInitRepresentation()
+    assert rep.GetContourActor() is None
+    assert rep.GetContourMapper() is None
+
+    renderer = vtk.vtkRenderer()
+    rep.SetRenderer(renderer)
+    assert renderer.GetActors().GetNumberOfItems() == 2
+
+    rep.update(_StubDisplayNode(), _StubDataNode(target=_StubTargetModel()))
+    assert rep.GetInputRefreshCount() == 1
+    rep.cleanup()
+    assert renderer.GetActors().GetNumberOfItems() == 0
+
+
+def test_representation_marker_positions_match_init_points(rep_module):
     """After ``update()`` the marker sphere sources sit at the two init
     points reported by the data node."""
     rep = rep_module()
@@ -261,116 +382,108 @@ def test_representation_marker_positions_match_init_points(
     rep.cleanup()
 
 
-def test_representation_plane_source_driven_by_origin_and_normal(
-    rep_module, vtk_module
-):
-    """The ``vtkPlaneSource`` centre lands on the data node's
-    ``GetSlicingPlaneOrigin`` and its normal lines up with
-    ``GetSlicingPlaneNormal``."""
+def test_contour_uniforms_follow_the_carrier_plane(rep_module):
+    """After ``update()`` with a target mesh present, the contour mapper
+    carries the carrier's plane origin/normal as its world-space uniforms
+    and the contour is visible — the shader band IS the plane
+    visualisation."""
     rep = rep_module()
     data = _StubDataNode(
         origin=(3.0, 4.0, 5.0),
         normal=(0.0, 1.0, 0.0),
         init0=(-2.0, 4.0, 5.0),
         init1=(2.0, 4.0, 5.0),
+        target=_StubTargetModel(),
     )
     rep.update(_StubDisplayNode(), data)
 
-    plane = rep.GetPlaneSource()
-    centre = plane.GetCenter()
-    assert list(centre) == pytest.approx([3.0, 4.0, 5.0])
-
-    n = plane.GetNormal()
-    # Allow either sign — ``vtkPlaneSource`` may flip the normal
-    # depending on the corner ordering vtkMath::Perpendiculars produced.
-    assert (
-        list(n) == pytest.approx([0.0, 1.0, 0.0])
-        or list(n) == pytest.approx([0.0, -1.0, 0.0])
-    )
+    mapper = rep.GetContourMapper()
+    assert mapper.plane_positions[-1] == pytest.approx((3.0, 4.0, 5.0))
+    assert mapper.plane_normals[-1] == pytest.approx((0.0, 1.0, 0.0))
+    assert mapper.visibility is True
     rep.cleanup()
 
 
-def test_representation_mapper_color_matches_display_node(
-    rep_module, vtk_module
-):
-    """After ``update()`` the actor properties carry the display node's
-    ResectionColor.  Plane opacity is reduced relative to the markers."""
-    from Representations.SlicingPlaneInitRepresentation import (
-        PLANE_OPACITY_FACTOR,
-    )
+def test_contour_hidden_without_target(rep_module):
+    """No target model (or an empty target mesh) → the contour is hidden
+    and no plane uniforms are pushed; the markers still refresh."""
+    rep = rep_module()
+    rep.update(_StubDisplayNode(), _StubDataNode(target=None))
 
+    mapper = rep.GetContourMapper()
+    assert mapper.visibility is False
+    assert True not in mapper.visibility_calls
+    assert mapper.plane_positions == []
+    assert mapper.input_connections == []
+    assert rep.GetInputRefreshCount() == 1
+    rep.cleanup()
+
+    # Empty target mesh — same hidden outcome.
+    rep = rep_module()
+    empty_target = _StubTargetModel(polydata=vtk.vtkPolyData())
+    rep.update(_StubDisplayNode(), _StubDataNode(target=empty_target))
+    mapper = rep.GetContourMapper()
+    assert mapper.visibility is False
+    assert True not in mapper.visibility_calls
+    assert mapper.input_connections == []
+    rep.cleanup()
+
+
+def test_contour_feeds_the_target_mesh_once(rep_module):
+    """The target mesh connection is fed to the contour mapper once per
+    target (memoised); swapping the target re-feeds it."""
+    rep = rep_module()
+    target_a = _StubTargetModel()
+    data = _StubDataNode(target=target_a)
+    rep.update(_StubDisplayNode(), data)
+
+    mapper = rep.GetContourMapper()
+    assert len(mapper.input_connections) == 1
+
+    # A geometry change at the SAME target refreshes the uniforms but
+    # must not re-feed the mesh connection.
+    data.origin = (1.0, 0.0, 0.0)
+    rep.update(_StubDisplayNode(), data)
+    assert len(mapper.input_connections) == 1
+    assert mapper.plane_positions[-1] == pytest.approx((1.0, 0.0, 0.0))
+
+    # Swapping the target re-feeds the connection.
+    data.target = _StubTargetModel()
+    rep.update(_StubDisplayNode(), data)
+    assert len(mapper.input_connections) == 2
+    rep.cleanup()
+
+
+def test_representation_mapper_color_matches_display_node(rep_module):
+    """After ``update()`` the marker actor properties carry the display
+    node's ResectionColor at full opacity.  The contour band takes no
+    actor decoration — its colour is the shader's concern."""
     rep = rep_module()
     display = _StubDisplayNode(color=(0.25, 0.5, 0.75), opacity=0.8)
     rep.update(display, _StubDataNode())
 
-    # Markers — full opacity, display node's colour.
     for i in (0, 1):
         actor = rep.GetMarkerActor(i)
         assert list(actor.GetProperty().GetColor()) == pytest.approx(
             [0.25, 0.5, 0.75]
         )
         assert actor.GetProperty().GetOpacity() == pytest.approx(0.8)
-
-    # Plane — same colour, reduced opacity.
-    plane_actor = rep.GetPlaneActor()
-    assert list(plane_actor.GetProperty().GetColor()) == pytest.approx(
-        [0.25, 0.5, 0.75]
-    )
-    assert plane_actor.GetProperty().GetOpacity() == pytest.approx(
-        0.8 * PLANE_OPACITY_FACTOR
-    )
     rep.cleanup()
 
 
-def test_representation_attach_detach_renderer(rep_module, vtk_module):
-    """``SetRenderer(r)`` adds two marker actors + one plane actor = 3;
+def test_representation_attach_detach_renderer(rep_module):
+    """``SetRenderer(r)`` adds two marker actors + the contour actor = 3;
     ``cleanup()`` removes them all."""
     rep = rep_module()
-    renderer = vtk_module.vtkRenderer()
+    renderer = vtk.vtkRenderer()
     assert renderer.GetActors().GetNumberOfItems() == 0
 
     rep.SetRenderer(renderer)
-    # Three actors expected: two markers + one plane.  No grid actor
-    # (the grid is a Planning-state shader feature per ADR-0014 §3;
-    # irrelevant in Init).  No ring actor (deferred per
-    # TODO(T2-target-mesh-weakref)).
+    # Three actors expected: two markers + the shader contour.  No grid
+    # actor (the grid is a Planning-state shader feature per ADR-0014
+    # §3; irrelevant in Init).  No plane square — the contour band on
+    # the liver IS the plane visualisation.
     assert renderer.GetActors().GetNumberOfItems() == 3
 
     rep.cleanup()
     assert renderer.GetActors().GetNumberOfItems() == 0
-
-
-def test_representation_plane_size_scales_with_init_point_distance(
-    rep_module, vtk_module
-):
-    """The plane's side length scales with the distance between the two
-    init points (per ``PLANE_SIZE_FACTOR`` in the Representation)."""
-    from Representations.SlicingPlaneInitRepresentation import (
-        PLANE_SIZE_FACTOR,
-    )
-
-    rep = rep_module()
-    # Far-apart init points so we exceed PLANE_FALLBACK_HALF_EXTENT and
-    # the distance-driven sizing dominates.
-    d = 100.0
-    data = _StubDataNode(
-        origin=(0.0, 0.0, 0.0),
-        normal=(0.0, 0.0, 1.0),
-        init0=(-d / 2, 0.0, 0.0),
-        init1=(d / 2, 0.0, 0.0),
-    )
-    rep.update(_StubDisplayNode(), data)
-
-    plane = rep.GetPlaneSource()
-    # Plane corners are at ``origin ± half × u`` (and ± half × v).  We
-    # only check the magnitude — the basis direction can vary.
-    expected_half = 0.5 * PLANE_SIZE_FACTOR * d
-    p1 = plane.GetPoint1()
-    origin = plane.GetOrigin()
-    side = (
-        (p1[0] - origin[0]) ** 2
-        + (p1[1] - origin[1]) ** 2
-        + (p1[2] - origin[2]) ** 2
-    ) ** 0.5
-    assert side == pytest.approx(2.0 * expected_half, rel=1e-6)
-    rep.cleanup()

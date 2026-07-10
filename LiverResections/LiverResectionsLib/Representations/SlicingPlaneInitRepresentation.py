@@ -3,10 +3,12 @@
 """Representation active in ``(ResectionState=Init, InitMode=SlicingPlane)``.
 
 Renders the surgeon-placed *SlicingPlane* initialisation geometry per
-ADR-0014 §2: the two init points that seed the plane and the plane
-visualisation itself.  Driven by the ``vtkMRMLBezierSurfaceNode`` data
-node (geometry: ``GetSlicingPlaneOrigin``, ``GetSlicingPlaneNormal``,
-``GetSlicingPlaneInitPoint(0|1)``) and the paired
+ADR-0014 §2: the two init points that seed the plane and the live
+shader contour that visualises the plane on the liver surface.  Driven
+by the ``vtkMRMLBezierSurfaceNode`` data node (geometry:
+``GetSlicingPlaneOrigin``, ``GetSlicingPlaneNormal``,
+``GetSlicingPlaneInitPoint(0|1)``, target liver mesh:
+``GetTargetModelNode``) and the paired
 ``vtkMRMLParametricSurfaceDisplayNode`` (decoration: ``GetResectionColor``,
 ``GetResectionOpacity``).
 
@@ -25,13 +27,16 @@ Three pieces of geometry per ADR-0014 §2
    transformed to ``GetSlicingPlaneInitPoint(0)`` and
    ``GetSlicingPlaneInitPoint(1)``.  Full opacity, takes the display
    node's ``ResectionColor``.
-2. **The plane visualisation** — a ``vtkPlaneSource`` driven by
-   ``GetSlicingPlaneOrigin`` (centre) + ``GetSlicingPlaneNormal``
-   (orientation).  Sized to a square ~2× the distance between the two
-   init points, centred on the plane origin.  Reduced opacity (the
-   display node's ``ResectionOpacity`` is multiplied by
-   ``PLANE_OPACITY_FACTOR`` so the plane reads as a transparent
-   reference surface and does not occlude the underlying liver).
+2. **The live shader contour** — v1 parity: no plane square is ever
+   rendered.  The whole target liver mesh renders through the
+   relocated ``vtkOpenGLSlicingContourPolyDataMapper`` whose fragment
+   shader keeps only a band of ``CONTOUR_THICKNESS_WORLD`` world units
+   around the plane and discards everything else — the visible band on
+   the liver surface IS the plane's visualisation.  Shader-based per
+   the maintainer's requirement (no CPU cutter substitute).  Driven by
+   ``GetSlicingPlaneOrigin`` / ``GetSlicingPlaneNormal`` pushed as the
+   mapper's world-space plane uniforms, and fed the target mesh from
+   ``GetTargetModelNode`` (ADR-0014 §1).
 3. **Ring on the target liver mesh** — produced on the Init->Planning
    commit boundary by ``run_ring_extraction``: the Pipeline's
    ``commit()`` resolves the weakref'd target liver mesh
@@ -42,14 +47,16 @@ Three pieces of geometry per ADR-0014 §2
    shader's job; the discrete CPU ring is one-shot per resection
    (ADR-0019).
 
-Mapper relocation
------------------
-Per ADR-0014 §3 the relocated ``vtkOpenGLSlicingContourPolyDataMapper``
-is the eventual replacement for the plane visualisation mapper used
-here.  Today the relocation has not landed; this skeleton uses the
-generic ``vtkPolyDataMapper`` + ``vtkActor`` pair.  Marked with
-``TODO(T2-mapper-relocation)`` at the construction point so the swap
-is mechanical.
+Contour-mapper injection seam
+-----------------------------
+Per ADR-0014 §3 the contour mapper is injected, not silently
+discovered (mirrors ``FlattenedSurfaceRepresentation``'s
+``resection_mapper_2d`` seam): an injected instance (the bare-VTK unit
+layer, ADR-0008 §2) is used as-is; ``None`` (production) resolves the
+wrapped ``vtkOpenGLSlicingContourPolyDataMapper``.  Unlike the
+resectogram's resolve-or-raise, an unreachable wrapping degrades
+gracefully — the contour is a decoration, so the Representation simply
+renders the markers only (the bare unit layer must still construct).
 
 Renderer attachment
 -------------------
@@ -104,22 +111,11 @@ DEFAULT_RESECTION_OPACITY = 1.0
 # the design rationale of ADR-0009 §3 is applied.
 MARKER_RADIUS = 1.5
 
-# The plane is drawn at a reduced opacity relative to the display
-# node's ``ResectionOpacity`` so it reads as a transparent reference
-# surface and does not occlude the underlying liver in 3D views.
-PLANE_OPACITY_FACTOR = 0.35
-
-# Size factor — the plane is rendered as a square whose side length is
-# ``PLANE_SIZE_FACTOR`` × the distance between the two init points,
-# centred on the plane origin.  Provides a "sensible size" per the
-# T2.2 iteration-2 brief.  Refined when ADR-0009 §3's UX rationale is
-# applied to this Representation.
-PLANE_SIZE_FACTOR = 2.0
-
-# Fallback plane half-extent (world units) used when the two init
-# points are coincident — without it the plane visualisation would
-# collapse to a degenerate point.
-PLANE_FALLBACK_HALF_EXTENT = 25.0
+# Half-width (world units) of the shader contour band kept around the
+# slicing plane — the v1 band half-width.  The fragment shader discards
+# every liver fragment farther than this from the plane, so the
+# surviving band on the liver surface IS the plane's visualisation.
+CONTOUR_THICKNESS_WORLD = 2.0
 
 
 class SlicingPlaneInitRepresentation:
@@ -127,11 +123,17 @@ class SlicingPlaneInitRepresentation:
 
     Constructor
     -----------
-    ``SlicingPlaneInitRepresentation(renderer=None)``
+    ``SlicingPlaneInitRepresentation(renderer=None, *,
+    slicing_contour_mapper=None)``
 
     * ``renderer`` — the ``vtkRenderer`` the actors are added to.
       Optional; ``None`` is supported for unit tests (the actors
       exist but are unrendered).
+    * ``slicing_contour_mapper`` — the shader contour mapper INSTANCE
+      (dependency injection per ADR-0014 §3).  ``None`` (production)
+      resolves the wrapped ``vtkOpenGLSlicingContourPolyDataMapper``;
+      when the wrapping is off the path (the bare-VTK unit layer) the
+      Representation degrades to markers only — no contour actor.
 
     Public methods
     --------------
@@ -145,16 +147,21 @@ class SlicingPlaneInitRepresentation:
     ----------------------------------
     * ``GetMarkerActor(i)`` — the ``vtkActor`` rendering init point
       ``i`` (0 or 1).  ``None`` when VTK is not importable.
-    * ``GetPlaneActor()`` — the ``vtkActor`` rendering the plane
-      visualisation.
-    * ``GetPlaneSource()`` — the underlying ``vtkPlaneSource``.
+    * ``GetContourActor()`` — the ``vtkActor`` rendering the shader
+      contour band (``None`` when no contour mapper is available).
+    * ``GetContourMapper()`` — the contour mapper instance.
     * ``GetCurrentColor()`` — last colour written.
     * ``GetCurrentOpacity()`` — last opacity written.
-    * ``GetInputRefreshCount()`` — counter bumped each time the plane
+    * ``GetInputRefreshCount()`` — counter bumped each time the contour
       / marker geometry is rebuilt from a *changed* data node.
     """
 
-    def __init__(self, renderer: Any | None = None) -> None:
+    def __init__(
+        self,
+        renderer: Any | None = None,
+        *,
+        slicing_contour_mapper: Any | None = None,
+    ) -> None:
         self._renderer: Any | None = None
 
         # VTK objects owned by the Representation.  ``None`` in the
@@ -163,16 +170,21 @@ class SlicingPlaneInitRepresentation:
         self._marker_mappers: list[Any] = []  # vtkPolyDataMapper × 2
         self._marker_actors: list[Any] = []  # vtkActor × 2
 
-        self._plane_source: Any | None = None
-        self._plane_mapper: Any | None = None
-        self._plane_actor: Any | None = None
+        # Shader contour band on the liver surface — ``None`` when the
+        # wrapped mapper is unreachable (bare unit layer): markers only.
+        self._contour_mapper: Any | None = None
+        self._contour_actor: Any | None = None
+
+        # Last target model fed to the contour mapper — memoised so the
+        # mesh connection is pushed once per target, not per update.
+        self._contour_target: Any | None = None
 
         # Last-written colour / opacity — exposed for stub-friendly
         # introspection.
         self._current_color: tuple[float, float, float] = DEFAULT_RESECTION_COLOR
         self._current_opacity: float = DEFAULT_RESECTION_OPACITY
 
-        # Idempotency memo on (origin, normal, init0, init1, displayMTime).
+        # Idempotency memo on (origin, normal, init0, init1, target id).
         # The Pipeline already memoises (state, initMode, dataMTime,
         # displayMTime); this second memo guards against redundant VTK
         # pipeline rebuilds when the Pipeline's coarse-grained key
@@ -192,21 +204,7 @@ class SlicingPlaneInitRepresentation:
         # the Init->Planning commit, or ``None`` before commit.
         self._ring_polydata: Any | None = None
 
-        # TODO(T2-mapper-relocation): swap the generic
-        # ``vtk.vtkPolyDataMapper`` used for the plane visualisation
-        # with ``vtkOpenGLSlicingContourPolyDataMapper`` once the four
-        # custom mappers are relocated from ``LiverMarkups/VTKWidgets/``
-        # to ``LiverResections/VTKWidgets/`` per ADR-0014 §3.  The
-        # public API of this Representation does not change — only
-        # the plane mapper's concrete type.
-        #
-        # The on-commit ring extraction (``run_ring_extraction``)
-        # constructs a ``vtkLiverPlaneRingExtractor`` and feeds it the
-        # weakref'd target mesh (ADR-0014 §1, ``GetTargetModelNode()``)
-        # plus origin + normal.  The per-frame visual feedback is the
-        # shader's job; this Representation produces the discrete ring
-        # once, on the Init->Planning commit boundary (ADR-0019).
-        self._build_vtk_pipeline()
+        self._build_vtk_pipeline(slicing_contour_mapper)
 
         if renderer is not None:
             self.SetRenderer(renderer)
@@ -276,7 +274,11 @@ class SlicingPlaneInitRepresentation:
         return self._ring_polydata
 
     def cleanup(self) -> None:
-        """Detach actors from the renderer and drop the VTK pipeline."""
+        """Detach actors from the renderer and drop the VTK pipeline.
+
+        Detach FIRST, then drop the references — releasing the handles
+        before removal would strand the actors on the renderer.
+        """
         if self._renderer is not None:
             self._detach_actors(self._renderer)
             self._renderer = None
@@ -284,9 +286,9 @@ class SlicingPlaneInitRepresentation:
         self._marker_sources = []
         self._marker_mappers = []
         self._marker_actors = []
-        self._plane_source = None
-        self._plane_mapper = None
-        self._plane_actor = None
+        self._contour_mapper = None
+        self._contour_actor = None
+        self._contour_target = None
 
     # ------------------------------------------------------------------ #
     # Introspection — used by the unit-layer tests
@@ -302,14 +304,11 @@ class SlicingPlaneInitRepresentation:
             return self._marker_sources[index]
         return None
 
-    def GetPlaneActor(self) -> Any | None:
-        return self._plane_actor
+    def GetContourActor(self) -> Any | None:
+        return self._contour_actor
 
-    def GetPlaneMapper(self) -> Any | None:
-        return self._plane_mapper
-
-    def GetPlaneSource(self) -> Any | None:
-        return self._plane_source
+    def GetContourMapper(self) -> Any | None:
+        return self._contour_mapper
 
     def GetCurrentColor(self) -> tuple[float, float, float]:
         return self._current_color
@@ -324,10 +323,15 @@ class SlicingPlaneInitRepresentation:
     # Internal helpers
     # ------------------------------------------------------------------ #
 
-    def _build_vtk_pipeline(self) -> None:
-        """Construct the marker + plane actors.
+    def _build_vtk_pipeline(self, slicing_contour_mapper: Any | None) -> None:
+        """Construct the marker actors + the shader contour actor.
 
-        Called from ``__init__``.
+        Called from ``__init__``.  The contour mapper is injected, not
+        silently discovered (ADR-0014 §3): an injected instance (the
+        bare-VTK unit layer) is used as-is; ``None`` (production)
+        resolves the wrapped ``vtkOpenGLSlicingContourPolyDataMapper``.
+        When neither is available the contour actor is skipped — the
+        Representation degrades to markers only.
         """
         # Two marker spheres — one per init point.
         for _ in range(2):
@@ -346,35 +350,28 @@ class SlicingPlaneInitRepresentation:
             self._marker_mappers.append(mapper)
             self._marker_actors.append(actor)
 
-        # Plane visualisation.
-        #
-        # TODO(T2-mapper-relocation): once the four custom mappers land
-        # in ``LiverResections/VTKWidgets/`` per ADR-0014 §3, swap the
-        # ``vtk.vtkPolyDataMapper`` below for
-        # ``vtkOpenGLSlicingContourPolyDataMapper``.  That mapper carries
-        # the slicing-contour shader treatment that the legacy
-        # LiverMarkups path used; today we use the generic mapper so
-        # the Representation remains independent of the mapper
-        # relocation work.
-        self._plane_source = vtk.vtkPlaneSource()
-        self._plane_mapper = vtk.vtkPolyDataMapper()
-        self._plane_mapper.SetInputConnection(
-            self._plane_source.GetOutputPort()
+        # Live shader contour — the plane's visualisation (v1 parity:
+        # the whole liver mesh renders through the contour mapper whose
+        # fragment shader keeps only the band around the plane; no
+        # plane square is ever rendered).
+        self._contour_mapper = (
+            slicing_contour_mapper
+            if slicing_contour_mapper is not None
+            else _resolve_slicing_contour_mapper()
         )
-        self._plane_actor = vtk.vtkActor()
-        self._plane_actor.SetMapper(self._plane_mapper)
-        self._plane_actor.GetProperty().SetColor(*DEFAULT_RESECTION_COLOR)
-        self._plane_actor.GetProperty().SetOpacity(
-            DEFAULT_RESECTION_OPACITY * PLANE_OPACITY_FACTOR
-        )
+        if self._contour_mapper is not None:
+            self._contour_mapper.SetContourThickness(CONTOUR_THICKNESS_WORLD)
+            self._contour_mapper.SetContourVisibility(False)
+            self._contour_actor = vtk.vtkActor()
+            self._contour_actor.SetMapper(self._contour_mapper)
 
     def _attach_actors(self, renderer: Any) -> None:
         if not hasattr(renderer, "AddActor"):
             return
         for actor in self._marker_actors:
             renderer.AddActor(actor)
-        if self._plane_actor is not None:
-            renderer.AddActor(self._plane_actor)
+        if self._contour_actor is not None:
+            renderer.AddActor(self._contour_actor)
 
     def _detach_actors(self, renderer: Any) -> None:
         if not hasattr(renderer, "RemoveActor"):
@@ -384,17 +381,18 @@ class SlicingPlaneInitRepresentation:
                 renderer.RemoveActor(actor)
             except Exception:  # pragma: no cover — defensive
                 pass
-        if self._plane_actor is not None:
+        if self._contour_actor is not None:
             try:
-                renderer.RemoveActor(self._plane_actor)
+                renderer.RemoveActor(self._contour_actor)
             except Exception:  # pragma: no cover — defensive
                 pass
 
     def _apply_display_node(self, display_node: Any | None) -> None:
-        """Push decoration fields onto the actors.
+        """Push decoration fields onto the marker actors.
 
-        Marker actors take the colour at full opacity; the plane actor
-        takes the colour at reduced opacity (``PLANE_OPACITY_FACTOR``).
+        Marker actors take the colour at full opacity.  The shader
+        contour is not decorated here — its band colour is the contour
+        shader's own concern.
         """
         if display_node is None:
             color = DEFAULT_RESECTION_COLOR
@@ -428,14 +426,11 @@ class SlicingPlaneInitRepresentation:
             prop = actor.GetProperty()
             prop.SetColor(*color)
             prop.SetOpacity(opacity)
-        if self._plane_actor is not None:
-            prop = self._plane_actor.GetProperty()
-            prop.SetColor(*color)
-            prop.SetOpacity(opacity * PLANE_OPACITY_FACTOR)
 
     def _apply_data_node(self, data_node: Any | None) -> None:
-        """Pull plane + init-point geometry off the data node and
-        push it through the marker sphere centres + plane source.
+        """Pull plane + init-point geometry and the target model off the
+        data node and push them through the marker sphere centres + the
+        shader contour mapper.
         """
         if data_node is None:
             return
@@ -445,6 +440,7 @@ class SlicingPlaneInitRepresentation:
         normal = _read_vec3(data_node, "GetSlicingPlaneNormal")
         init0 = _read_init_point(data_node, 0)
         init1 = _read_init_point(data_node, 1)
+        target = data_node.GetTargetModelNode()
 
         if origin is None or normal is None or init0 is None or init1 is None:
             # Any missing field is treated as "not enough geometry to
@@ -453,14 +449,20 @@ class SlicingPlaneInitRepresentation:
             # the view) and the refresh counter does not advance.
             return
 
-        signature = (origin, normal, init0, init1)
+        signature = (
+            origin,
+            normal,
+            init0,
+            init1,
+            id(target) if target is not None else None,
+        )
         if signature == self._last_input_signature:
             return  # no geometry change, no refresh
         self._last_input_signature = signature
         self._input_refresh_count += 1
 
         self._refresh_marker_positions(init0, init1)
-        self._refresh_plane(origin, normal, init0, init1)
+        self._refresh_contour(origin, normal, target)
 
     def _refresh_marker_positions(
         self,
@@ -472,59 +474,40 @@ class SlicingPlaneInitRepresentation:
         self._marker_sources[0].SetCenter(*init0)
         self._marker_sources[1].SetCenter(*init1)
 
-    def _refresh_plane(
+    def _refresh_contour(
         self,
         origin: tuple[float, float, float],
         normal: tuple[float, float, float],
-        init0: tuple[float, float, float],
-        init1: tuple[float, float, float],
+        target: Any | None,
     ) -> None:
-        """Drive the ``vtkPlaneSource`` from origin + normal.
+        """Drive the shader contour from origin + normal + target mesh.
 
-        Builds a square plane of side ``PLANE_SIZE_FACTOR × |init0 -
-        init1|``, centred on ``origin``, oriented to ``normal``.
-        Falls back to ``PLANE_FALLBACK_HALF_EXTENT`` when the two init
-        points are coincident (would otherwise yield a degenerate
-        plane).
+        The contour mapper renders the WHOLE target liver mesh; its
+        fragment shader keeps only the ``CONTOUR_THICKNESS_WORLD`` band
+        around the plane.  Without a target (or with an empty target
+        mesh) there is nothing to band — the contour is hidden.  The
+        mesh connection is fed once per target (memoised on
+        ``self._contour_target``); the plane uniforms are pushed on
+        every refresh.  The carrier's stored normal is unit-length and
+        the shader normalises anyway, so no renormalisation here.
         """
-        if self._plane_source is None:
+        if self._contour_mapper is None:
             return
 
-        plane = self._plane_source
-
-        # Half-extent: half the side length.
-        d = _distance(init0, init1)
-        half = max(
-            0.5 * PLANE_SIZE_FACTOR * d, PLANE_FALLBACK_HALF_EXTENT
-        )
-
-        # Construct a basis (u, v) in the plane.  vtkMath::Perpendiculars
-        # returns two unit vectors perpendicular to ``normal`` and to
-        # each other.  Falls back to a manual orthonormal pair if the
-        # helper is unavailable.
-        n = _normalise(normal)
-        if n is None:
+        polydata = target.GetPolyData() if target is not None else None
+        if polydata is None or polydata.GetNumberOfPoints() == 0:
+            self._contour_mapper.SetContourVisibility(False)
             return
-        u, v = _plane_basis(n)
 
-        cx, cy, cz = origin
-        plane.SetOrigin(
-            cx - half * u[0] - half * v[0],
-            cy - half * u[1] - half * v[1],
-            cz - half * u[2] - half * v[2],
-        )
-        plane.SetPoint1(
-            cx + half * u[0] - half * v[0],
-            cy + half * u[1] - half * v[1],
-            cz + half * u[2] - half * v[2],
-        )
-        plane.SetPoint2(
-            cx - half * u[0] + half * v[0],
-            cy - half * u[1] + half * v[1],
-            cz - half * u[2] + half * v[2],
-        )
-        plane.SetCenter(cx, cy, cz)
-        plane.SetNormal(n[0], n[1], n[2])
+        if target is not self._contour_target:
+            self._contour_mapper.SetInputConnection(
+                target.GetPolyDataConnection()
+            )
+            self._contour_target = target
+
+        self._contour_mapper.SetPlanePositionWorld(*origin)
+        self._contour_mapper.SetPlaneNormalWorld(*normal)
+        self._contour_mapper.SetContourVisibility(True)
 
 
 # --------------------------------------------------------------------------- #
@@ -589,13 +572,25 @@ def _read_init_point(
         return None
 
 
-def _distance(
-    a: tuple[float, float, float], b: tuple[float, float, float]
-) -> float:
-    dx = a[0] - b[0]
-    dy = a[1] - b[1]
-    dz = a[2] - b[2]
-    return (dx * dx + dy * dy + dz * dz) ** 0.5
+def _resolve_slicing_contour_mapper() -> Any | None:
+    """Return a wrapped ``vtkOpenGLSlicingContourPolyDataMapper`` instance,
+    or ``None``.
+
+    The contour mapper lives in ``LiverResections/VTKWidgets/`` and is
+    exposed only on the module's VTKWidgets Python wrapping (ADR-0014 §3)
+    — NOT on the ``slicer`` or ``vtk`` namespaces.  Lazily imported so
+    this module stays importable where the wrapping is off the path (the
+    bare-VTK unit layer); the contour is a decoration, so absence
+    degrades to a markers-only Representation rather than raising.
+    """
+    try:
+        import vtkSlicerLiverResectionsModuleVTKWidgetsPython as widgets
+    except ImportError:
+        return None
+    factory = getattr(widgets, "vtkOpenGLSlicingContourPolyDataMapper", None)
+    if factory is None:
+        return None
+    return factory()
 
 
 def _resolve_extractor_class(name: str) -> Any | None:
@@ -633,49 +628,3 @@ def _model_polydata(target_model: Any | None) -> Any | None:
         return getter()
     except Exception:  # pragma: no cover — defensive
         return None
-
-
-def _normalise(
-    v: tuple[float, float, float],
-) -> tuple[float, float, float] | None:
-    n = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) ** 0.5
-    if n == 0.0:
-        return None
-    return (v[0] / n, v[1] / n, v[2] / n)
-
-
-def _plane_basis(
-    n: tuple[float, float, float],
-) -> tuple[
-    tuple[float, float, float], tuple[float, float, float]
-]:
-    """Return two unit vectors (u, v) perpendicular to ``n`` and to each other.
-
-    Used to lay out the ``vtkPlaneSource`` corners around the plane
-    origin.  Pure Python (no VTK dependency) so the basis is
-    computable in the no-VTK testing path.
-    """
-    # Pick a non-parallel reference axis.
-    ax, ay, az = abs(n[0]), abs(n[1]), abs(n[2])
-    if ax <= ay and ax <= az:
-        ref = (1.0, 0.0, 0.0)
-    elif ay <= ax and ay <= az:
-        ref = (0.0, 1.0, 0.0)
-    else:
-        ref = (0.0, 0.0, 1.0)
-
-    # u = normalise(ref × n)
-    u_raw = (
-        ref[1] * n[2] - ref[2] * n[1],
-        ref[2] * n[0] - ref[0] * n[2],
-        ref[0] * n[1] - ref[1] * n[0],
-    )
-    u = _normalise(u_raw) or (1.0, 0.0, 0.0)
-
-    # v = n × u (already unit by construction)
-    v = (
-        n[1] * u[2] - n[2] * u[1],
-        n[2] * u[0] - n[0] * u[2],
-        n[0] * u[1] - n[1] * u[0],
-    )
-    return u, v
