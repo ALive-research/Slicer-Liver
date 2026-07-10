@@ -578,3 +578,164 @@ def test_derivation_is_a_noop_before_both_points():
 
     assert tuple(carrier.GetSlicingPlaneOrigin()) == before_origin
     assert tuple(carrier.GetSlicingPlaneNormal()) == before_normal
+
+
+# --------------------------------------------------------------------------- #
+# Slice 3 — auto-seed + drag-only handles
+# --------------------------------------------------------------------------- #
+
+
+def _target_model_with_bounds(slicer, xmax=40.0, ymax=20.0, zmax=10.0):
+    """A box target model spanning [0, max] on each axis."""
+    import vtk
+
+    cube = vtk.vtkCubeSource()
+    cube.SetBounds(0.0, xmax, 0.0, ymax, 0.0, zmax)
+    cube.Update()
+    model = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
+    model.SetAndObservePolyData(cube.GetOutput())
+    return model
+
+
+def test_auto_seed_places_handles_across_the_target(monkeypatch):
+    """Auto-seed straddles the target's centre along the view-right axis.
+
+    v1 parity, camera-aware: v1 pre-seeded the two points across the
+    liver bounds (nobody clicks to place); v2 orients the seed axis
+    along the CAMERA's right vector so the initial bisector plane cuts
+    vertically through the surgeon's view and the handles sit
+    left/right on screen -- maximally draggable.  Headless fallback
+    (no camera): the world x axis, v1's exact default.
+    """
+    slicer = _slicer_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+    if not hasattr(pipeline, "_auto_seed_slicing_plane"):
+        pytest.fail("pipeline must expose the _auto_seed_slicing_plane kernel")
+
+    target = _target_model_with_bounds(slicer)  # centre (20, 10, 5)
+    carrier.SetAndObserveTargetModelNode(target)
+
+    # Attaching the target fires the carrier's ModifiedEvent, whose
+    # observer reconciles the pipeline -- the dispatch hook auto-seeds
+    # (the production path; headless fallback axis = world x = the
+    # injected view_right here, so the expectations match either route).
+    if pipeline._slicing_plane_points_placed < 2:
+        assert pipeline._auto_seed_slicing_plane(view_right=(1.0, 0.0, 0.0))
+
+    p0 = tuple(carrier.GetSlicingPlaneInitPoint(0))
+    p1 = tuple(carrier.GetSlicingPlaneInitPoint(1))
+    assert p0 == pytest.approx((0.0, 10.0, 5.0)), (
+        "handle 0 must sit at centre - half-extent along the seed axis"
+    )
+    assert p1 == pytest.approx((40.0, 10.0, 5.0)), (
+        "handle 1 must sit at centre + half-extent along the seed axis"
+    )
+    assert tuple(carrier.GetSlicingPlaneOrigin()) == pytest.approx((20.0, 10.0, 5.0)), (
+        "the auto-seed must run the plane derivation (origin = midpoint)"
+    )
+    assert tuple(carrier.GetSlicingPlaneNormal()) == pytest.approx((1.0, 0.0, 0.0))
+
+    # Idempotent: a second reconcile-driven call must not re-seed.
+    carrier.SetSlicingPlaneInitPoint(0, [5.0, 10.0, 5.0])
+    assert pipeline._auto_seed_slicing_plane(view_right=(1.0, 0.0, 0.0)) is False
+    assert tuple(carrier.GetSlicingPlaneInitPoint(0)) == pytest.approx((5.0, 10.0, 5.0))
+
+
+def test_auto_seed_without_target_is_a_noop():
+    slicer = _slicer_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+    if not hasattr(pipeline, "_auto_seed_slicing_plane"):
+        pytest.fail("pipeline must expose the _auto_seed_slicing_plane kernel")
+    assert pipeline._auto_seed_slicing_plane(view_right=(1.0, 0.0, 0.0)) is False
+
+
+def test_press_grabs_a_handle_and_drag_rederives_the_plane(monkeypatch):
+    """The Init handles are drag-editable with the control-point grammar.
+
+    Press within the pick radius grabs the nearest handle (real squared
+    distance for LayerDM arbitration); moves while grabbed relocate the
+    handle on the camera focal plane and re-derive the bisector plane;
+    release drops the grab.  Mirrors the ADR-0033 grab pattern.
+    """
+    import vtk
+
+    slicer = _slicer_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+    if not hasattr(pipeline, "_nearest_init_handle_in_display"):
+        pytest.fail("pipeline must expose _nearest_init_handle_in_display")
+
+    target = _target_model_with_bounds(slicer)
+    carrier.SetAndObserveTargetModelNode(target)  # reconcile hook auto-seeds
+    if pipeline._slicing_plane_points_placed < 2:
+        assert pipeline._auto_seed_slicing_plane(view_right=(1.0, 0.0, 0.0))
+
+    monkeypatch.setattr(pipeline, "_safe_get_renderer", lambda: object())
+    monkeypatch.setattr(
+        pipeline, "_nearest_init_handle_in_display", lambda r, e: (1, 9.0)
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_event_world_on_focal_plane",
+        lambda r, e: (40.0, 10.0, 25.0),
+    )
+
+    class _Event:
+        def __init__(self, etype):
+            self._etype = etype
+
+        def GetType(self):  # noqa: N802 - VTK verb
+            return self._etype
+
+    press = _Event(vtk.vtkCommand.LeftButtonPressEvent)
+    can, d2 = pipeline.CanProcessInteractionEvent(press)
+    assert can is True and d2 == pytest.approx(9.0), (
+        "a press within the pick radius must be claimed with the REAL "
+        "squared display distance (LayerDM arbitration)."
+    )
+    assert pipeline.ProcessInteractionEvent(press) is True
+
+    move = _Event(vtk.vtkCommand.MouseMoveEvent)
+    can, d2 = pipeline.CanProcessInteractionEvent(move)
+    assert can is True and d2 == 0.0, "a grabbed gesture owns the moves"
+    assert pipeline.ProcessInteractionEvent(move) is True
+    assert tuple(carrier.GetSlicingPlaneInitPoint(1)) == pytest.approx(
+        (40.0, 10.0, 25.0)
+    ), "the drag must relocate the grabbed handle"
+    assert tuple(carrier.GetSlicingPlaneOrigin()) == pytest.approx(
+        (20.0, 10.0, 15.0)
+    ), "the drag must re-derive the bisector plane live"
+
+    release = _Event(vtk.vtkCommand.LeftButtonReleaseEvent)
+    can, _ = pipeline.CanProcessInteractionEvent(release)
+    assert can is True
+    assert pipeline.ProcessInteractionEvent(release) is False, "grab ends"
+    can, _ = pipeline.CanProcessInteractionEvent(move)
+    assert can is False, "no grab -> bare moves stay unclaimed (camera intact)"
+
+
+def test_handle_interaction_declines_outside_init(monkeypatch):
+    """Planning must not steal the control-polygon interaction (ADR-0033)."""
+
+    slicer = _slicer_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+    target = _target_model_with_bounds(slicer)
+    carrier.SetAndObserveTargetModelNode(target)  # reconcile hook auto-seeds
+    if pipeline._slicing_plane_points_placed < 2:
+        pipeline._auto_seed_slicing_plane(view_right=(1.0, 0.0, 0.0))
+    monkeypatch.setattr(pipeline, "_safe_get_renderer", lambda: object())
+    monkeypatch.setattr(
+        pipeline, "_nearest_init_handle_in_display", lambda r, e: (0, 1.0)
+    )
+    carrier.SetState(1)  # Planning
+
+    class _Event:
+        def GetType(self):  # noqa: N802 - VTK verb
+            import vtk as _vtk
+
+            return _vtk.vtkCommand.LeftButtonPressEvent
+
+    can, _ = pipeline.CanProcessInteractionEvent(_Event())
+    assert can is False, (
+        "outside Init the surface pipeline must keep declining -- the "
+        "Planning drag belongs to ControlPolygonPipeline (ADR-0033)."
+    )

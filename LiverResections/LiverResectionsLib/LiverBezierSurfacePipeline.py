@@ -105,6 +105,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import vtk
+
 # --------------------------------------------------------------------------- #
 # Pipeline base — hard-required on the upstream LayerDM library per ADR-0013
 # §5.  Importable from any Slicer process that loaded the
@@ -149,6 +151,10 @@ STATE_CONFIRMED = 2
 
 INIT_MODE_SLICING_PLANE = 0
 INIT_MODE_DISTANCE_SPHEROID = 1
+
+#: Display-space pick radius for the Init-handle drag, in pixels (the same
+#: ADR-0032 value the control-point drag uses).
+INIT_HANDLE_PICK_RADIUS_PX = 20.0
 
 
 class LiverBezierSurfacePipeline(_PipelineBase):
@@ -230,6 +236,11 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         # a fixed 2 slots), so the Pipeline owns it; reset when the carrier
         # changes (SetDisplayNode).
         self._slicing_plane_points_placed: int = 0
+        # Re-entrancy latch: auto-seeding mutates the carrier, whose
+        # ModifiedEvent re-enters _reconcile -> the hook.  Without the latch
+        # the nested calls re-seed before the counter increments (the
+        # observer-mutation recursion of the LayerDM gotcha triad).
+        self._auto_seeding = False
 
         # DistanceSpheroid Init-placement progress (ADR-0032 slice 3b): how many
         # distance-spheroid init points have been placed on the current carrier.
@@ -314,6 +325,9 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         self._last_locator_scan_mtime = None
         # Restart SlicingPlane init-placement for the new carrier (slice 3a).
         self._slicing_plane_points_placed = 0
+        # Index of the Init handle currently grabbed by the press/move/
+        # release gesture -- None when no drag is in flight.
+        self._init_drag_index: int | None = None
         # Restart DistanceSpheroid init-placement for the new carrier (slice 3b).
         self._distance_spheroid_points_placed = 0
 
@@ -439,6 +453,12 @@ class LiverBezierSurfacePipeline(_PipelineBase):
 
         active_name = self._select_representation(state, init_mode)
         self._current_representation_name = active_name
+
+        # Entering (or sitting in) Init+SlicingPlane with a target mesh and
+        # no points yet: pre-seed the two handles across the target along
+        # the camera's right axis (one-shot; cheap no-op afterwards).
+        if active_name == REPRESENTATION_SLICING_PLANE_INIT:
+            self._auto_seed_slicing_plane(self._camera_right())
 
         active = self._representations.get(active_name) if active_name else None
 
@@ -635,19 +655,51 @@ class LiverBezierSurfacePipeline(_PipelineBase):
 
     #: Pick radius (display pixels) within which a click grabs a control point.
     def CanProcessInteractionEvent(self, eventData: Any):  # noqa: N802 - VTK verb
-        """Decline pointer events -- the surface Pipeline no longer edits.
+        """Claim only the Init-handle grab; decline everything else.
 
         ADR-0033 re-sited the Planning per-point drag onto the control
-        polygon's own Pipeline (``ControlPolygonPipeline``), which returns a
-        real display-space distance to the nearest handle for LayerDM's
-        focus arbitration.  The Init-mode placements handled by
-        ``ProcessInteractionEvent`` below are driven by the Stage-4
-        placement flow, not by pointer-focus claims.
+        polygon's own Pipeline; OUTSIDE ``Init`` this Pipeline still
+        declines unconditionally.  IN ``Init`` + ``SlicingPlane`` the two
+        auto-seeded handles are drag-editable with the same grammar as
+        the control points (the ADR-0033 grab pattern): a LEFT PRESS
+        within ``INIT_HANDLE_PICK_RADIUS_PX`` of a handle is claimed with
+        the real squared display distance (LayerDM arbitration); while
+        grabbed, moves and the ending release are claimed
+        unconditionally.  Bare hover moves stay unclaimed -- camera
+        interaction is untouched.
         """
-        del eventData
         import sys
 
-        return False, sys.float_info.max
+        try:
+            carrier = self._data_node
+            if (
+                _safe_get_state(carrier) != STATE_INIT
+                or _safe_get_init_mode(carrier) != INIT_MODE_SLICING_PLANE
+            ):
+                self._init_drag_index = None  # a state flip drops the grab
+                return False, sys.float_info.max
+            renderer = self._safe_get_renderer()
+            if renderer is None:
+                self._init_drag_index = None
+                return False, sys.float_info.max
+
+            etype = _event_type(eventData)
+            if self._init_drag_index is not None:
+                if etype in (
+                    vtk.vtkCommand.MouseMoveEvent,
+                    vtk.vtkCommand.LeftButtonReleaseEvent,
+                ):
+                    return True, 0.0
+                return False, sys.float_info.max
+
+            if etype != vtk.vtkCommand.LeftButtonPressEvent:
+                return False, sys.float_info.max
+            _, distance2 = self._nearest_init_handle_in_display(renderer, eventData)
+            if distance2 <= INIT_HANDLE_PICK_RADIUS_PX * INIT_HANDLE_PICK_RADIUS_PX:
+                return True, distance2
+            return False, sys.float_info.max
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            return False, sys.float_info.max
 
     def ProcessInteractionEvent(self, eventData: Any) -> bool:  # noqa: N802 - VTK verb
         """Route the interaction by resection state (ADR-0032).
@@ -669,6 +721,39 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             state = _safe_get_state(carrier)
 
             if state == STATE_INIT and _safe_get_init_mode(carrier) == INIT_MODE_SLICING_PLANE:
+                etype = _event_type(eventData)
+
+                # The handle GRAB (press/move/release, the ADR-0033 grammar).
+                if self._init_drag_index is not None:
+                    if etype == vtk.vtkCommand.MouseMoveEvent:
+                        world = self._event_world_on_focal_plane(renderer, eventData)
+                        if world is None:
+                            return True  # keep the grab alive
+                        carrier.SetSlicingPlaneInitPoint(
+                            self._init_drag_index,
+                            [float(world[0]), float(world[1]), float(world[2])],
+                        )
+                        self._derive_slicing_plane()
+                        return True
+                    if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
+                        self._init_drag_index = None
+                        return False
+                    return False
+                if etype == vtk.vtkCommand.LeftButtonPressEvent:
+                    index, distance2 = self._nearest_init_handle_in_display(
+                        renderer, eventData
+                    )
+                    if (
+                        index is not None
+                        and distance2
+                        <= INIT_HANDLE_PICK_RADIUS_PX * INIT_HANDLE_PICK_RADIUS_PX
+                        and self._slicing_plane_points_placed >= 2
+                    ):
+                        self._init_drag_index = index
+                        return True
+
+                # Legacy fill-placement (the no-auto-seed fallback: no target
+                # model, so both slots are still empty).
                 world = self._event_world_on_focal_plane(renderer, eventData)
                 if world is None:
                     return False
@@ -752,6 +837,115 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             delta[0] / length, delta[1] / length, delta[2] / length
         )
         return True
+
+    def _nearest_init_handle_in_display(self, renderer: Any, eventData: Any):
+        """``(index, distance2)`` of the Init handle nearest the event pixel."""
+        import sys
+
+        carrier = self._data_node
+        if carrier is None:
+            return None, sys.float_info.max
+        ex, ey = eventData.GetDisplayPosition()
+        best_index = None
+        best_d2 = sys.float_info.max
+        for index in range(2):
+            point = carrier.GetSlicingPlaneInitPoint(index)
+            if point is None:
+                continue
+            renderer.SetWorldPoint(point[0], point[1], point[2], 1.0)
+            renderer.WorldToDisplay()
+            dx, dy, _dz = renderer.GetDisplayPoint()
+            d2 = (dx - ex) ** 2 + (dy - ey) ** 2
+            if d2 < best_d2:
+                best_d2 = d2
+                best_index = index
+        return best_index, best_d2
+
+    def _auto_seed_slicing_plane(self, view_right: Any | None = None) -> bool:
+        """Pre-seed the two Init handles across the target's bounds.
+
+        v1 parity, camera-aware: v1 pre-seeded the two points across the
+        liver bounds (there is no click-to-place; the surgeon DRAGS the
+        pre-placed handles).  The seed axis is the CAMERA's right vector
+        when available -- the initial bisector plane then cuts vertically
+        through the surgeon's view and the handles sit left/right on
+        screen -- falling back to the world x axis (v1's default) when no
+        camera is available (headless).  One-shot: a no-op once any point
+        has been placed, when not in Init+SlicingPlane, or without a
+        target mesh (ADR-0014 §1) to span.
+        """
+        carrier = self._data_node
+        if carrier is None:
+            return False
+        if _safe_get_state(carrier) != STATE_INIT:
+            return False
+        if _safe_get_init_mode(carrier) != INIT_MODE_SLICING_PLANE:
+            return False
+        if self._auto_seeding or self._slicing_plane_points_placed > 0:
+            return False
+        target = self._resolve_target_model()
+        polydata = target.GetPolyData() if target is not None else None
+        if polydata is None or polydata.GetNumberOfPoints() == 0:
+            return False
+
+        direction = [1.0, 0.0, 0.0]
+        if view_right is not None:
+            length = (
+                float(view_right[0]) ** 2
+                + float(view_right[1]) ** 2
+                + float(view_right[2]) ** 2
+            ) ** 0.5
+            if length > 0.0:
+                direction = [float(view_right[i]) / length for i in range(3)]
+
+        bounds = polydata.GetBounds()
+        centre = [
+            (bounds[0] + bounds[1]) / 2.0,
+            (bounds[2] + bounds[3]) / 2.0,
+            (bounds[4] + bounds[5]) / 2.0,
+        ]
+        # Half-extent of the bounds box projected onto the seed axis.
+        half = (
+            abs(direction[0]) * (bounds[1] - bounds[0])
+            + abs(direction[1]) * (bounds[3] - bounds[2])
+            + abs(direction[2]) * (bounds[5] - bounds[4])
+        ) / 2.0
+        if half <= 0.0:
+            return False
+
+        self._auto_seeding = True
+        try:
+            for index, sign in ((0, -1.0), (1, 1.0)):
+                self._place_slicing_plane_init_point(
+                    [centre[i] + sign * half * direction[i] for i in range(3)]
+                )
+        finally:
+            self._auto_seeding = False
+        return self._slicing_plane_points_placed >= 2
+
+    def _camera_right(self) -> Any | None:
+        """The active camera's RIGHT vector (viewUp x viewPlaneNormal).
+
+        ``None`` when no renderer/camera is realized (headless) -- the
+        auto-seed then falls back to the world x axis (v1 parity).  The
+        cross product mirrors the v1 placement heuristic's cross_view.
+        """
+        try:
+            renderer = self._safe_get_renderer()
+            if renderer is None:
+                return None
+            camera = renderer.GetActiveCamera()
+            if camera is None:
+                return None
+            up = camera.GetViewUp()
+            normal = camera.GetViewPlaneNormal()
+            return (
+                up[1] * normal[2] - up[2] * normal[1],
+                up[2] * normal[0] - up[0] * normal[2],
+                up[0] * normal[1] - up[1] * normal[0],
+            )
+        except Exception:  # pragma: no cover - camera probing must not raise
+            return None
 
     def _place_distance_spheroid_init_point(self, world: Any) -> int | None:
         """Place the next distance-spheroid init point at RAS ``world``.
@@ -1013,6 +1207,11 @@ class LiverBezierSurfacePipeline(_PipelineBase):
 # linked); the accessors themselves are always-present carrier / locator API
 # and are called directly.
 # --------------------------------------------------------------------------- #
+
+
+def _event_type(eventData: Any) -> int:  # noqa: N803 - VTK arg name
+    """The VTK event-type id off ``eventData`` (never-raise callers only)."""
+    return int(eventData.GetType())
 
 
 def _safe_get_state(node: Any) -> int | None:
