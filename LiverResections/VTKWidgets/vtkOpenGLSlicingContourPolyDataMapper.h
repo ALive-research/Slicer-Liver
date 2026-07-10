@@ -70,6 +70,14 @@ public:
   /// Set the slicing plane normal
   void SetPlaneNormal(const std::array<float, 4>& planeNormal);
 
+  /// Python-wrappable plane accessors (the std::array signatures above do
+  /// not wrap; the LayerDM Init Representation drives the shader from
+  /// Python, ADR-0014 SS3).  The homogeneous W component is fixed to 1.
+  void SetPlanePositionWorld(double x, double y, double z);
+  void SetPlaneNormalWorld(double x, double y, double z);
+  double* GetPlanePositionWorld() VTK_SIZEHINT(3);
+  double* GetPlaneNormalWorld() VTK_SIZEHINT(3);
+
   /// Get the contour thickness
   float GetContourThickness() const;
 
