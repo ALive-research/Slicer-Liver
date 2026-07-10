@@ -77,6 +77,9 @@ public:
   std::array<float, 4> PlaneNormal;
   float ContourThickness;
   bool ContourVisibility;
+  // Backing storage for the Python-wrappable double* getters.
+  std::array<double, 3> PlanePositionWorld{ 0.0, 0.0, 0.0 };
+  std::array<double, 3> PlaneNormalWorld{ 1.0, 0.0, 0.0 };
 };
 
 //------------------------------------------------------------------------------
@@ -238,6 +241,34 @@ void vtkOpenGLSlicingContourPolyDataMapper::SetPlaneNormal(const std::array<floa
 {
   this->Impl->PlaneNormal = planeNormal;
   this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLSlicingContourPolyDataMapper::SetPlanePositionWorld(double x, double y, double z)
+{
+  this->SetPlanePosition({ static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), 1.0f });
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLSlicingContourPolyDataMapper::SetPlaneNormalWorld(double x, double y, double z)
+{
+  this->SetPlaneNormal({ static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), 1.0f });
+}
+
+//------------------------------------------------------------------------------
+double* vtkOpenGLSlicingContourPolyDataMapper::GetPlanePositionWorld()
+{
+  const auto& position = this->Impl->PlanePosition;
+  this->Impl->PlanePositionWorld = { static_cast<double>(position[0]), static_cast<double>(position[1]), static_cast<double>(position[2]) };
+  return this->Impl->PlanePositionWorld.data();
+}
+
+//------------------------------------------------------------------------------
+double* vtkOpenGLSlicingContourPolyDataMapper::GetPlaneNormalWorld()
+{
+  const auto& normal = this->Impl->PlaneNormal;
+  this->Impl->PlaneNormalWorld = { static_cast<double>(normal[0]), static_cast<double>(normal[1]), static_cast<double>(normal[2]) };
+  return this->Impl->PlaneNormalWorld.data();
 }
 
 //------------------------------------------------------------------------------
