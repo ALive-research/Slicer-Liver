@@ -22,58 +22,6 @@
     </widget>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="assignRow">
-     <item>
-      <widget class="QLabel" name="VolumeLabel">
-       <property name="text">
-        <string>Volume:</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="qMRMLNodeComboBox" name="CaseSetupVolumeComboBox">
-       <property name="nodeTypes">
-        <stringlist>
-         <string>vtkMRMLScalarVolumeNode</string>
-        </stringlist>
-       </property>
-       <property name="addEnabled">
-        <bool>false</bool>
-       </property>
-       <property name="removeEnabled">
-        <bool>false</bool>
-       </property>
-       <property name="noneEnabled">
-        <bool>true</bool>
-       </property>
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-         <horstretch>1</horstretch>
-         <verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QLabel" name="RoleLabel">
-       <property name="text">
-        <string>Role:</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QComboBox" name="CaseSetupRoleComboBox"/>
-     </item>
-     <item>
-      <widget class="QPushButton" name="CaseSetupAssignButton">
-       <property name="text">
-        <string>Assign role</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
-   </item>
-   <item>
     <widget class="QTableWidget" name="CaseSetupRoleTable">
      <property name="columnCount">
       <number>2</number>
@@ -104,11 +52,6 @@
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
    <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>qMRMLNodeComboBox</class>
-   <extends>QWidget</extends>
-   <header>qMRMLNodeComboBox.h</header>
   </customwidget>
  </customwidgets>
  <resources/>
