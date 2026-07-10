@@ -290,6 +290,13 @@ class ResectionPlanningWidget(qt.QWidget):
             return
         plan = logic.CreateResectionPlan(_DEFAULT_RESECTION_NAME)
         if plan is not None:
+            # Attach the hidden liver target model (ADR-0014 §1 weakref):
+            # the slicing-plane init contour and the commit-boundary ring
+            # extraction cut THIS mesh.  Graceful no-op without a Stage-2
+            # canonical liver segment.
+            from LiverResectionsLib.TargetModel import ensure_target_model
+
+            ensure_target_model(plan)
             self.setActiveResectionNode(plan)
 
     @staticmethod
