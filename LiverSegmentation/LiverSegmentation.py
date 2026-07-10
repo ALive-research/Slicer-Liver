@@ -730,7 +730,38 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
         # accepted segment's channel in place.
         self.ensureSurfaceRepresentation(canonical)
         self.ensureDistanceMap(canonical)
+        # Per-segment 3D opacity lives on the DISPLAY NODE and does not
+        # travel with the copied segments (colour does): re-apply the
+        # structure visual defaults on the CANONICAL node post-merge.
+        self.applyVisualDefaults(canonical)
         return canonical
+
+    def applyVisualDefaults(self, segmentationNode):
+        """Apply per-structure colour + 3D opacity to every tagged segment.
+
+        Reads each segment's SCT type code back off its ``TerminologyEntry``
+        tag and applies ``STRUCTURE_VISUAL_DEFAULTS``.  Idempotent; a no-op
+        for untagged segments, unknown codes, or a ``None`` node.  Needed
+        wherever segments CHANGE NODES: per-segment opacity is display-node
+        state, so a merge (Accept) or import must re-apply it on the
+        receiving node.
+        """
+        if segmentationNode is None:
+            return
+        if segmentationNode.GetDisplayNode() is None:
+            segmentationNode.CreateDefaultDisplayNodes()
+        display = segmentationNode.GetDisplayNode()
+        segmentation = segmentationNode.GetSegmentation()
+        for segmentId in list(segmentation.GetSegmentIDs()):
+            segment = segmentation.GetSegment(segmentId)
+            text = vtk.mutable("")
+            segment.GetTag(TERMINOLOGY_ENTRY_TAG, text)
+            for code, defaults in STRUCTURE_VISUAL_DEFAULTS.items():
+                if f"^{code}^" in str(text):
+                    segment.SetColor(*defaults["color"])
+                    if display is not None:
+                        display.SetSegmentOpacity3D(segmentId, defaults["opacity3d"])
+                    break
 
     def reject(self, scratch):
         """Discard a scratch node without touching the canonical node.

@@ -248,3 +248,35 @@ def test_sct_tagging_applies_the_structure_visual_defaults():
         )
     finally:
         slicer.mrmlScene.RemoveNode(node)
+
+
+def test_visual_defaults_survive_accept_onto_the_canonical_node():
+    """The CANONICAL display node must carry the opacity after Accept.
+
+    Per-segment 3D opacity lives on the DISPLAY NODE, not the segment:
+    applying it while tagging the scratch node meant the setting died
+    with the scratch node on Accept -- the copied liver segment rendered
+    opaque on the canonical node (the re-demo finding).  Colour travels
+    with the segment; opacity must be re-applied post-merge.
+    """
+    slicer = _slicer_or_skip()
+    logic = _logic_or_skip(slicer)
+    import pytest as _pytest
+
+    import LiverSegmentation as module
+
+    slicer.mrmlScene.Clear(0)
+    scratch = logic.createScratchSegmentation()
+    seg_id = scratch.GetSegmentation().AddEmptySegment("l", "Liver")
+    logic.tagSegmentWithSct(scratch, seg_id, module.SCT_LIVER_CODE, "Liver")
+
+    canonical = logic.accept(scratch)
+
+    display = canonical.GetDisplayNode()
+    assert display is not None, "canonical must carry a display node after Accept"
+    canon_seg_id = canonical.GetSegmentation().GetNthSegmentID(0)
+    assert display.GetSegmentOpacity3D(canon_seg_id) == _pytest.approx(0.2), (
+        "the parenchyma's translucent 3D opacity must survive the merge "
+        "onto the canonical node -- it lives on the display node and does "
+        "not travel with the copied segment."
+    )
