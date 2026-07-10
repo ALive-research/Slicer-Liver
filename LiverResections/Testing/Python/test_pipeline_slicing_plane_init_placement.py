@@ -514,3 +514,67 @@ def test_process_interaction_event_routes_placement_through_override():
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def test_second_placement_derives_the_slicing_plane():
+    """Placing both points writes origin=midpoint, normal=unit(p2-p1).
+
+    v1 parity (the NorMIT-Plan bisector): the slicing plane is the
+    perpendicular bisector of the two init points -- origin at their
+    midpoint, normal along their difference (normalized here so
+    downstream consumers -- the shader band, the ring extractor -- get a
+    unit normal).  The camera does NOT enter the plane math (the v1
+    study correction); it only orients the auto-seed placement.
+    """
+    slicer = _slicer_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+    _require_place_kernel_or_skip(pipeline)
+
+    first = pipeline._place_slicing_plane_init_point((10.0, 0.0, 0.0))
+    assert first == 0
+    second = pipeline._place_slicing_plane_init_point((40.0, 40.0, 0.0))
+    assert second == 1
+
+    origin = tuple(carrier.GetSlicingPlaneOrigin())
+    assert origin == pytest.approx((25.0, 20.0, 0.0)), (
+        "the slicing-plane origin must be the MIDPOINT of the two init "
+        "points (the v1 bisector plane)."
+    )
+    normal = tuple(carrier.GetSlicingPlaneNormal())
+    assert normal == pytest.approx((0.6, 0.8, 0.0)), (
+        "the slicing-plane normal must be the UNIT vector along p2 - p1."
+    )
+
+
+def test_rederive_follows_a_moved_init_point():
+    """Re-running the derivation after a point moves updates the plane."""
+    slicer = _slicer_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+    _require_place_kernel_or_skip(pipeline)
+
+    pipeline._place_slicing_plane_init_point((0.0, 0.0, 0.0))
+    pipeline._place_slicing_plane_init_point((10.0, 0.0, 0.0))
+
+    carrier.SetSlicingPlaneInitPoint(1, [0.0, 0.0, 8.0])
+    pipeline._derive_slicing_plane()
+
+    assert tuple(carrier.GetSlicingPlaneOrigin()) == pytest.approx(
+        (0.0, 0.0, 4.0)
+    )
+    assert tuple(carrier.GetSlicingPlaneNormal()) == pytest.approx(
+        (0.0, 0.0, 1.0)
+    )
+
+
+def test_derivation_is_a_noop_before_both_points():
+    """One placed point must not fabricate a plane (degenerate normal)."""
+    slicer = _slicer_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+    _require_place_kernel_or_skip(pipeline)
+
+    before_origin = tuple(carrier.GetSlicingPlaneOrigin())
+    before_normal = tuple(carrier.GetSlicingPlaneNormal())
+    pipeline._place_slicing_plane_init_point((10.0, 20.0, 30.0))
+
+    assert tuple(carrier.GetSlicingPlaneOrigin()) == before_origin
+    assert tuple(carrier.GetSlicingPlaneNormal()) == before_normal

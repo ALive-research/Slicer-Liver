@@ -714,7 +714,44 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         if placed is False:  # the node's Init-only guard rejected it
             return None
         self._slicing_plane_points_placed += 1
+        # Both points down -> the plane is now defined; derive it (and
+        # re-derive on every subsequent placement-kernel call, the drag
+        # path's re-entry).
+        if self._slicing_plane_points_placed >= 2:
+            self._derive_slicing_plane()
         return index
+
+    def _derive_slicing_plane(self) -> bool:
+        """Write the carrier's slicing plane from its two init points.
+
+        v1 parity (the NorMIT-Plan bisector): ``origin = midpoint(p1, p2)``,
+        ``normal = unit(p2 - p1)`` — the perpendicular-bisector plane of the
+        two handles.  The camera does NOT enter the plane math; it only
+        orients the auto-seeded initial placement.  A no-op returning
+        ``False`` when fewer than two points are placed or the points are
+        coincident (a degenerate normal must not overwrite the stored
+        plane).
+        """
+        carrier = self._data_node
+        if carrier is None or self._slicing_plane_points_placed < 2:
+            return False
+        p1 = carrier.GetSlicingPlaneInitPoint(0)
+        p2 = carrier.GetSlicingPlaneInitPoint(1)
+        if p1 is None or p2 is None:
+            return False
+        delta = [float(p2[i]) - float(p1[i]) for i in range(3)]
+        length = (delta[0] ** 2 + delta[1] ** 2 + delta[2] ** 2) ** 0.5
+        if length <= 0.0:
+            return False
+        carrier.SetSlicingPlaneOrigin(
+            (float(p1[0]) + float(p2[0])) / 2.0,
+            (float(p1[1]) + float(p2[1])) / 2.0,
+            (float(p1[2]) + float(p2[2])) / 2.0,
+        )
+        carrier.SetSlicingPlaneNormal(
+            delta[0] / length, delta[1] / length, delta[2] / length
+        )
+        return True
 
     def _place_distance_spheroid_init_point(self, world: Any) -> int | None:
         """Place the next distance-spheroid init point at RAS ``world``.
