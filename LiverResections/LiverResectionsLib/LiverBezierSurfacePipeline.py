@@ -726,14 +726,29 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                 # The handle GRAB (press/move/release, the ADR-0033 grammar).
                 if self._init_drag_index is not None:
                     if etype == vtk.vtkCommand.MouseMoveEvent:
-                        world = self._event_world_on_focal_plane(renderer, eventData)
+                        # Back-project at the GRABBED HANDLE's depth (the
+                        # control-point drag's model) -- the focal plane
+                        # would make the handle jump in depth on grab.
+                        world = self._event_world_at_init_point(
+                            renderer, eventData, self._init_drag_index
+                        )
                         if world is None:
                             return True  # keep the grab alive
-                        carrier.SetSlicingPlaneInitPoint(
-                            self._init_drag_index,
-                            [float(world[0]), float(world[1]), float(world[2])],
-                        )
-                        self._derive_slicing_plane()
+                        # ONE Modified per move (the control-point drag's
+                        # cost profile): the point write + the plane
+                        # re-derivation batch under StartModify, so the
+                        # observers -- including the Stage-4 widget's
+                        # per-Modified strip render -- fire once, not
+                        # three times.
+                        was_modifying = carrier.StartModify()
+                        try:
+                            carrier.SetSlicingPlaneInitPoint(
+                                self._init_drag_index,
+                                [float(world[0]), float(world[1]), float(world[2])],
+                            )
+                            self._derive_slicing_plane()
+                        finally:
+                            carrier.EndModify(was_modifying)
                         return True
                     if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
                         self._init_drag_index = None
@@ -860,6 +875,32 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                 best_d2 = d2
                 best_index = index
         return best_index, best_d2
+
+    def _event_world_at_init_point(self, renderer: Any, eventData: Any, index: int):
+        """Back-project the event pixel onto init handle ``index``'s depth.
+
+        Mirrors the control-point drag's depth model: the grabbed handle
+        keeps its own depth instead of jumping to the camera focal plane.
+        The try/except is FLOW: a move that fails to resolve returns
+        ``None`` so the caller keeps the grab alive.
+        """
+        carrier = self._data_node
+        if carrier is None:
+            return None
+        try:
+            point = carrier.GetSlicingPlaneInitPoint(index)
+            ex, ey = eventData.GetDisplayPosition()
+            renderer.SetWorldPoint(point[0], point[1], point[2], 1.0)
+            renderer.WorldToDisplay()
+            _dx, _dy, dz = renderer.GetDisplayPoint()
+            renderer.SetDisplayPoint(float(ex), float(ey), dz)
+            renderer.DisplayToWorld()
+            wx, wy, wz, ww = renderer.GetWorldPoint()
+        except Exception:  # pragma: no cover - defensive
+            return None
+        if ww == 0.0:
+            return None
+        return (wx / ww, wy / ww, wz / ww)
 
     def _auto_seed_slicing_plane(self, view_right: Any | None = None) -> bool:
         """Pre-seed the two Init handles across the target's bounds.

@@ -675,8 +675,8 @@ def test_press_grabs_a_handle_and_drag_rederives_the_plane(monkeypatch):
     )
     monkeypatch.setattr(
         pipeline,
-        "_event_world_on_focal_plane",
-        lambda r, e: (40.0, 10.0, 25.0),
+        "_event_world_at_init_point",
+        lambda r, e, i: (40.0, 10.0, 25.0),
     )
 
     class _Event:
@@ -739,3 +739,60 @@ def test_handle_interaction_declines_outside_init(monkeypatch):
         "outside Init the surface pipeline must keep declining -- the "
         "Planning drag belongs to ControlPolygonPipeline (ADR-0033)."
     )
+
+
+def test_drag_move_fires_exactly_one_modified(monkeypatch):
+    """A drag move batches point + plane writes under ONE ModifiedEvent.
+
+    The point write and the origin/normal re-derivation previously fired
+    three ModifiedEvents per mouse move -- and the Stage-4 widget force-
+    renders the resectogram strip on every carrier Modified, so each move
+    cost three reconciles + three strip renders (the "cutting and
+    rendering later" lag).  The control-point drag's cost profile is one
+    Modified per move; the handle drag must match it.
+    """
+    import vtk
+
+    slicer = _slicer_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+    target = _target_model_with_bounds(slicer)
+    carrier.SetAndObserveTargetModelNode(target)  # reconcile hook auto-seeds
+    if pipeline._slicing_plane_points_placed < 2:
+        pipeline._auto_seed_slicing_plane(view_right=(1.0, 0.0, 0.0))
+
+    monkeypatch.setattr(pipeline, "_safe_get_renderer", lambda: object())
+    monkeypatch.setattr(
+        pipeline, "_nearest_init_handle_in_display", lambda r, e: (0, 1.0)
+    )
+    monkeypatch.setattr(
+        pipeline, "_event_world_at_init_point", lambda r, e, i: (5.0, 6.0, 7.0)
+    )
+
+    class _Event:
+        def __init__(self, etype):
+            self._etype = etype
+
+        def GetType(self):  # noqa: N802 - VTK verb
+            return self._etype
+
+    assert pipeline.ProcessInteractionEvent(
+        _Event(vtk.vtkCommand.LeftButtonPressEvent)
+    )
+
+    events = []
+    tag = carrier.AddObserver(
+        vtk.vtkCommand.ModifiedEvent, lambda c, e: events.append(1)
+    )
+    try:
+        assert pipeline.ProcessInteractionEvent(
+            _Event(vtk.vtkCommand.MouseMoveEvent)
+        )
+    finally:
+        carrier.RemoveObserver(tag)
+
+    assert len(events) == 1, (
+        f"a drag move must fire exactly ONE ModifiedEvent (got {len(events)}) "
+        "-- the point + origin + normal writes batch under StartModify."
+    )
+    assert tuple(carrier.GetSlicingPlaneInitPoint(0)) == (5.0, 6.0, 7.0)
+    assert tuple(carrier.GetSlicingPlaneOrigin())[2] != 5.0  # plane re-derived
