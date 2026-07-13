@@ -753,10 +753,12 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                     if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
                         self._init_drag_index = None
                         # The v1 loop: every drag RELEASE re-fits the 4x4
-                        # grid from the fresh plane/liver cut and re-shows
-                        # the surface preview (hidden during the drag).
+                        # grid from the fresh plane/liver cut (the seeded
+                        # grid is what commit turns into the Planning
+                        # surface; during Init the CONTOUR is the cut's
+                        # only visualisation -- no explicit plane).
                         self._refit_grid_from_plane()
-                        self._set_surface_preview_suppressed(False)
+                        self._set_grabbed_handle(None)
                         return False
                     return False
                 if etype == vtk.vtkCommand.LeftButtonPressEvent:
@@ -770,8 +772,7 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                         and self._slicing_plane_points_placed >= 2
                     ):
                         self._init_drag_index = index
-                        # v1 hid the surface while a handle drags.
-                        self._set_surface_preview_suppressed(True)
+                        self._set_grabbed_handle(index)
                         return True
 
                 # Legacy fill-placement (the no-auto-seed fallback: no target
@@ -995,13 +996,13 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         except Exception:  # pragma: no cover - camera probing must not raise
             return None
 
-    def _set_surface_preview_suppressed(self, suppressed: bool) -> None:
-        """Hide/show the Init surface preview (drag choreography, v1)."""
+    def _set_grabbed_handle(self, index: int | None) -> None:
+        """Colour the grabbed Init handle (the control-point grab cue)."""
         name = self._current_representation_name
         active = self._representations.get(name) if name else None
-        setter = getattr(active, "SetSurfacePreviewSuppressed", None)
+        setter = getattr(active, "SetGrabbedHandle", None)
         if setter is not None:
-            setter(bool(suppressed))
+            setter(index)
 
     def _refit_grid_from_plane(self) -> bool:
         """Re-fit the 4x4 grid from the current plane/liver cut (v1 loop).
@@ -1316,6 +1317,11 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                 _safe_get_state(self._data_node),
                 _safe_get_init_mode(self._data_node),
                 _control_points_digest(self._data_node),
+                # The Init handle drag mutates the slicing-plane fields,
+                # not the control grid -- without them here the contour
+                # never repainted DURING a drag (only the release re-fit,
+                # which changes the grid, triggered a render).
+                _slicing_plane_digest(self._data_node),
                 _safe_get_picked_position(self._locator_node),
                 _safe_get_locator_visibility(self._locator_node),
             )
@@ -1380,6 +1386,20 @@ def _safe_get_picked_position(node: Any) -> tuple | None:
     if node is None:
         return None
     return tuple(float(v) for v in node.GetPickedPositionWorld())
+
+
+def _slicing_plane_digest(node: Any) -> tuple:
+    """Digest of the slicing-plane fields (the Init drag's render gate)."""
+    if node is None:
+        return ()
+    try:
+        p0 = tuple(node.GetSlicingPlaneInitPoint(0))
+        p1 = tuple(node.GetSlicingPlaneInitPoint(1))
+        origin = tuple(node.GetSlicingPlaneOrigin())
+        normal = tuple(node.GetSlicingPlaneNormal())
+    except Exception:  # stub nodes without the plane fields
+        return ()
+    return (p0, p1, origin, normal)
 
 
 def _control_points_digest(node: Any) -> tuple:
