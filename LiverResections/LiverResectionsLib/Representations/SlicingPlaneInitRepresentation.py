@@ -33,19 +33,19 @@ Three pieces of geometry per ADR-0014 §2
    shader keeps only a band of ``CONTOUR_THICKNESS_WORLD`` world units
    around the plane and discards everything else — the visible band on
    the liver surface IS the plane's visualisation.  Shader-based per
-   the maintainer's requirement (no CPU cutter substitute).  Driven by
-   ``GetSlicingPlaneOrigin`` / ``GetSlicingPlaneNormal`` pushed as the
-   mapper's world-space plane uniforms, and fed the target mesh from
-   ``GetTargetModelNode`` (ADR-0014 §1).
-3. **Ring on the target liver mesh** — produced on the Init->Planning
-   commit boundary by ``run_ring_extraction``: the Pipeline's
-   ``commit()`` resolves the weakref'd target liver mesh
+   the v1 shader-band behaviour (ADR-0035; no CPU cutter substitute).
+   Driven by ``GetSlicingPlaneOrigin`` / ``GetSlicingPlaneNormal``
+   pushed as the mapper's world-space plane uniforms, and fed the
+   target mesh from ``GetTargetModelNode`` (ADR-0014 §1).
+3. **Ring on the target liver mesh** — produced on the plane-handle
+   DROP boundary by ``run_ring_extraction`` (ADR-0035 §4): the
+   Pipeline's drop re-fit resolves the weakref'd target liver mesh
    (ADR-0014 §1, ``vtkMRMLBezierSurfaceNode::GetTargetModelNode()``)
    and hands it here, where a ``vtkLiverPlaneRingExtractor`` is fed
    the target mesh + origin + normal to produce the ordered
    intersection ring.  Per-frame visual feedback during Init is the
-   shader's job; the discrete CPU ring is one-shot per resection
-   (ADR-0019).
+   shader's job; the discrete CPU ring runs once per drop, never per
+   move.
 
 Contour-mapper injection seam
 -----------------------------
@@ -208,13 +208,13 @@ class SlicingPlaneInitRepresentation:
         # Bookkeeping for unit tests — bumped on a real refresh.
         self._input_refresh_count: int = 0
 
-        # Last data node seen by ``update`` — the on-commit ring
+        # Last data node seen by ``update`` — the drop-boundary ring
         # extraction reads the SlicingPlane geometry off it
         # (``run_ring_extraction``).
         self._data_node: Any | None = None
 
         # The extracted intersection ring (``vtkPolyData``) produced on
-        # the Init->Planning commit, or ``None`` before commit.
+        # the last plane-handle drop, or ``None`` before the first drop.
         self._ring_polydata: Any | None = None
 
         # Index of the Init handle currently grabbed (the control-point
@@ -281,10 +281,10 @@ class SlicingPlaneInitRepresentation:
         self._refresh_halo()
 
     def run_ring_extraction(self, target_model: Any | None) -> Any | None:
-        """Extract the plane/target intersection ring on the commit boundary.
+        """Extract the plane/target intersection ring on the DROP boundary.
 
         Consume site for ``TODO(T2-target-mesh-weakref)``: the Pipeline's
-        ``commit()`` resolves the weakref'd target organ model
+        drop re-fit (ADR-0035 §4) resolves the weakref'd target organ model
         (ADR-0014 §1, ``GetTargetModelNode()``) and hands it here.  This
         constructs a ``vtkLiverPlaneRingExtractor``, feeds it the target
         mesh's ``vtkPolyData`` plus the SlicingPlane origin + normal off
@@ -315,7 +315,7 @@ class SlicingPlaneInitRepresentation:
 
     def GetRingPolyData(self) -> Any | None:
         """The intersection ring produced by the last
-        ``run_ring_extraction`` — or ``None`` before commit."""
+        ``run_ring_extraction`` — or ``None`` before the first drop."""
         return self._ring_polydata
 
     def cleanup(self) -> None:

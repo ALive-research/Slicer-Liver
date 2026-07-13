@@ -93,6 +93,23 @@ def test_extractor_never_per_tick_once_per_drop(monkeypatch):
         "exactly ONE per drop (ADR-0035)."
     )
 
+    # The Init -> Planning commit itself (SurfaceGrabbed) is a PURE state
+    # flip -- zero extractions across it (the old commit()-boundary's
+    # corollary, restated for ADR-0035).
+    try:
+        from LiverResectionsLib import ResectionStateMachine as rsm
+    except Exception as exc:  # pragma: no cover - import-environment dependent
+        pytest.skip(f"ResectionStateMachine not importable ({exc!r}).")
+    rsm.request(bezier, rsm.EVENT_PLANE_HANDLE_GRABBED)
+    rsm.request(bezier, rsm.EVENT_PLANE_HANDLE_DROPPED, refit=lambda: True)
+    before = count["n"]
+    assert rsm.request(bezier, rsm.EVENT_SURFACE_GRABBED) is True
+    assert bezier.GetState() == rsm.STATE_PLANNING
+    assert count["n"] == before, (
+        f"the SurfaceGrabbed commit ran {count['n'] - before} "
+        "extraction(s); the commit is a pure state flip (ADR-0035 §4)."
+    )
+
 
 def test_drop_refit_reads_target_via_weakref(monkeypatch):
     """The drop's re-fit feeds the extractor the WEAKREF'D target mesh

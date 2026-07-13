@@ -213,5 +213,28 @@ def test_unknown_event_is_refused():
     assert rsm.request(carrier, "NoSuchEvent") is False
 
 
+def test_raising_refit_counts_as_a_failed_fit():
+    """A drop whose re-fit RAISES still lands a resting phase (the
+    origin) -- an exception must not strand the node in-flight with the
+    caller's gesture cleanup skipped."""
+    carrier = _StubCarrier(state=rsm.STATE_INIT)
+    rsm.request(carrier, rsm.EVENT_PLANE_HANDLE_GRABBED)
+
+    def _exploding_refit():
+        raise RuntimeError("degenerate ring")
+
+    assert (
+        rsm.request(
+            carrier, rsm.EVENT_PLANE_HANDLE_DROPPED, refit=_exploding_refit
+        )
+        is True
+    ), "the drop still fires -- the raise reads as a failed fit"
+    assert rsm.in_flight(carrier) is False
+    assert rsm.resting_phase(carrier) == rsm.PHASE_SEEDED
+    assert rsm.phase_token(carrier) == rsm.PHASE_SEEDED, (
+        "the render-key token reads the landed resting phase"
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
