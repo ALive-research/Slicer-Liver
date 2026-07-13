@@ -149,6 +149,15 @@ set(_liverseg_pytest_files
   # Scene-needing (converter + SimpleITK); launched `pytest_launched` row,
   # skips cleanly bare.
   test_liversegmentation_distance_map_on_import.py
+  # ADR-0034 §Decision 5 -- the main-thread QProcess job queue replacing the
+  # blocking readline+processEvents run path: (task, input) coalescing,
+  # strict sequencing, cancel/shutdown leaving no child (real slow stub
+  # children via an injected command builder -- never a real inference),
+  # plus the widget contract (enqueue flips targeted rows to native
+  # InProgress incl. the demote-from-Completed staleness rule; landing keeps
+  # InProgress; multi-select Run; the Segment-anatomy macro over the Missing
+  # set).  Launched `pytest_launched` row; skips cleanly bare.
+  test_liversegmentation_job_queue.py
 )
 
 foreach(_pytest_file IN LISTS _liverseg_pytest_files)

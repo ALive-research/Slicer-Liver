@@ -242,9 +242,36 @@ def buildCommand(executable, input_path, output_dir, sct_code, device) -> list:
 
     Per-class file output (no ``--ml``): the backend writes
     ``<output_dir>/<label>.nii.gz`` per class, which the orchestrator
-    loads by name — no class-index bookkeeping.
+    loads by name — no class-index bookkeeping.  Single-structure
+    convenience over :func:`buildCommandForStructures`.
     """
-    spec = INFERENCE_TARGETS[str(sct_code)]
+    return buildCommandForStructures(
+        executable, input_path, output_dir, [sct_code], device
+    )
+
+
+def buildCommandForStructures(
+    executable, input_path, output_dir, sct_codes, device
+) -> list:
+    """One backend command line covering several coalesced structures.
+
+    The job queue's coalescing (ADR-0034 §Decision 4/5) collapses every
+    structure sharing a backend task into ONE invocation; this builder merges
+    their specs: the ``roi_subset`` flag is the deduplicated union (emitted
+    only when EVERY spec restricts — one unrestricted spec means the task
+    already produces everything), ``--fast`` only when every spec supports
+    it.  All codes must share one task (the coalescing key); ``ValueError``
+    otherwise.  Pure and testable like :func:`buildCommand`.
+    """
+    specs = [INFERENCE_TARGETS[str(code)] for code in sct_codes]
+    if not specs:
+        raise ValueError("buildCommandForStructures needs at least one SCT code")
+    tasks = {spec["task"] for spec in specs}
+    if len(tasks) != 1:
+        raise ValueError(
+            f"structures span multiple backend tasks {sorted(tasks)}; the job "
+            "queue coalesces per task — one command covers one task only."
+        )
     command = [
         str(executable),
         "-i",
@@ -252,11 +279,16 @@ def buildCommand(executable, input_path, output_dir, sct_code, device) -> list:
         "-o",
         str(output_dir),
         "--task",
-        spec["task"],
+        tasks.pop(),
     ]
-    if spec["roi_subset"]:
-        command += ["--roi_subset", *spec["roi_subset"]]
-    if spec["fast"]:
+    if all(spec["roi_subset"] for spec in specs):
+        roi_subset: list = []
+        for spec in specs:
+            for roi in spec["roi_subset"]:
+                if roi not in roi_subset:
+                    roi_subset.append(roi)
+        command += ["--roi_subset", *roi_subset]
+    if all(spec["fast"] for spec in specs):
         command.append("--fast")
     command += ["--device", str(device)]
     return command
