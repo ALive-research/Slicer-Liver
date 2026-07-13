@@ -1037,3 +1037,139 @@ def test_press_repaints_before_any_drag_move(monkeypatch):
         "the press must request a render -- the grab green appears on "
         "the CLICK, not at the first drag move."
     )
+
+
+# --------------------------------------------------------------------------- #
+# R3 -- the v1 composite loop: release raises a manipulable candidate
+# surface; grabbing a plane handle hides it while the contour follows.
+# --------------------------------------------------------------------------- #
+
+
+def test_release_marks_the_candidate_and_drag_hides_it(monkeypatch):
+    """The v1 composite-widget coordination on the carrier: an init-handle
+    press raises the drag-in-flight flag (the candidate surface hides
+    while the contour follows the handle); the release re-fit clears it
+    and marks the candidate ready (the surface [re]appears)."""
+    import vtk
+
+    from LiverResectionsLib.LiverBezierSurfacePipeline import (
+        ATTR_INIT_CANDIDATE_READY,
+        ATTR_INIT_HANDLE_DRAG,
+    )
+
+    slicer = _slicer_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+    target = _target_model_with_bounds(slicer)
+    carrier.SetAndObserveTargetModelNode(target)  # reconcile hook auto-seeds
+    if pipeline._slicing_plane_points_placed < 2:
+        pipeline._auto_seed_slicing_plane(view_right=(1.0, 0.0, 0.0))
+
+    assert carrier.GetAttribute(ATTR_INIT_CANDIDATE_READY) != "1", (
+        "before any release there is no candidate -- handles + contour only"
+    )
+
+    monkeypatch.setattr(pipeline, "_safe_get_renderer", lambda: object())
+    monkeypatch.setattr(
+        pipeline, "_nearest_init_handle_in_display", lambda r, e: (0, 1.0)
+    )
+    monkeypatch.setattr(
+        pipeline, "_event_world_at_init_point", lambda r, e, i: (5.0, 6.0, 7.0)
+    )
+
+    class _Event:
+        def __init__(self, etype):
+            self._etype = etype
+
+        def GetType(self):  # noqa: N802 - VTK verb
+            return self._etype
+
+    assert pipeline.ProcessInteractionEvent(
+        _Event(vtk.vtkCommand.LeftButtonPressEvent)
+    )
+    assert carrier.GetAttribute(ATTR_INIT_HANDLE_DRAG) == "1", (
+        "the press must raise the drag-in-flight flag (the candidate "
+        "surface hides while the plane handle is being adjusted)."
+    )
+
+    assert pipeline.ProcessInteractionEvent(
+        _Event(vtk.vtkCommand.LeftButtonReleaseEvent)
+    ) is False
+    assert carrier.GetAttribute(ATTR_INIT_HANDLE_DRAG) != "1", (
+        "the release must clear the drag-in-flight flag."
+    )
+    assert carrier.GetAttribute(ATTR_INIT_CANDIDATE_READY) == "1", (
+        "the release re-fit must mark the candidate surface ready -- "
+        "dropping the handle GENERATES the manipulable candidate (v1)."
+    )
+
+
+class _FakeCompositeRep:
+    """Minimal Representation stand-in for the dispatch pin."""
+
+    def __init__(self):
+        self._renderer = None
+        self.updates = 0
+
+    def SetRenderer(self, renderer):  # noqa: N802 - VTK verb
+        self._renderer = renderer
+
+    def update(self, display_node, data_node):
+        self.updates += 1
+
+
+def test_candidate_attaches_the_planning_surface_alongside_init(monkeypatch):
+    """In Init+SlicingPlane with the candidate ready, the reconcile keeps
+    the BezierPlanning Representation attached ALONGSIDE the init rep
+    (the v1 two-widget composite); raising the drag flag detaches it."""
+
+    from LiverResectionsLib.LiverBezierSurfacePipeline import (
+        ATTR_INIT_CANDIDATE_READY,
+        ATTR_INIT_HANDLE_DRAG,
+        REPRESENTATION_BEZIER_PLANNING,
+        REPRESENTATION_SLICING_PLANE_INIT,
+    )
+
+    slicer = _slicer_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+
+    init_rep = _FakeCompositeRep()
+    planning_rep = _FakeCompositeRep()
+    pipeline._representations = {
+        REPRESENTATION_SLICING_PLANE_INIT: init_rep,
+        REPRESENTATION_BEZIER_PLANNING: planning_rep,
+    }
+    pipeline._representations_initialised = True
+    renderer = object()
+    monkeypatch.setattr(pipeline, "_safe_get_renderer", lambda: renderer)
+
+    # No candidate yet: only the init rep may sit on the renderer.
+    pipeline._last_update_key = None
+    pipeline.UpdatePipeline()
+    assert init_rep._renderer is renderer
+    assert planning_rep._renderer is None, (
+        "before the first release there is no candidate surface."
+    )
+
+    # Candidate ready: BOTH representations attach (the composite).
+    carrier.SetAttribute(ATTR_INIT_CANDIDATE_READY, "1")
+    pipeline._last_update_key = None
+    pipeline.UpdatePipeline()
+    assert init_rep._renderer is renderer, (
+        "the init handles + contour stay up while the candidate shows."
+    )
+    assert planning_rep._renderer is renderer, (
+        "the candidate surface must attach alongside the init rep."
+    )
+    assert planning_rep.updates >= 1, (
+        "the composite rep must be updated, not just attached."
+    )
+
+    # Drag in flight: the candidate hides, the init rep stays.
+    carrier.SetAttribute(ATTR_INIT_HANDLE_DRAG, "1")
+    pipeline._last_update_key = None
+    pipeline.UpdatePipeline()
+    assert planning_rep._renderer is None, (
+        "grabbing a plane handle must hide the candidate surface (v1: "
+        "the surface hides while the contour follows the drag)."
+    )
+    assert init_rep._renderer is renderer

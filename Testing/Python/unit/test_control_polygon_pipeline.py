@@ -12,7 +12,9 @@ Pins (ADR-0033 §Conformance):
 
 * handles + edges follow the carrier's control grid;
 * edge cells come from the (injected) Algorithm builder, once per shape;
-* Planning-only visibility, further gated by the display node's Visibility;
+* Planning (or Init-candidate) visibility, further gated by the display
+  node's Visibility; the first Init-candidate press commits Init -> Planning
+  (the v1 composite loop);
 * the drag kernel writes ``SetControlPoint`` in Planning and refuses
   otherwise;
 * ``CanProcessInteractionEvent`` declines outside Planning / without a
@@ -466,6 +468,82 @@ def test_press_repaints_before_any_drag_move(pipeline_module, polygon_nodes):
         "the press must request a render -- the grab green appears on "
         "the CLICK, not at the first drag move."
     )
+    pipeline.cleanup()
+
+
+def test_init_candidate_admits_the_polygon_and_press_commits(
+    pipeline_module, polygon_nodes
+):
+    """The v1 composite loop's COMMIT: with the candidate ready in Init,
+    the control polygon is visible and grabbable, and the FIRST press on
+    a surface handle advances the carrier Init -> Planning (v1's
+    first-surface-grab commit -- no button)."""
+    import vtk
+
+    data, display = polygon_nodes
+    pipeline = pipeline_module.ControlPolygonPipeline()
+    pipeline.SetDisplayNode(display)
+    _seed_grid(data)
+    data.SetState(0)  # Init
+
+    pipeline._safe_get_renderer = lambda: object()
+    pipeline._nearest_control_point_in_display = lambda r, e: (5, 4.0)
+    pipeline._event_world_at_control_point = lambda r, e, i: (50.0, 60.0, 5.0)
+
+    press = _TypedEvent(vtk.vtkCommand.LeftButtonPressEvent)
+
+    # Init WITHOUT a candidate: nothing to grab, no visibility.
+    can, _ = pipeline.CanProcessInteractionEvent(press)
+    assert can is False, "no candidate yet -- the polygon must decline"
+    assert pipeline._compute_visibility(data.GetState()) is False
+
+    # Candidate ready: visible + grabbable.
+    data.SetAttribute(pipeline_module.ATTR_INIT_CANDIDATE_READY, "1")
+    assert pipeline._compute_visibility(data.GetState()) is True, (
+        "the candidate polygon must show in Init once the release re-fit "
+        "marked it ready."
+    )
+    can, d2 = pipeline.CanProcessInteractionEvent(press)
+    assert can is True and d2 == pytest.approx(4.0)
+
+    assert pipeline.ProcessInteractionEvent(press) is True, (
+        "the press starts the grab"
+    )
+    assert data.GetState() == 1, (
+        "the FIRST surface-handle press is the Init -> Planning commit "
+        "(the v1 first-surface-grab gesture)."
+    )
+    pipeline.cleanup()
+
+
+def test_init_drag_in_flight_hides_and_declines_the_polygon(
+    pipeline_module, polygon_nodes
+):
+    """While a plane-handle drag is in flight the candidate polygon is
+    hidden and must not compete for the gesture (v1: the surface hides
+    while the contour follows the plane handle)."""
+    import vtk
+
+    data, display = polygon_nodes
+    pipeline = pipeline_module.ControlPolygonPipeline()
+    pipeline.SetDisplayNode(display)
+    _seed_grid(data)
+    data.SetState(0)  # Init
+    data.SetAttribute(pipeline_module.ATTR_INIT_CANDIDATE_READY, "1")
+    data.SetAttribute(pipeline_module.ATTR_INIT_HANDLE_DRAG, "1")
+
+    pipeline._safe_get_renderer = lambda: object()
+    pipeline._nearest_control_point_in_display = lambda r, e: (5, 4.0)
+
+    assert pipeline._compute_visibility(data.GetState()) is False, (
+        "the candidate polygon hides while the plane handle is dragged."
+    )
+    press = _TypedEvent(vtk.vtkCommand.LeftButtonPressEvent)
+    can, _ = pipeline.CanProcessInteractionEvent(press)
+    assert can is False, (
+        "mid-plane-drag the polygon must not claim the gesture."
+    )
+    assert data.GetState() == 0, "no commit while the plane drag is live"
     pipeline.cleanup()
 
 
