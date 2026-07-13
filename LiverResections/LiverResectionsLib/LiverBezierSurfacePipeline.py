@@ -156,6 +156,18 @@ INIT_MODE_DISTANCE_SPHEROID = 1
 #: ADR-0032 value the control-point drag uses).
 INIT_HANDLE_PICK_RADIUS_PX = 20.0
 
+#: Carrier attributes coordinating the v1 COMPOSITE init loop (the two
+#: v1 widgets' visibility choreography, carried on the shared node so
+#: every observing Pipeline — this one and ControlPolygonPipeline — sees
+#: the same phase).  ``InitCandidateReady`` is raised by the release
+#: re-fit: dropping a plane handle GENERATES the manipulable candidate
+#: surface.  ``InitHandleDrag`` is up for the press→release span of a
+#: plane-handle drag: the candidate hides while the contour follows.
+#: ControlPolygonPipeline mirrors these names (kept in sync by the
+#: composite-loop pins).
+ATTR_INIT_CANDIDATE_READY = "LiverResections.InitCandidateReady"
+ATTR_INIT_HANDLE_DRAG = "LiverResections.InitHandleDrag"
+
 
 class LiverBezierSurfacePipeline(_PipelineBase):
     """State-aware Pipeline for the Bezier-surface concept.
@@ -465,22 +477,41 @@ class LiverBezierSurfacePipeline(_PipelineBase):
 
         active = self._representations.get(active_name) if active_name else None
 
-        # Only the ACTIVE Representation's actors may sit on the renderer.
-        # All four are constructed against the renderer, so without this the
-        # inactive ones linger -- most visibly the SlicingPlaneInit plane +
-        # marker spheres surviving the Init -> Planning switch as a stray
-        # second surface (ADR-0013 §6: constructed once, reused; but only the
-        # dispatched one renders).  SetRenderer(None) detaches idempotently;
-        # re-attach the active one only when it lost its renderer (avoids
-        # duplicate AddActor calls).
+        # The v1 COMPOSITE: in Init+SlicingPlane with the candidate ready
+        # (release re-fit ran, no plane drag in flight) the BezierPlanning
+        # Representation renders ALONGSIDE the init handles + contour --
+        # v1's two coordinated widgets.  The candidate surface is the
+        # manipulable output of every handle drop; its first grab (on
+        # ControlPolygonPipeline) is the Init -> Planning commit.
+        composite = None
+        if (
+            active_name == REPRESENTATION_SLICING_PLANE_INIT
+            and _init_candidate_active(self._data_node)
+        ):
+            composite = self._representations.get(REPRESENTATION_BEZIER_PLANNING)
+
+        # Only the ACTIVE (+ composite) Representations' actors may sit on
+        # the renderer.  All four are constructed against the renderer, so
+        # without this the inactive ones linger -- most visibly the
+        # SlicingPlaneInit plane + marker spheres surviving the Init ->
+        # Planning switch as a stray second surface (ADR-0013 §6:
+        # constructed once, reused; but only the dispatched ones render).
+        # SetRenderer(None) detaches idempotently; re-attach only when a
+        # rep lost its renderer (avoids duplicate AddActor calls).
         renderer = self._safe_get_renderer()
         for rep in self._representations.values():
-            if rep is None or rep is active:
+            if rep is None or rep is active or rep is composite:
                 continue
             if rep._renderer is not None:
                 rep.SetRenderer(None)
         if active is not None and renderer is not None and active._renderer is not renderer:
             active.SetRenderer(renderer)
+        if (
+            composite is not None
+            and renderer is not None
+            and composite._renderer is not renderer
+        ):
+            composite.SetRenderer(renderer)
 
         if active is not None:
             # Thread the orchestrating wrapper to Representations that consume
@@ -494,6 +525,13 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             if hasattr(active, "SetLocatorNode"):
                 active.SetLocatorNode(self._locator_node)
             active.update(self._display_node, self._data_node)
+
+        if composite is not None:
+            if hasattr(composite, "SetResectionPlanNode"):
+                composite.SetResectionPlanNode(self._resection_node)
+            if hasattr(composite, "SetLocatorNode"):
+                composite.SetLocatorNode(self._locator_node)
+            composite.update(self._display_node, self._data_node)
 
         # Init-mode parameter mutations only MARK extraction pending; the
         # discrete ring extraction is debounced behind the commit
@@ -773,11 +811,18 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                     if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
                         self._init_drag_index = None
                         # The v1 loop: every drag RELEASE re-fits the 4x4
-                        # grid from the fresh plane/liver cut (the seeded
-                        # grid is what commit turns into the Planning
-                        # surface; during Init the CONTOUR is the cut's
-                        # only visualisation -- no explicit plane).
-                        self._refit_grid_from_plane()
+                        # grid from the fresh plane/liver cut and raises
+                        # the candidate surface (dropping the handle
+                        # GENERATES the manipulable candidate).  The
+                        # re-fit + the drag-flag clear batch under ONE
+                        # Modified so the composite reveal is a single
+                        # reconcile.
+                        was_modifying = carrier.StartModify()
+                        try:
+                            self._refit_grid_from_plane()
+                            carrier.SetAttribute(ATTR_INIT_HANDLE_DRAG, "0")
+                        finally:
+                            carrier.EndModify(was_modifying)
                         self._set_grabbed_handle(None)
                         self._set_hovered_handle(None)
                         return False
@@ -793,6 +838,9 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                         and self._slicing_plane_points_placed >= 2
                     ):
                         self._init_drag_index = index
+                        # The candidate surface hides for the whole drag
+                        # (v1: adjusting the plane shows contour only).
+                        carrier.SetAttribute(ATTR_INIT_HANDLE_DRAG, "1")
                         self._set_grabbed_handle(index)
                         # The halo jumps to (and rides with) the grabbed
                         # handle for the whole drag.
@@ -1084,7 +1132,13 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         )
         if ring is None or ring.GetNumberOfPoints() < 3:
             return False
-        return self._seed_grid_from_ring(ring)
+        if not self._seed_grid_from_ring(ring):
+            return False
+        # A freshly-fitted grid IS the candidate surface (v1: dropping the
+        # handle generates a manipulable candidate); the composite dispatch
+        # + ControlPolygonPipeline key on this flag.
+        carrier.SetAttribute(ATTR_INIT_CANDIDATE_READY, "1")
+        return True
 
     def _seed_grid_from_ring(self, ring: Any) -> bool:
         """Seed the carrier's 4x4 grid from a ring's PCA rectangle."""
@@ -1437,6 +1491,24 @@ def _safe_get_picked_position(node: Any) -> tuple | None:
     if node is None:
         return None
     return tuple(float(v) for v in node.GetPickedPositionWorld())
+
+
+def _init_candidate_active(node: Any) -> bool:
+    """True when the Init candidate surface should show (v1 composite).
+
+    The release re-fit raised ``InitCandidateReady`` and no plane-handle
+    drag is in flight.  ``getattr``-guarded so stub nodes without the
+    attribute API simply read as no-candidate.
+    """
+    if node is None:
+        return False
+    get = getattr(node, "GetAttribute", None)
+    if get is None:
+        return False
+    return (
+        get(ATTR_INIT_CANDIDATE_READY) == "1"
+        and get(ATTR_INIT_HANDLE_DRAG) != "1"
+    )
 
 
 def _slicing_plane_digest(node: Any) -> tuple:

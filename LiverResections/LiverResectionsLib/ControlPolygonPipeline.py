@@ -36,13 +36,21 @@ from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
 # vtkMRMLBezierSurfaceNode).
 try:  # pragma: no cover - exercised once per import path
     from .LiverBezierSurfacePipeline import (
+        ATTR_INIT_CANDIDATE_READY as ATTR_INIT_CANDIDATE_READY,
+        ATTR_INIT_HANDLE_DRAG as ATTR_INIT_HANDLE_DRAG,
+        STATE_INIT,
         STATE_PLANNING,
+        _init_candidate_active,
         _safe_get_mtime,
         _safe_get_state,
     )
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from LiverBezierSurfacePipeline import (  # type: ignore[no-redef]
+        ATTR_INIT_CANDIDATE_READY as ATTR_INIT_CANDIDATE_READY,
+        ATTR_INIT_HANDLE_DRAG as ATTR_INIT_HANDLE_DRAG,
+        STATE_INIT,
         STATE_PLANNING,
+        _init_candidate_active,
         _safe_get_mtime,
         _safe_get_state,
     )
@@ -363,7 +371,7 @@ class ControlPolygonPipeline(_PipelineBase):
         import sys
 
         try:
-            if _safe_get_state(self._data_node) != STATE_PLANNING:
+            if not self._interaction_admissible():
                 self._drag_index = None  # a state flip mid-gesture drops the grab
                 return False, sys.float_info.max
             renderer = self._safe_get_renderer()
@@ -516,7 +524,7 @@ class ControlPolygonPipeline(_PipelineBase):
             if renderer is None:
                 self._drag_index = None
                 return False
-            if _safe_get_state(self._data_node) != STATE_PLANNING:
+            if not self._interaction_admissible():
                 self._drag_index = None
                 return False
 
@@ -531,6 +539,13 @@ class ControlPolygonPipeline(_PipelineBase):
                     or distance2 > CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
                 ):
                     return False
+                # The v1 COMMIT: the first grab of the candidate surface
+                # in Init advances the carrier to Planning (no button;
+                # the state flip retires the init handles + contour).
+                # Flipped BEFORE the grab bookkeeping so the Planning-
+                # gated edit kernel admits this very gesture.
+                if _safe_get_state(self._data_node) == STATE_INIT:
+                    self._data_node.SetState(STATE_PLANNING)
                 self._drag_index = idx
                 self._publish_interaction_state(grabbed=idx)
                 self._apply_interaction_scalars()
@@ -667,9 +682,31 @@ class ControlPolygonPipeline(_PipelineBase):
     # Geometry + styling
     # ------------------------------------------------------------------ #
 
+    def _interaction_admissible(self) -> bool:
+        """True when the polygon may claim/process gestures.
+
+        Planning, or the Init candidate phase (v1 composite: candidate
+        raised by a release re-fit, no plane-handle drag in flight).
+        The first Init-phase press is the Init -> Planning commit.
+        """
+        state = _safe_get_state(self._data_node)
+        if state == STATE_PLANNING:
+            return True
+        return state == STATE_INIT and _init_candidate_active(self._data_node)
+
     def _compute_visibility(self, state: Any) -> bool:
-        """Planning-only, further gated by the display node's Visibility."""
-        if state != STATE_PLANNING:
+        """Planning, or the Init CANDIDATE phase; display-Visibility gated.
+
+        The candidate phase is v1's composite loop: a release re-fit
+        raised the candidate surface and no plane-handle drag is in
+        flight — the polygon shows (and is grabbable) alongside the init
+        handles + contour, and its first grab commits Init -> Planning.
+        """
+        if state == STATE_PLANNING:
+            pass
+        elif state == STATE_INIT and _init_candidate_active(self._data_node):
+            pass
+        else:
             return False
         display = self._display_node
         if display is None:
