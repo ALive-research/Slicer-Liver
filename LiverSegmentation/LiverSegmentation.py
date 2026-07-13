@@ -29,8 +29,10 @@ the Stage-2 sidebar indicator (Python-convention predicate, ADR-0023
 §"Per-stage state-indicator semantics"; ``LiverVolumetryLogic`` precedent).
 """
 
+import functools
 import logging
 import os
+import re
 
 import qt
 import slicer
@@ -97,11 +99,13 @@ SOURCE_TAG = "LiverSegmentation.Source"
 SOURCE_TOTALSEG = "TotalSeg"
 #: ``SOURCE_TAG`` value for segments the import-as-canonical path lands.
 SOURCE_IMPORTED = "imported"
-#: Canonical-node attribute prefix for the explicit clinical attestation
-#: that a structure is NOT present in this case (``<prefix><sctCode>`` =
-#: "1").  Absence is stated, never inferred from a forgotten row
-#: (ADR-0034 §Decision 1); the attribute stays for the audit trail beside
-#: the empty ``Completed`` segment that attests it (§Amendments).
+#: Legacy canonical-node attribute prefix for the retired marked-absent
+#: toolbar gesture (``<prefix><sctCode>`` = "1").  The attestation now
+#: rides the table's OWN status gesture — an EMPTY segment the surgeon
+#: confirms ``Completed`` IS the absence statement (ADR-0034 §Amendments;
+#: absence is stated, never inferred from a forgotten row, §Decision 1).
+#: The attribute has no writer any more; it is still READ for back-compat
+#: with scenes that carry it.
 MARKED_ABSENT_ATTRIBUTE_PREFIX = "LiverSegmentation.MarkedAbsent."
 
 #: Row-status vocabulary — derived from the native segment status, rendered
@@ -263,14 +267,15 @@ def structureStatus(canonicalNode, sctCode):
     NATIVE per-segment status: no segment, or a ``NotStarted`` pre-seeded
     empty placeholder (``ensureExpectedStructures``) -> ``STATUS_MISSING``;
     ``InProgress`` (landed, under review) -> ``STATUS_REVIEW``;
-    ``Completed`` (the surgeon's confirm) -> ``STATUS_CONFIRMED``;
-    ``Flagged`` -> ``STATUS_FLAGGED``.  The explicit marked-absent
-    attestation attribute reads ``STATUS_MARKED_ABSENT`` over the missing
-    states and over the empty ``Completed`` segment that attests it — a
-    landed segment (``InProgress`` / ``Flagged``) contradicts and outranks
-    a stale attestation.  The transient queue states (Running /
-    Interactive) are the job queue's to report, not derivable from the
-    node.
+    ``Flagged`` -> ``STATUS_FLAGGED``.  ``Completed`` splits on the data:
+    a segment WITH voxel data is the surgeon's confirm
+    (``STATUS_CONFIRMED``); an EMPTY ``Completed`` segment is the explicit
+    absence attestation (``STATUS_MARKED_ABSENT``) — the surgeon states
+    "not present in this case" through the table's own status gesture, no
+    dedicated affordance.  The legacy marked-absent attribute is still
+    read for back-compat with scenes that carry it.  The transient queue
+    states (Running / Interactive) are the job queue's to report, not
+    derivable from the node.
     """
     segmentsLogic = slicer.vtkSlicerSegmentationsModuleLogic
     markedAbsent = (
@@ -287,9 +292,30 @@ def structureStatus(canonicalNode, sctCode):
     if status == segmentsLogic.Flagged:
         return STATUS_FLAGGED
     if status == segmentsLogic.Completed:
-        return STATUS_MARKED_ABSENT if markedAbsent else STATUS_CONFIRMED
+        if _segmentIsEmpty(segment) or markedAbsent:
+            return STATUS_MARKED_ABSENT
+        return STATUS_CONFIRMED
     # NotStarted — the pre-seeded empty checklist row.
     return STATUS_MARKED_ABSENT if markedAbsent else STATUS_MISSING
+
+
+#: The percent token in a backend output line.  TotalSegmentator's nnU-Net
+#: progress streams tqdm refreshes (``" 45%|████      | 9/20 ..."``); the
+#: leading integer percent is the one recognizable progress datum.
+_PROGRESS_PERCENT_RE = re.compile(r"(\d{1,3})\s*%")
+
+
+def _progressPercent(line):
+    """The 0–100 percent parsed from a backend output line, or ``None``.
+
+    Feeds the per-job progress bars: a line carrying a tqdm-style percent
+    flips the job's bar determinate; lines without one leave it as it is
+    (indeterminate until the first percent arrives).
+    """
+    match = _PROGRESS_PERCENT_RE.search(str(line))
+    if match is None:
+        return None
+    return max(0, min(100, int(match.group(1))))
 
 
 class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
@@ -298,15 +324,17 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     ADR-0034 §Amendments: the panel is a configured stock
     ``qMRMLSegmentsTableView`` over the single canonical node, minted (or
     adopted) on setup so the pre-seeded four-row checklist is visible the
-    moment Stage 2 opens.  A selection-scoped toolbar under the table acts on
-    the SELECTED rows: Segment anatomy (the §Decision 4 macro over every
-    Missing row), Run TotalSegmentator (enqueues every selected structure
-    into the §Decision 5 job queue; results land on the canonical node as
-    native ``InProgress`` — no Accept/Reject machinery; the surgeon's
-    confirm is the status-cell click), Cancel (kills the running job),
-    Mark absent (the explicit absence attestation on each selected empty
-    row), and Edit in Segment Editor (interim jump-to-module until the
-    embedded-editor increment).  Inference runs in the BACKGROUND via the
+    moment Stage 2 opens.  A selection-scoped toolbar under the table acts
+    on the SELECTED rows: Run TotalSegmentator (enqueues every selected
+    structure into the §Decision 5 job queue; results land on the
+    canonical node as native ``InProgress`` — no Accept/Reject machinery;
+    the surgeon's confirm is the status-cell click) and Edit in Segment
+    Editor (interim jump-to-module until the embedded-editor increment).
+    Absence is attested through the table's own status gesture — an EMPTY
+    row the surgeon sets ``Completed`` reads Marked absent — so the
+    toolbar carries no dedicated affordance for it.  Each queued/running
+    job shows its OWN progress row (text embedded in the bar, per-job ✕
+    cancel) under the toolbar.  Inference runs in the BACKGROUND via the
     main-thread QProcess queue — the GUI stays responsive; no blocking
     readline loop, no ``processEvents`` in handlers.
 
@@ -326,10 +354,12 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         self._loadSegCombo = None
         self._loadSegTable = None
         # Async run path (ADR-0034 §Decision 5): the QProcess job queue plus
-        # the widget's per-job bookkeeping (pre-enqueue statuses, restored
-        # when a job ends without landing a structure).  Built in setup().
+        # the widget's per-job bookkeeping — pre-enqueue statuses (restored
+        # when a job ends without landing a structure) and one progress row
+        # per queued/running job.  Built in setup().
         self._jobQueue = None
         self._pendingJobs = {}
+        self._jobRows = {}
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)
 
@@ -404,15 +434,24 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         # §Amendments: selection-scoped toolbar).  The view's own
         # ``selectionChanged`` carries ``QItemSelection`` arguments PythonQt
         # cannot marshal (a per-emission warning and no reliable delivery),
-        # so the connection goes to the inner selection model's
-        # ``currentChanged`` — ``QModelIndex`` marshals fine.  Best-effort:
-        # a missing surface only costs the live re-label (the gesture
-        # handlers re-resolve the selection anyway).
+        # so TWO surfaces cover every gesture: the inner selection model's
+        # ``currentChanged`` (keyboard navigation — ``QModelIndex``
+        # marshals fine) AND the inner view's ``clicked`` (a ctrl-click
+        # deselect of the current row never moves the current index, so
+        # ``currentChanged`` alone lags one gesture behind).  Both route
+        # into a zero-interval re-resolve from the REAL selection.  The
+        # slot references are stored on self for the connections' lifetime
+        # (the PythonQt discipline).  Best-effort: a missing surface only
+        # costs the live re-label (the gesture handlers re-resolve the
+        # selection anyway).
+        self._tableSelectionSlot = self._onTableSelectionChanged
         try:
-            view.tableWidget().selectionModel().connect(
+            inner = view.tableWidget()
+            inner.selectionModel().connect(
                 "currentChanged(QModelIndex,QModelIndex)",
-                self._onTableSelectionChanged,
+                self._tableSelectionSlot,
             )
+            inner.connect("clicked(QModelIndex)", self._tableSelectionSlot)
         except Exception as exc:  # noqa: BLE001 — defensive across versions
             logging.debug("segments-table selection signal unavailable: %s", exc)
         self._segmentsTable = view
@@ -443,51 +482,41 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
             self._segmentsTable = None
 
     def _buildSelectionToolbar(self):
-        """Build the selection-scoped toolbar + the shared status surface.
+        """Build the selection-scoped toolbar + the per-job progress list.
 
-        ADR-0034 §Amendments: gestures act on the SELECTED table rows, not on
-        per-row button walls.  "Segment anatomy" (the §Decision 4 macro) runs
-        the default chain for every Missing row; Run enqueues every selected
-        structure (structures sharing a backend task coalesce into one child);
-        Mark absent writes the explicit absence attestation on each selected
-        empty row; Edit jumps to the Segment Editor on the first selected row
-        (interim until the embedded-editor increment).  The Cancel (✕) button
-        shows only while a job runs; one shared status label + busy bar
-        carries queue/backend lines for every gesture.
+        ADR-0034 §Amendments: gestures act on the SELECTED table rows, not
+        on per-row button walls.  Run enqueues every selected structure
+        (structures sharing a backend task coalesce into one child;
+        multi-select covers the run-everything gesture); Edit jumps to the
+        Segment Editor on the first selected row (interim until the
+        embedded-editor increment).  Absence is attested through the
+        table's own status gesture (empty row set ``Completed``), so no
+        dedicated button.  Under the buttons, one progress row PER
+        queued/running job — the job's text embedded IN its bar, a per-job
+        cancel (✕) beside it — plus one shared status label for
+        queue/backend lines.
         """
         box = qt.QWidget()
         column = qt.QVBoxLayout(box)
         column.setContentsMargins(0, 0, 0, 0)
 
         row = qt.QHBoxLayout()
-        self._segmentAnatomyButton = qt.QPushButton("Segment anatomy")
-        self._segmentAnatomyButton.setToolTip(
-            "Run the default AI chain for every structure still Missing."
-        )
         self._runButton = qt.QPushButton(self._RUN_LABEL_BASE)
-        self._cancelButton = qt.QPushButton("✕")
-        self._cancelButton.setToolTip("Cancel the running segmentation job.")
-        self._cancelButton.setVisible(False)
-        self._markAbsentButton = qt.QPushButton("Mark absent")
         self._editButton = qt.QPushButton("Edit in Segment Editor")
-        row.addWidget(self._segmentAnatomyButton)
         row.addWidget(self._runButton)
-        row.addWidget(self._cancelButton)
-        row.addWidget(self._markAbsentButton)
         row.addWidget(self._editButton)
         row.addStretch(1)
         column.addLayout(row)
 
-        self._progressBar = qt.QProgressBar()
-        self._progressBar.setVisible(False)
-        column.addWidget(self._progressBar)
+        self._jobListBox = qt.QWidget()
+        self._jobListLayout = qt.QVBoxLayout(self._jobListBox)
+        self._jobListLayout.setContentsMargins(0, 0, 0, 0)
+        column.addWidget(self._jobListBox)
+
         self._statusLabel = qt.QLabel("Idle")
         column.addWidget(self._statusLabel)
 
-        self._segmentAnatomyButton.connect("clicked()", self.onSegmentAnatomy)
         self._runButton.connect("clicked()", self.onRunSelectedStructures)
-        self._cancelButton.connect("clicked()", self.onCancelRunningJob)
-        self._markAbsentButton.connect("clicked()", self.onMarkAbsent)
         self._editButton.connect("clicked()", self.onEditInSegmentEditor)
         return box
 
@@ -519,27 +548,42 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         return selections
 
     def _onTableSelectionChanged(self, *_args):
-        self._updateRunButton()
+        """Schedule a Run-button re-resolve AFTER the gesture settles.
+
+        The reporting signal (``clicked`` / ``currentChanged``) fires
+        mid-gesture, before the selection model reflects a ctrl-click
+        deselect; a zero-interval single-shot re-reads the REAL selection
+        once the event cascade completes, so the label never lags a
+        gesture behind.
+        """
+        qt.QTimer.singleShot(0, self._updateRunButton)
 
     def _updateRunButton(self):
-        """Re-label the Run button live with the current selection."""
+        """Re-label the Run button from the REAL current selection."""
         button = getattr(self, "_runButton", None)
         if button is None:
             return
-        selections = self._selectedStructures()
-        if not selections:
-            button.setText(f"{self._RUN_LABEL_BASE} — select a structure")
-            button.setEnabled(False)
-        elif len(selections) == 1:
-            title = self.logic._structureTitle(selections[0][1])
-            button.setText(f"{self._RUN_LABEL_BASE} — {title}")
-            button.setEnabled(True)
-        else:
-            button.setText(f"{self._RUN_LABEL_BASE} — {len(selections)} structures")
-            button.setEnabled(True)
+        try:
+            selections = self._selectedStructures()
+            if not selections:
+                button.setText(f"{self._RUN_LABEL_BASE} — select a structure")
+                button.setEnabled(False)
+            elif len(selections) == 1:
+                title = self.logic._structureTitle(selections[0][1])
+                button.setText(f"{self._RUN_LABEL_BASE} — {title}")
+                button.setEnabled(True)
+            else:
+                button.setText(
+                    f"{self._RUN_LABEL_BASE} — {len(selections)} structures"
+                )
+                button.setEnabled(True)
+        except ValueError:
+            # The deferred re-resolve can outlive the Qt widgets (PythonQt
+            # raises on a deleted C++ object); nothing left to re-label.
+            pass
 
     def _ensureBackend(self):
-        """Backend-availability gate on the Run/macro path (main thread).
+        """Backend-availability gate on the Run path (main thread).
 
         The confirm dialog (lazy install, ADR-0024 §"Lazy install") must run
         on the GUI side BEFORE anything is enqueued — the queue's child knows
@@ -582,42 +626,6 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
             return
         self._enqueueStructures([code for _segment, code in selections], volume)
 
-    def onSegmentAnatomy(self):
-        """The §Decision 4 macro: enqueue every structure still Missing.
-
-        No selection needed — the macro reads the checklist itself and runs
-        the default chain for every row whose derived status is Missing
-        (marked-absent and landed rows are left alone).  Coalescing in the
-        queue collapses the set into the minimal backend calls.
-        """
-        canonical = self.logic.getOrCreateCanonicalSegmentation()
-        missing = [
-            code
-            for _title, code in STRUCTURE_TABS
-            if structureStatus(canonical, code) == STATUS_MISSING
-        ]
-        if not missing:
-            self._statusLabel.setText(
-                "No structure is Missing — every row already has a result "
-                "or an absence attestation."
-            )
-            return
-        volume = self.logic.selectInputVolume()
-        if volume is None:
-            self._statusLabel.setText(
-                "Tag a PortalVenous volume in Case Setup (Stage 1) first."
-            )
-            return
-        if not self._ensureBackend():
-            wrapper = _totalSegmentatorWrapper()
-            self._statusLabel.setText(
-                "TotalSegmentator is not installed — Run again to install "
-                f"({wrapper.TOTALSEGMENTATOR_DOWNLOAD_SIZE}), or use Edit in "
-                "Segment Editor."
-            )
-            return
-        self._enqueueStructures(missing, volume)
-
     def _enqueueStructures(self, sctCodes, volume):
         """Group by backend task, flip the rows, and enqueue (ADR-0034 §4/§5).
 
@@ -657,19 +665,79 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
                 segmentsLogic.SetSegmentStatus(segment, segmentsLogic.InProgress)
                 names.append(self.logic._structureTitle(code))
             self._jobQueue.enqueue(task, volume.GetID(), taskCodes)
-        # Busy surface: indeterminate bar + cancel affordance while the
-        # queue is non-empty; the finish callback retires them.
-        self._progressBar.setRange(0, 0)
-        self._progressBar.setVisible(True)
-        self._cancelButton.setVisible(True)
+            # Busy surface: one progress row per job (text embedded in the
+            # bar + per-job cancel); the finish callback retires each row.
+            self._ensureJobRow(key)
         self._statusLabel.setText(
             "Queued TotalSegmentator: " + ", ".join(names) + "…"
         )
 
-    def onCancelRunningJob(self):
-        """The ✕ gesture: kill the running child; the queue advances."""
+    #
+    # Per-job progress rows — one bar (job text embedded) + one cancel (✕)
+    # per queued/running job, retired as each job finishes.
+    #
+
+    def _jobLabel(self, key):
+        """The text embedded in a job's bar: tool + its structure titles."""
+        codes = self._pendingJobs.get(key, {})
+        titles = [title for title, code in STRUCTURE_TABS if code in codes]
+        return "TotalSegmentator — " + ", ".join(titles or [str(key[0])])
+
+    def _ensureJobRow(self, key):
+        """Create (or re-label, on coalescing) the progress row for ``key``.
+
+        The bar starts indeterminate — the backend's tqdm output flips it
+        determinate when a percent is parsed (``_onJobOutput``) — with the
+        job's text embedded via ``setFormat``.  The per-job ✕ routes to
+        ``cancelJob``: dequeue when queued, kill when running.  The
+        connected slot is stored for the connection's lifetime (the
+        PythonQt discipline the queue encodes).
+        """
+        label = self._jobLabel(key)
+        row = self._jobRows.get(key)
+        if row is None:
+            box = qt.QWidget()
+            layout = qt.QHBoxLayout(box)
+            layout.setContentsMargins(0, 0, 0, 0)
+            bar = qt.QProgressBar()
+            bar.setRange(0, 0)
+            bar.setTextVisible(True)
+            cancel = qt.QToolButton()
+            cancel.setText("✕")
+            cancel.setToolTip("Cancel this segmentation job.")
+            slot = functools.partial(self._onCancelJob, key)
+            cancel.connect("clicked()", slot)
+            layout.addWidget(bar, 1)
+            layout.addWidget(cancel)
+            self._jobListLayout.addWidget(box)
+            row = {"box": box, "bar": bar, "cancel": cancel, "slot": slot}
+            self._jobRows[key] = row
+        row["label"] = label
+        bar = row["bar"]
+        bar.setFormat(label if bar.maximum == 0 else f"{label} — %p%")
+
+    def _removeJobRow(self, key):
+        """Retire a finished/cancelled job's progress row."""
+        row = self._jobRows.pop(key, None)
+        if row is None:
+            return
+        try:
+            box = row["box"]
+            box.setParent(None)
+            box.delete()
+        except (ValueError, AttributeError):
+            # Already reclaimed with a disposed parent tree.
+            pass
+
+    def _onCancelJob(self, key):
+        """The per-job ✕: dequeue a queued job / kill the running child.
+
+        Both routes complete through the queue's finish path with
+        ``success=False``, so ``_onJobFinished`` restores the targeted
+        rows' pre-enqueue statuses and retires the job's progress row.
+        """
         if self._jobQueue is not None:
-            self._jobQueue.cancelCurrent()
+            self._jobQueue.cancelJob(key)
 
     #
     # Queue callbacks (main thread, event-driven — never call
@@ -679,11 +747,30 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     def _onJobStarted(self, key, structures):
         names = ", ".join(sorted(self.logic._structureTitle(c) for c in structures))
         self._statusLabel.setText(f"Running TotalSegmentator: {names}…")
-        self._cancelButton.setVisible(True)
 
     def _onJobOutput(self, line):
-        if line:
-            self._statusLabel.setText(str(line)[-80:])
+        """Stream a child output line to the status label + the job's bar.
+
+        The queue is strictly sequential, so output belongs to its current
+        job; a line carrying a recognizable percent (the backend's tqdm
+        refreshes) flips that job's bar determinate and drives its value —
+        the embedded job text stays either way.
+        """
+        if not line:
+            return
+        self._statusLabel.setText(str(line)[-80:])
+        key = self._jobQueue.currentKey() if self._jobQueue is not None else None
+        row = self._jobRows.get(key)
+        if row is None:
+            return
+        percent = _progressPercent(line)
+        if percent is None:
+            return
+        bar = row["bar"]
+        if bar.maximum == 0:
+            bar.setRange(0, 100)
+            bar.setFormat(f"{row['label']} — %p%")
+        bar.setValue(percent)
 
     def _onJobFinished(self, key, structures, success, outputDir):
         """Land a finished job's label files on the canonical node.
@@ -718,10 +805,7 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
                 # framing; re-centre the 3D views (GUI-level concern).
                 self._reframeThreeDViews()
         self._restoreUnlandedStatuses(pending, landedCodes)
-        if self._jobQueue is None or not self._jobQueue.isBusy():
-            self._progressBar.setVisible(False)
-            self._progressBar.setRange(0, 100)
-            self._cancelButton.setVisible(False)
+        self._removeJobRow(key)
         if landedCodes:
             self._statusLabel.setText(
                 "Landed for review — confirm via the row's status cell."
@@ -757,38 +841,6 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
                 continue
             if segmentsLogic.GetSegmentStatus(segment) == segmentsLogic.InProgress:
                 segmentsLogic.SetSegmentStatus(segment, previousStatus)
-
-    def onMarkAbsent(self):
-        """Attest that the SELECTED structures are not present in this case.
-
-        Multi-select aware: each selected row still reading native
-        ``NotStarted`` (the pre-seeded empty placeholder) is attested; rows
-        past ``NotStarted`` are refused with a hint.  Writes the attestation
-        shape ``structureStatus`` / ``isStageComplete`` already understand
-        (ADR-0034 §Amendments): the canonical marked-absent attribute for
-        the audit trail PLUS native ``Completed`` on the empty segment.
-        Absence is stated, never inferred from a forgotten row (ADR-0034
-        §Decision 1).
-        """
-        selections = self._selectedStructures()
-        if not selections:
-            self._statusLabel.setText("Select a structure row in the table first.")
-            return
-        segmentsLogic = slicer.vtkSlicerSegmentationsModuleLogic
-        canonical = self._segmentsTable.segmentationNode()
-        attested = []
-        for segment, sctCode in selections:
-            if segmentsLogic.GetSegmentStatus(segment) != segmentsLogic.NotStarted:
-                continue
-            canonical.SetAttribute(MARKED_ABSENT_ATTRIBUTE_PREFIX + str(sctCode), "1")
-            segmentsLogic.SetSegmentStatus(segment, segmentsLogic.Completed)
-            attested.append(segment.GetName())
-        if attested:
-            self._statusLabel.setText(", ".join(attested) + ": marked absent.")
-        else:
-            self._statusLabel.setText(
-                "Mark absent applies only to a structure without a result yet."
-            )
 
     def _reframeThreeDViews(self):
         """Re-centre the 3D views on the new anatomy; a no-op headless.
@@ -973,9 +1025,10 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
         ADR-0034 §Amendments: stage completion is the NATIVE per-segment
         status — a canonical node exists and every structure-vocabulary
         entry's segment reads ``Completed`` (the surgeon's status-cell
-        confirm).  An empty ``Completed`` segment carrying the marked-absent
-        attestation attribute counts — absence is stated, never inferred.
-        Scratch nodes never flip the predicate true (canonical-only read).
+        confirm).  An EMPTY ``Completed`` segment is the explicit absence
+        attestation and counts — absence is stated through the same status
+        gesture, never inferred from a forgotten row.  Scratch nodes never
+        flip the predicate true (canonical-only read).
         """
         canonical = self._findCanonicalSegmentation()
         if canonical is None:

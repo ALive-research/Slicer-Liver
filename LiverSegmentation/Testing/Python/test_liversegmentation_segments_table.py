@@ -26,10 +26,10 @@ Pins (ADR-0034 §Amendments + §Conformance read through them):
     placeholder is replaced, not duplicated; order preserved) as native
     ``InProgress`` with the per-segment source tag.
   * ``structureStatus`` maps the native vocabulary, incl. ``Flagged`` and
-    the marked-absent attestation.
-  * the toolbar's Mark absent writes the attestation shape on the selected
-    empty row: the canonical marked-absent attribute + native ``Completed``
-    on the empty segment, read back as ``Marked absent``.
+    the absence attestation: an EMPTY segment the surgeon sets
+    ``Completed`` (the table's own status gesture) reads ``Marked
+    absent`` — no dedicated toolbar button, no attribute required; the
+    legacy marked-absent attribute is still read for back-compat.
 
 Needs the launched-Slicer harness (module + Qt + MRML); skips cleanly
 under bare pytest via the shared guards.
@@ -92,6 +92,20 @@ def _sct_segment_ids(module, canonical, code):
         if f"^{code}^" in str(text):
             ids.append(segment_id)
     return ids
+
+
+def _fill_segment(slicer, segment):
+    """Give ``segment`` a tiny non-empty binary labelmap (a "landed" row)."""
+    import vtk
+
+    name = (
+        slicer.vtkSegmentationConverter.GetSegmentationBinaryLabelmapRepresentationName()
+    )
+    image = slicer.vtkOrientedImageData()
+    image.SetDimensions(2, 2, 2)
+    image.AllocateScalars(vtk.VTK_UNSIGNED_CHAR, 1)
+    image.GetPointData().GetScalars().Fill(1)
+    segment.AddRepresentation(name, image)
 
 
 def test_getorcreate_pre_seeds_expected_structures_idempotently():
@@ -314,8 +328,8 @@ def test_accept_lands_scratch_liver_into_the_preseeded_row():
 
 def test_structure_status_maps_the_native_vocabulary():
     """``structureStatus`` derives the module vocabulary from the native
-    status, incl. ``Flagged`` and the marked-absent attestation (ADR-0034
-    §Amendments)."""
+    status, incl. ``Flagged`` and the empty-``Completed`` absence
+    attestation (ADR-0034 §Amendments)."""
     slicer = _slicer_or_skip()
     module = _module_or_skip()
     slicer.mrmlScene.Clear(0)
@@ -344,11 +358,14 @@ def test_structure_status_maps_the_native_vocabulary():
         == module.STATUS_REVIEW
     ), "native InProgress -> '● Review' (produced, under review)."
 
+    # Completed splits on the data: a segment WITH voxels is the surgeon's
+    # confirm...
+    _fill_segment(slicer, liver)
     segments_logic.SetSegmentStatus(liver, segments_logic.Completed)
     assert (
         module.structureStatus(canonical, module.SCT_LIVER_CODE)
         == module.STATUS_CONFIRMED
-    ), "native Completed -> '✓ Confirmed' (the status-cell confirm)."
+    ), "native Completed on a NON-EMPTY segment -> '✓ Confirmed'."
 
     segments_logic.SetSegmentStatus(liver, segments_logic.Flagged)
     assert (
@@ -356,17 +373,8 @@ def test_structure_status_maps_the_native_vocabulary():
         == module.STATUS_FLAGGED
     ), "native Flagged -> '⚑ Flagged' (defer to a senior reviewer)."
 
-    # The explicit clinical attestation: the attribute reads Marked absent
-    # over the empty placeholder...
-    canonical.SetAttribute(
-        module.MARKED_ABSENT_ATTRIBUTE_PREFIX + module.SCT_MASS_CODE, "1"
-    )
-    assert (
-        module.structureStatus(canonical, module.SCT_MASS_CODE)
-        == module.STATUS_MARKED_ABSENT
-    )
-    # ...and over the empty Completed segment that attests it (the shape
-    # the marked-absent writer produces; the attribute stays for audit).
+    # ...while an EMPTY Completed segment IS the absence attestation — the
+    # surgeon's status gesture on a structure with no data; no attribute.
     mass = canonical.GetSegmentation().GetSegment(
         _sct_segment_ids(module, canonical, module.SCT_MASS_CODE)[0]
     )
@@ -374,70 +382,64 @@ def test_structure_status_maps_the_native_vocabulary():
     assert (
         module.structureStatus(canonical, module.SCT_MASS_CODE)
         == module.STATUS_MARKED_ABSENT
+    ), "an EMPTY Completed segment must read Marked absent (ADR-0034 §Amendments)."
+
+    # Back-compat: the legacy marked-absent attribute (retired writer) is
+    # still read over an untouched placeholder.
+    canonical.SetAttribute(
+        module.MARKED_ABSENT_ATTRIBUTE_PREFIX + module.SCT_PORTAL_VEIN_CODE, "1"
     )
+    assert (
+        module.structureStatus(canonical, module.SCT_PORTAL_VEIN_CODE)
+        == module.STATUS_MARKED_ABSENT
+    ), "a legacy scene's marked-absent attribute must still be honoured."
 
 
-def test_mark_absent_toolbar_writes_the_attestation_shape(qt_widgets):
-    """Mark absent on a selected empty row writes attribute + ``Completed``.
+def test_status_gesture_on_empty_row_is_the_absence_attestation():
+    """The table's own status gesture attests absence: empty + ``Completed``.
 
-    ADR-0034 §Amendments: the explicit absence attestation is an empty
-    ``Completed`` segment plus the canonical marked-absent attribute (the
-    audit trail) -- exactly the shape ``structureStatus`` and
-    ``isStageComplete`` already understand.  The gesture applies only to a
-    row still reading native ``NotStarted``; anything else gets a hint and
-    no write."""
+    ADR-0034 §Amendments: no dedicated Mark-absent affordance — the surgeon
+    states "not present in this case" by confirming the EMPTY row through
+    the native status cell (the same click/context-menu cycle every row
+    uses).  The shape needs NO node attribute and counts toward
+    ``isStageComplete`` like any other confirm."""
     slicer = _slicer_or_skip()
     module = _module_or_skip()
     slicer.mrmlScene.Clear(0)
 
-    widget = _widget_or_skip(slicer, qt_widgets)
-    table = widget.segmentsTable()
-    canonical = table.segmentationNode()
+    logic = module.LiverSegmentationLogic()
+    canonical = logic.getOrCreateCanonicalSegmentation()
     segments_logic = _segments_logic(slicer)
 
+    # The surgeon's status-cell gesture writes the native status; simulate
+    # its effect on the pre-seeded empty tumors row.
     mass_id = _sct_segment_ids(module, canonical, module.SCT_MASS_CODE)[0]
-    table.setSelectedSegmentIDs([mass_id])
-    widget.onMarkAbsent()
-
-    attribute = module.MARKED_ABSENT_ATTRIBUTE_PREFIX + module.SCT_MASS_CODE
-    assert canonical.GetAttribute(attribute) == "1", (
-        "Mark absent must write the canonical marked-absent attribute "
-        "(the audit trail, ADR-0034 §Amendments)."
-    )
     mass = canonical.GetSegmentation().GetSegment(mass_id)
-    assert segments_logic.GetSegmentStatus(mass) == segments_logic.Completed, (
-        "Mark absent must set native Completed on the empty segment -- the "
-        "explicit attestation the completion predicate counts."
-    )
+    segments_logic.SetSegmentStatus(mass, segments_logic.Completed)
+
     assert (
         module.structureStatus(canonical, module.SCT_MASS_CODE)
         == module.STATUS_MARKED_ABSENT
-    ), "the attested row must read back as Marked absent."
-
-    # A row past NotStarted refuses the gesture: hint, no write.
-    liver_id = _sct_segment_ids(module, canonical, module.SCT_LIVER_CODE)[0]
-    liver = canonical.GetSegmentation().GetSegment(liver_id)
-    segments_logic.SetSegmentStatus(liver, segments_logic.InProgress)
-    table.setSelectedSegmentIDs([liver_id])
-    widget.onMarkAbsent()
-
-    liver_attribute = module.MARKED_ABSENT_ATTRIBUTE_PREFIX + module.SCT_LIVER_CODE
-    assert canonical.GetAttribute(liver_attribute) is None, (
-        "Mark absent on a row past NotStarted must not write the attribute."
-    )
-    assert segments_logic.GetSegmentStatus(liver) == segments_logic.InProgress, (
-        "Mark absent on a row past NotStarted must not touch its status."
-    )
-    status = widget._statusLabel.text
-    assert status and status != "Idle", (
-        "the refused gesture must surface a hint on the shared status label."
+    ), "the empty Completed row must read back as Marked absent."
+    attribute = module.MARKED_ABSENT_ATTRIBUTE_PREFIX + module.SCT_MASS_CODE
+    assert canonical.GetAttribute(attribute) is None, (
+        "the attestation is the status gesture ALONE -- no node attribute "
+        "is required (or written) any more."
     )
 
-    # No selection: a no-op with a hint.
-    table.setSelectedSegmentIDs([])
-    widget.onMarkAbsent()
-    assert canonical.GetSegmentation().GetNumberOfSegments() == len(
-        module.STRUCTURE_TABS
+    # The attestation counts toward stage completion exactly like a
+    # data-carrying confirm.
+    for _title, code in module.STRUCTURE_TABS:
+        if code == module.SCT_MASS_CODE:
+            continue
+        segment = canonical.GetSegmentation().GetSegment(
+            _sct_segment_ids(module, canonical, code)[0]
+        )
+        _fill_segment(slicer, segment)
+        segments_logic.SetSegmentStatus(segment, segments_logic.Completed)
+    assert logic.isStageComplete() is True, (
+        "empty + Completed must count complete WITHOUT the marked-absent "
+        "attribute (ADR-0034 §Amendments)."
     )
 
 

@@ -14,10 +14,14 @@ builder — never a real inference):
   * jobs sharing ``(task, input)`` coalesce — two enqueues, ONE child;
   * strictly sequential — the second job starts only after the first ends;
   * ``cancelCurrent()`` kills the running child;
+  * ``cancelJob(key)`` on a QUEUED key dequeues it — no child ever spawns,
+    the job completes through ``onJobFinished`` with ``success=False``;
+    on the RUNNING key it kills the child (the ``cancelCurrent`` route);
   * ``shutdown()`` leaves no child and no pending job.
 
 Widget-contract pins (queue enqueue stubbed; the finish callback driven
-synchronously):
+synchronously — except the per-job cancel pin, which drives the REAL
+queue with a slow stub child):
 
   * enqueueing flips every targeted segment to native ``InProgress``,
     including the demote-from-``Completed`` staleness rule;
@@ -25,7 +29,8 @@ synchronously):
     (the surgeon ALWAYS confirms via the status cell);
   * multi-select Run enqueues every selected structure, grouped into the
     minimal per-task backend calls;
-  * the "Segment anatomy" macro enqueues exactly the Missing set.
+  * the per-job ✕ on a QUEUED job dequeues it and restores its segments'
+    pre-enqueue statuses; the running job is untouched.
 
 Needs the launched-Slicer harness (Qt event loop + MRML + module); skips
 cleanly under bare pytest via the shared guards.
@@ -279,6 +284,79 @@ def test_cancel_kills_the_running_child(queue_teardown):
     assert not queue.isBusy()
 
 
+def test_canceljob_dequeues_a_queued_job_without_spawning_a_child(queue_teardown):
+    """``cancelJob`` on a QUEUED key dequeues it; no child ever spawns.
+
+    The dequeued job completes through ``onJobFinished`` with
+    ``success=False`` and no output directory — the same completion shape
+    a failed start uses — while the RUNNING job is untouched.
+    """
+    slicer = _slicer_or_skip()
+    queue_mod = _queue_module_or_skip()
+
+    builds: list = []
+    queue = queue_mod.SegmentationJobQueue(commandBuilder=_stub_builder(builds, 30))
+    queue_teardown.append(queue)
+    events = _Events()
+    events.wire(queue)
+
+    key_first = queue.enqueue("total", "vol-1", [SCT_LIVER_CODE])
+    key_second = queue.enqueue("liver_vessels", "vol-1", [SCT_MASS_CODE])
+    assert _pump_until(slicer, lambda: queue.currentProcessId() > 0)
+    pid = queue.currentProcessId()
+    assert queue.pendingKeys() == [key_second], (
+        "precondition: the second job waits behind the running one."
+    )
+
+    assert queue.cancelJob(key_second) is True
+
+    assert queue.pendingCount() == 0, "the queued job must be dequeued."
+    finished = events.of("finished")
+    assert [(entry[1], entry[3], entry[4]) for entry in finished] == [
+        (key_second, False, None)
+    ], (
+        "the dequeued job must complete through onJobFinished with "
+        f"success=False and no output dir; got {finished!r}."
+    )
+    assert [entry[1] for entry in events.of("started")] == [key_first], (
+        "a dequeued job must never start."
+    )
+    assert len(builds) == 1, "the dequeued job must not spawn a child."
+    assert queue.currentKey() == key_first and _pid_alive(pid), (
+        "cancelling a QUEUED job must leave the running one untouched."
+    )
+    assert queue.cancelJob(("no-such-task", "vol-1")) is False, (
+        "an unknown key is a no-op."
+    )
+
+
+def test_canceljob_on_the_running_key_kills_the_child(queue_teardown):
+    """``cancelJob`` on the RUNNING key takes the ``cancelCurrent`` route."""
+    slicer = _slicer_or_skip()
+    queue_mod = _queue_module_or_skip()
+
+    builds: list = []
+    queue = queue_mod.SegmentationJobQueue(commandBuilder=_stub_builder(builds, 30))
+    queue_teardown.append(queue)
+    events = _Events()
+    events.wire(queue)
+
+    key = queue.enqueue("total", "vol-1", [SCT_LIVER_CODE])
+    assert _pump_until(slicer, lambda: queue.currentProcessId() > 0)
+    pid = queue.currentProcessId()
+
+    assert queue.cancelJob(key) is True
+
+    finished = events.of("finished")
+    assert len(finished) == 1 and finished[0][3] is False, (
+        "the cancelled running job must complete with success=False."
+    )
+    assert _pump_until(slicer, lambda: not _pid_alive(pid), timeout=5.0), (
+        f"cancelJob on the running key must KILL the child (pid {pid})."
+    )
+    assert not queue.isBusy()
+
+
 def test_shutdown_leaves_no_child_and_no_pending_job(queue_teardown):
     """``shutdown()`` cancels the current job AND drops the pending queue.
 
@@ -473,58 +551,61 @@ def test_multiselect_run_enqueues_all_selected_grouped_by_task(
     )
 
 
-def test_segment_anatomy_macro_enqueues_exactly_the_missing_set(
-    monkeypatch, qt_widgets
+def test_widget_cancel_of_a_queued_job_restores_prior_statuses(
+    monkeypatch, qt_widgets, queue_teardown
 ):
-    """The macro enqueues EXACTLY the Missing rows — no selection needed.
+    """The per-job ✕ on a QUEUED job dequeues it and restores its rows.
 
-    ADR-0034 §Decision 4 macro gesture: rows already landed/confirmed and
-    rows attested Marked-absent are left alone; the Missing remainder runs
-    the default chain, collapsed by task."""
+    Drives the widget's REAL queue with a slow stub child: a multi-select
+    Run spawns the ``total`` child and leaves ``liver_vessels`` queued.
+    Cancelling the queued job must restore its segment to the pre-enqueue
+    status (the enqueue-time ``InProgress`` flip is a promise of produced
+    output), retire its progress row, and never spawn its child — while
+    the running job and its row stay untouched."""
     slicer = _slicer_or_skip()
     module = _module_or_skip()
     slicer.mrmlScene.Clear(0)
 
-    _add_input_volume(slicer)
+    volume = _add_input_volume(slicer)
     widget = _widget_or_skip(slicer, qt_widgets)
-    calls = _stub_widget_queue(monkeypatch, widget)
+    queue_teardown.append(widget._jobQueue)
+    builds: list = []
+    monkeypatch.setattr(widget._jobQueue, "_commandBuilder", _stub_builder(builds, 30))
+    monkeypatch.setattr(widget, "_ensureBackend", lambda: True)
     table = widget.segmentsTable()
     canonical = table.segmentationNode()
     segments_logic = slicer.vtkSlicerSegmentationsModuleLogic
 
-    # Liver: already confirmed by the surgeon.
-    _liver_id, liver = _sct_segment(module, canonical, SCT_LIVER_CODE)
-    segments_logic.SetSegmentStatus(liver, segments_logic.Completed)
-    # Portal vein: attested absent (attribute + empty Completed).
-    _portal_id, portal = _sct_segment(module, canonical, SCT_PORTAL_VEIN_CODE)
-    canonical.SetAttribute(
-        module.MARKED_ABSENT_ATTRIBUTE_PREFIX + SCT_PORTAL_VEIN_CODE, "1"
-    )
-    segments_logic.SetSegmentStatus(portal, segments_logic.Completed)
-    # Hepatic vein + Tumors stay NotStarted -> the Missing set.
+    liver_id, liver = _sct_segment(module, canonical, SCT_LIVER_CODE)
+    hepatic_id, hepatic = _sct_segment(module, canonical, SCT_HEPATIC_VEIN_CODE)
+    table.setSelectedSegmentIDs([liver_id, hepatic_id])
+    widget.onRunSelectedStructures()
 
-    table.setSelectedSegmentIDs([])
-    widget.onSegmentAnatomy()
+    from LiverSegmentationLib.SegmentationJobQueue import jobKey
 
-    enqueued = set()
-    for _task, _vol, codes in calls:
-        enqueued |= set(codes)
-    assert enqueued == {SCT_HEPATIC_VEIN_CODE, SCT_MASS_CODE}, (
-        "the macro must enqueue exactly the Missing set; got "
-        f"{sorted(enqueued)!r}."
+    running_key = jobKey("total", volume.GetID())
+    queued_key = jobKey("liver_vessels", volume.GetID())
+    assert _pump_until(slicer, lambda: widget._jobQueue.currentProcessId() > 0)
+    assert widget._jobQueue.currentKey() == running_key
+    assert widget._jobQueue.pendingKeys() == [queued_key]
+    assert set(widget._jobRows) == {running_key, queued_key}, (
+        "one progress row per queued/running job must be on screen."
     )
-    assert len(calls) == 1, (
-        "hepatic vein + tumors share the liver_vessels task -> coalesced "
-        f"into ONE job; got {calls!r}."
+    assert segments_logic.GetSegmentStatus(hepatic) == segments_logic.InProgress
+
+    widget._onCancelJob(queued_key)
+
+    assert segments_logic.GetSegmentStatus(hepatic) == segments_logic.NotStarted, (
+        "cancelling the QUEUED job must restore its segment's pre-enqueue "
+        "status -- nothing was produced."
     )
-    # The untargeted rows keep their statuses; the targeted ones flipped.
-    assert segments_logic.GetSegmentStatus(liver) == segments_logic.Completed
-    assert segments_logic.GetSegmentStatus(portal) == segments_logic.Completed
-    for code in (SCT_HEPATIC_VEIN_CODE, SCT_MASS_CODE):
-        _sid, segment = _sct_segment(module, canonical, code)
-        assert (
-            segments_logic.GetSegmentStatus(segment) == segments_logic.InProgress
-        ), f"the macro's enqueue must flip {code} to InProgress."
+    assert segments_logic.GetSegmentStatus(liver) == segments_logic.InProgress, (
+        "the RUNNING job's segment must stay InProgress."
+    )
+    assert set(widget._jobRows) == {running_key}, (
+        "the dequeued job's progress row must retire; the running one stays."
+    )
+    assert len(builds) == 1, "the dequeued job must never spawn its child."
 
 
 if __name__ == "__main__":

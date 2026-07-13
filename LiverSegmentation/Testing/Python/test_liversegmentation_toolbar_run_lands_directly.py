@@ -28,11 +28,14 @@ Pins:
     hint (the ADR-0024 Stage-1/Stage-2 hand-off pin, wording preserved).
   * a FAILED job lands nothing and the targeted rows fall back to their
     pre-enqueue status (the invariant the retired Reject suite carried).
-  * the busy surface (indeterminate bar + Cancel + status) shows from the
-    enqueue and retires when the queue drains; no blocking loop, no wait
-    cursor, the Run button stays live.
+  * the busy surface is PER JOB: each queued/running job gets its own
+    progress row — job text embedded IN the bar, a per-job cancel (✕)
+    beside it — indeterminate until the child's output carries a percent,
+    retired as the job finishes; no blocking loop, no wait cursor, the
+    Run button stays live.
   * the landing re-frames the 3D views; the Run button re-labels with the
-    table selection.
+    table selection, re-resolved through the zero-interval deferred path
+    every selection gesture schedules.
 
 Scene/widget-needing: launched-Slicer harness
 (``Liver/Testing/Python/run_pytest_launched.py`` / ``pytest_launched``);
@@ -53,6 +56,7 @@ ROLE_CANONICAL = "canonical"
 # grep-able.
 SCT_LIVER_CODE = "10200004"
 SCT_PORTAL_VEIN_CODE = "32764006"
+SCT_HEPATIC_VEIN_CODE = "8993003"
 
 #: The Stage-1 hand-off hint (pinned verbatim -- ADR-0024 Stage-1/Stage-2
 #: hand-off is an explicit precondition, not a silent no-op).
@@ -367,8 +371,8 @@ def test_toolbar_run_without_portalvenous_volume_is_refused_with_stage1_hint(
         "the refusal must surface the Stage-1 hand-off hint verbatim; got "
         f"{widget._statusLabel.text!r}."
     )
-    assert widget._progressBar.visible is False, (
-        "the progress bar must not be shown when Run short-circuits."
+    assert widget._jobRows == {}, (
+        "no per-job progress row may be minted when Run short-circuits."
     )
 
 
@@ -426,16 +430,17 @@ def test_failed_job_leaves_canonical_untouched(monkeypatch, qt_widgets):
     )
 
 
-def test_toolbar_run_shows_busy_state_until_the_queue_drains(
+def test_toolbar_run_shows_per_job_progress_rows_until_each_job_ends(
     monkeypatch, qt_widgets
 ):
-    """The busy surface shows from the enqueue and retires when idle.
+    """One progress row PER job, text embedded in the bar, retired on finish.
 
-    The async path (ADR-0034 §Decision 5) replaces the blocking loop: the
-    Run gesture returns immediately with the indeterminate bar + the Cancel
-    (✕) affordance visible and a status message; the finish callback
-    retires them once the queue is idle.  No wait cursor (nothing blocks)
-    and the Run button stays live for further enqueues.
+    The async path (ADR-0034 §Decision 5) replaces the blocking loop and
+    the single shared busy bar: every queued/running job gets its own
+    progress row — the bar carries the job's text (``setFormat``), starts
+    indeterminate, and has a per-job cancel (✕) beside it; each row
+    retires as ITS job finishes.  No wait cursor (nothing blocks) and the
+    Run button stays live for further enqueues.
     """
     slicer, _orch = _orchestrator_or_skip()
     import LiverSegmentation as module
@@ -444,24 +449,50 @@ def test_toolbar_run_shows_busy_state_until_the_queue_drains(
     volume = _add_input_volume(slicer)
     widget = _widget_or_skip(slicer, qt_widgets)
     _stub_queue(monkeypatch, widget)
-    _select_structure_rows(module, widget, [SCT_LIVER_CODE])
+    _select_structure_rows(
+        module, widget, [SCT_LIVER_CODE, SCT_HEPATIC_VEIN_CODE]  # two backend tasks
+    )
 
     widget.onRunSelectedStructures()
 
     import qt
 
-    # The TEST pumps once: the toolbar was added to an already-shown parent,
-    # so its children's layout-activation show is a posted event.  The
-    # handlers themselves never pump (ADR-0034 §Decision 5 discipline).
-    slicer.app.processEvents()
+    from LiverSegmentationLib.SegmentationJobQueue import jobKey
 
-    assert widget._progressBar.visible, (
-        "the busy/progress bar must show as soon as the job is enqueued -- "
+    total_key = jobKey("total", volume.GetID())
+    vessels_key = jobKey("liver_vessels", volume.GetID())
+
+    # The TEST pumps (a few turns): the toolbar was added to an
+    # already-shown parent, so its children's layout-activation show is a
+    # posted event -- and the show/focus cascade emits a selection signal
+    # whose zero-interval Run-button re-resolve lands on the NEXT loop
+    # turn.  The handlers themselves never pump (ADR-0034 §Decision 5
+    # discipline).
+    for _ in range(3):
+        slicer.app.processEvents()
+
+    assert set(widget._jobRows) == {total_key, vessels_key}, (
+        "two backend tasks -> TWO per-job progress rows; got "
+        f"{set(widget._jobRows)!r}."
+    )
+    liver_bar = widget._jobRows[total_key]["bar"]
+    assert liver_bar.visible, (
+        "each job's progress bar must show as soon as it is enqueued -- "
         "'no signaling that there is processing going on'."
     )
-    assert widget._cancelButton.visible, (
-        "the Cancel (✕) affordance must appear while a job is queued/running."
+    assert liver_bar.textVisible and "Liver parenchyma" in liver_bar.format, (
+        "the job's text must be embedded IN its bar (setFormat); got "
+        f"{liver_bar.format!r}."
     )
+    assert "TotalSegmentator" in liver_bar.format
+    assert liver_bar.maximum == 0, (
+        "with no percent parsed yet the bar must be indeterminate."
+    )
+    assert "Hepatic vein" in widget._jobRows[vessels_key]["bar"].format
+    for row in widget._jobRows.values():
+        assert row["cancel"].visible and row["cancel"].text == "✕", (
+            "every job row must carry its own cancel (✕) affordance."
+        )
     status = widget._statusLabel.text
     assert status and "idle" not in status.lower(), (
         f"the status must signal processing, not {status!r}."
@@ -477,12 +508,64 @@ def test_toolbar_run_shows_busy_state_until_the_queue_drains(
 
     _drive_finish(widget, volume, [SCT_LIVER_CODE], success=False)
 
-    assert widget._progressBar.visible is False, (
-        "the busy bar must retire when the queue drains."
+    assert set(widget._jobRows) == {vessels_key}, (
+        "a finished job's row must retire; the other job's row stays."
     )
-    assert widget._cancelButton.visible is False, (
-        "the Cancel affordance must retire when the queue drains."
+
+    _drive_finish(
+        widget, volume, [SCT_HEPATIC_VEIN_CODE], success=False, task="liver_vessels"
     )
+
+    assert widget._jobRows == {}, (
+        "every progress row must retire once its job ends."
+    )
+
+
+def test_job_output_percent_drives_the_jobs_bar(monkeypatch, qt_widgets):
+    """A tqdm-style percent in the child's output flips the bar determinate.
+
+    TotalSegmentator's nnU-Net progress streams tqdm refreshes
+    (``" 45%|████      | 9/20 ..."``); the queue is strictly sequential,
+    so an output line belongs to the CURRENT job — its bar picks up the
+    parsed percent (text still embedded); lines without a percent leave
+    the bar as it is.
+    """
+    slicer, _orch = _orchestrator_or_skip()
+    import LiverSegmentation as module
+
+    slicer.mrmlScene.Clear(0)
+    volume = _add_input_volume(slicer)
+    widget = _widget_or_skip(slicer, qt_widgets)
+    _stub_queue(monkeypatch, widget)
+    _select_structure_rows(module, widget, [SCT_LIVER_CODE])
+
+    widget.onRunSelectedStructures()
+
+    from LiverSegmentationLib.SegmentationJobQueue import jobKey
+
+    key = jobKey("total", volume.GetID())
+    # The stubbed queue never spawns a child; report the job as current so
+    # the output routing under test sees the real production shape.
+    monkeypatch.setattr(widget._jobQueue, "currentKey", lambda: key)
+    bar = widget._jobRows[key]["bar"]
+    assert bar.maximum == 0, "precondition: indeterminate before any percent."
+
+    widget._onJobOutput("no recognizable progress here")
+    assert bar.maximum == 0, (
+        "a line without a percent must leave the bar indeterminate."
+    )
+
+    widget._onJobOutput(" 45%|████      | 9/20 [00:12<00:15,  1.4s/it]")
+    assert bar.maximum == 100 and bar.value == 45, (
+        "a tqdm percent must flip the bar determinate and drive its value."
+    )
+    assert "Liver parenchyma" in bar.format and "%p%" in bar.format, (
+        "the job text must stay embedded in the determinate bar; got "
+        f"{bar.format!r}."
+    )
+
+    widget._onJobOutput(" 90%|█████████ | 18/20 [00:25<00:03,  1.4s/it]")
+    assert bar.value == 90
 
 
 def test_toolbar_run_reframes_the_threed_views(monkeypatch, qt_widgets):
@@ -549,6 +632,49 @@ def test_run_button_relabels_with_the_selection(qt_widgets):
     assert "2 structures" in widget._runButton.text, (
         "a multi-selection must be counted on the Run button; got "
         f"{widget._runButton.text!r}."
+    )
+
+
+def test_run_button_relabel_re_resolves_after_the_gesture_settles(qt_widgets):
+    """Every selection gesture re-reads the REAL selection, deferred.
+
+    The reporting signals (the inner view's ``clicked``, the selection
+    model's ``currentChanged``) fire mid-gesture — a ctrl-click deselect of
+    the current row is invisible to ``currentChanged`` and the selection
+    model may not yet reflect the click when the signal arrives.  The
+    handler therefore schedules a zero-interval re-resolve; once the event
+    loop turns, the label reads whatever the selection ACTUALLY is.  This
+    drives the production handler (the signal entry point) and pumps the
+    loop — never calling ``_updateRunButton`` directly.
+    """
+    slicer, _orch = _orchestrator_or_skip()
+    import LiverSegmentation as module
+
+    slicer.mrmlScene.Clear(0)
+    _add_input_volume(slicer)
+    widget = _widget_or_skip(slicer, qt_widgets)
+
+    # Gesture 1: a row lands in the selection; the handler fires as the
+    # click signal would, with the selection already applied.
+    _select_structure_rows(module, widget, [SCT_LIVER_CODE])
+    widget._onTableSelectionChanged()
+    slicer.app.processEvents()
+    assert "Liver parenchyma" in widget._runButton.text, (
+        "the deferred re-resolve must pick up the selected row; got "
+        f"{widget._runButton.text!r}."
+    )
+
+    # Gesture 2: the same-row ctrl-click DESELECT — the selection empties
+    # without the current index moving (the case currentChanged misses).
+    widget.segmentsTable().setSelectedSegmentIDs([])
+    widget._onTableSelectionChanged()
+    slicer.app.processEvents()
+    assert not widget._runButton.enabled, (
+        "the deferred re-resolve must track a deselect back to disabled."
+    )
+    assert "select a structure" in widget._runButton.text.lower(), (
+        "the label must read the REAL (empty) selection after the gesture; "
+        f"got {widget._runButton.text!r}."
     )
 
 
