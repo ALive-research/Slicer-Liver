@@ -678,6 +678,7 @@ def test_place_resection_mints_and_selects_plan():
     _require_combo_repointed_or_skip(combo)
 
     _button, slot = _place_button_and_slot_or_skip(widget)
+    _add_canonical_liver(slicer)  # the Place guard requires an Accepted liver
 
     plans_before = slicer.mrmlScene.GetNumberOfNodesByClass(PLAN_NODE_CLASS)
     carriers_before = slicer.mrmlScene.GetNumberOfNodesByClass(BEZIER_CARRIER_CLASS)
@@ -734,3 +735,64 @@ def test_reshow_kicks_a_resectogram_render():
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def _add_canonical_liver(slicer):
+    """A canonical-role segmentation with one SCT-tagged liver segment.
+
+    The Place guard requires it: without an Accepted liver there is no
+    target mesh and Place refuses (v1 parity -- AddResectionPlane errored
+    on a missing target organ model).
+    """
+    import numpy as np
+
+    labelmap = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
+    array = np.zeros((12, 12, 12), dtype="uint8")
+    array[3:9, 3:9, 3:9] = 1
+    slicer.util.updateVolumeFromArray(labelmap, array)
+    node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
+    slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(
+        labelmap, node
+    )
+    slicer.mrmlScene.RemoveNode(labelmap)
+    node.SetAttribute("LiverSegmentation.Role", "canonical")
+    segment_id = node.GetSegmentation().GetNthSegmentID(0)
+    node.GetSegmentation().GetSegment(segment_id).SetTag(
+        "TerminologyEntry",
+        "Segmentation category and type - DICOM master list"
+        "~SCT^85756007^Tissue~SCT^10200004^Liver"
+        "~^^~Anatomic codes - DICOM master list~^^~^^",
+    )
+    return node
+
+
+def test_place_without_canonical_liver_refuses_and_explains():
+    """No Accepted liver -> Place mints NOTHING and says why.
+
+    The silent path minted a dead resection (origin grid, no target, no
+    seed, no contour) -- exactly the walkthrough failure.  v1 errored on
+    a missing target organ; v2 refuses with explainable state
+    (ADR-0009): the hint names the missing hand-off.
+    """
+    slicer = _slicer_or_skip()
+    slicer.mrmlScene.Clear(0)
+    _resection_logic_or_skip(slicer)
+    widget = _widget_or_skip(slicer)
+    _button, slot = _place_button_and_slot_or_skip(widget)
+
+    plans_before = slicer.mrmlScene.GetNumberOfNodesByClass(PLAN_NODE_CLASS)
+    slot()
+    slicer.app.processEvents()
+
+    assert (
+        slicer.mrmlScene.GetNumberOfNodesByClass(PLAN_NODE_CLASS)
+        == plans_before
+    ), (
+        "Place must REFUSE without a canonical liver -- the silent path "
+        "minted a dead origin-grid resection."
+    )
+    hint = widget.resectogramHintLabel()
+    assert hint is not None and "liver" in str(hint.text).lower(), (
+        "the refusal must explain itself (ADR-0009): the hint names the "
+        f"missing Stage-2 hand-off; got {str(hint.text)!r}."
+    )

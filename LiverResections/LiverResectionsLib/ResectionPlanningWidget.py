@@ -288,14 +288,26 @@ class ResectionPlanningWidget(qt.QWidget):
         logic = self._resectionLogic()
         if logic is None or not hasattr(logic, "CreateResectionPlan"):
             return
+        # HARD GATE (v1 parity + ADR-0009 explainable state): without an
+        # Accepted liver there is no target mesh, no auto-seed, and no
+        # contour -- refuse to mint a dead origin-grid resection and name
+        # the missing Stage-2 hand-off instead.
+        from LiverResectionsLib.TargetModel import (
+            ensure_target_model,
+            has_canonical_liver,
+        )
+
+        if not has_canonical_liver():
+            self._hintLabel.setText(
+                "Accept a liver segmentation in Anatomy (Stage 2) first."
+            )
+            self._hintLabel.show()
+            return
         plan = logic.CreateResectionPlan(_DEFAULT_RESECTION_NAME)
         if plan is not None:
             # Attach the hidden liver target model (ADR-0014 §1 weakref):
             # the slicing-plane init contour and the commit-boundary ring
-            # extraction cut THIS mesh.  Graceful no-op without a Stage-2
-            # canonical liver segment.
-            from LiverResectionsLib.TargetModel import ensure_target_model
-
+            # extraction cut THIS mesh.
             ensure_target_model(plan)
             self.setActiveResectionNode(plan)
 
