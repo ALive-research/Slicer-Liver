@@ -40,8 +40,13 @@ def _logic_or_skip(slicer):
 
 
 def _wrapper_module():
-    from LiverSegmentationLib.ToolWrappers import TotalSegmentator as wrapper
-
+    try:
+        from LiverSegmentationLib.ToolWrappers import TotalSegmentator as wrapper
+    except ImportError as exc:
+        pytest.skip(
+            f"LiverSegmentationLib not importable ({exc}); ensure "
+            "--additional-module-paths includes LiverSegmentation/."
+        )
     return wrapper
 
 
@@ -200,6 +205,108 @@ def test_stream_splitter_handles_carriage_return_progress():
     pieces = wrapper._split_stream_pieces(b"line one\nline two\n")
     assert pieces[:-1] == ["line one", "line two"]
     assert pieces[-1] == b""
+
+
+def test_parse_progress_line_extracts_tqdm_percent_as_predicting():
+    """An nnU-Net tqdm refresh maps to ``("predicting", NN)`` (clamped 0–100).
+
+    The backend's sliding-window tqdm bar (stderr, merged into the child
+    stream) refreshes with bare carriage returns and embeds its own bar
+    glyphs / per-iteration timing — the one fine-grained percent TS emits.
+    The parser lifts the leading percent and labels the phase; the raw text
+    is never surfaced.
+    """
+    wrapper = _wrapper_module()
+
+    assert wrapper.parseProgressLine(
+        " 45%|████      | 9/20 [00:12<00:15,  1.4s/it]"
+    ) == ("predicting", 45)
+    assert wrapper.parseProgressLine("100%|██████████| 20/20 [00:28<00:00]") == (
+        "predicting",
+        100,
+    )
+    # A leading 0% (bar just started) is still a valid determinate signal.
+    assert wrapper.parseProgressLine("  0%|          | 0/20 [00:00<?, ?it/s]") == (
+        "predicting",
+        0,
+    )
+    # A stray decimal-second reading must NOT be mistaken for a percent.
+    assert wrapper.parseProgressLine("Predicted in 1.4s") == (None, None)
+
+
+def test_parse_progress_line_maps_milestones_to_clean_indeterminate_stages():
+    """TS milestone prints map to a clean stage word, ``percent=None``.
+
+    These lines are ordered phase markers, not percentages, so they render
+    indeterminate with clean stage text (a fabricated number would mislead).
+    """
+    wrapper = _wrapper_module()
+
+    assert wrapper.parseProgressLine("Resampling...") == ("resampling", None)
+    assert wrapper.parseProgressLine("Predicting part 1 of 3 ...") == (
+        "predicting",
+        None,
+    )
+    assert wrapper.parseProgressLine("Predicting...") == ("predicting", None)
+    assert wrapper.parseProgressLine("Saving segmentations...") == ("saving", None)
+    assert wrapper.parseProgressLine(
+        "Generating rough segmentation for cropping..."
+    ) == ("preparing", None)
+
+
+def test_parse_progress_line_ignores_unrecognised_chatter():
+    """Unrecognised lines return ``(None, None)`` so the caller leaves its bar.
+
+    The blank line, the citation banner, the usage-stats notice — none carry a
+    stage or percent, so the parser reports nothing and the bar is untouched
+    (the raw text is never echoed onto our surface).
+    """
+    wrapper = _wrapper_module()
+
+    assert wrapper.parseProgressLine("") == (None, None)
+    assert wrapper.parseProgressLine("   ") == (None, None)
+    assert wrapper.parseProgressLine(
+        "If you use this tool please cite: https://pubs.rsna.org/..."
+    ) == (None, None)
+    assert wrapper.parseProgressLine(
+        "TotalSegmentator sends anonymous usage statistics."
+    ) == (None, None)
+
+
+def test_parse_progress_line_drives_a_realistic_merged_stream():
+    """A representative merged stream yields clean, ordered stage/percent hits.
+
+    Feeds the pieces a real run would emit (milestone prints on stdout, tqdm
+    ``\\r`` refreshes on stderr, both merged) through the stream splitter and
+    the parser end-to-end — the widget's exact wiring — and checks the
+    distilled sequence, never the raw text.
+    """
+    wrapper = _wrapper_module()
+
+    raw = (
+        b"Resampling...\n"
+        b"Predicting part 1 of 3 ...\n"
+        b"  0%|          | 0/20 [00:00<?, ?it/s]\r"
+        b" 50%|#####     | 10/20 [00:14<00:14,  1.4s/it]\r"
+        b"100%|##########| 20/20 [00:28<00:00,  1.4s/it]\r\n"
+        b"Saving segmentations...\n"
+    )
+    *pieces, remainder = wrapper._split_stream_pieces(raw)
+    assert remainder == b"", "a newline-terminated stream leaves no carry-over."
+
+    distilled = [
+        parsed
+        for parsed in (wrapper.parseProgressLine(piece) for piece in pieces)
+        if parsed != (None, None)
+    ]
+    assert distilled == [
+        ("resampling", None),
+        ("predicting", None),
+        ("predicting", 0),
+        ("predicting", 50),
+        ("predicting", 100),
+        ("saving", None),
+    ], f"the distilled progress sequence mismatched: {distilled!r}."
 
 
 def test_sct_tagging_applies_the_structure_visual_defaults():

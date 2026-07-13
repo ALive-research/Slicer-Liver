@@ -268,6 +268,15 @@ class SegmentationJobQueue:
 
             process = qt.QProcess()
             process.setProcessChannelMode(qt.QProcess.MergedChannels)
+            # A piped Python child block-buffers stdout, so the backend's
+            # milestone lines ("Resampling...", "Saving segmentations...") would
+            # otherwise arrive in one lump at exit — the progress surface would
+            # sit silent through the whole run.  Force unbuffered stdout so each
+            # line reaches the parser as the backend prints it (the tqdm bar on
+            # stderr already flushes itself).
+            environment = qt.QProcessEnvironment.systemEnvironment()
+            environment.insert("PYTHONUNBUFFERED", "1")
+            process.setProcessEnvironment(environment)
             self._current = job
             self._process = process
             self._buffer = b""
