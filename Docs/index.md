@@ -53,6 +53,7 @@ adr/0031-distance-map-input-on-resection-plan.md
 adr/0032-v2-interaction-via-layerdm-pipeline-seam.md
 adr/0033-control-polygon-display-aspect.md
 adr/0034-stage2-segments-table.md
+adr/0035-resection-init-state-machine.md
 ```
 
 ```{toctree}
