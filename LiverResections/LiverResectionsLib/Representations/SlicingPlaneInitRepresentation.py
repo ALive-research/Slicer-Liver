@@ -111,12 +111,18 @@ DEFAULT_RESECTION_OPACITY = 1.0
 # the design rationale of ADR-0009 §3 is applied.
 MARKER_RADIUS = 6.0  # matches the Planning control-point sphere radius
 
-#: Base + grabbed colours for the Init handles -- the SAME visual grammar
-#: as the Planning control points (white handles; the grabbed one turns
-#: the grab green).  Values mirror ControlPolygonPipeline's handle default
-#: and HALO_GRAB_COLOR (kept in sync by the interaction pins).
+#: Base + grabbed + hovered colours for the Init handles -- the SAME
+#: visual grammar as the Planning control points (white handles; the
+#: grabbed one turns the grab green, the hovered one the warm hover hue).
+#: Values mirror ControlPolygonPipeline's handle default, HALO_GRAB_COLOR
+#: and HALO_HOVER_COLOR (kept in sync by the interaction pins).
 HANDLE_BASE_COLOR = (1.0, 1.0, 1.0)
 HANDLE_GRAB_COLOR = (0.3, 1.0, 0.4)
+HALO_HOVER_COLOR = (1.0, 0.9, 0.2)
+
+#: Glow-halo radius scale vs the marker sphere (the control-point halo
+#: reads as a ring around the handle).
+HALO_HOVER_SCALE = 1.35
 
 # Half-width (world units) of the shader contour band kept around the
 # slicing plane — the v1 band half-width.  The fragment shader discards
@@ -215,6 +221,15 @@ class SlicingPlaneInitRepresentation:
         # grab-colour cue), or ``None``.
         self._grabbed_handle: int | None = None
 
+        # Index of the Init handle currently hovered (the glow-halo cue),
+        # or ``None``.  The grabbed handle wins the halo when both are set.
+        self._hovered_handle: int | None = None
+
+        # The private glow overlay renderer carrying the halo actor
+        # (``None`` before a windowed renderer attaches, and in the bare
+        # unit layer where the renderer has no window).
+        self._halo_renderer: Any | None = None
+
         self._build_vtk_pipeline(slicing_contour_mapper)
 
         if renderer is not None:
@@ -250,12 +265,20 @@ class SlicingPlaneInitRepresentation:
         """Colour handle ``index`` with the grab cue (``None`` restores).
 
         The SAME visual grammar as the Planning control points: the
-        grabbed handle turns the grab green, the rest stay white.
+        grabbed handle turns the grab green, the rest stay white; the
+        glow halo sits on the grabbed handle for the whole drag.
         """
         self._grabbed_handle = index
-        for i, actor in enumerate(self._marker_actors):
-            color = HANDLE_GRAB_COLOR if i == index else HANDLE_BASE_COLOR
-            actor.GetProperty().SetColor(*color)
+        self._apply_handle_colors()
+        self._refresh_halo()
+
+    def SetHoveredHandle(self, index: int | None) -> None:
+        """Raise the glow halo + the warm hover hue on handle ``index``
+        (``None`` clears both) — the control-point hover grammar.
+        """
+        self._hovered_handle = index
+        self._apply_handle_colors()
+        self._refresh_halo()
 
     def run_ring_extraction(self, target_model: Any | None) -> Any | None:
         """Extract the plane/target intersection ring on the commit boundary.
@@ -311,6 +334,9 @@ class SlicingPlaneInitRepresentation:
         self._contour_mapper = None
         self._contour_actor = None
         self._contour_target = None
+        self._halo_sphere = None
+        self._halo_mapper = None
+        self._halo_actor = None
 
     # ------------------------------------------------------------------ #
     # Introspection — used by the unit-layer tests
@@ -331,6 +357,12 @@ class SlicingPlaneInitRepresentation:
 
     def GetContourMapper(self) -> Any | None:
         return self._contour_mapper
+
+    def GetHaloActor(self) -> Any | None:
+        return self._halo_actor
+
+    def GetHaloSource(self) -> Any | None:
+        return self._halo_sphere
 
     def GetCurrentColor(self) -> tuple[float, float, float]:
         return self._current_color
@@ -372,6 +404,22 @@ class SlicingPlaneInitRepresentation:
             self._marker_mappers.append(mapper)
             self._marker_actors.append(actor)
 
+        # Glow halo — a slightly larger sphere the hover/grab raises on
+        # a handle, rendered on a PRIVATE overlay renderer with a
+        # vtkOutlineGlowPass (the control-point halo pattern: the overlay
+        # keeps qMRMLThreeDView's SetPass(nullptr) reset on the view
+        # renderer from clobbering the pass).  Hidden until a hover.
+        self._halo_sphere = vtk.vtkSphereSource()
+        self._halo_sphere.SetPhiResolution(16)
+        self._halo_sphere.SetThetaResolution(16)
+        self._halo_sphere.SetRadius(MARKER_RADIUS * HALO_HOVER_SCALE)
+        self._halo_mapper = vtk.vtkPolyDataMapper()
+        self._halo_mapper.SetInputConnection(self._halo_sphere.GetOutputPort())
+        self._halo_actor = vtk.vtkActor()
+        self._halo_actor.SetMapper(self._halo_mapper)
+        self._halo_actor.GetProperty().SetColor(*HALO_HOVER_COLOR)
+        self._halo_actor.SetVisibility(False)
+
         # Live shader contour — the plane's visualisation (v1 parity:
         # the whole liver mesh renders through the contour mapper whose
         # fragment shader keeps only the band around the plane; no
@@ -394,6 +442,7 @@ class SlicingPlaneInitRepresentation:
             renderer.AddActor(actor)
         if self._contour_actor is not None:
             renderer.AddActor(self._contour_actor)
+        self._attach_halo_renderer(renderer)
 
     def _detach_actors(self, renderer: Any) -> None:
         if not hasattr(renderer, "RemoveActor"):
@@ -408,6 +457,52 @@ class SlicingPlaneInitRepresentation:
                 renderer.RemoveActor(self._contour_actor)
             except Exception:  # pragma: no cover — defensive
                 pass
+        self._detach_halo_renderer()
+
+    def _attach_halo_renderer(self, renderer: Any) -> None:
+        """Build the private glow overlay on ``renderer``'s window.
+
+        A dedicated overlay ``vtkRenderer`` (camera shared with the view
+        renderer) carries the halo actor and a ``vtkOutlineGlowPass`` —
+        the blur-to-halo pass — so qMRMLThreeDView's SetPass(nullptr)
+        reset on the VIEW renderer never clobbers it (the control-point
+        halo precedent).  Degrades to no halo when the render window is
+        unavailable (the bare unit layer) — the halo actor is never
+        dumped on the view renderer itself.
+        """
+        window = getattr(renderer, "GetRenderWindow", None)
+        window = window() if window is not None else None
+        if window is None or self._halo_renderer is not None:
+            return
+        try:
+            overlay = vtk.vtkRenderer()
+            overlay.SetLayer(max(1, window.GetNumberOfLayers()))
+            window.SetNumberOfLayers(overlay.GetLayer() + 1)
+            overlay.InteractiveOff()
+            overlay.SetActiveCamera(renderer.GetActiveCamera())
+            overlay.AddActor(self._halo_actor)
+            glow = getattr(vtk, "vtkOutlineGlowPass", None)
+            steps = getattr(vtk, "vtkRenderStepsPass", None)
+            if glow is not None and steps is not None:
+                glow_pass = glow()
+                glow_pass.SetDelegatePass(steps())
+                overlay.SetPass(glow_pass)
+            window.AddRenderer(overlay)
+            self._halo_renderer = overlay
+        except Exception:  # pragma: no cover - defensive (fake renderers)
+            self._halo_renderer = None
+
+    def _detach_halo_renderer(self) -> None:
+        overlay = self._halo_renderer
+        self._halo_renderer = None
+        if overlay is None:
+            return
+        try:
+            window = overlay.GetRenderWindow()
+            if window is not None:
+                window.RemoveRenderer(overlay)
+        except Exception:  # pragma: no cover — defensive
+            pass
 
     def _apply_display_node(self, display_node: Any | None) -> None:
         """Record decoration fields; markers keep the HANDLE grammar.
@@ -447,15 +542,45 @@ class SlicingPlaneInitRepresentation:
         # ResectionColor above).  The terminology helper API lands in
         # T2.4; this Representation is among its first consumers.
 
+        self._apply_handle_colors()
+
+    def _apply_handle_colors(self) -> None:
+        """Repaint the markers from the interaction state — grab wins
+        over hover, everything else takes the white base, all at full
+        opacity (the control-point handle grammar)."""
         for i, actor in enumerate(self._marker_actors):
+            if i == self._grabbed_handle:
+                color = HANDLE_GRAB_COLOR
+            elif i == self._hovered_handle:
+                color = HALO_HOVER_COLOR
+            else:
+                color = HANDLE_BASE_COLOR
             prop = actor.GetProperty()
-            handle_color = (
-                HANDLE_GRAB_COLOR
-                if i == self._grabbed_handle
-                else HANDLE_BASE_COLOR
-            )
-            prop.SetColor(*handle_color)
+            prop.SetColor(*color)
             prop.SetOpacity(1.0)
+
+    def _refresh_halo(self) -> None:
+        """Show the glow halo on the grabbed-else-hovered handle.
+
+        Positions the halo at that handle's marker centre (so a mid-drag
+        ``update()`` moving the marker carries the halo along) and scales
+        it up from the marker radius so the glow reads as a ring;
+        ``None``/``None`` hides it.
+        """
+        if self._halo_actor is None:
+            return
+        target = (
+            self._grabbed_handle
+            if self._grabbed_handle is not None
+            else self._hovered_handle
+        )
+        if target is None or not (0 <= target < len(self._marker_sources)):
+            self._halo_actor.SetVisibility(False)
+            return
+        centre = self._marker_sources[target].GetCenter()
+        self._halo_sphere.SetRadius(MARKER_RADIUS * HALO_HOVER_SCALE)
+        self._halo_actor.SetPosition(centre[0], centre[1], centre[2])
+        self._halo_actor.SetVisibility(True)
 
     def _apply_data_node(self, data_node: Any | None) -> None:
         """Pull plane + init-point geometry and the target model off the
@@ -498,6 +623,9 @@ class SlicingPlaneInitRepresentation:
 
         self._refresh_marker_positions(init0, init1)
         self._refresh_contour(origin, normal, target)
+        # The drag moves the marker under the raised halo — carry the
+        # halo along with it.
+        self._refresh_halo()
 
     def _refresh_marker_positions(
         self,

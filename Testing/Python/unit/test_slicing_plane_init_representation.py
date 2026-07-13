@@ -521,6 +521,113 @@ def test_grabbed_handle_takes_the_grab_green_and_survives_update(rep_module):
     rep.cleanup()
 
 
+def test_halo_constructed_hidden_with_the_hover_colour(rep_module):
+    """Construction builds the glow halo sphere — hidden, warm hover
+    colour, the control-point halo grammar (ControlPolygonPipeline's
+    HALO_HOVER_COLOR / HALO_HOVER_SCALE, kept in sync by these pins)."""
+    from Representations.SlicingPlaneInitRepresentation import (
+        HALO_HOVER_COLOR,
+        HALO_HOVER_SCALE,
+    )
+
+    assert HALO_HOVER_COLOR == (1.0, 0.9, 0.2)
+    assert HALO_HOVER_SCALE == pytest.approx(1.35)
+
+    rep = rep_module()
+    halo = rep.GetHaloActor()
+    assert halo is not None
+    assert not halo.GetVisibility()
+    assert list(halo.GetProperty().GetColor()) == pytest.approx(
+        list(HALO_HOVER_COLOR)
+    )
+    rep.cleanup()
+    assert rep.GetHaloActor() is None
+
+
+def test_hover_raises_the_halo_on_the_handle(rep_module):
+    """``SetHoveredHandle(i)`` shows the halo AT handle *i* (scaled up
+    from the marker radius) and warms the handle colour;
+    ``SetHoveredHandle(None)`` hides it and restores the white base."""
+    from Representations.SlicingPlaneInitRepresentation import (
+        HALO_HOVER_COLOR,
+        HALO_HOVER_SCALE,
+        HANDLE_BASE_COLOR,
+        MARKER_RADIUS,
+    )
+
+    rep = rep_module()
+    data = _StubDataNode(
+        origin=(0.0, 0.0, 0.0),
+        normal=(0.0, 0.0, 1.0),
+        init0=(-7.0, 1.0, 2.0),
+        init1=(7.0, -1.0, -2.0),
+    )
+    rep.update(_StubDisplayNode(), data)
+
+    rep.SetHoveredHandle(1)
+    halo = rep.GetHaloActor()
+    assert halo.GetVisibility()
+    assert list(halo.GetPosition()) == pytest.approx([7.0, -1.0, -2.0])
+    assert rep.GetHaloSource().GetRadius() == pytest.approx(
+        MARKER_RADIUS * HALO_HOVER_SCALE
+    )
+    assert list(rep.GetMarkerActor(1).GetProperty().GetColor()) == (
+        pytest.approx(list(HALO_HOVER_COLOR))
+    )
+    assert list(rep.GetMarkerActor(0).GetProperty().GetColor()) == (
+        pytest.approx(list(HANDLE_BASE_COLOR))
+    )
+
+    rep.SetHoveredHandle(None)
+    assert not halo.GetVisibility()
+    assert list(rep.GetMarkerActor(1).GetProperty().GetColor()) == (
+        pytest.approx(list(HANDLE_BASE_COLOR))
+    )
+    rep.cleanup()
+
+
+def test_grab_wins_over_hover_and_the_halo_tracks_the_drag(rep_module):
+    """The grabbed handle stays grab-green even while hovered, the halo
+    sits on the GRABBED handle, and a mid-drag ``update()`` moving the
+    handle repositions the halo under it."""
+    from Representations.SlicingPlaneInitRepresentation import (
+        HANDLE_GRAB_COLOR,
+    )
+
+    rep = rep_module()
+    data = _StubDataNode(
+        origin=(0.0, 0.0, 0.0),
+        normal=(0.0, 0.0, 1.0),
+        init0=(-7.0, 1.0, 2.0),
+        init1=(7.0, -1.0, -2.0),
+    )
+    rep.update(_StubDisplayNode(), data)
+
+    rep.SetHoveredHandle(0)
+    rep.SetGrabbedHandle(0)
+    assert list(rep.GetMarkerActor(0).GetProperty().GetColor()) == (
+        pytest.approx(list(HANDLE_GRAB_COLOR))
+    )
+    halo = rep.GetHaloActor()
+    assert halo.GetVisibility()
+    assert list(halo.GetPosition()) == pytest.approx([-7.0, 1.0, 2.0])
+
+    # The drag moves the handle -- the halo must follow it.
+    moved = _StubDataNode(
+        origin=(0.0, 0.0, 0.0),
+        normal=(0.0, 0.0, 1.0),
+        init0=(-3.0, 4.0, 5.0),
+        init1=(7.0, -1.0, -2.0),
+    )
+    rep.update(_StubDisplayNode(), moved)
+    assert list(halo.GetPosition()) == pytest.approx([-3.0, 4.0, 5.0])
+
+    rep.SetGrabbedHandle(None)
+    rep.SetHoveredHandle(None)
+    assert not halo.GetVisibility()
+    rep.cleanup()
+
+
 def test_representation_attach_detach_renderer(rep_module):
     """``SetRenderer(r)`` adds two marker actors + the contour actor = 3;
     ``cleanup()`` removes them all."""

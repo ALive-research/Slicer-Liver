@@ -328,6 +328,9 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         # Index of the Init handle currently grabbed by the press/move/
         # release gesture -- None when no drag is in flight.
         self._init_drag_index: int | None = None
+        # Index of the Init handle currently hovered (the glow-halo cue)
+        # -- None when the cursor is away from every handle.
+        self._init_hover_index: int | None = None
         # Restart DistanceSpheroid init-placement for the new carrier (slice 3b).
         self._distance_spheroid_points_placed = 0
 
@@ -666,7 +669,9 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         the real squared display distance (LayerDM arbitration); while
         grabbed, moves and the ending release are claimed
         unconditionally.  Bare hover moves stay unclaimed -- camera
-        interaction is untouched.
+        interaction is untouched -- but raise the glow halo on the
+        handle under the cursor as a side effect of the arbitration
+        call (the control-point hover grammar).
         """
         import sys
 
@@ -677,6 +682,7 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                 or _safe_get_init_mode(carrier) != INIT_MODE_SLICING_PLANE
             ):
                 self._init_drag_index = None  # a state flip drops the grab
+                self._set_hovered_handle(None)  # ...and the stale halo
                 return False, sys.float_info.max
             renderer = self._safe_get_renderer()
             if renderer is None:
@@ -692,6 +698,20 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                     return True, 0.0
                 return False, sys.float_info.max
 
+            if etype == vtk.vtkCommand.MouseMoveEvent:
+                # Bare hover: raise the glow halo as a SIDE EFFECT of the
+                # arbitration call and decline -- camera moves stay
+                # unclaimed (the control-point hover grammar).
+                index, distance2 = self._nearest_init_handle_in_display(
+                    renderer, eventData
+                )
+                within = (
+                    index is not None
+                    and distance2
+                    <= INIT_HANDLE_PICK_RADIUS_PX * INIT_HANDLE_PICK_RADIUS_PX
+                )
+                self._set_hovered_handle(index if within else None)
+                return False, sys.float_info.max
             if etype != vtk.vtkCommand.LeftButtonPressEvent:
                 return False, sys.float_info.max
             _, distance2 = self._nearest_init_handle_in_display(renderer, eventData)
@@ -759,6 +779,7 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                         # only visualisation -- no explicit plane).
                         self._refit_grid_from_plane()
                         self._set_grabbed_handle(None)
+                        self._set_hovered_handle(None)
                         return False
                     return False
                 if etype == vtk.vtkCommand.LeftButtonPressEvent:
@@ -773,6 +794,9 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                     ):
                         self._init_drag_index = index
                         self._set_grabbed_handle(index)
+                        # The halo jumps to (and rides with) the grabbed
+                        # handle for the whole drag.
+                        self._set_hovered_handle(index)
                         return True
 
                 # Legacy fill-placement (the no-auto-seed fallback: no target
@@ -1003,6 +1027,24 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         setter = getattr(active, "SetGrabbedHandle", None)
         if setter is not None:
             setter(index)
+
+    def _set_hovered_handle(self, index: int | None) -> None:
+        """Raise/clear the glow halo on an Init handle (the control-point
+        hover cue).
+
+        Idempotent per hover change; a real change repaints via
+        ``RequestRender`` — hover is Pipeline-local state, not on the
+        node, so the digest-gated observer render never covers it.
+        """
+        if index == self._init_hover_index:
+            return
+        self._init_hover_index = index
+        name = self._current_representation_name
+        active = self._representations.get(name) if name else None
+        setter = getattr(active, "SetHoveredHandle", None)
+        if setter is not None:
+            setter(index)
+            self.RequestRender()
 
     def _refit_grid_from_plane(self) -> bool:
         """Re-fit the 4x4 grid from the current plane/liver cut (v1 loop).
