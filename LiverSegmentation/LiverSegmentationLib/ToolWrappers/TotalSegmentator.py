@@ -25,6 +25,7 @@ error and leaves the manual Segment-Editor path available (ADR-0024
 from __future__ import annotations
 
 import logging
+import re
 
 #
 # Lazy-install contract.  Kept as module-level named constants so the
@@ -356,8 +357,6 @@ def _split_stream_pieces(buffer: bytes) -> list:
     undecoded remainder as the final element — the streaming loop's
     carry-over.
     """
-    import re
-
     parts = re.split(rb"[\r\n]", buffer)
     remainder = parts.pop()
     pieces = [
@@ -366,3 +365,72 @@ def _split_stream_pieces(buffer: bytes) -> list:
         if part.strip()
     ]
     return [*pieces, remainder]
+
+
+#
+# Progress parsing — the backend's raw output is NOT surgeon-facing.
+#
+# TotalSegmentator emits two overlapping progress channels (both reach the
+# merged child stream):
+#
+#   * Milestone lines on STDOUT via ``print()`` (suppressed only under
+#     ``--quiet``, which we deliberately do NOT pass): "Resampling...",
+#     "Predicting part 1 of 3 ...", "Predicting...", "Saving segmentations..."
+#     and a few others.  These are ordered phase markers, not percentages.
+#   * The nnU-Net sliding-window ``tqdm`` bar on STDERR (enabled whenever
+#     ``allow_tqdm = not quiet``): the one fine-grained percent TotalSegmentator
+#     produces, refreshed with bare carriage returns
+#     (``" 45%|████      | 9/20 [00:12<00:15,  1.4s/it]"``).
+#
+# The raw tqdm text carries its own bar glyphs and per-iteration timing — it is
+# never shown verbatim on our surface.  :func:`parseProgressLine` distils each
+# line to a clean ``(stage, percent)`` pair the widget renders in its own
+# format (e.g. "Portal vein — predicting 45%" / "Portal vein — saving…").
+#
+
+#: The leading integer percent of an nnU-Net tqdm refresh.  Anchored so a
+#: stray "0.5s" or an ISO time never reads as a percent (the ``%`` is required).
+_TQDM_PERCENT_RE = re.compile(r"(?<![\d.])(\d{1,3})\s*%")
+
+#: TotalSegmentator milestone substrings -> our clean stage word, most specific
+#: first.  Matched case-insensitively.  These are phase markers, not
+#: percentages, so they render as indeterminate clean stage text rather than a
+#: fabricated number (a made-up percent on a non-quantified milestone would
+#: mislead more than an honest "resampling…").
+_STAGE_MARKERS = (
+    ("predicting part", "predicting"),
+    ("predicting", "predicting"),
+    ("resampling", "resampling"),
+    ("generating rough segmentation", "preparing"),
+    ("cropping from", "preparing"),
+    ("splitting into subparts", "preparing"),
+    ("saving segmentations", "saving"),
+    ("generating preview", "saving"),
+    ("calculating statistics", "finishing"),
+)
+
+
+def parseProgressLine(line):
+    """Distil one raw backend line to a clean ``(stage, percent)`` pair.
+
+    The tuple drives OUR progress surface; the raw tqdm/milestone text is
+    never echoed verbatim (it embeds tqdm's own bar glyphs and timings).
+
+      * An nnU-Net tqdm refresh (a leading ``NN%``) is the one fine-grained
+        percent the backend emits -> ``("predicting", NN)`` (0–100 clamped).
+      * A recognised milestone line -> ``(stage, None)``: an ordered phase
+        marker rendered indeterminate with clean stage text.
+      * Anything else -> ``(None, None)``: the caller leaves its bar
+        untouched rather than surface unrecognised backend chatter.
+    """
+    text = str(line).strip()
+    if not text:
+        return (None, None)
+    match = _TQDM_PERCENT_RE.search(text)
+    if match is not None:
+        return ("predicting", max(0, min(100, int(match.group(1)))))
+    low = text.lower()
+    for needle, stage in _STAGE_MARKERS:
+        if needle in low:
+            return (stage, None)
+    return (None, None)

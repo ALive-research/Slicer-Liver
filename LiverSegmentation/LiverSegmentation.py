@@ -32,7 +32,6 @@ the Stage-2 sidebar indicator (Python-convention predicate, ADR-0023
 import functools
 import logging
 import os
-import re
 
 import qt
 import slicer
@@ -297,25 +296,6 @@ def structureStatus(canonicalNode, sctCode):
         return STATUS_CONFIRMED
     # NotStarted — the pre-seeded empty checklist row.
     return STATUS_MARKED_ABSENT if markedAbsent else STATUS_MISSING
-
-
-#: The percent token in a backend output line.  TotalSegmentator's nnU-Net
-#: progress streams tqdm refreshes (``" 45%|████      | 9/20 ..."``); the
-#: leading integer percent is the one recognizable progress datum.
-_PROGRESS_PERCENT_RE = re.compile(r"(\d{1,3})\s*%")
-
-
-def _progressPercent(line):
-    """The 0–100 percent parsed from a backend output line, or ``None``.
-
-    Feeds the per-job progress bars: a line carrying a tqdm-style percent
-    flips the job's bar determinate; lines without one leave it as it is
-    (indeterminate until the first percent arrives).
-    """
-    match = _PROGRESS_PERCENT_RE.search(str(line))
-    if match is None:
-        return None
-    return max(0, min(100, int(match.group(1))))
 
 
 class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
@@ -665,76 +645,118 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
                 segmentsLogic.SetSegmentStatus(segment, segmentsLogic.InProgress)
                 names.append(self.logic._structureTitle(code))
             self._jobQueue.enqueue(task, volume.GetID(), taskCodes)
-            # Busy surface: one progress row per job (text embedded in the
-            # bar + per-job cancel); the finish callback retires each row.
-            self._ensureJobRow(key)
+            # Busy surface: one progress row PER STRUCTURE the job covers
+            # (coalesced execution, fanned-out UI); the finish callback retires
+            # the whole job's rows together.
+            self._ensureJobRows(key)
         self._statusLabel.setText(
             "Queued TotalSegmentator: " + ", ".join(names) + "…"
         )
 
     #
-    # Per-job progress rows — one bar (job text embedded) + one cancel (✕)
-    # per queued/running job, retired as each job finishes.
+    # Per-STRUCTURE progress rows.  The queue coalesces execution (one backend
+    # child per (task, input)); the UI fans that single job out to one bar per
+    # anatomical structure it covers — each bar names its OWN structure.  A ✕
+    # on any structure row cancels the shared underlying job, so its sibling
+    # structure rows retire together (visually simultaneous — the whole job
+    # box is removed at once).
     #
 
-    def _jobLabel(self, key):
-        """The text embedded in a job's bar: tool + its structure titles."""
-        codes = self._pendingJobs.get(key, {})
-        titles = [title for title, code in STRUCTURE_TABS if code in codes]
-        return "TotalSegmentator — " + ", ".join(titles or [str(key[0])])
+    def _ensureJobRows(self, key):
+        """Create (or extend, on coalescing) the per-structure rows for ``key``.
 
-    def _ensureJobRow(self, key):
-        """Create (or re-label, on coalescing) the progress row for ``key``.
-
-        The bar starts indeterminate — the backend's tqdm output flips it
-        determinate when a percent is parsed (``_onJobOutput``) — with the
-        job's text embedded via ``setFormat``.  The per-job ✕ routes to
-        ``cancelJob``: dequeue when queued, kill when running.  The
-        connected slot is stored for the connection's lifetime (the
-        PythonQt discipline the queue encodes).
+        One bar per structure the job covers — the bar names its structure and
+        starts indeterminate; ``_onJobOutput`` renders the parsed stage/percent
+        into every sibling bar (they share one backend child).  The per-row ✕
+        routes to ``cancelJob`` on the SHARED key: dequeue when queued, kill
+        when running — the whole job's rows retire together.  Each connected
+        slot is stored for the connection's lifetime (the PythonQt discipline
+        the queue encodes).
         """
-        label = self._jobLabel(key)
-        row = self._jobRows.get(key)
-        if row is None:
+        codes = list(self._pendingJobs.get(key, {}))
+        job = self._jobRows.get(key)
+        if job is None:
             box = qt.QWidget()
-            layout = qt.QHBoxLayout(box)
+            layout = qt.QVBoxLayout(box)
             layout.setContentsMargins(0, 0, 0, 0)
+            self._jobListLayout.addWidget(box)
+            job = {"box": box, "layout": layout, "rows": {}}
+            self._jobRows[key] = job
+        # Structure-vocabulary order first, then any code outside it.
+        ordered = [code for _title, code in STRUCTURE_TABS if code in codes]
+        ordered += [code for code in codes if code not in ordered]
+        for code in ordered:
+            if code in job["rows"]:
+                continue
+            title = self.logic._structureTitle(code)
+            rowBox = qt.QWidget()
+            rowLayout = qt.QHBoxLayout(rowBox)
+            rowLayout.setContentsMargins(0, 0, 0, 0)
             bar = qt.QProgressBar()
             bar.setRange(0, 0)
             bar.setTextVisible(True)
+            bar.setFormat(title)
             cancel = qt.QToolButton()
             cancel.setText("✕")
-            cancel.setToolTip("Cancel this segmentation job.")
+            cancel.setToolTip(
+                "Cancel this segmentation job (its sibling structures, which "
+                "share one backend run, cancel together)."
+            )
             slot = functools.partial(self._onCancelJob, key)
             cancel.connect("clicked()", slot)
-            layout.addWidget(bar, 1)
-            layout.addWidget(cancel)
-            self._jobListLayout.addWidget(box)
-            row = {"box": box, "bar": bar, "cancel": cancel, "slot": slot}
-            self._jobRows[key] = row
-        row["label"] = label
-        bar = row["bar"]
-        bar.setFormat(label if bar.maximum == 0 else f"{label} — %p%")
+            rowLayout.addWidget(bar, 1)
+            rowLayout.addWidget(cancel)
+            job["layout"].addWidget(rowBox)
+            job["rows"][code] = {
+                "box": rowBox,
+                "bar": bar,
+                "cancel": cancel,
+                "slot": slot,
+                "title": title,
+            }
 
     def _removeJobRow(self, key):
-        """Retire a finished/cancelled job's progress row."""
-        row = self._jobRows.pop(key, None)
-        if row is None:
+        """Retire a finished/cancelled job's rows — every sibling at once."""
+        job = self._jobRows.pop(key, None)
+        if job is None:
             return
         try:
-            box = row["box"]
+            box = job["box"]
             box.setParent(None)
             box.delete()
         except (ValueError, AttributeError):
             # Already reclaimed with a disposed parent tree.
             pass
 
-    def _onCancelJob(self, key):
-        """The per-job ✕: dequeue a queued job / kill the running child.
+    @staticmethod
+    def _applyProgress(row, stage, percent):
+        """Render a clean ``(stage, percent)`` into ONE structure's bar.
 
-        Both routes complete through the queue's finish path with
-        ``success=False``, so ``_onJobFinished`` restores the targeted
-        rows' pre-enqueue statuses and retires the job's progress row.
+        The bar always leads with the structure's own title; a parsed percent
+        flips it determinate ("Portal vein — predicting 45%"), a stage-only
+        line renders indeterminate clean text ("Portal vein — saving…").  The
+        raw backend text is never shown (it embeds tqdm's bar glyphs).
+        """
+        bar = row["bar"]
+        title = row["title"]
+        if percent is None:
+            if bar.maximum != 0:
+                bar.setRange(0, 0)
+            bar.setFormat(f"{title} — {stage}…")
+        else:
+            if bar.maximum == 0:
+                bar.setRange(0, 100)
+            bar.setValue(percent)
+            bar.setFormat(f"{title} — {stage} %p%")
+
+    def _onCancelJob(self, key):
+        """A structure row's ✕: dequeue a queued job / kill the running child.
+
+        The rows fanned from one job all carry the SAME key, so any of their
+        ✕ buttons cancels the shared underlying job.  Both routes complete
+        through the queue's finish path with ``success=False``, so
+        ``_onJobFinished`` restores the targeted rows' pre-enqueue statuses and
+        retires the job's rows together.
         """
         if self._jobQueue is not None:
             self._jobQueue.cancelJob(key)
@@ -749,28 +771,28 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         self._statusLabel.setText(f"Running TotalSegmentator: {names}…")
 
     def _onJobOutput(self, line):
-        """Stream a child output line to the status label + the job's bar.
+        """Distil a child output line to a clean stage/percent on every bar.
 
         The queue is strictly sequential, so output belongs to its current
-        job; a line carrying a recognizable percent (the backend's tqdm
-        refreshes) flips that job's bar determinate and drives its value —
-        the embedded job text stays either way.
+        job; its every structure bar shares one backend child, so the parsed
+        ``(stage, percent)`` renders identically across the job's sibling
+        rows.  Unrecognised backend chatter leaves the bars and the status
+        label untouched — the raw tqdm/milestone text is never surfaced.
         """
         if not line:
             return
-        self._statusLabel.setText(str(line)[-80:])
+        stage, percent = _totalSegmentatorWrapper().parseProgressLine(line)
+        if stage is None:
+            return
         key = self._jobQueue.currentKey() if self._jobQueue is not None else None
-        row = self._jobRows.get(key)
-        if row is None:
+        job = self._jobRows.get(key)
+        if job is None:
             return
-        percent = _progressPercent(line)
-        if percent is None:
-            return
-        bar = row["bar"]
-        if bar.maximum == 0:
-            bar.setRange(0, 100)
-            bar.setFormat(f"{row['label']} — %p%")
-        bar.setValue(percent)
+        cleanPercent = "" if percent is None else f" {percent}%"
+        titles = ", ".join(row["title"] for row in job["rows"].values())
+        self._statusLabel.setText(f"{titles} — {stage}{cleanPercent}")
+        for row in job["rows"].values():
+            self._applyProgress(row, stage, percent)
 
     def _onJobFinished(self, key, structures, success, outputDir):
         """Land a finished job's label files on the canonical node.

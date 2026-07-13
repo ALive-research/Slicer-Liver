@@ -28,11 +28,16 @@ Pins:
     hint (the ADR-0024 Stage-1/Stage-2 hand-off pin, wording preserved).
   * a FAILED job lands nothing and the targeted rows fall back to their
     pre-enqueue status (the invariant the retired Reject suite carried).
-  * the busy surface is PER JOB: each queued/running job gets its own
-    progress row — job text embedded IN the bar, a per-job cancel (✕)
-    beside it — indeterminate until the child's output carries a percent,
-    retired as the job finishes; no blocking loop, no wait cursor, the
-    Run button stays live.
+  * the busy surface is PER STRUCTURE: the queue coalesces EXECUTION (one
+    backend child per (task, input)) but the UI fans each job out to one
+    progress row per anatomical structure it covers — each bar leads with
+    its OWN structure title, a per-row cancel (✕) beside it — indeterminate
+    until the child's output carries a percent; the backend's raw tqdm /
+    milestone text is distilled to OUR clean "<structure> — predicting NN%"
+    / "<structure> — saving…" format, never surfaced verbatim.  A ✕ on any
+    structure row cancels the shared underlying job, so its sibling rows
+    retire together.  No blocking loop, no wait cursor, the Run button
+    stays live.
   * the landing re-frames the 3D views; the Run button re-labels with the
     table selection, re-resolved through the zero-interval deferred path
     every selection gesture schedules.
@@ -430,17 +435,18 @@ def test_failed_job_leaves_canonical_untouched(monkeypatch, qt_widgets):
     )
 
 
-def test_toolbar_run_shows_per_job_progress_rows_until_each_job_ends(
-    monkeypatch, qt_widgets
-):
-    """One progress row PER job, text embedded in the bar, retired on finish.
+def test_toolbar_run_shows_one_progress_row_per_structure(monkeypatch, qt_widgets):
+    """One progress row PER anatomical structure, even when structures share
+    one coalesced backend child (the maintainer's live finding: 4 structures
+    must show 4 bars, each naming its OWN structure — not 2 bars each naming
+    several).
 
-    The async path (ADR-0034 §Decision 5) replaces the blocking loop and
-    the single shared busy bar: every queued/running job gets its own
-    progress row — the bar carries the job's text (``setFormat``), starts
-    indeterminate, and has a per-job cancel (✕) beside it; each row
-    retires as ITS job finishes.  No wait cursor (nothing blocks) and the
-    Run button stays live for further enqueues.
+    The queue coalesces EXECUTION (one child per (task, input)); the UI fans
+    that job out to one bar per structure.  Here liver + portal share the
+    ``total`` task (ONE job, TWO rows) and hepatic runs ``liver_vessels`` (one
+    job, one row).  Each bar leads with its own structure title, starts
+    indeterminate, and carries its own cancel (✕).  No wait cursor and the Run
+    button stays live.
     """
     slicer, _orch = _orchestrator_or_skip()
     import LiverSegmentation as module
@@ -450,7 +456,9 @@ def test_toolbar_run_shows_per_job_progress_rows_until_each_job_ends(
     widget = _widget_or_skip(slicer, qt_widgets)
     _stub_queue(monkeypatch, widget)
     _select_structure_rows(
-        module, widget, [SCT_LIVER_CODE, SCT_HEPATIC_VEIN_CODE]  # two backend tasks
+        module,
+        widget,
+        [SCT_LIVER_CODE, SCT_PORTAL_VEIN_CODE, SCT_HEPATIC_VEIN_CODE],
     )
 
     widget.onRunSelectedStructures()
@@ -472,27 +480,39 @@ def test_toolbar_run_shows_per_job_progress_rows_until_each_job_ends(
         slicer.app.processEvents()
 
     assert set(widget._jobRows) == {total_key, vessels_key}, (
-        "two backend tasks -> TWO per-job progress rows; got "
+        "two backend tasks -> two coalesced jobs; got "
         f"{set(widget._jobRows)!r}."
     )
-    liver_bar = widget._jobRows[total_key]["bar"]
-    assert liver_bar.visible, (
-        "each job's progress bar must show as soon as it is enqueued -- "
+    # The coalesced ``total`` job fans out to ONE row per structure it covers.
+    total_rows = widget._jobRows[total_key]["rows"]
+    assert set(total_rows) == {SCT_LIVER_CODE, SCT_PORTAL_VEIN_CODE}, (
+        "the coalesced total job must show one row PER structure it covers; "
+        f"got {set(total_rows)!r}."
+    )
+    liver_bar = total_rows[SCT_LIVER_CODE]["bar"]
+    portal_bar = total_rows[SCT_PORTAL_VEIN_CODE]["bar"]
+    assert liver_bar.format == "Liver parenchyma" and portal_bar.format == (
+        "Portal vein"
+    ), (
+        "each structure's bar must lead with its OWN structure name, not a "
+        f"multi-structure label; got {liver_bar.format!r} / {portal_bar.format!r}."
+    )
+    assert liver_bar.visible and liver_bar.textVisible, (
+        "each structure's bar must show as soon as it is enqueued -- "
         "'no signaling that there is processing going on'."
     )
-    assert liver_bar.textVisible and "Liver parenchyma" in liver_bar.format, (
-        "the job's text must be embedded IN its bar (setFormat); got "
-        f"{liver_bar.format!r}."
+    assert liver_bar.maximum == 0 and portal_bar.maximum == 0, (
+        "with no percent parsed yet each bar must be indeterminate."
     )
-    assert "TotalSegmentator" in liver_bar.format
-    assert liver_bar.maximum == 0, (
-        "with no percent parsed yet the bar must be indeterminate."
-    )
-    assert "Hepatic vein" in widget._jobRows[vessels_key]["bar"].format
-    for row in widget._jobRows.values():
-        assert row["cancel"].visible and row["cancel"].text == "✕", (
-            "every job row must carry its own cancel (✕) affordance."
-        )
+    vessels_rows = widget._jobRows[vessels_key]["rows"]
+    assert set(vessels_rows) == {SCT_HEPATIC_VEIN_CODE}
+    assert vessels_rows[SCT_HEPATIC_VEIN_CODE]["bar"].format == "Hepatic vein"
+    # Every structure row carries its own cancel (✕).
+    for job in widget._jobRows.values():
+        for row in job["rows"].values():
+            assert row["cancel"].visible and row["cancel"].text == "✕", (
+                "every structure row must carry its own cancel (✕) affordance."
+            )
     status = widget._statusLabel.text
     assert status and "idle" not in status.lower(), (
         f"the status must signal processing, not {status!r}."
@@ -506,29 +526,16 @@ def test_toolbar_run_shows_per_job_progress_rows_until_each_job_ends(
         "blocking loop (ADR-0034 §Decision 5)."
     )
 
-    _drive_finish(widget, volume, [SCT_LIVER_CODE], success=False)
 
-    assert set(widget._jobRows) == {vessels_key}, (
-        "a finished job's row must retire; the other job's row stays."
-    )
+def test_cancel_on_one_structure_row_retires_its_siblings_together(
+    monkeypatch, qt_widgets
+):
+    """A ✕ on any structure row cancels the shared job; siblings retire together.
 
-    _drive_finish(
-        widget, volume, [SCT_HEPATIC_VEIN_CODE], success=False, task="liver_vessels"
-    )
-
-    assert widget._jobRows == {}, (
-        "every progress row must retire once its job ends."
-    )
-
-
-def test_job_output_percent_drives_the_jobs_bar(monkeypatch, qt_widgets):
-    """A tqdm-style percent in the child's output flips the bar determinate.
-
-    TotalSegmentator's nnU-Net progress streams tqdm refreshes
-    (``" 45%|████      | 9/20 ..."``); the queue is strictly sequential,
-    so an output line belongs to the CURRENT job — its bar picks up the
-    parsed percent (text still embedded); lines without a percent leave
-    the bar as it is.
+    The rows fanned from one coalesced job share the backend child, so a ✕ on
+    one cancels the underlying job and ALL its structure rows retire at once —
+    the maintainer accepts (and wants visible) that siblings go together.  The
+    other job's rows are untouched.
     """
     slicer, _orch = _orchestrator_or_skip()
     import LiverSegmentation as module
@@ -537,7 +544,58 @@ def test_job_output_percent_drives_the_jobs_bar(monkeypatch, qt_widgets):
     volume = _add_input_volume(slicer)
     widget = _widget_or_skip(slicer, qt_widgets)
     _stub_queue(monkeypatch, widget)
-    _select_structure_rows(module, widget, [SCT_LIVER_CODE])
+    _select_structure_rows(
+        module,
+        widget,
+        [SCT_LIVER_CODE, SCT_PORTAL_VEIN_CODE, SCT_HEPATIC_VEIN_CODE],
+    )
+
+    widget.onRunSelectedStructures()
+
+    from LiverSegmentationLib.SegmentationJobQueue import jobKey
+
+    total_key = jobKey("total", volume.GetID())
+    vessels_key = jobKey("liver_vessels", volume.GetID())
+    assert set(widget._jobRows[total_key]["rows"]) == {
+        SCT_LIVER_CODE,
+        SCT_PORTAL_VEIN_CODE,
+    }
+
+    # Click the ✕ on the PORTAL row -- it must cancel the shared total job.
+    widget._jobRows[total_key]["rows"][SCT_PORTAL_VEIN_CODE]["cancel"].click()
+    _drive_finish(
+        widget, volume, [SCT_LIVER_CODE, SCT_PORTAL_VEIN_CODE], success=False
+    )
+
+    assert set(widget._jobRows) == {vessels_key}, (
+        "cancelling one structure row must retire the whole shared job (its "
+        f"sibling rows go together); got {set(widget._jobRows)!r}."
+    )
+    assert set(widget._jobRows[vessels_key]["rows"]) == {SCT_HEPATIC_VEIN_CODE}, (
+        "the other coalesced job's rows must be untouched."
+    )
+
+
+def test_job_output_renders_clean_stage_and_percent_per_structure(
+    monkeypatch, qt_widgets
+):
+    """The parsed (stage, percent) renders cleanly across a job's sibling bars.
+
+    Raw TotalSegmentator text (its own tqdm bar glyphs, milestone prints) is
+    NEVER embedded: a tqdm refresh flips every sibling bar determinate as
+    "<structure> — predicting NN%"; a milestone line renders indeterminate
+    clean stage text ("<structure> — saving…"); unrecognised chatter leaves
+    the bars untouched.  The queue is sequential, so output belongs to the
+    current job and drives all of its structure rows together.
+    """
+    slicer, _orch = _orchestrator_or_skip()
+    import LiverSegmentation as module
+
+    slicer.mrmlScene.Clear(0)
+    volume = _add_input_volume(slicer)
+    widget = _widget_or_skip(slicer, qt_widgets)
+    _stub_queue(monkeypatch, widget)
+    _select_structure_rows(module, widget, [SCT_LIVER_CODE, SCT_PORTAL_VEIN_CODE])
 
     widget.onRunSelectedStructures()
 
@@ -547,25 +605,36 @@ def test_job_output_percent_drives_the_jobs_bar(monkeypatch, qt_widgets):
     # The stubbed queue never spawns a child; report the job as current so
     # the output routing under test sees the real production shape.
     monkeypatch.setattr(widget._jobQueue, "currentKey", lambda: key)
-    bar = widget._jobRows[key]["bar"]
-    assert bar.maximum == 0, "precondition: indeterminate before any percent."
+    liver_bar = widget._jobRows[key]["rows"][SCT_LIVER_CODE]["bar"]
+    portal_bar = widget._jobRows[key]["rows"][SCT_PORTAL_VEIN_CODE]["bar"]
+    assert liver_bar.maximum == 0, "precondition: indeterminate before any output."
 
-    widget._onJobOutput("no recognizable progress here")
-    assert bar.maximum == 0, (
-        "a line without a percent must leave the bar indeterminate."
+    widget._onJobOutput("Sending anonymous usage statistics is unrecognised chatter")
+    assert liver_bar.maximum == 0 and liver_bar.format == "Liver parenchyma", (
+        "unrecognised backend chatter must leave the bar untouched -- the raw "
+        "text is never surfaced."
     )
 
     widget._onJobOutput(" 45%|████      | 9/20 [00:12<00:15,  1.4s/it]")
-    assert bar.maximum == 100 and bar.value == 45, (
-        "a tqdm percent must flip the bar determinate and drive its value."
-    )
-    assert "Liver parenchyma" in bar.format and "%p%" in bar.format, (
-        "the job text must stay embedded in the determinate bar; got "
-        f"{bar.format!r}."
+    for bar, title in ((liver_bar, "Liver parenchyma"), (portal_bar, "Portal vein")):
+        assert bar.maximum == 100 and bar.value == 45, (
+            "a tqdm percent must flip every sibling bar determinate and drive "
+            "its value (they share one backend child)."
+        )
+        assert bar.format == f"{title} — predicting %p%", (
+            "the bar must render OUR clean 'title — predicting NN%' format, "
+            f"never raw tqdm text; got {bar.format!r}."
+        )
+    assert "%|" not in widget._statusLabel.text, (
+        "the raw tqdm bar text must never reach the status label; got "
+        f"{widget._statusLabel.text!r}."
     )
 
-    widget._onJobOutput(" 90%|█████████ | 18/20 [00:25<00:03,  1.4s/it]")
-    assert bar.value == 90
+    widget._onJobOutput("Saving segmentations...")
+    assert liver_bar.maximum == 0 and liver_bar.format == "Liver parenchyma — saving…", (
+        "a milestone line renders indeterminate clean stage text; got "
+        f"{liver_bar.format!r}."
+    )
 
 
 def test_toolbar_run_reframes_the_threed_views(monkeypatch, qt_widgets):
