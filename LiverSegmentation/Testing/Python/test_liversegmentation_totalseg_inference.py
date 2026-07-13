@@ -3,7 +3,7 @@
 """The real TotalSegmentator inference wiring behind ``_runTotalSegmentator``.
 
 The seam previously returned an EMPTY scratch node ("real inference lands
-with the backend integration") — running a structure card yielded nothing.
+with the backend integration") — running a structure yielded nothing.
 These pins fix the contract of the real wiring WITHOUT running a real
 inference (CI has no model / GPU):
 
@@ -11,7 +11,7 @@ inference (CI has no model / GPU):
   ``runInference`` (monkeypatched here to write a synthetic per-label
   NIfTI, the backend's on-disk output convention), and imports the
   result into the scratch node as ONE SCT-tagged, non-empty segment.
-* the SCT target table covers all four structure-card codes and builds
+* the SCT target table covers all four structure-vocabulary codes and builds
   a well-formed backend command line.
 * a declined / failed backend install surfaces as the wrapper's typed
   exception, not a silent empty scratch.
@@ -128,8 +128,8 @@ def test_segment_populates_scratch_from_inference_output(monkeypatch):
             slicer.mrmlScene.RemoveNode(scratch)
 
 
-def test_inference_target_table_covers_all_four_cards():
-    """Every structure card's SCT code resolves to a backend task spec."""
+def test_inference_target_table_covers_all_four_structures():
+    """Every structure-vocabulary SCT code resolves to a backend task spec."""
     _slicer_or_skip()
     import LiverSegmentation as module
 
@@ -281,51 +281,6 @@ def test_visual_defaults_survive_accept_onto_the_canonical_node():
         "not travel with the copied segment."
     )
 
-
-def test_accept_reframes_the_threed_views(monkeypatch):
-    """Accepting the first anatomy must re-centre the 3D view.
-
-    The surface model generated on Accept lands outside the default
-    camera framing -- the surgeon saw an empty/off-centre 3D view until
-    a manual re-centre.  The card's Accept requests a 3D re-frame
-    (``slicer.util.resetThreeDViews``); pinned GL-free at that seam.
-    """
-    slicer = _slicer_or_skip()
-    import LiverSegmentation as module
-
-    logic = _logic_or_skip(slicer)
-    scratch = logic.createScratchSegmentation()
-    scratch.GetSegmentation().AddEmptySegment("s", "Synthetic")
-
-    class _CardHost:
-        pass
-
-    host = _CardHost()
-    host.logic = logic
-    host._refreshTabGlyphs = lambda: None
-
-    class _WidgetStandIn:
-        pass
-
-    stand_in = _WidgetStandIn()
-    stand_in.logic = logic
-    stand_in._refreshTabGlyphs = lambda: None
-
-    card = module._StructureCard.__new__(module._StructureCard)
-    card._widget = stand_in
-    card._scratch = scratch
-    import qt
-
-    card.acceptButton = qt.QPushButton()
-    card.rejectButton = qt.QPushButton()
-    card.statusLabel = qt.QLabel()
-
-    reframes = []
-    monkeypatch.setattr(slicer.util, "resetThreeDViews", lambda: reframes.append(1))
-
-    card.onAccept()
-
-    assert reframes, (
-        "onAccept must request a 3D-view re-frame after the surface model "
-        "lands -- the new anatomy is otherwise outside the camera framing."
-    )
+# The re-frame-after-landing pin (formerly the card onAccept test) moved to
+# test_liversegmentation_toolbar_run_lands_directly.py: the landing gesture
+# is the toolbar Run now (ADR-0034 §Amendments), and the re-frame rides it.

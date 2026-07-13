@@ -9,7 +9,7 @@ portal-venous-phase volume produced by Stage 1.  The orchestrator's
 ``LiverRole = "PortalVenous"`` (the Stage-1 / Stage-2 hand-off contract).
 
 This pins the input-selection invariant: when the orchestrator selects the
-working volume for a card Run, it picks the ``LiverRole="PortalVenous"``
+working volume for a toolbar Run, it picks the ``LiverRole="PortalVenous"``
 volume — not an arbitrary scalar volume in the scene.  A real
 TotalSegmentator inference cannot run in CI, so the backend seam is
 **mocked**; the mock records which volume the orchestrator handed it.
@@ -108,7 +108,7 @@ def test_segment_runs_against_portalvenous_volume(monkeypatch):
     no real TotalSegmentator inference occurs.
 
     TODO(impl): align the mocked seam name with the implementer's choice
-    (same seam as test_liversegmentation_card_run_produces_scratch).
+    (same seam as test_liversegmentation_toolbar_run_lands_directly).
     """
     slicer, orch = _orchestrator_or_skip()
     slicer.mrmlScene.Clear(0)

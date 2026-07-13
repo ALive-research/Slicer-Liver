@@ -11,10 +11,11 @@ Hosts the Python orchestrator that sequences per-structure micro-workflows
 
   * publishes exactly ONE canonical ``vtkMRMLSegmentationNode`` per case,
     flagged via the ``LiverSegmentation.Role`` attribute;
-  * holds per-tool output in scratch ``vtkMRMLSegmentationNode``s (same role
-    attribute, value ``scratch``) until the surgeon Accepts;
-  * merges a scratch node's segments INTO the existing canonical node on
-    Accept (singular canonical-creation path; ADR-0024 §"Output contract");
+  * lands tool output DIRECTLY on the canonical node as native ``InProgress``
+    ("produced, under review"): the internal scratch node a run produces is
+    merged and removed in the same gesture (ADR-0034 §Amendments; the
+    surgeon's confirm is the stock table's status-cell click to
+    ``Completed``, not a node-level Accept);
   * SCT-tags segments via the repo-root
     ``Resources/Terminology/LabelToSCT/`` bridges (ADR-0011);
   * renders with stock ``vtkMRMLSegmentationDisplayNode`` — no per-module
@@ -172,18 +173,11 @@ class LiverSegmentation(ScriptedLoadableModule):
 
 
 #
-# Per-tab confirmation glyphs, reused from the Liver shell idiom
-# (``Liver/Liver.py`` ``_INDICATOR_COMPLETE`` / ``_INDICATOR_PENDING``, the
-# ✓ / ● / ○ set).  Named here so the per-tab glyph contract stays in lockstep
-# with the shell and is grep-able (ADR-0024 surgeon UI).
-#
-GLYPH_COMPLETE = "✓"  # accepted: canonical node holds this structure's SCT segment
-GLYPH_PENDING = "○"   # not yet accepted
-
-#
-# The four Stage-2 structure tabs, in surgeon-workflow order (ADR-0024
-# §"Per-structure micro-workflows").  Each entry pairs the tab title with the
-# SCT type code its Accept lands in the canonical node.
+# The Stage-2 structure vocabulary, in surgeon-workflow order (ADR-0024
+# §"Per-structure micro-workflows").  Each entry pairs the row title with its
+# SCT type code; the pre-seeded checklist, the landing contract, and the
+# completion predicate all iterate this set (ADR-0034 §Decision 1).  The name
+# predates the retired tab UI and is kept grep-stable.
 #
 STRUCTURE_TABS = (
     ("Liver parenchyma", SCT_LIVER_CODE),
@@ -276,17 +270,17 @@ def structureStatus(canonicalNode, sctCode):
 
 
 class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
-    """Stage-2 surgeon panel — a QTabWidget of four per-structure cards.
+    """Stage-2 surgeon panel — the anatomy segments table + selection toolbar.
 
-    Each tab (Liver parenchyma / Portal vein / Hepatic vein / Tumors) hosts a
-    reusable card fragment driving the orchestrator end to end: Run
-    TotalSegmentator -> scratch, then Accept (merge into the canonical node)
-    or Reject (discard scratch), plus Edit-in-Segment-Editor on the canonical
-    node (ADR-0024 §"Per-structure micro-workflows").  Each tab label carries
-    a confirmation glyph (○ -> ✓) mirroring the Liver-shell idiom; the glyph
-    flips once that structure's segment has LANDED on the canonical node
-    (``LiverSegmentationLogic.isStructureAccepted`` — native status past
-    ``NotStarted``, ADR-0034 §Amendments), refreshed on scene change.
+    ADR-0034 §Amendments: the panel is a configured stock
+    ``qMRMLSegmentsTableView`` over the single canonical node, minted (or
+    adopted) on setup so the pre-seeded four-row checklist is visible the
+    moment Stage 2 opens.  A selection-scoped toolbar under the table acts on
+    the SELECTED row: Run TotalSegmentator (lands directly on the canonical
+    node as native ``InProgress`` — no Accept/Reject machinery; the surgeon's
+    confirm is the status-cell click), Mark absent (the explicit absence
+    attestation on an empty row), and Edit in Segment Editor (interim
+    jump-to-module until the embedded-editor increment).
 
     A Stage-2-local backend-status row (installed ✓/✗ + Pre-download) surfaces
     the TotalSegmentator install state.  This is intentionally local to
@@ -299,7 +293,6 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
 
     def __init__(self, parent=None):
         self.logic = None
-        self.structureTabs = None
         self._backendStatusLabel = None
         # Load-a-segmentation affordance (the v2.0 no-AI path); built in setup().
         self._loadSegCombo = None
@@ -312,24 +305,12 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
 
         self.logic = LiverSegmentationLogic()
 
-        # The ADR-0034 §Amendments anatomy segments table — the configured
-        # stock qMRMLSegmentsTableView lands ALONGSIDE the tabs; the tabs
-        # retire with the selection-scoped toolbar (next increment).
         self.layout.addWidget(self._buildSegmentsTable())
-
-        self.structureTabs = qt.QTabWidget()
-        self.structureTabs.setObjectName("StructureTabs")
-        self.structureTabs.setTabPosition(qt.QTabWidget.North)
-        for title, sctCode in STRUCTURE_TABS:
-            page = self._buildStructureCard(title, sctCode)
-            self.structureTabs.addTab(page, f"{GLYPH_PENDING}  {title}")
-        self.layout.addWidget(self.structureTabs)
-
+        self.layout.addWidget(self._buildSelectionToolbar())
         self.layout.addWidget(self._buildLoadSegmentationSection())
-
         self.layout.addWidget(self._buildBackendStatusRow())
 
-        # Keep the per-tab glyphs in sync with the canonical-node state.
+        # Keep the table bound to the canonical node across scene changes.
         self.addObserver(
             slicer.mrmlScene, slicer.mrmlScene.NodeAddedEvent, self._onSceneChanged
         )
@@ -338,29 +319,13 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         )
 
         self.layout.addStretch(1)
-        self._refreshTabGlyphs()
+        # Opening Stage 2 mints-or-adopts the canonical node (idempotent) so
+        # the pre-seeded checklist is on screen immediately — the stock
+        # view's "no node selected" empty state never shows (ADR-0034
+        # §Decision 1: the empty state teaches the goal).
+        self.logic.getOrCreateCanonicalSegmentation()
         self._bindSegmentsTable()
         self._refreshBackendStatus()
-
-    def _buildStructureCard(self, title, sctCode):
-        """Build the reusable per-structure card fragment for one tab body.
-
-        Run TotalSegmentator / status / Accept / Reject / Edit-in-Segment-
-        Editor (ADR-0024 §"Per-structure micro-workflows").  The card holds
-        its own scratch node between Run and Accept/Reject.
-        """
-        # Layout authored in ``Resources/UI/StructureCard.ui`` (one reusable
-        # designer file backs all four cards); the controller binds the
-        # loaded widgets (view/controller split, ADR-0029).
-        page = slicer.util.loadUI(self.resourcePath("UI/StructureCard.ui"))
-        view = slicer.util.childWidgetVariables(page)
-        card = _StructureCard(self, title, sctCode, view=view)
-        # The widget owns its card controllers explicitly (previously they
-        # survived only through PythonQt signal references).
-        if not hasattr(self, "_structureCards"):
-            self._structureCards = []
-        self._structureCards.append(card)
-        return page
 
     def _buildSegmentsTable(self):
         """Build the ADR-0034 §Amendments anatomy segments table.
@@ -394,14 +359,217 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         """(Re-)bind the segments table to the canonical node, if one exists.
 
         Pure READ path: binds only when a canonical node is already in the
-        scene, else leaves the view's node None — a refresh must never
-        mint the canonical node (``getOrCreateCanonicalSegmentation`` is a
-        write gesture; ADR-0024 §"Output contract").
+        scene, else leaves the view's node None — a refresh must never mint
+        the canonical node (``getOrCreateCanonicalSegmentation`` is the
+        write gesture ``setup()`` performs once, explicitly; ADR-0024
+        §"Output contract").
         """
         view = getattr(self, "_segmentsTable", None)
         if view is None or self.logic is None:
             return
-        view.setSegmentationNode(self.logic._findCanonicalSegmentation())
+        try:
+            view.setSegmentationNode(self.logic._findCanonicalSegmentation())
+        except ValueError:
+            # PythonQt raises when the Qt view was destroyed with a parent
+            # tree while this Python widget (and its scene observers) is
+            # still alive — e.g. a host shell disposing the composed page.
+            # Drop the stale reference; the observers go with cleanup().
+            self._segmentsTable = None
+
+    def _buildSelectionToolbar(self):
+        """Build the selection-scoped toolbar + the shared status surface.
+
+        ADR-0034 §Amendments: gestures act on the SELECTED table row, not on
+        per-row button walls.  Run lands its result directly on the canonical
+        node (no Accept/Reject machinery — the surgeon's confirm is the
+        native status cell); Mark absent writes the explicit absence
+        attestation; Edit jumps to the Segment Editor (interim until the
+        embedded-editor increment).  One shared status label + busy bar
+        carries run/progress/hint text for all three gestures.
+        """
+        box = qt.QWidget()
+        column = qt.QVBoxLayout(box)
+        column.setContentsMargins(0, 0, 0, 0)
+
+        row = qt.QHBoxLayout()
+        self._runButton = qt.QPushButton("Run TotalSegmentator")
+        self._markAbsentButton = qt.QPushButton("Mark absent")
+        self._editButton = qt.QPushButton("Edit in Segment Editor")
+        row.addWidget(self._runButton)
+        row.addWidget(self._markAbsentButton)
+        row.addWidget(self._editButton)
+        row.addStretch(1)
+        column.addLayout(row)
+
+        self._progressBar = qt.QProgressBar()
+        self._progressBar.setVisible(False)
+        column.addWidget(self._progressBar)
+        self._statusLabel = qt.QLabel("Idle")
+        column.addWidget(self._statusLabel)
+
+        self._runButton.connect("clicked()", self.onRunSelectedStructure)
+        self._markAbsentButton.connect("clicked()", self.onMarkAbsent)
+        self._editButton.connect("clicked()", self.onEditInSegmentEditor)
+        return box
+
+    def _selectedStructure(self):
+        """The selected table row's ``(segment, sctCode)``, or ``None``.
+
+        Resolves the stock view's selection to the canonical segment and the
+        structure-vocabulary SCT code its ``TerminologyEntry`` tag carries.
+        ``None`` when nothing (or more than one row) is selected, or when
+        the selected segment sits outside the vocabulary — callers surface
+        their own hint on the shared status label.
+        """
+        view = getattr(self, "_segmentsTable", None)
+        canonical = view.segmentationNode() if view is not None else None
+        if canonical is None:
+            return None
+        selected = list(view.selectedSegmentIDs())
+        if len(selected) != 1:
+            return None
+        segment = canonical.GetSegmentation().GetSegment(selected[0])
+        if segment is None:
+            return None
+        code = self.logic._expectedCodeForSegment(segment)
+        if code is None:
+            return None
+        return segment, code
+
+    def onRunSelectedStructure(self):
+        """Run the AI backend for the SELECTED row and land it directly.
+
+        The surgeon flow (ADR-0034 §Amendments): select row -> Run -> the row
+        flips to In progress when done.  The run reuses the Stage-1 input
+        contract (``selectInputVolume``), streams backend lines to the shared
+        status label, and — on success — lands the result on the canonical
+        node immediately via :meth:`LiverSegmentationLogic.accept` (the
+        internal landing step; there is no Accept button).
+        """
+        selection = self._selectedStructure()
+        if selection is None:
+            self._statusLabel.setText("Select a structure row in the table first.")
+            return
+        _segment, sctCode = selection
+        volume = self.logic.selectInputVolume()
+        if volume is None:
+            # No portal-venous working volume tagged in Stage 1 -- do NOT run
+            # the backend on None (a silent no-op that reads as success);
+            # surface the missing hand-off instead (ADR-0024 Stage-1/Stage-2
+            # hand-off).
+            self._statusLabel.setText(
+                "Tag a PortalVenous volume in Case Setup (Stage 1) first."
+            )
+            return
+        # Indeterminate busy bar + streamed backend lines: the inference runs
+        # minutes-long OUT of process; the callback keeps the GUI painting.
+        # Paint the busy state BEFORE the blocking call starts -- the first
+        # callback line arrives only after the backend's slow startup, and
+        # without an explicit event-loop flush the surgeon sees no signal at
+        # all ("no signaling that there is processing going on").
+        self._progressBar.setRange(0, 0)
+        self._progressBar.setVisible(True)
+        self._runButton.setEnabled(False)
+        self._statusLabel.setText(
+            "Starting TotalSegmentator — this can take a few minutes…"
+        )
+        # The v1 idiom: a spinning wait cursor for the whole blocking span
+        # (restored in the finally below, symmetric even on failure).
+        qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+        slicer.app.processEvents()
+
+        def _progress(line):
+            self._statusLabel.setText(line[-80:])
+            slicer.app.processEvents()
+
+        wrapper = _totalSegmentatorWrapper()
+        try:
+            scratch = self.logic.segment(
+                volume, sctCode, progressCallback=_progress
+            )
+        except wrapper.TotalSegmentatorNotInstalled:
+            self._statusLabel.setText(
+                "TotalSegmentator is not installed — Run again to install "
+                f"({wrapper.TOTALSEGMENTATOR_DOWNLOAD_SIZE}), or use Edit in "
+                "Segment Editor."
+            )
+            return
+        except Exception as exc:  # noqa: BLE001 — surface any backend failure
+            logging.error("TotalSegmentator run failed: %s", exc)
+            self._statusLabel.setText(f"Segmentation failed: {str(exc)[-160:]}")
+            return
+        finally:
+            qt.QApplication.restoreOverrideCursor()
+            self._progressBar.setVisible(False)
+            self._progressBar.setRange(0, 100)
+            self._runButton.setEnabled(True)
+        if scratch is None:
+            return
+        # Land directly: the result arrives on the canonical row as native
+        # ``InProgress`` ("produced, under review"); the surgeon's confirm is
+        # the table's status-cell click (ADR-0034 §Amendments).
+        self.logic.accept(scratch)
+        self._statusLabel.setText(
+            "Landed for review — confirm via the row's status cell."
+        )
+        # The landed surface model sits outside the default camera framing;
+        # re-centre the 3D views on the new anatomy (GUI-level concern, so it
+        # lives here and not in the logic's accept()).
+        self._reframeThreeDViews()
+
+    def onMarkAbsent(self):
+        """Attest that the SELECTED structure is not present in this case.
+
+        Applies only to a row still reading native ``NotStarted`` (the
+        pre-seeded empty placeholder); a hint otherwise.  Writes the
+        attestation shape ``structureStatus`` / ``isStageComplete`` already
+        understand (ADR-0034 §Amendments): the canonical marked-absent
+        attribute for the audit trail PLUS native ``Completed`` on the empty
+        segment.  Absence is stated, never inferred from a forgotten row
+        (ADR-0034 §Decision 1).
+        """
+        selection = self._selectedStructure()
+        if selection is None:
+            self._statusLabel.setText("Select a structure row in the table first.")
+            return
+        segment, sctCode = selection
+        segmentsLogic = slicer.vtkSlicerSegmentationsModuleLogic
+        if segmentsLogic.GetSegmentStatus(segment) != segmentsLogic.NotStarted:
+            self._statusLabel.setText(
+                "Mark absent applies only to a structure without a result yet."
+            )
+            return
+        canonical = self._segmentsTable.segmentationNode()
+        canonical.SetAttribute(MARKED_ABSENT_ATTRIBUTE_PREFIX + str(sctCode), "1")
+        segmentsLogic.SetSegmentStatus(segment, segmentsLogic.Completed)
+        self._statusLabel.setText(f"{segment.GetName()}: marked absent.")
+
+    def _reframeThreeDViews(self):
+        """Re-centre the 3D views on the new anatomy; a no-op headless.
+
+        Under ``--no-main-window`` there is no layout manager, so the stock
+        helper raises — the re-frame is a pure GUI nicety and must never
+        fail the landing/import path.
+        """
+        try:
+            slicer.util.resetThreeDViews()
+        except AttributeError:
+            logging.debug("3D re-frame skipped: no layout manager (headless).")
+
+    def onEditInSegmentEditor(self):
+        """Open the stock Segment Editor on the canonical node.
+
+        Interim jump-to-module until the embedded ``qMRMLSegmentEditorWidget``
+        increment lands (ADR-0034 §Amendments).  Kumar-Oram effect
+        pre-activation is out of scope here (ADR-0026 / future).
+        """
+        canonical = self.logic.getOrCreateCanonicalSegmentation()
+        slicer.util.selectModule("SegmentEditor")
+        try:
+            editorWidget = slicer.modules.segmenteditor.widgetRepresentation().self()
+            editorWidget.editor.setSegmentationNode(canonical)
+        except Exception as exc:  # noqa: BLE001 — defensive across Slicer versions
+            logging.debug("Could not pre-select canonical node in editor: %s", exc)
 
     def _buildBackendStatusRow(self):
         """Build the Stage-2-local backend-status + Pre-download row.
@@ -493,13 +661,12 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         if not assignments:
             return
         self.logic.importSegmentationAsCanonical(node, assignments)
-        self._refreshTabGlyphs()
         # The import promotes an EXISTING node (no NodeAdded/Removed event
         # reaches _onSceneChanged), so re-bind the table explicitly.
         self._bindSegmentsTable()
-        # Same re-centre as the card's Accept: the imported anatomy's
+        # Same re-centre as the toolbar Run's landing: the imported anatomy's
         # surface model lands outside the default camera framing.
-        slicer.util.resetThreeDViews()
+        self._reframeThreeDViews()
 
     def onPreDownload(self):
         """Pre-download the AI backend without minting a node.
@@ -517,175 +684,15 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         if self._backendStatusLabel is None:
             return
         installed = _totalSegmentatorWrapper()._backend_importable()
-        glyph = GLYPH_COMPLETE if installed else "✗"
+        glyph = "✓" if installed else "✗"
         state = "installed" if installed else "not installed"
         self._backendStatusLabel.setText(f"AI backend (TotalSegmentator): {glyph} {state}")
 
     def _onSceneChanged(self, caller=None, event=None):
-        self._refreshTabGlyphs()
         self._bindSegmentsTable()
-
-    def _refreshTabGlyphs(self):
-        """Repaint each tab label's confirmation glyph from the canonical node.
-
-        ○ before that structure's Accept, ✓ after — driven by
-        ``LiverSegmentationLogic.isStructureAccepted`` (canonical-only read).
-        PythonQt: ``QTabWidget.count`` is a property, not a callable.
-        """
-        if self.structureTabs is None or self.logic is None:
-            return
-        for index in range(self.structureTabs.count):
-            title, sctCode = STRUCTURE_TABS[index]
-            glyph = (
-                GLYPH_COMPLETE
-                if self.logic.isStructureAccepted(sctCode)
-                else GLYPH_PENDING
-            )
-            self.structureTabs.setTabText(index, f"{glyph}  {title}")
 
     def cleanup(self):
         self.removeObservers()
-
-
-class _StructureCard:
-    """Per-structure card controller: Run -> scratch -> Accept / Reject / Edit.
-
-    One instance backs one tab body (ADR-0024 §"Per-structure
-    micro-workflows").  Holds the card's pending scratch node between Run and
-    Accept/Reject; delegates all node lifecycle to the orchestrator.
-    """
-
-    def __init__(self, widget, title, sctCode, view=None):
-        self._widget = widget
-        self._sctCode = sctCode
-        self._scratch = None
-
-        if view is not None:
-            # VIEW/CONTROLLER split (ADR-0029): the widgets come from the
-            # designer-authored ``Resources/UI/StructureCard.ui`` as a
-            # ``childWidgetVariables`` namespace -- BIND them, do not build.
-            self.runButton = view.RunButton
-            self.statusLabel = view.StatusLabel
-            self.progressBar = view.ProgressBar
-            self.acceptButton = view.AcceptButton
-            self.rejectButton = view.RejectButton
-            self.editButton = view.EditButton
-            self.runButton.setText(f"Run TotalSegmentator ({title})")
-            self.statusLabel.setText("Idle")
-        else:
-            # Programmatic fallback -- the GL-free unit path (and any host
-            # without resourcePath) constructs the same six widgets.
-            self.runButton = qt.QPushButton(f"Run TotalSegmentator ({title})")
-            self.statusLabel = qt.QLabel("Idle")
-            self.progressBar = qt.QProgressBar()
-            self.acceptButton = qt.QPushButton("Accept")
-            self.rejectButton = qt.QPushButton("Reject")
-            self.editButton = qt.QPushButton("Edit in Segment Editor")
-
-        self.progressBar.setVisible(False)
-        self.acceptButton.setEnabled(False)
-        self.rejectButton.setEnabled(False)
-
-        self.runButton.connect("clicked()", self.onRun)
-        self.acceptButton.connect("clicked()", self.onAccept)
-        self.rejectButton.connect("clicked()", self.onReject)
-        self.editButton.connect("clicked()", self.onEdit)
-
-    def onRun(self):
-        volume = self._widget.logic.selectInputVolume()
-        if volume is None:
-            # No portal-venous working volume tagged in Stage 1 -- do NOT run the
-            # backend on None (a silent no-op that reads as success); surface the
-            # missing hand-off instead (ADR-0024 Stage-1/Stage-2 hand-off).
-            self.statusLabel.setText(
-                "Tag a PortalVenous volume in Case Setup (Stage 1) first."
-            )
-            self.acceptButton.setEnabled(False)
-            self.rejectButton.setEnabled(False)
-            return
-        # Indeterminate busy bar + streamed backend lines: the inference runs
-        # minutes-long OUT of process; the callback keeps the GUI painting.
-        # Paint the busy state BEFORE the blocking call starts -- the first
-        # callback line arrives only after the backend's slow startup, and
-        # without an explicit event-loop flush the surgeon sees no signal at
-        # all ("no signaling that there is processing going on").
-        self.progressBar.setRange(0, 0)
-        self.progressBar.setVisible(True)
-        self.runButton.setEnabled(False)
-        self.statusLabel.setText(
-            "Starting TotalSegmentator — this can take a few minutes…"
-        )
-        # The v1 idiom: a spinning wait cursor for the whole blocking span
-        # (restored in the finally below, symmetric even on failure).
-        qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
-        slicer.app.processEvents()
-
-        def _progress(line):
-            self.statusLabel.setText(line[-80:])
-            slicer.app.processEvents()
-
-        wrapper = _totalSegmentatorWrapper()
-        try:
-            self._scratch = self._widget.logic.segment(
-                volume, self._sctCode, progressCallback=_progress
-            )
-        except wrapper.TotalSegmentatorNotInstalled:
-            self.statusLabel.setText(
-                "TotalSegmentator is not installed — Run again to install "
-                f"({wrapper.TOTALSEGMENTATOR_DOWNLOAD_SIZE}), or use Edit in "
-                "Segment Editor."
-            )
-            return
-        except Exception as exc:  # noqa: BLE001 — surface any backend failure
-            logging.error("TotalSegmentator run failed: %s", exc)
-            self.statusLabel.setText(f"Segmentation failed: {str(exc)[-160:]}")
-            return
-        finally:
-            qt.QApplication.restoreOverrideCursor()
-            self.progressBar.setVisible(False)
-            self.progressBar.setRange(0, 100)
-            self.runButton.setEnabled(True)
-        self.statusLabel.setText("Review the result, then Accept or Reject.")
-        self.acceptButton.setEnabled(True)
-        self.rejectButton.setEnabled(True)
-
-    def onAccept(self):
-        if self._scratch is None:
-            return
-        self._widget.logic.accept(self._scratch)
-        self._scratch = None
-        self.acceptButton.setEnabled(False)
-        self.rejectButton.setEnabled(False)
-        self.statusLabel.setText("Accepted.")
-        self._widget._refreshTabGlyphs()
-        # The accepted surface model lands outside the default camera
-        # framing; re-centre the 3D views on the new anatomy (GUI-level
-        # concern, so it lives here and not in the logic's accept()).
-        slicer.util.resetThreeDViews()
-
-    def onReject(self):
-        if self._scratch is None:
-            return
-        self._widget.logic.reject(self._scratch)
-        self._scratch = None
-        self.acceptButton.setEnabled(False)
-        self.rejectButton.setEnabled(False)
-        self.statusLabel.setText("Discarded.")
-
-    def onEdit(self):
-        """Open the stock Segment Editor on the canonical node.
-
-        Stock Segment Editor on the single canonical segmentation (ADR-0024).
-        Kumar-Oram effect pre-activation is out of scope here (ADR-0026 /
-        future).
-        """
-        canonical = self._widget.logic.getOrCreateCanonicalSegmentation()
-        slicer.util.selectModule("SegmentEditor")
-        try:
-            editorWidget = slicer.modules.segmenteditor.widgetRepresentation().self()
-            editorWidget.editor.setSegmentationNode(canonical)
-        except Exception as exc:  # noqa: BLE001 — defensive across Slicer versions
-            logging.debug("Could not pre-select canonical node in editor: %s", exc)
 
 
 class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
@@ -730,14 +737,14 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
     def isStructureAccepted(self, sctCode) -> bool:
         """Return True iff the CANONICAL node holds a LANDED ``sctCode`` segment.
 
-        Drives the per-tab confirmation glyph (○ -> ✓) in the surgeon UI.
+        Logic predicate (its retired consumer was the tab-glyph UI).
         "Landed" reads through the native status (ADR-0034 §Amendments):
         the segment exists AND its status has moved past ``NotStarted`` —
         a pre-seeded empty placeholder (``ensureExpectedStructures``) is
         expected, not accepted.  Canonical-only read (mirroring
         :meth:`_findCanonicalSegmentation`): a scratch node tagged for the
-        structure is pending, not accepted, so the tab stays ○ until that
-        structure's Accept (ADR-0024 §"Output contract" + §Terminology).
+        structure is pending, not landed (ADR-0024 §"Output contract" +
+        §Terminology).
         """
         canonical = self._findCanonicalSegmentation()
         segment = _findSctSegment(canonical, sctCode)
@@ -930,8 +937,10 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
     def accept(self, scratch):
         """Merge a scratch node's segments into the canonical node.
 
-        The surgeon-approved promotion (ADR-0024 §Terminology "commit /
-        Accept") under the ADR-0034 §Amendments landing contract: an
+        The INTERNAL landing step the toolbar Run drives immediately after
+        ``segment()`` returns (ADR-0034 §Amendments: no Accept button; the
+        review boundary is the native per-segment status), under the
+        ADR-0034 §Amendments landing contract: an
         incoming segment whose SCT code matches a pre-seeded EMPTY
         (``NotStarted``) expected segment REPLACES that placeholder in
         place — same row position, re-applied SCT tag / vocabulary name /
@@ -1058,7 +1067,7 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
         return None
 
     def _structureTitle(self, sctCode):
-        """The structure-vocabulary row title for an SCT code (the tab set)."""
+        """The structure-vocabulary row title for an SCT code."""
         for title, code in STRUCTURE_TABS:
             if str(code) == str(sctCode):
                 return title
@@ -1091,24 +1100,13 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
                         display.SetSegmentOpacity3D(segmentId, defaults["opacity3d"])
                     break
 
-    def reject(self, scratch):
-        """Discard a scratch node without touching the canonical node.
-
-        The symmetric counterpart of :meth:`accept` (ADR-0024 §Terminology:
-        scratch is discardable pending output).  Removing the scratch node
-        leaves the canonical node — and its segments — exactly as they were.
-        """
-        if scratch is None or not scratch.IsA("vtkMRMLSegmentationNode"):
-            raise ValueError("reject() requires a scratch vtkMRMLSegmentationNode")
-        if scratch.GetAttribute(ROLE_ATTRIBUTE) != ROLE_SCRATCH:
-            raise ValueError("reject() target is not a scratch-role segmentation")
-        slicer.mrmlScene.RemoveNode(scratch)
-
     #
-    # Per-structure Run (ADR-0024 §"Per-structure micro-workflows").  A card's
-    # Run drives the AI backend on the Stage-1 input volume and lands its
-    # output in a single scratch node; Run never touches the canonical node
-    # (that path is Accept-only, rejecting Alternative D auto-commit).
+    # Per-structure Run (ADR-0024 §"Per-structure micro-workflows").  The
+    # toolbar's Run drives the AI backend on the Stage-1 input volume and
+    # lands its output in a single internal scratch node; the widget then
+    # lands that on the canonical node via accept() in the same gesture
+    # (ADR-0034 §Amendments: the review boundary is the native per-segment
+    # status, not a node-level Accept — and Reject is removed entirely).
     #
 
     def selectInputVolume(self):
@@ -1125,15 +1123,16 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
     def segment(self, volume, sctTarget, progressCallback=None):
         """Run the AI backend for one structure, landing output in scratch.
 
-        The orchestrator-owned entry point a card's Run drives.  All
+        The orchestrator-owned entry point the toolbar's Run drives.  All
         TotalSegmentator invocation funnels through the single
         :meth:`_runTotalSegmentator` seam so CI can stub it (a real inference
         needs a multi-GB model + GPU).  ``progressCallback`` receives the
-        backend's output lines (the card's status surface).  Returns the
+        backend's output lines (the toolbar's status surface).  Returns the
         scratch ``vtkMRMLSegmentationNode`` holding the structure's pending
-        output (ADR-0024 §"Output contract"); raises the wrapper's
+        output (ADR-0024 §"Output contract") — the widget lands it via
+        :meth:`accept` in the same gesture; raises the wrapper's
         ``TotalSegmentatorNotInstalled`` when the backend is unavailable so
-        the card can route the surgeon to the manual path.
+        the widget can route the surgeon to the manual path.
         """
         return self._runTotalSegmentator(
             volume, sctTarget, progressCallback=progressCallback
@@ -1145,8 +1144,8 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
         Kept import-pure: the TotalSegmentator backend is reached only through
         the lazy-install wrapper's call path (ADR-0024 §"Lazy install"), never
         imported at module-import time.  CI stubs this method (or the
-        wrapper's ``runInference``) to exercise the Run/Accept/Reject
-        bookkeeping without an inference.
+        wrapper's ``runInference``) to exercise the Run/landing bookkeeping
+        without an inference.
 
         The real wiring: export the input volume to a temp NIfTI, run the
         backend OUT OF PROCESS (GUI stays alive; progress streams to the
@@ -1202,7 +1201,7 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
             shutil.rmtree(workdir, ignore_errors=True)
 
     def _structureMeaning(self, sctTarget):
-        """Human meaning for a structure-card SCT code (the tab vocabulary)."""
+        """Human meaning for a structure-vocabulary SCT code."""
         meanings = {
             SCT_LIVER_CODE: "Liver",
             SCT_PORTAL_VEIN_CODE: "Portal vein",

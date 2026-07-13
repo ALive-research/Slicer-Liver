@@ -11,10 +11,10 @@ Hepatic vein 8993003; Mass 4147007).  Accept is a pure merge that:
   * keeps the canonical-node count at exactly ONE (rejecting Alternative B
     per-target nodes);
   * lands segment(s) carrying the correct SCT triple for the structure the
-    card represents — the SCT tags come from the LabelToSCT.json bridge at
+    row represents — the SCT tags come from the LabelToSCT.json bridge at
     Run (ADR-0011); the orchestrator's tag loop applies them.
 
-**Multi-focal tumors (decided):** Accept on the Tumors card lands **N
+**Multi-focal tumors (decided):** landing the Tumors result yields **N
 separate SCT-`Mass` segments** in the one canonical node (per-lesion
 identity), NOT a single merged tumor segment.  ADR-0024 §"Per-structure
 micro-workflows" Tumors row: "Multi-focal supported (N tumors per case)".
@@ -139,7 +139,7 @@ def test_tumors_accept_lands_n_separate_mass_segments():
 
     Decided multi-focal behaviour (ADR-0024 §"Per-structure micro-workflows"
     Tumors row, "Multi-focal supported (N tumors per case)"): Accept on the
-    Tumors card preserves per-lesion identity by landing N separate
+    Tumors landing preserves per-lesion identity by landing N separate
     SCT-``Mass`` (4147007) segments in the one canonical node — the SCT-tag
     loop tags each tumor sub-label individually rather than merging them.
 
@@ -173,7 +173,7 @@ def test_tumors_accept_lands_n_separate_mass_segments():
         "multi-focal Accept must still keep one canonical node."
     )
     assert _canonical_segments_with_sct(slicer, SCT_MASS_CODE) == n_lesions, (
-        f"Accept on the Tumors card must land {n_lesions} SEPARATE SCT-Mass "
+        f"landing the Tumors result must yield {n_lesions} SEPARATE SCT-Mass "
         f"({SCT_MASS_CODE}) segments (per-lesion identity), NOT a single "
         "merged tumor segment (ADR-0024 §'Per-structure micro-workflows', "
         "multi-focal decided behaviour)."

@@ -203,9 +203,9 @@ def _no_slicer_module_leak():
 # ``Clear(0)`` at the START of the test, which leaves the LAST test's nodes —
 # and every node a test forgot to account for — alive at shutdown.  The
 # widget-needing tests additionally construct a ``LiverSegmentationWidget``
-# (a ``QTabWidget`` of four ``_StructureCard`` fragments); the module's
-# ``cleanup()`` only drops VTK observers, never the Qt widget tree, so the
-# whole sub-tree survives to shutdown too.
+# (the anatomy segments table + selection toolbar, ADR-0034 §Amendments);
+# the module's ``cleanup()`` only drops VTK observers, never the Qt widget
+# tree, so the whole sub-tree survives to shutdown too.
 #
 # The two fixtures below restore the same end-of-test hygiene Slicer's own
 # launched tests practise:

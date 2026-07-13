@@ -44,20 +44,23 @@
 # this module's source dir + Testing/Python root are added to that row's
 # --additional-module-paths and test roots.
 #
-#   * test_liversegmentation_card_run_produces_scratch.py
-#     Card Run (mocked backend) -> exactly one scratch node; no premature
-#     canonical.  Scene-needing.
+#   * test_liversegmentation_toolbar_run_lands_directly.py
+#     Selection-scoped toolbar Run (mocked backend) lands the SELECTED
+#     row's result directly on the canonical node (native InProgress +
+#     source tag; no surviving scratch); no-selection / no-PortalVenous
+#     runs are refused with hints; a failed run leaves the canonical
+#     untouched (the invariant the retired Reject suite carried).
+#     Scene + widget-needing.
 #
 #   * test_liversegmentation_accept_sct_and_multifocal.py
-#     Accept -> single canonical node carrying the correct SCT triple per
-#     structure; Tumors lands N separate Mass segments.  Scene-needing.
-#
-#   * test_liversegmentation_reject_discards_scratch.py
-#     Reject -> scratch removed; canonical unchanged.  Scene-needing.
+#     The landing step -> single canonical node carrying the correct SCT
+#     triple per structure; Tumors lands N separate Mass segments.
+#     Scene-needing.
 #
 #   * test_liversegmentation_structure_accepted_glyph.py
-#     isStructureAccepted(sct) (canonical-only read) + per-tab ✓/○ glyph
-#     mirroring the Liver-shell idiom.  Scene + widget-needing.
+#     isStructureAccepted(sct) (canonical-only read) logic pins; its
+#     tab-glyph consumer retired with the tabs (ADR-0034 §Amendments).
+#     Scene-needing.
 #
 #   * test_liversegmentation_backend_status_row.py
 #     Stage-2-local backend-status row reflects ensureBackendInstalled;
@@ -106,16 +109,17 @@ set(_liverseg_pytest_files
   test_liversegmentation_conformance.py
   # Stage-2 surgeon-UI invariants (mocked backend; scene/widget tests run
   # green under the launched-Slicer `pytest_launched` row, skip cleanly bare).
-  test_liversegmentation_card_run_produces_scratch.py
+  test_liversegmentation_toolbar_run_lands_directly.py
   test_liversegmentation_accept_sct_and_multifocal.py
-  test_liversegmentation_reject_discards_scratch.py
   test_liversegmentation_structure_accepted_glyph.py
   test_liversegmentation_backend_status_row.py
   test_liversegmentation_segment_input_selection.py
-  # ADR-0034 increment 1 -- the read-only anatomy segments table:
-  # pre-seeded Missing rows + row-status derivation (Missing / Review /
-  # Confirmed / Marked-absent) from the canonical node.  Widget-needing
-  # (launched `pytest_launched` row); skips cleanly bare.
+  # ADR-0034 §Amendments -- the anatomy segments table on Slicer-native
+  # primitives: setup mints-and-binds the canonical with its pre-seeded
+  # checklist; row-status derivation (Missing / Review / Confirmed /
+  # Flagged / Marked-absent) from the native per-segment status; the
+  # Mark-absent attestation gesture.  Widget-needing (launched
+  # `pytest_launched` row); skips cleanly bare.
   test_liversegmentation_segments_table.py
   # SLICE C -- Stage 2 produces the canonical, per-structure-SCT-tagged
   # segmentation by LOADING one (in-app AI deferred to v2.1); pins the
