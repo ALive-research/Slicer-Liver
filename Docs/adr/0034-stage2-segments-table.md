@@ -6,6 +6,71 @@
 - **Diagrams:** table mock inline (§1); no separate diagram file yet
 - **PR:** _filled in on merge_
 
+## Amendments
+
+- **2026-07-13 — the table and the review contract move onto
+  Slicer-native primitives.**  Maintainer direction after the first
+  read-only-table increment: *"get closer to how Slicer handles
+  segmentations"* — no bespoke Edit/Approve button walls, and Reject
+  has no practical meaning.  A survey of the Slicer source and the
+  ecosystem (TotalSegmentator, MONAILabel, CaseIterator,
+  SegmentationVerification, SegmentationReview) established:
+
+  1. **Alternative B was rejected on a false premise.**  It claimed
+     `qMRMLSegmentsTableView` "cannot host the … Status … column".
+     In fact core Slicer ships a **native per-segment status**
+     (`vtkSegment` tag `Segmentation.Status`, enum
+     `vtkSlicerSegmentationsModuleLogic::{NotStarted, InProgress,
+     Completed, Flagged}`) surfaced in the stock table as a status
+     column with icons, **single-click-to-cycle**, per-status filter
+     buttons, and context-menu actions; the Segment Editor auto-flips
+     `NotStarted → InProgress` on first edit.  Alternative B is
+     therefore **un-rejected** and becomes the committed shape.
+  2. **Decision 1 (amended):** the panel is a configured
+     `qMRMLSegmentsTableView` (status column on, layer column off,
+     terminology selector on) over the canonical node.  The
+     pre-seeded checklist is realised as **real empty segments** —
+     `AddEmptySegment` + `vtkSegment::SetTerminology` (SNOMED entry)
+     + name + the structure visual defaults, left `NotStarted` — the
+     documented core pattern for structured segmentation jobs.  Rows
+     ARE segments; no parallel bookkeeping.  The bespoke status
+     glyph vocabulary and the custom `QTableWidget` are retired.
+     The Source column is dropped from the table (no stock slot);
+     provenance lives in a per-segment source tag surfaced via
+     tooltip and the queue's status line.
+  3. **Decision 2 (amended):** the review contract is the native
+     status.  A backend run / import lands segments as `InProgress`
+     ("produced, under review"); the surgeon's confirm is the native
+     status-cell click to `Completed`; `Flagged` defers to a senior
+     reviewer.  The per-segment confirm tag
+     (`LiverSegmentation.Confirmed`) is retired before ever having a
+     writer.  Stage completion: every expected segment `Completed`
+     (an empty `Completed` segment with the marked-absent attribute
+     is the explicit absence attestation — the attribute stays for
+     the audit trail).  Downstream stages filter on SCT tag +
+     `Completed`.  The demote-on-rerun staleness rule writes
+     `InProgress`; demote-on-edit rides the core auto-flip where it
+     applies and the queue's re-run path otherwise.
+  4. **Edit** is an embedded `qMRMLSegmentEditorWidget` (own
+     non-singleton `vtkMRMLSegmentEditorNode`, curated effect list,
+     node selectors hidden) in a collapsible section under the table
+     — the MONAILabel/SegmentationReview idiom — replacing the
+     jump-to-module ✎ buttons.  **Reject is removed entirely**: no
+     surveyed tool has one; delete/re-run and `Flagged` cover its
+     uses.
+  5. Decisions 3–5 (tool registry, macro/micro gestures, QProcess
+     queue) and Decision 6 (validate-and-next seam) stand, with the
+     gesture surface now a **selection-scoped toolbar** (Run ▾ over
+     the selected structure's chains, Segment anatomy, Mark absent)
+     instead of per-row action buttons — per-row button walls appear
+     nowhere in the ecosystem.  Transient Running/Interactive states
+     surface on the toolbar/queue line, not in the segment status
+     vocabulary.
+
+  §Conformance items referring to the confirm tag and the bespoke
+  vocabulary read through this amendment (Completed replaces the
+  confirm tag; `InProgress` replaces `● Review`).
+
 ## Context
 
 The 2026-07-09 end-to-end stabilization walkthrough (the maintainer
