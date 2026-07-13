@@ -32,7 +32,7 @@ Contract:
     RUNNING key delegates to ``cancelCurrent()``, a QUEUED key is
     DEQUEUED (never having spawned a child) and completes through
     ``onJobFinished`` with ``success=False`` so the caller's bookkeeping
-    (status restore, progress-row retirement) runs the same path either
+    (progress-row retirement) runs the same path either
     way; ``shutdown()`` cancels the current job AND clears the pending
     queue — wired into the widget's teardown so no child outlives the
     module.
@@ -84,7 +84,14 @@ def buildTotalSegmentatorJobCommand(task, inputVolumeID, structures, workdir, ou
     volume = slicer.mrmlScene.GetNodeByID(str(inputVolumeID))
     if volume is None:
         raise RuntimeError(f"input volume {inputVolumeID!r} is no longer in the scene")
-    input_path = os.path.join(workdir, "input.nii.gz")
+    # UNCOMPRESSED NIfTI, deliberately: this export runs synchronously on
+    # the main thread inside the Run gesture (the builder is called from
+    # ``enqueue`` -> ``_startNext``), and gzip is the entire cost of a
+    # ``.nii.gz`` export — seconds of frozen GUI on a routine CT, against
+    # a near-instant buffered write for the raw ``.nii``.  The file is
+    # job-private scratch the backend reads once and the finish path
+    # deletes, so compression buys nothing here.
+    input_path = os.path.join(workdir, "input.nii")
     if not slicer.util.saveNode(volume, input_path):
         raise RuntimeError("could not export the input volume for inference")
     command = wrapper.buildCommandForStructures(
@@ -208,8 +215,9 @@ class SegmentationJobQueue:
         child; the queue advances).  A QUEUED key is DEQUEUED — no child
         was ever spawned — and reported through ``onJobFinished`` with
         ``success=False`` and no output directory, the same completion
-        shape a failed start uses, so the caller restores its per-job
-        bookkeeping through one path.  An unknown key is a no-op.
+        shape a failed start uses, so the caller runs its per-job
+        bookkeeping (progress-row retirement) through one path.  An
+        unknown key is a no-op.
         """
         if self._current is not None and self._current.key == key:
             self.cancelCurrent()

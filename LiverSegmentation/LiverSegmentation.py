@@ -216,10 +216,10 @@ def _segmentIsEmpty(segment):
     """True when a segment carries no voxel data (a checklist placeholder).
 
     A pre-seeded ``AddEmptySegment`` row holds an empty binary-labelmap
-    representation; the async run path flips such placeholders to native
-    ``InProgress`` at ENQUEUE (ADR-0034 §Decision 5 staleness rule), so the
-    landing contract can no longer key on ``NotStarted`` alone — emptiness
-    is what makes a row a replaceable placeholder.
+    representation.  The landing contract keys on emptiness (plus missing
+    provenance), never on status: the status column is the surgeon's
+    channel — an EMPTY ``Completed`` row is the absence attestation — so
+    status cannot mark a row as a replaceable placeholder.
     """
     if segment is None:
         return True
@@ -334,9 +334,9 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         self._loadSegCombo = None
         self._loadSegTable = None
         # Async run path (ADR-0034 §Decision 5): the QProcess job queue plus
-        # the widget's per-job bookkeeping — pre-enqueue statuses (restored
-        # when a job ends without landing a structure) and one progress row
-        # per queued/running job.  Built in setup().
+        # the widget's per-job bookkeeping — the structure codes each job
+        # covers (fanned into per-structure progress rows) and one progress
+        # box per queued/running job.  Built in setup().
         self._jobQueue = None
         self._pendingJobs = {}
         self._jobRows = {}
@@ -574,13 +574,15 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     def onRunSelectedStructures(self):
         """Enqueue the AI backend for EVERY selected row (async, ADR-0034 §5).
 
-        The surgeon flow (ADR-0034 §Amendments): select rows -> Run -> each
-        targeted row flips to native ``InProgress`` immediately (running a
-        structure IS editing it — the staleness rule also demotes a re-run
-        ``Completed`` row), the job queue runs the minimal set of backend
-        children (structures sharing a task coalesce), and the finish
-        callback lands the results on the canonical node.  The GUI stays
-        responsive throughout — no blocking loop, no ``processEvents``.
+        The surgeon flow (ADR-0034 §Amendments): select rows -> Run -> the
+        job queue runs the minimal set of backend children (structures
+        sharing a task coalesce) and the finish callback lands the results
+        on the canonical node.  Segment statuses are NOT touched at enqueue
+        — jobs can abort, and the queued/running state is visible through
+        the per-job progress rows; the native ``InProgress`` flip (and the
+        staleness demote of a re-run ``Completed`` row) happens at LANDING,
+        when produced output actually exists.  The GUI stays responsive
+        throughout — no blocking loop, no ``processEvents``.
         """
         selections = self._selectedStructures()
         if not selections:
@@ -607,22 +609,21 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         self._enqueueStructures([code for _segment, code in selections], volume)
 
     def _enqueueStructures(self, sctCodes, volume):
-        """Group by backend task, flip the rows, and enqueue (ADR-0034 §4/§5).
+        """Group by backend task and enqueue (ADR-0034 §4/§5).
 
         Grouping happens HERE (one enqueue per task with the full structure
         set) so a single gesture's structures share one child from the
         start; the queue's key-level coalescing then absorbs repeat gestures
-        on an already-queued/running task.  At enqueue every targeted
-        segment flips to native ``InProgress`` immediately — running a
-        structure is editing it, and a re-run of a ``Completed`` row demotes
-        the same way (the staleness rule).  The pre-enqueue status is
-        recorded so a job that ends WITHOUT landing a structure restores it.
+        on an already-queued/running task.  Segment statuses are NOT
+        written at enqueue: jobs can be cancelled or fail, and nothing was
+        produced yet — the running state is the per-job progress rows'
+        to show, and the native ``InProgress`` flip happens at LANDING
+        (``_landSegment``).  The covered codes are recorded per job so the
+        progress rows fan out one bar per structure.
         """
         from LiverSegmentationLib.SegmentationJobQueue import jobKey
 
         wrapper = _totalSegmentatorWrapper()
-        canonical = self.logic.getOrCreateCanonicalSegmentation()
-        segmentsLogic = slicer.vtkSlicerSegmentationsModuleLogic
         byTask = {}
         for code in sctCodes:
             spec = wrapper.INFERENCE_TARGETS.get(str(code))
@@ -635,14 +636,9 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         names = []
         for task, taskCodes in byTask.items():
             key = jobKey(task, volume.GetID())
-            pending = self._pendingJobs.setdefault(key, {})
+            covered = self._pendingJobs.setdefault(key, set())
             for code in taskCodes:
-                segment = _findSctSegment(canonical, code)
-                if segment is None:
-                    continue
-                if code not in pending:
-                    pending[code] = segmentsLogic.GetSegmentStatus(segment)
-                segmentsLogic.SetSegmentStatus(segment, segmentsLogic.InProgress)
+                covered.add(code)
                 names.append(self.logic._structureTitle(code))
             self._jobQueue.enqueue(task, volume.GetID(), taskCodes)
             # Busy surface: one progress row PER STRUCTURE the job covers
@@ -673,7 +669,7 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         slot is stored for the connection's lifetime (the PythonQt discipline
         the queue encodes).
         """
-        codes = list(self._pendingJobs.get(key, {}))
+        codes = list(self._pendingJobs.get(key, set()))
         job = self._jobRows.get(key)
         if job is None:
             box = qt.QWidget()
@@ -755,8 +751,10 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         The rows fanned from one job all carry the SAME key, so any of their
         ✕ buttons cancels the shared underlying job.  Both routes complete
         through the queue's finish path with ``success=False``, so
-        ``_onJobFinished`` restores the targeted rows' pre-enqueue statuses and
-        retires the job's rows together.
+        ``_onJobFinished`` retires the job's rows together.  Segment
+        statuses are left untouched — nothing was written at enqueue and
+        nothing was produced (ADR-0034 §Amendments: the status column is
+        the surgeon's channel, not the queue's).
         """
         if self._jobQueue is not None:
             self._jobQueue.cancelJob(key)
@@ -804,9 +802,10 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         review"); NOTHING ever auto-writes ``Completed``, the surgeon always
         confirms via the status cell (ADR-0034 §Amendments).  Structures the
         job did NOT land (failure, cancel, or a label file the backend never
-        produced) fall back to their recorded pre-enqueue status.
+        produced) keep whatever status they had — enqueue wrote nothing, so
+        an aborted job has nothing to undo.
         """
-        pending = self._pendingJobs.pop(key, {})
+        self._pendingJobs.pop(key, None)
         landedCodes = set()
         if success and outputDir:
             scratch = None
@@ -826,7 +825,6 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
                 # The landed surface model sits outside the default camera
                 # framing; re-centre the 3D views (GUI-level concern).
                 self._reframeThreeDViews()
-        self._restoreUnlandedStatuses(pending, landedCodes)
         self._removeJobRow(key)
         if landedCodes:
             self._statusLabel.setText(
@@ -841,28 +839,6 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
                 sorted(self.logic._structureTitle(c) for c in structures)
             )
             self._statusLabel.setText(f"Segmentation failed: {names} — see the log.")
-
-    def _restoreUnlandedStatuses(self, pending, landedCodes):
-        """Fall structures a job never landed back to their pre-enqueue status.
-
-        The enqueue-time ``InProgress`` flip is a promise of produced output;
-        when the job ends without delivering a structure, the row must not
-        keep reading "under review" over unchanged (or absent) data.  Only a
-        row still ``InProgress`` is restored — a status the surgeon set in
-        the meantime wins.
-        """
-        canonical = self.logic._findCanonicalSegmentation()
-        if canonical is None:
-            return
-        segmentsLogic = slicer.vtkSlicerSegmentationsModuleLogic
-        for code, previousStatus in pending.items():
-            if code in landedCodes:
-                continue
-            segment = _findSctSegment(canonical, code)
-            if segment is None:
-                continue
-            if segmentsLogic.GetSegmentStatus(segment) == segmentsLogic.InProgress:
-                segmentsLogic.SetSegmentStatus(segment, previousStatus)
 
     def _reframeThreeDViews(self):
         """Re-centre the 3D views on the new anatomy; a no-op headless.
@@ -1314,13 +1290,18 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
         merge loop: when the incoming segment's SCT code matches a
         pre-seeded EMPTY expected segment (no voxel data and no provenance
         source tag — emptiness, not status, marks the replaceable
-        placeholder: the async run path flips targeted rows to
-        ``InProgress`` at enqueue, ADR-0034 §Decision 5), the placeholder
-        is removed, the incoming segment copied in, and the placeholder's
-        row position restored via the ``vtkSegmentation`` reorder API (the
-        same ``GetSegmentIndex``/``SetSegmentIndex`` pair the stock table's
-        move up/down uses).  Returns the landed segment id, or ``None``
-        when the copy failed.
+        placeholder: the status column is the surgeon's channel), the
+        placeholder is removed, the incoming segment copied in, and the
+        placeholder's row position restored via the ``vtkSegmentation``
+        reorder API (the same ``GetSegmentIndex``/``SetSegmentIndex`` pair
+        the stock table's move up/down uses).  Returns the landed segment
+        id, or ``None`` when the copy failed.
+
+        Staleness rides the LANDING (ADR-0034 §Decision 2, as amended):
+        enqueue/cancel never touch statuses, so a re-run of a confirmed
+        structure demotes its previously landed same-code ``Completed``
+        row(s) back to native ``InProgress`` here — at the moment new
+        produced output for the structure actually arrives.
 
         The landed identity — native ``InProgress`` status, the source tag
         (kept when the segment already carries provenance from where it was
@@ -1340,6 +1321,19 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
 
         placeholderIndex = -1
         if code is not None:
+            # The staleness demote (see docstring): new output for this
+            # structure makes a previously confirmed same-code row stale.
+            for siblingId in list(canonicalSegmentation.GetSegmentIDs()):
+                sibling = canonicalSegmentation.GetSegment(siblingId)
+                if self._expectedCodeForSegment(sibling) != code:
+                    continue
+                if (
+                    segmentsLogic.GetSegmentStatus(sibling)
+                    == segmentsLogic.Completed
+                ):
+                    segmentsLogic.SetSegmentStatus(
+                        sibling, segmentsLogic.InProgress
+                    )
             placeholderId = _findSctSegmentId(canonicalNode, code)
             placeholder = (
                 canonicalSegmentation.GetSegment(placeholderId)
