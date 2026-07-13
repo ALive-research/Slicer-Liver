@@ -15,8 +15,10 @@
 #     qSlicerApplication); skips cleanly under bare PythonSlicer.
 #
 #   * test_liversegmentation_isstagecomplete_semantics.py (invariant 2)
-#     Soft Stage-2-done semantics: empty -> False; canonical + >=1 SCT
-#     segment -> True; scratch-only -> False.  Scene-needing.
+#     Stage-2-done semantics (ADR-0034 §Amendments): empty -> False;
+#     pre-seeded NotStarted checklist -> False; every structure Completed
+#     (incl. the marked-absent empty Completed attestation) -> True;
+#     scratch-only -> False.  Scene-needing.
 #
 #   * test_liversegmentation_single_canonical_node.py     (invariant 3)
 #     Exactly ONE canonical vtkMRMLSegmentationNode; Accept merges scratch

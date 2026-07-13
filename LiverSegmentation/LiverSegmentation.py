@@ -82,29 +82,34 @@ STRUCTURE_VISUAL_DEFAULTS = {
 }
 
 # --------------------------------------------------------------------------- #
-# ADR-0034 — the anatomy segments table's review contract + status vocabulary.
+# ADR-0034 §Amendments — the review contract rides the NATIVE per-segment
+# status (``vtkSlicerSegmentationsModuleLogic`` ``Segmentation.Status`` tag:
+# NotStarted / InProgress / Completed / Flagged).  The retired per-segment
+# confirm tag never gained a writer; Completed replaces it.
 # --------------------------------------------------------------------------- #
 
-#: Per-segment confirm tag (beside the SCT terminology tag): the surgeon's
-#: scene-persistent attestation.  Only confirmed segments count downstream
-#: (ADR-0034 §Decision 2).  Written by the row Confirm action (increment 2);
-#: the status derivation below already reads it.
-CONFIRMED_TAG = "LiverSegmentation.Confirmed"
-#: Per-segment source tag — which tool / import produced the segment (the
-#: table's Source column).
+#: Per-segment source tag — which tool / import produced the segment
+#: (provenance surfaced via tooltip / the queue's status line, ADR-0034
+#: §Amendments; the stock table has no Source column slot).
 SOURCE_TAG = "LiverSegmentation.Source"
+#: ``SOURCE_TAG`` value for segments the AI accept path lands.
+SOURCE_TOTALSEG = "TotalSeg"
+#: ``SOURCE_TAG`` value for segments the import-as-canonical path lands.
+SOURCE_IMPORTED = "imported"
 #: Canonical-node attribute prefix for the explicit clinical attestation
 #: that a structure is NOT present in this case (``<prefix><sctCode>`` =
 #: "1").  Absence is stated, never inferred from a forgotten row
-#: (ADR-0034 §Decision 1).  Node-level because there is no segment to tag.
+#: (ADR-0034 §Decision 1); the attribute stays for the audit trail beside
+#: the empty ``Completed`` segment that attests it (§Amendments).
 MARKED_ABSENT_ATTRIBUTE_PREFIX = "LiverSegmentation.MarkedAbsent."
 
-#: Row-status vocabulary — exhaustive, rendered as GLYPH + TEXT, never
-#: colour alone (ADR-0010).  ``(glyph, text)`` pairs.
+#: Row-status vocabulary — derived from the native segment status, rendered
+#: as GLYPH + TEXT, never colour alone (ADR-0010).  ``(glyph, text)`` pairs.
 STATUS_MISSING = ("○", "Missing")
 STATUS_RUNNING = ("⟳", "Running…")
 STATUS_REVIEW = ("●", "Review")
 STATUS_CONFIRMED = ("✓", "Confirmed")
+STATUS_FLAGGED = ("⚑", "Flagged")
 STATUS_MARKED_ABSENT = ("∅", "Marked absent")
 STATUS_INTERACTIVE = ("✎", "Interactive…")
 
@@ -188,8 +193,8 @@ STRUCTURE_TABS = (
 )
 
 
-def _findSctSegment(segmentationNode, sctCode):
-    """The segment SCT-tagged ``sctCode`` on ``segmentationNode``, or None."""
+def _findSctSegmentId(segmentationNode, sctCode):
+    """The id of the segment SCT-tagged ``sctCode``, or None."""
     if segmentationNode is None:
         return None
     segmentation = segmentationNode.GetSegmentation()
@@ -198,8 +203,16 @@ def _findSctSegment(segmentationNode, sctCode):
         text = vtk.mutable("")
         segment.GetTag(TERMINOLOGY_ENTRY_TAG, text)
         if f"^{sctCode}^" in str(text):
-            return segment
+            return segmentId
     return None
+
+
+def _findSctSegment(segmentationNode, sctCode):
+    """The segment SCT-tagged ``sctCode`` on ``segmentationNode``, or None."""
+    segmentId = _findSctSegmentId(segmentationNode, sctCode)
+    if segmentId is None:
+        return None
+    return segmentationNode.GetSegmentation().GetSegment(segmentId)
 
 
 def _segmentTag(segment, tag):
@@ -211,30 +224,55 @@ def _segmentTag(segment, tag):
     return str(text)
 
 
+def _sctTerminologyTag(code, meaning):
+    """The ``TerminologyEntry`` tag value carrying an SCT-coded type triple.
+
+    The serialization every reader in the repo greps (``^<code>^``,
+    ADR-0011); :meth:`LiverSegmentationLogic.tagSegmentWithSct` is the
+    funnel that applies it together with the visual defaults.
+    """
+    return (
+        "Segmentation category and type - DICOM master list"
+        f"~{SCT_SCHEME}^85756007^Tissue"
+        f"~{SCT_SCHEME}^{code}^{meaning}"
+        "~^^~Anatomic codes - DICOM master list~^^~^^"
+    )
+
+
 def structureStatus(canonicalNode, sctCode):
     """Derive a structure row's status from the canonical-node state.
 
-    The ADR-0034 §Decision 2 reading: no SCT segment -> ``STATUS_MISSING``
-    (or ``STATUS_MARKED_ABSENT`` under the explicit attestation attribute);
-    an SCT segment present -> ``STATUS_REVIEW`` — nothing counts until the
-    surgeon confirms; the per-segment confirm tag -> ``STATUS_CONFIRMED``.
-    The transient queue states (Running / Interactive) are the job queue's
-    to report, not derivable from the node.
+    The ADR-0034 §Amendments reading — the module-level vocabulary maps the
+    NATIVE per-segment status: no segment, or a ``NotStarted`` pre-seeded
+    empty placeholder (``ensureExpectedStructures``) -> ``STATUS_MISSING``;
+    ``InProgress`` (landed, under review) -> ``STATUS_REVIEW``;
+    ``Completed`` (the surgeon's confirm) -> ``STATUS_CONFIRMED``;
+    ``Flagged`` -> ``STATUS_FLAGGED``.  The explicit marked-absent
+    attestation attribute reads ``STATUS_MARKED_ABSENT`` over the missing
+    states and over the empty ``Completed`` segment that attests it — a
+    landed segment (``InProgress`` / ``Flagged``) contradicts and outranks
+    a stale attestation.  The transient queue states (Running /
+    Interactive) are the job queue's to report, not derivable from the
+    node.
     """
+    segmentsLogic = slicer.vtkSlicerSegmentationsModuleLogic
+    markedAbsent = (
+        canonicalNode is not None
+        and canonicalNode.GetAttribute(MARKED_ABSENT_ATTRIBUTE_PREFIX + str(sctCode))
+        == "1"
+    )
     segment = _findSctSegment(canonicalNode, sctCode)
     if segment is None:
-        if (
-            canonicalNode is not None
-            and canonicalNode.GetAttribute(
-                MARKED_ABSENT_ATTRIBUTE_PREFIX + str(sctCode)
-            )
-            == "1"
-        ):
-            return STATUS_MARKED_ABSENT
-        return STATUS_MISSING
-    if _segmentTag(segment, CONFIRMED_TAG) == "1":
-        return STATUS_CONFIRMED
-    return STATUS_REVIEW
+        return STATUS_MARKED_ABSENT if markedAbsent else STATUS_MISSING
+    status = segmentsLogic.GetSegmentStatus(segment)
+    if status == segmentsLogic.InProgress:
+        return STATUS_REVIEW
+    if status == segmentsLogic.Flagged:
+        return STATUS_FLAGGED
+    if status == segmentsLogic.Completed:
+        return STATUS_MARKED_ABSENT if markedAbsent else STATUS_CONFIRMED
+    # NotStarted — the pre-seeded empty checklist row.
+    return STATUS_MARKED_ABSENT if markedAbsent else STATUS_MISSING
 
 
 class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
@@ -246,8 +284,9 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     or Reject (discard scratch), plus Edit-in-Segment-Editor on the canonical
     node (ADR-0024 §"Per-structure micro-workflows").  Each tab label carries
     a confirmation glyph (○ -> ✓) mirroring the Liver-shell idiom; the glyph
-    flips once the CANONICAL node holds that structure's SCT-tagged segment
-    (``LiverSegmentationLogic.isStructureAccepted``), refreshed on scene change.
+    flips once that structure's segment has LANDED on the canonical node
+    (``LiverSegmentationLogic.isStructureAccepted`` — native status past
+    ``NotStarted``, ADR-0034 §Amendments), refreshed on scene change.
 
     A Stage-2-local backend-status row (installed ✓/✗ + Pre-download) surfaces
     the TotalSegmentator install state.  This is intentionally local to
@@ -273,9 +312,9 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
 
         self.logic = LiverSegmentationLogic()
 
-        # The ADR-0034 anatomy segments table — increment 1 renders it
-        # read-only ALONGSIDE the tabs; the tabs retire with the row
-        # actions (increment 2).
+        # The ADR-0034 §Amendments anatomy segments table — the configured
+        # stock qMRMLSegmentsTableView lands ALONGSIDE the tabs; the tabs
+        # retire with the selection-scoped toolbar (next increment).
         self.layout.addWidget(self._buildSegmentsTable())
 
         self.structureTabs = qt.QTabWidget()
@@ -300,7 +339,7 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
 
         self.layout.addStretch(1)
         self._refreshTabGlyphs()
-        self._refreshSegmentsTable()
+        self._bindSegmentsTable()
         self._refreshBackendStatus()
 
     def _buildStructureCard(self, title, sctCode):
@@ -324,60 +363,45 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         return page
 
     def _buildSegmentsTable(self):
-        """Build the ADR-0034 anatomy segments table (increment 1: read-only).
+        """Build the ADR-0034 §Amendments anatomy segments table.
 
-        Pre-seeded with one row per structure-vocabulary entry BEFORE any
-        data exists — the empty state teaches the goal (ADR-0034
-        §Decision 1).  Columns: colour swatch, Structure, Source, Status
-        (glyph + text, ADR-0010).  Row actions, the eye toggle, and the
-        tab retirement arrive with increment 2.
+        A configured STOCK ``qMRMLSegmentsTableView`` over the canonical
+        node: status column on (the native status-cell single-click cycle
+        IS the review gesture), layer column off, filter bar off,
+        terminology selector on.  Rows ARE segments — the pre-seeded
+        checklist is real empty segments (``ensureExpectedStructures``),
+        no parallel bookkeeping.  Segment provenance (the retired Source
+        column) lives in the per-segment ``SOURCE_TAG``.
         """
-        table = qt.QTableWidget()
-        table.setObjectName("AnatomySegmentsTable")
-        columns = ("", "Structure", "Source", "Status")
-        table.setColumnCount(len(columns))
-        table.setHorizontalHeaderLabels(list(columns))
-        table.setRowCount(len(STRUCTURE_TABS))
-        table.verticalHeader().setVisible(False)
-        table.setSelectionMode(qt.QAbstractItemView.NoSelection)
-        table.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
-        table.setColumnWidth(0, 28)
-        table.horizontalHeader().setStretchLastSection(True)
-        table.setFixedHeight(
-            table.horizontalHeader().height
-            + table.verticalHeader().defaultSectionSize * len(STRUCTURE_TABS)
-            + 2 * table.frameWidth
-        )
-        self._segmentsTable = table
-        return table
+        # Widgets-module PythonQt binding; resolved on the build path only
+        # (mirrors the wrapped-class namespace discipline).
+        import qSlicerSegmentationsModuleWidgetsPythonQt
+
+        view = qSlicerSegmentationsModuleWidgetsPythonQt.qMRMLSegmentsTableView()
+        view.setObjectName("AnatomySegmentsTable")
+        view.setMRMLScene(slicer.mrmlScene)
+        view.setStatusColumnVisible(True)
+        view.setLayerColumnVisible(False)
+        view.setFilterBarVisible(False)
+        view.setUseTerminologySelector(True)
+        self._segmentsTable = view
+        return view
 
     def segmentsTable(self):  # noqa: N802 - Slicer/Qt verb convention
         return getattr(self, "_segmentsTable", None)
 
-    def _refreshSegmentsTable(self):
-        """Re-render every table row from the current canonical-node state."""
-        table = getattr(self, "_segmentsTable", None)
-        if table is None:
+    def _bindSegmentsTable(self):
+        """(Re-)bind the segments table to the canonical node, if one exists.
+
+        Pure READ path: binds only when a canonical node is already in the
+        scene, else leaves the view's node None — a refresh must never
+        mint the canonical node (``getOrCreateCanonicalSegmentation`` is a
+        write gesture; ADR-0024 §"Output contract").
+        """
+        view = getattr(self, "_segmentsTable", None)
+        if view is None or self.logic is None:
             return
-        canonical = self.logic._findCanonicalSegmentation()
-        for row, (title, sctCode) in enumerate(STRUCTURE_TABS):
-            segment = _findSctSegment(canonical, sctCode)
-
-            swatch = qt.QTableWidgetItem("")
-            if segment is not None:
-                red, green, blue = segment.GetColor()
-                swatch.setBackground(
-                    qt.QBrush(qt.QColor.fromRgbF(red, green, blue))
-                )
-            table.setItem(row, 0, swatch)
-
-            table.setItem(row, 1, qt.QTableWidgetItem(title))
-
-            source = _segmentTag(segment, SOURCE_TAG) or "—"
-            table.setItem(row, 2, qt.QTableWidgetItem(source))
-
-            glyph, text = structureStatus(canonical, sctCode)
-            table.setItem(row, 3, qt.QTableWidgetItem(f"{glyph} {text}"))
+        view.setSegmentationNode(self.logic._findCanonicalSegmentation())
 
     def _buildBackendStatusRow(self):
         """Build the Stage-2-local backend-status + Pre-download row.
@@ -470,6 +494,9 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
             return
         self.logic.importSegmentationAsCanonical(node, assignments)
         self._refreshTabGlyphs()
+        # The import promotes an EXISTING node (no NodeAdded/Removed event
+        # reaches _onSceneChanged), so re-bind the table explicitly.
+        self._bindSegmentsTable()
         # Same re-centre as the card's Accept: the imported anatomy's
         # surface model lands outside the default camera framing.
         slicer.util.resetThreeDViews()
@@ -496,7 +523,7 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
 
     def _onSceneChanged(self, caller=None, event=None):
         self._refreshTabGlyphs()
-        self._refreshSegmentsTable()
+        self._bindSegmentsTable()
 
     def _refreshTabGlyphs(self):
         """Repaint each tab label's confirmation glyph from the canonical node.
@@ -679,30 +706,45 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
     #
 
     def isStageComplete(self) -> bool:
-        """Return True iff Stage 2 is (soft-)done.
+        """Return True iff Stage 2 is done: every expected structure Completed.
 
-        Soft-done per ADR-0023: the canonical segmentation holds at least ONE
-        SCT-tagged segment — NOT "all four structures present".  Scratch nodes
-        never flip the predicate true.
+        ADR-0034 §Amendments: stage completion is the NATIVE per-segment
+        status — a canonical node exists and every structure-vocabulary
+        entry's segment reads ``Completed`` (the surgeon's status-cell
+        confirm).  An empty ``Completed`` segment carrying the marked-absent
+        attestation attribute counts — absence is stated, never inferred.
+        Scratch nodes never flip the predicate true (canonical-only read).
         """
         canonical = self._findCanonicalSegmentation()
         if canonical is None:
             return False
-        return self._hasSctTaggedSegment(canonical)
+        segmentsLogic = slicer.vtkSlicerSegmentationsModuleLogic
+        for _title, sctCode in STRUCTURE_TABS:
+            segment = _findSctSegment(canonical, sctCode)
+            if segment is None:
+                return False
+            if segmentsLogic.GetSegmentStatus(segment) != segmentsLogic.Completed:
+                return False
+        return True
 
     def isStructureAccepted(self, sctCode) -> bool:
-        """Return True iff the CANONICAL node holds a segment SCT-tagged ``sctCode``.
+        """Return True iff the CANONICAL node holds a LANDED ``sctCode`` segment.
 
         Drives the per-tab confirmation glyph (○ -> ✓) in the surgeon UI.
-        Canonical-only read (mirroring :meth:`_findCanonicalSegmentation`):
-        a scratch node tagged for the structure is pending, not accepted, so
-        the tab stays ○ until that structure's Accept (ADR-0024 §"Output
-        contract" + §Terminology).
+        "Landed" reads through the native status (ADR-0034 §Amendments):
+        the segment exists AND its status has moved past ``NotStarted`` —
+        a pre-seeded empty placeholder (``ensureExpectedStructures``) is
+        expected, not accepted.  Canonical-only read (mirroring
+        :meth:`_findCanonicalSegmentation`): a scratch node tagged for the
+        structure is pending, not accepted, so the tab stays ○ until that
+        structure's Accept (ADR-0024 §"Output contract" + §Terminology).
         """
         canonical = self._findCanonicalSegmentation()
-        if canonical is None:
+        segment = _findSctSegment(canonical, sctCode)
+        if segment is None:
             return False
-        return any(str(sctCode) in text for text in self._sctTagTexts(canonical))
+        segmentsLogic = slicer.vtkSlicerSegmentationsModuleLogic
+        return segmentsLogic.GetSegmentStatus(segment) != segmentsLogic.NotStarted
 
     #
     # Canonical / scratch surface (ADR-0024 §"Output contract" + §Terminology).
@@ -713,12 +755,38 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
 
         Idempotent (get-or-create): repeated calls return the SAME node, never
         a second canonical node (ADR-0024 §"Output contract", rejecting
-        Alternative B).
+        Alternative B).  Pre-seeds the expected-structure checklist on
+        creation AND on adoption of an existing canonical, so loaded scenes
+        self-heal (ADR-0034 §Amendments; :meth:`ensureExpectedStructures`).
         """
         canonical = self._findCanonicalSegmentation()
-        if canonical is not None:
-            return canonical
-        return self._createSegmentationWithRole(ROLE_CANONICAL, "Anatomy: Canonical")
+        if canonical is None:
+            canonical = self._createSegmentationWithRole(
+                ROLE_CANONICAL, "Anatomy: Canonical"
+            )
+        self.ensureExpectedStructures(canonical)
+        return canonical
+
+    def ensureExpectedStructures(self, canonicalNode):
+        """Pre-seed the expected-structure checklist as real empty segments.
+
+        ADR-0034 §Amendments: rows ARE segments — for each structure-
+        vocabulary entry (``STRUCTURE_TABS``) whose SCT code has no segment
+        yet, add an empty segment carrying the SCT terminology tag, the
+        vocabulary title as its name, and the structure visual defaults,
+        left status-untagged so it reads the native ``NotStarted``.  The
+        empty state teaches the goal (ADR-0034 §Decision 1).  Idempotent —
+        existing segments (placeholder or landed) are never touched.
+        """
+        if canonicalNode is None:
+            return
+        for title, sctCode in STRUCTURE_TABS:
+            if _findSctSegmentId(canonicalNode, sctCode) is not None:
+                continue
+            segmentId = canonicalNode.GetSegmentation().AddEmptySegment("", title)
+            self.tagSegmentWithSct(
+                canonicalNode, segmentId, sctCode, self._structureMeaning(sctCode)
+            )
 
     def importSegmentationAsCanonical(self, sourceSegmentationNode, assignments):
         """Promote a loaded segmentation to the canonical node, SCT-tagging it.
@@ -728,10 +796,13 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
         structure.  ``assignments`` maps ``segmentId -> (sctCode, meaning)``.
         Marks ``sourceSegmentationNode`` as THE canonical node (ADR-0024
         §"Output contract" — exactly one; any prior canonical is demoted) and
-        SCT-tags each assigned segment via :meth:`tagSegmentWithSct`, so
-        :meth:`isStructureAccepted` / :meth:`isStageComplete` report the
-        structures.  A no-op returning ``None`` when the source is missing / not
-        a segmentation, or no assignments are given.
+        SCT-tags each assigned segment via :meth:`tagSegmentWithSct`.  Landed
+        segments arrive as native ``InProgress`` with the ``imported`` source
+        tag — imports no longer skip the review boundary (ADR-0034
+        §Amendments); the surgeon's status-cell confirm to ``Completed`` is
+        what :meth:`isStageComplete` counts.  A no-op returning ``None`` when
+        the source is missing / not a segmentation, or no assignments are
+        given.
         """
         if sourceSegmentationNode is None or not sourceSegmentationNode.IsA(
             "vtkMRMLSegmentationNode"
@@ -747,8 +818,17 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
             existing.SetAttribute(ROLE_ATTRIBUTE, None)
 
         sourceSegmentationNode.SetAttribute(ROLE_ATTRIBUTE, ROLE_CANONICAL)
+        segmentsLogic = slicer.vtkSlicerSegmentationsModuleLogic
         for segmentId, (code, meaning) in assignments.items():
             self.tagSegmentWithSct(sourceSegmentationNode, segmentId, code, meaning)
+            # Landing contract (ADR-0034 §Amendments): every landed segment
+            # arrives "produced, under review" and carries its provenance.
+            segment = sourceSegmentationNode.GetSegmentation().GetSegment(segmentId)
+            segmentsLogic.SetSegmentStatus(segment, segmentsLogic.InProgress)
+            segment.SetTag(SOURCE_TAG, SOURCE_IMPORTED)
+        # Self-heal the checklist on the adopted canonical: the structures
+        # the import did not cover get their pre-seeded empty rows.
+        self.ensureExpectedStructures(sourceSegmentationNode)
         # Give the canonical segments a 3D closed-surface representation + make
         # them visible, so the anatomy renders through to Planning (#539) --
         # otherwise the main 3D view is empty entering Stage 4.
@@ -851,9 +931,15 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
         """Merge a scratch node's segments into the canonical node.
 
         The surgeon-approved promotion (ADR-0024 §Terminology "commit /
-        Accept"): the canonical-node count is unchanged; the scratch node's
-        segments now live in the canonical node.  The scratch node is removed
-        once its segments are copied.
+        Accept") under the ADR-0034 §Amendments landing contract: an
+        incoming segment whose SCT code matches a pre-seeded EMPTY
+        (``NotStarted``) expected segment REPLACES that placeholder in
+        place — same row position, re-applied SCT tag / vocabulary name /
+        visual defaults — so the checklist order is stable and no
+        duplicate rows accrue.  Every landed segment reads the native
+        ``InProgress`` ("produced, under review") and carries its source
+        tag.  The canonical-node count is unchanged; the scratch node is
+        removed once its segments are copied.
         """
         if scratch is None or not scratch.IsA("vtkMRMLSegmentationNode"):
             raise ValueError("accept() requires a scratch vtkMRMLSegmentationNode")
@@ -861,11 +947,10 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
             raise ValueError("accept() target is not a scratch-role segmentation")
 
         canonical = self.getOrCreateCanonicalSegmentation()
-        canonicalSegmentation = canonical.GetSegmentation()
         scratchSegmentation = scratch.GetSegmentation()
         for segmentId in list(scratchSegmentation.GetSegmentIDs()):
-            canonicalSegmentation.CopySegmentFromSegmentation(
-                scratchSegmentation, segmentId
+            self._landSegment(
+                canonical, scratchSegmentation, segmentId, SOURCE_TOTALSEG
             )
         slicer.mrmlScene.RemoveNode(scratch)
         # The Accept is the AI path's explicit human action growing the
@@ -882,6 +967,102 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
         # structure visual defaults on the CANONICAL node post-merge.
         self.applyVisualDefaults(canonical)
         return canonical
+
+    def _landSegment(self, canonicalNode, sourceSegmentation, segmentId, source):
+        """Land one incoming segment on the canonical node.
+
+        The ADR-0034 §Amendments landing contract shared by the accept
+        merge loop: when the incoming segment's SCT code matches a
+        pre-seeded EMPTY (``NotStarted``) expected segment, the placeholder
+        is removed, the incoming segment copied in, and the placeholder's
+        row position restored via the ``vtkSegmentation`` reorder API (the
+        same ``GetSegmentIndex``/``SetSegmentIndex`` pair the stock table's
+        move up/down uses).  Returns the landed segment id, or ``None``
+        when the copy failed.
+
+        The landed identity — native ``InProgress`` status, the source tag
+        (kept when the segment already carries provenance from where it was
+        created), and on replacement the re-asserted SCT tag / vocabulary
+        title / default colour — is written on the INCOMING segment BEFORE
+        the copy: segment tags travel with the deep copy, and a live
+        ``qMRMLSegmentsTableView`` bound to the canonical node echoes its
+        row state back into segments (``qMRMLSegmentsModel`` itemChanged ->
+        ``SetSegmentStatus``), which clobbers a status written in the same
+        event cascade as the structural insert.
+        """
+        segmentsLogic = slicer.vtkSlicerSegmentationsModuleLogic
+        canonicalSegmentation = canonicalNode.GetSegmentation()
+
+        incoming = sourceSegmentation.GetSegment(segmentId)
+        code = self._expectedCodeForSegment(incoming)
+
+        placeholderIndex = -1
+        if code is not None:
+            placeholderId = _findSctSegmentId(canonicalNode, code)
+            if placeholderId is not None and (
+                segmentsLogic.GetSegmentStatus(
+                    canonicalSegmentation.GetSegment(placeholderId)
+                )
+                == segmentsLogic.NotStarted
+            ):
+                placeholderIndex = canonicalSegmentation.GetSegmentIndex(
+                    placeholderId
+                )
+                canonicalSegmentation.RemoveSegment(placeholderId)
+
+        if placeholderIndex >= 0:
+            # Placeholder replacement: re-assert the checklist row identity
+            # (SCT tag + vocabulary title + default colour; the 3D opacity
+            # is display-node state applyVisualDefaults re-applies on the
+            # receiving node post-merge).
+            incoming.SetTag(
+                TERMINOLOGY_ENTRY_TAG,
+                _sctTerminologyTag(code, self._structureMeaning(code)),
+            )
+            incoming.SetName(self._structureTitle(code))
+            defaults = STRUCTURE_VISUAL_DEFAULTS.get(str(code))
+            if defaults is not None:
+                incoming.SetColor(*defaults["color"])
+        segmentsLogic.SetSegmentStatus(incoming, segmentsLogic.InProgress)
+        if not _segmentTag(incoming, SOURCE_TAG):
+            incoming.SetTag(SOURCE_TAG, source)
+
+        before = set(canonicalSegmentation.GetSegmentIDs())
+        canonicalSegmentation.CopySegmentFromSegmentation(
+            sourceSegmentation, segmentId
+        )
+        landedIds = [
+            landedId
+            for landedId in canonicalSegmentation.GetSegmentIDs()
+            if landedId not in before
+        ]
+        if not landedIds:
+            return None
+        landedId = landedIds[0]
+        if placeholderIndex >= 0:
+            canonicalSegmentation.SetSegmentIndex(landedId, placeholderIndex)
+        return landedId
+
+    def _expectedCodeForSegment(self, segment):
+        """The structure-vocabulary SCT code a segment carries, or ``None``.
+
+        Reads the segment's ``TerminologyEntry`` tag for one of the
+        ``STRUCTURE_TABS`` codes (the ``^<code>^`` marker every reader in
+        the repo greps).  Segments outside the expected vocabulary land
+        as plain appended rows.
+        """
+        text = _segmentTag(segment, TERMINOLOGY_ENTRY_TAG)
+        for _title, code in STRUCTURE_TABS:
+            if f"^{code}^" in text:
+                return code
+        return None
+
+    def _structureTitle(self, sctCode):
+        """The structure-vocabulary row title for an SCT code (the tab set)."""
+        for title, code in STRUCTURE_TABS:
+            if str(code) == str(sctCode):
+                return title
+        return str(sctCode)
 
     def applyVisualDefaults(self, segmentationNode):
         """Apply per-structure colour + 3D opacity to every tagged segment.
@@ -1045,8 +1226,13 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
                 return 0
             for index in range(before, after):
                 segment_id = scratch.GetSegmentation().GetNthSegmentID(index)
-                scratch.GetSegmentation().GetSegment(segment_id).SetName(meaning)
+                segment = scratch.GetSegmentation().GetSegment(segment_id)
+                segment.SetName(meaning)
                 self.tagSegmentWithSct(scratch, segment_id, code, meaning)
+                # Provenance is stamped where the segment is born so it
+                # travels with the copy into the canonical node on Accept
+                # (ADR-0034 §Amendments source tag).
+                segment.SetTag(SOURCE_TAG, SOURCE_TOTALSEG)
             return after - before
         finally:
             slicer.mrmlScene.RemoveNode(labelmap)
@@ -1067,13 +1253,7 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
         segment = segmentationNode.GetSegmentation().GetSegment(segmentId)
         if segment is None:
             raise ValueError(f"no segment '{segmentId}' in segmentation")
-        tag = (
-            "Segmentation category and type - DICOM master list"
-            f"~{SCT_SCHEME}^85756007^Tissue"
-            f"~{SCT_SCHEME}^{code}^{meaning}"
-            "~^^~Anatomic codes - DICOM master list~^^~^^"
-        )
-        segment.SetTag(TERMINOLOGY_ENTRY_TAG, tag)
+        segment.SetTag(TERMINOLOGY_ENTRY_TAG, _sctTerminologyTag(code, meaning))
         # Apply the structure's visual defaults at the same funnel: every
         # tagged segment (AI accept OR import) gets its v1-parity colour, and
         # the parenchyma its translucent 3D opacity, instead of the generic
@@ -1114,29 +1294,6 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
             if node.GetAttribute(ROLE_ATTRIBUTE) == ROLE_CANONICAL:
                 return node
         return None
-
-    def _sctTagTexts(self, segmentationNode):
-        """Yield the SCT-coded terminology-tag text of each tagged segment.
-
-        Segments without a terminology tag are skipped; only tags carrying the
-        SCT coding scheme (the discriminator; the type triple uses
-        ``SCT^<code>^<meaning>``) are yielded.  Shared read path behind
-        :meth:`_hasSctTaggedSegment` and :meth:`isStructureAccepted`.
-        """
-        segmentation = segmentationNode.GetSegmentation()
-        for index in range(segmentation.GetNumberOfSegments()):
-            entry = vtk.reference("")
-            if not segmentation.GetNthSegment(index).GetTag(
-                TERMINOLOGY_ENTRY_TAG, entry
-            ):
-                continue
-            text = str(entry)
-            if SCT_SCHEME in text:
-                yield text
-
-    def _hasSctTaggedSegment(self, segmentationNode) -> bool:
-        """Return True iff any segment carries an SCT-coded terminology tag."""
-        return any(True for _ in self._sctTagTexts(segmentationNode))
 
     def _collectUnderAnatomyFolder(self, node):
         """Reparent ``node`` under the "Anatomy" Subject Hierarchy folder.

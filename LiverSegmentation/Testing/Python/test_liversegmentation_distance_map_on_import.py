@@ -128,7 +128,12 @@ def test_import_as_canonical_computes_tagged_distance_map():
     dmap = maps[0]
     assert dmap.GetAttribute("Computed") == "True"
     assert dmap.GetImageData() is not None, "distance map must carry image data"
-    assert dmap.GetImageData().GetNumberOfScalarComponents() >= 1
+    assert dmap.GetImageData().GetNumberOfScalarComponents() == 1, (
+        "only the PRESENT (non-empty) liver channel may compose -- the "
+        "pre-seeded empty checklist segments (ADR-0034 §Amendments) must "
+        "not become distance-map channels; the components stay dense over "
+        "the present channels (the v1 contract the resection shader reads)."
+    )
 
 
 def test_reimport_reuses_the_distance_map_node():

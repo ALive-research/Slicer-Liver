@@ -1,26 +1,26 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 
-"""Invariant 2 — isStageComplete() scene semantics (SOFT Stage-2-done).
+"""Invariant 2 — isStageComplete() scene semantics (all structures Completed).
 
-ADR-0023 §"Per-stage state-indicator semantics" (the soft-done line at
-``Docs/adr/0023-unified-gui-stage-workflow.md``) defines Stage 2 as done iff
-the canonical segmentation holds at least ONE SCT-tagged segment — NOT "all
-four structures present".  ADR-0024 §"Output contract" names the single
-canonical ``vtkMRMLSegmentationNode`` distinguished from per-tool scratch
-nodes; scratch nodes must not flip the predicate true.
+ADR-0034 §Amendments (Decision 2 amended) replaces the soft ">=1 SCT-tagged
+segment" predicate: Stage 2 is complete iff a canonical segmentation node
+exists AND every structure-vocabulary entry's segment reads the NATIVE
+``Completed`` status (``vtkSlicerSegmentationsModuleLogic``
+``Segmentation.Status`` tag — the surgeon's status-cell confirm).  An empty
+``Completed`` segment carrying the marked-absent attestation attribute is
+the explicit absence statement and counts.  Scratch nodes never flip the
+predicate true (ADR-0024 §"Output contract": the role attribute is the
+discriminator).
 
-Scratch-vs-canonical is distinguished by a namespaced node attribute
-(``LiverSegmentation.Role`` = ``scratch`` | ``canonical``), following the
-``VascularTerritories.VascTerrId`` attribute precedent in
-``VascularTerritories/VascularTerritories.py``.
+The pinned semantics:
+  * empty scene                                     -> False
+  * canonical, pre-seeded NotStarted checklist      -> False
+  * all four structures Completed                   -> True
+  * three Completed + one absent-attr'd empty
+    Completed                                       -> True
+  * scratch-only (no canonical)                     -> False
 
-The three pinned semantics:
-  * empty scene                      -> False
-  * canonical seg + >=1 SCT segment  -> True
-  * scratch-only (no canonical)      -> False
-
-RED until the implementer lands the predicate body per ADR-0024 / ADR-0023.
 Scene-needing: runs under a minimal qSlicerApplication.
 """
 
@@ -30,16 +30,12 @@ import pytest
 
 MODULE_NAME = "liversegmentation"
 
-# Namespaced role attribute + its two values.  The implementer's module owns
-# the authoritative definition of these strings; the test pins the contract
-# the orchestrator and the Liver shell agree on.  Mirrors the
-# ``VascularTerritories.VascTerrId`` namespacing precedent.
+# Namespaced role attribute + its two values.  The module owns the
+# authoritative definitions; the test pins the contract the orchestrator and
+# the Liver shell agree on.
 ROLE_ATTRIBUTE = "LiverSegmentation.Role"
 ROLE_SCRATCH = "scratch"
 ROLE_CANONICAL = "canonical"
-
-# Liver parenchyma SNOMED-CT code per ADR-0024 §"Output contract".
-SCT_LIVER_CODE = "10200004"
 
 
 def _logic_or_skip():
@@ -63,73 +59,97 @@ def _logic_or_skip():
             f"LiverSegmentation not importable ({exc}); "
             "ensure --additional-module-paths includes LiverSegmentation/."
         )
-    return slicer, LiverSegmentation.LiverSegmentationLogic()
+    return slicer, LiverSegmentation, LiverSegmentation.LiverSegmentationLogic()
 
 
-def _add_segmentation_with_role(slicer, role):
-    """Add a ``vtkMRMLSegmentationNode`` flagged with the role attribute."""
-    node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
-    node.SetAttribute(ROLE_ATTRIBUTE, role)
-    return node
-
-
-# Slicer's standard per-segment terminology tag name.  A segment is
-# "SCT-tagged" when this tag carries a terminology entry whose type triple
-# uses the SCT coding scheme.
-TERMINOLOGY_ENTRY_TAG = "TerminologyEntry"
-
-
-def _add_sct_tagged_segment(node):
-    """Add one liver-parenchyma SCT-tagged segment to ``node``.
-
-    TODO(impl): once the orchestrator exposes its SCT-tagging helper, prefer
-    that path so this test exercises the production tagging code rather than a
-    test-local approximation.  ADR-0011 owns the SCT dispatch surface, and the
-    predicate under test must agree with the orchestrator on what "SCT-tagged"
-    means.
-    """
-    segmentation = node.GetSegmentation()
-    segmentId = segmentation.AddEmptySegment("liver", "Liver")
-    segment = segmentation.GetSegment(segmentId)
-    # Minimal SCT triple on the segment terminology tag (Liver 10200004).
-    tag = (
-        "Segmentation category and type - DICOM master list"
-        "~SCT^85756007^Tissue"
-        f"~SCT^{SCT_LIVER_CODE}^Liver"
-        "~^^~Anatomic codes - DICOM master list~^^~^^"
-    )
-    segment.SetTag(TERMINOLOGY_ENTRY_TAG, tag)
-    return segmentId
+def _expected_segments(module, canonical):
+    """``{sctCode: vtkSegment}`` for every structure-vocabulary entry."""
+    return {
+        code: module._findSctSegment(canonical, code)
+        for _title, code in module.STRUCTURE_TABS
+    }
 
 
 def test_isstagecomplete_false_on_empty_scene():
-    """Empty scene -> Stage 2 is NOT done.
-
-    ADR-0023 §"Per-stage state-indicator semantics": no canonical
-    segmentation means the surgeon has not produced anatomy yet.
-    """
-    slicer, logic = _logic_or_skip()
+    """Empty scene -> Stage 2 is NOT done (no canonical node exists)."""
+    slicer, _module, logic = _logic_or_skip()
     slicer.mrmlScene.Clear(0)
     assert logic.isStageComplete() is False, (
         "isStageComplete() must be False on an empty scene."
     )
 
 
-def test_isstagecomplete_true_on_canonical_with_one_sct_segment():
-    """Canonical seg + >=1 SCT-tagged segment -> Stage 2 done (SOFT).
+def test_isstagecomplete_false_on_preseeded_notstarted_checklist():
+    """The pre-seeded canonical (all rows native NotStarted) is NOT done.
 
-    ADR-0023 soft-done semantics: ONE SCT-tagged segment in the canonical
-    node suffices, NOT all four structures.  ADR-0024 §"Output contract"
-    names the single canonical node.
+    ADR-0034 §Amendments: the checklist placeholders state the GOAL; only
+    the surgeon's Completed confirms count.  This retires the soft
+    ">=1 SCT-tagged segment" reading, under which the four tagged
+    placeholders would have flipped the stage done at creation.
     """
-    slicer, logic = _logic_or_skip()
+    slicer, _module, logic = _logic_or_skip()
     slicer.mrmlScene.Clear(0)
-    canonical = _add_segmentation_with_role(slicer, ROLE_CANONICAL)
-    _add_sct_tagged_segment(canonical)
+    logic.getOrCreateCanonicalSegmentation()
+    assert logic.isStageComplete() is False, (
+        "a freshly pre-seeded canonical (four terminology-tagged EMPTY "
+        "NotStarted segments) must NOT count as Stage-2 done (ADR-0034 "
+        "§Amendments predicate: every structure Completed)."
+    )
+
+
+def test_isstagecomplete_true_when_every_structure_completed():
+    """All four structure segments Completed -> Stage 2 done."""
+    slicer, module, logic = _logic_or_skip()
+    slicer.mrmlScene.Clear(0)
+    canonical = logic.getOrCreateCanonicalSegmentation()
+
+    segments_logic = slicer.vtkSlicerSegmentationsModuleLogic
+    for code, segment in _expected_segments(module, canonical).items():
+        assert segment is not None, f"pre-seeded segment missing for {code}"
+        segments_logic.SetSegmentStatus(segment, segments_logic.Completed)
+
     assert logic.isStageComplete() is True, (
-        "isStageComplete() must be True once a canonical (role-flagged) "
-        "segmentation holds at least one SCT-tagged segment (soft-done per "
-        "ADR-0023)."
+        "isStageComplete() must be True once every structure-vocabulary "
+        "segment reads native Completed (ADR-0034 §Amendments)."
+    )
+
+
+def test_isstagecomplete_counts_marked_absent_completed_row():
+    """Three Completed + one absent-attr'd empty Completed -> done.
+
+    The explicit absence attestation (ADR-0034 §Amendments): an EMPTY
+    ``Completed`` segment carrying the ``LiverSegmentation.MarkedAbsent.
+    <code>`` attribute is the stated "not present in this case" and
+    satisfies the predicate; short of the attestation's Completed status
+    the row still blocks.
+    """
+    slicer, module, logic = _logic_or_skip()
+    slicer.mrmlScene.Clear(0)
+    canonical = logic.getOrCreateCanonicalSegmentation()
+    segments_logic = slicer.vtkSlicerSegmentationsModuleLogic
+
+    segments = _expected_segments(module, canonical)
+    for code, segment in segments.items():
+        if code == module.SCT_MASS_CODE:
+            continue
+        segments_logic.SetSegmentStatus(segment, segments_logic.Completed)
+
+    # The tumors row is only attribute-marked so far: not yet attested.
+    canonical.SetAttribute(
+        module.MARKED_ABSENT_ATTRIBUTE_PREFIX + module.SCT_MASS_CODE, "1"
+    )
+    assert logic.isStageComplete() is False, (
+        "the marked-absent attribute alone (row still NotStarted) must not "
+        "complete the stage -- the attestation writes Completed on the "
+        "empty segment."
+    )
+
+    segments_logic.SetSegmentStatus(
+        segments[module.SCT_MASS_CODE], segments_logic.Completed
+    )
+    assert logic.isStageComplete() is True, (
+        "an EMPTY Completed segment with the marked-absent attribute is the "
+        "explicit absence attestation and must count (ADR-0034 §Amendments)."
     )
 
 
@@ -138,55 +158,24 @@ def test_isstagecomplete_false_for_scratch_only():
 
     ADR-0024 §Terminology + §"Output contract": scratch nodes are
     orchestrator-private pending output; only the canonical node satisfies
-    Stage 2.  The role attribute is the discriminator.
+    Stage 2, whatever statuses its segments carry.
     """
-    slicer, logic = _logic_or_skip()
+    slicer, module, logic = _logic_or_skip()
     slicer.mrmlScene.Clear(0)
-    scratch = _add_segmentation_with_role(slicer, ROLE_SCRATCH)
-    _add_sct_tagged_segment(scratch)
+
+    scratch = logic.createScratchSegmentation()
+    segments_logic = slicer.vtkSlicerSegmentationsModuleLogic
+    for title, code in module.STRUCTURE_TABS:
+        seg_id = scratch.GetSegmentation().AddEmptySegment(title, title)
+        logic.tagSegmentWithSct(scratch, seg_id, code, title)
+        segments_logic.SetSegmentStatus(
+            scratch.GetSegmentation().GetSegment(seg_id),
+            segments_logic.Completed,
+        )
+
     assert logic.isStageComplete() is False, (
         "isStageComplete() must stay False when only scratch-role "
         "segmentations exist -- scratch is pre-Accept and not canonical."
-    )
-
-
-def test_isstagecomplete_flips_true_only_after_first_accept():
-    """The predicate flips true only after the first Accept lands an SCT segment.
-
-    Extends the soft-done semantics through the orchestrator's lifecycle
-    (ADR-0024 §Terminology "commit / Accept" + ADR-0023 §"Per-stage
-    state-indicator semantics"): a scratch-stage Run leaves Stage 2 NOT done;
-    the first Accept that merges an SCT-tagged segment into the canonical node
-    flips ``isStageComplete()`` true.
-
-    TODO(impl): align the accessor names with the orchestrator surface
-    (createScratchSegmentation / tagSegmentWithSct / accept).  The pinned
-    invariant is the false->true transition gated on the first Accept, not the
-    spelling.
-    """
-    slicer, logic = _logic_or_skip()
-    slicer.mrmlScene.Clear(0)
-
-    for name in ("createScratchSegmentation", "tagSegmentWithSct", "accept"):
-        if not hasattr(logic, name):
-            pytest.fail(
-                f"orchestrator missing '{name}' -- the Accept lifecycle that "
-                "ADR-0024 §Terminology defines is not yet implemented."
-            )
-
-    scratch = logic.createScratchSegmentation()
-    segId = scratch.GetSegmentation().AddEmptySegment("liver", "Liver")
-    logic.tagSegmentWithSct(scratch, segId, SCT_LIVER_CODE, "Liver")
-    assert logic.isStageComplete() is False, (
-        "isStageComplete() must stay False after a Run (scratch present, no "
-        "Accept yet) -- ADR-0023 soft-done is canonical-only."
-    )
-
-    logic.accept(scratch)
-    assert logic.isStageComplete() is True, (
-        "isStageComplete() must flip True after the first Accept lands an "
-        "SCT-tagged segment in the canonical node (ADR-0024 §Terminology / "
-        "ADR-0023 soft-done)."
     )
 
 

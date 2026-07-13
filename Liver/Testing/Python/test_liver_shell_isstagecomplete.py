@@ -471,9 +471,9 @@ def test_t3_stage4_semantics_confirmed_state_returns_true():
 # =========================================================================== #
 #
 # Contract: ``_stageIsComplete(1)`` must route to the LiverSegmentation module
-# logic's ``isStageComplete()`` (true iff a canonical segmentation holds >=1
-# SCT-tagged segment), NOT to the always-False ``_stage2IsComplete`` shell
-# stub.  The stub survives only as the graceful-degradation answer when the
+# logic's ``isStageComplete()`` (true iff every expected structure segment on
+# the canonical node reads native ``Completed``, ADR-0034 §Amendments), NOT to
+# the always-False ``_stage2IsComplete`` shell stub.  The stub survives only as the graceful-degradation answer when the
 # module is ABSENT (pinned by ``test_t2_stage2_predicate_degrades_gracefully``
 # above, which exercises ``_stage2IsComplete`` directly).
 #
@@ -515,18 +515,24 @@ def _liversegmentation_logic_or_skip():
 
 
 def _make_stage2_complete(logic):
-    """Land one canonical, SCT-tagged segment so ``isStageComplete()`` is True.
+    """Confirm every expected structure so ``isStageComplete()`` is True.
 
-    Uses the orchestrator's own accept/tag seams
-    (``getOrCreateCanonicalSegmentation`` + ``tagSegmentWithSct``) rather than a
-    hand-built node, so the routing test agrees with the module on what
-    "SCT-tagged canonical segment" means — the same construction the module's
-    own ``isStageComplete()`` semantics suite uses.
+    Uses the orchestrator's own seams (``getOrCreateCanonicalSegmentation``
+    pre-seeds the expected-structure checklist) rather than a hand-built
+    node, so the routing test agrees with the module on what "complete"
+    means — ADR-0034 §Amendments: every structure-vocabulary segment reads
+    the native ``Completed`` status.  Same construction the module's own
+    ``isStageComplete()`` semantics suite uses.
     """
+    import slicer
+
+    import LiverSegmentation as module
+
     canonical = logic.getOrCreateCanonicalSegmentation()
-    segId = canonical.GetSegmentation().AddEmptySegment("liver", "Liver")
-    # Liver parenchyma SNOMED-CT code per ADR-0024 §"Output contract".
-    logic.tagSegmentWithSct(canonical, segId, "10200004", "Liver")
+    segments_logic = slicer.vtkSlicerSegmentationsModuleLogic
+    for _title, code in module.STRUCTURE_TABS:
+        segment = module._findSctSegment(canonical, code)
+        segments_logic.SetSegmentStatus(segment, segments_logic.Completed)
 
 
 def test_stage2_routing_delegates_to_module_logic_when_complete():
