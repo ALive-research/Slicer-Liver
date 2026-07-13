@@ -204,6 +204,17 @@ class SlicingPlaneInitRepresentation:
         # the Init->Planning commit, or ``None`` before commit.
         self._ring_polydata: Any | None = None
 
+        # Surface PREVIEW (the v1 iterate loop): once a drag release
+        # re-fits the 4x4 grid, the tessellated surface shows so the
+        # surgeon can judge the cut before committing; hidden while a
+        # handle drags.  Absent when the wrapped tessellation source is
+        # off the path (bare unit layer).
+        self._preview_source: Any | None = None
+        self._preview_mapper: Any | None = None
+        self._preview_actor: Any | None = None
+        self._preview_suppressed = False
+        self._last_preview_geometry: tuple | None = None
+
         self._build_vtk_pipeline(slicing_contour_mapper)
 
         if renderer is not None:
@@ -234,6 +245,14 @@ class SlicingPlaneInitRepresentation:
         """
         self._apply_display_node(display_node)
         self._apply_data_node(data_node)
+
+    def GetSurfacePreviewActor(self) -> Any | None:
+        return self._preview_actor
+
+    def SetSurfacePreviewSuppressed(self, suppressed: bool) -> None:
+        """Hide the surface preview while a handle drags (v1 choreography)."""
+        self._preview_suppressed = bool(suppressed)
+        self._reconcile_preview_visibility()
 
     def run_ring_extraction(self, target_model: Any | None) -> Any | None:
         """Extract the plane/target intersection ring on the commit boundary.
@@ -365,6 +384,23 @@ class SlicingPlaneInitRepresentation:
             self._contour_actor = vtk.vtkActor()
             self._contour_actor.SetMapper(self._contour_mapper)
 
+        # Surface preview: the tessellated 4x4 surface, visible once a
+        # drag release seeds a non-degenerate grid (the v1 iterate loop);
+        # absent where the wrapped tessellation source is off the path.
+        source_cls = _resolve_surface_source()
+        if source_cls is not None:
+            self._preview_source = source_cls()
+            self._preview_source.SetResolution(20, 20)
+            self._preview_mapper = vtk.vtkPolyDataMapper()
+            self._preview_mapper.SetInputConnection(
+                self._preview_source.GetOutputPort()
+            )
+            self._preview_actor = vtk.vtkActor()
+            self._preview_actor.SetMapper(self._preview_mapper)
+            self._preview_actor.GetProperty().SetColor(*DEFAULT_RESECTION_COLOR)
+            self._preview_actor.GetProperty().SetOpacity(DEFAULT_RESECTION_OPACITY)
+            self._preview_actor.SetVisibility(False)
+
     def _attach_actors(self, renderer: Any) -> None:
         if not hasattr(renderer, "AddActor"):
             return
@@ -372,6 +408,8 @@ class SlicingPlaneInitRepresentation:
             renderer.AddActor(actor)
         if self._contour_actor is not None:
             renderer.AddActor(self._contour_actor)
+        if self._preview_actor is not None:
+            renderer.AddActor(self._preview_actor)
 
     def _detach_actors(self, renderer: Any) -> None:
         if not hasattr(renderer, "RemoveActor"):
@@ -384,6 +422,11 @@ class SlicingPlaneInitRepresentation:
         if self._contour_actor is not None:
             try:
                 renderer.RemoveActor(self._contour_actor)
+            except Exception:  # pragma: no cover — defensive
+                pass
+        if self._preview_actor is not None:
+            try:
+                renderer.RemoveActor(self._preview_actor)
             except Exception:  # pragma: no cover — defensive
                 pass
 
@@ -449,12 +492,17 @@ class SlicingPlaneInitRepresentation:
             # the view) and the refresh counter does not advance.
             return
 
+        grid = data_node.GetControlGridVector()
+        grid_digest = tuple(grid[:48]) if grid is not None and len(grid) >= 48 else None
         signature = (
             origin,
             normal,
             init0,
             init1,
             id(target) if target is not None else None,
+            # The seeded 4x4 grid drives the surface PREVIEW; without it
+            # in the memo a drag-release re-fit would never refresh.
+            grid_digest,
         )
         if signature == self._last_input_signature:
             return  # no geometry change, no refresh
@@ -463,6 +511,46 @@ class SlicingPlaneInitRepresentation:
 
         self._refresh_marker_positions(init0, init1)
         self._refresh_contour(origin, normal, target)
+        self._refresh_surface_preview(data_node)
+
+    def _refresh_surface_preview(self, data_node: Any) -> None:
+        """Feed the seeded 4x4 grid to the tessellated surface preview.
+
+        Degenerate grids (the all-zero default before the first drag
+        release seeds one) keep the preview hidden; a real grid feeds the
+        tessellation ONLY on geometry change (a fresh vtkPoints always
+        marks the source modified) and shows the surface unless a drag is
+        in flight.
+        """
+        if self._preview_source is None:
+            return
+        grid = data_node.GetControlGridVector()
+        if grid is None or len(grid) < 48:
+            return
+        geometry = tuple(grid[:48])
+        spread = max(geometry) - min(geometry)
+        if spread <= 1e-6:
+            # The unseeded default grid: nothing to preview.
+            if self._preview_actor is not None:
+                self._preview_actor.SetVisibility(False)
+            return
+        if geometry != self._last_preview_geometry:
+            points = vtk.vtkPoints()
+            for base in range(0, 48, 3):
+                points.InsertNextPoint(
+                    geometry[base], geometry[base + 1], geometry[base + 2]
+                )
+            self._preview_source.SetControlPoints(points)
+            self._last_preview_geometry = geometry
+        self._reconcile_preview_visibility()
+
+    def _reconcile_preview_visibility(self) -> None:
+        if self._preview_actor is None:
+            return
+        seeded = self._last_preview_geometry is not None
+        self._preview_actor.SetVisibility(
+            bool(seeded and not self._preview_suppressed)
+        )
 
     def _refresh_marker_positions(
         self,
@@ -569,6 +657,29 @@ def _read_init_point(
     try:
         return (float(raw[0]), float(raw[1]), float(raw[2]))
     except Exception:
+        return None
+
+
+def _resolve_surface_source():
+    """The wrapped ``vtkBezierSurfaceSource`` class, or ``None`` off-path.
+
+    Two-namespace resolve (the wrapped VTKWidgets classes are only on
+    the module wrapping inside a launched Slicer): the surface PREVIEW
+    degrades to absent in the bare unit layer.
+    """
+    try:
+        import vtkSlicerLiverResectionsModuleVTKWidgetsPython as widgets
+
+        cls = getattr(widgets, "vtkBezierSurfaceSource", None)
+        if cls is not None:
+            return cls
+    except ImportError:
+        pass
+    try:
+        import slicer
+
+        return getattr(slicer, "vtkBezierSurfaceSource", None)
+    except Exception:  # pragma: no cover - defensive
         return None
 
 

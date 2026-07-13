@@ -156,6 +156,12 @@ class _StubDataNode:
         self.init0 = init0
         self.init1 = init1
         self.target = target
+        # The unseeded default 4x4 grid (the surface preview reads it;
+        # all-zero = degenerate = no preview).
+        self.grid = tuple(0.0 for _ in range(48))
+
+    def GetControlGridVector(self):
+        return self.grid
 
     def GetSlicingPlaneOrigin(self):
         return self.origin
@@ -355,7 +361,10 @@ def test_representation_construct_without_wrapping_degrades_to_markers_only(
 
     renderer = vtk.vtkRenderer()
     rep.SetRenderer(renderer)
-    assert renderer.GetActors().GetNumberOfItems() == 2
+    # 2 markers (+ the surface PREVIEW actor when the wrapped
+    # tessellation source resolves -- launched harness only).
+    expected = 2 + (1 if rep.GetSurfacePreviewActor() is not None else 0)
+    assert renderer.GetActors().GetNumberOfItems() == expected
 
     rep.update(_StubDisplayNode(), _StubDataNode(target=_StubTargetModel()))
     assert rep.GetInputRefreshCount() == 1
@@ -479,11 +488,12 @@ def test_representation_attach_detach_renderer(rep_module):
     assert renderer.GetActors().GetNumberOfItems() == 0
 
     rep.SetRenderer(renderer)
-    # Three actors expected: two markers + the shader contour.  No grid
-    # actor (the grid is a Planning-state shader feature per ADR-0014
-    # §3; irrelevant in Init).  No plane square — the contour band on
-    # the liver IS the plane visualisation.
-    assert renderer.GetActors().GetNumberOfItems() == 3
+    # Two markers + the shader contour (+ the surface PREVIEW actor when
+    # the wrapped tessellation source resolves -- launched harness only).
+    # No plane square — the contour band on the liver IS the plane
+    # visualisation.
+    expected = 3 + (1 if rep.GetSurfacePreviewActor() is not None else 0)
+    assert renderer.GetActors().GetNumberOfItems() == expected
 
     rep.cleanup()
     assert renderer.GetActors().GetNumberOfItems() == 0

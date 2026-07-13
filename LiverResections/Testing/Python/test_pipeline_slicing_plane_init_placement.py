@@ -796,3 +796,144 @@ def test_drag_move_fires_exactly_one_modified(monkeypatch):
     )
     assert tuple(carrier.GetSlicingPlaneInitPoint(0)) == (5.0, 6.0, 7.0)
     assert tuple(carrier.GetSlicingPlaneOrigin())[2] != 5.0  # plane re-derived
+
+
+# --------------------------------------------------------------------------- #
+# R2 — the v1 iterate loop: re-fit on release, surface preview
+# --------------------------------------------------------------------------- #
+
+
+def _flat_ring(radius=20.0, z=5.0, count=36):
+    """A planar circle ring polydata (a synthetic plane/liver cut)."""
+    import math
+
+    import vtk
+
+    points = vtk.vtkPoints()
+    for k in range(count):
+        angle = 2.0 * math.pi * k / count
+        points.InsertNextPoint(
+            radius * math.cos(angle), radius * math.sin(angle), z
+        )
+    ring = vtk.vtkPolyData()
+    ring.SetPoints(points)
+    return ring
+
+
+def test_seed_grid_from_ring_builds_the_pca_rectangle():
+    """The ring's PCA rectangle becomes a non-degenerate planar 4x4 grid.
+
+    v1 parity (NorMIT-Plan): the rectangle spans 4*sqrt(eigenvalue)
+    along the two dominant in-plane eigenvectors, centred on the ring's
+    centre of mass; a 4x4 lattice over it seeds the control grid --
+    in ONE ModifiedEvent (the drag-latency lesson).
+    """
+    import vtk
+
+    slicer = _slicer_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+
+    events = []
+    tag = carrier.AddObserver(
+        vtk.vtkCommand.ModifiedEvent, lambda c, e: events.append(1)
+    )
+    try:
+        assert pipeline._seed_grid_from_ring(_flat_ring()) is True
+    finally:
+        carrier.RemoveObserver(tag)
+
+    assert len(events) == 1, (
+        f"the 16 grid writes must batch under ONE Modified (got {len(events)})"
+    )
+    grid = carrier.GetControlGridVector()
+    xs = [grid[i] for i in range(0, 48, 3)]
+    ys = [grid[i] for i in range(1, 48, 3)]
+    zs = [grid[i] for i in range(2, 48, 3)]
+    assert max(xs) - min(xs) > 10.0 and max(ys) - min(ys) > 10.0, (
+        "the grid must span the ring's PCA rectangle, not collapse"
+    )
+    assert all(abs(z - 5.0) < 1e-6 for z in zs), (
+        "a planar ring must seed a PLANAR grid at the ring's plane"
+    )
+    centre_x = sum(xs) / 16.0
+    centre_y = sum(ys) / 16.0
+    assert abs(centre_x) < 1.0 and abs(centre_y) < 1.0, (
+        "the grid must be centred on the ring's centre of mass"
+    )
+
+
+def test_release_refits_and_reshows_the_preview(monkeypatch):
+    """A drag release runs the re-fit and lifts the preview suppression."""
+    import vtk
+
+    slicer = _slicer_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+    target = _target_model_with_bounds(slicer)
+    carrier.SetAndObserveTargetModelNode(target)  # reconcile hook auto-seeds
+    if pipeline._slicing_plane_points_placed < 2:
+        pipeline._auto_seed_slicing_plane(view_right=(1.0, 0.0, 0.0))
+
+    monkeypatch.setattr(pipeline, "_safe_get_renderer", lambda: object())
+    monkeypatch.setattr(
+        pipeline, "_nearest_init_handle_in_display", lambda r, e: (0, 1.0)
+    )
+    monkeypatch.setattr(
+        pipeline, "_event_world_at_init_point", lambda r, e, i: (5.0, 6.0, 7.0)
+    )
+    refits = []
+    monkeypatch.setattr(
+        pipeline, "_refit_grid_from_plane", lambda: refits.append(1) or True
+    )
+    suppressions = []
+    monkeypatch.setattr(
+        pipeline,
+        "_set_surface_preview_suppressed",
+        lambda s: suppressions.append(bool(s)),
+    )
+
+    class _Event:
+        def __init__(self, etype):
+            self._etype = etype
+
+        def GetType(self):  # noqa: N802 - VTK verb
+            return self._etype
+
+    assert pipeline.ProcessInteractionEvent(
+        _Event(vtk.vtkCommand.LeftButtonPressEvent)
+    )
+    assert suppressions == [True], "a grab must hide the preview (v1)"
+    assert pipeline.ProcessInteractionEvent(
+        _Event(vtk.vtkCommand.LeftButtonReleaseEvent)
+    ) is False
+    assert refits == [1], "the release must run the grid re-fit (v1 loop)"
+    assert suppressions == [True, False], (
+        "the release must re-show the preview after the re-fit"
+    )
+
+
+def test_preview_shows_only_a_seeded_grid():
+    """The Init preview hides on the default grid, shows once seeded."""
+    slicer = _slicer_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+    target = _target_model_with_bounds(slicer)
+    carrier.SetAndObserveTargetModelNode(target)
+    pipeline.UpdatePipeline()
+
+    rep = pipeline._representations.get("SlicingPlaneInit")
+    if rep is None or rep.GetSurfacePreviewActor() is None:
+        pytest.skip("surface preview needs the wrapped tessellation source")
+    assert rep.GetSurfacePreviewActor().GetVisibility() == 0, (
+        "the unseeded default grid must not preview"
+    )
+
+    assert pipeline._seed_grid_from_ring(_flat_ring()) is True
+    pipeline.UpdatePipeline()
+    assert rep.GetSurfacePreviewActor().GetVisibility() == 1, (
+        "a seeded grid must show the tessellated surface preview"
+    )
+    rep.SetSurfacePreviewSuppressed(True)
+    assert rep.GetSurfacePreviewActor().GetVisibility() == 0, (
+        "suppression (mid-drag) must hide the preview"
+    )
+    rep.SetSurfacePreviewSuppressed(False)
+    assert rep.GetSurfacePreviewActor().GetVisibility() == 1

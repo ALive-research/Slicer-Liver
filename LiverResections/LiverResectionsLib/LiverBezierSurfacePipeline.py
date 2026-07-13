@@ -752,6 +752,11 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                         return True
                     if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
                         self._init_drag_index = None
+                        # The v1 loop: every drag RELEASE re-fits the 4x4
+                        # grid from the fresh plane/liver cut and re-shows
+                        # the surface preview (hidden during the drag).
+                        self._refit_grid_from_plane()
+                        self._set_surface_preview_suppressed(False)
                         return False
                     return False
                 if etype == vtk.vtkCommand.LeftButtonPressEvent:
@@ -765,6 +770,8 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                         and self._slicing_plane_points_placed >= 2
                     ):
                         self._init_drag_index = index
+                        # v1 hid the surface while a handle drags.
+                        self._set_surface_preview_suppressed(True)
                         return True
 
                 # Legacy fill-placement (the no-auto-seed fallback: no target
@@ -987,6 +994,84 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             )
         except Exception:  # pragma: no cover - camera probing must not raise
             return None
+
+    def _set_surface_preview_suppressed(self, suppressed: bool) -> None:
+        """Hide/show the Init surface preview (drag choreography, v1)."""
+        name = self._current_representation_name
+        active = self._representations.get(name) if name else None
+        setter = getattr(active, "SetSurfacePreviewSuppressed", None)
+        if setter is not None:
+            setter(bool(suppressed))
+
+    def _refit_grid_from_plane(self) -> bool:
+        """Re-fit the 4x4 grid from the current plane/liver cut (v1 loop).
+
+        Runs the discrete ring extraction against the weakref'd target
+        mesh and seeds the control grid from the ring's PCA rectangle --
+        v1's ``UpdateBezierWidgetOnInitialization`` (NorMIT-Plan): the
+        rectangle spans 4*sqrt(eigenvalue) along the two dominant
+        in-plane eigenvectors, centred on the ring's centre of mass, and
+        a 4x4 lattice over it becomes the control grid.  A graceful
+        ``False`` when there is nothing to fit (no target / no ring).
+        """
+        carrier = self._data_node
+        if carrier is None or _safe_get_state(carrier) != STATE_INIT:
+            return False
+        if _safe_get_init_mode(carrier) != INIT_MODE_SLICING_PLANE:
+            return False
+        target = self._resolve_target_model()
+        if target is None:
+            return False
+        self._run_ring_extraction(target)
+        name = self._current_representation_name
+        active = self._representations.get(name) if name else None
+        ring = (
+            getattr(active, "GetRingPolyData", lambda: None)()
+            if active is not None
+            else None
+        )
+        if ring is None or ring.GetNumberOfPoints() < 3:
+            return False
+        return self._seed_grid_from_ring(ring)
+
+    def _seed_grid_from_ring(self, ring: Any) -> bool:
+        """Seed the carrier's 4x4 grid from a ring's PCA rectangle."""
+        import numpy as np
+
+        carrier = self._data_node
+        if carrier is None:
+            return False
+        count = ring.GetNumberOfPoints()
+        if count < 3:
+            return False
+        points = np.array([ring.GetPoint(i) for i in range(count)])
+        centre = points.mean(axis=0)
+        eigenvalues, eigenvectors = np.linalg.eigh(np.cov((points - centre).T))
+        # Ascending order: the two DOMINANT axes are the in-plane pair.
+        axis_u = eigenvectors[:, 2]
+        axis_v = eigenvectors[:, 1]
+        length_u = 4.0 * float(np.sqrt(max(float(eigenvalues[2]), 0.0)))
+        length_v = 4.0 * float(np.sqrt(max(float(eigenvalues[1]), 0.0)))
+        if length_u <= 0.0 or length_v <= 0.0:
+            return False
+        corner = centre - axis_u * (length_u / 2.0) - axis_v * (length_v / 2.0)
+
+        # ONE Modified for the 16 writes (the drag-latency lesson).
+        was_modifying = carrier.StartModify()
+        try:
+            for row in range(4):
+                for col in range(4):
+                    point = (
+                        corner
+                        + axis_u * (length_u * col / 3.0)
+                        + axis_v * (length_v * row / 3.0)
+                    )
+                    carrier.SetControlPoint(
+                        row, col, float(point[0]), float(point[1]), float(point[2])
+                    )
+        finally:
+            carrier.EndModify(was_modifying)
+        return True
 
     def _place_distance_spheroid_init_point(self, world: Any) -> int | None:
         """Place the next distance-spheroid init point at RAS ``world``.
