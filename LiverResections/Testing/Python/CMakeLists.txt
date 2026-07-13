@@ -149,24 +149,21 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections;subject-hierarchy"
     )
 
-    # Stack-4 ring-extraction wiring -- Constraint 3 (issue-337): ring
-    # extraction runs ONCE on the Init->Planning commit transition
-    # (ADR-0019), NOT per drag; and the Init Representation consumes the
-    # weakref'd target mesh (ADR-0014 §1, GetTargetModelNode()).  Needs the
-    # wrapped vtkMRMLBezierSurfaceNode + a real target model + the Pipeline's
-    # commit() seam, so it runs green under the launched-Slicer
-    # `pytest_launched` row and SKIPS CLEANLY here under bare pytest (no
-    # slicer.mrmlScene / commit() seam absent).  RED / skip-pending until the
-    # implementer lands the commit boundary + the TODO(T2-target-mesh-weakref)
-    # wiring.
+    # Ring-extraction BOUNDARY (ADR-0035): the CPU ring extraction runs
+    # exactly once per plane-handle DROP (the candidate re-fit), never on
+    # per-move / per-reconcile Init ticks; and the drop's re-fit consumes
+    # the weakref'd target mesh (ADR-0014 §1, GetTargetModelNode()).
+    # Needs the wrapped vtkMRMLBezierSurfaceNode + a real target model,
+    # so it runs green under the launched-Slicer `pytest_launched` row
+    # and SKIPS CLEANLY here under bare pytest (no slicer.mrmlScene).
     add_test(
-      NAME LiverResections_ring_extraction_on_commit
+      NAME LiverResections_ring_extraction_boundary
       COMMAND "${Python3_EXECUTABLE}" -m pytest
         -q
-        "${CMAKE_CURRENT_SOURCE_DIR}/test_resections_ring_extraction_on_commit.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_resections_ring_extraction_boundary.py"
       WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     )
-    set_tests_properties(LiverResections_ring_extraction_on_commit PROPERTIES
+    set_tests_properties(LiverResections_ring_extraction_boundary PROPERTIES
       LABELS "pytest;module-layer;LiverResections;ring-extraction"
     )
 

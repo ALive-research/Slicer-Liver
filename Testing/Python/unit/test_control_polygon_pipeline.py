@@ -497,11 +497,14 @@ def test_init_candidate_admits_the_polygon_and_press_commits(
     assert can is False, "no candidate yet -- the polygon must decline"
     assert pipeline._compute_visibility(data.GetState()) is False
 
-    # Candidate ready: visible + grabbable.
-    data.SetAttribute(pipeline_module.ATTR_INIT_CANDIDATE_READY, "1")
+    # Candidate up (a drop with a successful re-fit): visible + grabbable.
+    import ResectionStateMachine as rsm
+
+    rsm.request(data, rsm.EVENT_PLANE_HANDLE_GRABBED)
+    rsm.request(data, rsm.EVENT_PLANE_HANDLE_DROPPED, refit=lambda: True)
     assert pipeline._compute_visibility(data.GetState()) is True, (
-        "the candidate polygon must show in Init once the release re-fit "
-        "marked it ready."
+        "the candidate polygon must show in Init once a drop's re-fit "
+        "raised the candidate."
     )
     can, d2 = pipeline.CanProcessInteractionEvent(press)
     assert can is True and d2 == pytest.approx(4.0)
@@ -524,13 +527,17 @@ def test_init_drag_in_flight_hides_and_declines_the_polygon(
     while the contour follows the plane handle)."""
     import vtk
 
+    import ResectionStateMachine as rsm
+
     data, display = polygon_nodes
     pipeline = pipeline_module.ControlPolygonPipeline()
     pipeline.SetDisplayNode(display)
     _seed_grid(data)
     data.SetState(0)  # Init
-    data.SetAttribute(pipeline_module.ATTR_INIT_CANDIDATE_READY, "1")
-    data.SetAttribute(pipeline_module.ATTR_INIT_HANDLE_DRAG, "1")
+    # Raise a candidate, then grab a plane handle again: in flight.
+    rsm.request(data, rsm.EVENT_PLANE_HANDLE_GRABBED)
+    rsm.request(data, rsm.EVENT_PLANE_HANDLE_DROPPED, refit=lambda: True)
+    rsm.request(data, rsm.EVENT_PLANE_HANDLE_GRABBED)
 
     pipeline._safe_get_renderer = lambda: object()
     pipeline._nearest_control_point_in_display = lambda r, e: (5, 4.0)
