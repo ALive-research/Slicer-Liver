@@ -34,6 +34,18 @@ _SCT_LIVER_CODE = "10200004"
 _TARGET_MODEL_ATTRIBUTE = "LiverResections.TargetModel"
 
 
+def has_canonical_liver() -> bool:
+    """True iff a canonical segmentation holds an SCT-tagged liver segment.
+
+    The Place guard's predicate: without it there is no target mesh, no
+    auto-seed, and no contour -- Place must refuse instead of minting a
+    dead resection (v1 parity: AddResectionPlane errored on a missing
+    target organ model).
+    """
+    node, _segment_id = _find_canonical_liver_segment()
+    return node is not None
+
+
 def ensure_target_model(plan_node: Any) -> Any | None:
     """Attach the hidden liver target model to ``plan_node``'s carrier.
 
