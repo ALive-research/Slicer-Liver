@@ -23,14 +23,18 @@ Widget-contract pins (queue enqueue stubbed; the finish callback driven
 synchronously — except the per-job cancel pin, which drives the REAL
 queue with a slow stub child):
 
-  * enqueueing flips every targeted segment to native ``InProgress``,
-    including the demote-from-``Completed`` staleness rule;
-  * landing keeps ``InProgress`` — nothing ever auto-writes ``Completed``
-    (the surgeon ALWAYS confirms via the status cell);
+  * enqueueing leaves every segment status UNTOUCHED — jobs can abort,
+    so nothing is promised before output lands; the queued/running state
+    is the per-job progress rows' to show;
+  * landing writes native ``InProgress`` ("produced, under review") and
+    demotes a re-run ``Completed`` same-code row (the staleness rule now
+    rides the landing); nothing ever auto-writes ``Completed`` (the
+    surgeon ALWAYS confirms via the status cell);
   * multi-select Run enqueues every selected structure, grouped into the
     minimal per-task backend calls;
-  * the per-job ✕ on a QUEUED job dequeues it and restores its segments'
-    pre-enqueue statuses; the running job is untouched.
+  * the per-job ✕ on a QUEUED job dequeues it, retires its progress row,
+    and leaves every segment status untouched; the running job is
+    untouched.
 
 Needs the launched-Slicer harness (Qt event loop + MRML + module); skips
 cleanly under bare pytest via the shared guards.
@@ -391,7 +395,7 @@ def test_shutdown_leaves_no_child_and_no_pending_job(queue_teardown):
 
 
 # =========================================================================== #
-# Widget contract — enqueue-time status flips, landing, multi-select, macro.
+# Widget contract — status-neutral enqueue, landing, multi-select, macro.
 # =========================================================================== #
 
 
@@ -433,10 +437,14 @@ def _stub_widget_queue(monkeypatch, widget):
     return calls
 
 
-def test_enqueue_flips_targeted_segments_to_inprogress(monkeypatch, qt_widgets):
-    """At enqueue every targeted row reads native ``InProgress`` at once —
-    including the demote-from-``Completed`` staleness rule (running
-    TotalSegmentator on a segment IS editing it, ADR-0034 §Amendments)."""
+def test_enqueue_leaves_segment_statuses_untouched(monkeypatch, qt_widgets):
+    """Enqueue writes NO segment status — jobs can abort before producing.
+
+    The status column is the surgeon's channel; a queued/running job shows
+    through its progress rows, and the native ``InProgress`` flip happens
+    only at LANDING, when produced output actually exists.  A ``Completed``
+    row being re-run therefore keeps reading ``Completed`` until its new
+    output lands (the staleness demote rides the landing)."""
     slicer = _slicer_or_skip()
     module = _module_or_skip()
     slicer.mrmlScene.Clear(0)
@@ -450,20 +458,24 @@ def test_enqueue_flips_targeted_segments_to_inprogress(monkeypatch, qt_widgets):
 
     liver_id, liver = _sct_segment(module, canonical, SCT_LIVER_CODE)
     hepatic_id, hepatic = _sct_segment(module, canonical, SCT_HEPATIC_VEIN_CODE)
-    # The staleness case: hepatic vein was already confirmed by the surgeon.
+    # The re-run case: hepatic vein was already confirmed by the surgeon.
     segments_logic.SetSegmentStatus(hepatic, segments_logic.Completed)
 
     table.setSelectedSegmentIDs([liver_id, hepatic_id])
     widget.onRunSelectedStructures()
 
     assert calls, "the Run gesture must enqueue."
-    assert segments_logic.GetSegmentStatus(liver) == segments_logic.InProgress, (
-        "the enqueue must flip a NotStarted target to native InProgress "
-        "IMMEDIATELY, before any child output."
+    assert segments_logic.GetSegmentStatus(liver) == segments_logic.NotStarted, (
+        "enqueue must NOT touch a NotStarted target's status -- nothing "
+        "was produced yet; the progress row is the running indicator."
     )
-    assert segments_logic.GetSegmentStatus(hepatic) == segments_logic.InProgress, (
-        "re-running a Completed row must demote it to InProgress at enqueue "
-        "-- the staleness rule (ADR-0034 §Decision 2, as amended)."
+    assert segments_logic.GetSegmentStatus(hepatic) == segments_logic.Completed, (
+        "enqueue must NOT demote a Completed row -- the staleness demote "
+        "happens at landing, when the new output actually arrives."
+    )
+    assert widget._jobRows, (
+        "the queued/running state must be visible through the per-job "
+        "progress rows instead of a status write."
     )
 
 
@@ -514,6 +526,59 @@ def test_landing_keeps_inprogress_never_auto_completed(monkeypatch, qt_widgets):
     )
 
 
+def test_completed_row_demotes_at_landing_on_rerun(monkeypatch, qt_widgets):
+    """Re-running a confirmed structure demotes it to ``InProgress`` at LANDING.
+
+    Enqueue no longer touches statuses, so the staleness rule (new output
+    makes a prior confirm stale, ADR-0034 §Decision 2 as amended) fires when
+    the re-run's output lands: the previously landed same-code ``Completed``
+    row falls back to native ``InProgress`` alongside the newly landed
+    row — the surgeon re-reviews both."""
+    slicer = _slicer_or_skip()
+    module = _module_or_skip()
+    slicer.mrmlScene.Clear(0)
+
+    volume = _add_input_volume(slicer)
+    widget = _widget_or_skip(slicer, qt_widgets)
+    _stub_widget_queue(monkeypatch, widget)
+    table = widget.segmentsTable()
+    canonical = table.segmentationNode()
+    segments_logic = slicer.vtkSlicerSegmentationsModuleLogic
+
+    # A previously landed + confirmed liver row: provenance-tagged (so the
+    # placeholder-replacement path does not apply) and Completed.
+    liver_id, liver = _sct_segment(module, canonical, SCT_LIVER_CODE)
+    liver.SetTag(module.SOURCE_TAG, module.SOURCE_TOTALSEG)
+    segments_logic.SetSegmentStatus(liver, segments_logic.Completed)
+
+    def _fake_import(outputDir, structures):
+        logic = widget.logic
+        scratch = logic.createScratchSegmentation()
+        seg_id = scratch.GetSegmentation().AddEmptySegment("rerun", "Rerun")
+        logic.tagSegmentWithSct(scratch, seg_id, SCT_LIVER_CODE, "Rerun")
+        return scratch
+
+    monkeypatch.setattr(widget.logic, "importJobOutput", _fake_import)
+
+    table.setSelectedSegmentIDs([liver_id])
+    widget.onRunSelectedStructures()
+    assert segments_logic.GetSegmentStatus(liver) == segments_logic.Completed, (
+        "precondition: the enqueue left the confirmed row untouched."
+    )
+
+    from LiverSegmentationLib.SegmentationJobQueue import jobKey
+
+    widget._onJobFinished(
+        jobKey("total", volume.GetID()), {SCT_LIVER_CODE}, True, "/nonexistent-out"
+    )
+
+    assert segments_logic.GetSegmentStatus(liver) == segments_logic.InProgress, (
+        "landing new output for the structure must demote the previously "
+        "confirmed same-code row to InProgress -- the staleness rule rides "
+        "the landing."
+    )
+
+
 def test_multiselect_run_enqueues_all_selected_grouped_by_task(
     monkeypatch, qt_widgets
 ):
@@ -551,17 +616,18 @@ def test_multiselect_run_enqueues_all_selected_grouped_by_task(
     )
 
 
-def test_widget_cancel_of_a_queued_job_restores_prior_statuses(
+def test_widget_cancel_of_a_queued_job_leaves_statuses_untouched(
     monkeypatch, qt_widgets, queue_teardown
 ):
-    """The per-job ✕ on a QUEUED job dequeues it and restores its rows.
+    """The per-job ✕ on a QUEUED job dequeues it; statuses stay untouched.
 
     Drives the widget's REAL queue with a slow stub child: a multi-select
     Run spawns the ``total`` child and leaves ``liver_vessels`` queued.
-    Cancelling the queued job must restore its segment to the pre-enqueue
-    status (the enqueue-time ``InProgress`` flip is a promise of produced
-    output), retire its progress row, and never spawn its child — while
-    the running job and its row stay untouched."""
+    Enqueue wrote no status, so the cancel has nothing to undo: every row
+    keeps exactly the status it had before the Run (including a surgeon's
+    ``Completed`` confirm).  The cancelled job's progress row retires, its
+    child never spawns — while the running job and its row stay
+    untouched."""
     slicer = _slicer_or_skip()
     module = _module_or_skip()
     slicer.mrmlScene.Clear(0)
@@ -578,6 +644,9 @@ def test_widget_cancel_of_a_queued_job_restores_prior_statuses(
 
     liver_id, liver = _sct_segment(module, canonical, SCT_LIVER_CODE)
     hepatic_id, hepatic = _sct_segment(module, canonical, SCT_HEPATIC_VEIN_CODE)
+    # A surgeon-set confirm on the soon-to-be-cancelled structure: the
+    # cancel path must not rewrite it (nothing was written at enqueue).
+    segments_logic.SetSegmentStatus(hepatic, segments_logic.Completed)
     table.setSelectedSegmentIDs([liver_id, hepatic_id])
     widget.onRunSelectedStructures()
 
@@ -591,16 +660,19 @@ def test_widget_cancel_of_a_queued_job_restores_prior_statuses(
     assert set(widget._jobRows) == {running_key, queued_key}, (
         "one progress row per queued/running job must be on screen."
     )
-    assert segments_logic.GetSegmentStatus(hepatic) == segments_logic.InProgress
+    assert segments_logic.GetSegmentStatus(hepatic) == segments_logic.Completed, (
+        "enqueue must leave the queued structure's status untouched."
+    )
 
     widget._onCancelJob(queued_key)
 
-    assert segments_logic.GetSegmentStatus(hepatic) == segments_logic.NotStarted, (
-        "cancelling the QUEUED job must restore its segment's pre-enqueue "
-        "status -- nothing was produced."
+    assert segments_logic.GetSegmentStatus(hepatic) == segments_logic.Completed, (
+        "cancelling the QUEUED job must leave its segment's status exactly "
+        "as it was -- enqueue wrote nothing, so there is nothing to restore."
     )
-    assert segments_logic.GetSegmentStatus(liver) == segments_logic.InProgress, (
-        "the RUNNING job's segment must stay InProgress."
+    assert segments_logic.GetSegmentStatus(liver) == segments_logic.NotStarted, (
+        "the RUNNING job's segment status is untouched too -- its progress "
+        "row is the running indicator."
     )
     assert set(widget._jobRows) == {running_key}, (
         "the dequeued job's progress row must retire; the running one stays."

@@ -26,8 +26,9 @@ Pins:
   * Run with no row selected enqueues nothing, with a status-label hint.
   * Run without a Stage-1 PortalVenous volume is refused with the Stage-1
     hint (the ADR-0024 Stage-1/Stage-2 hand-off pin, wording preserved).
-  * a FAILED job lands nothing and the targeted rows fall back to their
-    pre-enqueue status (the invariant the retired Reject suite carried).
+  * a FAILED job lands nothing and leaves every row's status untouched —
+    enqueue writes no status, so an aborted job has nothing to undo (the
+    canonical-untouched invariant the retired Reject suite carried).
   * the busy surface is PER STRUCTURE: the queue coalesces EXECUTION (one
     backend child per (task, input)) but the UI fans each job out to one
     progress row per anatomical structure it covers — each bar leads with
@@ -382,14 +383,14 @@ def test_toolbar_run_without_portalvenous_volume_is_refused_with_stage1_hint(
 
 
 def test_failed_job_leaves_canonical_untouched(monkeypatch, qt_widgets):
-    """A failed job lands nothing: rows fall back, no scratch, no growth.
+    """A failed job lands nothing: statuses untouched, no scratch, no growth.
 
     The invariant the retired Reject suite carried (ADR-0034 §Amendments
     removes Reject; delete/re-run and ``Flagged`` cover its uses): a job
     that fails must leave the canonical node -- and its pre-seeded
-    checklist -- exactly as they were.  The enqueue-time ``InProgress``
-    flip is a promise of produced output, so the targeted row falls BACK
-    to its pre-enqueue status when the job delivers nothing.
+    checklist -- exactly as they were.  Enqueue writes NO status (jobs can
+    abort; the progress rows carry the running state), so the failed job
+    has nothing to restore: every row still reads its pre-Run status.
     """
     slicer, _orch = _orchestrator_or_skip()
     import LiverSegmentation as module
@@ -407,8 +408,9 @@ def test_failed_job_leaves_canonical_untouched(monkeypatch, qt_widgets):
     liver = canonical.GetSegmentation().GetSegment(
         _sct_segment_id(module, canonical, SCT_LIVER_CODE)
     )
-    assert segments_logic.GetSegmentStatus(liver) == segments_logic.InProgress, (
-        "precondition: the enqueue flipped the targeted row to InProgress."
+    assert segments_logic.GetSegmentStatus(liver) == segments_logic.NotStarted, (
+        "enqueue must leave the targeted row's status untouched -- the "
+        "running state is the progress row's to show."
     )
 
     _drive_finish(widget, volume, [SCT_LIVER_CODE], success=False)
@@ -426,8 +428,8 @@ def test_failed_job_leaves_canonical_untouched(monkeypatch, qt_widgets):
         assert (
             segments_logic.GetSegmentStatus(segment) == segments_logic.NotStarted
         ), (
-            "a failed job must leave every checklist row NotStarted -- the "
-            "enqueue-time flip is restored when nothing lands."
+            "a failed job must leave every checklist row NotStarted -- "
+            "no status was written at enqueue and nothing landed."
         )
     assert "failed" in widget._statusLabel.text.lower(), (
         "the failure must surface on the shared status label; got "
