@@ -26,7 +26,6 @@ set(MODULE_PYTHON_RESOURCES
   Resources/Icons/${MODULE_NAME}.png
   Resources/UI/${MODULE_NAME}.ui
   Resources/UI/BackendStatusRow.ui
-  Resources/UI/StructureCard.ui
   Resources/UI/LoadSegmentationSection.ui
   )
 

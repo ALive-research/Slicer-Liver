@@ -16,12 +16,20 @@ Pins (ADR-0034 §Amendments + §Conformance read through them):
     EMPTY segment per structure-vocabulary entry, in vocabulary order, all
     reading native ``NotStarted``; idempotent on the second call.
   * ``segmentsTable()`` returns the configured stock view (status column
-    on), bound to the canonical node; the read path never mints one.
+    on), bound to the canonical node.
+  * ``setup()`` mints exactly ONE canonical (idempotent across widget
+    rebuilds) with the pre-seeded checklist and binds the table to it —
+    the "no node is selected" empty state never shows; the refresh path
+    (``_bindSegmentsTable`` on scene change) stays a pure read that never
+    mints.
   * ``accept()`` lands a scratch segment INTO its pre-seeded row (the
     placeholder is replaced, not duplicated; order preserved) as native
     ``InProgress`` with the per-segment source tag.
   * ``structureStatus`` maps the native vocabulary, incl. ``Flagged`` and
     the marked-absent attestation.
+  * the toolbar's Mark absent writes the attestation shape on the selected
+    empty row: the canonical marked-absent attribute + native ``Completed``
+    on the empty segment, read back as ``Marked absent``.
 
 Needs the launched-Slicer harness (module + Qt + MRML); skips cleanly
 under bare pytest via the shared guards.
@@ -168,33 +176,81 @@ def test_segments_table_is_a_configured_stock_view_bound_to_canonical(qt_widgets
     )
 
 
-def test_segments_table_read_path_never_mints_the_canonical(qt_widgets):
-    """Building the panel on an empty scene binds nothing and creates no
-    canonical node -- getOrCreate is a write gesture, never a refresh
-    side-effect (ADR-0024 §'Output contract')."""
+def _canonicals(slicer, module):
+    return [
+        node
+        for node in slicer.util.getNodesByClass("vtkMRMLSegmentationNode")
+        if node.GetAttribute(module.ROLE_ATTRIBUTE) == module.ROLE_CANONICAL
+    ]
+
+
+def test_setup_binds_the_table_immediately_on_a_fresh_scene(qt_widgets):
+    """Right after ``setup()`` on a fresh scene the table is bound and the
+    four-row checklist is on screen -- the stock view's "no node is
+    selected" empty state never shows (ADR-0034 §Decision 1: the empty
+    state teaches the goal)."""
     slicer = _slicer_or_skip()
     module = _module_or_skip()
     slicer.mrmlScene.Clear(0)
 
     widget = _widget_or_skip(slicer, qt_widgets)
     table = widget.segmentsTable()
-    assert table.segmentationNode() is None, (
-        "no canonical node exists, so the view must stay unbound."
+    bound = table.segmentationNode()
+    assert bound is not None, (
+        "setup() must mint-or-adopt the canonical node and bind the table "
+        "to it immediately -- the 'no node is selected' state is retired."
     )
-    canonicals = [
-        node
-        for node in slicer.util.getNodesByClass("vtkMRMLSegmentationNode")
-        if node.GetAttribute(module.ROLE_ATTRIBUTE) == module.ROLE_CANONICAL
-    ]
-    assert canonicals == [], (
-        "building/refreshing the table must not mint a canonical node."
+    assert bound.GetSegmentation().GetNumberOfSegments() == len(
+        module.STRUCTURE_TABS
+    ), "the pre-seeded checklist must be visible the moment Stage 2 opens."
+
+
+def test_setup_mints_exactly_one_canonical_idempotently(qt_widgets):
+    """``setup()`` mints exactly ONE canonical with the pre-seeded checklist,
+    idempotent across widget rebuilds; the scene-change refresh path stays
+    a pure read that never mints (ADR-0034 §Amendments; ADR-0024 §'Output
+    contract' single-canonical)."""
+    slicer = _slicer_or_skip()
+    module = _module_or_skip()
+    slicer.mrmlScene.Clear(0)
+
+    first = _widget_or_skip(slicer, qt_widgets)
+    canonicals = _canonicals(slicer, module)
+    assert len(canonicals) == 1, (
+        "setup() on a fresh scene must mint exactly one canonical node."
+    )
+    canonical = canonicals[0]
+
+    # A widget REBUILD adopts the existing canonical, never a second one.
+    second = _widget_or_skip(slicer, qt_widgets)
+    assert len(_canonicals(slicer, module)) == 1, (
+        "a widget rebuild must adopt the existing canonical, not mint a "
+        "second one (get-or-create idempotence)."
+    )
+    assert second.segmentsTable().segmentationNode().GetID() == canonical.GetID()
+    assert canonical.GetSegmentation().GetNumberOfSegments() == len(
+        module.STRUCTURE_TABS
+    ), "re-running setup() must not duplicate the pre-seeded checklist rows."
+
+    # The refresh path is a pure READ: with the canonical gone, a scene-
+    # change refresh unbinds and must NOT mint a replacement.
+    slicer.mrmlScene.RemoveNode(canonical)
+    first._onSceneChanged()
+    assert first.segmentsTable().segmentationNode() is None, (
+        "with no canonical in the scene the refresh must leave the view "
+        "unbound."
+    )
+    assert _canonicals(slicer, module) == [], (
+        "_bindSegmentsTable is a pure read -- a scene-change refresh must "
+        "never mint the canonical (getOrCreate is setup()'s explicit write "
+        "gesture)."
     )
 
     # A canonical landing in the scene re-binds via the scene observer.
-    canonical = widget.logic.getOrCreateCanonicalSegmentation()
-    widget._onSceneChanged()
-    bound = table.segmentationNode()
-    assert bound is not None and bound.GetID() == canonical.GetID(), (
+    replacement = first.logic.getOrCreateCanonicalSegmentation()
+    first._onSceneChanged()
+    bound = first.segmentsTable().segmentationNode()
+    assert bound is not None and bound.GetID() == replacement.GetID(), (
         "the view must re-bind to a canonical node arriving after setup."
     )
 
@@ -318,6 +374,70 @@ def test_structure_status_maps_the_native_vocabulary():
     assert (
         module.structureStatus(canonical, module.SCT_MASS_CODE)
         == module.STATUS_MARKED_ABSENT
+    )
+
+
+def test_mark_absent_toolbar_writes_the_attestation_shape(qt_widgets):
+    """Mark absent on a selected empty row writes attribute + ``Completed``.
+
+    ADR-0034 §Amendments: the explicit absence attestation is an empty
+    ``Completed`` segment plus the canonical marked-absent attribute (the
+    audit trail) -- exactly the shape ``structureStatus`` and
+    ``isStageComplete`` already understand.  The gesture applies only to a
+    row still reading native ``NotStarted``; anything else gets a hint and
+    no write."""
+    slicer = _slicer_or_skip()
+    module = _module_or_skip()
+    slicer.mrmlScene.Clear(0)
+
+    widget = _widget_or_skip(slicer, qt_widgets)
+    table = widget.segmentsTable()
+    canonical = table.segmentationNode()
+    segments_logic = _segments_logic(slicer)
+
+    mass_id = _sct_segment_ids(module, canonical, module.SCT_MASS_CODE)[0]
+    table.setSelectedSegmentIDs([mass_id])
+    widget.onMarkAbsent()
+
+    attribute = module.MARKED_ABSENT_ATTRIBUTE_PREFIX + module.SCT_MASS_CODE
+    assert canonical.GetAttribute(attribute) == "1", (
+        "Mark absent must write the canonical marked-absent attribute "
+        "(the audit trail, ADR-0034 §Amendments)."
+    )
+    mass = canonical.GetSegmentation().GetSegment(mass_id)
+    assert segments_logic.GetSegmentStatus(mass) == segments_logic.Completed, (
+        "Mark absent must set native Completed on the empty segment -- the "
+        "explicit attestation the completion predicate counts."
+    )
+    assert (
+        module.structureStatus(canonical, module.SCT_MASS_CODE)
+        == module.STATUS_MARKED_ABSENT
+    ), "the attested row must read back as Marked absent."
+
+    # A row past NotStarted refuses the gesture: hint, no write.
+    liver_id = _sct_segment_ids(module, canonical, module.SCT_LIVER_CODE)[0]
+    liver = canonical.GetSegmentation().GetSegment(liver_id)
+    segments_logic.SetSegmentStatus(liver, segments_logic.InProgress)
+    table.setSelectedSegmentIDs([liver_id])
+    widget.onMarkAbsent()
+
+    liver_attribute = module.MARKED_ABSENT_ATTRIBUTE_PREFIX + module.SCT_LIVER_CODE
+    assert canonical.GetAttribute(liver_attribute) is None, (
+        "Mark absent on a row past NotStarted must not write the attribute."
+    )
+    assert segments_logic.GetSegmentStatus(liver) == segments_logic.InProgress, (
+        "Mark absent on a row past NotStarted must not touch its status."
+    )
+    status = widget._statusLabel.text
+    assert status and status != "Idle", (
+        "the refused gesture must surface a hint on the shared status label."
+    )
+
+    # No selection: a no-op with a hint.
+    table.setSelectedSegmentIDs([])
+    widget.onMarkAbsent()
+    assert canonical.GetSegmentation().GetNumberOfSegments() == len(
+        module.STRUCTURE_TABS
     )
 
 

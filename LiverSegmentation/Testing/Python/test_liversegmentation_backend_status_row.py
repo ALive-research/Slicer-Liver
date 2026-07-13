@@ -201,6 +201,10 @@ def test_predownload_button_calls_ensurebackend_confirm_false_no_node(
     slicer = _import_slicer_or_skip()
     slicer.mrmlScene.Clear(0)
     widget = _widget_or_skip(slicer, qt_widgets)
+    # setup() legitimately mints the single canonical node (ADR-0034
+    # §Amendments: the pre-seeded checklist is visible on entry); the
+    # Pre-download invariant is that the CLICK adds nothing on top.
+    baseline = len(slicer.util.getNodesByClass("vtkMRMLSegmentationNode"))
 
     import LiverSegmentationLib.ToolWrappers.TotalSegmentator as ts  # noqa: N813
 
@@ -230,7 +234,9 @@ def test_predownload_button_calls_ensurebackend_confirm_false_no_node(
         "Pre-download must call ensureBackendInstalled(confirm=False) -- "
         "the click is the opt-in, no second size dialog (ADR-0024)."
     )
-    assert len(slicer.util.getNodesByClass("vtkMRMLSegmentationNode")) == 0, (
+    assert (
+        len(slicer.util.getNodesByClass("vtkMRMLSegmentationNode")) == baseline
+    ), (
         "Pre-download must mint NO segmentation node -- downloading the "
         "model is not a Run (ADR-0024 §'Lazy install')."
     )

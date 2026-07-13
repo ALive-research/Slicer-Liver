@@ -1,36 +1,23 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 
-"""Invariant 8 (UI) — isStructureAccepted(sct) + per-tab confirmation glyph.
+"""isStructureAccepted(sct) — the canonical-only landed-structure predicate.
 
-The Stage-2 panel is a ``QTabWidget`` of four structure tabs (Liver
-parenchyma / Portal vein / Hepatic vein / Tumors), each carrying a
-confirmation glyph in its tab label that mirrors the Liver-shell idiom
-(``Liver/Liver.py`` ``_stageIndicatorState`` -> ``_indicatorGlyph``, the
-✓ / ● / ○ set).  A tab flips ○ -> ✓ once the CANONICAL node holds a segment
-SCT-tagged for that structure — i.e. only after that structure's Accept.
+The orchestrator method ``isStructureAccepted(<sct target>)`` reads the
+CANONICAL node ONLY (role-filtered, like ``_findCanonicalSegmentation``):
+a structure counts as landed once its canonical segment's NATIVE status has
+moved past ``NotStarted`` (ADR-0034 §Amendments — a pre-seeded empty
+placeholder is expected, not accepted).  Scratch nodes must never flip the
+predicate (canonical-only read), per ADR-0024 §"Output contract" +
+§Terminology.
 
-The predicate driving the glyph is a new orchestrator method
-``isStructureAccepted(<sct target>)`` that reads the CANONICAL node ONLY
-(role-filtered, like ``_findCanonicalSegmentation``).  Scratch nodes must
-never flip a tab to ✓ (canonical-only read), per ADR-0024 §"Output contract"
-+ §Terminology.
+The predicate's original consumer — the per-tab confirmation glyph — retired
+with the tab UI (ADR-0034 §Amendments: the panel is the stock segments table;
+the native status column carries the review state).  The logic pins stay: the
+predicate remains part of the orchestrator surface.
 
-Two layers are pinned:
-  * **Logic** — ``isStructureAccepted(sct)`` is False pre-Accept, True after
-    that structure's Accept, and stays False for scratch-only state.  This
-    layer is exercised by instantiating the logic directly (scene-needing).
-  * **Glyph** — the structure tab's label carries the pending glyph (○)
-    before Accept and the complete glyph (✓) after, reusing the shell's
-    glyph set.  This layer is exercised by constructing the widget
-    (widget-needing).
-
-Watch the PythonQt int-property gotcha: ``QTabWidget.count`` /
-``.currentIndex`` are *properties*, not callables — read them as attributes.
-
-Scene/widget-needing: launched-Slicer harness (``pytest_launched``).
-RED until the implementer lands ``isStructureAccepted`` + the tab-glyph
-refresh per ADR-0024.
+Scene-needing: launched-Slicer harness (``pytest_launched``); skips cleanly
+under bare pytest via the shared guards.
 """
 
 from __future__ import annotations
@@ -48,12 +35,6 @@ SCT_LIVER_CODE = "10200004"
 SCT_PORTAL_VEIN_CODE = "32764006"
 SCT_HEPATIC_VEIN_CODE = "8993003"
 SCT_MASS_CODE = "4147007"
-
-# Confirmation glyphs reused from the Liver shell (Liver/Liver.py
-# _INDICATOR_COMPLETE / _INDICATOR_PENDING).  Named here so the per-tab glyph
-# contract is grep-able and stays in lockstep with the shell's idiom.
-GLYPH_COMPLETE = "✓"  # ✓
-GLYPH_PENDING = "○"   # ○
 
 
 def _logic_or_skip():
@@ -172,93 +153,6 @@ def test_isstructureaccepted_ignores_scratch_only_state():
         "isStructureAccepted reads the canonical node only (ADR-0024 "
         "§Terminology)."
     )
-
-
-def _build_widget_or_skip(slicer, registry):
-    """Construct the LiverSegmentationWidget under a launched Slicer.
-
-    Widget-needing: skips cleanly under bare PythonSlicer (no qt.QWidget).
-    The widget is registered with the ``qt_widgets`` fixture's ``registry``
-    so its Qt tree is disposed in teardown (otherwise it survives to process
-    shutdown and trips vtkDebugLeaks in the launched harness).
-    """
-    from conftest import _require_qt_widget
-
-    _require_qt_widget()
-    try:
-        import LiverSegmentation  # type: ignore[import-not-found]
-    except ImportError as exc:
-        pytest.skip(f"LiverSegmentation not importable ({exc}).")
-    widget = LiverSegmentation.LiverSegmentationWidget()
-    widget.setup()
-    registry.append(widget)
-    return widget
-
-
-def _structure_tab_widget(widget):
-    """Return the QTabWidget of structure tabs, or fail with guidance.
-
-    TODO(impl): pin the attribute name the implementer wires the QTabWidget
-    to (e.g. ``widget.structureTabs`` / ``widget.ui.StructureTabs``).  The
-    pinned invariant is "four structure tabs each carrying a confirmation
-    glyph", not the attribute spelling.
-    """
-    for attr in ("structureTabs", "_structureTabs"):
-        tabs = getattr(widget, attr, None)
-        if tabs is not None:
-            return tabs
-    ui = getattr(widget, "ui", None)
-    if ui is not None:
-        for attr in ("StructureTabs", "structureTabs"):
-            tabs = getattr(ui, attr, None)
-            if tabs is not None:
-                return tabs
-    return None
-
-
-def test_structure_tabs_carry_confirmation_glyphs(qt_widgets):
-    """Four structure tabs, each label prefixed with a confirmation glyph.
-
-    ADR-0024 §"Per-structure micro-workflows" surgeon UI: a QTabWidget of the
-    four structure tabs, mirroring the Liver-shell glyph idiom
-    (``Liver/Liver.py`` _indicatorGlyph, ✓ / ● / ○).  Pre-Accept every tab
-    shows the pending glyph (○).
-
-    NOTE PythonQt gotcha: ``QTabWidget.count`` is a *property*, not a
-    callable; read it as an attribute (not ``.count()``).
-    """
-    from conftest import _import_slicer_or_skip, _require_mrml_scene
-
-    _require_mrml_scene()
-    slicer = _import_slicer_or_skip()
-    if getattr(slicer.modules, MODULE_NAME, None) is None:
-        pytest.skip(
-            f"'{MODULE_NAME}' module not registered -- ADR-0024 surgeon-UI "
-            "deliverable absent."
-        )
-    slicer.mrmlScene.Clear(0)
-    widget = _build_widget_or_skip(slicer, qt_widgets)
-    tabs = _structure_tab_widget(widget)
-    if tabs is None:
-        pytest.fail(
-            "widget must host a QTabWidget of four structure tabs "
-            "(Liver / Portal vein / Hepatic vein / Tumors) per ADR-0024 "
-            "§'Per-structure micro-workflows' -- not yet implemented."
-        )
-    # PythonQt: .count is a property, not a callable.
-    assert tabs.count == 4, (
-        f"expected 4 structure tabs, got {tabs.count} (ADR-0024 four "
-        "per-structure cards)."
-    )
-    for index in range(tabs.count):
-        label = tabs.tabText(index)
-        assert label.startswith(GLYPH_PENDING) or label.lstrip().startswith(
-            GLYPH_PENDING
-        ), (
-            f"tab {index} label '{label}' must carry the pending glyph "
-            f"'{GLYPH_PENDING}' pre-Accept, mirroring the Liver-shell "
-            "idiom (Liver/Liver.py _indicatorGlyph)."
-        )
 
 
 if __name__ == "__main__":
