@@ -90,6 +90,17 @@ def candidate_active(node: Any) -> bool:
     return _raw_phase(node) == PHASE_CANDIDATE
 
 
+def phase_token(node: Any) -> str | None:
+    """The raw phase value, for render-key digests.
+
+    A phase flip must repaint the views even when no local gesture
+    requested a render (a failed re-fit, undo/redo, a programmatic
+    :func:`request`) — pipelines include this token in their
+    digest-gated render keys.
+    """
+    return _raw_phase(node)
+
+
 # --------------------------------------------------------------------------- #
 # Writes — request() and normalize() are the ONLY mutators
 # --------------------------------------------------------------------------- #
@@ -126,7 +137,14 @@ def request(
             return False
         was_modifying = node.StartModify()
         try:
-            fitted = bool(refit()) if refit is not None else False
+            # A raising re-fit counts as a FAILED fit -- the phase write
+            # below must still land (the "a fired event always leaves a
+            # resting phase" contract; an exception here would strand the
+            # node in-flight with the gesture cleanup skipped).
+            try:
+                fitted = bool(refit()) if refit is not None else False
+            except Exception:
+                fitted = False
             node.SetAttribute(
                 PHASE_ATTRIBUTE,
                 PHASE_CANDIDATE if fitted else resting_phase(node),

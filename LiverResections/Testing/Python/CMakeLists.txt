@@ -252,6 +252,23 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections;mapper-wiring"
     )
 
+    # Slicing-contour mapper WRAPPING pins -- the Python-callable World
+    # overloads on vtkOpenGLSlicingContourPolyDataMapper (std::array
+    # setters do not wrap; the double x,y,z overloads + VTK_SIZEHINT
+    # getters do).  Needs the wrapped VTKWidgets class, so it runs green
+    # under the launched-Slicer `pytest_launched` row and SKIPS CLEANLY
+    # here under bare pytest (wrapped class off the path).  GL free.
+    add_test(
+      NAME LiverResections_slicing_contour_mapper_wrapping
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_slicing_contour_mapper_wrapping.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_slicing_contour_mapper_wrapping PROPERTIES
+      LABELS "pytest;module-layer;LiverResections;mapper-wiring"
+    )
+
     # T2 render-cutover slice 1c -- the LayerDM Pipeline reverse-resolves its
     # vtkMRMLResectionPlanNode wrapper from the data node's geometry
     # back-reference (ADR-0031), so the live render path threads the

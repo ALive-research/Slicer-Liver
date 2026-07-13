@@ -841,12 +841,17 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         if self._slicing_plane_points_placed >= 2:
             return None
         index = self._slicing_plane_points_placed
+        # Claim the slot BEFORE the node write: SetSlicingPlaneInitPoint
+        # fires Modified synchronously, and the observer-driven reconcile
+        # re-enters _auto_seed_slicing_plane, whose node-side adoption
+        # would otherwise double-count the point we are mid-placing.
+        self._slicing_plane_points_placed += 1
         placed = carrier.SetSlicingPlaneInitPoint(
             index, [float(world[0]), float(world[1]), float(world[2])]
         )
         if placed is False:  # the node's Init-only guard rejected it
+            self._slicing_plane_points_placed -= 1
             return None
-        self._slicing_plane_points_placed += 1
         # Both points down -> the plane is now defined; derive it (and
         # re-derive on every subsequent placement-kernel call, the drag
         # path's re-entry).
@@ -956,6 +961,23 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         if _safe_get_init_mode(carrier) != INIT_MODE_SLICING_PLANE:
             return False
         if self._auto_seeding or self._slicing_plane_points_placed > 0:
+            return False
+        # Node-side evidence beats the pipeline-local counter: a LOADED
+        # Init carrier already carries its (persisted) handle positions,
+        # and re-seeding on adoption would clobber the surgeon's
+        # adjustments while the phase + grid survive.  Unplaced slots
+        # read as the zero vector, so a non-zero point means placed --
+        # adopt PER SLOT (a half-placed fill sequence must keep filling,
+        # not read as complete) and never re-seed over any of them.
+        p0 = tuple(carrier.GetSlicingPlaneInitPoint(0))
+        p1 = tuple(carrier.GetSlicingPlaneInitPoint(1))
+        placed_on_node = sum(
+            1 for point in (p0, p1) if any(abs(v) > 0.0 for v in point)
+        )
+        if placed_on_node:
+            self._slicing_plane_points_placed = max(
+                self._slicing_plane_points_placed, placed_on_node
+            )
             return False
         target = self._resolve_target_model()
         polydata = target.GetPolyData() if target is not None else None
@@ -1374,6 +1396,10 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                 # never repainted DURING a drag (only the release re-fit,
                 # which changes the grid, triggered a render).
                 _slicing_plane_digest(self._data_node),
+                # A phase flip (candidate raised/hidden) must repaint even
+                # when no LOCAL gesture requested a render -- a failed
+                # re-fit, undo/redo, or another view's request (ADR-0035).
+                _machine.phase_token(self._data_node),
                 _safe_get_picked_position(self._locator_node),
                 _safe_get_locator_visibility(self._locator_node),
             )

@@ -146,6 +146,23 @@ def _make_pipeline_or_skip():
     return LiverBezierSurfacePipeline()
 
 
+def _state_machine_or_skip():
+    """Import ``ResectionStateMachine`` or skip cleanly.
+
+    Bare pytest has ``LiverResectionsLib`` off ``sys.path`` (the built
+    ``qt-scripted-modules`` only) -- an unguarded module-scope import
+    would ERROR the bare CTest row instead of skipping.
+    """
+    try:
+        from LiverResectionsLib import ResectionStateMachine
+    except Exception as exc:  # pragma: no cover - import-environment dependent
+        pytest.skip(
+            f"ResectionStateMachine not importable ({exc!r}) -- "
+            "LiverResectionsLib not reachable in this environment."
+        )
+    return ResectionStateMachine
+
+
 def _resection_logic_or_skip(slicer):
     """Return ``vtkSlicerLiverResectionsLogic`` with the create-API, or skip.
 
@@ -1052,9 +1069,8 @@ def test_release_marks_the_candidate_and_drag_hides_it(monkeypatch):
     the carrier in the Candidate phase (the surface [re]appears)."""
     import vtk
 
-    from LiverResectionsLib import ResectionStateMachine as rsm
-
     slicer = _slicer_or_skip()
+    rsm = _state_machine_or_skip()
     pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
     target = _target_model_with_bounds(slicer)
     carrier.SetAndObserveTargetModelNode(target)  # reconcile hook auto-seeds
@@ -1119,13 +1135,18 @@ def test_candidate_attaches_the_planning_surface_alongside_init(monkeypatch):
     the BezierPlanning Representation attached ALONGSIDE the init rep
     (the v1 two-widget composite); an in-flight drag detaches it."""
 
-    from LiverResectionsLib import ResectionStateMachine as rsm
-    from LiverResectionsLib.LiverBezierSurfacePipeline import (
-        REPRESENTATION_BEZIER_PLANNING,
-        REPRESENTATION_SLICING_PLANE_INIT,
-    )
-
     slicer = _slicer_or_skip()
+    rsm = _state_machine_or_skip()
+    try:
+        from LiverResectionsLib.LiverBezierSurfacePipeline import (
+            REPRESENTATION_BEZIER_PLANNING,
+            REPRESENTATION_SLICING_PLANE_INIT,
+        )
+    except Exception as exc:  # pragma: no cover - import-environment dependent
+        pytest.skip(
+            f"LiverBezierSurfacePipeline not importable ({exc!r}) -- "
+            "LiverResectionsLib not reachable in this environment."
+        )
     pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
 
     init_rep = _FakeCompositeRep()
@@ -1170,3 +1191,57 @@ def test_candidate_attaches_the_planning_surface_alongside_init(monkeypatch):
         "the surface hides while the contour follows the drag)."
     )
     assert init_rep._renderer is renderer
+
+
+def test_phase_flip_requests_a_render_without_a_local_gesture(monkeypatch):
+    """A phase flip raised OUTSIDE this pipeline's gesture handlers (a
+    programmatic request, another view, undo/redo) must still repaint --
+    the phase token sits in the digest-gated render key."""
+    slicer = _slicer_or_skip()
+    rsm = _state_machine_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+
+    renders = []
+    monkeypatch.setattr(pipeline, "RequestRender", lambda: renders.append(1))
+
+    # Settle the render key, then verify the feedback-loop guard.
+    pipeline._on_node_modified(None, None)
+    baseline = len(renders)
+    pipeline._on_node_modified(None, None)
+    assert len(renders) == baseline
+
+    # A machine-raised phase flip with NO local gesture must repaint.
+    assert rsm.request(carrier, rsm.EVENT_PLANE_HANDLE_GRABBED) is True
+    pipeline._on_node_modified(None, None)
+    assert len(renders) == baseline + 1, (
+        "a phase flip must enter the render key -- without it the "
+        "composite attach/detach reconciles but never repaints."
+    )
+
+
+def test_adoption_keeps_persisted_init_handles(monkeypatch):
+    """Re-adopting a carrier that ALREADY carries placed init handles (a
+    loaded scene) must not re-seed them -- node-side evidence beats the
+    pipeline-local placement counter."""
+    slicer = _slicer_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+    target = _target_model_with_bounds(slicer)
+    carrier.SetAndObserveTargetModelNode(target)
+    if pipeline._slicing_plane_points_placed < 2:
+        pipeline._auto_seed_slicing_plane(view_right=(1.0, 0.0, 0.0))
+
+    # The surgeon adjusted a handle; the scene was saved + reloaded --
+    # simulated by a FRESH pipeline adopting the same carrier.
+    surgeon_p0 = (12.5, -3.0, 41.0)
+    carrier.SetSlicingPlaneInitPoint(0, surgeon_p0)
+    fresh = _make_pipeline_or_skip()
+    fresh.SetDisplayNode(carrier.GetDisplayNode())
+    assert fresh.GetDataNode() is carrier
+
+    fresh._auto_seed_slicing_plane(view_right=(1.0, 0.0, 0.0))
+    assert tuple(carrier.GetSlicingPlaneInitPoint(0)) == pytest.approx(
+        surgeon_p0
+    ), "adoption must ADOPT persisted handles, not re-seed over them."
+    assert fresh._slicing_plane_points_placed == 2, (
+        "the fresh pipeline adopts the placed count from the node."
+    )

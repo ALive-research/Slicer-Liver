@@ -554,6 +554,34 @@ def test_init_drag_in_flight_hides_and_declines_the_polygon(
     pipeline.cleanup()
 
 
+def test_phase_flip_requests_a_render_here_too(pipeline_module, polygon_nodes):
+    """The Init phase gates this pipeline's visibility -- a phase flip
+    raised by the OTHER pipeline's gesture must repaint this view (the
+    phase token sits in the render key)."""
+    import ResectionStateMachine as rsm
+
+    data, display = polygon_nodes
+    pipeline = pipeline_module.ControlPolygonPipeline()
+    pipeline.SetDisplayNode(display)
+    _seed_grid(data)
+    data.SetState(0)  # Init
+
+    renders = []
+    pipeline.RequestRender = lambda: renders.append(1)
+    pipeline._on_node_modified(None, "")
+    baseline = len(renders)
+    pipeline._on_node_modified(None, "")
+    assert len(renders) == baseline, "unchanged inputs must not re-request"
+
+    rsm.request(data, rsm.EVENT_PLANE_HANDLE_GRABBED)
+    rsm.request(data, rsm.EVENT_PLANE_HANDLE_DROPPED, refit=lambda: True)
+    pipeline._on_node_modified(None, "")
+    assert len(renders) > baseline, (
+        "the candidate raise must repaint the polygon's view."
+    )
+    pipeline.cleanup()
+
+
 def test_remote_hover_colors_the_3d_handles(pipeline_module, polygon_nodes):
     """A hover raised in ANOTHER view (display channel) colours this one."""
     data, display = polygon_nodes

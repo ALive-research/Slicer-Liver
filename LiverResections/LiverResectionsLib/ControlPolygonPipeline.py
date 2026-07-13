@@ -886,6 +886,10 @@ class ControlPolygonPipeline(_PipelineBase):
                 _safe_get_state(self._data_node),
                 _control_points_digest(self._data_node),
                 interaction,
+                # The Init phase gates the polygon's visibility (ADR-0035
+                # candidate) -- a phase flip must repaint this view even
+                # when the flip came from the OTHER pipeline's gesture.
+                _machine.phase_token(self._data_node),
             )
             if render_key == self._last_render_key:
                 return
