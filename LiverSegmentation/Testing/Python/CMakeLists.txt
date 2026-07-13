@@ -110,6 +110,11 @@ set(_liverseg_pytest_files
   test_liversegmentation_structure_accepted_glyph.py
   test_liversegmentation_backend_status_row.py
   test_liversegmentation_segment_input_selection.py
+  # ADR-0034 increment 1 -- the read-only anatomy segments table:
+  # pre-seeded Missing rows + row-status derivation (Missing / Review /
+  # Confirmed / Marked-absent) from the canonical node.  Widget-needing
+  # (launched `pytest_launched` row); skips cleanly bare.
+  test_liversegmentation_segments_table.py
   # SLICE C -- Stage 2 produces the canonical, per-structure-SCT-tagged
   # segmentation by LOADING one (in-app AI deferred to v2.1); pins the
   # importSegmentationAsCanonical logic seam (ADR-0024 §"Output contract",

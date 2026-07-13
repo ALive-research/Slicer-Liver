@@ -81,6 +81,34 @@ STRUCTURE_VISUAL_DEFAULTS = {
     SCT_MASS_CODE: {"color": (144 / 255.0, 238 / 255.0, 144 / 255.0), "opacity3d": 1.0},
 }
 
+# --------------------------------------------------------------------------- #
+# ADR-0034 — the anatomy segments table's review contract + status vocabulary.
+# --------------------------------------------------------------------------- #
+
+#: Per-segment confirm tag (beside the SCT terminology tag): the surgeon's
+#: scene-persistent attestation.  Only confirmed segments count downstream
+#: (ADR-0034 §Decision 2).  Written by the row Confirm action (increment 2);
+#: the status derivation below already reads it.
+CONFIRMED_TAG = "LiverSegmentation.Confirmed"
+#: Per-segment source tag — which tool / import produced the segment (the
+#: table's Source column).
+SOURCE_TAG = "LiverSegmentation.Source"
+#: Canonical-node attribute prefix for the explicit clinical attestation
+#: that a structure is NOT present in this case (``<prefix><sctCode>`` =
+#: "1").  Absence is stated, never inferred from a forgotten row
+#: (ADR-0034 §Decision 1).  Node-level because there is no segment to tag.
+MARKED_ABSENT_ATTRIBUTE_PREFIX = "LiverSegmentation.MarkedAbsent."
+
+#: Row-status vocabulary — exhaustive, rendered as GLYPH + TEXT, never
+#: colour alone (ADR-0010).  ``(glyph, text)`` pairs.
+STATUS_MISSING = ("○", "Missing")
+STATUS_RUNNING = ("⟳", "Running…")
+STATUS_REVIEW = ("●", "Review")
+STATUS_CONFIRMED = ("✓", "Confirmed")
+STATUS_MARKED_ABSENT = ("∅", "Marked absent")
+STATUS_INTERACTIVE = ("✎", "Interactive…")
+
+
 #: Stage-1 / Stage-2 hand-off: Stage 2 segments the portal-venous-phase
 #: volume Stage 1 flags with this attribute (ADR-0024 §"Per-structure
 #: micro-workflows").  Single source of truth is the shared role vocabulary
@@ -160,6 +188,55 @@ STRUCTURE_TABS = (
 )
 
 
+def _findSctSegment(segmentationNode, sctCode):
+    """The segment SCT-tagged ``sctCode`` on ``segmentationNode``, or None."""
+    if segmentationNode is None:
+        return None
+    segmentation = segmentationNode.GetSegmentation()
+    for segmentId in list(segmentation.GetSegmentIDs()):
+        segment = segmentation.GetSegment(segmentId)
+        text = vtk.mutable("")
+        segment.GetTag(TERMINOLOGY_ENTRY_TAG, text)
+        if f"^{sctCode}^" in str(text):
+            return segment
+    return None
+
+
+def _segmentTag(segment, tag):
+    """A segment tag's value as ``str`` ("" when unset / no segment)."""
+    if segment is None:
+        return ""
+    text = vtk.mutable("")
+    segment.GetTag(tag, text)
+    return str(text)
+
+
+def structureStatus(canonicalNode, sctCode):
+    """Derive a structure row's status from the canonical-node state.
+
+    The ADR-0034 §Decision 2 reading: no SCT segment -> ``STATUS_MISSING``
+    (or ``STATUS_MARKED_ABSENT`` under the explicit attestation attribute);
+    an SCT segment present -> ``STATUS_REVIEW`` — nothing counts until the
+    surgeon confirms; the per-segment confirm tag -> ``STATUS_CONFIRMED``.
+    The transient queue states (Running / Interactive) are the job queue's
+    to report, not derivable from the node.
+    """
+    segment = _findSctSegment(canonicalNode, sctCode)
+    if segment is None:
+        if (
+            canonicalNode is not None
+            and canonicalNode.GetAttribute(
+                MARKED_ABSENT_ATTRIBUTE_PREFIX + str(sctCode)
+            )
+            == "1"
+        ):
+            return STATUS_MARKED_ABSENT
+        return STATUS_MISSING
+    if _segmentTag(segment, CONFIRMED_TAG) == "1":
+        return STATUS_CONFIRMED
+    return STATUS_REVIEW
+
+
 class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """Stage-2 surgeon panel — a QTabWidget of four per-structure cards.
 
@@ -196,6 +273,11 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
 
         self.logic = LiverSegmentationLogic()
 
+        # The ADR-0034 anatomy segments table — increment 1 renders it
+        # read-only ALONGSIDE the tabs; the tabs retire with the row
+        # actions (increment 2).
+        self.layout.addWidget(self._buildSegmentsTable())
+
         self.structureTabs = qt.QTabWidget()
         self.structureTabs.setObjectName("StructureTabs")
         self.structureTabs.setTabPosition(qt.QTabWidget.North)
@@ -218,6 +300,7 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
 
         self.layout.addStretch(1)
         self._refreshTabGlyphs()
+        self._refreshSegmentsTable()
         self._refreshBackendStatus()
 
     def _buildStructureCard(self, title, sctCode):
@@ -239,6 +322,62 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
             self._structureCards = []
         self._structureCards.append(card)
         return page
+
+    def _buildSegmentsTable(self):
+        """Build the ADR-0034 anatomy segments table (increment 1: read-only).
+
+        Pre-seeded with one row per structure-vocabulary entry BEFORE any
+        data exists — the empty state teaches the goal (ADR-0034
+        §Decision 1).  Columns: colour swatch, Structure, Source, Status
+        (glyph + text, ADR-0010).  Row actions, the eye toggle, and the
+        tab retirement arrive with increment 2.
+        """
+        table = qt.QTableWidget()
+        table.setObjectName("AnatomySegmentsTable")
+        columns = ("", "Structure", "Source", "Status")
+        table.setColumnCount(len(columns))
+        table.setHorizontalHeaderLabels(list(columns))
+        table.setRowCount(len(STRUCTURE_TABS))
+        table.verticalHeader().setVisible(False)
+        table.setSelectionMode(qt.QAbstractItemView.NoSelection)
+        table.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
+        table.setColumnWidth(0, 28)
+        table.horizontalHeader().setStretchLastSection(True)
+        table.setFixedHeight(
+            table.horizontalHeader().height
+            + table.verticalHeader().defaultSectionSize * len(STRUCTURE_TABS)
+            + 2 * table.frameWidth
+        )
+        self._segmentsTable = table
+        return table
+
+    def segmentsTable(self):  # noqa: N802 - Slicer/Qt verb convention
+        return getattr(self, "_segmentsTable", None)
+
+    def _refreshSegmentsTable(self):
+        """Re-render every table row from the current canonical-node state."""
+        table = getattr(self, "_segmentsTable", None)
+        if table is None:
+            return
+        canonical = self.logic._findCanonicalSegmentation()
+        for row, (title, sctCode) in enumerate(STRUCTURE_TABS):
+            segment = _findSctSegment(canonical, sctCode)
+
+            swatch = qt.QTableWidgetItem("")
+            if segment is not None:
+                red, green, blue = segment.GetColor()
+                swatch.setBackground(
+                    qt.QBrush(qt.QColor.fromRgbF(red, green, blue))
+                )
+            table.setItem(row, 0, swatch)
+
+            table.setItem(row, 1, qt.QTableWidgetItem(title))
+
+            source = _segmentTag(segment, SOURCE_TAG) or "—"
+            table.setItem(row, 2, qt.QTableWidgetItem(source))
+
+            glyph, text = structureStatus(canonical, sctCode)
+            table.setItem(row, 3, qt.QTableWidgetItem(f"{glyph} {text}"))
 
     def _buildBackendStatusRow(self):
         """Build the Stage-2-local backend-status + Pre-download row.
@@ -357,6 +496,7 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
 
     def _onSceneChanged(self, caller=None, event=None):
         self._refreshTabGlyphs()
+        self._refreshSegmentsTable()
 
     def _refreshTabGlyphs(self):
         """Repaint each tab label's confirmation glyph from the canonical node.
