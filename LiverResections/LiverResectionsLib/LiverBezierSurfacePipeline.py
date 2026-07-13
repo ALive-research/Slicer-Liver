@@ -156,17 +156,14 @@ INIT_MODE_DISTANCE_SPHEROID = 1
 #: ADR-0032 value the control-point drag uses).
 INIT_HANDLE_PICK_RADIUS_PX = 20.0
 
-#: Carrier attributes coordinating the v1 COMPOSITE init loop (the two
-#: v1 widgets' visibility choreography, carried on the shared node so
-#: every observing Pipeline — this one and ControlPolygonPipeline — sees
-#: the same phase).  ``InitCandidateReady`` is raised by the release
-#: re-fit: dropping a plane handle GENERATES the manipulable candidate
-#: surface.  ``InitHandleDrag`` is up for the press→release span of a
-#: plane-handle drag: the candidate hides while the contour follows.
-#: ControlPolygonPipeline mirrors these names (kept in sync by the
-#: composite-loop pins).
-ATTR_INIT_CANDIDATE_READY = "LiverResections.InitCandidateReady"
-ATTR_INIT_HANDLE_DRAG = "LiverResections.InitHandleDrag"
+# The v1 COMPOSITE init loop's coordination lives on the resection state
+# machine (ADR-0035): this Pipeline translates raw gestures into domain
+# events (request()) and reads the phase through the machine's
+# accessors -- it never writes the phase attribute itself.
+try:  # pragma: no cover - exercised once per import path
+    from . import ResectionStateMachine as _machine
+except ImportError:  # top-level import path (the unit layer's sys.path setup)
+    import ResectionStateMachine as _machine  # type: ignore[no-redef]
 
 
 class LiverBezierSurfacePipeline(_PipelineBase):
@@ -285,14 +282,6 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         # ``None`` before the first ``UpdatePipeline``.
         self._current_representation_name: str | None = None
 
-        # On-commit extraction boundary (ADR-0019 Init->Planning
-        # transition).  Per-drag ``UpdatePipeline`` ticks only MARK
-        # extraction pending — the per-frame visual feedback is the
-        # shader's job.  The discrete CPU ring extraction is one-shot
-        # per resection: it runs exactly once when ``commit()`` consumes
-        # the pending request on the Init->Planning transition.
-        self._pending_extraction: bool = False
-
     # ------------------------------------------------------------------ #
     # LayerDM lifecycle overrides
     # ------------------------------------------------------------------ #
@@ -327,6 +316,10 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             self._attach_observer(displayNode)
             if self._data_node is not None:
                 self._attach_observer(self._data_node)
+                # A stale in-flight phase (a scene saved mid-drag)
+                # collapses to its resting origin on adoption -- a drag
+                # can never span carrier adoption (ADR-0035).
+                _machine.normalize(self._data_node)
 
         # Invalidate the memoised dispatch key — the next
         # ``UpdatePipeline`` picks up the new node set.
@@ -486,7 +479,7 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         composite = None
         if (
             active_name == REPRESENTATION_SLICING_PLANE_INIT
-            and _init_candidate_active(self._data_node)
+            and _machine.candidate_active(self._data_node)
         ):
             composite = self._representations.get(REPRESENTATION_BEZIER_PLANNING)
 
@@ -533,13 +526,6 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                 composite.SetLocatorNode(self._locator_node)
             composite.update(self._display_node, self._data_node)
 
-        # Init-mode parameter mutations only MARK extraction pending; the
-        # discrete ring extraction is debounced behind the commit
-        # boundary (ADR-0019).  Per-drag visual feedback is the shader's
-        # job — it must NOT trigger the CPU extraction here.
-        if state == STATE_INIT:
-            self._pending_extraction = True
-
         self._update_count += 1
 
     def OnRendererAdded(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
@@ -585,38 +571,6 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         if resectionNode is not None:
             self._attach_observer(resectionNode)
         self._last_update_key = None
-
-    def commit(self) -> None:
-        """Commit the Init->Planning transition (ADR-0019).
-
-        Constraint 3 (Stack-4 ring-extraction wiring): the discrete CPU
-        ring extraction is one-shot per resection.  It runs here, exactly
-        once, on the irreversible Init->Planning transition — never on
-        the per-drag ``UpdatePipeline`` ticks (those only mark
-        ``_pending_extraction``; per-frame feedback is the shader's job).
-
-        ``commit()`` resolves the weakref'd target mesh off the data node
-        (ADR-0014 §1, ``GetTargetModelNode()``) and routes it through the
-        named, test-observable ``_run_ring_extraction`` entry point.  The
-        transition is irreversible: ``commit()`` only extracts while the
-        data node is still in ``Init`` and advances it to ``Planning``,
-        so a second ``commit()`` is a no-op (one-shot per resection).
-        """
-        state = _safe_get_state(self._data_node)
-        # ``None`` state means no carrier is attached yet: treat it as
-        # still-in-Init so the single transition fires.
-        if state not in (None, STATE_INIT):
-            return
-
-        target_model = self._resolve_target_model()
-        self._run_ring_extraction(target_model)
-
-        # Clear the pending request and advance the state machine so the
-        # transition cannot re-fire (ADR-0019: irreversible 2-state
-        # automaton; init data freezes to read-only audit data).
-        self._pending_extraction = False
-        if self._data_node is not None:
-            self._data_node.SetState(STATE_PLANNING)
 
     def _resolve_target_model(self) -> Any | None:
         """Return the weakref'd target organ model node (ADR-0014 §1).
@@ -810,19 +764,16 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                         return True
                     if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
                         self._init_drag_index = None
-                        # The v1 loop: every drag RELEASE re-fits the 4x4
-                        # grid from the fresh plane/liver cut and raises
-                        # the candidate surface (dropping the handle
-                        # GENERATES the manipulable candidate).  The
-                        # re-fit + the drag-flag clear batch under ONE
-                        # Modified so the composite reveal is a single
-                        # reconcile.
-                        was_modifying = carrier.StartModify()
-                        try:
-                            self._refit_grid_from_plane()
-                            carrier.SetAttribute(ATTR_INIT_HANDLE_DRAG, "0")
-                        finally:
-                            carrier.EndModify(was_modifying)
+                        # The v1 loop: the DROP re-fits the 4x4 grid and
+                        # raises the candidate surface (dropping the
+                        # handle GENERATES the manipulable candidate).
+                        # The machine batches the re-fit + phase write
+                        # into ONE Modified (ADR-0035).
+                        _machine.request(
+                            carrier,
+                            _machine.EVENT_PLANE_HANDLE_DROPPED,
+                            refit=self._refit_grid_from_plane,
+                        )
                         self._set_grabbed_handle(None)
                         self._set_hovered_handle(None)
                         return False
@@ -840,7 +791,9 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                         self._init_drag_index = index
                         # The candidate surface hides for the whole drag
                         # (v1: adjusting the plane shows contour only).
-                        carrier.SetAttribute(ATTR_INIT_HANDLE_DRAG, "1")
+                        _machine.request(
+                            carrier, _machine.EVENT_PLANE_HANDLE_GRABBED
+                        )
                         self._set_grabbed_handle(index)
                         # The halo jumps to (and rides with) the grabbed
                         # handle for the whole drag.
@@ -1132,13 +1085,7 @@ class LiverBezierSurfacePipeline(_PipelineBase):
         )
         if ring is None or ring.GetNumberOfPoints() < 3:
             return False
-        if not self._seed_grid_from_ring(ring):
-            return False
-        # A freshly-fitted grid IS the candidate surface (v1: dropping the
-        # handle generates a manipulable candidate); the composite dispatch
-        # + ControlPolygonPipeline key on this flag.
-        carrier.SetAttribute(ATTR_INIT_CANDIDATE_READY, "1")
-        return True
+        return self._seed_grid_from_ring(ring)
 
     def _seed_grid_from_ring(self, ring: Any) -> bool:
         """Seed the carrier's 4x4 grid from a ring's PCA rectangle."""
@@ -1491,24 +1438,6 @@ def _safe_get_picked_position(node: Any) -> tuple | None:
     if node is None:
         return None
     return tuple(float(v) for v in node.GetPickedPositionWorld())
-
-
-def _init_candidate_active(node: Any) -> bool:
-    """True when the Init candidate surface should show (v1 composite).
-
-    The release re-fit raised ``InitCandidateReady`` and no plane-handle
-    drag is in flight.  ``getattr``-guarded so stub nodes without the
-    attribute API simply read as no-candidate.
-    """
-    if node is None:
-        return False
-    get = getattr(node, "GetAttribute", None)
-    if get is None:
-        return False
-    return (
-        get(ATTR_INIT_CANDIDATE_READY) == "1"
-        and get(ATTR_INIT_HANDLE_DRAG) != "1"
-    )
 
 
 def _slicing_plane_digest(node: Any) -> tuple:

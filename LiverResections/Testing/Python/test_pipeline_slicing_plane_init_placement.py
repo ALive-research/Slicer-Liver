@@ -1046,16 +1046,13 @@ def test_press_repaints_before_any_drag_move(monkeypatch):
 
 
 def test_release_marks_the_candidate_and_drag_hides_it(monkeypatch):
-    """The v1 composite-widget coordination on the carrier: an init-handle
-    press raises the drag-in-flight flag (the candidate surface hides
-    while the contour follows the handle); the release re-fit clears it
-    and marks the candidate ready (the surface [re]appears)."""
+    """The v1 composite loop through the state machine (ADR-0035): an
+    init-handle press raises the in-flight phase (the candidate surface
+    hides while the contour follows); the release drop re-fits and lands
+    the carrier in the Candidate phase (the surface [re]appears)."""
     import vtk
 
-    from LiverResectionsLib.LiverBezierSurfacePipeline import (
-        ATTR_INIT_CANDIDATE_READY,
-        ATTR_INIT_HANDLE_DRAG,
-    )
+    from LiverResectionsLib import ResectionStateMachine as rsm
 
     slicer = _slicer_or_skip()
     pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
@@ -1064,7 +1061,7 @@ def test_release_marks_the_candidate_and_drag_hides_it(monkeypatch):
     if pipeline._slicing_plane_points_placed < 2:
         pipeline._auto_seed_slicing_plane(view_right=(1.0, 0.0, 0.0))
 
-    assert carrier.GetAttribute(ATTR_INIT_CANDIDATE_READY) != "1", (
+    assert rsm.candidate_active(carrier) is False, (
         "before any release there is no candidate -- handles + contour only"
     )
 
@@ -1086,20 +1083,20 @@ def test_release_marks_the_candidate_and_drag_hides_it(monkeypatch):
     assert pipeline.ProcessInteractionEvent(
         _Event(vtk.vtkCommand.LeftButtonPressEvent)
     )
-    assert carrier.GetAttribute(ATTR_INIT_HANDLE_DRAG) == "1", (
-        "the press must raise the drag-in-flight flag (the candidate "
+    assert rsm.in_flight(carrier) is True, (
+        "the press must raise the in-flight phase (the candidate "
         "surface hides while the plane handle is being adjusted)."
     )
 
     assert pipeline.ProcessInteractionEvent(
         _Event(vtk.vtkCommand.LeftButtonReleaseEvent)
     ) is False
-    assert carrier.GetAttribute(ATTR_INIT_HANDLE_DRAG) != "1", (
-        "the release must clear the drag-in-flight flag."
+    assert rsm.in_flight(carrier) is False, (
+        "the release must clear the in-flight phase."
     )
-    assert carrier.GetAttribute(ATTR_INIT_CANDIDATE_READY) == "1", (
-        "the release re-fit must mark the candidate surface ready -- "
-        "dropping the handle GENERATES the manipulable candidate (v1)."
+    assert rsm.candidate_active(carrier) is True, (
+        "the release drop must land in the Candidate phase -- dropping "
+        "the handle GENERATES the manipulable candidate (v1)."
     )
 
 
@@ -1118,13 +1115,12 @@ class _FakeCompositeRep:
 
 
 def test_candidate_attaches_the_planning_surface_alongside_init(monkeypatch):
-    """In Init+SlicingPlane with the candidate ready, the reconcile keeps
+    """In Init+SlicingPlane with the candidate up, the reconcile keeps
     the BezierPlanning Representation attached ALONGSIDE the init rep
-    (the v1 two-widget composite); raising the drag flag detaches it."""
+    (the v1 two-widget composite); an in-flight drag detaches it."""
 
+    from LiverResectionsLib import ResectionStateMachine as rsm
     from LiverResectionsLib.LiverBezierSurfacePipeline import (
-        ATTR_INIT_CANDIDATE_READY,
-        ATTR_INIT_HANDLE_DRAG,
         REPRESENTATION_BEZIER_PLANNING,
         REPRESENTATION_SLICING_PLANE_INIT,
     )
@@ -1147,11 +1143,12 @@ def test_candidate_attaches_the_planning_surface_alongside_init(monkeypatch):
     pipeline.UpdatePipeline()
     assert init_rep._renderer is renderer
     assert planning_rep._renderer is None, (
-        "before the first release there is no candidate surface."
+        "before the first drop there is no candidate surface."
     )
 
-    # Candidate ready: BOTH representations attach (the composite).
-    carrier.SetAttribute(ATTR_INIT_CANDIDATE_READY, "1")
+    # Candidate up (a drop with a successful re-fit): BOTH attach.
+    rsm.request(carrier, rsm.EVENT_PLANE_HANDLE_GRABBED)
+    rsm.request(carrier, rsm.EVENT_PLANE_HANDLE_DROPPED, refit=lambda: True)
     pipeline._last_update_key = None
     pipeline.UpdatePipeline()
     assert init_rep._renderer is renderer, (
@@ -1165,7 +1162,7 @@ def test_candidate_attaches_the_planning_surface_alongside_init(monkeypatch):
     )
 
     # Drag in flight: the candidate hides, the init rep stays.
-    carrier.SetAttribute(ATTR_INIT_HANDLE_DRAG, "1")
+    rsm.request(carrier, rsm.EVENT_PLANE_HANDLE_GRABBED)
     pipeline._last_update_key = None
     pipeline.UpdatePipeline()
     assert planning_rep._renderer is None, (

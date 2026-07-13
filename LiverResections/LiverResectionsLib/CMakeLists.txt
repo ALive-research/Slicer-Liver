@@ -28,6 +28,7 @@ set(LiverResectionsLib_PYTHON_SCRIPTS
   LiverBezierSurfacePipeline.py
   LocatorReslicer.py
   ResectionPlanningWidget.py
+  ResectionStateMachine.py
   ResectogramLocatorProducer.py
   ResectogramPipeline.py
   SliceContourPipeline.py
