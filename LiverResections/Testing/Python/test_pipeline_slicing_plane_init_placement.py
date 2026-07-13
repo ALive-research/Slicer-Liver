@@ -944,3 +944,54 @@ def test_drag_requests_a_render_per_plane_change(monkeypatch):
         "a slicing-plane change must request a render -- the contour "
         "follows the handle DURING the drag."
     )
+
+
+def test_bare_hover_raises_the_halo_and_declines(monkeypatch):
+    """A bare mouse move near a handle raises the hover cue (the glow
+    halo, the control-point grammar) as a SIDE EFFECT of the declined
+    arbitration call -- camera interaction stays unclaimed."""
+    import sys
+
+    import vtk
+
+    slicer = _slicer_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+    target = _target_model_with_bounds(slicer)
+    carrier.SetAndObserveTargetModelNode(target)  # reconcile hook auto-seeds
+    if pipeline._slicing_plane_points_placed < 2:
+        pipeline._auto_seed_slicing_plane(view_right=(1.0, 0.0, 0.0))
+
+    monkeypatch.setattr(pipeline, "_safe_get_renderer", lambda: object())
+    hovers = []
+    monkeypatch.setattr(
+        pipeline, "_set_hovered_handle", lambda i: hovers.append(i)
+    )
+
+    class _Event:
+        def __init__(self, etype):
+            self._etype = etype
+
+        def GetType(self):  # noqa: N802 - VTK verb
+            return self._etype
+
+    # Near a handle: hover raised, event still declined.
+    monkeypatch.setattr(
+        pipeline, "_nearest_init_handle_in_display", lambda r, e: (1, 4.0)
+    )
+    can, distance2 = pipeline.CanProcessInteractionEvent(
+        _Event(vtk.vtkCommand.MouseMoveEvent)
+    )
+    assert can is False and distance2 == sys.float_info.max
+    assert hovers == [1], "a near hover must raise the halo on handle 1"
+
+    # Far from every handle: hover cleared, still declined.
+    monkeypatch.setattr(
+        pipeline,
+        "_nearest_init_handle_in_display",
+        lambda r, e: (0, 1.0e9),
+    )
+    can, _ = pipeline.CanProcessInteractionEvent(
+        _Event(vtk.vtkCommand.MouseMoveEvent)
+    )
+    assert can is False
+    assert hovers == [1, None], "a far move must clear the hover"
