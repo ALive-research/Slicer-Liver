@@ -799,7 +799,7 @@ def test_drag_move_fires_exactly_one_modified(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# R2 — the v1 iterate loop: re-fit on release, surface preview
+# R2 — the v1 iterate loop: re-fit on release, contour-only Init
 # --------------------------------------------------------------------------- #
 
 
@@ -862,8 +862,10 @@ def test_seed_grid_from_ring_builds_the_pca_rectangle():
     )
 
 
-def test_release_refits_and_reshows_the_preview(monkeypatch):
-    """A drag release runs the re-fit and lifts the preview suppression."""
+def test_release_refits_and_restores_the_handle_colour(monkeypatch):
+    """A drag release runs the grid re-fit and hands ``None`` back to the
+    grab cue — press colours the grabbed handle (the control-point
+    grammar), release restores the white base."""
     import vtk
 
     slicer = _slicer_or_skip()
@@ -884,11 +886,9 @@ def test_release_refits_and_reshows_the_preview(monkeypatch):
     monkeypatch.setattr(
         pipeline, "_refit_grid_from_plane", lambda: refits.append(1) or True
     )
-    suppressions = []
+    grabs = []
     monkeypatch.setattr(
-        pipeline,
-        "_set_surface_preview_suppressed",
-        lambda s: suppressions.append(bool(s)),
+        pipeline, "_set_grabbed_handle", lambda i: grabs.append(i)
     )
 
     class _Event:
@@ -901,39 +901,46 @@ def test_release_refits_and_reshows_the_preview(monkeypatch):
     assert pipeline.ProcessInteractionEvent(
         _Event(vtk.vtkCommand.LeftButtonPressEvent)
     )
-    assert suppressions == [True], "a grab must hide the preview (v1)"
+    assert grabs == [0], (
+        "a grab must colour the grabbed handle (the control-point cue)"
+    )
     assert pipeline.ProcessInteractionEvent(
         _Event(vtk.vtkCommand.LeftButtonReleaseEvent)
     ) is False
     assert refits == [1], "the release must run the grid re-fit (v1 loop)"
-    assert suppressions == [True, False], (
-        "the release must re-show the preview after the re-fit"
-    )
+    assert grabs == [0, None], "the release must restore the handle colour"
 
 
-def test_preview_shows_only_a_seeded_grid():
-    """The Init preview hides on the default grid, shows once seeded."""
+def test_drag_requests_a_render_per_plane_change(monkeypatch):
+    """Moving a slicing-plane init point must request a render — the
+    contour follows the handle DURING the drag, not only at the release
+    re-fit.  A geometry-preserving ``Modified`` must not re-request (the
+    render feedback-loop guard)."""
     slicer = _slicer_or_skip()
     pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
     target = _target_model_with_bounds(slicer)
-    carrier.SetAndObserveTargetModelNode(target)
-    pipeline.UpdatePipeline()
+    carrier.SetAndObserveTargetModelNode(target)  # reconcile hook auto-seeds
+    if pipeline._slicing_plane_points_placed < 2:
+        pipeline._auto_seed_slicing_plane(view_right=(1.0, 0.0, 0.0))
 
-    rep = pipeline._representations.get("SlicingPlaneInit")
-    if rep is None or rep.GetSurfacePreviewActor() is None:
-        pytest.skip("surface preview needs the wrapped tessellation source")
-    assert rep.GetSurfacePreviewActor().GetVisibility() == 0, (
-        "the unseeded default grid must not preview"
+    renders = []
+    monkeypatch.setattr(pipeline, "RequestRender", lambda: renders.append(1))
+
+    # Baseline: settle the render key at the current geometry.
+    pipeline._on_node_modified(None, None)
+    baseline = len(renders)
+
+    # A geometry-preserving Modified must NOT re-request.
+    pipeline._on_node_modified(None, None)
+    assert len(renders) == baseline, (
+        "a Modified at unchanged plane geometry must not re-request a "
+        "render (the feedback-loop guard)."
     )
 
-    assert pipeline._seed_grid_from_ring(_flat_ring()) is True
-    pipeline.UpdatePipeline()
-    assert rep.GetSurfacePreviewActor().GetVisibility() == 1, (
-        "a seeded grid must show the tessellated surface preview"
+    # Moving a handle changes the plane digest -> render requested.
+    carrier.SetSlicingPlaneInitPoint(0, (1.0, 2.0, 3.0))
+    pipeline._on_node_modified(None, None)
+    assert len(renders) == baseline + 1, (
+        "a slicing-plane change must request a render -- the contour "
+        "follows the handle DURING the drag."
     )
-    rep.SetSurfacePreviewSuppressed(True)
-    assert rep.GetSurfacePreviewActor().GetVisibility() == 0, (
-        "suppression (mid-drag) must hide the preview"
-    )
-    rep.SetSurfacePreviewSuppressed(False)
-    assert rep.GetSurfacePreviewActor().GetVisibility() == 1

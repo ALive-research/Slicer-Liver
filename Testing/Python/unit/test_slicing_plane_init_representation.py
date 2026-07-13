@@ -361,10 +361,10 @@ def test_representation_construct_without_wrapping_degrades_to_markers_only(
 
     renderer = vtk.vtkRenderer()
     rep.SetRenderer(renderer)
-    # 2 markers (+ the surface PREVIEW actor when the wrapped
-    # tessellation source resolves -- launched harness only).
-    expected = 2 + (1 if rep.GetSurfacePreviewActor() is not None else 0)
-    assert renderer.GetActors().GetNumberOfItems() == expected
+    # 2 markers only — the Init phase renders nothing else (the contour
+    # needs the wrapped mapper, and there is no surface preview: the
+    # cutting contour IS the whole Init visualisation).
+    assert renderer.GetActors().GetNumberOfItems() == 2
 
     rep.update(_StubDisplayNode(), _StubDataNode(target=_StubTargetModel()))
     assert rep.GetInputRefreshCount() == 1
@@ -463,10 +463,15 @@ def test_contour_feeds_the_target_mesh_once(rep_module):
     rep.cleanup()
 
 
-def test_representation_mapper_color_matches_display_node(rep_module):
-    """After ``update()`` the marker actor properties carry the display
-    node's ResectionColor at full opacity.  The contour band takes no
-    actor decoration — its colour is the shader's concern."""
+def test_representation_markers_keep_the_handle_grammar(rep_module):
+    """The markers follow the Planning CONTROL-POINT visual grammar
+    (white base at full opacity — the ``vtkMRMLControlPolygonDisplayNode``
+    defaults), not the display node's ResectionColor.  An ``update()``
+    with a coloured display node must not repaint them."""
+    from Representations.SlicingPlaneInitRepresentation import (
+        HANDLE_BASE_COLOR,
+    )
+
     rep = rep_module()
     display = _StubDisplayNode(color=(0.25, 0.5, 0.75), opacity=0.8)
     rep.update(display, _StubDataNode())
@@ -474,9 +479,45 @@ def test_representation_mapper_color_matches_display_node(rep_module):
     for i in (0, 1):
         actor = rep.GetMarkerActor(i)
         assert list(actor.GetProperty().GetColor()) == pytest.approx(
-            [0.25, 0.5, 0.75]
+            list(HANDLE_BASE_COLOR)
         )
-        assert actor.GetProperty().GetOpacity() == pytest.approx(0.8)
+        assert actor.GetProperty().GetOpacity() == pytest.approx(1.0)
+    # The resection decoration is still recorded for the commit surface.
+    assert rep.GetCurrentColor() == pytest.approx((0.25, 0.5, 0.75))
+    rep.cleanup()
+
+
+def test_grabbed_handle_takes_the_grab_green_and_survives_update(rep_module):
+    """``SetGrabbedHandle(i)`` colours handle *i* with the control-point
+    grab green; a mid-drag ``update()`` must NOT squash the cue; and
+    ``SetGrabbedHandle(None)`` restores the white base."""
+    from Representations.SlicingPlaneInitRepresentation import (
+        HANDLE_BASE_COLOR,
+        HANDLE_GRAB_COLOR,
+    )
+
+    rep = rep_module()
+    rep.update(_StubDisplayNode(), _StubDataNode())
+
+    rep.SetGrabbedHandle(0)
+    assert list(rep.GetMarkerActor(0).GetProperty().GetColor()) == (
+        pytest.approx(list(HANDLE_GRAB_COLOR))
+    )
+    assert list(rep.GetMarkerActor(1).GetProperty().GetColor()) == (
+        pytest.approx(list(HANDLE_BASE_COLOR))
+    )
+
+    # A drag move re-runs update() — the grab cue must persist.
+    rep.update(_StubDisplayNode(), _StubDataNode())
+    assert list(rep.GetMarkerActor(0).GetProperty().GetColor()) == (
+        pytest.approx(list(HANDLE_GRAB_COLOR))
+    )
+
+    rep.SetGrabbedHandle(None)
+    for i in (0, 1):
+        assert list(rep.GetMarkerActor(i).GetProperty().GetColor()) == (
+            pytest.approx(list(HANDLE_BASE_COLOR))
+        )
     rep.cleanup()
 
 
@@ -488,12 +529,10 @@ def test_representation_attach_detach_renderer(rep_module):
     assert renderer.GetActors().GetNumberOfItems() == 0
 
     rep.SetRenderer(renderer)
-    # Two markers + the shader contour (+ the surface PREVIEW actor when
-    # the wrapped tessellation source resolves -- launched harness only).
-    # No plane square — the contour band on the liver IS the plane
+    # Two markers + the shader contour = 3.  No plane square and no
+    # surface preview — the contour band on the liver IS the whole Init
     # visualisation.
-    expected = 3 + (1 if rep.GetSurfacePreviewActor() is not None else 0)
-    assert renderer.GetActors().GetNumberOfItems() == expected
+    assert renderer.GetActors().GetNumberOfItems() == 3
 
     rep.cleanup()
     assert renderer.GetActors().GetNumberOfItems() == 0
