@@ -26,7 +26,12 @@ Three pieces of geometry per ADR-0014 §2
 1. **Two control-point markers** — small ``vtkSphereSource`` glyphs,
    transformed to ``GetSlicingPlaneInitPoint(0)`` and
    ``GetSlicingPlaneInitPoint(1)``.  Full opacity, takes the display
-   node's ``ResectionColor``.
+   node's ``ResectionColor``.  A dashed handle-connecting **scaffold
+   tube** joins the two markers (v1 parity: the discontinuous tube
+   between the plane handles) — the ``ControlPolygonPipeline``
+   dashed-edge idiom: world-space ``DASH_LENGTH_MM``/``GAP_LENGTH_MM``
+   segments through a ``vtkTubeFilter``, handle-base white at modest
+   opacity, hidden until both init points exist.
 2. **The live shader contour** — v1 parity: no plane square is ever
    rendered.  The whole target liver mesh renders through the
    relocated ``vtkOpenGLSlicingContourPolyDataMapper`` whose fragment
@@ -130,6 +135,26 @@ HALO_HOVER_SCALE = 1.35
 # surviving band on the liver surface IS the plane's visualisation.
 CONTOUR_THICKNESS_WORLD = 2.0
 
+#: World-space dash pattern for the handle-connecting scaffold tube —
+#: the SAME dashed-scaffold language as ``ControlPolygonPipeline``'s
+#: polygon edges (its ``DASH_LENGTH_MM`` / ``GAP_LENGTH_MM``, kept in
+#: sync by the unit pins): v1 parity for the discontinuous tube that
+#: joined the two slicing-plane handles.
+DASH_LENGTH_MM = 7.0
+GAP_LENGTH_MM = 7.0
+
+#: Scaffold tube radius (world mm).  A world-space tube for the same
+#: reason as the control polygon's edges (pixel line width reads
+#: hairline-thin over a liver-scale scene), but deliberately slimmer
+#: than the ``vtkMRMLControlPolygonDisplayNode`` EdgeWidth default —
+#: the scaffold is a spatial hint between the handles, not an editable
+#: polygon edge.
+SCAFFOLD_TUBE_RADIUS_MM = 0.6
+
+#: Scaffold opacity — the handle base white knocked back so the dashes
+#: read behind/around the full-opacity handles.
+SCAFFOLD_OPACITY = 0.6
+
 
 class SlicingPlaneInitRepresentation:
     """VTK assembly for the (Init, SlicingPlane) state.
@@ -160,6 +185,8 @@ class SlicingPlaneInitRepresentation:
     ----------------------------------
     * ``GetMarkerActor(i)`` — the ``vtkActor`` rendering init point
       ``i`` (0 or 1).  ``None`` when VTK is not importable.
+    * ``GetScaffoldActor()`` — the ``vtkActor`` rendering the dashed
+      handle-connecting scaffold tube.
     * ``GetContourActor()`` — the ``vtkActor`` rendering the shader
       contour band (``None`` when no contour mapper is available).
     * ``GetContourMapper()`` — the contour mapper instance.
@@ -182,6 +209,13 @@ class SlicingPlaneInitRepresentation:
         self._marker_sources: list[Any] = []  # vtkSphereSource × 2
         self._marker_mappers: list[Any] = []  # vtkPolyDataMapper × 2
         self._marker_actors: list[Any] = []  # vtkActor × 2
+
+        # Dashed scaffold tube connecting the two init handles — v1
+        # parity for the discontinuous tube between the plane handles.
+        self._scaffold_polydata: Any | None = None
+        self._scaffold_tube: Any | None = None
+        self._scaffold_mapper: Any | None = None
+        self._scaffold_actor: Any | None = None
 
         # Shader contour band on the liver surface — ``None`` when the
         # wrapped mapper is unreachable (bare unit layer): markers only.
@@ -331,6 +365,10 @@ class SlicingPlaneInitRepresentation:
         self._marker_sources = []
         self._marker_mappers = []
         self._marker_actors = []
+        self._scaffold_polydata = None
+        self._scaffold_tube = None
+        self._scaffold_mapper = None
+        self._scaffold_actor = None
         self._contour_mapper = None
         self._contour_actor = None
         self._contour_target = None
@@ -351,6 +389,9 @@ class SlicingPlaneInitRepresentation:
         if 0 <= index < len(self._marker_sources):
             return self._marker_sources[index]
         return None
+
+    def GetScaffoldActor(self) -> Any | None:
+        return self._scaffold_actor
 
     def GetContourActor(self) -> Any | None:
         return self._contour_actor
@@ -404,6 +445,28 @@ class SlicingPlaneInitRepresentation:
             self._marker_mappers.append(mapper)
             self._marker_actors.append(actor)
 
+        # Dashed handle-connecting scaffold — the init0→init1 chord
+        # emitted as world-space dash segments and tubed (the
+        # ControlPolygonPipeline dashed-edge idiom, ADR-0032's
+        # interaction grammar on ADR-0035's Init state): v1 parity for
+        # the discontinuous tube that joined the two plane handles.
+        # Hidden until both init points arrive.
+        self._scaffold_polydata = vtk.vtkPolyData()
+        self._scaffold_polydata.SetPoints(vtk.vtkPoints())
+        self._scaffold_tube = vtk.vtkTubeFilter()
+        self._scaffold_tube.SetInputData(self._scaffold_polydata)
+        self._scaffold_tube.SetNumberOfSides(12)
+        self._scaffold_tube.SetRadius(SCAFFOLD_TUBE_RADIUS_MM)
+        self._scaffold_mapper = vtk.vtkPolyDataMapper()
+        self._scaffold_mapper.SetInputConnection(
+            self._scaffold_tube.GetOutputPort()
+        )
+        self._scaffold_actor = vtk.vtkActor()
+        self._scaffold_actor.SetMapper(self._scaffold_mapper)
+        self._scaffold_actor.GetProperty().SetColor(*HANDLE_BASE_COLOR)
+        self._scaffold_actor.GetProperty().SetOpacity(SCAFFOLD_OPACITY)
+        self._scaffold_actor.SetVisibility(False)
+
         # Glow halo — a slightly larger sphere the hover/grab raises on
         # a handle, rendered on a PRIVATE overlay renderer with a
         # vtkOutlineGlowPass (the control-point halo pattern: the overlay
@@ -440,6 +503,8 @@ class SlicingPlaneInitRepresentation:
             return
         for actor in self._marker_actors:
             renderer.AddActor(actor)
+        if self._scaffold_actor is not None:
+            renderer.AddActor(self._scaffold_actor)
         if self._contour_actor is not None:
             renderer.AddActor(self._contour_actor)
         self._attach_halo_renderer(renderer)
@@ -450,6 +515,11 @@ class SlicingPlaneInitRepresentation:
         for actor in self._marker_actors:
             try:
                 renderer.RemoveActor(actor)
+            except Exception:  # pragma: no cover — defensive
+                pass
+        if self._scaffold_actor is not None:
+            try:
+                renderer.RemoveActor(self._scaffold_actor)
             except Exception:  # pragma: no cover — defensive
                 pass
         if self._contour_actor is not None:
@@ -636,6 +706,54 @@ class SlicingPlaneInitRepresentation:
             return
         self._marker_sources[0].SetCenter(*init0)
         self._marker_sources[1].SetCenter(*init1)
+        self._rebuild_scaffold(init0, init1)
+
+    def _rebuild_scaffold(
+        self,
+        init0: tuple[float, float, float],
+        init1: tuple[float, float, float],
+    ) -> None:
+        """Emit the init0→init1 chord as world-space dash segments.
+
+        The ``ControlPolygonPipeline`` dashed-edge idiom on a single
+        chord: walk the chord in ``DASH_LENGTH_MM + GAP_LENGTH_MM``
+        periods, emit each dash as a two-point line cell, and let the
+        tube filter give the dashes the handles' world metric.  A
+        degenerate (coincident-handles) chord clears + hides the
+        scaffold rather than leaving a stale tube behind.
+        """
+        if self._scaffold_actor is None:
+            return
+        dash_points = vtk.vtkPoints()
+        dash_lines = vtk.vtkCellArray()
+        a, b = init0, init1
+        length = sum((b[j] - a[j]) ** 2 for j in range(3)) ** 0.5
+        if length <= 0.0:
+            self._scaffold_polydata.SetPoints(dash_points)
+            self._scaffold_polydata.SetLines(dash_lines)
+            self._scaffold_polydata.Modified()
+            self._scaffold_actor.SetVisibility(False)
+            return
+        period = DASH_LENGTH_MM + GAP_LENGTH_MM
+        t = 0.0
+        while t < length:
+            t_end = min(t + DASH_LENGTH_MM, length)
+            f0, f1 = t / length, t_end / length
+            i0 = dash_points.InsertNextPoint(
+                *(a[j] + (b[j] - a[j]) * f0 for j in range(3))
+            )
+            i1 = dash_points.InsertNextPoint(
+                *(a[j] + (b[j] - a[j]) * f1 for j in range(3))
+            )
+            seg = vtk.vtkLine()
+            seg.GetPointIds().SetId(0, i0)
+            seg.GetPointIds().SetId(1, i1)
+            dash_lines.InsertNextCell(seg)
+            t += period
+        self._scaffold_polydata.SetPoints(dash_points)
+        self._scaffold_polydata.SetLines(dash_lines)
+        self._scaffold_polydata.Modified()
+        self._scaffold_actor.SetVisibility(True)
 
     def _refresh_contour(
         self,
