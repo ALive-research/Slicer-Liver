@@ -79,11 +79,18 @@ def _logic_or_skip():
 
 
 def _add_canonical_with_sct(slicer, orch, code, meaning):
-    """Mint the canonical node and land one SCT-tagged segment on it."""
-    canonical = orch.getOrCreateCanonicalSegmentation()
-    segId = canonical.GetSegmentation().AddEmptySegment(meaning, meaning)
-    orch.tagSegmentWithSct(canonical, segId, code, meaning)
-    return canonical
+    """LAND one SCT-tagged segment on the canonical node via ``accept()``.
+
+    Drives the production landing path (scratch -> Accept) rather than
+    hand-tagging a canonical segment: under ADR-0034 §Amendments "accepted"
+    reads through the native segment status (a landed segment is
+    ``InProgress``; a pre-seeded empty placeholder stays ``NotStarted`` and
+    does NOT count), so the fixture must land, not merely tag.
+    """
+    scratch = orch.createScratchSegmentation()
+    segId = scratch.GetSegmentation().AddEmptySegment(meaning, meaning)
+    orch.tagSegmentWithSct(scratch, segId, code, meaning)
+    return orch.accept(scratch)
 
 
 def test_isstructureaccepted_false_before_accept():

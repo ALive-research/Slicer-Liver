@@ -22,9 +22,10 @@ implementer's call, see the module note) is:
   * afterwards the single canonical node (the one ``_findCanonicalSegmentation``
     returns, role attribute ``canonical``) holds one SCT-tagged segment per
     assignment;
-  * ``isStructureAccepted(sctCode)`` is True for each assigned structure;
-  * ``isStageComplete()`` is True (soft-done, ADR-0023 §"Per-stage
-    state-indicator semantics": >=1 SCT-tagged canonical segment);
+  * ``isStructureAccepted(sctCode)`` is True for each assigned structure —
+    imported segments land as native ``InProgress`` (ADR-0034 §Amendments:
+    imports no longer skip the review boundary), so ``isStageComplete()``
+    stays False until the surgeon confirms every structure ``Completed``;
   * a degenerate call (empty ``assignments`` or ``None`` source) is a no-op
     that does NOT flip Stage 2 complete and does not raise.
 
@@ -102,13 +103,15 @@ def _source_segmentation(slicer, labels):
     return node, ids
 
 
-def test_import_single_structure_makes_stage_complete_and_accepted():
-    """C1a — loading a liver segment + assigning SCT 10200004 completes Stage 2.
+def test_import_single_structure_lands_accepted_under_review():
+    """C1a — loading a liver segment + assigning SCT 10200004 lands it accepted.
 
-    ADR-0024 §"Output contract" + ADR-0023 soft-done: promoting a loaded
-    segmentation whose liver segment is assigned SCT ``10200004`` yields a
-    canonical node with one SCT-tagged segment, so ``isStructureAccepted`` for
-    the liver code and ``isStageComplete`` are both True.
+    ADR-0024 §"Output contract": promoting a loaded segmentation whose liver
+    segment is assigned SCT ``10200004`` yields a canonical node with the
+    SCT-tagged segment, so ``isStructureAccepted`` is True.  The landed
+    segment arrives as native ``InProgress`` (ADR-0034 §Amendments: the
+    import path no longer skips the review boundary), so ``isStageComplete``
+    stays False until every structure is confirmed ``Completed``.
     """
     slicer, logic = _logic_or_skip()
     slicer.mrmlScene.Clear(0)
@@ -131,19 +134,22 @@ def test_import_single_structure_makes_stage_complete_and_accepted():
         f"isStructureAccepted({SCT_LIVER_CODE}) must be True after the liver "
         "segment is promoted + SCT-tagged (ADR-0011 dispatch key)."
     )
-    assert logic.isStageComplete() is True, (
-        "isStageComplete() must be True once the canonical node holds one "
-        "SCT-tagged segment (ADR-0023 soft-done)."
+    assert logic.isStageComplete() is False, (
+        "an import lands segments under review (native InProgress) -- Stage 2 "
+        "completes only when every structure reads Completed (ADR-0034 "
+        "§Amendments predicate)."
     )
 
 
-def test_import_multiple_structures_accepts_each_and_completes_stage():
-    """C1b — assigning liver + portal vein accepts both; Stage 2 completes.
+def test_import_multiple_structures_accepts_each_under_review():
+    """C1b — assigning liver + portal vein accepts both, still under review.
 
     ADR-0024 §"Output contract": one SCT-tagged segment per structure in the
     single canonical node.  Loading a segmentation with liver + portal-vein
     segments and assigning SCT ``10200004`` / ``32764006`` makes
-    ``isStructureAccepted`` True for BOTH, and ``isStageComplete`` True.
+    ``isStructureAccepted`` True for BOTH; ``isStageComplete`` stays False —
+    the landed segments read native ``InProgress`` and the remaining
+    structures are pre-seeded ``NotStarted`` rows (ADR-0034 §Amendments).
     """
     slicer, logic = _logic_or_skip()
     slicer.mrmlScene.Clear(0)
@@ -165,18 +171,18 @@ def test_import_multiple_structures_accepts_each_and_completes_stage():
         f"portal-vein SCT {SCT_PORTAL_VEIN_CODE} must be accepted after "
         "multi-structure import (ADR-0024 §'Output contract')."
     )
-    assert logic.isStageComplete() is True, (
-        "isStageComplete() must be True with >=1 SCT-tagged canonical segment "
-        "(ADR-0023 soft-done)."
+    assert logic.isStageComplete() is False, (
+        "imported segments land under review; the stage completes only when "
+        "every structure reads Completed (ADR-0034 §Amendments predicate)."
     )
 
 
 def test_import_degenerate_is_noop_and_does_not_complete_stage():
     """C1c — empty assignments / None source is a no-op; Stage 2 stays incomplete.
 
-    A degenerate promotion must NOT flip Stage 2 complete (ADR-0023 soft-done
-    is >=1 SCT-tagged canonical segment) and must NOT raise -- an accidental
-    empty load cannot silently satisfy the stage.
+    A degenerate promotion must NOT flip Stage 2 complete (ADR-0034
+    §Amendments: every structure Completed) and must NOT raise -- an
+    accidental empty load cannot silently satisfy the stage.
     """
     slicer, logic = _logic_or_skip()
     slicer.mrmlScene.Clear(0)
@@ -185,7 +191,7 @@ def test_import_degenerate_is_noop_and_does_not_complete_stage():
     # None source.
     result_none = logic.importSegmentationAsCanonical(None, {})
     assert logic.isStageComplete() is False, (
-        "a None-source import must not complete Stage 2 (ADR-0023 soft-done)."
+        "a None-source import must not complete Stage 2."
     )
 
     # Empty assignments over a real source: nothing gets SCT-tagged.
@@ -193,7 +199,8 @@ def test_import_degenerate_is_noop_and_does_not_complete_stage():
     result_empty = logic.importSegmentationAsCanonical(source, {})
     assert logic.isStageComplete() is False, (
         "an empty-assignments import must not complete Stage 2 -- no segment "
-        "carries an SCT tag (ADR-0023 soft-done; ADR-0024 §'Output contract')."
+        "was landed or confirmed (ADR-0034 §Amendments; ADR-0024 §'Output "
+        "contract')."
     )
 
     # The degenerate return shape is the implementer's call (None or an empty

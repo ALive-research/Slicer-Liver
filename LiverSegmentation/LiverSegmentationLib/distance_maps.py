@@ -131,6 +131,7 @@ def compute_distance_map_for_segmentation(
     resection distance-map selectors pick it up.  Returns ``output_volume_node``
     on success, ``None`` when no channel (not even parenchyma) resolves.
     """
+    import SimpleITK as sitk
     import sitkUtils
     import slicer
     import vtk
@@ -148,11 +149,22 @@ def compute_distance_map_for_segmentation(
         )
         ids = vtk.vtkStringArray()
         ids.InsertNextValue(segment_id)
-        slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(
+        exported = slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(
             segmentation_node, ids, labelmap, reference_volume_node
         )
-        channel_images.append(sitkUtils.PullVolumeFromSlicer(labelmap))
+        image = None
+        if exported and labelmap.GetImageData() is not None:
+            image = sitkUtils.PullVolumeFromSlicer(labelmap)
         slicer.mrmlScene.RemoveNode(labelmap)
+        # The pre-seeded checklist rows are REAL empty segments carrying the
+        # SCT tag (ADR-0034 §Amendments, ``ensureExpectedStructures``): a
+        # segment that exports no foreground is an absent channel, exactly
+        # like a missing segment, keeping the composed components dense over
+        # the PRESENT channels (the v1 contract the resection shader reads).
+        if image is not None and _image_has_foreground(sitk, image):
+            channel_images.append(image)
+        else:
+            channel_images.append(None)
 
     composed = compose_distance_map(channel_images, downsampling_rate)
     if composed is None:
@@ -166,13 +178,20 @@ def compute_distance_map_for_segmentation(
     return output_volume_node
 
 
+def _image_has_foreground(sitk: Any, image: Any) -> bool:
+    """True iff ``image`` carries at least one non-zero (labelled) voxel."""
+    stats = sitk.StatisticsImageFilter()
+    stats.Execute(image)
+    return stats.GetMaximum() > 0
+
+
 def _segment_id_for_sct(segmentation: Any, sct_code: str) -> Any:
     """Return the segment id whose terminology entry carries ``sct_code``.
 
     Scans the segments' ``TerminologyEntry`` tag for the ``SCT^<code>^`` marker
     the canonical import writes (ADR-0011), mirroring the C++ resolver in
     ``vtkSlicerVascularTerritoriesLogic::GetLiverSegmentId`` and the Python
-    reader ``LiverSegmentationLogic._sctTagTexts`` (``vtk.reference`` out-param:
+    reader ``LiverSegmentation._findSctSegmentId`` (``vtk.reference`` out-param:
     ``vtkSegment.GetTag`` takes a ``std::string&``, not a Python list).
     """
     import vtk
