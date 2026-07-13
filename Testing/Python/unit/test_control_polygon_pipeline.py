@@ -439,6 +439,36 @@ def test_grab_changes_the_halo_color(pipeline_module, polygon_nodes):
     pipeline.cleanup()
 
 
+def test_press_repaints_before_any_drag_move(pipeline_module, polygon_nodes):
+    """The grab green must appear ON THE CLICK, not at the first drag
+    move: with the hover already raised on the handle (the real-world
+    approach sequence), the press itself still requests a render."""
+    import vtk
+
+    data, display = polygon_nodes
+    pipeline = pipeline_module.ControlPolygonPipeline()
+    pipeline.SetDisplayNode(display)
+    _seed_grid(data)
+    data.SetState(1)
+    pipeline._safe_get_renderer = lambda: object()
+    pipeline._nearest_control_point_in_display = lambda r, e: (5, 4.0)
+    pipeline._event_world_at_control_point = lambda r, e, i: (10.0, 10.0, 5.0)
+
+    # The approach raises the hover on handle 5 first.
+    move = _TypedEvent(vtk.vtkCommand.MouseMoveEvent)
+    pipeline.CanProcessInteractionEvent(move)
+
+    renders = []
+    pipeline.RequestRender = lambda: renders.append(1)
+    press = _TypedEvent(vtk.vtkCommand.LeftButtonPressEvent)
+    assert pipeline.ProcessInteractionEvent(press) is True
+    assert len(renders) >= 1, (
+        "the press must request a render -- the grab green appears on "
+        "the CLICK, not at the first drag move."
+    )
+    pipeline.cleanup()
+
+
 def test_remote_hover_colors_the_3d_handles(pipeline_module, polygon_nodes):
     """A hover raised in ANOTHER view (display channel) colours this one."""
     data, display = polygon_nodes

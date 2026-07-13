@@ -1021,12 +1021,21 @@ class LiverBezierSurfacePipeline(_PipelineBase):
             return None
 
     def _set_grabbed_handle(self, index: int | None) -> None:
-        """Colour the grabbed Init handle (the control-point grab cue)."""
+        """Colour the grabbed Init handle (the control-point grab cue).
+
+        Requests a render itself: the grab green must appear ON THE
+        CLICK.  The press changes no node geometry (the digest-gated
+        observer render stays silent) and the handle is already hovered
+        on approach (the hover setter's change gate stays silent too) --
+        without this request the recolor only showed at the first drag
+        move's plane-digest render.
+        """
         name = self._current_representation_name
         active = self._representations.get(name) if name else None
         setter = getattr(active, "SetGrabbedHandle", None)
         if setter is not None:
             setter(index)
+            self.RequestRender()
 
     def _set_hovered_handle(self, index: int | None) -> None:
         """Raise/clear the glow halo on an Init handle (the control-point

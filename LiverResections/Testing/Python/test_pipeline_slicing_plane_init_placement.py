@@ -995,3 +995,45 @@ def test_bare_hover_raises_the_halo_and_declines(monkeypatch):
     )
     assert can is False
     assert hovers == [1, None], "a far move must clear the hover"
+
+
+def test_press_repaints_before_any_drag_move(monkeypatch):
+    """The grab green must appear ON THE CLICK, not at the first drag
+    move: the press itself requests a render even when the handle was
+    already hovered (the approach raises the hover first, so the hover
+    setter's change-gated request never fires on the press)."""
+    import vtk
+
+    slicer = _slicer_or_skip()
+    pipeline, carrier = _make_init_slicing_plane_carrier_or_skip(slicer)
+    target = _target_model_with_bounds(slicer)
+    carrier.SetAndObserveTargetModelNode(target)  # reconcile hook auto-seeds
+    if pipeline._slicing_plane_points_placed < 2:
+        pipeline._auto_seed_slicing_plane(view_right=(1.0, 0.0, 0.0))
+
+    monkeypatch.setattr(pipeline, "_safe_get_renderer", lambda: object())
+    monkeypatch.setattr(
+        pipeline, "_nearest_init_handle_in_display", lambda r, e: (0, 1.0)
+    )
+    renders = []
+    monkeypatch.setattr(pipeline, "RequestRender", lambda: renders.append(1))
+
+    # The approach: hover already raised on handle 0 (the real-world
+    # sequence -- you hover a handle before you can click it).
+    pipeline._set_hovered_handle(0)
+    renders.clear()
+
+    class _Event:
+        def __init__(self, etype):
+            self._etype = etype
+
+        def GetType(self):  # noqa: N802 - VTK verb
+            return self._etype
+
+    assert pipeline.ProcessInteractionEvent(
+        _Event(vtk.vtkCommand.LeftButtonPressEvent)
+    )
+    assert len(renders) >= 1, (
+        "the press must request a render -- the grab green appears on "
+        "the CLICK, not at the first drag move."
+    )
