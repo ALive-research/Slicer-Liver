@@ -28,9 +28,14 @@ Contract:
     ``onJobFinished(key, structures, success, outputDir)``.  Callback
     exceptions are logged, never allowed to wedge the queue.
   * ``cancelCurrent()`` kills the running child (``kill()``, then a
-    ``terminate()`` fallback); ``shutdown()`` cancels the current job AND
-    clears the pending queue — wired into the widget's teardown so no
-    child outlives the module.
+    ``terminate()`` fallback); ``cancelJob(key)`` cancels ONE job — the
+    RUNNING key delegates to ``cancelCurrent()``, a QUEUED key is
+    DEQUEUED (never having spawned a child) and completes through
+    ``onJobFinished`` with ``success=False`` so the caller's bookkeeping
+    (status restore, progress-row retirement) runs the same path either
+    way; ``shutdown()`` cancels the current job AND clears the pending
+    queue — wired into the widget's teardown so no child outlives the
+    module.
 
 The command builder is injectable (tests substitute a stub child such as
 ``sleep``); the default reuses the existing
@@ -135,6 +140,10 @@ class SegmentationJobQueue:
         """Jobs waiting behind the current one."""
         return len(self._queue)
 
+    def pendingKeys(self) -> list:
+        """The waiting jobs' keys, in queue order."""
+        return [job.key for job in self._queue]
+
     def currentKey(self):
         """The running job's key, or ``None`` when idle."""
         return self._current.key if self._current is not None else None
@@ -191,6 +200,28 @@ class SegmentationJobQueue:
         # signal was somehow lost (already-dead child), complete explicitly.
         if self._current is job:
             self._completeCurrent(success=False)
+
+    def cancelJob(self, key):
+        """Cancel one job by key; returns True when a job was cancelled.
+
+        The RUNNING key delegates to :meth:`cancelCurrent` (kill the
+        child; the queue advances).  A QUEUED key is DEQUEUED — no child
+        was ever spawned — and reported through ``onJobFinished`` with
+        ``success=False`` and no output directory, the same completion
+        shape a failed start uses, so the caller restores its per-job
+        bookkeeping through one path.  An unknown key is a no-op.
+        """
+        if self._current is not None and self._current.key == key:
+            self.cancelCurrent()
+            return True
+        for index, job in enumerate(self._queue):
+            if job.key == key:
+                del self._queue[index]
+                self._fire(
+                    self.onJobFinished, job.key, set(job.structures), False, None
+                )
+                return True
+        return False
 
     def shutdown(self):
         """Cancel the running job and drop every pending one.
