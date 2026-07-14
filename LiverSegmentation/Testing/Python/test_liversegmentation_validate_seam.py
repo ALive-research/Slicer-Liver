@@ -434,15 +434,16 @@ def test_tint_delegate_installed_on_name_column_status_column_delegate_intact(
 
     # Stock column layout: name = 3, status = 5.  The tint delegate on the name
     # column must still be a terminology delegate (subclassed, not replaced) so
-    # name/terminology editing survives.
-    from qSlicerTerminologiesModuleWidgetsPythonQt import (
-        qSlicerTerminologyItemDelegate,
-    )
-
+    # name/terminology editing survives.  Assert the subclass relationship via
+    # the Python MRO rather than importing the base class by name -- the
+    # terminology delegate's Python-importable location is build-specific, but
+    # the implementation subclasses whatever delegate the column already had
+    # (type(existing)), so its name is on our tint delegate's MRO regardless.
     name_delegate = inner.itemDelegateForColumn(3)
-    assert isinstance(name_delegate, qSlicerTerminologyItemDelegate), (
+    mro_names = [base.__name__ for base in type(name_delegate).__mro__]
+    assert "qSlicerTerminologyItemDelegate" in mro_names, (
         "the name-column tint delegate must SUBCLASS the terminology delegate "
-        "so terminology editing is preserved."
+        f"so terminology editing is preserved; MRO was {mro_names!r}."
     )
     assert name_delegate in widget._tintDelegates, (
         "the name column must carry one of the widget's tint delegates."
