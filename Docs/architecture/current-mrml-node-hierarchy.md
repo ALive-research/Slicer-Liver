@@ -66,7 +66,7 @@ classDiagram
         +InitMode : SlicingPlane / DistanceSpheroid
     }
     class vtkMRMLBezierSurfaceNode {
-        +(Rows, Cols) in {(3,3), (4,4)}
+        +Rows x Cols : 3x3 or 4x4
     }
     <<abstract>> vtkMRMLAbstractParametricSurfaceNode
 
