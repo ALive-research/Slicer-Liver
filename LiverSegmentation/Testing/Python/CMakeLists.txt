@@ -178,6 +178,21 @@ set(_liverseg_pytest_files
   # tag writes and the pre-seed/landing paths never spuriously demote).
   # Widget-needing (launched `pytest_launched` row); skips cleanly bare.
   test_liversegmentation_embedded_editor.py
+  # ADR-0034 §Decision 6 -- the validate-and-next SEAM (the shell's
+  # "Validate and next" button itself stays with the phase-contracts work
+  # #440; this ships what it needs): the logic's explainStageIncomplete()
+  # naming the unsatisfied structures (title + status text), derived
+  # through the SAME structureStatus the completion predicate reads so they
+  # cannot drift (isStageComplete() iff the explanation is empty); the
+  # widget's markUnresolvedRows()/clearUnresolvedMarks() marking mechanism
+  # (SELECT the offenders + a glyph+text summary line, never colour alone,
+  # ADR-0010 -- the stock model exposes no safe per-row background role);
+  # the local "Validate anatomy" affordance; and the LIVE clear (a status
+  # flip to Completed / a landing drops the row's mark without re-clicking
+  # Validate, riding the existing canonical-segmentation observation with
+  # the digest discipline).  Widget-needing (launched `pytest_launched`
+  # row); skips cleanly bare.
+  test_liversegmentation_validate_seam.py
   # Packaging parity for the LiverSegmentationLib sub-package: every source
   # .py appears in LiverSegmentationLib_PYTHON_SCRIPTS (and no stale
   # entries), or an omitted file silently vanishes from a fresh build and

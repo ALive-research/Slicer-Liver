@@ -370,9 +370,12 @@ Qt.  See References.
   re-run covers its uses, so there is no Discard behaviour to pin.)
 - [test] Completion predicate: all rows Confirmed/Marked-absent ⇒
   complete; any other status ⇒ incomplete.
-- [future] The explain API naming the offending rows — a later
-  increment alongside the shell's "Validate and next" wiring
-  (Decision 6).
+- [test] The explain API naming the offending rows
+  (`explainStageIncomplete()` → the unsatisfied structures with title +
+  status text), derived through the same `structureStatus` the completion
+  predicate reads so the two cannot drift (`isStageComplete()` iff the
+  explanation is empty).  The shell's "Validate and next" wiring that
+  consumes it stays [future] (Decision 6).
 - [test] Re-run/edit of a confirmed row demotes it to `● Review`.
 - [future] The registry covers every seeded structure; each entry
   names wrapper, labels, modality, and preferred input role — arrives
