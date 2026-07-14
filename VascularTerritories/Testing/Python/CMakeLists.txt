@@ -68,6 +68,10 @@ set(_vascterr_pytest_files
   # (reachable only from a launched Slicer); they SKIP bare and RUN
   # launched, mirroring the ControlPolygonPipeline unit suite.
   test_vessel_highlight_pipeline.py
+  # Snap-on-place + the widget highlight wiring.  Scene-/widget-needing
+  # (segmentation closed-surface reps + the module widget); they SKIP
+  # cleanly bare and RUN launched, mirroring the LiverSegmentation suite.
+  test_vessel_snap_and_wiring.py
 )
 
 foreach(_pytest_file IN LISTS _vascterr_pytest_files)

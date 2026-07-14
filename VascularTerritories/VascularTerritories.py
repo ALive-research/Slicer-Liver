@@ -156,6 +156,16 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     self._parameterNode = None
     self._updatingGUIFromParameterNode = False
     self._updatingGUIFromSegmentationNode = False
+    # Vessel-adhering-highlight wiring (ADR-0036).  A single scene-resident
+    # ``vtkMRMLTerritoriesHighlightDisplayNode`` whose ``pickSurface``
+    # reference tracks the input segmentation and whose Visibility gates
+    # the hover Pipeline's paint (live only during marker placement).  The
+    # endpoints markup we currently observe for snap-on-place is tracked so
+    # the observer follows selector changes; ``_snapping`` is the
+    # re-entrancy latch for the reposition (which fires Modified).
+    self._highlightDisplayNode = None
+    self._observedEndpointsNode = None
+    self._snapping = False
     ScriptedLoadableModuleWidget.__init__(self, parent)
     VTKObservationMixin.__init__(self)  # needed for parameter node observation
 
@@ -218,6 +228,14 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     self.ui.selectedVascularTerritorySegmId.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
     self.ui.selectedVascularTerritorySegmId.connect('currentNodeChanged(bool)', self.vascular_territory_segmentationNodeSelected)
 
+    # Vessel-adhering-highlight wiring (ADR-0036).  Keep the highlight
+    # node's pickSurface aimed at the selected input segmentation, keep the
+    # snap observer attached to the current endpoints markup, and gate the
+    # highlight's visibility on place mode (see ``_updateHighlightWiring``).
+    self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.updateHighlightPickSurface)
+    self.ui.endPointsMarkupsSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.updateHighlightWiring)
+    self.ui.endPointsMarkupsPlaceWidget.connect('placeModeChanged()', self.updateHighlightVisibility)
+
     self.ui.selectedVascularTerritorySegmId.setNodeTypeLabel('Vascular Territory Segmentation', 'vtkMRMLSegmentationNode')
     self.ui.selectedVascularTerritorySegmId.addAttribute("vtkMRMLSegmentationNode", "VascularTerritories.SegmentationId")
 
@@ -265,6 +283,119 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         "creator not registered (%s) -- the highlight is disabled in this "
         "session.  Loading the SlicerLayerDisplayableManager extension is "
         "required for the Pipeline path (ADR-0013).", exc)
+
+  # ------------------------------------------------------------------ #
+  # Vessel-adhering-highlight wiring (ADR-0036)
+  # ------------------------------------------------------------------ #
+  #
+  # Lifecycle choice: ONE persistent, scene-resident
+  # ``vtkMRMLTerritoriesHighlightDisplayNode`` is created lazily on first
+  # use and reused for the module's lifetime.  Its ``pickSurface``
+  # reference tracks the input segmentation selector; the hover Pipeline
+  # (VascularTerritoriesLib.VesselHighlightPipeline) paints only when the
+  # node is visible.  We gate that Visibility on the endpoints markup being
+  # in PLACE MODE, so the adhering marker is live exactly while the surgeon
+  # is dropping territory endpoints and never competes with plain camera
+  # interaction outside annotation (ADR-0033 hover discipline keeps even
+  # the live marker from stealing the move; the visibility gate is the
+  # coarser "don't paint at all outside placement" guard).  A persistent
+  # data-only node is cheap and leaves no stray live marker: off-surface
+  # hover hides the marker, and place-mode-off hides it wholesale.
+
+  def _ensureHighlightDisplayNode(self):
+    """Return the scene-resident highlight display node, creating it once.
+
+    ``None`` when the C++ node class is unavailable (a launch without the
+    module's MRML library on the path) — the caller degrades gracefully.
+    """
+    node = self._highlightDisplayNode
+    if node is not None and slicer.mrmlScene.IsNodePresent(node):
+      return node
+    try:
+      node = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLTerritoriesHighlightDisplayNode", "Vessel Highlight")
+    except Exception:  # noqa: BLE001 - node class not registered in this launch
+      logging.warning(
+        "VascularTerritories: vtkMRMLTerritoriesHighlightDisplayNode "
+        "unavailable -- vessel highlight disabled this session.")
+      return None
+    if node is None:
+      return None
+    node.SetVisibility(False)  # off until place mode turns it on
+    self._highlightDisplayNode = node
+    return node
+
+  def updateHighlightPickSurface(self, *args):
+    """Aim the highlight's pickSurface at the selected input segmentation."""
+    node = self._ensureHighlightDisplayNode()
+    if node is None:
+      return
+    segmentation = self.ui.inputSurfaceSelector.currentNode()
+    segmentationId = segmentation.GetID() if segmentation is not None else None
+    node.SetAndObservePickSurfaceNodeID(segmentationId)
+
+  def updateHighlightVisibility(self, *args):
+    """Show the highlight only while the endpoints markup is in place mode."""
+    node = self._ensureHighlightDisplayNode()
+    if node is None:
+      return
+    placing = self.ui.endPointsMarkupsPlaceWidget.placeModeEnabled
+    node.SetVisibility(bool(placing))
+
+  def updateHighlightWiring(self, *args):
+    """Re-attach the snap observer to the current endpoints markup node.
+
+    Keeps the pickSurface + visibility in sync too, so a selector change
+    lands a fully-wired highlight in one call.
+    """
+    self.updateHighlightPickSurface()
+    self.updateHighlightVisibility()
+
+    endpointsNode = self.ui.endPointsMarkupsSelector.currentNode()
+    if endpointsNode is self._observedEndpointsNode:
+      return
+    if self._observedEndpointsNode is not None:
+      self.removeObserver(
+        self._observedEndpointsNode,
+        slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent,
+        self.onEndpointPlaced)
+    self._observedEndpointsNode = endpointsNode
+    if endpointsNode is not None:
+      self.addObserver(
+        endpointsNode,
+        slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent,
+        self.onEndpointPlaced)
+
+  def onEndpointPlaced(self, caller, event, callData=None):
+    """Snap a just-placed endpoint onto the referenced vessel surface.
+
+    Observer for ``vtkMRMLMarkupsNode.PointPositionDefinedEvent`` on the
+    endpoints markup tagged ``VascularTerritories.VascTerrId``.  Rewrites
+    the newly-defined control point to its nearest-surface projection using
+    the SAME pick core the hover uses; a raw point is kept only when there
+    is no surface (graceful).  The ``_snapping`` latch guards the reposition
+    (which fires Modified/events) so exactly one net reposition happens per
+    placed point and the rewrite never recurses.
+    """
+    if self._snapping:
+      return
+    node = self._highlightDisplayNode
+    segmentation = node.GetPickSurfaceNode() if node is not None else None
+    if segmentation is None:
+      return
+    # The event's callData carries the defined point's index.
+    pointIndex = callData
+    if pointIndex is None:
+      pointIndex = caller.GetNumberOfControlPoints() - 1
+    try:
+      from VascularTerritoriesLib import snap_control_point_to_surface
+    except ImportError:  # pragma: no cover - Lib unreachable in this launch
+      return
+    self._snapping = True
+    try:
+      snap_control_point_to_surface(caller, pointIndex, segmentation)
+    finally:
+      self._snapping = False
 
   def enableWidgetButtons(self, state):
     self.ui.addSegmentationButton.setEnabled(state)
@@ -492,6 +623,15 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     """
     Called just after the scene is closed.
     """
+    # The highlight display node was cleared with the scene; drop the stale
+    # handle + observer so the next placement re-creates a fresh one.
+    if self._observedEndpointsNode is not None:
+      self.removeObserver(
+        self._observedEndpointsNode,
+        slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent,
+        self.onEndpointPlaced)
+      self._observedEndpointsNode = None
+    self._highlightDisplayNode = None
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
     self.initializeParameterNode()
 
