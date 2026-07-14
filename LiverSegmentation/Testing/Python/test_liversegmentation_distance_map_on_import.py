@@ -71,9 +71,9 @@ def _require_segmentations_module(slicer):
 def _source_segmentation_with_geometry(slicer):
     """A source segmentation with one real-geometry segment (cube labelmap).
 
-    The segment is named ``liver`` so the unified import path name-matches
-    it against the ``Resources/Terminology/LabelToSCT/`` bridges (ADR-0011)
-    and lands it as the liver structure.
+    The import correspondence is stated explicitly at the call sites
+    (``{segment_id: SCT_LIVER_CODE}``) — the explicit-correspondence import
+    path has no name matching (ADR-0034 §Amendments).
     """
     import numpy as np
 
@@ -126,9 +126,9 @@ def test_import_computes_tagged_distance_map():
     _require_segmentations_module(slicer)
 
     _reference_volume(slicer)
-    source, _segId = _source_segmentation_with_geometry(slicer)
+    source, segId = _source_segmentation_with_geometry(slicer)
 
-    canonical = logic.importSegmentation(source)
+    canonical = logic.importSegmentation(source, {segId: SCT_LIVER_CODE})
     assert canonical is not None
 
     maps = _distance_map_volumes(slicer)
@@ -159,10 +159,10 @@ def test_reimport_reuses_the_distance_map_node():
     _require_segmentations_module(slicer)
 
     _reference_volume(slicer)
-    first, _segId = _source_segmentation_with_geometry(slicer)
-    logic.importSegmentation(first)
-    second, _segId = _source_segmentation_with_geometry(slicer)
-    logic.importSegmentation(second)
+    first, segId = _source_segmentation_with_geometry(slicer)
+    logic.importSegmentation(first, {segId: SCT_LIVER_CODE})
+    second, segId = _source_segmentation_with_geometry(slicer)
+    logic.importSegmentation(second, {segId: SCT_LIVER_CODE})
 
     maps = _distance_map_volumes(slicer)
     assert len(maps) == 1, (
@@ -178,8 +178,8 @@ def test_import_without_reference_volume_still_succeeds():
     _require_seam(logic)
     _require_segmentations_module(slicer)
 
-    source, _segId = _source_segmentation_with_geometry(slicer)
-    canonical = logic.importSegmentation(source)
+    source, segId = _source_segmentation_with_geometry(slicer)
+    canonical = logic.importSegmentation(source, {segId: SCT_LIVER_CODE})
     assert canonical is not None, (
         "a missing reference volume must degrade gracefully -- the canonical "
         "import itself succeeds."

@@ -21,6 +21,7 @@ import pytest
 
 CLOSED_SURFACE = "Closed surface"
 SURFACE_SEAM = "ensureSurfaceRepresentation"
+SCT_LIVER_CODE = "10200004"
 
 
 def _logic_or_skip():
@@ -80,9 +81,6 @@ def _source_segmentation_with_geometry(slicer):
     segmentation = node.GetSegmentation()
     assert segmentation.GetNumberOfSegments() >= 1, "import must yield a segment"
     segment_id = segmentation.GetNthSegmentID(0)
-    # Named to the bridge label so the unified import path name-matches it
-    # to the liver structure (ADR-0011).
-    segmentation.GetSegment(segment_id).SetName("liver")
     return node, segment_id
 
 
@@ -93,8 +91,8 @@ def test_import_creates_visible_surface_representation():
     slicer.mrmlScene.Clear(0)
     _require_seam(logic)
 
-    source, _segId = _source_segmentation_with_geometry(slicer)
-    canonical = logic.importSegmentation(source)
+    source, segId = _source_segmentation_with_geometry(slicer)
+    canonical = logic.importSegmentation(source, {segId: SCT_LIVER_CODE})
     assert canonical is not None
 
     segmentation = canonical.GetSegmentation()
