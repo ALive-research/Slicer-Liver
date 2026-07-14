@@ -1,6 +1,6 @@
 # 0036. Vessel-adhering highlight is a separate instance, not the resection locator
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0037](0037-vascular-territories-off-markups.md)
 - **Date:** 2026-07-14
 - **Deciders:** Rafael Palomar
 - **Relates to:** [ADR-0025](0025-locator-architecture.md) (reuses the
