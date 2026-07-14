@@ -1477,7 +1477,20 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
                 "source segmentation was kept."
             )
             return
-        canonical = self.logic.importSegmentation(source, correspondences)
+        # The landing tail (segment copies + the distance-map compute) is
+        # synchronous and takes seconds on real anatomy: paint the busy
+        # state BEFORE the blocking span starts (the v1 idiom the toolbar
+        # Run established -- wait cursor + status text + one explicit
+        # event-loop flush; ADR-0009 explainable state).
+        self._statusLabel.setText(
+            f"Importing {mapped} of {total} segment(s)…"
+        )
+        qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+        slicer.app.processEvents()
+        try:
+            canonical = self.logic.importSegmentation(source, correspondences)
+        finally:
+            qt.QApplication.restoreOverrideCursor()
         if canonical is None:
             self._statusLabel.setText(
                 "Import failed — the source segmentation was left untouched; "
