@@ -14,18 +14,25 @@ Stage-2-local "Validate anatomy" affordance:
     complete.  The predicate and the explanation are the SAME derivation
     (both route through ``structureStatus``), pinned equivalent here:
     ``isStageComplete()`` iff ``explainStageIncomplete() == []``.
-  * ``LiverSegmentationWidget.markUnresolvedRows()`` /
-    ``clearUnresolvedMarks()`` mark/unmark the offending rows.  Mechanism:
-    the stock ``qMRMLSegmentsTableView`` offers no Python-writable
-    background/decoration role that survives the model's per-update item
-    regeneration (and the name/colour data must not be abused, per the
-    brief), so marking is realised as SELECTING the offending rows
-    (``setSelectedSegmentIDs``) plus a glyph+text summary line on the shared
-    status label ("Unresolved: Portal vein (Missing), Tumors (Review)"),
-    never colour alone (ADR-0010).
-  * The marks CLEAR LIVE: resolving a row (native status flip to
-    ``Completed``, or a landing) re-evaluates and unmarks, riding the
-    existing canonical-segmentation observation / ``_onSceneChanged``.
+  * ``LiverSegmentationWidget.markValidationRows()`` /
+    ``clearUnresolvedMarks()`` tint/untint every anatomy row by its
+    validation state.  Mechanism: the stock ``qMRMLSegmentsTableView``
+    installs functional per-column item delegates (terminology on the name
+    column, an item delegate on opacity) and paints the status/visibility
+    icons through the default delegate's decoration role, so a whole-view
+    delegate would clobber them; instead each column's delegate is
+    SUBCLASSED to set ``option.backgroundBrush`` from a widget-held
+    per-segment tint state (``_rowValidationTint``), leaving the status-cell
+    click-to-cycle review gesture intact.  Green for validated (native
+    ``Completed``, incl. the empty-``Completed`` absence attestation), red
+    for not-validated (Missing / Review / Flagged), plus a glyph+text summary
+    line on the shared status label — the tint REINFORCES the status column,
+    never colour alone (ADR-0010).  Delegate paint is not unit-testable
+    headless, so these tests pin the STATE the delegate consults
+    (``_rowValidationTint``), not pixels.
+  * The tints UPDATE LIVE: resolving a row (native status flip to
+    ``Completed``, or a landing) re-evaluates and flips its tint red -> green,
+    riding the existing canonical-segmentation observation / ``_onSceneChanged``.
 
 Needs the launched-Slicer harness (module + Qt + MRML); skips cleanly under
 bare pytest via the shared guards.
@@ -230,11 +237,17 @@ def test_isstagecomplete_is_exactly_the_empty_explanation():
 # --------------------------------------------------------------------------- #
 
 
-def test_validate_on_incomplete_marks_offenders_and_summarises(qt_widgets):
-    """The local Validate gesture on an incomplete stage marks the offending
-    rows (SELECTED in the stock view) and puts a glyph+text summary line
-    listing them on the shared status label (ADR-0034 §Decision 6; ADR-0010
-    never colour alone)."""
+def _tint(widget, module, canonical, code):
+    """The tint state (`'validated'|'unresolved'|None`) of a structure's row."""
+    return widget._rowValidationTint(_sct_segment_id(module, canonical, code))
+
+
+def test_validate_on_incomplete_tints_rows_by_state_and_summarises(qt_widgets):
+    """The local Validate gesture on an incomplete stage tints each row by its
+    validation state — green validated, red not-validated — and puts a
+    glyph+text summary line naming the unresolved structures on the shared
+    status label (ADR-0034 §Decision 6; the tint reinforces, ADR-0010 never
+    colour alone)."""
     slicer = _slicer_or_skip()
     module = _module_or_skip()
     slicer.mrmlScene.Clear(0)
@@ -245,6 +258,7 @@ def test_validate_on_incomplete_marks_offenders_and_summarises(qt_widgets):
     # Confirm two structures; leave Portal vein (Missing) and Tumors (Review)
     # unresolved.
     _confirm(slicer, module, canonical, module.SCT_LIVER_CODE)
+    _confirm(slicer, module, canonical, module.SCT_HEPATIC_VEIN_CODE)
     segments_logic = _segments_logic(slicer)
     tumors = canonical.GetSegmentation().GetSegment(
         _sct_segment_id(module, canonical, module.SCT_MASS_CODE)
@@ -253,37 +267,35 @@ def test_validate_on_incomplete_marks_offenders_and_summarises(qt_widgets):
 
     widget.onValidateAnatomy()
 
-    table = widget.segmentsTable()
-    selected = set(table.selectedSegmentIDs())
-    offenders = {
-        _sct_segment_id(module, canonical, module.SCT_PORTAL_VEIN_CODE),
-        _sct_segment_id(module, canonical, module.SCT_HEPATIC_VEIN_CODE),
-        _sct_segment_id(module, canonical, module.SCT_MASS_CODE),
-    }
-    assert selected == offenders, (
-        "Validate must SELECT exactly the unresolved rows (the marking "
-        f"mechanism); got {selected!r} vs {offenders!r}."
+    # Validated rows read 'validated'; unresolved rows read 'unresolved'.
+    assert _tint(widget, module, canonical, module.SCT_LIVER_CODE) == "validated"
+    assert (
+        _tint(widget, module, canonical, module.SCT_HEPATIC_VEIN_CODE)
+        == "validated"
     )
+    assert (
+        _tint(widget, module, canonical, module.SCT_PORTAL_VEIN_CODE)
+        == "unresolved"
+    ), "a Missing row must tint 'unresolved'."
+    assert _tint(widget, module, canonical, module.SCT_MASS_CODE) == "unresolved", (
+        "a Review (InProgress) row must tint 'unresolved'."
+    )
+
     summary = widget._statusLabel.text
     assert "Unresolved" in summary
-    for token in (
-        "Portal vein",
-        module.STATUS_MISSING[1],
-        "Hepatic vein",
-        "Tumors",
-        module.STATUS_REVIEW[1],
-    ):
+    for token in ("Portal vein", module.STATUS_MISSING[1], "Tumors", module.STATUS_REVIEW[1]):
         assert token in summary, (
             f"the summary line must name every offender with its status "
-            f"text (glyph+text, never colour alone); {token!r} missing from "
+            f"text (glyph+text, the primary carrier); {token!r} missing from "
             f"{summary!r}."
         )
 
 
-def test_resolving_one_row_clears_its_mark_live_without_re_validating(qt_widgets):
-    """Resolving ONE structure (native status flip to ``Completed``) clears
-    ITS mark live — no second Validate click — and resolving ALL clears every
-    mark (ADR-0034 §Decision 6: marks clear live)."""
+def test_resolving_one_row_flips_its_tint_live_without_re_validating(qt_widgets):
+    """Resolving ONE structure (native status flip to ``Completed``) flips ITS
+    tint 'unresolved' -> 'validated' live — no second Validate click — and
+    resolving ALL leaves every row 'validated' (ADR-0034 §Decision 6: tints
+    update live)."""
     slicer = _slicer_or_skip()
     module = _module_or_skip()
     slicer.mrmlScene.Clear(0)
@@ -301,32 +313,33 @@ def test_resolving_one_row_clears_its_mark_live_without_re_validating(qt_widgets
         segments_logic.SetSegmentStatus(seg, segments_logic.InProgress)
 
     widget.onValidateAnatomy()
-    table = widget.segmentsTable()
-    assert len(table.selectedSegmentIDs()) == len(module.STRUCTURE_TABS), (
-        "all four rows unresolved before any confirm."
-    )
+    # Every one of the four rows is unresolved before any confirm.
+    for _title, code in module.STRUCTURE_TABS:
+        assert _tint(widget, module, canonical, code) == "unresolved"
 
     # Confirm the portal vein via its status cell -- the content edit +
     # status flip funnels through the canonical-segmentation observer the
-    # widget already rides; the portal-vein mark must drop WITHOUT a second
-    # Validate click.
+    # widget already rides; the portal-vein tint must flip to green WITHOUT a
+    # second Validate click.
     pv = canonical.GetSegmentation().GetSegment(
         _sct_segment_id(module, canonical, module.SCT_PORTAL_VEIN_CODE)
     )
     segments_logic.SetSegmentStatus(pv, segments_logic.Completed)
 
-    pv_id = _sct_segment_id(module, canonical, module.SCT_PORTAL_VEIN_CODE)
-    assert pv_id not in set(table.selectedSegmentIDs()), (
-        "resolving the portal-vein row must clear ITS mark live, without "
-        "re-clicking Validate (ADR-0034 §Decision 6)."
+    assert (
+        _tint(widget, module, canonical, module.SCT_PORTAL_VEIN_CODE)
+        == "validated"
+    ), (
+        "resolving the portal-vein row must flip ITS tint to 'validated' "
+        "live, without re-clicking Validate (ADR-0034 §Decision 6)."
     )
-    # Its still-unresolved siblings stay marked.
-    hv_id = _sct_segment_id(module, canonical, module.SCT_HEPATIC_VEIN_CODE)
-    assert hv_id in set(table.selectedSegmentIDs()), (
-        "a still-unresolved sibling row must keep its mark."
-    )
+    # Its still-unresolved sibling stays red.
+    assert (
+        _tint(widget, module, canonical, module.SCT_HEPATIC_VEIN_CODE)
+        == "unresolved"
+    ), "a still-unresolved sibling row must keep its 'unresolved' tint."
 
-    # Resolve the rest -> every mark gone.
+    # Resolve the rest -> every row 'validated'.
     for title, code in module.STRUCTURE_TABS:
         if code == module.SCT_PORTAL_VEIN_CODE:
             continue
@@ -336,15 +349,16 @@ def test_resolving_one_row_clears_its_mark_live_without_re_validating(qt_widgets
         _fill_segment(slicer, seg)
         segments_logic.SetSegmentStatus(seg, segments_logic.Completed)
 
-    assert list(table.selectedSegmentIDs()) == [], (
-        "resolving every structure must clear all marks live (ADR-0034 "
-        "§Decision 6)."
-    )
+    for _title, code in module.STRUCTURE_TABS:
+        assert _tint(widget, module, canonical, code) == "validated", (
+            "resolving every structure must leave all rows 'validated' live "
+            "(ADR-0034 §Decision 6)."
+        )
 
 
-def test_validate_on_complete_reports_complete_with_no_marks(qt_widgets):
-    """Validate on a complete stage clears marks and reports completeness on
-    the status label — no rows selected (ADR-0034 §Decision 6)."""
+def test_validate_on_complete_tints_all_green_and_reports_complete(qt_widgets):
+    """Validate on a complete stage tints every row 'validated' and reports
+    completeness on the status label (ADR-0034 §Decision 6)."""
     slicer = _slicer_or_skip()
     module = _module_or_skip()
     slicer.mrmlScene.Clear(0)
@@ -357,10 +371,10 @@ def test_validate_on_complete_reports_complete_with_no_marks(qt_widgets):
 
     widget.onValidateAnatomy()
 
-    table = widget.segmentsTable()
-    assert list(table.selectedSegmentIDs()) == [], (
-        "a complete stage must leave no offending rows marked."
-    )
+    for _title, code in module.STRUCTURE_TABS:
+        assert _tint(widget, module, canonical, code) == "validated", (
+            "a complete stage must tint every row 'validated' (green)."
+        )
     summary = widget._statusLabel.text
     assert "complete" in summary.lower(), (
         f"Validate on a complete stage must report completeness; got "
@@ -372,36 +386,72 @@ def test_validate_on_complete_reports_complete_with_no_marks(qt_widgets):
     )
 
 
-def test_marking_mechanism_selects_exactly_the_offenders(qt_widgets):
-    """The marking mechanism's own shape pin: ``markUnresolvedRows()`` SELECTS
-    exactly the offending segment ids and ``clearUnresolvedMarks()`` clears
-    the selection (the committed fallback — no background-role abuse; the
-    stock model exposes none that survives item regeneration)."""
+def test_tint_state_neutral_outside_active_validation(qt_widgets):
+    """The tint state the delegate consults is None for every row while no
+    validation is active, and ``clearUnresolvedMarks`` returns all rows to
+    None (ADR-0034 §Decision 6: a normal edit never tints a row)."""
     slicer = _slicer_or_skip()
     module = _module_or_skip()
     slicer.mrmlScene.Clear(0)
 
     widget = _widget_or_skip(slicer, qt_widgets)
     canonical = widget.logic.getOrCreateCanonicalSegmentation()
-
-    # Confirm liver only; the other three are the offenders.
     _confirm(slicer, module, canonical, module.SCT_LIVER_CODE)
 
-    widget.markUnresolvedRows()
-    table = widget.segmentsTable()
-    offenders = {
-        _sct_segment_id(module, canonical, code)
-        for _title, code in module.STRUCTURE_TABS
-        if code != module.SCT_LIVER_CODE
-    }
-    assert set(table.selectedSegmentIDs()) == offenders, (
-        "markUnresolvedRows must set the view's selection to EXACTLY the "
-        "offending rows (the committed marking mechanism)."
+    # Before any Validate: every row neutral (None).
+    for _title, code in module.STRUCTURE_TABS:
+        assert _tint(widget, module, canonical, code) is None, (
+            "no row may be tinted before Validate is invoked."
+        )
+
+    widget.markValidationRows()
+    assert _tint(widget, module, canonical, module.SCT_LIVER_CODE) == "validated"
+    assert (
+        _tint(widget, module, canonical, module.SCT_PORTAL_VEIN_CODE)
+        == "unresolved"
     )
 
     widget.clearUnresolvedMarks()
-    assert list(table.selectedSegmentIDs()) == [], (
-        "clearUnresolvedMarks must clear the selection."
+    for _title, code in module.STRUCTURE_TABS:
+        assert _tint(widget, module, canonical, code) is None, (
+            "clearUnresolvedMarks must return every row to neutral (None)."
+        )
+
+
+def test_tint_delegate_installed_on_name_column_status_column_delegate_intact(
+    qt_widgets,
+):
+    """The tint delegate is installed on the name column (and the other tinted
+    columns) while the status column keeps a functional item delegate — the
+    tint SUBCLASSES each column's delegate rather than clobbering it, so the
+    status-cell click-to-cycle review gesture survives (ADR-0034 §Decision 6)."""
+    slicer = _slicer_or_skip()
+    _module_or_skip()
+    slicer.mrmlScene.Clear(0)
+
+    widget = _widget_or_skip(slicer, qt_widgets)
+    inner = widget.segmentsTable().tableWidget()
+
+    # Stock column layout: name = 3, status = 5.  The tint delegate on the name
+    # column must still be a terminology delegate (subclassed, not replaced) so
+    # name/terminology editing survives.
+    from qSlicerTerminologiesModuleWidgetsPythonQt import (
+        qSlicerTerminologyItemDelegate,
+    )
+
+    name_delegate = inner.itemDelegateForColumn(3)
+    assert isinstance(name_delegate, qSlicerTerminologyItemDelegate), (
+        "the name-column tint delegate must SUBCLASS the terminology delegate "
+        "so terminology editing is preserved."
+    )
+    assert name_delegate in widget._tintDelegates, (
+        "the name column must carry one of the widget's tint delegates."
+    )
+
+    # The tint delegate must be scoped per column, not installed whole-view
+    # (a whole-view setItemDelegate would clobber the icon columns).
+    assert inner.itemDelegate() not in widget._tintDelegates, (
+        "the tint must be column-scoped, never a whole-view delegate."
     )
 
 
