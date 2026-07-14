@@ -76,21 +76,27 @@
   vocabulary read through this amendment (Completed replaces the
   confirm tag; `InProgress` replaces `● Review`).
 
-- **2026-07-14 — the unified import path adapts to the
-  native-primitives shape.**  Decision 2's "the import path unifies"
-  ships as a toolbar **Import…** gesture (a minimal source picker; the
-  separate load section and its assignment table are retired) whose
-  segments flow through the SAME landing kernel the accept path uses —
-  the canonical node's **identity is stable** (the earlier
-  promote-the-source-to-canonical mechanism is retired; the source
-  node is consumed after a successful copy, left untouched on
-  failure).  SCT resolution per source segment: an existing
-  `TerminologyEntry` tag carrying a structure code wins; else name
-  matching over the `Resources/Terminology/LabelToSCT/` bridges; else
-  the segment lands as an extra untagged row and structure assignment
-  is the **native terminology-navigator gesture** on the table's
-  colour swatch (the in-row assignment combo of Decision 2 predates
-  the native pivot and is superseded).  Landed — and in particular
+- **2026-07-14 — the unified import path ships as an explicit
+  correspondence dialog.**  Decision 2's "the import path unifies"
+  ships as a toolbar **Import…** gesture opening a correspondence
+  dialog (the separate load section is retired): under the source
+  picker, a mapping table lists every source segment with an
+  **"Import as"** combo — the skip entry is THE default for every row.
+  There is **no auto-match**: neither name matching over the
+  `Resources/Terminology/LabelToSCT/` bridges nor tag-based routing
+  ships (the bridge JSONs remain ADR-0011 repo assets); the surgeon
+  states every correspondence explicitly, and unmapped segments never
+  land.  A structure whose checklist row already landed is annotated
+  "(already present)" and stays selectable.  Mapped segments flow
+  through the SAME landing kernel the accept path uses and take the
+  EXPECTED structure's identity — vocabulary title, visual defaults,
+  SCT tag; several rows may map to one structure (the multifocal
+  shape: subsequent titles number "<Title> 2", "<Title> 3"…).  The
+  canonical node's **identity is stable** (the earlier
+  promote-the-source-to-canonical mechanism is retired); the source
+  node is consumed only when EVERY segment was mapped — any skipped
+  row keeps the source in the scene (the status line says so), and an
+  all-skip mapping is a graceful no-op.  Landed — and in particular
   surgeon-`Completed` — rows are **never overwritten or demoted by an
   import**: the incoming segment lands as an extra same-code
   `InProgress` row and the surgeon decides which to keep (the

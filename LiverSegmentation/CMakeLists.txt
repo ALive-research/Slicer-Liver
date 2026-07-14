@@ -70,23 +70,6 @@ ctkMacroCompilePythonScript(
   )
 
 #-----------------------------------------------------------------------------
-# ADR-0011 LabelToSCT bridges: the unified import path (ADR-0034 §Decision 2)
-# name-matches loaded segments against the repo-root bridge JSONs at runtime.
-# Stage them under the scripted modules' shared Resources/ directory (beside
-# the staged .ui resources above) and install them alongside, so a launched
-# or packaged Slicer resolves them without the source tree; the module's
-# loader also walks up to the repo root when running from source.
-file(COPY
-  ${CMAKE_SOURCE_DIR}/Resources/Terminology/LabelToSCT
-  DESTINATION ${CMAKE_BINARY_DIR}/${Slicer_QTSCRIPTEDMODULES_LIB_DIR}/Resources/Terminology
-  )
-install(
-  DIRECTORY ${CMAKE_SOURCE_DIR}/Resources/Terminology/LabelToSCT
-  DESTINATION ${Slicer_INSTALL_QTSCRIPTEDMODULES_LIB_DIR}/Resources/Terminology
-  COMPONENT RuntimeLibraries
-  )
-
-#-----------------------------------------------------------------------------
 if(BUILD_TESTING)
   add_subdirectory(Testing)
 endif()

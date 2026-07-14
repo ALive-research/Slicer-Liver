@@ -121,15 +121,18 @@ set(_liverseg_pytest_files
   # Mark-absent attestation gesture.  Widget-needing (launched
   # `pytest_launched` row); skips cleanly bare.
   test_liversegmentation_segments_table.py
-  # ADR-0034 §Decision 2 -- the import path unifies: the toolbar Import…
-  # gesture routes a loaded segmentation through the SAME landing kernel
-  # the AI accept path uses (importSegmentation; canonical identity
-  # stable).  Pins the SCT-resolution order (TerminologyEntry tag wins,
-  # else LabelToSCT bridge name matching, else unmatched extra row), the
-  # never-overwrite rule for landed/Confirmed rows, source-node
-  # consumption on success only, and stock terminology-navigator format
-  # recognition (ADR-0011).  Scene/widget-needing (launched
-  # `pytest_launched` row); skips cleanly bare.
+  # ADR-0034 §Decision 2 -- the import path unifies, as amended: the
+  # toolbar Import… gesture opens the explicit-correspondence dialog
+  # (one Import-as combo per source segment, skip by default, NO
+  # auto-match) and routes the stated mapping through the SAME landing
+  # kernel the AI accept path uses (importSegmentation; canonical
+  # identity stable; expected-structure identity on landing).  Pins the
+  # skip-default/no-prefill table, the "(already present)" annotation,
+  # many->1 numbered titles, the never-overwrite rule for
+  # landed/Confirmed rows, source-node consumption only on a full
+  # mapping, and stock terminology-navigator format recognition
+  # (ADR-0011).  Scene/widget-needing (launched `pytest_launched` row);
+  # skips cleanly bare.
   test_liversegmentation_import_unified.py
   # T5.2-f -- shared Subject-Hierarchy folder utility reachability +
   # Anatomy placement through vtkSlicerSubjectHierarchyFolders
