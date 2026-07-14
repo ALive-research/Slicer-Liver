@@ -26,6 +26,14 @@ set(MODULE_PYTHON_RESOURCES
 add_subdirectory(MRML)
 add_subdirectory(Logic)
 
+# Vessel-adhering-highlight — Python sub-package staged alongside the
+# scripted module (ADR-0004 Python pick math, ADR-0025 locator pattern).
+# Gated on ``Slicer_USE_PYTHONQT`` to match the Slicer-core
+# ``<Module>Lib`` convention (mirrors LiverResections/CMakeLists.txt).
+if(Slicer_USE_PYTHONQT)
+  add_subdirectory(VascularTerritoriesLib)
+endif()
+
 #-----------------------------------------------------------------------------
 slicerMacroBuildScriptedModule(
   NAME ${MODULE_NAME}
