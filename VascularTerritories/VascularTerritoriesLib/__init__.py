@@ -29,10 +29,23 @@ except ImportError:  # pragma: no cover - LayerDMLib unreachable bare
     VesselHighlightPipeline = None
     registerVesselHighlightPipelineCreator = None
 
+# The annotation placement/edit Pipeline (ADR-0037 §Decision 2) has the same
+# LayerDMLib dependency; guard it the same way.
+try:
+    from .TerritoryPlacementPipeline import (
+        TerritoryPlacementPipeline,
+        registerTerritoryPlacementPipelineCreator,
+    )
+except ImportError:  # pragma: no cover - LayerDMLib unreachable bare
+    TerritoryPlacementPipeline = None
+    registerTerritoryPlacementPipelineCreator = None
+
 __all__ = [
     "VesselSurfacePick",
     "closed_surface_polydata",
     "snap_control_point_to_surface",
     "VesselHighlightPipeline",
     "registerVesselHighlightPipelineCreator",
+    "TerritoryPlacementPipeline",
+    "registerTerritoryPlacementPipelineCreator",
 ]

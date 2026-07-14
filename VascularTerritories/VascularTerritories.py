@@ -184,6 +184,7 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # ``LayerDMLib`` is unreachable — log loudly (ADR-0002 makes LayerDM a
     # hard runtime dependency) but let the rest of setup continue.
     self._registerVesselHighlightPipeline()
+    self._registerTerritoryPlacementPipeline()
 
     # Load widget from .ui file (created by Qt Designer)
     uiWidget = slicer.util.loadUI(self.resourcePath('UI/VascularTerritories.ui'))
@@ -283,6 +284,25 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         "creator not registered (%s) -- the highlight is disabled in this "
         "session.  Loading the SlicerLayerDisplayableManager extension is "
         "required for the Pipeline path (ADR-0013).", exc)
+
+  def _registerTerritoryPlacementPipeline(self):
+    """Register the annotation placement/edit LayerDM Pipeline creator.
+
+    ADR-0037 §Decision 2 (ADR-0013 §5 call 3).  Idempotent; a missing
+    LayerDMLib is a real configuration error under ADR-0002 so it logs at
+    ``critical``, but the rest of widget setup continues.
+    """
+    try:
+      from VascularTerritoriesLib import registerTerritoryPlacementPipelineCreator
+      if registerTerritoryPlacementPipelineCreator is None:
+        raise ImportError("registerTerritoryPlacementPipelineCreator unavailable")
+      registerTerritoryPlacementPipelineCreator()
+    except ImportError as exc:
+      logging.critical(
+        "VascularTerritories: annotation placement LayerDM Pipeline creator "
+        "not registered (%s) -- annotation placement is disabled in this "
+        "session.  Loading the SlicerLayerDisplayableManager extension is "
+        "required for the Pipeline path (ADR-0013/0037).", exc)
 
   # ------------------------------------------------------------------ #
   # Vessel-adhering-highlight wiring (ADR-0036)
