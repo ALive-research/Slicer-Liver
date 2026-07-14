@@ -30,8 +30,11 @@ the Stage-2 sidebar indicator (Python-convention predicate, ADR-0023
 """
 
 import functools
+import glob
+import json
 import logging
 import os
+import re
 
 import ctk
 import qt
@@ -278,6 +281,81 @@ def _sctTerminologyTag(code, meaning):
     )
 
 
+def _normalizeLabel(name):
+    """Fold a segment/bridge label for name matching (case + separators).
+
+    The bridge labels are tool-vocabulary (``portal_vein_and_splenic_vein``)
+    while loaded segments often carry human names ("Portal vein"); matching
+    is over a separator-and-case-insensitive normal form, exact after
+    normalization — never substring guessing.
+    """
+    return re.sub(r"[\s_\-]+", " ", str(name)).strip().lower()
+
+
+def _labelToSctBridgeDirectory():
+    """Locate the ``Resources/Terminology/LabelToSCT/`` bridge directory.
+
+    Two layouts resolve: the STAGED/installed tree keeps the bridges under
+    the scripted modules' shared ``Resources/`` directory (beside this
+    module's staged ``.ui`` resources, see the module CMakeLists), and the
+    SOURCE tree keeps them at the repo root — the walk up from the module
+    file covers both (an in-worktree ``build/`` also walks up to the repo
+    root).  ``None`` when absent: name matching then degrades gracefully
+    to unmatched extra rows.
+    """
+    directory = os.path.dirname(os.path.abspath(__file__))
+    while True:
+        candidate = os.path.join(directory, "Resources", "Terminology", "LabelToSCT")
+        if os.path.isdir(candidate):
+            return candidate
+        parent = os.path.dirname(directory)
+        if parent == directory:
+            return None
+        directory = parent
+
+
+@functools.lru_cache(maxsize=1)
+def _labelToSctNameMatches():
+    """The name-matching table off the ADR-0011 LabelToSCT bridges.
+
+    Reads EVERY ``Resources/Terminology/LabelToSCT/*.json`` bridge and maps
+    each mapping's label AND its SCT code meaning (normalized) to the
+    ``(code, meaning)`` pair.  Bridges declaring ``dynamic_mapping``
+    contribute their ``seed_role_mapping`` triples by meaning (the
+    Kumar-Oram bridge carries the hepatic-vein triple only there — its
+    static mappings are populated at runtime from seed roles).  Entries
+    mapped to ``null`` (out of the core type set) stay unmatched by
+    design.  Cached: the bridges are repo assets, not runtime state.
+    """
+    directory = _labelToSctBridgeDirectory()
+    if directory is None:
+        logging.debug("LabelToSCT bridge directory not found; name matching off.")
+        return {}
+    matches = {}
+
+    def _addTriple(label, sct):
+        if not sct or not sct.get("CodeValue"):
+            return
+        code = str(sct["CodeValue"])
+        meaning = str(sct.get("CodeMeaning", "") or code)
+        for key in (label, meaning):
+            if key:
+                matches.setdefault(_normalizeLabel(key), (code, meaning))
+
+    for path in sorted(glob.glob(os.path.join(directory, "*.json"))):
+        try:
+            with open(path, encoding="utf-8") as bridgeFile:
+                bridge = json.load(bridgeFile)
+        except (OSError, ValueError) as exc:
+            logging.warning("could not read LabelToSCT bridge %s: %s", path, exc)
+            continue
+        for mapping in bridge.get("mappings", []):
+            _addTriple(mapping.get("label"), mapping.get("sct"))
+        for sct in (bridge.get("seed_role_mapping") or {}).values():
+            _addTriple(None, sct)
+    return matches
+
+
 def structureStatus(canonicalNode, sctCode):
     """Derive a structure row's status from the canonical-node state.
 
@@ -355,9 +433,6 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     def __init__(self, parent=None):
         self.logic = None
         self._backendStatusLabel = None
-        # Load-a-segmentation affordance (the v2.0 no-AI path); built in setup().
-        self._loadSegCombo = None
-        self._loadSegTable = None
         # Async run path (ADR-0034 §Decision 5): the QProcess job queue plus
         # the widget's per-job bookkeeping — the structure codes each job
         # covers (fanned into per-structure progress rows) and one progress
@@ -385,7 +460,6 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         self.layout.addWidget(self._buildSegmentsTable())
         self.layout.addWidget(self._buildSelectionToolbar())
         self.layout.addWidget(self._buildEmbeddedEditor())
-        self.layout.addWidget(self._buildLoadSegmentationSection())
         self.layout.addWidget(self._buildBackendStatusRow())
 
         # Keep the table bound to the canonical node across scene changes.
@@ -679,7 +753,10 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         (structures sharing a backend task coalesce into one child;
         multi-select covers the run-everything gesture); Edit expands the
         embedded Segment Editor section and syncs the first selected row
-        into it (§Amendments item 4 — the jump-to-module path is retired).
+        into it (§Amendments item 4 — the jump-to-module path is retired);
+        Import… opens the minimal source picker routing a loaded
+        segmentation through the unified landing path (§Decision 2: the
+        import path unifies — the separate load section is retired).
         Absence is attested through the table's own status gesture (empty
         row set ``Completed``), so no dedicated button.  Under the buttons,
         one progress row PER queued/running job — the job's text embedded
@@ -693,8 +770,15 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         row = qt.QHBoxLayout()
         self._runButton = qt.QPushButton(self._RUN_LABEL_BASE)
         self._editButton = qt.QPushButton("Edit")
+        self._importButton = qt.QPushButton("Import…")
+        self._importButton.setObjectName("ImportSegmentationButton")
+        self._importButton.setToolTip(
+            "Import a loaded segmentation's segments into the anatomy "
+            "table (they land under review)."
+        )
         row.addWidget(self._runButton)
         row.addWidget(self._editButton)
+        row.addWidget(self._importButton)
         row.addStretch(1)
         column.addLayout(row)
 
@@ -708,6 +792,7 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
 
         self._runButton.connect("clicked()", self.onRunSelectedStructures)
         self._editButton.connect("clicked()", self.onEditSelectedSegment)
+        self._importButton.connect("clicked()", self.onImportSegmentation)
         return box
 
     #: Run-button label vocabulary (re-labelled live with the selection).
@@ -1206,85 +1291,99 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         ui.PreDownloadButton.connect("clicked()", self.onPreDownload)
         return row
 
-    def _buildLoadSegmentationSection(self):
-        """Build the "load an existing segmentation" affordance (ADR-0024).
+    def _eligibleImportSources(self):
+        """The scene's importable segmentation nodes.
 
-        The v2.0 path to a canonical segmentation WITHOUT in-app AI (deferred to
-        v2.1): pick a loaded ``vtkMRMLSegmentationNode``, assign each of its
-        segments a structure, and Import -> the logic promotes it to canonical
-        and SCT-tags the assigned segments (``importSegmentationAsCanonical``).
+        Any plain ``vtkMRMLSegmentationNode`` qualifies; the orchestrator's
+        OWN role-carrying nodes never do — the canonical is the landing
+        target, and scratch nodes are the AI path's internal carriers
+        (``accept()`` is their route, ADR-0024 §Terminology).
         """
-        box = slicer.util.loadUI(self.resourcePath("UI/LoadSegmentationSection.ui"))
-        ui = slicer.util.childWidgetVariables(box)
-        combo = ui.LoadSegmentationComboBox
-        # Bind the selector's scene explicitly -- the root is a plain QGroupBox,
-        # so there is no qMRMLWidget setMRMLScene to propagate.
+        return [
+            node
+            for node in slicer.util.getNodesByClass("vtkMRMLSegmentationNode")
+            if not node.GetAttribute(ROLE_ATTRIBUTE)
+        ]
+
+    def onImportSegmentation(self):
+        """The toolbar Import… gesture: pick a source, land it for review.
+
+        A minimal modal picker (a ``qMRMLNodeComboBox`` over segmentation
+        nodes, the canonical/scratch roles hidden) in front of the unified
+        landing path (ADR-0034 §Decision 2: the import path unifies — one
+        interaction grammar for the AI and import routes).  With nothing
+        importable in the scene the gesture explains itself on the shared
+        status label instead of opening an empty picker (explainable
+        state, ADR-0009).
+        """
+        eligible = self._eligibleImportSources()
+        if not eligible:
+            self._statusLabel.setText(
+                "No importable segmentation in the scene — load one first "
+                "(File ▸ Add Data)."
+            )
+            return
+        dialog = qt.QDialog(self.parent)
+        dialog.setWindowTitle("Import segmentation")
+        column = qt.QVBoxLayout(dialog)
+        column.addWidget(
+            qt.QLabel("Import the segments of this segmentation for review:")
+        )
+        combo = slicer.qMRMLNodeComboBox()
+        combo.nodeTypes = ["vtkMRMLSegmentationNode"]
+        combo.addEnabled = False
+        combo.removeEnabled = False
+        combo.renameEnabled = False
+        combo.noneEnabled = False
+        combo.showHidden = False
         combo.setMRMLScene(slicer.mrmlScene)
-        combo.connect("currentNodeChanged(vtkMRMLNode*)", self._onLoadSegmentationSelected)
-        table = ui.LoadSegmentationAssignTable
-        table.horizontalHeader().setStretchLastSection(True)
-        ui.ImportSegmentationButton.connect("clicked()", self._onImportSegmentationAsCanonical)
+        # Hide the orchestrator's own nodes (canonical + scratch roles);
+        # the proxy-model hidden list is the stock exclusion surface.
+        combo.sortFilterProxyModel().hiddenNodeIDs = [
+            node.GetID()
+            for node in slicer.util.getNodesByClass("vtkMRMLSegmentationNode")
+            if node.GetAttribute(ROLE_ATTRIBUTE)
+        ]
+        column.addWidget(combo)
+        buttons = qt.QDialogButtonBox(
+            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
+        )
+        buttons.connect("accepted()", dialog.accept)
+        buttons.connect("rejected()", dialog.reject)
+        column.addWidget(buttons)
+        try:
+            accepted = dialog.exec_() == qt.QDialog.Accepted
+            source = combo.currentNode() if accepted else None
+        finally:
+            combo.setMRMLScene(None)
+            dialog.setParent(None)
+            dialog.deleteLater()
+        if source is not None:
+            self._importChosenSource(source)
 
-        self._loadSegCombo = combo
-        self._loadSegTable = table
-        return box
-
-    def _onLoadSegmentationSelected(self, node):
-        """Repopulate the per-segment structure-assignment table."""
-        table = self._loadSegTable
-        if table is None:
+    def _importChosenSource(self, source):
+        """Route the picked source through the unified landing path."""
+        if source is None or self.logic is None:
             return
-        segmentIds = []
-        if node is not None:
-            segmentation = node.GetSegmentation()
-            segmentIds = list(segmentation.GetSegmentIDs())
-        table.setRowCount(len(segmentIds))
-        for row, segmentId in enumerate(segmentIds):
-            segment = node.GetSegmentation().GetSegment(segmentId)
-            name = segment.GetName() if segment is not None else segmentId
-            nameItem = qt.QTableWidgetItem(name)
-            nameItem.setData(qt.Qt.UserRole, segmentId)
-            table.setItem(row, 0, nameItem)
-
-            picker = qt.QComboBox()
-            picker.addItem("(skip)", None)
-            for title, sctCode in STRUCTURE_TABS:
-                picker.addItem(title, sctCode)
-            table.setCellWidget(row, 1, picker)
-
-    def _onImportSegmentationAsCanonical(self):
-        """Collect the structure assignments and promote the loaded node."""
-        combo = self._loadSegCombo
-        table = self._loadSegTable
-        if combo is None or table is None or self.logic is None:
+        canonical = self.logic.importSegmentation(source)
+        if canonical is None:
+            self._statusLabel.setText(
+                "Import failed — the source segmentation was left untouched; "
+                "see the log."
+            )
             return
-        node = combo.currentNode()
-        if node is None:
-            return
-        assignments = {}
-        for row in range(table.rowCount):
-            nameItem = table.item(row, 0)
-            picker = table.cellWidget(row, 1)
-            if nameItem is None or picker is None:
-                continue
-            sctCode = picker.itemData(picker.currentIndex)
-            if sctCode is None:
-                continue  # "(skip)"
-            segmentId = nameItem.data(qt.Qt.UserRole)
-            meaning = picker.itemText(picker.currentIndex)
-            assignments[segmentId] = (sctCode, meaning)
-        if not assignments:
-            return
-        self.logic.importSegmentationAsCanonical(node, assignments)
-        # The import promotes an EXISTING node (no NodeAdded/Removed event
-        # reaches _onSceneChanged), so re-bind the canonical consumers
-        # (table, embedded editor, demote-on-edit observer) explicitly.
+        # The landing grows the EXISTING canonical node (the source removal
+        # does reach _onSceneChanged, but re-bind explicitly rather than
+        # ride a side effect).
         self._bindSegmentsTable()
         self._bindEmbeddedEditor()
         self._observeCanonicalSegmentation()
         # Same re-centre as the toolbar Run's landing: the imported anatomy's
         # surface model lands outside the default camera framing.
         self._reframeThreeDViews()
+        self._statusLabel.setText(
+            "Imported for review — confirm via the row's status cell."
+        )
 
     def onPreDownload(self):
         """Pre-download the AI backend without minting a node.
@@ -1443,57 +1542,100 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
                 canonicalNode, segmentId, sctCode, self._structureMeaning(sctCode)
             )
 
-    def importSegmentationAsCanonical(self, sourceSegmentationNode, assignments):
-        """Promote a loaded segmentation to the canonical node, SCT-tagging it.
+    def importSegmentation(self, sourceSegmentationNode):
+        """Land a loaded segmentation's segments on the canonical node.
 
-        The v2.0 path to a canonical segmentation WITHOUT in-app AI (deferred to
-        v2.1): the surgeon loads a segmentation and assigns each segment a
-        structure.  ``assignments`` maps ``segmentId -> (sctCode, meaning)``.
-        Marks ``sourceSegmentationNode`` as THE canonical node (ADR-0024
-        §"Output contract" — exactly one; any prior canonical is demoted) and
-        SCT-tags each assigned segment via :meth:`tagSegmentWithSct`.  Landed
-        segments arrive as native ``InProgress`` with the ``imported`` source
-        tag — imports no longer skip the review boundary (ADR-0034
-        §Amendments); the surgeon's status-cell confirm to ``Completed`` is
-        what :meth:`isStageComplete` counts.  A no-op returning ``None`` when
-        the source is missing / not a segmentation, or no assignments are
-        given.
+        The unified import path (ADR-0034 §Decision 2 "the import path
+        unifies", as amended): the canonical node's IDENTITY is stable —
+        the retired node promotion is gone — and every source segment
+        flows through the SAME :meth:`_landSegment` kernel the AI accept
+        path uses, arriving native ``InProgress`` with the ``imported``
+        source tag.  Per source segment the SCT code resolves in order
+        (ADR-0011 dispatch):
+
+          1. an existing ``TerminologyEntry`` tag carrying a
+             structure-vocabulary code wins;
+          2. else the segment NAME is matched against the
+             ``Resources/Terminology/LabelToSCT/`` bridges
+             (:func:`_labelToSctNameMatches`) and the matched SCT triple is
+             tagged onto the segment before landing;
+          3. else the segment is unmatched: it lands as an EXTRA untagged
+             row keeping its imported name — structure assignment is then
+             the stock terminology-navigator gesture on the table's colour
+             swatch (its serialization satisfies the same ``^<code>^``
+             readers).
+
+        The landing kernel's standing rule replaces a pre-seeded checklist
+        placeholder only when it is EMPTY and provenance-free; a row that
+        already landed — in particular a surgeon-``Completed`` one — is
+        NEVER overwritten or demoted by an import (``demoteStale=False``:
+        the demote-on-rerun staleness rule belongs to the AI re-run path):
+        the incoming segment lands as an extra same-code row and the
+        surgeon decides which to keep.
+
+        The source node is REMOVED after a fully successful copy (its
+        segments live on in the canonical node); on any failure —
+        including a segment-less source and the orchestrator's own
+        role-carrying nodes, which are refused — the source is left
+        untouched and ``None`` is returned.  A successful import also runs
+        the canonical post-growth steps the accept path runs: the 3D
+        closed-surface representation, the composed distance map Stage 4
+        consumes (ADR-0031), and the visual defaults re-apply.
         """
         if sourceSegmentationNode is None or not sourceSegmentationNode.IsA(
             "vtkMRMLSegmentationNode"
         ):
             return None
-        if not assignments:
+        if sourceSegmentationNode.GetAttribute(ROLE_ATTRIBUTE):
+            # The canonical node cannot import itself; scratch nodes are the
+            # AI landing's internal carriers (accept() is their path).
+            return None
+        sourceSegmentation = sourceSegmentationNode.GetSegmentation()
+        segmentIds = list(sourceSegmentation.GetSegmentIDs())
+        if not segmentIds:
             return None
 
-        # Exactly one canonical node: demote any prior canonical before
-        # promoting the loaded one.
-        existing = self._findCanonicalSegmentation()
-        if existing is not None and existing is not sourceSegmentationNode:
-            existing.SetAttribute(ROLE_ATTRIBUTE, None)
-
-        sourceSegmentationNode.SetAttribute(ROLE_ATTRIBUTE, ROLE_CANONICAL)
-        segmentsLogic = slicer.vtkSlicerSegmentationsModuleLogic
-        for segmentId, (code, meaning) in assignments.items():
-            self.tagSegmentWithSct(sourceSegmentationNode, segmentId, code, meaning)
-            # Landing contract (ADR-0034 §Amendments): every landed segment
-            # arrives "produced, under review" and carries its provenance.
-            segment = sourceSegmentationNode.GetSegmentation().GetSegment(segmentId)
-            segmentsLogic.SetSegmentStatus(segment, segmentsLogic.InProgress)
-            segment.SetTag(SOURCE_TAG, SOURCE_IMPORTED)
-        # Self-heal the checklist on the adopted canonical: the structures
-        # the import did not cover get their pre-seeded empty rows.
-        self.ensureExpectedStructures(sourceSegmentationNode)
-        # Give the canonical segments a 3D closed-surface representation + make
-        # them visible, so the anatomy renders through to Planning (#539) --
-        # otherwise the main 3D view is empty entering Stage 4.
-        self.ensureSurfaceRepresentation(sourceSegmentationNode)
-        # The canonical import is the explicit human action completing Stage 2
-        # (ADR-0023 Stage-2 hand-off), so it also computes the composed
-        # distance map Stage 4 consumes (ADR-0031: the map is the resection
-        # plan's input) -- Planning then opens with the map ready.
-        self.ensureDistanceMap(sourceSegmentationNode)
-        return sourceSegmentationNode
+        canonical = self.getOrCreateCanonicalSegmentation()
+        nameMatches = _labelToSctNameMatches()
+        try:
+            for segmentId in segmentIds:
+                segment = sourceSegmentation.GetSegment(segmentId)
+                if self._expectedCodeForSegment(segment) is None:
+                    match = nameMatches.get(_normalizeLabel(segment.GetName()))
+                    if match is not None:
+                        self.tagSegmentWithSct(
+                            sourceSegmentationNode, segmentId, *match
+                        )
+                landedId = self._landSegment(
+                    canonical,
+                    sourceSegmentation,
+                    segmentId,
+                    SOURCE_IMPORTED,
+                    demoteStale=False,
+                )
+                if landedId is None:
+                    raise RuntimeError(
+                        f"could not copy segment {segmentId!r} into the "
+                        "canonical node"
+                    )
+        except Exception as exc:  # noqa: BLE001 — surface, keep the source
+            logging.error(
+                "import failed; the source segmentation stays in the "
+                "scene: %s",
+                exc,
+            )
+            return None
+        slicer.mrmlScene.RemoveNode(sourceSegmentationNode)
+        # The import is an explicit human action growing the canonical node
+        # (the accept path's twin), so it runs the same post-merge steps:
+        # the 3D closed-surface representation (the main 3D view is
+        # otherwise empty entering Stage 4), the composed distance map
+        # Stage 4 consumes (ADR-0031), and the per-segment 3D opacity that
+        # does not travel with copied segments.
+        self.ensureSurfaceRepresentation(canonical)
+        self.ensureDistanceMap(canonical)
+        self.applyVisualDefaults(canonical)
+        return canonical
 
     #: Downsampling applied to the auto-computed distance map.  A full-res
     #: 4-channel float map of a 512-cubed CT is on the order of a gigabyte;
@@ -1625,25 +1767,33 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
         self.applyVisualDefaults(canonical)
         return canonical
 
-    def _landSegment(self, canonicalNode, sourceSegmentation, segmentId, source):
+    def _landSegment(
+        self, canonicalNode, sourceSegmentation, segmentId, source, demoteStale=True
+    ):
         """Land one incoming segment on the canonical node.
 
         The ADR-0034 §Amendments landing contract shared by the accept
-        merge loop: when the incoming segment's SCT code matches a
-        pre-seeded EMPTY expected segment (no voxel data and no provenance
-        source tag — emptiness, not status, marks the replaceable
-        placeholder: the status column is the surgeon's channel), the
-        placeholder is removed, the incoming segment copied in, and the
-        placeholder's row position restored via the ``vtkSegmentation``
-        reorder API (the same ``GetSegmentIndex``/``SetSegmentIndex`` pair
-        the stock table's move up/down uses).  Returns the landed segment
-        id, or ``None`` when the copy failed.
+        merge loop AND the unified import path: when the incoming
+        segment's SCT code matches a pre-seeded EMPTY expected segment (no
+        voxel data and no provenance source tag — emptiness, not status,
+        marks the replaceable placeholder: the status column is the
+        surgeon's channel), the placeholder is removed, the incoming
+        segment copied in, and the placeholder's row position restored via
+        the ``vtkSegmentation`` reorder API (the same
+        ``GetSegmentIndex``/``SetSegmentIndex`` pair the stock table's
+        move up/down uses).  A row that already landed is never replaced:
+        the incoming segment lands as an extra same-code row.  Returns the
+        landed segment id, or ``None`` when the copy failed.
 
         Staleness rides the LANDING (ADR-0034 §Decision 2, as amended):
         enqueue/cancel never touch statuses, so a re-run of a confirmed
         structure demotes its previously landed same-code ``Completed``
         row(s) back to native ``InProgress`` here — at the moment new
-        produced output for the structure actually arrives.
+        produced output for the structure actually arrives.  The demote is
+        the AI re-run path's; the import path lands with
+        ``demoteStale=False`` so a surgeon-``Completed`` row is never
+        touched by an import (the extra row lands beside it and the
+        surgeon decides which to keep).
 
         The landed identity — native ``InProgress`` status, the source tag
         (kept when the segment already carries provenance from where it was
@@ -1665,7 +1815,11 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
         if code is not None:
             # The staleness demote (see docstring): new output for this
             # structure makes a previously confirmed same-code row stale.
-            for siblingId in list(canonicalSegmentation.GetSegmentIDs()):
+            # AI re-run path only -- an import never demotes.
+            siblingIds = (
+                list(canonicalSegmentation.GetSegmentIDs()) if demoteStale else []
+            )
+            for siblingId in siblingIds:
                 sibling = canonicalSegmentation.GetSegment(siblingId)
                 if self._expectedCodeForSegment(sibling) != code:
                     continue

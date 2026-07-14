@@ -136,10 +136,9 @@ def _canonical_of(widget):
 
 def test_embedded_editor_exists_collapsed_and_configured(qt_widgets):
     """The panel hosts a stock ``qMRMLSegmentEditorWidget`` inside a
-    collapsed ``ctkCollapsibleButton`` under the table (above the import
-    section), selectors hidden, curated effect list pinned, bound to the
-    canonical node + the Stage-1 PortalVenous source volume (ADR-0034
-    §Amendments item 4)."""
+    collapsed ``ctkCollapsibleButton`` under the table, selectors hidden,
+    curated effect list pinned, bound to the canonical node + the Stage-1
+    PortalVenous source volume (ADR-0034 §Amendments item 4)."""
     slicer = _slicer_or_skip()
     _module_or_skip()
     slicer.mrmlScene.Clear(0)
@@ -169,17 +168,13 @@ def test_embedded_editor_exists_collapsed_and_configured(qt_widgets):
         "the editor widget must live INSIDE the collapsible section."
     )
 
-    # Placement: directly under the table (with its toolbar), ABOVE the
-    # import section.
+    # Placement: directly under the table (with its toolbar).  The retired
+    # load section is gone -- import is a toolbar gesture into the same
+    # table (ADR-0034 §Decision 2: the import path unifies).
     layout = widget.layout
-    load_section = slicer.util.findChild(widget.parent, "LoadSegmentationSection")
-    assert (
-        layout.indexOf(widget.segmentsTable())
-        < layout.indexOf(section)
-        < layout.indexOf(load_section)
-    ), (
-        "the editor section must sit under the segments table and above "
-        "the import section (ADR-0034 §Amendments item 4)."
+    assert layout.indexOf(widget.segmentsTable()) < layout.indexOf(section), (
+        "the editor section must sit under the segments table "
+        "(ADR-0034 §Amendments item 4)."
     )
 
     # Pinned inputs: the node-selector rows are hidden -- the canonical
