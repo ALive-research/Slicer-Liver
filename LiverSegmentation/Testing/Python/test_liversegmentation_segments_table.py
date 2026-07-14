@@ -95,7 +95,13 @@ def _sct_segment_ids(module, canonical, code):
 
 
 def _fill_segment(slicer, segment):
-    """Give ``segment`` a tiny non-empty binary labelmap (a "landed" row)."""
+    """Give ``segment`` a tiny non-empty binary labelmap (a "landed" row).
+
+    Voxels carry the segment's OWN label value: emptiness is label-aware
+    (pre-seeded rows share one labelmap layer, so a foreign label value
+    would not count as this segment's content — the shape a real editor
+    write produces).
+    """
     import vtk
 
     name = (
@@ -104,7 +110,7 @@ def _fill_segment(slicer, segment):
     image = slicer.vtkOrientedImageData()
     image.SetDimensions(2, 2, 2)
     image.AllocateScalars(vtk.VTK_UNSIGNED_CHAR, 1)
-    image.GetPointData().GetScalars().Fill(1)
+    image.GetPointData().GetScalars().Fill(segment.GetLabelValue())
     segment.AddRepresentation(name, image)
 
 
