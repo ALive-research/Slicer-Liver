@@ -50,17 +50,11 @@
 #include <vtkMRMLResectionPlanNode.h>
 #include "qSlicerLiverResectionsReader.h"
 #include <vtkSlicerLiverResectionsLogic.h>
-#include <vtkSlicerMarkupsLogic.h>
-#include <qSlicerLiverMarkupsModule.h> //Needed to include qSlicerLiverMarkupsModule_INCLUDE_DIRS to find the files from the LiverMarkupsModule
 
 #include <vtkMRMLBezierSurfaceNode.h>
 
 // MRML includes
 #include <vtkMRMLScene.h>
-#include <vtkMRMLMarkupsNode.h>
-#include <vtkSlicerSlicingContourWidget.h>
-#include <vtkMRMLMarkupsSlicingContourNode.h>
-#include <vtkMRMLMarkupsSlicingContourDisplayNode.h>
 
 // VTK includes
 #include "qMRMLWidget.h"
@@ -176,25 +170,9 @@ int qSlicerLiverResectionsModuleIntegrationTest(int argc, char* argv[])
   vtkSlicerLiverResectionsLogic* liverResectionsLogic = vtkSlicerLiverResectionsLogic::SafeDownCast(module.logic());
   Q_ASSERT(liverResectionsLogic);
 
-  // Register markups
-  vtkSlicerMarkupsLogic* markupsLogic = vtkSlicerMarkupsLogic::SafeDownCast(appLogic->GetModuleLogic("Markups"));
-  Q_ASSERT(markupsLogic);
-  vtkNew<vtkMRMLMarkupsSlicingContourNode> slicingContourNode;
-  Q_ASSERT(slicingContourNode);
-  slicingContourNode->SetScene(scene);
-
-  vtkNew<vtkSlicerSlicingContourWidget> slicingContourWidget;
-  Q_ASSERT(slicingContourWidget);
-  markupsLogic->RegisterMarkupsNode(slicingContourNode, slicingContourWidget);
-  qSlicerLiverMarkupsModule* markupsModule = new qSlicerLiverMarkupsModule();
-  Q_ASSERT(markupsModule);
-  //    markupsModule->initialize(appLogic);
-  delete markupsModule;
-
-  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLMarkupsSlicingContourDisplayNode>::New());
-  // The v1 markups Bezier surface + its display node are retired
-  // (ADR-0014 §"Dissolution"; ADR-0032 §"Consequences"); the v2 carrier
-  // is exercised below.
+  // The v1 markups init primitives + the v1 markups Bezier surface are
+  // retired (ADR-0014 §"Dissolution"; ADR-0032 §"Consequences"); the v2
+  // carrier is exercised below.
 
   // The v2 plan resolves its geometry through a typed node reference
   // to the Bezier carrier (ADR-0014); exercise that wiring.
@@ -208,7 +186,6 @@ int qSlicerLiverResectionsModuleIntegrationTest(int argc, char* argv[])
   //    qSlicerLiverResectionsWriter *markupsWriter;
 
   // Also test the MRML methods in the nodes
-  EXERCISE_ALL_BASIC_MRML_METHODS(slicingContourNode.GetPointer());
   EXERCISE_ALL_BASIC_MRML_METHODS(resectionPlanNode);
 
   //    return module.runApp(argc, argv);//fails - just delete app instead

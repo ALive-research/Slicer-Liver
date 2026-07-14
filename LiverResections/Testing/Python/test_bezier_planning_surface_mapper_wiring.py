@@ -45,7 +45,7 @@ is wired.
 -- WHY THIS IS A LAUNCHED-SLICER PYTEST --
 
 ``vtkOpenGLBezierResectionPolyDataMapper`` (LiverResections VTKWidgets) and
-``vtkBezierSurfaceSource`` (LiverMarkups VTKWidgets) are wrapped-C++ classes
+``vtkBezierSurfaceSource`` (LiverResections VTKWidgets) are wrapped-C++ classes
 reachable only inside a launched Slicer with the modules loaded; a bare
 ``PythonSlicer -m pytest`` has ``slicer.mrmlScene is None`` and the wrapped
 widget classes off the path, so this SKIPS CLEANLY via the shared

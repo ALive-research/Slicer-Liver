@@ -1174,7 +1174,7 @@ def _import_aspect_ratio_helper() -> Any | None:
 def _import_texture_object_helper() -> Any | None:
     """Return the ``vtkMultiTextureObjectHelper`` class, or ``None``.
 
-    The helper (``LiverMarkups/VTKWidgets/``) wraps ``vtkTextureObject``
+    The helper (``LiverResections/VTKWidgets/``) wraps ``vtkTextureObject``
     with the ``CreateSeq3DFromRaw`` upload the resectogram distance map
     needs.  A named seam over ``_import_wrapped_class`` for symmetry with
     the aspect-ratio helper.

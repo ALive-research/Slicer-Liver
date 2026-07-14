@@ -118,7 +118,6 @@ add_subdirectory(SubjectHierarchyFolders)
 
 #-----------------------------------------------------------------------------
 # Extension modules
-add_subdirectory(LiverMarkups)
 add_subdirectory(LiverResections)
 add_subdirectory(VascularTerritories)
 add_subdirectory(LiverSegmentation)
