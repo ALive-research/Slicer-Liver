@@ -432,28 +432,41 @@ def test_tint_delegate_installed_on_name_column_status_column_delegate_intact(
     widget = _widget_or_skip(slicer, qt_widgets)
     inner = widget.segmentsTable().tableWidget()
 
-    # Stock column layout: name = 3, status = 5.  The tint delegate on the name
-    # column must still be a terminology delegate (subclassed, not replaced) so
-    # name/terminology editing survives.  Assert the subclass relationship via
-    # the Python MRO rather than importing the base class by name -- the
-    # terminology delegate's Python-importable location is build-specific, but
-    # the implementation subclasses whatever delegate the column already had
-    # (type(existing)), so its name is on our tint delegate's MRO regardless.
+    # Stock column layout: name = 3, status = 5.  The tint delegate must
+    # SUBCLASS whatever delegate the column already had (the implementation
+    # uses type(existing)) rather than replace it -- so any editor behaviour
+    # the build installed on the column survives.  WHICH base that is, is
+    # build-specific: the terminology delegate is present only where the
+    # Terminologies module widgets are wrapped (absent in some CI builds,
+    # where the base is plain QStyledItemDelegate).  So pin the two
+    # build-agnostic invariants, not the specific base class:
     name_delegate = inner.itemDelegateForColumn(3)
-    mro_names = [base.__name__ for base in type(name_delegate).__mro__]
-    assert "qSlicerTerminologyItemDelegate" in mro_names, (
-        "the name-column tint delegate must SUBCLASS the terminology delegate "
-        f"so terminology editing is preserved; MRO was {mro_names!r}."
-    )
     assert name_delegate in widget._tintDelegates, (
         "the name column must carry one of the widget's tint delegates."
     )
+    # PythonQt flattens C++ inheritance -- a wrapped delegate's Python MRO
+    # sits directly on PythonQtInstanceWrapper, never chaining through a
+    # Python QStyledItemDelegate -- and the base class is the build-specific
+    # delegate the column already had (terminology where the module widgets
+    # are wrapped, plain QStyledItemDelegate otherwise).  The build-agnostic
+    # fact is that our subclass wraps a REAL Qt delegate (not a bare Python
+    # object): PythonQtInstanceWrapper on the MRO.
+    mro_names = [base.__name__ for base in type(name_delegate).__mro__]
+    assert "PythonQtInstanceWrapper" in mro_names, (
+        "the tint delegate must subclass the column's real (wrapped) item "
+        f"delegate so its editor behaviour is preserved; MRO was {mro_names!r}."
+    )
 
-    # The tint delegate must be scoped per column, not installed whole-view
-    # (a whole-view setItemDelegate would clobber the icon columns).
+    # Column-scoped, never a whole-view setItemDelegate -- THE anti-clobber
+    # invariant: a whole-view delegate would replace the icon/editor columns'
+    # delegates wholesale (status click-to-cycle, terminology, opacity).
     assert inner.itemDelegate() not in widget._tintDelegates, (
         "the tint must be column-scoped, never a whole-view delegate."
     )
+    for column in (0, 1, 2, 3, 5):
+        assert inner.itemDelegateForColumn(column) in widget._tintDelegates, (
+            f"column {column} must carry a column-scoped tint delegate."
+        )
 
 
 if __name__ == "__main__":
