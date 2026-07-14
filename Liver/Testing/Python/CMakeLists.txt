@@ -187,6 +187,7 @@ set(_launched_test_roots
   "${CMAKE_SOURCE_DIR}/Liver/Testing/Python"
   "${CMAKE_SOURCE_DIR}/Testing/Python"
   "${CMAKE_SOURCE_DIR}/LiverResections/Testing/Python"
+  "${CMAKE_SOURCE_DIR}/VascularTerritories/Testing/Python"
   "${CMAKE_SOURCE_DIR}/LiverSegmentation/Testing/Python"
 )
 

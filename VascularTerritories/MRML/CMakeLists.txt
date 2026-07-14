@@ -31,6 +31,8 @@ set(${KIT}_SRCS
   vtkMRMLStdCouinaudTerritoriesNode.cxx
   vtkMRMLCustomTerritoriesNode.h
   vtkMRMLCustomTerritoriesNode.cxx
+  vtkMRMLCustomTerritoriesStorageNode.h
+  vtkMRMLCustomTerritoriesStorageNode.cxx
   vtkMRMLTerritoriesHighlightDisplayNode.h
   vtkMRMLTerritoriesHighlightDisplayNode.cxx
   )

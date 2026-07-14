@@ -45,13 +45,17 @@
 #include <vtkNew.h>
 #include <vtkSetGet.h>
 #include <vtkSmartPointer.h>
+#include <vtkWrappingHints.h>
 
 // STD includes
+#include <array>
 #include <map>
 #include <string>
+#include <vector>
 
 class vtkMRMLMarkupsFiducialNode;
 class vtkMRMLModelNode;
+class vtkMRMLStorageNode;
 class vtkStringArray;
 
 /**
@@ -64,13 +68,22 @@ class vtkStringArray;
  * Per Docs/architecture/territories-class-hierarchy.md the Manual path
  * holds:
  *
- *   - ``CenterlineRefs``  — references to centerline model nodes
- *                            (output of VMTK ExtractCenterline).
- *   - ``EndpointRefs``    — references to fiducial nodes seeding the
- *                            centerline extractor.
- *   - ``Groupings``       — map from centerline ID to surgeon-named
- *                            segment ID.
- *   - ``SegmentNames``    — surgeon-defined segment labels.
+ *   - ``CenterlineRefs``     — references to centerline model nodes
+ *                               (output of VMTK ExtractCenterline).
+ *   - ``AnnotationPoints``   — ordered, surface-snapped annotation
+ *                               points, keyed per surgeon-named
+ *                               territory, seeding the centerline
+ *                               extractor.  Per ADR-0037 §Decision 1
+ *                               these live in an OWN point carrier on
+ *                               this node — NOT on a
+ *                               ``vtkMRMLMarkupsFiducialNode`` — the
+ *                               module's transition off markups.  The
+ *                               VMTK feed (Stage 3) builds a transient
+ *                               fiducial node from these points inside
+ *                               the extraction call and discards it.
+ *   - ``Groupings``          — map from centerline ID to surgeon-named
+ *                               segment ID.
+ *   - ``SegmentNames``       — surgeon-defined segment labels.
  *
  * Segment masks live on the referenced ``vtkMRMLSegmentationNode``
  * (the ``segments`` node-reference role on the abstract base), not on
@@ -140,6 +153,60 @@ public:
   /// means "no SCT tagging" (the default).
   void SetSegmentSCTCode(int index, const std::string& sctCode);
 
+  //--------------------------------------------------------------------------
+  // Annotation-point carrier (ADR-0037 §Decision 1 + ADR-0014 §"Fourth
+  // layer")
+  //--------------------------------------------------------------------------
+  //
+  // Ordered, surface-snapped annotation points, keyed per surgeon-named
+  // territory id (the same std::string idiom as ``SetGrouping`` /
+  // ``GetGrouping``).  Replaces the never-implemented ``EndpointRefs``
+  // markups slot with an OWN point store — no markups reference anywhere
+  // on the annotation path.  Round-trips through MRML XML + the
+  // ``vtkMRMLCustomTerritoriesStorageNode`` ``.vta.json`` schema.
+
+  /// Append a point to ``territoryId``'s ordered list; returns its index
+  /// within that territory.  Fires ONE ModifiedEvent.
+  int AddAnnotationPoint(const std::string& territoryId, double x, double y, double z);
+
+  /// Number of annotation points in ``territoryId`` (0 for an unknown
+  /// territory).
+  int GetNumberOfAnnotationPoints(const std::string& territoryId);
+
+  /// The i-th annotation point of ``territoryId`` (placement order),
+  /// returned as a 3-tuple in Python (``VTK_SIZEHINT``).  An out-of-range
+  /// index returns the origin.  The pointer aliases an internal scratch
+  /// buffer valid until the next call — copy before re-calling.
+  const double* GetNthAnnotationPoint(const std::string& territoryId, int i) VTK_SIZEHINT(3);
+
+  /// Relocate the i-th annotation point of ``territoryId`` in place.
+  /// Fires ONE ModifiedEvent; a no-op (no event) for an out-of-range
+  /// index.
+  void SetNthAnnotationPoint(const std::string& territoryId, int i, double x, double y, double z);
+
+  /// Remove the i-th annotation point of ``territoryId``; the tail shifts
+  /// up in order.  Fires ONE ModifiedEvent; a no-op for an out-of-range
+  /// index.  Returns true iff a point was removed.
+  bool RemoveNthAnnotationPoint(const std::string& territoryId, int i);
+
+  /// Empty ``territoryId``'s list only, leaving siblings intact.  Fires
+  /// ONE ModifiedEvent for a non-empty territory.
+  void ClearAnnotationPoints(const std::string& territoryId);
+
+  /// The surgeon-named territory ids that currently carry at least one
+  /// annotation point, in a deterministic (sorted) order.  Used by the
+  /// storage node to enumerate the per-territory point lists.
+  std::vector<std::string> GetAnnotationTerritoryIds() const;
+
+  //--------------------------------------------------------------------------
+  // Storage
+  //--------------------------------------------------------------------------
+
+  /// The annotation carrier's default storage node
+  /// (``vtkMRMLCustomTerritoriesStorageNode``), mirroring the resection
+  /// plan's rooted-persistence wiring (ADR-0014 §"Fourth layer").
+  vtkMRMLStorageNode* CreateDefaultStorageNode() override;
+
 protected:
   vtkMRMLCustomTerritoriesNode();
   ~vtkMRMLCustomTerritoriesNode() override;
@@ -148,6 +215,17 @@ protected:
 
   std::map<std::string, std::string> Groupings;
   std::map<int, std::string> OptInSCTCodes;
+
+  /// Ordered, surface-snapped annotation points keyed per territory id
+  /// (ADR-0037 §Decision 1).  Each value is the territory's point list in
+  /// placement order; a ``std::map`` keyed on the territory id keeps the
+  /// lists independent and enumerable in a deterministic order.
+  std::map<std::string, std::vector<std::array<double, 3>>> AnnotationPoints;
+
+  /// Scratch buffer backing the ``GetNthAnnotationPoint`` size-hinted
+  /// return (the ``GetSlicingPlaneInitPoint`` idiom): a stable address to
+  /// alias so the wrapped 3-tuple does not point at a temporary.
+  double AnnotationPointScratch[3] = { 0.0, 0.0, 0.0 };
 
   /// Surgeon-defined segment-label list.  Owned by the node; written
   /// to / read from MRML XML via the ``segmentNames`` attribute.

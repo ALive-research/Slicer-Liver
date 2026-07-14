@@ -42,6 +42,7 @@
 // VascularTerritories MRML includes
 #include "vtkMRMLAbstractTerritoriesNode.h"
 #include "vtkMRMLCustomTerritoriesNode.h"
+#include "vtkMRMLCustomTerritoriesStorageNode.h"
 #include "vtkMRMLStdCouinaudTerritoriesNode.h"
 #include "vtkMRMLTerritoriesHighlightDisplayNode.h"
 
@@ -124,6 +125,13 @@ void vtkSlicerVascularTerritoriesLogic::RegisterNodes()
   // §5 call 3) is registered on the Python side from the scripted
   // module's setup.
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLTerritoriesHighlightDisplayNode>::New());
+
+  // Annotation-carrier storage node (ADR-0037 §Decision 1 + ADR-0014
+  // §"Fourth layer").  Mirrors the resection plan's storage-node
+  // registration: the ``.vta.json`` storage node round-trips the
+  // custom-territories node's ordered per-territory annotation points and
+  // is the carrier's default storage node (CreateDefaultStorageNode).
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLCustomTerritoriesStorageNode>::New());
 }
 
 //------------------------------------------------------------------------------

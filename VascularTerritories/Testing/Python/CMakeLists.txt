@@ -72,6 +72,20 @@ set(_vascterr_pytest_files
   # (segmentation closed-surface reps + the module widget); they SKIP
   # cleanly bare and RUN launched, mirroring the LiverSegmentation suite.
   test_vessel_snap_and_wiring.py
+  # ADR-0037 Stage-1 i1/i2 -- the annotation-point carrier on
+  # vtkMRMLCustomTerritoriesNode (ordered per-territory points; no markups
+  # reference) + its storage round-trip.  The carrier is a WRAPPED C++
+  # node, reachable only launched; import-/hasattr-guarded on the
+  # not-yet-existing carrier API + storage node, they SKIP-PENDING bare
+  # and RUN launched once the seam lands (ADR-0027).
+  test_territories_annotation_carrier.py
+  # ADR-0037 Stage-1 i3/i4 -- the annotation placement/edit Pipeline
+  # (ADR-0032/0033 seam): click adds exactly one surface-snapped point, a
+  # bare move is declined (camera untouched), a drag edits the nearest
+  # point, delete removes one.  Import-guarded on the not-yet-existing
+  # TerritoryPlacementPipeline + LayerDMLib; SKIP bare, RUN launched,
+  # mirroring the ControlPolygon/LiverBezier interaction suites (ADR-0027).
+  test_territories_placement_pipeline.py
 )
 
 foreach(_pytest_file IN LISTS _vascterr_pytest_files)

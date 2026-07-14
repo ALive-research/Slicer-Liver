@@ -13,6 +13,7 @@
 
 // This module MRML includes
 #include "vtkMRMLCustomTerritoriesNode.h"
+#include "vtkMRMLCustomTerritoriesStorageNode.h"
 
 // MRML includes
 #include <vtkMRMLNode.h>
@@ -23,6 +24,7 @@
 
 // STD includes
 #include <cstring>
+#include <iomanip>
 #include <sstream>
 #include <string>
 
@@ -77,6 +79,82 @@ void walkEncodedMap(const std::string& encoded, OnPair&& onPair)
   }
 }
 
+// Compact encoding for the per-territory annotation points.  Territory
+// blocks are separated by ``kPairDelimiter`` (``;``); within a block the
+// territory id and its flat coordinate run are separated by
+// ``kFieldDelimiter`` (``|``), and the coordinates themselves by
+// ``kCoordDelimiter`` (``,``).  Territory ids are surgeon-named and may
+// not contain the delimiter characters; this schema-internal form is only
+// read by this class (the .vta.json storage surfaces the same data as
+// JSON).
+constexpr char kCoordDelimiter = ',';
+
+std::string encodeAnnotationPoints(const std::map<std::string, std::vector<std::array<double, 3>>>& points)
+{
+  std::ostringstream out;
+  out << std::setprecision(17);
+  bool firstTerritory = true;
+  for (const auto& kv : points)
+  {
+    if (kv.second.empty())
+    {
+      continue;
+    }
+    if (!firstTerritory)
+    {
+      out << kPairDelimiter;
+    }
+    firstTerritory = false;
+    out << kv.first << kFieldDelimiter;
+    bool firstCoord = true;
+    for (const auto& p : kv.second)
+    {
+      for (int c = 0; c < 3; ++c)
+      {
+        if (!firstCoord)
+        {
+          out << kCoordDelimiter;
+        }
+        firstCoord = false;
+        out << p[c];
+      }
+    }
+  }
+  return out.str();
+}
+
+void decodeAnnotationPoints(const std::string& encoded, std::map<std::string, std::vector<std::array<double, 3>>>& points)
+{
+  points.clear();
+  walkEncodedMap(encoded,
+                 [&points](const std::string& territoryId, const std::string& coords)
+                 {
+                   std::vector<double> flat;
+                   std::istringstream stream(coords);
+                   std::string token;
+                   while (std::getline(stream, token, kCoordDelimiter))
+                   {
+                     if (token.empty())
+                     {
+                       continue;
+                     }
+                     try
+                     {
+                       flat.push_back(std::stod(token));
+                     }
+                     catch (const std::exception&)
+                     {
+                       // Malformed coordinate — skip silently.
+                     }
+                   }
+                   auto& list = points[territoryId];
+                   for (std::size_t i = 0; i + 3 <= flat.size(); i += 3)
+                   {
+                     list.push_back({ flat[i], flat[i + 1], flat[i + 2] });
+                   }
+                 });
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -103,6 +181,11 @@ void vtkMRMLCustomTerritoriesNode::PrintSelf(ostream& os, vtkIndent indent)
   this->Superclass::PrintSelf(os, indent);
   os << indent << "Groupings: " << this->Groupings.size() << " entries\n";
   os << indent << "OptInSCTCodes: " << this->OptInSCTCodes.size() << " entries\n";
+  os << indent << "AnnotationPoints: " << this->AnnotationPoints.size() << " territories\n";
+  for (const auto& kv : this->AnnotationPoints)
+  {
+    os << indent.GetNextIndent() << kv.first << ": " << kv.second.size() << " points\n";
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -137,6 +220,10 @@ void vtkMRMLCustomTerritoriesNode::ReadXMLAttributes(const char** atts)
                          // Malformed numeric key — skip silently.
                        }
                      });
+    }
+    else if (!std::strcmp(attName, "annotationPoints"))
+    {
+      decodeAnnotationPoints(attValue, this->AnnotationPoints);
     }
     else if (!std::strcmp(attName, "segmentNames"))
     {
@@ -176,6 +263,10 @@ void vtkMRMLCustomTerritoriesNode::WriteXML(ostream& of, int nIndent)
   {
     of << " optInSCTCodes=\"" << this->XMLAttributeEncodeString(encodeMap(this->OptInSCTCodes).c_str()) << "\"";
   }
+  if (!this->AnnotationPoints.empty())
+  {
+    of << " annotationPoints=\"" << this->XMLAttributeEncodeString(encodeAnnotationPoints(this->AnnotationPoints).c_str()) << "\"";
+  }
   if (this->SegmentNames && this->SegmentNames->GetNumberOfValues() > 0)
   {
     std::ostringstream names;
@@ -205,6 +296,7 @@ void vtkMRMLCustomTerritoriesNode::CopyContent(vtkMRMLNode* anode, bool deepCopy
 
   this->Groupings = other->Groupings;
   this->OptInSCTCodes = other->OptInSCTCodes;
+  this->AnnotationPoints = other->AnnotationPoints;
   if (other->SegmentNames)
   {
     this->SegmentNames->DeepCopy(other->SegmentNames);
@@ -291,4 +383,99 @@ void vtkMRMLCustomTerritoriesNode::SetSegmentSCTCode(int index, const std::strin
     this->OptInSCTCodes[index] = sctCode;
   }
   this->Modified();
+}
+
+//------------------------------------------------------------------------------
+int vtkMRMLCustomTerritoriesNode::AddAnnotationPoint(const std::string& territoryId, double x, double y, double z)
+{
+  std::vector<std::array<double, 3>>& list = this->AnnotationPoints[territoryId];
+  list.push_back({ x, y, z });
+  const int index = static_cast<int>(list.size()) - 1;
+  this->Modified();
+  return index;
+}
+
+//------------------------------------------------------------------------------
+int vtkMRMLCustomTerritoriesNode::GetNumberOfAnnotationPoints(const std::string& territoryId)
+{
+  auto it = this->AnnotationPoints.find(territoryId);
+  if (it == this->AnnotationPoints.end())
+  {
+    return 0;
+  }
+  return static_cast<int>(it->second.size());
+}
+
+//------------------------------------------------------------------------------
+const double* vtkMRMLCustomTerritoriesNode::GetNthAnnotationPoint(const std::string& territoryId, int i)
+{
+  this->AnnotationPointScratch[0] = 0.0;
+  this->AnnotationPointScratch[1] = 0.0;
+  this->AnnotationPointScratch[2] = 0.0;
+  auto it = this->AnnotationPoints.find(territoryId);
+  if (it != this->AnnotationPoints.end() && i >= 0 && i < static_cast<int>(it->second.size()))
+  {
+    const std::array<double, 3>& p = it->second[static_cast<std::size_t>(i)];
+    this->AnnotationPointScratch[0] = p[0];
+    this->AnnotationPointScratch[1] = p[1];
+    this->AnnotationPointScratch[2] = p[2];
+  }
+  return this->AnnotationPointScratch;
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLCustomTerritoriesNode::SetNthAnnotationPoint(const std::string& territoryId, int i, double x, double y, double z)
+{
+  auto it = this->AnnotationPoints.find(territoryId);
+  if (it == this->AnnotationPoints.end() || i < 0 || i >= static_cast<int>(it->second.size()))
+  {
+    return;
+  }
+  it->second[static_cast<std::size_t>(i)] = { x, y, z };
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+bool vtkMRMLCustomTerritoriesNode::RemoveNthAnnotationPoint(const std::string& territoryId, int i)
+{
+  auto it = this->AnnotationPoints.find(territoryId);
+  if (it == this->AnnotationPoints.end() || i < 0 || i >= static_cast<int>(it->second.size()))
+  {
+    return false;
+  }
+  it->second.erase(it->second.begin() + i);
+  this->Modified();
+  return true;
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLCustomTerritoriesNode::ClearAnnotationPoints(const std::string& territoryId)
+{
+  auto it = this->AnnotationPoints.find(territoryId);
+  if (it == this->AnnotationPoints.end() || it->second.empty())
+  {
+    return;
+  }
+  it->second.clear();
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+std::vector<std::string> vtkMRMLCustomTerritoriesNode::GetAnnotationTerritoryIds() const
+{
+  std::vector<std::string> ids;
+  for (const auto& kv : this->AnnotationPoints)
+  {
+    if (!kv.second.empty())
+    {
+      ids.push_back(kv.first);
+    }
+  }
+  return ids;
+}
+
+//------------------------------------------------------------------------------
+vtkMRMLStorageNode* vtkMRMLCustomTerritoriesNode::CreateDefaultStorageNode()
+{
+  return vtkMRMLCustomTerritoriesStorageNode::New();
 }
