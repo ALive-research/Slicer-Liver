@@ -162,6 +162,16 @@ set(_liverseg_pytest_files
   # NO Segment-anatomy macro, multi-select Run subsumes it, ADR-0034
   # §Amendments).  Launched `pytest_launched` row; skips cleanly bare.
   test_liversegmentation_job_queue.py
+  # ADR-0034 §Amendments item 4 -- the embedded Segment Editor increment:
+  # a stock qMRMLSegmentEditorWidget in a collapsed ctkCollapsibleButton
+  # under the table (own non-singleton editor node, curated effects,
+  # selectors hidden, canonical + PortalVenous pinned); row-selection /
+  # Edit-button sync (the jump-to-module path is deleted); and the
+  # demote-on-edit staleness rule (content edit to a Completed segment ->
+  # InProgress via vtkSegmentation::SourceRepresentationModified; status-
+  # tag writes and the pre-seed/landing paths never spuriously demote).
+  # Widget-needing (launched `pytest_launched` row); skips cleanly bare.
+  test_liversegmentation_embedded_editor.py
   # Packaging parity for the LiverSegmentationLib sub-package: every source
   # .py appears in LiverSegmentationLib_PYTHON_SCRIPTS (and no stale
   # entries), or an omitted file silently vanishes from a fresh build and

@@ -33,6 +33,7 @@ import functools
 import logging
 import os
 
+import ctk
 import qt
 import slicer
 import vtk
@@ -114,6 +115,12 @@ STATUS_REVIEW = ("●", "Review")
 STATUS_CONFIRMED = ("✓", "Confirmed")
 STATUS_FLAGGED = ("⚑", "Flagged")
 STATUS_MARKED_ABSENT = ("∅", "Marked absent")
+
+#: Curated effect list for the embedded Segment Editor — the AI-mask-
+#: correction set (ADR-0034 §Amendments item 4).  Everything outside this
+#: order is hidden (``unorderedEffectsVisible`` off): the embedded editor
+#: corrects produced masks; it is not a from-scratch segmentation surface.
+EMBEDDED_EDITOR_EFFECTS = ("Paint", "Erase", "Scissors", "Islands", "Smoothing")
 
 
 #: Stage-1 / Stage-2 hand-off: Stage 2 segments the portal-venous-phase
@@ -218,6 +225,13 @@ def _segmentIsEmpty(segment):
     provenance), never on status: the status column is the surgeon's
     channel — an EMPTY ``Completed`` row is the absence attestation — so
     status cannot mark a row as a replaceable placeholder.
+
+    Emptiness is LABEL-AWARE: pre-seeded segments SHARE one binary-labelmap
+    layer (the stock ``AddEmptySegment`` shape), so a content write to one
+    segment through the Segment Editor funnel grows the shared image's
+    extent for every sharer.  A segment is empty iff NO voxel carries its
+    own label value — the object-level extent says nothing about a single
+    sharer.
     """
     if segment is None:
         return True
@@ -227,10 +241,17 @@ def _segmentIsEmpty(segment):
     labelmap = segment.GetRepresentation(name)
     if labelmap is None:
         return True
-    if hasattr(labelmap, "IsEmpty"):
-        return bool(labelmap.IsEmpty())
+    if hasattr(labelmap, "IsEmpty") and labelmap.IsEmpty():
+        return True
     extent = labelmap.GetExtent()
-    return extent[0] > extent[1] or extent[2] > extent[3] or extent[4] > extent[5]
+    if extent[0] > extent[1] or extent[2] > extent[3] or extent[4] > extent[5]:
+        return True
+    scalars = labelmap.GetPointData().GetScalars()
+    if scalars is None:
+        return True
+    from vtk.util.numpy_support import vtk_to_numpy
+
+    return not bool((vtk_to_numpy(scalars) == segment.GetLabelValue()).any())
 
 
 def _segmentTag(segment, tag):
@@ -306,8 +327,14 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     on the SELECTED rows: Run TotalSegmentator (enqueues every selected
     structure into the §Decision 5 job queue; results land on the
     canonical node as native ``InProgress`` — no Accept/Reject machinery;
-    the surgeon's confirm is the status-cell click) and Edit in Segment
-    Editor (interim jump-to-module until the embedded-editor increment).
+    the surgeon's confirm is the status-cell click) and Edit (expands the
+    EMBEDDED ``qMRMLSegmentEditorWidget`` section under the toolbar and
+    syncs the selected row — ADR-0034 §Amendments item 4; the editor
+    drives its own non-singleton editor node with a curated effect list,
+    pinned to the canonical node + the Stage-1 PortalVenous volume).
+    Editing a ``Completed`` segment demotes it to ``InProgress`` (the
+    §Decision 2 staleness rule, hooked at segmentation level so stock-
+    module edits are covered too).
     Absence is attested through the table's own status gesture — an EMPTY
     row the surgeon sets ``Completed`` reads Marked absent — so the
     toolbar carries no dedicated affordance for it.  Each queued/running
@@ -338,6 +365,14 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         self._jobQueue = None
         self._pendingJobs = {}
         self._jobRows = {}
+        # Embedded Segment Editor (ADR-0034 §Amendments item 4): the stock
+        # qMRMLSegmentEditorWidget in a collapsible section, its OWN
+        # non-singleton editor node, and the vtkSegmentation currently
+        # observed for the demote-on-edit staleness rule.  Built in setup().
+        self._embeddedEditor = None
+        self._editorSection = None
+        self._editorNode = None
+        self._observedSegmentation = None
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)
 
@@ -349,6 +384,7 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
 
         self.layout.addWidget(self._buildSegmentsTable())
         self.layout.addWidget(self._buildSelectionToolbar())
+        self.layout.addWidget(self._buildEmbeddedEditor())
         self.layout.addWidget(self._buildLoadSegmentationSection())
         self.layout.addWidget(self._buildBackendStatusRow())
 
@@ -367,6 +403,8 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         # §Decision 1: the empty state teaches the goal).
         self.logic.getOrCreateCanonicalSegmentation()
         self._bindSegmentsTable()
+        self._bindEmbeddedEditor()
+        self._observeCanonicalSegmentation()
         self._refreshBackendStatus()
         self._updateRunButton()
 
@@ -464,20 +502,174 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
             # Drop the stale reference; the observers go with cleanup().
             self._segmentsTable = None
 
+    def _buildEmbeddedEditor(self):
+        """Build the embedded Segment Editor section (ADR-0034 §Amendments 4).
+
+        A STOCK ``qMRMLSegmentEditorWidget`` inside a ``ctkCollapsibleButton``
+        directly under the table/toolbar, COLLAPSED by default (the table is
+        the primary surface; Edit is the opt-in gesture) — the MONAILabel /
+        SegmentationReview idiom replacing the jump-to-module path.  The
+        editor drives its OWN non-singleton ``vtkMRMLSegmentEditorNode`` so
+        embedded edits never clobber the stock Segment Editor module's
+        singleton state.  Its inputs are PINNED contracts, not user choices:
+        the node-selector rows and the switch-to-Segmentations button are
+        hidden; ``_bindEmbeddedEditor`` supplies the canonical node + the
+        Stage-1 PortalVenous volume.  Effects are the curated AI-mask-
+        correction set (``EMBEDDED_EDITOR_EFFECTS``), everything else hidden.
+        """
+        import qSlicerSegmentationsModuleWidgetsPythonQt
+
+        section = ctk.ctkCollapsibleButton()
+        section.text = "Edit selected segment"
+        section.setObjectName("EmbeddedEditorSection")
+        section.collapsed = True
+        column = qt.QVBoxLayout(section)
+
+        editor = qSlicerSegmentationsModuleWidgetsPythonQt.qMRMLSegmentEditorWidget()
+        editor.setObjectName("EmbeddedSegmentEditor")
+        editor.setMaximumNumberOfUndoStates(10)
+        editor.setEffectNameOrder(list(EMBEDDED_EDITOR_EFFECTS))
+        editor.unorderedEffectsVisible = False
+        editor.setSegmentationNodeSelectorVisible(False)
+        editor.setSourceVolumeNodeSelectorVisible(False)
+        editor.setSwitchToSegmentationsButtonVisible(False)
+        # Parameter node BEFORE the scene, so the automatic selections made
+        # when the scene lands are stored on OUR node (the stock module's
+        # setup order).
+        editor.setMRMLSegmentEditorNode(self._ensureEditorParameterNode())
+        editor.setMRMLScene(slicer.mrmlScene)
+        column.addWidget(editor)
+
+        self._embeddedEditor = editor
+        self._editorSection = section
+        return section
+
+    def embeddedEditor(self):  # noqa: N802 - Slicer/Qt verb convention
+        return getattr(self, "_embeddedEditor", None)
+
+    def embeddedEditorSection(self):  # noqa: N802 - Slicer/Qt verb convention
+        return getattr(self, "_editorSection", None)
+
+    def _ensureEditorParameterNode(self):
+        """Get-or-mint the embedded editor's OWN parameter node.
+
+        A plain (non-singleton) ``vtkMRMLSegmentEditorNode`` — deliberately
+        NOT the stock Segment Editor module's ``SegmentEditor`` singleton, so
+        the embedded editor's segmentation/volume/effect state stays private
+        (ADR-0034 §Amendments item 4).  Re-minted lazily when a scene close
+        reclaimed the previous one (the Edit gesture re-ensures it).
+        """
+        node = self._editorNode
+        if node is not None and node.GetScene() is not None:
+            return node
+        node = slicer.mrmlScene.AddNewNodeByClass(
+            "vtkMRMLSegmentEditorNode", "LiverSegmentationEditor"
+        )
+        self._editorNode = node
+        return node
+
+    def _bindEmbeddedEditor(self):
+        """(Re-)pin the embedded editor's inputs from the scene state.
+
+        Pure READ path (the ``_bindSegmentsTable`` discipline): the
+        segmentation input is the canonical node when one exists (else
+        unbound), the source volume is the Stage-1 PortalVenous working
+        volume (``logic.selectInputVolume``) — re-resolved on every scene
+        change like the table bind, never minting anything.
+        """
+        editor = getattr(self, "_embeddedEditor", None)
+        if editor is None or self.logic is None:
+            return
+        try:
+            canonical = self.logic._findCanonicalSegmentation()
+            if editor.segmentationNode() is not canonical:
+                editor.setSegmentationNode(canonical)
+            source = self.logic.selectInputVolume()
+            if editor.sourceVolumeNode() is not source:
+                editor.setSourceVolumeNode(source)
+        except ValueError:
+            # PythonQt raises when the Qt widget was destroyed with a host
+            # parent tree while this Python widget is still alive (the
+            # _bindSegmentsTable case); drop the stale references.
+            self._embeddedEditor = None
+            self._editorSection = None
+
+    def _observeCanonicalSegmentation(self):
+        """(Re-)observe the canonical node's segmentation for content edits.
+
+        The demote-on-edit hook (ADR-0034 §Decision 2 staleness rule, as
+        amended) rides ``vtkSegmentation::SourceRepresentationModified`` —
+        the CONTENT-change event every Segment Editor effect apply funnels
+        through (``vtkSegmentationModifier`` invokes it with the segment id
+        as call data), covering the embedded editor AND stock-module edits.
+        Observing at segmentation level (not the editor) keeps the rule a
+        property of the canonical node's data, not of one editing surface.
+        Swapped, never stacked, when the canonical node changes.
+        """
+        node = (
+            self.logic._findCanonicalSegmentation() if self.logic is not None else None
+        )
+        segmentation = node.GetSegmentation() if node is not None else None
+        if segmentation is self._observedSegmentation:
+            return
+        if self._observedSegmentation is not None:
+            self.removeObserver(
+                self._observedSegmentation,
+                slicer.vtkSegmentation.SourceRepresentationModified,
+                self._onSegmentContentModified,
+            )
+        self._observedSegmentation = segmentation
+        if segmentation is not None:
+            self.addObserver(
+                segmentation,
+                slicer.vtkSegmentation.SourceRepresentationModified,
+                self._onSegmentContentModified,
+            )
+
+    def _onSegmentContentModified(self, caller, event, segmentId=None):
+        """Demote an edited ``Completed`` segment to ``InProgress``.
+
+        ADR-0034 §Decision 2 (as amended): an edited confirm is stale and
+        re-enters review.  ``SourceRepresentationModified`` arrives with the
+        modified segment's id as call data on the editor-apply funnel; other
+        emitters pass no usable id (a raw representation-object Modified
+        forwards null) — those are ignored rather than guessed at, so
+        nothing is ever demoted on attribution-free events.  Status-tag
+        writes (``SetSegmentStatus`` — including this demotion itself) fire
+        only ``SegmentModified``, never this event, so the hook cannot
+        recurse.
+        """
+        if not segmentId:
+            return
+        segment = caller.GetSegment(segmentId) if caller is not None else None
+        if segment is None:
+            return
+        segmentsLogic = slicer.vtkSlicerSegmentationsModuleLogic
+        if segmentsLogic.GetSegmentStatus(segment) != segmentsLogic.Completed:
+            return
+        segmentsLogic.SetSegmentStatus(segment, segmentsLogic.InProgress)
+
+    # VTK call-data plumbing for the observer above: vtkPythonCommand reads
+    # the callback's ``CallDataType`` attribute; ``"string0"`` is its
+    # null-terminated-string form (what ``vtk.calldata_type(vtk.VTK_STRING)``
+    # would declare).  Set as a plain attribute so module IMPORT stays pure —
+    # the import-purity probes stub ``vtk`` without the decorator helper.
+    _onSegmentContentModified.CallDataType = "string0"
+
     def _buildSelectionToolbar(self):
         """Build the selection-scoped toolbar + the per-job progress list.
 
         ADR-0034 §Amendments: gestures act on the SELECTED table rows, not
         on per-row button walls.  Run enqueues every selected structure
         (structures sharing a backend task coalesce into one child;
-        multi-select covers the run-everything gesture); Edit jumps to the
-        Segment Editor on the first selected row (interim until the
-        embedded-editor increment).  Absence is attested through the
-        table's own status gesture (empty row set ``Completed``), so no
-        dedicated button.  Under the buttons, one progress row PER
-        queued/running job — the job's text embedded IN its bar, a per-job
-        cancel (✕) beside it — plus one shared status label for
-        queue/backend lines.
+        multi-select covers the run-everything gesture); Edit expands the
+        embedded Segment Editor section and syncs the first selected row
+        into it (§Amendments item 4 — the jump-to-module path is retired).
+        Absence is attested through the table's own status gesture (empty
+        row set ``Completed``), so no dedicated button.  Under the buttons,
+        one progress row PER queued/running job — the job's text embedded
+        IN its bar, a per-job cancel (✕) beside it — plus one shared status
+        label for queue/backend lines.
         """
         box = qt.QWidget()
         column = qt.QVBoxLayout(box)
@@ -485,7 +677,7 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
 
         row = qt.QHBoxLayout()
         self._runButton = qt.QPushButton(self._RUN_LABEL_BASE)
-        self._editButton = qt.QPushButton("Edit in Segment Editor")
+        self._editButton = qt.QPushButton("Edit")
         row.addWidget(self._runButton)
         row.addWidget(self._editButton)
         row.addStretch(1)
@@ -500,7 +692,7 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         column.addWidget(self._statusLabel)
 
         self._runButton.connect("clicked()", self.onRunSelectedStructures)
-        self._editButton.connect("clicked()", self.onEditInSegmentEditor)
+        self._editButton.connect("clicked()", self.onEditSelectedSegment)
         return box
 
     #: Run-button label vocabulary (re-labelled live with the selection).
@@ -531,15 +723,42 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         return selections
 
     def _onTableSelectionChanged(self, *_args):
-        """Schedule a Run-button re-resolve AFTER the gesture settles.
+        """Schedule a selection re-resolve AFTER the gesture settles.
 
         The reporting signal (``clicked`` / ``currentChanged``) fires
         mid-gesture, before the selection model reflects a ctrl-click
         deselect; a zero-interval single-shot re-reads the REAL selection
-        once the event cascade completes, so the label never lags a
-        gesture behind.
+        once the event cascade completes, so neither the Run label nor the
+        embedded editor's current segment lags a gesture behind.
         """
-        qt.QTimer.singleShot(0, self._updateRunButton)
+        qt.QTimer.singleShot(0, self._onSelectionSettled)
+
+    def _onSelectionSettled(self):
+        """Fan the settled selection out to its consumers."""
+        self._updateRunButton()
+        self._syncEditorToSelection()
+
+    def _syncEditorToSelection(self):
+        """Set the embedded editor's current segment from the table selection.
+
+        The FIRST selected row becomes the editor's current segment
+        (ADR-0034 §Amendments item 4).  A no-op when nothing is selected
+        (the editor keeps its segment) or while the editor is unbound.
+        """
+        editor = getattr(self, "_embeddedEditor", None)
+        view = getattr(self, "_segmentsTable", None)
+        if editor is None or view is None:
+            return
+        try:
+            if editor.segmentationNode() is None:
+                return
+            selected = list(view.selectedSegmentIDs())
+            if selected:
+                editor.setCurrentSegmentID(selected[0])
+        except ValueError:
+            # The deferred re-resolve can outlive the Qt widgets (PythonQt
+            # raises on a deleted C++ object); nothing left to sync.
+            pass
 
     def _updateRunButton(self):
         """Re-label the Run button from the REAL current selection."""
@@ -925,25 +1144,32 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         except AttributeError:
             logging.debug("3D re-frame skipped: no layout manager (headless).")
 
-    def onEditInSegmentEditor(self):
-        """Open the stock Segment Editor on the canonical node.
+    def onEditSelectedSegment(self):
+        """Expand the embedded editor and sync the selected row into it.
 
-        Interim jump-to-module until the embedded ``qMRMLSegmentEditorWidget``
-        increment lands (ADR-0034 §Amendments).  With a table selection, the
-        FIRST selected row becomes the editor's current segment.  Kumar-Oram
-        effect pre-activation is out of scope here (ADR-0026 / future).
+        The toolbar's Edit gesture (ADR-0034 §Amendments item 4): re-ensure
+        the editor's parameter node + pinned inputs (a scene close may have
+        reclaimed them), open the collapsible section, and make the FIRST
+        selected row the editor's current segment.  Replaces the retired
+        jump-to-module path.  Effect pre-activation is out of scope here
+        (ADR-0026 / future).
         """
-        canonical = self.logic.getOrCreateCanonicalSegmentation()
-        view = getattr(self, "_segmentsTable", None)
-        selected = list(view.selectedSegmentIDs()) if view is not None else []
-        slicer.util.selectModule("SegmentEditor")
+        editor = getattr(self, "_embeddedEditor", None)
+        if editor is None:
+            return
+        self.logic.getOrCreateCanonicalSegmentation()
         try:
-            editorWidget = slicer.modules.segmenteditor.widgetRepresentation().self()
-            editorWidget.editor.setSegmentationNode(canonical)
-            if selected:
-                editorWidget.editor.setCurrentSegmentID(selected[0])
-        except Exception as exc:  # noqa: BLE001 — defensive across Slicer versions
-            logging.debug("Could not pre-select canonical node in editor: %s", exc)
+            editor.setMRMLSegmentEditorNode(self._ensureEditorParameterNode())
+        except ValueError:
+            self._embeddedEditor = None
+            self._editorSection = None
+            return
+        self._bindEmbeddedEditor()
+        self._observeCanonicalSegmentation()
+        section = getattr(self, "_editorSection", None)
+        if section is not None:
+            section.collapsed = False
+        self._syncEditorToSelection()
 
     def _buildBackendStatusRow(self):
         """Build the Stage-2-local backend-status + Pre-download row.
@@ -1036,8 +1262,11 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
             return
         self.logic.importSegmentationAsCanonical(node, assignments)
         # The import promotes an EXISTING node (no NodeAdded/Removed event
-        # reaches _onSceneChanged), so re-bind the table explicitly.
+        # reaches _onSceneChanged), so re-bind the canonical consumers
+        # (table, embedded editor, demote-on-edit observer) explicitly.
         self._bindSegmentsTable()
+        self._bindEmbeddedEditor()
+        self._observeCanonicalSegmentation()
         # Same re-centre as the toolbar Run's landing: the imported anatomy's
         # surface model lands outside the default camera framing.
         self._reframeThreeDViews()
@@ -1064,12 +1293,37 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
 
     def _onSceneChanged(self, caller=None, event=None):
         self._bindSegmentsTable()
+        self._bindEmbeddedEditor()
+        self._observeCanonicalSegmentation()
 
     def cleanup(self):
         # No child process outlives the module: cancel the running job and
         # drop every pending one (ADR-0034 §Decision 5 teardown contract).
         if self._jobQueue is not None:
             self._jobQueue.shutdown()
+        # Embedded-editor teardown discipline: detach every MRML reference
+        # the editor holds BEFORE the Qt tree is disposed, and reclaim its
+        # private parameter node — a widget still holding scene nodes at
+        # shutdown is the launched-harness teardown-crash family.
+        editor = getattr(self, "_embeddedEditor", None)
+        if editor is not None:
+            try:
+                editor.setActiveEffect(None)
+                editor.removeViewObservations()
+                editor.setSegmentationNode(None)
+                editor.setSourceVolumeNode(None)
+                editor.setMRMLSegmentEditorNode(None)
+                editor.setMRMLScene(None)
+            except ValueError:
+                # The C++ widget already went down with a host parent tree.
+                pass
+        self._embeddedEditor = None
+        self._editorSection = None
+        editorNode = getattr(self, "_editorNode", None)
+        if editorNode is not None and editorNode.GetScene() is not None:
+            slicer.mrmlScene.RemoveNode(editorNode)
+        self._editorNode = None
+        self._observedSegmentation = None
         self.removeObservers()
 
 
