@@ -1329,7 +1329,12 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
             source = combo.currentNode() if accepted else None
         finally:
             combo.setMRMLScene(None)
-            dialog.setParent(None)
+            # Keep the dialog PARENTED for its deferred deletion:
+            # setParent(None) hands the wrapper's ownership to PythonQt,
+            # and deleteLater then destroys the same object from the Qt
+            # side -- the parentless-widget double-free (crashed live on
+            # the first event-loop spin after the import).
+            self._importDialogButtons = None
             dialog.deleteLater()
         if source is not None:
             self._importChosenSource(source)
