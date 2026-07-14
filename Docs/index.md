@@ -55,6 +55,7 @@ adr/0033-control-polygon-display-aspect.md
 adr/0034-stage2-segments-table.md
 adr/0035-resection-init-state-machine.md
 adr/0036-vessel-highlight-separate-instance.md
+adr/0037-vascular-territories-off-markups.md
 ```
 
 ```{toctree}
