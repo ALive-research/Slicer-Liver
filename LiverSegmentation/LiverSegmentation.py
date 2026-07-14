@@ -110,12 +110,10 @@ MARKED_ABSENT_ATTRIBUTE_PREFIX = "LiverSegmentation.MarkedAbsent."
 #: Row-status vocabulary — derived from the native segment status, rendered
 #: as GLYPH + TEXT, never colour alone (ADR-0010).  ``(glyph, text)`` pairs.
 STATUS_MISSING = ("○", "Missing")
-STATUS_RUNNING = ("⟳", "Running…")
 STATUS_REVIEW = ("●", "Review")
 STATUS_CONFIRMED = ("✓", "Confirmed")
 STATUS_FLAGGED = ("⚑", "Flagged")
 STATUS_MARKED_ABSENT = ("∅", "Marked absent")
-STATUS_INTERACTIVE = ("✎", "Interactive…")
 
 
 #: Stage-1 / Stage-2 hand-off: Stage 2 segments the portal-venous-phase
@@ -453,7 +451,12 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         if view is None or self.logic is None:
             return
         try:
-            view.setSegmentationNode(self.logic._findCanonicalSegmentation())
+            node = self.logic._findCanonicalSegmentation()
+            if view.segmentationNode() is node:
+                # Already bound — a redundant rebind would churn the
+                # view's model (and its selection) on every scene event.
+                return
+            view.setSegmentationNode(node)
         except ValueError:
             # PythonQt raises when the Qt view was destroyed with a parent
             # tree while this Python widget (and its scene observers) is
@@ -614,12 +617,22 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         Grouping happens HERE (one enqueue per task with the full structure
         set) so a single gesture's structures share one child from the
         start; the queue's key-level coalescing then absorbs repeat gestures
-        on an already-queued/running task.  Segment statuses are NOT
-        written at enqueue: jobs can be cancelled or fail, and nothing was
-        produced yet — the running state is the per-job progress rows'
-        to show, and the native ``InProgress`` flip happens at LANDING
-        (``_landSegment``).  The covered codes are recorded per job so the
-        progress rows fan out one bar per structure.
+        on an already-queued task (a task whose child is already RUNNING
+        gets a NEW sequential job — the running command line is frozen).
+        Segment statuses are NOT written at enqueue: jobs can be cancelled
+        or fail, and nothing was produced yet — the running state is the
+        per-job progress rows' to show, and the native ``InProgress`` flip
+        happens at LANDING (``_landSegment``).  The covered codes are
+        recorded per job so the progress rows fan out one bar per
+        structure.
+
+        ORDER MATTERS: the per-job bookkeeping, the progress rows, and the
+        "Queued…" line are all put up BEFORE any enqueue.  The command
+        builder runs synchronously inside ``enqueue`` (export precondition
+        failures raise on the spot), so its failure path re-enters
+        ``_onJobFinished`` mid-gesture — the rows must already exist for
+        that path to retire, and the gesture's own "Queued…" line must not
+        clobber the failure message afterwards.
         """
         from LiverSegmentationLib.SegmentationJobQueue import jobKey
 
@@ -640,22 +653,24 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
             for code in taskCodes:
                 covered.add(code)
                 names.append(self.logic._structureTitle(code))
-            self._jobQueue.enqueue(task, volume.GetID(), taskCodes)
             # Busy surface: one progress row PER STRUCTURE the job covers
-            # (coalesced execution, fanned-out UI); the finish callback retires
-            # the whole job's rows together.
+            # (coalesced execution, fanned-out UI); the finish callback
+            # retires each structure's row with its own job.
             self._ensureJobRows(key)
         self._statusLabel.setText(
             "Queued TotalSegmentator: " + ", ".join(names) + "…"
         )
+        for task, taskCodes in byTask.items():
+            self._jobQueue.enqueue(task, volume.GetID(), taskCodes)
 
     #
     # Per-STRUCTURE progress rows.  The queue coalesces execution (one backend
     # child per (task, input)); the UI fans that single job out to one bar per
     # anatomical structure it covers — each bar names its OWN structure.  A ✕
     # on any structure row cancels the shared underlying job, so its sibling
-    # structure rows retire together (visually simultaneous — the whole job
-    # box is removed at once).
+    # structure rows retire together.  Same-key jobs can OVERLAP (a late Run
+    # while the key's child runs rides a second sequential job), so each bar
+    # retires with its own job; the key's box goes when the last bar does.
     #
 
     def _ensureJobRows(self, key):
@@ -665,9 +680,9 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         starts indeterminate; ``_onJobOutput`` renders the parsed stage/percent
         into every sibling bar (they share one backend child).  The per-row ✕
         routes to ``cancelJob`` on the SHARED key: dequeue when queued, kill
-        when running — the whole job's rows retire together.  Each connected
-        slot is stored for the connection's lifetime (the PythonQt discipline
-        the queue encodes).
+        when running — each job's rows retire together with it
+        (``_retireJobRows``).  Each connected slot is stored for the
+        connection's lifetime (the PythonQt discipline the queue encodes).
         """
         codes = list(self._pendingJobs.get(key, set()))
         job = self._jobRows.get(key)
@@ -723,6 +738,38 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         except (ValueError, AttributeError):
             # Already reclaimed with a disposed parent tree.
             pass
+
+    def _retireJobRows(self, key, structures):
+        """Retire ONE finished job's structure bars; keep siblings that live on.
+
+        Same-key jobs can overlap (a late Run while the key's child runs
+        rides a second sequential job), so a finished job retires only the
+        bars no outstanding same-key job still covers — the late
+        structure's bar must outlive the first job's retirement.  The
+        key's box goes when its last bar does.
+        """
+        job = self._jobRows.get(key)
+        if job is None:
+            return
+        stillCovered = (
+            self._jobQueue.coveredStructures(key)
+            if self._jobQueue is not None
+            else set()
+        )
+        for code in {str(code) for code in structures}:
+            if code in stillCovered:
+                continue
+            row = job["rows"].pop(code, None)
+            if row is None:
+                continue
+            try:
+                row["box"].setParent(None)
+                row["box"].delete()
+            except (ValueError, AttributeError):
+                # Already reclaimed with a disposed parent tree.
+                pass
+        if not job["rows"]:
+            self._removeJobRow(key)
 
     @staticmethod
     def _applyProgress(row, stage, percent):
@@ -804,33 +851,59 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         job did NOT land (failure, cancel, or a label file the backend never
         produced) keep whatever status they had — enqueue wrote nothing, so
         an aborted job has nothing to undo.
+
+        The whole landing (import AND ``accept``) sits inside one try with
+        the row retirement in its ``finally``: a raising merge must not
+        leave spinning bars, and its scratch node is reclaimed on the spot
+        (``accept`` only removes it on success).  Only THIS job's bars
+        retire — a still-outstanding same-key job (the late-structure
+        sequential child) keeps its own bars alive.
         """
-        self._pendingJobs.pop(key, None)
+        structures = {str(code) for code in structures}
+        stillCovered = (
+            self._jobQueue.coveredStructures(key)
+            if self._jobQueue is not None
+            else set()
+        )
+        if stillCovered:
+            self._pendingJobs[key] = set(stillCovered)
+        else:
+            self._pendingJobs.pop(key, None)
         landedCodes = set()
-        if success and outputDir:
-            scratch = None
-            try:
-                scratch = self.logic.importJobOutput(outputDir, structures)
-            except Exception as exc:  # noqa: BLE001 — surface, never wedge
-                logging.error("could not import the job output: %s", exc)
-            if scratch is not None:
-                segmentation = scratch.GetSegmentation()
-                for segmentId in list(segmentation.GetSegmentIDs()):
-                    code = self.logic._expectedCodeForSegment(
-                        segmentation.GetSegment(segmentId)
-                    )
-                    if code is not None:
-                        landedCodes.add(code)
-                self.logic.accept(scratch)
-                # The landed surface model sits outside the default camera
-                # framing; re-centre the 3D views (GUI-level concern).
-                self._reframeThreeDViews()
-        self._removeJobRow(key)
+        landingFailed = False
+        try:
+            if success and outputDir:
+                scratch = None
+                try:
+                    scratch = self.logic.importJobOutput(outputDir, structures)
+                    if scratch is not None:
+                        segmentation = scratch.GetSegmentation()
+                        for segmentId in list(segmentation.GetSegmentIDs()):
+                            code = self.logic._expectedCodeForSegment(
+                                segmentation.GetSegment(segmentId)
+                            )
+                            if code is not None:
+                                landedCodes.add(code)
+                        self.logic.accept(scratch)
+                        # The landed surface model sits outside the default
+                        # camera framing; re-centre the 3D views (GUI-level
+                        # concern).
+                        self._reframeThreeDViews()
+                except Exception as exc:  # noqa: BLE001 — surface, never wedge
+                    logging.error("could not land the job output: %s", exc)
+                    landingFailed = True
+                    landedCodes = set()
+                    if scratch is not None and scratch.GetScene() is not None:
+                        # ``accept`` removes the scratch on success only; a
+                        # failed merge must not leak it into the scene.
+                        slicer.mrmlScene.RemoveNode(scratch)
+        finally:
+            self._retireJobRows(key, structures)
         if landedCodes:
             self._statusLabel.setText(
                 "Landed for review — confirm via the row's status cell."
             )
-        elif success:
+        elif success and not landingFailed:
             self._statusLabel.setText(
                 "Segmentation finished but produced no output — see the log."
             )

@@ -45,9 +45,10 @@
      reviewer.  The per-segment confirm tag
      (`LiverSegmentation.Confirmed`) is retired before ever having a
      writer.  Stage completion: every expected segment `Completed`
-     (an empty `Completed` segment with the marked-absent attribute
-     is the explicit absence attestation — the attribute stays for
-     the audit trail).  Downstream stages filter on SCT tag +
+     (an empty `Completed` segment IS the explicit absence
+     attestation — attribute-free; the legacy marked-absent
+     attribute is only read for back-compat with scenes that carry
+     it, never written).  Downstream stages filter on SCT tag +
      `Completed`.  The demote-on-rerun staleness rule writes
      `InProgress`; demote-on-edit rides the core auto-flip where it
      applies and the queue's re-run path otherwise.
@@ -60,12 +61,16 @@
      uses.
   5. Decisions 3–5 (tool registry, macro/micro gestures, QProcess
      queue) and Decision 6 (validate-and-next seam) stand, with the
-     gesture surface now a **selection-scoped toolbar** (Run ▾ over
-     the selected structure's chains, Segment anatomy, Mark absent)
-     instead of per-row action buttons — per-row button walls appear
-     nowhere in the ecosystem.  Transient Running/Interactive states
-     surface on the toolbar/queue line, not in the segment status
-     vocabulary.
+     gesture surface now a **selection-scoped toolbar** — a
+     multi-select **Run** (enqueue the default chain for every
+     selected row) plus **Edit** (the embedded Segment Editor) —
+     instead of per-row action buttons: per-row button walls appear
+     nowhere in the ecosystem.  There is no Segment-anatomy macro
+     button (multi-select Run subsumes it) and no Mark-absent button
+     (the attestation is the status-cell gesture, item 3); the Run ▾
+     per-chain menu arrives with the Decision-3 registry increment.
+     Transient Running/Interactive states surface on the
+     toolbar/queue line, not in the segment status vocabulary.
 
   §Conformance items referring to the confirm tag and the bespoke
   vocabulary read through this amendment (Completed replaces the
@@ -333,14 +338,20 @@ Qt.  See References.
 - [test] Pre-seeded rows exist with `○ Missing` before any data; the
   empty state names the goal.
 - [test] A completed job lands segments in the canonical node as
-  `● Review` with the SCT tag; only Confirm flips the confirm tag;
-  Discard removes the segment.
+  `● Review` with the SCT tag; only Confirm flips the confirm tag.
+  (The Discard gesture's subject retired with the 2026-07-13
+  amendment — Reject/Discard is removed entirely; native delete +
+  re-run covers its uses, so there is no Discard behaviour to pin.)
 - [test] Completion predicate: all rows Confirmed/Marked-absent ⇒
-  complete; any other status ⇒ incomplete, and the explain API names
-  the offending rows.
+  complete; any other status ⇒ incomplete.
+- [future] The explain API naming the offending rows — a later
+  increment alongside the shell's "Validate and next" wiring
+  (Decision 6).
 - [test] Re-run/edit of a confirmed row demotes it to `● Review`.
-- [test] The registry covers every seeded structure; each entry names
-  wrapper, labels, modality, and preferred input role.
+- [future] The registry covers every seeded structure; each entry
+  names wrapper, labels, modality, and preferred input role — arrives
+  with the Decision-3 registry increment (today the wrapper's
+  `INFERENCE_TARGETS` table carries the task/roi/fast specs).
 - [test] Queue: jobs sharing `(task, input)` coalesce; jobs run one at
   a time; cancel kills the running process; teardown leaves no child
   process.
