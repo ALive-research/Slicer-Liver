@@ -402,6 +402,12 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         self._editorSection = None
         self._editorNode = None
         self._observedSegmentation = None
+        # Validate-and-next seam (ADR-0034 §Decision 6): whether the
+        # unresolved-row marks are currently up, plus a digest of the last
+        # marked offender set so the live re-evaluation only touches the view
+        # on an ACTUAL change (no per-event selection storm).
+        self._marksActive = False
+        self._markedOffendersDigest = None
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)
 
@@ -661,12 +667,28 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
                 slicer.vtkSegmentation.SourceRepresentationModified,
                 self._onSegmentContentModified,
             )
+        if self._observedSegmentation is not None:
+            self.removeObserver(
+                self._observedSegmentation,
+                slicer.vtkSegmentation.SegmentModified,
+                self._onSegmentStatusMaybeChanged,
+            )
         self._observedSegmentation = segmentation
         if segmentation is not None:
             self.addObserver(
                 segmentation,
                 slicer.vtkSegmentation.SourceRepresentationModified,
                 self._onSegmentContentModified,
+            )
+            # The demote-on-edit hook above rides the CONTENT-change event;
+            # the validate-seam live-clear (ADR-0034 §Decision 6) needs the
+            # STATUS-change surface too, which a SetSegmentStatus write fires
+            # (SegmentModified, never SourceRepresentationModified).  Guarded
+            # by _marksActive so it is a no-op outside a validation.
+            self.addObserver(
+                segmentation,
+                slicer.vtkSegmentation.SegmentModified,
+                self._onSegmentStatusMaybeChanged,
             )
 
     def _onSegmentContentModified(self, caller, event, segmentId=None):
@@ -699,6 +721,20 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     # the import-purity probes stub ``vtk`` without the decorator helper.
     _onSegmentContentModified.CallDataType = "string0"
 
+    def _onSegmentStatusMaybeChanged(self, caller=None, event=None, segmentId=None):
+        """Re-evaluate the validate-seam marks after a segment changes.
+
+        ADR-0034 §Decision 6 live-clear: a status flip to ``Completed`` (or a
+        landing) that resolves a row must drop its mark WITHOUT re-clicking
+        Validate.  ``SegmentModified`` fires on every ``SetSegmentStatus``
+        write; ``_refreshUnresolvedMarks`` is a no-op unless the marks are up
+        AND the offender set actually changed (the digest discipline), so
+        this rides the existing observation without a per-event storm.
+        """
+        self._refreshUnresolvedMarks()
+
+    _onSegmentStatusMaybeChanged.CallDataType = "string0"
+
     def _buildSelectionToolbar(self):
         """Build the selection-scoped toolbar + the per-job progress list.
 
@@ -730,9 +766,20 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
             "Import a loaded segmentation's segments into the anatomy "
             "table (they land under review)."
         )
+        # The Stage-2-LOCAL validate affordance (ADR-0034 §Decision 6): the
+        # shell-level "Validate and next" button stays with the
+        # phase-contracts work (#440); this gives Stage 2 its own gesture to
+        # check completeness and mark the offending rows.
+        self._validateButton = qt.QPushButton("Validate anatomy")
+        self._validateButton.setObjectName("ValidateAnatomyButton")
+        self._validateButton.setToolTip(
+            "Check every anatomy structure is confirmed or attested absent; "
+            "the unresolved rows are selected and listed."
+        )
         row.addWidget(self._runButton)
         row.addWidget(self._editButton)
         row.addWidget(self._importButton)
+        row.addWidget(self._validateButton)
         row.addStretch(1)
         column.addLayout(row)
 
@@ -747,6 +794,7 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         self._runButton.connect("clicked()", self.onRunSelectedStructures)
         self._editButton.connect("clicked()", self.onEditSelectedSegment)
         self._importButton.connect("clicked()", self.onImportSegmentation)
+        self._validateButton.connect("clicked()", self.onValidateAnatomy)
         return box
 
     #: Run-button label vocabulary (re-labelled live with the selection).
@@ -1225,6 +1273,131 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
             section.collapsed = False
         self._syncEditorToSelection()
 
+    #
+    # Validate-and-next seam (ADR-0034 §Decision 6).  The shell owns the
+    # actual "Validate and next" stage-footer button and its Next wiring —
+    # that stays with the phase-contracts work (#440); this module exposes
+    # the explain API (on the logic) and the row marking that button will
+    # drive, plus a Stage-2-LOCAL "Validate anatomy" affordance so the stage
+    # can be checked in isolation.
+    #
+    # Marking mechanism: the stock qMRMLSegmentsTableView exposes no
+    # Python-writable per-row background/decoration role that survives the
+    # qMRMLSegmentsModel's per-update item regeneration, and the name/colour
+    # data must not be repurposed — so an unresolved row is marked by
+    # SELECTING it (setSelectedSegmentIDs) and listing it (glyph+text) on the
+    # shared status label, never colour alone (ADR-0010).
+    #
+
+    def _unresolvedOffenderIds(self):
+        """The canonical segment ids of the structures Validate would flag.
+
+        The SAME derivation the logic's explain API uses (both route through
+        ``structureStatus``): every structure-vocabulary code the explain API
+        reports, resolved to its canonical segment id.  Missing structures
+        with no segment yet contribute nothing to SELECT (there is no row to
+        mark); they still count as unresolved in the summary text.
+        """
+        canonical = (
+            self.logic._findCanonicalSegmentation() if self.logic else None
+        )
+        if canonical is None:
+            return []
+        ids = []
+        for sctCode, _title, _statusText in self.logic.explainStageIncomplete():
+            segmentId = _findSctSegmentId(canonical, sctCode)
+            if segmentId is not None:
+                ids.append(segmentId)
+        return ids
+
+    def markUnresolvedRows(self):
+        """Mark the unresolved anatomy rows (ADR-0034 §Decision 6).
+
+        Selects exactly the offending rows in the stock view and puts a
+        glyph+text summary line on the shared status label listing them.  A
+        no-op-clean when the stage is complete (clears any prior marks).
+        Idempotent: re-marking the same offender set does not re-churn the
+        selection (the digest discipline the widget already uses).
+        """
+        offenders = self.logic.explainStageIncomplete() if self.logic else []
+        if not offenders:
+            self.clearUnresolvedMarks()
+            return
+        ids = self._unresolvedOffenderIds()
+        digest = tuple(ids)
+        self._marksActive = True
+        if digest != self._markedOffendersDigest:
+            self._markedOffendersDigest = digest
+            view = getattr(self, "_segmentsTable", None)
+            if view is not None:
+                try:
+                    view.setSelectedSegmentIDs(ids)
+                except ValueError:
+                    # The Qt view went down with a host parent tree while the
+                    # observers are still alive (the _bindSegmentsTable case).
+                    self._segmentsTable = None
+        summary = ", ".join(
+            f"{title} ({statusText})" for _code, title, statusText in offenders
+        )
+        label = getattr(self, "_statusLabel", None)
+        if label is not None:
+            label.setText(f"Unresolved: {summary}")
+
+    def clearUnresolvedMarks(self):
+        """Drop the unresolved-row marks (ADR-0034 §Decision 6).
+
+        Clears the view selection and forgets the marked-offender digest.  A
+        no-op when no marks are up (the digest discipline: never churn the
+        view or the label on a change that leaves the marks already clear).
+        """
+        if not self._marksActive:
+            return
+        self._marksActive = False
+        self._markedOffendersDigest = None
+        view = getattr(self, "_segmentsTable", None)
+        if view is not None:
+            try:
+                view.setSelectedSegmentIDs([])
+            except ValueError:
+                self._segmentsTable = None
+
+    def _refreshUnresolvedMarks(self):
+        """Live-re-evaluate the marks after a row resolves (ADR-0034 §Decision 6).
+
+        Ridden by the canonical-segmentation observation / ``_onSceneChanged``
+        (the same surfaces the table bind uses): while the marks are up, a
+        status flip to ``Completed`` (or a landing) that resolves a row drops
+        ITS mark and re-summarises the remainder; the last resolution clears
+        every mark.  A no-op while no marks are up — so a normal edit outside
+        a validation never touches the selection.
+        """
+        if not self._marksActive:
+            return
+        self.markUnresolvedRows()
+
+    def onValidateAnatomy(self):
+        """The Stage-2-local "Validate anatomy" gesture (ADR-0034 §Decision 6).
+
+        Complete: clear any marks and report completeness ("Anatomy complete
+        — all N structures confirmed.").  Incomplete: mark the offending rows
+        (:meth:`markUnresolvedRows`) and list them on the status label.  The
+        SHELL-level "Validate and next" button and its Next wiring are OUT of
+        scope here — they stay with the phase-contracts work (#440); this
+        module only exposes the explain API + the marking that button drives.
+        """
+        if self.logic is None:
+            return
+        if self.logic.isStageComplete():
+            self.clearUnresolvedMarks()
+            label = getattr(self, "_statusLabel", None)
+            if label is not None:
+                label.setText(
+                    f"Anatomy complete — all {len(STRUCTURE_TABS)} structures "
+                    "confirmed."
+                )
+            return
+        self.markUnresolvedRows()
+
     def _buildBackendStatusRow(self):
         """Build the Stage-2-local backend-status + Pre-download row.
 
@@ -1539,6 +1712,10 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         self._bindSegmentsTable()
         self._bindEmbeddedEditor()
         self._observeCanonicalSegmentation()
+        # A landing that grows/replaces the canonical node can resolve a
+        # marked row (ADR-0034 §Decision 6 live-clear); no-op unless marks
+        # are up (the digest discipline).
+        self._refreshUnresolvedMarks()
 
     def cleanup(self):
         # No child process outlives the module: cancel the running job and
@@ -1588,6 +1765,14 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
     # semantics"; LiverVolumetryLogic.isStageComplete() precedent).
     #
 
+    #: The row statuses that SATISFY the completion predicate — the surgeon's
+    #: data-carrying confirm (``STATUS_CONFIRMED``) and the empty-``Completed``
+    #: absence attestation (``STATUS_MARKED_ABSENT``); both are native
+    #: ``Completed``.  Every other status (Missing / Review / Flagged) leaves
+    #: the row unresolved.  The single source both the predicate and the
+    #: explain API read, so they cannot drift (ADR-0034 §Decision 6).
+    _SATISFIED_STATUSES = (STATUS_CONFIRMED, STATUS_MARKED_ABSENT)
+
     def isStageComplete(self) -> bool:
         """Return True iff Stage 2 is done: every expected structure Completed.
 
@@ -1598,18 +1783,36 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
         attestation and counts — absence is stated through the same status
         gesture, never inferred from a forgotten row.  Scratch nodes never
         flip the predicate true (canonical-only read).
+
+        Routed through :meth:`explainStageIncomplete` so the predicate and
+        the explanation are ONE derivation and cannot drift (ADR-0034
+        §Decision 6): the stage is complete iff nothing is unresolved.
+        """
+        return not self.explainStageIncomplete()
+
+    def explainStageIncomplete(self):
+        """The unresolved structures as ``[(sctCode, title, statusText), ...]``.
+
+        ADR-0034 §Decision 6: the explain API the shell's "Validate and
+        next" seam needs (the button itself stays with the phase-contracts
+        work, #440).  Every structure-vocabulary entry whose derived
+        :func:`structureStatus` is NOT one of ``_SATISFIED_STATUSES``
+        (native ``Completed`` — a data-carrying confirm or the empty-
+        ``Completed`` absence attestation) is listed, in vocabulary order,
+        with its glyph-vocabulary status TEXT.  An EMPTY list means the
+        stage is complete — and :meth:`isStageComplete` is exactly this
+        emptiness, so the predicate and the explanation share one source of
+        truth (``structureStatus``) and cannot drift.  A missing canonical
+        node reports every structure Missing.
         """
         canonical = self._findCanonicalSegmentation()
-        if canonical is None:
-            return False
-        segmentsLogic = slicer.vtkSlicerSegmentationsModuleLogic
-        for _title, sctCode in STRUCTURE_TABS:
-            segment = _findSctSegment(canonical, sctCode)
-            if segment is None:
-                return False
-            if segmentsLogic.GetSegmentStatus(segment) != segmentsLogic.Completed:
-                return False
-        return True
+        unresolved = []
+        for title, sctCode in STRUCTURE_TABS:
+            status = structureStatus(canonical, sctCode)
+            if status in self._SATISFIED_STATUSES:
+                continue
+            unresolved.append((sctCode, title, status[1]))
+        return unresolved
 
     def isStructureAccepted(self, sctCode) -> bool:
         """Return True iff the CANONICAL node holds a LANDED ``sctCode`` segment.
