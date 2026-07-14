@@ -1464,7 +1464,7 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         if label is None:
             return
         if not offenders:
-            label.setText(
+            text = (
                 f"Anatomy complete — all {len(STRUCTURE_TABS)} structures "
                 "confirmed."
             )
@@ -1473,7 +1473,14 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
                 f"{title} ({statusText})"
                 for _code, title, statusText in offenders
             )
-            label.setText(f"Unresolved: {summary}")
+            text = f"Unresolved: {summary}"
+        try:
+            label.setText(text)
+        except (ValueError, RuntimeError):
+            # The status label went down with a host parent tree while the
+            # mark observers were still live (the teardown-ordering window);
+            # drop the stale reference rather than swarm setText errors.
+            self._statusLabel = None
 
     def clearUnresolvedMarks(self):
         """Drop the validation row-tints (ADR-0034 §Decision 6).
@@ -1881,6 +1888,10 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
             slicer.mrmlScene.RemoveNode(editorNode)
         self._editorNode = None
         self._observedSegmentation = None
+        # Gate the validation-mark refresh OFF before dropping observers, so
+        # any event still in flight during teardown is a no-op instead of a
+        # write into a disposed status label / view.
+        self._marksActive = False
         # Drop the tint-delegate references (parented to the inner view, so
         # the Qt tree owns their lifetime — this only releases the Python
         # handles that outlive it).
