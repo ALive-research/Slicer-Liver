@@ -175,6 +175,121 @@ def test_build_command_shapes_the_backend_invocation():
     assert "--roi_subset" not in vessels
 
 
+#
+# buildCommandForStructures — the merged per-task command the job queue's
+# coalescing rides on.  Pure-Python pins (no Slicer, no Qt): they run bare
+# whenever LiverSegmentationLib resolves, and always in the launched suite.
+#
+
+_EXE = "/opt/bin/TotalSegmentator"
+
+
+def test_build_command_for_structures_unions_roi_subset_when_all_restrict():
+    """All specs restrict -> ``--roi_subset`` is the deduplicated union."""
+    wrapper = _wrapper_module()
+
+    cmd = wrapper.buildCommandForStructures(
+        _EXE, "/tmp/in.nii", "/tmp/out", ["10200004", "32764006"], "cpu"
+    )
+    assert "--task" in cmd and "total" in cmd
+    marker = cmd.index("--roi_subset")
+    rois = cmd[marker + 1 : cmd.index("--fast")]
+    assert rois == ["liver", "portal_vein_and_splenic_vein"], (
+        f"the roi_subset must be the union of every spec's rois; got {rois!r}."
+    )
+    assert "--fast" in cmd, "liver + portal both support the fast variant."
+
+    # Dedupe: the same code twice must not repeat its roi.
+    repeated = wrapper.buildCommandForStructures(
+        _EXE, "/tmp/in.nii", "/tmp/out", ["10200004", "10200004"], "cpu"
+    )
+    assert repeated.count("liver") == 1, (
+        "a coalesced duplicate code must not duplicate its roi entry."
+    )
+
+
+def test_build_command_for_structures_omits_roi_subset_when_any_unrestricted(
+    monkeypatch,
+):
+    """ONE unrestricted spec -> no ``--roi_subset`` at all.
+
+    An unrestricted spec means the task already produces everything it can;
+    restricting to the union of the OTHER specs' rois would silently drop
+    the unrestricted structure's output.
+    """
+    wrapper = _wrapper_module()
+
+    # Both liver_vessels specs are unrestricted -- no roi flag.
+    cmd = wrapper.buildCommandForStructures(
+        _EXE, "/tmp/in.nii", "/tmp/out", ["8993003", "4147007"], "cpu"
+    )
+    assert "--roi_subset" not in cmd
+    assert "--fast" not in cmd, "liver_vessels has no fast variant."
+
+    # A MIX of restricted + unrestricted on one task (synthetic spec: the
+    # current table has no such pair) must also omit the flag.
+    monkeypatch.setitem(
+        wrapper.INFERENCE_TARGETS,
+        "999999001",
+        {"task": "total", "roi_subset": None, "labels": ["everything"], "fast": True},
+    )
+    mixed = wrapper.buildCommandForStructures(
+        _EXE, "/tmp/in.nii", "/tmp/out", ["10200004", "999999001"], "cpu"
+    )
+    assert "--roi_subset" not in mixed, (
+        "one unrestricted spec must drop the roi restriction entirely; "
+        f"got {mixed!r}."
+    )
+
+
+def test_build_command_for_structures_fast_only_when_every_spec_supports_it(
+    monkeypatch,
+):
+    """``--fast`` requires EVERY coalesced spec to support the fast variant.
+
+    Synthetic non-fast spec on the ``total`` task (the current table has no
+    same-task fast split): coalescing it with the fast-capable liver spec
+    must drop ``--fast`` — a fast run of a non-fast-capable structure is a
+    silent quality downgrade.
+    """
+    wrapper = _wrapper_module()
+
+    monkeypatch.setitem(
+        wrapper.INFERENCE_TARGETS,
+        "999999002",
+        {
+            "task": "total",
+            "roi_subset": ["spleen"],
+            "labels": ["spleen"],
+            "fast": False,
+        },
+    )
+    cmd = wrapper.buildCommandForStructures(
+        _EXE, "/tmp/in.nii", "/tmp/out", ["10200004", "999999002"], "cpu"
+    )
+    assert "--fast" not in cmd, (
+        "one non-fast spec in the coalesced set must veto --fast."
+    )
+    assert "--roi_subset" in cmd and "spleen" in cmd and "liver" in cmd, (
+        "both specs restrict, so the roi union still applies."
+    )
+
+
+def test_build_command_for_structures_rejects_cross_task_and_empty():
+    """Cross-task sets and the empty set raise ``ValueError``.
+
+    The job queue coalesces per task; one command covers one task only.
+    """
+    wrapper = _wrapper_module()
+
+    with pytest.raises(ValueError):
+        wrapper.buildCommandForStructures(
+            _EXE, "/tmp/in.nii", "/tmp/out", ["10200004", "8993003"], "cpu"
+        )
+    with pytest.raises(ValueError):
+        wrapper.buildCommandForStructures(_EXE, "/tmp/in.nii", "/tmp/out", [], "cpu")
+
+
 def test_declined_backend_surfaces_as_typed_exception(monkeypatch):
     """An unavailable backend raises the wrapper's typed error, not empty scratch."""
     slicer = _slicer_or_skip()

@@ -150,14 +150,24 @@ set(_liverseg_pytest_files
   # skips cleanly bare.
   test_liversegmentation_distance_map_on_import.py
   # ADR-0034 §Decision 5 -- the main-thread QProcess job queue replacing the
-  # blocking readline+processEvents run path: (task, input) coalescing,
-  # strict sequencing, cancel/shutdown leaving no child (real slow stub
-  # children via an injected command builder -- never a real inference),
-  # plus the widget contract (enqueue flips targeted rows to native
-  # InProgress incl. the demote-from-Completed staleness rule; landing keeps
-  # InProgress; multi-select Run; the Segment-anatomy macro over the Missing
-  # set).  Launched `pytest_launched` row; skips cleanly bare.
+  # blocking readline+processEvents run path: QUEUED-only (task, input)
+  # coalescing (a key matching the RUNNING job rides a NEW sequential child
+  # -- the running command line is frozen at start), strict sequencing,
+  # cancel reaping the child's whole process tree without a GUI-thread
+  # block, shutdown leaving no child (real slow stub children via an
+  # injected command builder -- never a real inference), plus the widget
+  # contract (enqueue is STATUS-NEUTRAL -- the native InProgress flip and
+  # the demote-from-Completed staleness rule both ride the LANDING;
+  # landing keeps InProgress; multi-select Run grouped per task -- there is
+  # NO Segment-anatomy macro, multi-select Run subsumes it, ADR-0034
+  # §Amendments).  Launched `pytest_launched` row; skips cleanly bare.
   test_liversegmentation_job_queue.py
+  # Packaging parity for the LiverSegmentationLib sub-package: every source
+  # .py appears in LiverSegmentationLib_PYTHON_SCRIPTS (and no stale
+  # entries), or an omitted file silently vanishes from a fresh build and
+  # `import LiverSegmentationLib.<name>` fails at runtime.  Same drift class
+  # the LiverResectionsLib parity test guards.  Pure-Python; runs bare.
+  test_liversegmentationlib_packaging_parity.py
 )
 
 foreach(_pytest_file IN LISTS _liverseg_pytest_files)

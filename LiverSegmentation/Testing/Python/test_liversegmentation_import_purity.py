@@ -55,6 +55,10 @@ import pytest
 # Module-under-test import targets per ADR-0024 §"Module layout".
 MODULE_IMPORT = "LiverSegmentation"
 WRAPPER_IMPORT = "LiverSegmentationLib.ToolWrappers.TotalSegmentator"
+# The ADR-0034 §Decision 5 job queue drives the wrapper on its call path;
+# its import must stay exactly as inert as the wrapper's (``qt`` / ``slicer``
+# are imported on the call path only).
+QUEUE_IMPORT = "LiverSegmentationLib.SegmentationJobQueue"
 # Shared volume-role vocabulary module (the single source of truth for the
 # Stage-1 -> Stage-2 role attribute + values, ADR-0023 §"Subject Hierarchy
 # management convention" hand-off).  SLICE C collapses the module's duplicated
@@ -150,7 +154,7 @@ _CHILD_PROGRAM = textwrap.dedent(
 )
 
 
-@pytest.mark.parametrize("target", [MODULE_IMPORT, WRAPPER_IMPORT])
+@pytest.mark.parametrize("target", [MODULE_IMPORT, WRAPPER_IMPORT, QUEUE_IMPORT])
 def test_import_triggers_no_pip_install_and_no_totalsegmentator(target):
     """Importing the module/wrapper triggers no pip_install + no AI import.
 

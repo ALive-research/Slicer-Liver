@@ -12,9 +12,13 @@ implementation used).
 Contract:
 
   * Jobs are keyed on ``(task, inputVolumeID)``.  Enqueueing an
-    already-queued or already-running key COALESCES: the requested
-    structure set merges into the existing job and no duplicate child is
-    spawned (ADR-0034 §Decision 4 — the queue is where coalescing lives).
+    already-QUEUED key COALESCES: the requested structure set merges into
+    the waiting job and no duplicate child is spawned (ADR-0034 §Decision
+    4 — the queue is where coalescing lives).  A key matching the RUNNING
+    job does NOT merge — the running child's command line was frozen when
+    it started, so a structure merged into it would silently never be
+    produced; it creates a NEW queued job instead (repeat gestures then
+    dedupe into that queued job).
   * Strictly sequential: one child process at a time; the next job starts
     only from the previous job's completion path.
   * PythonQt discipline (ADR-0034 §Decision 5 + §Conformance [review]):
@@ -27,8 +31,12 @@ Contract:
     ``onJobStarted(key, structures)``, ``onJobOutput(line)``,
     ``onJobFinished(key, structures, success, outputDir)``.  Callback
     exceptions are logged, never allowed to wedge the queue.
-  * ``cancelCurrent()`` kills the running child (``kill()``, then a
-    ``terminate()`` fallback); ``cancelJob(key)`` cancels ONE job — the
+  * ``cancelCurrent()`` kills the running child AND its descendants —
+    the child is spawned as its own session/process-group leader (the
+    command is wrapped with ``setsid``; PythonQt's ``QProcess`` exposes
+    no child-process-modifier hook) so one ``os.killpg`` reaps the whole
+    tree, followed by a short bounded reap wait, never a multi-second
+    GUI-thread block; ``cancelJob(key)`` cancels ONE job — the
     RUNNING key delegates to ``cancelCurrent()``, a QUEUED key is
     DEQUEUED (never having spawned a child) and completes through
     ``onJobFinished`` with ``success=False`` so the caller's bookkeeping
@@ -161,6 +169,21 @@ class SegmentationJobQueue:
             return 0
         return int(self._process.processId())
 
+    def coveredStructures(self, key) -> set:
+        """Union of the structures every OUTSTANDING job on ``key`` covers.
+
+        Same-key jobs can overlap (a late enqueue while the key's child
+        runs rides a second sequential job), so per-structure bookkeeping
+        outside the queue needs the still-covered set, not a per-key flag.
+        """
+        covered: set = set()
+        if self._current is not None and self._current.key == key:
+            covered |= self._current.structures
+        for job in self._queue:
+            if job.key == key:
+                covered |= job.structures
+        return covered
+
     #
     # Enqueue / cancel / shutdown.
     #
@@ -168,16 +191,19 @@ class SegmentationJobQueue:
     def enqueue(self, task, inputVolumeID, structures):
         """Enqueue (or coalesce) a job; returns its key.
 
-        An already-queued or already-running key merges the requested
-        structure set into the existing job — no duplicate child (ADR-0034
-        §Decision 4).  A new key appends and, when the queue is idle,
-        starts immediately.
+        Coalescing is QUEUED-jobs-only: an already-queued key merges the
+        requested structure set into the waiting job — no duplicate child
+        (ADR-0034 §Decision 4).  The RUNNING job never absorbs a late
+        enqueue: its command line was frozen when the child started, so a
+        structure merged into it would silently never be produced (the
+        import skips the missing label file; the row stays Missing with
+        no error).  A key matching the running job therefore creates a
+        NEW queued job — the late structures ride a second sequential
+        child — and repeat gestures dedupe into that queued job.  A new
+        key appends and, when the queue is idle, starts immediately.
         """
         key = jobKey(task, inputVolumeID)
         structures = {str(code) for code in structures}
-        if self._current is not None and self._current.key == key:
-            self._current.structures |= structures
-            return key
         for job in self._queue:
             if job.key == key:
                 job.structures |= structures
@@ -187,11 +213,23 @@ class SegmentationJobQueue:
         return key
 
     def cancelCurrent(self):
-        """Kill the running child; the queue then advances normally.
+        """Kill the running child AND its descendants; the queue advances.
 
-        ``kill()`` first (the child is a batch inference — nothing to save),
-        with a ``terminate()`` fallback should the hard kill not take.  The
-        cancelled job completes through the normal finish path with
+        The real backend forks worker subprocesses mid-inference; killing
+        only the direct child would orphan them (they run on, burning CPU,
+        invisible to the queue).  The child was spawned as its own
+        session/process-group leader (the ``setsid`` wrap in
+        ``_startNext``), so one ``SIGKILL`` to the process group reaps the
+        whole tree at once — nothing to save, the child is a batch
+        inference.  Where the group signal is unavailable (no ``setsid``
+        wrap took) a plain ``kill()`` of the direct child is the fallback.
+
+        The only wait afforded on the GUI thread is SIGKILL reap latency
+        (a short bounded ``waitForFinished``) — never a multi-second
+        block.  Either the reap delivers ``finished`` synchronously or the
+        job is completed explicitly here; the late ``finished`` from an
+        already-completed job is disconnected and harmless.  The cancelled
+        job completes through the normal finish path with
         ``success=False``.
         """
         job = self._current
@@ -199,12 +237,24 @@ class SegmentationJobQueue:
         if job is None or process is None:
             return
         job.cancelled = True
-        process.kill()
-        if not process.waitForFinished(3000):
-            process.terminate()
-            process.waitForFinished(1000)
-        # ``waitForFinished`` delivers ``finished`` synchronously; if the
-        # signal was somehow lost (already-dead child), complete explicitly.
+        pid = int(process.processId())
+        killed_group = False
+        if pid > 0 and hasattr(os, "killpg"):
+            import signal
+
+            try:
+                os.killpg(pid, signal.SIGKILL)
+                killed_group = True
+            except (ProcessLookupError, PermissionError, OSError):
+                # Not a group leader (no setsid wrap) or already gone —
+                # fall back to the direct-child kill below.
+                pass
+        if not killed_group:
+            process.kill()
+        process.waitForFinished(250)
+        # A synchronous ``finished`` already completed the job; if the
+        # reap outran the timeout, complete explicitly — the eventual
+        # signal finds its slots disconnected.
         if self._current is job:
             self._completeCurrent(success=False)
 
@@ -273,6 +323,17 @@ class SegmentationJobQueue:
                 continue
 
             import qt
+
+            # Spawn the child as its OWN session/process-group leader so
+            # ``cancelCurrent`` can reap the whole descendant tree with one
+            # ``os.killpg`` (the backend forks worker subprocesses).
+            # PythonQt's QProcess exposes no child-process-modifier /
+            # setpgrp hook, so the command is wrapped with ``setsid``: the
+            # QProcess child is not a group leader, so ``setsid`` execs the
+            # program in place — same pid, now leading its own group.
+            if os.name == "posix" and shutil.which("setsid") is not None:
+                arguments = [program, *arguments]
+                program = "setsid"
 
             process = qt.QProcess()
             process.setProcessChannelMode(qt.QProcess.MergedChannels)
