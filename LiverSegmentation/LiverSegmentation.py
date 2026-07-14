@@ -125,6 +125,16 @@ STATUS_CONFIRMED = ("✓", "Confirmed")
 STATUS_FLAGGED = ("⚑", "Flagged")
 STATUS_MARKED_ABSENT = ("∅", "Marked absent")
 
+#: Validation-tint palette (ADR-0034 §Decision 6; ADR-0010 reinforcement).
+#: Light, desaturated row backgrounds so the status GLYPH stays legible over
+#: them and dark cell text keeps its contrast — the tint REINFORCES the
+#: glyph+text status column, it never carries the meaning on hue alone.  The
+#: green/red pair is the conventional validated/unresolved reading; because
+#: the status column already reproduces the state as glyph+text, the hue is
+#: pure reinforcement (a red-green-blind reader loses nothing).
+TINT_VALIDATED = "#e6f4ea"  # accessible light green (validated rows)
+TINT_UNRESOLVED = "#fce8e6"  # accessible light red (not-validated rows)
+
 #: Curated effect list for the embedded Segment Editor — the AI-mask-
 #: correction set (ADR-0034 §Amendments item 4).  Everything outside this
 #: order is hidden (``unorderedEffectsVisible`` off): the embedded editor
@@ -349,6 +359,37 @@ def structureStatus(canonicalNode, sctCode):
     return STATUS_MARKED_ABSENT if markedAbsent else STATUS_MISSING
 
 
+def _makeRowTintDelegate(baseDelegateClass, tintForRow):
+    """Build a row-background tint delegate SUBCLASSING an existing one.
+
+    ADR-0034 §Decision 6 (tint mechanism).  The stock
+    ``qMRMLSegmentsTableView`` installs functional per-column item delegates
+    (``qSlicerTerminologyItemDelegate`` on the name column, ``qMRMLItemDelegate``
+    on opacity), and its status/visibility icons are painted by the default
+    delegate via the decoration role.  Whole-view ``setItemDelegate`` would
+    clobber those; the status-cell click-to-cycle review gesture MUST survive.
+    So the tint is injected by SUBCLASSING whatever delegate already sits on a
+    column and overriding ONLY ``initStyleOption`` to set
+    ``option.backgroundBrush`` — every inherited behaviour (terminology
+    editing, opacity spinbox, status icon, click-to-cycle) is untouched
+    because none of those delegates override ``paint``, so the base
+    ``QStyledItemDelegate::paint`` still honours the background brush.
+
+    ``tintForRow(row) -> QColor | None`` is the widget-held state the delegate
+    consults per paint (NOT model data — so nothing fights the model's
+    per-update item regeneration).  ``None`` leaves the cell neutral.
+    """
+
+    class _RowTintDelegate(baseDelegateClass):
+        def initStyleOption(self, option, index):  # noqa: N802 - Qt override
+            baseDelegateClass.initStyleOption(self, option, index)
+            colour = tintForRow(index.row())
+            if colour is not None:
+                option.backgroundBrush = qt.QBrush(colour)
+
+    return _RowTintDelegate
+
+
 class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """Stage-2 surgeon panel — the anatomy segments table + selection toolbar.
 
@@ -403,11 +444,16 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         self._editorNode = None
         self._observedSegmentation = None
         # Validate-and-next seam (ADR-0034 §Decision 6): whether the
-        # unresolved-row marks are currently up, plus a digest of the last
-        # marked offender set so the live re-evaluation only touches the view
-        # on an ACTUAL change (no per-event selection storm).
+        # validation row-tints are currently up, plus the per-segment tint
+        # state the tint delegate consults (segmentId -> "validated" |
+        # "unresolved").  Empty + inactive == neutral (no tint), so the tint
+        # delegate is a no-op outside an active validation and a normal edit
+        # never colours a row.  A digest of the last painted state gates the
+        # live re-evaluation so it only repaints on an ACTUAL change.
         self._marksActive = False
-        self._markedOffendersDigest = None
+        self._rowTintState = {}
+        self._markedTintDigest = None
+        self._tintDelegates = []
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)
 
@@ -505,7 +551,66 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         except Exception as exc:  # noqa: BLE001 — defensive across versions
             logging.debug("segments-table selection signal unavailable: %s", exc)
         self._segmentsTable = view
+        self._installRowTintDelegates(view)
         return view
+
+    #: Columns the tint delegate paints — the stock model's fixed layout.  The
+    #: tint SUBCLASSES each column's existing delegate (name = terminology,
+    #: opacity = qMRMLItemDelegate) so no functional delegate is clobbered and
+    #: the status-cell click-to-cycle keeps working (ADR-0034 §Decision 6).
+    _TINT_COLUMNS = (0, 1, 2, 3, 5)  # visibility, colour, opacity, name, status
+
+    def _installRowTintDelegates(self, view):
+        """Install the per-column row-tint delegates on the inner table view.
+
+        One tint delegate per visible column, each SUBCLASSING that column's
+        current delegate (or ``QStyledItemDelegate`` where none is set) so the
+        whole row tints together while every column keeps its own behaviour.
+        The delegates read :meth:`_rowTintColour`, a widget-held state, per
+        paint — so the model's per-update item regeneration never erases the
+        tint.  Delegates are parented to the inner view and retained on ``self``
+        for their connections' lifetime (the PythonQt discipline).
+        """
+        try:
+            inner = view.tableWidget()
+        except Exception as exc:  # noqa: BLE001 — defensive across versions
+            logging.debug("segments-table inner view unavailable: %s", exc)
+            return
+        self._tintDelegates = []
+        for column in self._TINT_COLUMNS:
+            existing = inner.itemDelegateForColumn(column)
+            baseClass = type(existing) if existing is not None else qt.QStyledItemDelegate
+            delegateClass = _makeRowTintDelegate(baseClass, self._rowTintColour)
+            delegate = delegateClass(inner)
+            inner.setItemDelegateForColumn(column, delegate)
+            self._tintDelegates.append(delegate)
+
+    def _rowTintColour(self, row):
+        """The ``QColor`` (or None) the tint delegate paints for ``row``.
+
+        Maps the table row to its segment id and looks the id up in the
+        widget-held :attr:`_rowTintState`; returns the palette green for a
+        "validated" row, the palette red for an "unresolved" row, and None
+        (neutral) otherwise — so a row with no validation state, and every row
+        while no validation is active, stays untinted.
+        """
+        view = getattr(self, "_segmentsTable", None)
+        if view is None:
+            return None
+        try:
+            segmentId = view.segmentIDForRow(row)
+        except (ValueError, RuntimeError):
+            return None
+        return self._rowTintColourForSegment(segmentId)
+
+    def _rowTintColourForSegment(self, segmentId):
+        """The palette ``QColor`` for a segment id's tint state, or None."""
+        state = self._rowValidationTint(segmentId)
+        if state == "validated":
+            return qt.QColor(TINT_VALIDATED)
+        if state == "unresolved":
+            return qt.QColor(TINT_UNRESOLVED)
+        return None
 
     def segmentsTable(self):  # noqa: N802 - Slicer/Qt verb convention
         return getattr(self, "_segmentsTable", None)
@@ -1281,122 +1386,153 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     # drive, plus a Stage-2-LOCAL "Validate anatomy" affordance so the stage
     # can be checked in isolation.
     #
-    # Marking mechanism: the stock qMRMLSegmentsTableView exposes no
-    # Python-writable per-row background/decoration role that survives the
-    # qMRMLSegmentsModel's per-update item regeneration, and the name/colour
-    # data must not be repurposed — so an unresolved row is marked by
-    # SELECTING it (setSelectedSegmentIDs) and listing it (glyph+text) on the
-    # shared status label, never colour alone (ADR-0010).
+    # Marking mechanism: the stock qMRMLSegmentsTableView installs functional
+    # per-column item delegates (terminology on the name column, an item
+    # delegate on opacity) and paints the status/visibility icons through the
+    # default delegate's decoration role.  So Validate tints each row by
+    # SUBCLASSING every column's delegate and setting option.backgroundBrush
+    # from a widget-held per-segment state (_installRowTintDelegates /
+    # _rowValidationTint) — no delegate is clobbered (status-cell click-to-
+    # cycle keeps working) and nothing fights the model's item regeneration.
+    # The tint is REINFORCEMENT: the status column's glyph+text stays the
+    # primary carrier and a shared status-label summary line accompanies it,
+    # never colour alone (ADR-0010).
     #
 
-    def _unresolvedOffenderIds(self):
-        """The canonical segment ids of the structures Validate would flag.
+    def _rowValidationTint(self, segmentId):
+        """The tint state a delegate consults for ``segmentId``.
 
-        The SAME derivation the logic's explain API uses (both route through
-        ``structureStatus``): every structure-vocabulary code the explain API
-        reports, resolved to its canonical segment id.  Missing structures
-        with no segment yet contribute nothing to SELECT (there is no row to
-        mark); they still count as unresolved in the summary text.
+        ``"validated"`` (native ``Completed``, incl. the empty-``Completed``
+        absence attestation), ``"unresolved"`` (Missing / Review / Flagged),
+        or ``None`` — neutral, meaning no tint.  Reads the widget-held
+        :attr:`_rowTintState`, which is empty while no validation is active, so
+        this is ``None`` for every row outside an active validation (a normal
+        edit never tints a row).
+        """
+        if not self._marksActive:
+            return None
+        return self._rowTintState.get(segmentId)
+
+    def _computeRowTintState(self):
+        """The per-segment ``{id: "validated"|"unresolved"}`` for every row.
+
+        The SAME derivation the explain API / completion predicate use (both
+        route through :func:`structureStatus` via
+        :meth:`explainStageIncomplete`): a structure whose SCT code is in the
+        unresolved explanation is ``"unresolved"``; every other pre-seeded
+        structure row is ``"validated"``.  A missing canonical node yields an
+        empty map (there are no rows to tint).
         """
         canonical = (
             self.logic._findCanonicalSegmentation() if self.logic else None
         )
         if canonical is None:
-            return []
-        ids = []
-        for sctCode, _title, _statusText in self.logic.explainStageIncomplete():
+            return {}
+        unresolvedCodes = {
+            code for code, _title, _status in self.logic.explainStageIncomplete()
+        }
+        state = {}
+        for _title, sctCode in STRUCTURE_TABS:
             segmentId = _findSctSegmentId(canonical, sctCode)
-            if segmentId is not None:
-                ids.append(segmentId)
-        return ids
+            if segmentId is None:
+                continue
+            state[segmentId] = (
+                "unresolved" if sctCode in unresolvedCodes else "validated"
+            )
+        return state
 
-    def markUnresolvedRows(self):
-        """Mark the unresolved anatomy rows (ADR-0034 §Decision 6).
+    def markValidationRows(self):
+        """Tint every anatomy row by its validation state (ADR-0034 §Decision 6).
 
-        Selects exactly the offending rows in the stock view and puts a
-        glyph+text summary line on the shared status label listing them.  A
-        no-op-clean when the stage is complete (clears any prior marks).
-        Idempotent: re-marking the same offender set does not re-churn the
-        selection (the digest discipline the widget already uses).
+        Paints all rows — green for validated (native ``Completed``, incl. the
+        empty-``Completed`` absence attestation), red for not-validated
+        (Missing / Review / Flagged) — and puts a glyph+text summary line on
+        the shared status label listing the unresolved structures.  A complete
+        anatomy tints every row green and reports completeness.  Idempotent:
+        re-marking an unchanged state does not repaint the view (the digest
+        discipline the widget already uses).
         """
-        offenders = self.logic.explainStageIncomplete() if self.logic else []
-        if not offenders:
-            self.clearUnresolvedMarks()
-            return
-        ids = self._unresolvedOffenderIds()
-        digest = tuple(ids)
         self._marksActive = True
-        if digest != self._markedOffendersDigest:
-            self._markedOffendersDigest = digest
-            view = getattr(self, "_segmentsTable", None)
-            if view is not None:
-                try:
-                    view.setSelectedSegmentIDs(ids)
-                except ValueError:
-                    # The Qt view went down with a host parent tree while the
-                    # observers are still alive (the _bindSegmentsTable case).
-                    self._segmentsTable = None
-        summary = ", ".join(
-            f"{title} ({statusText})" for _code, title, statusText in offenders
-        )
+        state = self._computeRowTintState()
+        digest = tuple(sorted(state.items()))
+        if digest != self._markedTintDigest:
+            self._markedTintDigest = digest
+            self._rowTintState = state
+            self._repaintTintedRows()
+        offenders = self.logic.explainStageIncomplete() if self.logic else []
         label = getattr(self, "_statusLabel", None)
-        if label is not None:
+        if label is None:
+            return
+        if not offenders:
+            label.setText(
+                f"Anatomy complete — all {len(STRUCTURE_TABS)} structures "
+                "confirmed."
+            )
+        else:
+            summary = ", ".join(
+                f"{title} ({statusText})"
+                for _code, title, statusText in offenders
+            )
             label.setText(f"Unresolved: {summary}")
 
     def clearUnresolvedMarks(self):
-        """Drop the unresolved-row marks (ADR-0034 §Decision 6).
+        """Drop the validation row-tints (ADR-0034 §Decision 6).
 
-        Clears the view selection and forgets the marked-offender digest.  A
-        no-op when no marks are up (the digest discipline: never churn the
-        view or the label on a change that leaves the marks already clear).
+        Returns every row to neutral (no tint) and forgets the painted state.
+        A no-op when no tints are up (the digest discipline: never repaint on a
+        change that leaves the rows already neutral).
         """
         if not self._marksActive:
             return
         self._marksActive = False
-        self._markedOffendersDigest = None
+        self._markedTintDigest = None
+        self._rowTintState = {}
+        self._repaintTintedRows()
+
+    def _repaintTintedRows(self):
+        """Ask the inner table view to repaint (the tint delegates re-read state).
+
+        The tint delegates paint from :attr:`_rowTintState`, not model data, so
+        a model update never triggers a repaint on its own; nudge the view's
+        viewport after the state changes.  Best-effort — a torn-down view
+        (host parent disposed while observers live) just drops the reference.
+        """
         view = getattr(self, "_segmentsTable", None)
-        if view is not None:
-            try:
-                view.setSelectedSegmentIDs([])
-            except ValueError:
-                self._segmentsTable = None
+        if view is None:
+            return
+        try:
+            view.tableWidget().viewport().update()
+        except (ValueError, RuntimeError, AttributeError):
+            self._segmentsTable = None
 
     def _refreshUnresolvedMarks(self):
-        """Live-re-evaluate the marks after a row resolves (ADR-0034 §Decision 6).
+        """Live-re-evaluate the tints after a row resolves (ADR-0034 §Decision 6).
 
         Ridden by the canonical-segmentation observation / ``_onSceneChanged``
-        (the same surfaces the table bind uses): while the marks are up, a
-        status flip to ``Completed`` (or a landing) that resolves a row drops
-        ITS mark and re-summarises the remainder; the last resolution clears
-        every mark.  A no-op while no marks are up — so a normal edit outside
-        a validation never touches the selection.
+        (the same surfaces the table bind uses): while the tints are up, a
+        status flip to ``Completed`` (or a landing) that resolves a row flips
+        ITS tint red -> green and re-summarises the remainder.  A no-op while
+        no tints are up — so a normal edit outside a validation never tints a
+        row.
         """
         if not self._marksActive:
             return
-        self.markUnresolvedRows()
+        self.markValidationRows()
 
     def onValidateAnatomy(self):
         """The Stage-2-local "Validate anatomy" gesture (ADR-0034 §Decision 6).
 
-        Complete: clear any marks and report completeness ("Anatomy complete
-        — all N structures confirmed.").  Incomplete: mark the offending rows
-        (:meth:`markUnresolvedRows`) and list them on the status label.  The
+        Tints every row by its validation state (green validated / red
+        not-validated) and puts a glyph+text summary line on the status label —
+        a complete anatomy tints all rows green and reports completeness.  The
         SHELL-level "Validate and next" button and its Next wiring are OUT of
         scope here — they stay with the phase-contracts work (#440); this
-        module only exposes the explain API + the marking that button drives.
+        module only exposes the explain API + the row tinting that button
+        drives.
         """
         if self.logic is None:
             return
-        if self.logic.isStageComplete():
-            self.clearUnresolvedMarks()
-            label = getattr(self, "_statusLabel", None)
-            if label is not None:
-                label.setText(
-                    f"Anatomy complete — all {len(STRUCTURE_TABS)} structures "
-                    "confirmed."
-                )
-            return
-        self.markUnresolvedRows()
+        self.markValidationRows()
 
     def _buildBackendStatusRow(self):
         """Build the Stage-2-local backend-status + Pre-download row.
@@ -1745,6 +1881,10 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
             slicer.mrmlScene.RemoveNode(editorNode)
         self._editorNode = None
         self._observedSegmentation = None
+        # Drop the tint-delegate references (parented to the inner view, so
+        # the Qt tree owns their lifetime — this only releases the Python
+        # handles that outlive it).
+        self._tintDelegates = []
         self.removeObservers()
 
 

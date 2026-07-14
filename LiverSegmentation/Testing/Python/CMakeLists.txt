@@ -184,14 +184,16 @@ set(_liverseg_pytest_files
   # naming the unsatisfied structures (title + status text), derived
   # through the SAME structureStatus the completion predicate reads so they
   # cannot drift (isStageComplete() iff the explanation is empty); the
-  # widget's markUnresolvedRows()/clearUnresolvedMarks() marking mechanism
-  # (SELECT the offenders + a glyph+text summary line, never colour alone,
-  # ADR-0010 -- the stock model exposes no safe per-row background role);
-  # the local "Validate anatomy" affordance; and the LIVE clear (a status
-  # flip to Completed / a landing drops the row's mark without re-clicking
-  # Validate, riding the existing canonical-segmentation observation with
-  # the digest discipline).  Widget-needing (launched `pytest_launched`
-  # row); skips cleanly bare.
+  # widget's markValidationRows()/clearUnresolvedMarks() tint mechanism
+  # (each row tinted green validated / red not-validated + a glyph+text
+  # summary line, the tint reinforcing, never colour alone, ADR-0010 -- a
+  # per-column delegate SUBCLASSING each column's own delegate so the
+  # status-cell click-to-cycle survives, reading a widget-held tint state);
+  # the local "Validate anatomy" affordance; and the LIVE update (a status
+  # flip to Completed / a landing flips the row's tint to green without
+  # re-clicking Validate, riding the existing canonical-segmentation
+  # observation with the digest discipline).  Widget-needing (launched
+  # `pytest_launched` row); skips cleanly bare.
   test_liversegmentation_validate_seam.py
   # Packaging parity for the LiverSegmentationLib sub-package: every source
   # .py appears in LiverSegmentationLib_PYTHON_SCRIPTS (and no stale
