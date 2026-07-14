@@ -30,6 +30,13 @@
 # ``ConfirmedRepresentation`` consumes the mappers as-is, and the v2.1
 # GPU-tessellation rewrite per ADR-0020 replaces the geometry path in
 # the Bezier mapper.
+#
+# The Bezier tessellation source (``vtkBezierSurfaceSource``) and the
+# resectogram texture-upload helper (``vtkMultiTextureObjectHelper``)
+# relocated here with the LiverMarkups dissolution (ADR-0014 step 8) —
+# the same lift-and-shift discipline as the mappers.  Consumers:
+# the LayerDM Representations (surface tessellation + distance-map
+# upload) and the LiverVolumetry logic (surface projection).
 #-----------------------------------------------------------------------------
 
 project(vtkSlicer${MODULE_NAME}ModuleVTKWidgets)
@@ -62,6 +69,10 @@ set(${KIT}_SRCS
   vtkOpenGLSlicingContourPolyDataMapper.cxx
   vtkOpenGLDistanceContourPolyDataMapper.h
   vtkOpenGLDistanceContourPolyDataMapper.cxx
+  vtkBezierSurfaceSource.h
+  vtkBezierSurfaceSource.cxx
+  vtkMultiTextureObjectHelper.h
+  vtkMultiTextureObjectHelper.cpp
   )
 
 set(${KIT}_TARGET_LIBRARIES

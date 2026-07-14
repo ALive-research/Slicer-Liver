@@ -24,10 +24,6 @@ slicerMacroConfigureModuleCxxTestDriver(
     # LiverResections MRML library; the production volumetry logic needs
     # the same link once it is retargeted to the carrier.
     vtkSlicerLiverResectionsModuleMRML
-    # vtkMRMLMarkupsBezierSurfaceNode (the disjoint v1 hierarchy whose
-    # SafeDownCast drops the carrier) is characterized by the root-cause
-    # test; it lives in the LiverMarkups MRML library.
-    vtkSlicerLiverMarkupsModuleMRML
   WITH_VTK_DEBUG_LEAKS_CHECK
   WITH_VTK_ERROR_OUTPUT_CHECK
   )

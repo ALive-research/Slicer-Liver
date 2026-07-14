@@ -167,11 +167,10 @@ protected:
   /// per-control-point glyph set on every shape change (the buffer
   /// ``Reset`` above is idempotent across sizes; the glyph count on
   /// the next frame matches the data node's current Rows × Cols).
-  /// The control-grid OpenGL mapper from
-  /// ``LiverMarkups/VTKWidgets/`` is *not* hosted here — it relocates
-  /// in TODO(T2-mapper-relocation) and the LayerDM Pipeline keeps the
-  /// surface render path.  This representation only owns the
-  /// interaction-time glyph cloud + selection highlight.
+  /// The relocated OpenGL surface mappers (ADR-0014 §3) are *not*
+  /// hosted here — the LayerDM Pipeline keeps the surface render
+  /// path.  This representation only owns the interaction-time glyph
+  /// cloud + selection highlight.
   void UpdatePickableGlyphs();
 
   /// Data node observed for geometry source.  Weak so the data node

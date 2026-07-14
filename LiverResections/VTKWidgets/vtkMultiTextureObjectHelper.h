@@ -2,7 +2,7 @@
 
  Distributed under the OSI-approved BSD 3-Clause License.
 
-  Copyright (c) 2021-2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
+  Copyright (c) 2023-2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -31,41 +31,33 @@
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  This file was originally developed by Rafael Palomar (Oslo University
-  Hospital and NTNU) and was supported by The Research Council of Norway
-  through the ALive project (grant nr. 311393).
-
 ==============================================================================*/
 
-#ifndef __vtkmrmlmarkupsdistancecontourdisplaynode_h_
-#define __vtkmrmlmarkupsdistancecontourdisplaynode_h_
+//
+// Created by ruoyan on 06.10.22.
+//
 
-#include "vtkSlicerLiverMarkupsModuleMRMLExport.h"
+#ifndef SLICERLIVER_VTKMULTITEXTUREOBJECTHELPER_H
+#define SLICERLIVER_VTKMULTITEXTUREOBJECTHELPER_H
 
-#include <vtkMRMLMarkupsDisplayNode.h>
+#include "vtkSlicerLiverResectionsModuleVTKWidgetsExport.h"
 
-//-----------------------------------------------------------------------------
-class VTK_SLICER_LIVERMARKUPS_MODULE_MRML_EXPORT vtkMRMLMarkupsDistanceContourDisplayNode : public vtkMRMLMarkupsDisplayNode
+// VTK includes
+#include <vtkTextureObject.h>
+
+class vtkOpenGLHelper;
+
+class VTK_SLICER_LIVERRESECTIONS_MODULE_VTKWIDGETS_EXPORT vtkMultiTextureObjectHelper : public vtkTextureObject
 {
 public:
-  static vtkMRMLMarkupsDistanceContourDisplayNode* New();
-  vtkTypeMacro(vtkMRMLMarkupsDistanceContourDisplayNode, vtkMRMLMarkupsDisplayNode);
+  static vtkMultiTextureObjectHelper* New();
+  vtkTypeMacro(vtkMultiTextureObjectHelper, vtkTextureObject);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  //--------------------------------------------------------------------------
-  // MRMLNode methods
-  //--------------------------------------------------------------------------
+  bool CreateSeq3DFromRaw(unsigned int width, unsigned int height, unsigned int depth, int numComps, int dataType, void* data, int texSeq = 0);
+  bool CreateSeq2DFromRaw(unsigned int width, unsigned int height, int numComps, int dataType, void* data, int texSeq);
 
-  vtkMRMLNode* CreateNodeInstance() override;
-
-  /// Get node XML tag name (like Volume, Markups)
-  const char* GetNodeTagName() override { return "MarkupsDistanceContourDisplay"; };
-
-protected:
-  vtkMRMLMarkupsDistanceContourDisplayNode();
-  ~vtkMRMLMarkupsDistanceContourDisplayNode() override;
-  vtkMRMLMarkupsDistanceContourDisplayNode(const vtkMRMLMarkupsDistanceContourDisplayNode&);
-  void operator=(const vtkMRMLMarkupsDistanceContourDisplayNode&);
+  void CreateSeqTexture(int texSeq = 0);
 };
 
-#endif // __vtkmrmlmarkupsdistancecontourdisplaynode_h_
+#endif // SLICERLIVER_VTKMULTITEXTUREOBJECTHELPER_H

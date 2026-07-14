@@ -19,10 +19,12 @@ set(${KIT}_TARGET_LIBRARIES
   ${VTK_LIBRARIES}
   ${ITK_LIBRARIES}
   MRMLCore
-  vtkSlicerLiverMarkupsModuleMRML
   vtkSlicerLiverResectionsModuleMRML
   vtkSlicerMarkupsModuleLogic
-  vtkSlicerLiverMarkupsModuleVTKWidgets
+  # vtkBezierSurfaceSource (the Bezier tessellation source the surface
+  # projection consumes) ships from the LiverResections VTKWidgets
+  # target since the LiverMarkups dissolution (ADR-0014 step 8).
+  vtkSlicerLiverResectionsModuleVTKWidgets
   )
 
 #---------------------------------

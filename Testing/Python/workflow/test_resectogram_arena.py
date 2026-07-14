@@ -60,7 +60,7 @@ launched/GPU verification.
 Harness placement (greppable skip reasons, mind #460)
 -----------------------------------------------------
 Needs a live ``qSlicerApplication`` (Qt widget + MRML scene + the
-registered LiverResections + LiverMarkups modules so the Bezier node + the
+registered LiverResections module so the Bezier node + the
 resectogram render path are available).  Bare ``PythonSlicer -m pytest``
 has none of those, so the test SKIPS CLEANLY there via the shared guards;
 it EXECUTES under the launched-Slicer ``pytest_launched`` row.  Every skip
