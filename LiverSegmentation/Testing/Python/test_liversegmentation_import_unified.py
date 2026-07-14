@@ -815,3 +815,49 @@ def test_import_dialog_carries_ok_and_cancel(qt_widgets):
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def test_import_paints_busy_state_before_the_blocking_landing(qt_widgets):
+    """The synchronous landing tail takes seconds on real anatomy: the
+    busy state (status text + wait cursor) must be painted BEFORE the
+    blocking call starts, and the cursor restored afterwards -- on
+    failure too (ADR-0009 explainable state; the toolbar Run idiom)."""
+    import qt
+
+    slicer, module, logic = _logic_or_skip()
+    slicer.mrmlScene.Clear(0)
+    widget = _widget_or_skip(slicer, qt_widgets)
+    source, ids = _source_segmentation(slicer, ["alpha"])
+    segment_id = ids["alpha"]
+
+    observed = {}
+
+    def _capturing_import(sourceNode, correspondences=None):
+        observed["status"] = widget._statusLabel.text
+        observed["cursor"] = qt.QApplication.overrideCursor() is not None
+        return widget.logic.getOrCreateCanonicalSegmentation()
+
+    widget.logic.importSegmentation = _capturing_import
+    widget._importChosenSource(source, {segment_id: module.SCT_LIVER_CODE})
+    assert "Importing" in observed.get("status", ""), (
+        "the status label must announce the import BEFORE the blocking "
+        f"landing starts; saw {observed.get('status')!r}."
+    )
+    assert observed.get("cursor"), (
+        "the wait cursor must be up during the blocking landing."
+    )
+    assert qt.QApplication.overrideCursor() is None, (
+        "the wait cursor must be restored after the landing."
+    )
+
+    def _raising_import(sourceNode, correspondences=None):
+        raise RuntimeError("landing exploded")
+
+    widget.logic.importSegmentation = _raising_import
+    try:
+        widget._importChosenSource(source, {segment_id: module.SCT_LIVER_CODE})
+    except RuntimeError:
+        pass
+    assert qt.QApplication.overrideCursor() is None, (
+        "the wait cursor must be restored even when the landing raises."
+    )
