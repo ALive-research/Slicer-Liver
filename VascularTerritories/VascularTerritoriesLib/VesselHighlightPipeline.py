@@ -42,8 +42,10 @@ from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
 
 try:  # pragma: no cover - exercised once per import path
     from .VesselSurfacePick import VesselSurfacePick
+    from .VesselHighlightWiring import closed_surface_polydata
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from VesselSurfacePick import VesselSurfacePick  # type: ignore[no-redef]
+    from VesselHighlightWiring import closed_surface_polydata  # type: ignore[no-redef]
 
 _REGISTERED = False
 
@@ -282,37 +284,14 @@ class VesselHighlightPipeline(_PipelineBase):
         segmentation = display.GetPickSurfaceNode()
         if segmentation is None:
             return None
-        polydata = self._closed_surface(segmentation)
+        # Shared surface-resolution seam (VesselHighlightWiring): the hover
+        # Pipeline and the snap-on-place path resolve the pick target the
+        # same way, so neither duplicates the representation-building logic.
+        polydata = closed_surface_polydata(segmentation)
         if polydata is None:
             return None
         self._pick = VesselSurfacePick(polydata)
         return self._pick
-
-    @staticmethod
-    def _closed_surface(segmentation: Any):
-        """The segmentation's whole closed-surface mesh as one polydata.
-
-        Creates the closed-surface representation if absent (the module's
-        ``polyDataFromNode`` precedent) and appends every segment so the
-        pick sees the whole vessel tree.  ``None`` on any failure.
-        """
-        try:
-            segmentation.CreateClosedSurfaceRepresentation()
-            seg = segmentation.GetSegmentation()
-            ids = vtk.vtkStringArray()
-            seg.GetSegmentIDs(ids)
-            append = vtk.vtkAppendPolyData()
-            for i in range(ids.GetNumberOfValues()):
-                mesh = vtk.vtkPolyData()
-                segmentation.GetClosedSurfaceRepresentation(ids.GetValue(i), mesh)
-                if mesh.GetNumberOfPoints() > 0:
-                    append.AddInputData(mesh)
-            if append.GetNumberOfInputConnections(0) == 0:
-                return None
-            append.Update()
-            return append.GetOutput()
-        except Exception:  # pragma: no cover - defensive
-            return None
 
     # ------------------------------------------------------------------ #
     # Introspection (unit tests) + plumbing

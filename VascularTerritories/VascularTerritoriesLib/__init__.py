@@ -10,6 +10,10 @@ The pick core (``VesselSurfacePick``) is the pure-VTK snap math
 from __future__ import annotations
 
 from .VesselSurfacePick import VesselSurfacePick
+from .VesselHighlightWiring import (
+    closed_surface_polydata,
+    snap_control_point_to_surface,
+)
 
 # The LayerDM highlight Pipeline import depends on LayerDMLib (reachable
 # only from a launched Slicer with the SlicerLayerDisplayableManager
@@ -27,6 +31,8 @@ except ImportError:  # pragma: no cover - LayerDMLib unreachable bare
 
 __all__ = [
     "VesselSurfacePick",
+    "closed_surface_polydata",
+    "snap_control_point_to_surface",
     "VesselHighlightPipeline",
     "registerVesselHighlightPipelineCreator",
 ]
