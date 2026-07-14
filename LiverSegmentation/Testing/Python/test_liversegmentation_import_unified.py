@@ -503,3 +503,35 @@ def test_import_gesture_routes_chosen_source_into_logic(qt_widgets):
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def test_import_dialog_carries_ok_and_cancel(qt_widgets):
+    """The picker dialog must actually be operable: the button box carries
+    real Ok + Cancel buttons wired to accept/reject.  Pins the PythonQt
+    trap found live: the flags-taking QDialogButtonBox CONSTRUCTOR
+    overload does not marshal and produced a buttonless dialog ("nothing
+    to do after selecting the node")."""
+    import qt
+
+    slicer, _module, _logic = _logic_or_skip()
+    slicer.mrmlScene.Clear(0)
+    widget = _widget_or_skip(slicer, qt_widgets)
+
+    dialog, combo = widget._buildImportDialog()
+    try:
+        buttons = widget._importDialogButtons
+        ok = buttons.button(qt.QDialogButtonBox.Ok)
+        cancel = buttons.button(qt.QDialogButtonBox.Cancel)
+        assert ok is not None and cancel is not None, (
+            "the import dialog must offer Ok AND Cancel -- a buttonless "
+            "box leaves the surgeon stranded after picking a node."
+        )
+        assert ok.isDefault(), "Ok must be the default (Enter confirms)."
+        accepted = []
+        dialog.connect("accepted()", lambda: accepted.append(1))
+        ok.click()
+        assert accepted, "clicking Ok must accept the dialog."
+    finally:
+        combo.setMRMLScene(None)
+        dialog.setParent(None)
+        dialog.deleteLater()

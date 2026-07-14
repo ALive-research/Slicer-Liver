@@ -1323,6 +1323,27 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
                 "(File ▸ Add Data)."
             )
             return
+        dialog, combo = self._buildImportDialog()
+        try:
+            accepted = dialog.exec_() == qt.QDialog.Accepted
+            source = combo.currentNode() if accepted else None
+        finally:
+            combo.setMRMLScene(None)
+            dialog.setParent(None)
+            dialog.deleteLater()
+        if source is not None:
+            self._importChosenSource(source)
+
+    def _buildImportDialog(self):
+        """Build the modal import picker; returns ``(dialog, combo)``.
+
+        Split from the gesture so the dialog SHAPE is pinnable headless —
+        the live run only adds ``exec_()``.  The button box is built empty
+        and populated through the ``standardButtons`` property: the
+        flags-taking CONSTRUCTOR overload does not marshal through
+        PythonQt (the int matched a different overload and produced a
+        buttonless box — a live-test finding).
+        """
         dialog = qt.QDialog(self.parent)
         dialog.setWindowTitle("Import segmentation")
         column = qt.QVBoxLayout(dialog)
@@ -1345,21 +1366,18 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
             if node.GetAttribute(ROLE_ATTRIBUTE)
         ]
         column.addWidget(combo)
-        buttons = qt.QDialogButtonBox(
+        buttons = qt.QDialogButtonBox()
+        buttons.standardButtons = (
             qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
         )
+        okButton = buttons.button(qt.QDialogButtonBox.Ok)
+        if okButton is not None:
+            okButton.setDefault(True)
         buttons.connect("accepted()", dialog.accept)
         buttons.connect("rejected()", dialog.reject)
         column.addWidget(buttons)
-        try:
-            accepted = dialog.exec_() == qt.QDialog.Accepted
-            source = combo.currentNode() if accepted else None
-        finally:
-            combo.setMRMLScene(None)
-            dialog.setParent(None)
-            dialog.deleteLater()
-        if source is not None:
-            self._importChosenSource(source)
+        self._importDialogButtons = buttons
+        return dialog, combo
 
     def _importChosenSource(self, source):
         """Route the picked source through the unified landing path."""
