@@ -533,6 +533,21 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         editor.setSegmentationNodeSelectorVisible(False)
         editor.setSourceVolumeNodeSelectorVisible(False)
         editor.setSwitchToSegmentationsButtonVisible(False)
+        # Row lifecycle belongs to the ANATOMY segments table above; the
+        # editor's own add/remove buttons would bypass the pre-seeded
+        # checklist contract (ADR-0034 §Amendments).
+        editor.setAddRemoveSegmentButtonsVisible(False)
+        # The editor embeds its OWN qMRMLSegmentsTableView -- redundant
+        # beside the anatomy table that already drives the selection
+        # (maintainer live-test finding).  No Q_PROPERTY exposes it, so
+        # hide the named child frame (the .ui wraps the view in
+        # SegmentsTableResizableFrame; falling back to the view itself
+        # keeps this resilient to upstream .ui reshuffles).
+        for childName in ("SegmentsTableResizableFrame", "SegmentsTableView"):
+            child = editor.findChild(qt.QWidget, childName)
+            if child is not None:
+                child.setVisible(False)
+                break
         # Parameter node BEFORE the scene, so the automatic selections made
         # when the scene lands are stored on OUR node (the stock module's
         # setup order).

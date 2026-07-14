@@ -194,6 +194,29 @@ def test_embedded_editor_exists_collapsed_and_configured(qt_widgets):
         "the switch-to-Segmentations module button must be hidden -- the "
         "jump-out path is retired."
     )
+    assert not editor.addRemoveSegmentButtonsVisible, (
+        "the editor's add/remove segment buttons must be hidden -- row "
+        "lifecycle belongs to the anatomy table's pre-seeded checklist."
+    )
+    # The editor's OWN embedded segments table is redundant beside the
+    # anatomy table that drives the selection (maintainer live-test
+    # finding): the named child (frame, or the view as fallback) is
+    # hidden.
+    import qt
+
+    inner = None
+    for child_name in ("SegmentsTableResizableFrame", "SegmentsTableView"):
+        inner = editor.findChild(qt.QWidget, child_name)
+        if inner is not None:
+            break
+    assert inner is not None, (
+        "the stock editor no longer exposes its internal segments "
+        "table under a known child name -- update the hide fallback."
+    )
+    assert not inner.isVisibleTo(editor), (
+        "the editor's internal segments table must be hidden -- the "
+        "anatomy segments table above already fills that role."
+    )
 
     # Curated effects: the AI-mask-correction set, nothing else.
     assert list(editor.effectNameOrder()) == CURATED_EFFECTS, (
