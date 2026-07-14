@@ -150,6 +150,24 @@ def _stub_builder(record, sleep_seconds):
 
 
 def _pid_alive(pid):
+    """True iff ``pid`` is a RUNNING process — a zombie counts as dead.
+
+    ``os.kill(pid, 0)`` succeeds for zombies, and a SIGKILLed grandchild
+    whose parent died with it reparents to PID 1 — which in a CI
+    container is no reaping init, so the corpse lingers as a zombie for
+    the rest of the job.  The reap invariant is "no RUNNING orphan";
+    read the state field from ``/proc/<pid>/stat`` (text after the last
+    ``)`` guards against parens in the comm name) and treat ``Z`` as
+    dead, falling back to the signal probe where ``/proc`` is absent.
+    """
+    try:
+        with open(f"/proc/{pid}/stat") as stat:
+            state = stat.read().rsplit(")", 1)[1].split()[0]
+        return state != "Z"
+    except (FileNotFoundError, ProcessLookupError, IndexError):
+        return False
+    except OSError:
+        pass
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
