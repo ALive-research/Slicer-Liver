@@ -71,7 +71,7 @@ set(_vascterr_pytest_files
   # Snap-on-place + the widget highlight wiring.  Scene-/widget-needing
   # (segmentation closed-surface reps + the module widget); they SKIP
   # cleanly bare and RUN launched, mirroring the LiverSegmentation suite.
-  test_vessel_snap_and_wiring.py
+  test_vessel_highlight_wiring.py
   # ADR-0037 Stage-1 i1/i2 -- the annotation-point carrier on
   # vtkMRMLCustomTerritoriesNode (ordered per-territory points; no markups
   # reference) + its storage round-trip.  The carrier is a WRAPPED C++
