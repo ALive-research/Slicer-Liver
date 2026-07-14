@@ -22,6 +22,7 @@
 set(VascularTerritoriesLib_PYTHON_SCRIPTS
   __init__.py
   VesselSurfacePick.py
+  VesselHighlightPipeline.py
   )
 
 set(VascularTerritoriesLib_PYTHON_RESOURCES

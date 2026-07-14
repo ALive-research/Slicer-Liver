@@ -43,6 +43,7 @@
 #include "vtkMRMLAbstractTerritoriesNode.h"
 #include "vtkMRMLCustomTerritoriesNode.h"
 #include "vtkMRMLStdCouinaudTerritoriesNode.h"
+#include "vtkMRMLTerritoriesHighlightDisplayNode.h"
 
 // SubjectHierarchyFolders utility
 #include "vtkSlicerSubjectHierarchyFolders.h"
@@ -115,6 +116,14 @@ void vtkSlicerVascularTerritoriesLogic::RegisterNodes()
   // pre-constructed sentinel instance built via the concrete subclass.
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLStdCouinaudTerritoriesNode>::New());
   scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLCustomTerritoriesNode>::New());
+
+  // Vessel-adhering-highlight display node (ADR-0013 §5 call 1 —
+  // RegisterNodeClass).  Data-only display node keying the LayerDM
+  // VesselHighlightPipeline; per ADR-0025's template the ONLY new C++
+  // wiring is this RegisterNodeClass — the Pipeline creator (ADR-0013
+  // §5 call 3) is registered on the Python side from the scripted
+  // module's setup.
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLTerritoriesHighlightDisplayNode>::New());
 }
 
 //------------------------------------------------------------------------------
