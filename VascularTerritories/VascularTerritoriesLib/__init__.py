@@ -11,4 +11,22 @@ from __future__ import annotations
 
 from .VesselSurfacePick import VesselSurfacePick
 
-__all__ = ["VesselSurfacePick"]
+# The LayerDM highlight Pipeline import depends on LayerDMLib (reachable
+# only from a launched Slicer with the SlicerLayerDisplayableManager
+# extension on the path); guard it so the bare unit layer can still import
+# the package for the pure-VTK pick core alone (the ControlPolygonPipeline
+# precedent).
+try:
+    from .VesselHighlightPipeline import (
+        VesselHighlightPipeline,
+        registerVesselHighlightPipelineCreator,
+    )
+except ImportError:  # pragma: no cover - LayerDMLib unreachable bare
+    VesselHighlightPipeline = None
+    registerVesselHighlightPipelineCreator = None
+
+__all__ = [
+    "VesselSurfacePick",
+    "VesselHighlightPipeline",
+    "registerVesselHighlightPipelineCreator",
+]

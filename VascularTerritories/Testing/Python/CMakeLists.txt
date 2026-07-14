@@ -63,6 +63,11 @@ set(_vascterr_pytest_files
   # collect + SKIP-PENDING cleanly bare until the implementer lands
   # VascularTerritoriesLib/VesselSurfacePick.py (ADR-0027).
   test_vessel_surface_pick.py
+  # LayerDM highlight-Pipeline unit invariants (pick integration + the
+  # ADR-0033 hover-decline discipline).  Import-guarded on LayerDMLib
+  # (reachable only from a launched Slicer); they SKIP bare and RUN
+  # launched, mirroring the ControlPolygonPipeline unit suite.
+  test_vessel_highlight_pipeline.py
 )
 
 foreach(_pytest_file IN LISTS _vascterr_pytest_files)

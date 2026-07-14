@@ -165,6 +165,16 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     """
     ScriptedLoadableModuleWidget.setup(self)
 
+    # ADR-0013 §5 call 3 — register the LayerDM Pipeline creator for the
+    # vessel-adhering highlight (``vtkMRMLTerritoriesHighlightDisplayNode``).
+    # The Pipeline class is Python (ADR-0004 §1); one Pipeline per
+    # display-node type (ADR-0013 §1).  Registration is idempotent (a
+    # module-level flag inside the creator).  Guarded: in a launch without
+    # the SlicerLayerDisplayableManager extension on the module path,
+    # ``LayerDMLib`` is unreachable — log loudly (ADR-0002 makes LayerDM a
+    # hard runtime dependency) but let the rest of setup continue.
+    self._registerVesselHighlightPipeline()
+
     # Load widget from .ui file (created by Qt Designer)
     uiWidget = slicer.util.loadUI(self.resourcePath('UI/VascularTerritories.ui'))
     self.layout.addWidget(uiWidget)
@@ -236,6 +246,25 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     #self.enableWidgetButtons(False)
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
+
+  def _registerVesselHighlightPipeline(self):
+    """Register the vessel-adhering-highlight LayerDM Pipeline creator.
+
+    ADR-0013 §5 call 3.  Idempotent; a missing LayerDMLib is a real
+    configuration error under ADR-0002 so it logs at ``critical``, but the
+    rest of widget setup continues.
+    """
+    try:
+      from VascularTerritoriesLib import registerVesselHighlightPipelineCreator
+      if registerVesselHighlightPipelineCreator is None:
+        raise ImportError("registerVesselHighlightPipelineCreator unavailable")
+      registerVesselHighlightPipelineCreator()
+    except ImportError as exc:
+      logging.critical(
+        "VascularTerritories: vessel-adhering-highlight LayerDM Pipeline "
+        "creator not registered (%s) -- the highlight is disabled in this "
+        "session.  Loading the SlicerLayerDisplayableManager extension is "
+        "required for the Pipeline path (ADR-0013).", exc)
 
   def enableWidgetButtons(self, state):
     self.ui.addSegmentationButton.setEnabled(state)

@@ -40,6 +40,8 @@ class TerritoriesNodeWrapperTestCase(ScriptedLoadableModuleTest):
         self.test_subject_hierarchy_folder_placement()
         self.setUp()
         self.test_couinaud_sct_codes_through_wrappers()
+        self.setUp()
+        self.test_highlight_display_node_registers_and_round_trips()
 
     # ------------------------------------------------------------------
     # Invariant 2 + 6 -- subclasses are creatable through Slicer's
@@ -144,6 +146,40 @@ class TerritoriesNodeWrapperTestCase(ScriptedLoadableModuleTest):
                          "Couinaud Segment II SCT code mismatch")
         self.assertEqual(couinaud.GetSCTCode(7), "277962002",  # Segment VIII
                          "Couinaud Segment VIII SCT code mismatch")
+
+    # ------------------------------------------------------------------
+    # Vessel-adhering-highlight display node (ADR-0013 §5, ADR-0025
+    # display-node template).  Data-only node: it registers via the
+    # module Logic RegisterNodes(), round-trips its persisted field
+    # (Radius) + the transient adhering-point/flag through the setters,
+    # and resolves the referenced input segmentation whose closed
+    # surface the highlight adheres to.
+    # ------------------------------------------------------------------
+    def test_highlight_display_node_registers_and_round_trips(self):
+        display = slicer.mrmlScene.AddNewNodeByClass(
+            "vtkMRMLTerritoriesHighlightDisplayNode")
+        self.assertIsNotNone(
+            display,
+            "vtkMRMLTerritoriesHighlightDisplayNode not registered -- "
+            "module Logic RegisterNodes() must wire this up (ADR-0013 §5).")
+        self.assertEqual(display.GetClassName(),
+                         "vtkMRMLTerritoriesHighlightDisplayNode")
+
+        # Persisted field round-trips.
+        display.SetRadius(4.5)
+        self.assertAlmostEqual(display.GetRadius(), 4.5)
+
+        # Transient adhering-point + flag round-trip through the setters.
+        display.SetAdheringPointWorld(1.0, 2.0, 3.0)
+        self.assertEqual(list(display.GetAdheringPointWorld()), [1.0, 2.0, 3.0])
+        display.SetAdhering(True)
+        self.assertTrue(display.GetAdhering())
+
+        # Pick-surface reference resolves the input segmentation.
+        segmentation = slicer.mrmlScene.AddNewNodeByClass(
+            "vtkMRMLSegmentationNode")
+        display.SetAndObservePickSurfaceNodeID(segmentation.GetID())
+        self.assertIs(display.GetPickSurfaceNode(), segmentation)
 
 
 if __name__ == "__main__":
