@@ -121,13 +121,16 @@ set(_liverseg_pytest_files
   # Mark-absent attestation gesture.  Widget-needing (launched
   # `pytest_launched` row); skips cleanly bare.
   test_liversegmentation_segments_table.py
-  # SLICE C -- Stage 2 produces the canonical, per-structure-SCT-tagged
-  # segmentation by LOADING one (in-app AI deferred to v2.1); pins the
-  # importSegmentationAsCanonical logic seam (ADR-0024 §"Output contract",
-  # ADR-0011).  Scene-needing (launched `pytest_launched` row); skips cleanly
-  # bare.  The vocab-collapse companion (C2) rides the existing pure-Python
-  # test_liversegmentation_import_purity.py row.
-  test_liversegmentation_import_as_canonical.py
+  # ADR-0034 §Decision 2 -- the import path unifies: the toolbar Import…
+  # gesture routes a loaded segmentation through the SAME landing kernel
+  # the AI accept path uses (importSegmentation; canonical identity
+  # stable).  Pins the SCT-resolution order (TerminologyEntry tag wins,
+  # else LabelToSCT bridge name matching, else unmatched extra row), the
+  # never-overwrite rule for landed/Confirmed rows, source-node
+  # consumption on success only, and stock terminology-navigator format
+  # recognition (ADR-0011).  Scene/widget-needing (launched
+  # `pytest_launched` row); skips cleanly bare.
+  test_liversegmentation_import_unified.py
   # T5.2-f -- shared Subject-Hierarchy folder utility reachability +
   # Anatomy placement through vtkSlicerSubjectHierarchyFolders
   # (ADR-0023 §"MRML scene organisation").  Wrapped-C++-from-Python

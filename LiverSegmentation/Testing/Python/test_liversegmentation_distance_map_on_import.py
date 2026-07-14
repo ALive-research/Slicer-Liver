@@ -1,15 +1,15 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 
-"""Stage-2 canonical import triggers the distance-map computation (#538).
+"""Stage-2 canonical import triggers the distance-map computation.
 
 The distance-map volume is consumed throughout Stage 4 (the resection plan's
 distance-map reference, the resectogram, the resection mappers) but nothing in
 the v2 workflow produced it -- Planning opened with no map.  The explicit
-human action that completes Stage 2 is the **import-as-canonical** click, so
-that hook (the same one that creates the 3D surface representations) also
-computes the composed distance map via the new ``ensureDistanceMap`` logic
-seam:
+human action growing the canonical node is the toolbar **Import…** gesture
+(the unified ``importSegmentation`` path, ADR-0034 §Decision 2), so that hook
+(the same one that creates the 3D surface representations) also computes the
+composed distance map via the ``ensureDistanceMap`` logic seam:
 
   * reference volume resolved from the Stage-1 ``LiverRole='PortalVenous'``
     tag (``selectInputVolume``);
@@ -29,6 +29,7 @@ import pytest
 
 SCT_LIVER_CODE = "10200004"
 SEAM = "ensureDistanceMap"
+IMPORT_SEAM = "importSegmentation"
 
 
 def _logic_or_skip():
@@ -49,9 +50,14 @@ def _logic_or_skip():
 def _require_seam(logic):
     if not hasattr(logic, SEAM):
         pytest.skip(
-            f"LiverSegmentationLogic.{SEAM}() not implemented -- #538 "
+            f"LiverSegmentationLogic.{SEAM}() not implemented -- "
             "skip-pending until the distance-map trigger seam lands."
         )
+    assert hasattr(logic, IMPORT_SEAM), (
+        f"LiverSegmentationLogic.{IMPORT_SEAM}() is missing -- the "
+        "distance-map trigger must ride the unified import path "
+        "(ADR-0034 §Decision 2)."
+    )
 
 
 def _require_segmentations_module(slicer):
@@ -63,7 +69,12 @@ def _require_segmentations_module(slicer):
 
 
 def _source_segmentation_with_geometry(slicer):
-    """A source segmentation with one real-geometry segment (cube labelmap)."""
+    """A source segmentation with one real-geometry segment (cube labelmap).
+
+    The segment is named ``liver`` so the unified import path name-matches
+    it against the ``Resources/Terminology/LabelToSCT/`` bridges (ADR-0011)
+    and lands it as the liver structure.
+    """
     import numpy as np
 
     labelmap = slicer.mrmlScene.AddNewNodeByClass(
@@ -80,7 +91,9 @@ def _source_segmentation_with_geometry(slicer):
     slicer.mrmlScene.RemoveNode(labelmap)
     segmentation = node.GetSegmentation()
     assert segmentation.GetNumberOfSegments() >= 1
-    return node, segmentation.GetNthSegmentID(0)
+    segment_id = segmentation.GetNthSegmentID(0)
+    segmentation.GetSegment(segment_id).SetName("liver")
+    return node, segment_id
 
 
 def _reference_volume(slicer):
@@ -105,19 +118,17 @@ def _distance_map_volumes(slicer):
     ]
 
 
-def test_import_as_canonical_computes_tagged_distance_map():
-    """Importing the canonical segmentation mints a computed distance map."""
+def test_import_computes_tagged_distance_map():
+    """Importing into the canonical segmentation mints a computed distance map."""
     slicer, logic = _logic_or_skip()
     slicer.mrmlScene.Clear(0)
     _require_seam(logic)
     _require_segmentations_module(slicer)
 
     _reference_volume(slicer)
-    source, segId = _source_segmentation_with_geometry(slicer)
+    source, _segId = _source_segmentation_with_geometry(slicer)
 
-    canonical = logic.importSegmentationAsCanonical(
-        source, {segId: (SCT_LIVER_CODE, "Liver")}
-    )
+    canonical = logic.importSegmentation(source)
     assert canonical is not None
 
     maps = _distance_map_volumes(slicer)
@@ -137,18 +148,21 @@ def test_import_as_canonical_computes_tagged_distance_map():
 
 
 def test_reimport_reuses_the_distance_map_node():
-    """A second import recomputes onto the SAME tagged node (no duplicates)."""
+    """A second import recomputes onto the SAME tagged node (no duplicates).
+
+    Two separate sources: a successful import CONSUMES its source node
+    (the unified-path contract), so the second import brings its own.
+    """
     slicer, logic = _logic_or_skip()
     slicer.mrmlScene.Clear(0)
     _require_seam(logic)
     _require_segmentations_module(slicer)
 
     _reference_volume(slicer)
-    source, segId = _source_segmentation_with_geometry(slicer)
-    assignments = {segId: (SCT_LIVER_CODE, "Liver")}
-
-    logic.importSegmentationAsCanonical(source, assignments)
-    logic.importSegmentationAsCanonical(source, assignments)
+    first, _segId = _source_segmentation_with_geometry(slicer)
+    logic.importSegmentation(first)
+    second, _segId = _source_segmentation_with_geometry(slicer)
+    logic.importSegmentation(second)
 
     maps = _distance_map_volumes(slicer)
     assert len(maps) == 1, (
@@ -164,10 +178,8 @@ def test_import_without_reference_volume_still_succeeds():
     _require_seam(logic)
     _require_segmentations_module(slicer)
 
-    source, segId = _source_segmentation_with_geometry(slicer)
-    canonical = logic.importSegmentationAsCanonical(
-        source, {segId: (SCT_LIVER_CODE, "Liver")}
-    )
+    source, _segId = _source_segmentation_with_geometry(slicer)
+    canonical = logic.importSegmentation(source)
     assert canonical is not None, (
         "a missing reference volume must degrade gracefully -- the canonical "
         "import itself succeeds."
@@ -181,11 +193,11 @@ def test_import_without_reference_volume_still_succeeds():
 def test_accept_computes_tagged_distance_map_and_surface_rep():
     """The AI path (Run -> Accept) must produce the map + 3D rep too.
 
-    Every prior end-to-end pass built the canonical node via
-    ``importSegmentationAsCanonical`` (which computes the distance map and
-    the closed-surface representation).  A surgeon going PURE-AI (per-card
-    Run + Accept, no import) reached Stage 4 with NO distance map and no
-    3D anatomy -- ``accept()`` must run the same two post-merge steps.
+    Every prior end-to-end pass built the canonical node via the import
+    path (which computes the distance map and the closed-surface
+    representation).  A surgeon going PURE-AI (Run + landing, no import)
+    reached Stage 4 with NO distance map and no 3D anatomy -- ``accept()``
+    must run the same two post-merge steps.
     """
     slicer, logic = _logic_or_skip()
     slicer.mrmlScene.Clear(0)

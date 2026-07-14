@@ -1,13 +1,13 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 
-"""Stage-2 canonical segments get a visible 3D surface representation (#539).
+"""Stage-2 canonical segments get a visible 3D surface representation.
 
 A loaded segmentation arrives with only a binary-labelmap representation, so
-the main 3D view is empty entering Stage 4 (Planning).  Promoting it to
-canonical (``importSegmentationAsCanonical``) must also generate the
-**closed-surface representation** and turn on 3D visibility, via the
-``ensureSurfaceRepresentation`` logic seam.
+the main 3D view is empty entering Stage 4 (Planning).  Importing it into the
+canonical node (the unified ``importSegmentation`` path, ADR-0034 §Decision 2)
+must also generate the **closed-surface representation** and turn on 3D
+visibility, via the ``ensureSurfaceRepresentation`` logic seam.
 
 Scene-needing (builds a real segmentation with geometry + runs the segmentation
 converter), so this runs under the launched-Slicer ``pytest_launched`` row and
@@ -20,7 +20,6 @@ from __future__ import annotations
 import pytest
 
 CLOSED_SURFACE = "Closed surface"
-SCT_LIVER_CODE = "10200004"
 SURFACE_SEAM = "ensureSurfaceRepresentation"
 
 
@@ -80,20 +79,22 @@ def _source_segmentation_with_geometry(slicer):
     slicer.mrmlScene.RemoveNode(labelmap)
     segmentation = node.GetSegmentation()
     assert segmentation.GetNumberOfSegments() >= 1, "import must yield a segment"
-    return node, segmentation.GetNthSegmentID(0)
+    segment_id = segmentation.GetNthSegmentID(0)
+    # Named to the bridge label so the unified import path name-matches it
+    # to the liver structure (ADR-0011).
+    segmentation.GetSegment(segment_id).SetName("liver")
+    return node, segment_id
 
 
-def test_import_as_canonical_creates_visible_surface_representation():
-    """Promoting a loaded segmentation to canonical must give it a visible
-    closed-surface representation (#539)."""
+def test_import_creates_visible_surface_representation():
+    """Importing a loaded segmentation into the canonical node must give it a
+    visible closed-surface representation."""
     slicer, logic = _logic_or_skip()
     slicer.mrmlScene.Clear(0)
     _require_seam(logic)
 
-    source, segId = _source_segmentation_with_geometry(slicer)
-    canonical = logic.importSegmentationAsCanonical(
-        source, {segId: (SCT_LIVER_CODE, "Liver")}
-    )
+    source, _segId = _source_segmentation_with_geometry(slicer)
+    canonical = logic.importSegmentation(source)
     assert canonical is not None
 
     segmentation = canonical.GetSegmentation()

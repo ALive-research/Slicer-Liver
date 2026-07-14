@@ -76,6 +76,26 @@
   vocabulary read through this amendment (Completed replaces the
   confirm tag; `InProgress` replaces `● Review`).
 
+- **2026-07-14 — the unified import path adapts to the
+  native-primitives shape.**  Decision 2's "the import path unifies"
+  ships as a toolbar **Import…** gesture (a minimal source picker; the
+  separate load section and its assignment table are retired) whose
+  segments flow through the SAME landing kernel the accept path uses —
+  the canonical node's **identity is stable** (the earlier
+  promote-the-source-to-canonical mechanism is retired; the source
+  node is consumed after a successful copy, left untouched on
+  failure).  SCT resolution per source segment: an existing
+  `TerminologyEntry` tag carrying a structure code wins; else name
+  matching over the `Resources/Terminology/LabelToSCT/` bridges; else
+  the segment lands as an extra untagged row and structure assignment
+  is the **native terminology-navigator gesture** on the table's
+  colour swatch (the in-row assignment combo of Decision 2 predates
+  the native pivot and is superseded).  Landed — and in particular
+  surgeon-`Completed` — rows are **never overwritten or demoted by an
+  import**: the incoming segment lands as an extra same-code
+  `InProgress` row and the surgeon decides which to keep (the
+  demote-on-rerun staleness rule remains the AI re-run path's).
+
 ## Context
 
 The 2026-07-09 end-to-end stabilization walkthrough (the maintainer
