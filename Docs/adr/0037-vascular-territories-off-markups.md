@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-07-14
 - **Deciders:** Rafael Palomar
-- **Diagrams:** [`Docs/architecture/territories-class-hierarchy.md`](territories-class-hierarchy.md) (extended during implementation with the annotation carrier)
+- **Diagrams:** [`Docs/architecture/territories-class-hierarchy.md`](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/architecture/territories-class-hierarchy.md) (extended during implementation with the annotation carrier)
 - **Supersedes:** [ADR-0036](0036-vessel-highlight-separate-instance.md) (scoped only the hover highlight as a separate instance; this ADR subsumes it into the full module transition).
 - **Relates to:** the resection-plan transition —
   [ADR-0032](0032-v2-interaction-via-layerdm-pipeline-seam.md) (interaction through the Pipeline seam),
@@ -161,7 +161,7 @@ modernisation; (3) the VMTK feed + graceful degradation.
   only — no `vtkMRMLAbstractDisplayableManager` in VascularTerritories;
   no `vtkMRMLMarkupsFiducialNode` persisted by the annotation path.
 - [review] Status/label rendered as glyph + text, never colour alone
-  ([ADR-0010](0010-accessibility-and-i18n.md)).
+  ([ADR-0010](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0010-accessibility-and-i18n.md)).
 - [future] Cross-module locator unification (#572) as a candidate
   consumer of the vessel highlight.
 - [future] The Auto/Couinaud path modernisation, if ever taken off its
