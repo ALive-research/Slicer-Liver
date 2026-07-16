@@ -103,6 +103,17 @@ set(_vascterr_pytest_files
   # invariants need LayerDMLib so they SKIP bare and RUN launched, mirroring
   # the 3D placement suite (ADR-0027).
   test_territories_slice_pipeline.py
+  # ADR-0037 Stage-3 -- the VMTK centerline feed off the annotation carrier
+  # (§Decision 4): the transient-markups builder maps carrier points ->
+  # a fiducial payload (same count/coords/ORDER; one inlet at index 0,
+  # selected == False); after extraction NO fiducial persists; the
+  # extraction action follows the moduleNames() guard (disabled + tooltip
+  # when SlicerVMTK absent, placement/table stay live); N territories ->
+  # N transient nodes.  The pure builder core RUNS BARE; the lifecycle /
+  # guard / per-territory invariants need the module Logic + a live scene
+  # so they SKIP-PENDING bare and RUN launched; the REAL extraction wiring
+  # is SlicerVMTK-env-gated and skips cleanly off that image (ADR-0027).
+  test_territories_vmtk_feed.py
 )
 
 foreach(_pytest_file IN LISTS _vascterr_pytest_files)

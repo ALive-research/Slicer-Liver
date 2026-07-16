@@ -258,6 +258,11 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     self.ui.ColorPickerButton.connect('colorChanged(QColor)', self.onColorChanged)
     self.ui.showHideButton.connect('clicked(bool)', self.onShowHideButton)
 
+    # ADR-0037 §Decision 4 graceful degradation: disable ONLY the extraction
+    # action (with an explaining tooltip) when SlicerVMTK is absent; placement
+    # + the table stay live (the legacy VMTK-hard-gate on placement is gone).
+    self.updateExtractionActionEnablement()
+
     #self.enableWidgetButtons(False)
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
@@ -438,8 +443,12 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     return node
 
   def enableWidgetButtons(self, state):
-    self.ui.addSegmentationButton.setEnabled(state)
-    self.ui.addCenterlineSegmentButton.setEnabled(state)
+    # The extraction actions additionally require SlicerVMTK (ADR-0037
+    # §Decision 4): never enable them when the extractor is absent, even if
+    # the rest of the panel arms.
+    extractionState = state and self.logic.extractionActionEnabled()
+    self.ui.addSegmentationButton.setEnabled(extractionState)
+    self.ui.addCenterlineSegmentButton.setEnabled(extractionState)
     self.ui.calculateVascularTerritoryMapButton.setEnabled(state)
     self.ui.inputSurfaceSelector.setEnabled(state)
     self.ui.vascularTerritoryId.setEnabled(state)
@@ -768,6 +777,22 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     if(colorIndex > 0):
       self.colormap.SetColor(colorIndex, color.redF(), color.greenF(), color.blueF()) #Update index color in colormap.
 
+  def updateExtractionActionEnablement(self):
+    """Enable/disable the centerline-extraction action from the VMTK guard.
+
+    ADR-0037 §Decision 4: the extraction action follows
+    ``VascularTerritoriesLogic.extractionActionEnabled()`` (the SlicerVMTK
+    ``ExtractCenterline`` module guard).  When disabled the button carries an
+    explaining tooltip; placement + the table are untouched.
+    """
+    enabled = self.logic.extractionActionEnabled()
+    tooltip = "" if enabled else (
+      "Centerline extraction needs the SlicerVMTK extension "
+      "(ExtractCenterline), which is not installed.")
+    for button in (self.ui.addCenterlineSegmentButton, self.ui.addSegmentationButton):
+      button.setEnabled(enabled)
+      button.setToolTip(tooltip)
+
   def onAddCenterlineButton(self):
     self.onAddCenterlineSegment()
 
@@ -775,16 +800,30 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     self.onAddCenterlineSegment(addSegmentationInsteadOfLine = True)
 
   def onAddCenterlineSegment(self, addSegmentationInsteadOfLine = False):
-    # ADR-0037 §Decision 4: the VMTK centerline feed is rewired off Slicer
-    # markups onto the annotation carrier in Stage 3 -- the extraction call
-    # builds a TRANSIENT fiducial node from the carrier's points inside the
-    # call and discards it.  With the Stage-2 markups-selector retirement the
-    # legacy markups-sourced feed is gone; the extraction action is inert
-    # until the Stage-3 carrier feed lands.
+    # ADR-0037 §Decision 4: the VMTK centerline feed reads the annotation
+    # carrier's per-territory points, builds a TRANSIENT fiducial node inside
+    # the extraction call, and discards it -- no persistent markups.  When
+    # SlicerVMTK is absent the action is disabled upstream, so this only runs
+    # with the extractor present.
     del addSegmentationInsteadOfLine
-    slicer.util.errorDisplay(
-      "Centerline extraction from the annotation carrier is not available "
-      "yet -- it lands with the VMTK feed transition (ADR-0037 Stage 3).")
+    if not self.logic.extractionActionEnabled():
+      # Belt-and-braces: the action is disabled when VMTK is absent, but
+      # guard here too so a programmatic call degrades rather than crashing.
+      slicer.util.errorDisplay(
+        "Centerline extraction needs the SlicerVMTK extension "
+        "(ExtractCenterline), which is not installed (ADR-0037 §Decision 4).")
+      return
+    carrier = self._ensureAnnotationCarrier()
+    if carrier is None:
+      return
+    surfaceNode = self.ui.inputSurfaceSelector.currentNode()
+    slicer.app.pauseRender()
+    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+    try:
+      self.logic.extractCenterlines(carrier, surfaceNode, "")
+    finally:
+      slicer.app.resumeRender()
+      qt.QApplication.restoreOverrideCursor()
 
   def mergePolydata(self, existingPolyData, newPolyData):
     combinedPolyData = vtk.vtkAppendPolyData()
@@ -818,10 +857,35 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
 
+class _SeedsFirstCenterlineExtractor:
+  """Adapt SlicerVMTK's surface-first extractor to a seeds-first call (ADR-0037 §Decision 4).
+
+  The Stage-3 feed drives extraction with the transient seeds node first
+  (``extractCenterline(seedsNode, surfacePolyData)``) because the annotation
+  carrier is the source of truth.  SlicerVMTK's
+  ``ExtractCenterlineLogic.extractCenterline(surfacePolyData,
+  endPointsMarkupsNode)`` takes the surface first, so this thin adapter flips
+  the argument order.  It is created lazily inside ``getCenterlineLogic`` --
+  the invariant tests monkeypatch that seam with their own stub, so the feed's
+  transient-node / per-territory lifecycle never depends on SlicerVMTK.
+  """
+
+  def __init__(self, vmtkLogic):
+    self._vmtkLogic = vmtkLogic
+
+  def extractCenterline(self, seedsNode, surfacePolyData, *args, **kwargs):
+    return self._vmtkLogic.extractCenterline(surfacePolyData, seedsNode, *args, **kwargs)
+
+
 # VascularTerritoriesLogic
 #
 
 class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
+
+  # The carrier node-reference role holding Stage-3 extracted centerline
+  # models (ADR-0037 §Decision 4); paired with the ``Groupings`` map keyed on
+  # the same centerline node ID.
+  CENTERLINE_REFERENCE_ROLE = "CenterlineRefs"
 
   def __init__(self):
     ScriptedLoadableModuleLogic.__init__(self)
@@ -841,14 +905,165 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
     module_name = 'ExtractCenterline'
     return module_name in slicer.util.moduleNames()
 
-  def getCenterlineLogic(self):
+  def extractionActionEnabled(self):
+    """Whether the centerline-extraction action is enabled (ADR-0037 §Decision 4).
+
+    Mirrors the ``ExtractCenterline`` module guard: True iff SlicerVMTK is
+    installed.  When False the widget disables ONLY the extraction action
+    (with an explaining tooltip) while placement + the table stay live --
+    the legacy VMTK-hard-gate on placement is gone (ADR-0037 §Decision 4).
     """
-    Get the centerline logic. If the logic wasn't yet instantiated it does it
+    return bool(self.check_module_Extract_Centerline_installed())
+
+  def getCenterlineLogic(self):
+    """Return the seeds-first centerline extractor adapter (ADR-0037 §Decision 4).
+
+    The Stage-3 feed drives the extractor with the TRANSIENT fiducial node
+    first (``extractCenterline(seedsNode, surfacePolyData)``): the annotation
+    carrier is the source of truth, so the seeds lead the call.  SlicerVMTK's
+    ``ExtractCenterlineLogic.extractCenterline`` takes the surface first, so
+    this wraps it in a thin adapter that flips the argument order -- keeping
+    the feed's carrier-first convention while driving the real VMTK filter
+    correctly.  The adapter is the monkeypatch seam the Stage-3 invariant
+    tests replace with a stub, so the feed never depends on SlicerVMTK for
+    the transient-node / per-territory lifecycle invariants.
     """
     from ExtractCenterline import ExtractCenterlineLogic
     if self.centerlineProcessingLogic is None:
-      self.centerlineProcessingLogic = ExtractCenterlineLogic()
+      self.centerlineProcessingLogic = _SeedsFirstCenterlineExtractor(ExtractCenterlineLogic())
     return self.centerlineProcessingLogic
+
+  def extractCenterlines(self, carrier, surfaceNode, segmentId):
+    """Feed the carrier's per-territory annotation points to VMTK (ADR-0037 §Decision 4).
+
+    For each surgeon-named territory carrying points, builds a TRANSIENT
+    ``vtkMRMLMarkupsFiducialNode`` from the carrier's ordered points (via the
+    pure ``build_seed_payload`` core, preserving the start-endpoint
+    ``selected`` convention), runs the centerline extractor over the
+    decimated input surface, wires the resulting centerline model into the
+    carrier's ``CenterlineRefs`` node-reference role + ``Groupings`` map
+    (keyed to the territory id -- the Stage-4 territory-map contract), and
+    REMOVES the transient node.  No persistent markups survive (ADR-0037 /
+    ADR-0014).  One extractor invocation + one transient node PER TERRITORY,
+    never a merged node.
+
+    :param carrier: the ``vtkMRMLCustomTerritoriesNode`` annotation carrier.
+    :param surfaceNode: the closed-surface model/segmentation node the
+        centerline is extracted over.
+    :param segmentId: a single territory id to extract, or the empty string
+        to extract every territory carrying points.
+    """
+    if carrier is None:
+      return
+
+    territoryIds = list(carrier.GetAnnotationTerritoryIds())
+    if segmentId:
+      territoryIds = [tid for tid in territoryIds if tid == segmentId]
+
+    # Decimate the input surface once; every territory shares the same input
+    # mesh.  Best-effort: a missing/empty surface still lets the
+    # transient-node lifecycle run (the extractor stub tolerates it), so the
+    # feed degrades rather than crashing.
+    surfacePolyData = self._preprocessedSurface(surfaceNode)
+
+    extractor = self.getCenterlineLogic()
+    for territoryId in territoryIds:
+      count = carrier.GetNumberOfAnnotationPoints(territoryId)
+      if count <= 0:
+        continue
+      points = []
+      for i in range(count):
+        p = carrier.GetNthAnnotationPoint(territoryId, i)
+        points.append((p[0], p[1], p[2]))
+      self._extractOneTerritory(carrier, extractor, surfacePolyData, territoryId, points)
+
+  def _preprocessedSurface(self, surfaceNode):
+    """Return the decimated input-surface polydata, or ``None`` on any failure."""
+    if surfaceNode is None:
+      return None
+    try:
+      surfacePolyData = self.polyDataFromNode(surfaceNode, "")
+      if not surfacePolyData or surfacePolyData.GetNumberOfPoints() == 0:
+        return None
+      return self.preprocessAndDecimate(surfacePolyData)
+    except Exception:  # noqa: BLE001 - degrade gracefully when preprocessing fails
+      logging.warning(
+        "VascularTerritories: input-surface preprocessing failed -- the "
+        "centerline feed proceeds without a decimated surface.")
+      return None
+
+  def _extractOneTerritory(self, carrier, extractor, surfacePolyData, territoryId, points):
+    """Build a transient fiducial, extract, wire the output, tear the node down."""
+    from VascularTerritoriesLib.TransientVmtkSeeds import build_seed_payload
+    payload = build_seed_payload(points)
+    seedsNode = self._buildTransientFiducial(payload)
+    try:
+      # Carrier-first call convention (ADR-0037 §Decision 4); the adapter
+      # returned by getCenterlineLogic flips to SlicerVMTK's surface-first
+      # signature for the real run.
+      result = extractor.extractCenterline(seedsNode, surfacePolyData)
+      self._wireCenterlineOutput(carrier, territoryId, result)
+    finally:
+      slicer.mrmlScene.RemoveNode(seedsNode)
+
+  def _buildTransientFiducial(self, payload):
+    """Create a throwaway fiducial node from a seed payload (ADR-0037 §Decision 4).
+
+    Adds each ``(x, y, z, selected)`` seed IN ORDER; the inlet (index 0,
+    ``selected == False``) becomes the unselected control point SlicerVMTK
+    treats as the start endpoint.  The caller REMOVES the node after
+    extraction -- no persistent markups (ADR-0037 / ADR-0014).
+    """
+    node = slicer.mrmlScene.AddNewNodeByClass(
+      "vtkMRMLMarkupsFiducialNode", "TerritoryCenterlineSeeds")
+    for x, y, z, selected in payload:
+      index = node.AddControlPoint(vtk.vtkVector3d(x, y, z))
+      node.SetNthControlPointSelected(index, bool(selected))
+    return node
+
+  def getCenterlineReferenceIDs(self, carrier):
+    """The centerline model node IDs referenced by ``carrier`` (ADR-0037 §Decision 4).
+
+    Reads the ``CenterlineRefs`` node-reference role on the annotation
+    carrier -- the clean accessor for the Stage-3 extraction output, keeping
+    the wrapper/carrier reference idiom (ADR-0014).  Returns a list in
+    reference order.
+    """
+    role = self.CENTERLINE_REFERENCE_ROLE
+    return [carrier.GetNthNodeReferenceID(role, i)
+            for i in range(carrier.GetNumberOfNodeReferences(role))]
+
+  def _wireCenterlineOutput(self, carrier, territoryId, result):
+    """Wire an extracted centerline into ``CenterlineRefs`` + ``Groupings``.
+
+    Preserves the Stage-4 territory-map contract: the centerline model is
+    tagged with the territory id, referenced from the carrier's
+    ``CenterlineRefs`` role, and grouped under the territory id in
+    ``Groupings`` (centerline node ID -> territory id) so the downstream
+    watershed scan resolves it.  A ``None`` result (the extractor stubbed to
+    a no-op) wires nothing -- the transient-node lifecycle is unaffected.
+    """
+    centerlinePolyData = self._centerlinePolyDataFromResult(result)
+    if centerlinePolyData is None:
+      return
+    modelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "TerritoryCenterline")
+    modelNode.SetAndObserveMesh(centerlinePolyData)
+    modelNode.SetAttribute("VascularTerritories.VascTerrId", territoryId)
+    carrier.AddNodeReferenceID(self.CENTERLINE_REFERENCE_ROLE, modelNode.GetID())
+    carrier.SetGrouping(modelNode.GetID(), territoryId)
+    return modelNode
+
+  def _centerlinePolyDataFromResult(self, result):
+    """Extract the centerline polydata from an extractor return value.
+
+    SlicerVMTK returns ``(centerlinePolyData, voronoiDiagramPolyData)``; a
+    stub may return ``None`` or a bare polydata.  Tolerates each shape.
+    """
+    if result is None:
+      return None
+    if isinstance(result, (tuple, list)):
+      return result[0] if result else None
+    return result
 
   def setDefaultParameters(self, parameterNode):
     """
