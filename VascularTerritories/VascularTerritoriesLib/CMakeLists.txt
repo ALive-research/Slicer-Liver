@@ -24,6 +24,7 @@ set(VascularTerritoriesLib_PYTHON_SCRIPTS
   VesselSurfacePick.py
   VesselHighlightPipeline.py
   TerritoryPlacementPipeline.py
+  TerritoriesTableWidget.py
   )
 
 set(VascularTerritoriesLib_PYTHON_RESOURCES

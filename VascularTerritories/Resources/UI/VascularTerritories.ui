@@ -80,13 +80,6 @@
           </property>
          </widget>
         </item>
-        <item row="4" column="0">
-         <widget class="QLabel" name="label_3">
-          <property name="text">
-           <string>Vessel points:</string>
-          </property>
-         </widget>
-        </item>
         <item row="5" column="2" colspan="3">
          <widget class="QPushButton" name="addCenterlineSegmentButton">
           <property name="enabled">
@@ -127,30 +120,6 @@
           </property>
          </widget>
         </item>
-        <item row="4" column="1" colspan="3">
-         <widget class="qMRMLNodeComboBox" name="endPointsMarkupsSelector">
-          <property name="nodeTypes">
-           <stringlist>
-            <string>vtkMRMLMarkupsFiducialNode</string>
-           </stringlist>
-          </property>
-          <property name="showChildNodeTypes">
-           <bool>false</bool>
-          </property>
-          <property name="baseName">
-           <string>CenterlineSegment</string>
-          </property>
-          <property name="noneEnabled">
-           <bool>true</bool>
-          </property>
-          <property name="editEnabled">
-           <bool>true</bool>
-          </property>
-          <property name="renameEnabled">
-           <bool>true</bool>
-          </property>
-         </widget>
-        </item>
         <item row="2" column="0">
          <widget class="QLabel" name="label">
           <property name="text">
@@ -171,19 +140,6 @@
           </property>
           <property name="segmentationNodeSelectorVisible">
            <bool>false</bool>
-          </property>
-         </widget>
-        </item>
-        <item row="4" column="4">
-         <widget class="qSlicerMarkupsPlaceWidget" name="endPointsMarkupsPlaceWidget">
-          <property name="maximumSize">
-           <size>
-            <width>15000</width>
-            <height>40</height>
-           </size>
-          </property>
-          <property name="placeMultipleMarkups">
-           <enum>qSlicerMarkupsPlaceWidget::ForcePlaceMultipleMarkups</enum>
           </property>
          </widget>
         </item>
@@ -264,11 +220,6 @@
    <container>1</container>
   </customwidget>
   <customwidget>
-   <class>qSlicerMarkupsPlaceWidget</class>
-   <extends>qSlicerWidget</extends>
-   <header>qSlicerMarkupsPlaceWidget.h</header>
-  </customwidget>
-  <customwidget>
    <class>qMRMLSegmentSelectorWidget</class>
    <extends>qMRMLWidget</extends>
    <header>qMRMLSegmentSelectorWidget.h</header>
@@ -302,38 +253,6 @@
  </customwidgets>
  <resources/>
  <connections>
-  <connection>
-   <sender>SegmentsWidget</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>endPointsMarkupsPlaceWidget</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>235</x>
-     <y>158</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>235</x>
-     <y>155</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>SegmentsWidget</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>endPointsMarkupsSelector</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>235</x>
-     <y>158</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>235</x>
-     <y>55</y>
-    </hint>
-   </hints>
-  </connection>
   <connection>
    <sender>SegmentsWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
@@ -379,22 +298,6 @@
     <hint type="destinationlabel">
      <x>235</x>
      <y>95</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>endPointsMarkupsSelector</sender>
-   <signal>currentNodeChanged(vtkMRMLNode*)</signal>
-   <receiver>endPointsMarkupsPlaceWidget</receiver>
-   <slot>setCurrentNode(vtkMRMLNode*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>163</x>
-     <y>110</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>382</x>
-     <y>110</y>
     </hint>
    </hints>
   </connection>

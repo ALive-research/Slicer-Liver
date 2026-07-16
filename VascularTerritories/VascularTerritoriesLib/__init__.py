@@ -39,6 +39,14 @@ except ImportError:  # pragma: no cover - LayerDMLib unreachable bare
     TerritoryPlacementPipeline = None
     registerTerritoryPlacementPipelineCreator = None
 
+# The Stage-2 annotation table widget (ADR-0037 §Decision 3) needs Qt
+# (``qt.QTableWidget``); guard it so the bare unit layer can still import the
+# package for the pure-VTK pick core alone.
+try:
+    from .TerritoriesTableWidget import TerritoriesTableWidget
+except ImportError:  # pragma: no cover - Qt unreachable bare
+    TerritoriesTableWidget = None
+
 __all__ = [
     "VesselSurfacePick",
     "closed_surface_polydata",
@@ -46,4 +54,5 @@ __all__ = [
     "registerVesselHighlightPipelineCreator",
     "TerritoryPlacementPipeline",
     "registerTerritoryPlacementPipelineCreator",
+    "TerritoriesTableWidget",
 ]

@@ -74,6 +74,14 @@ class TerritoryPlacementPipeline(_PipelineBase):
         self._carrier: Any | None = None
         self._territory_id: str | None = None
 
+        # Stage-2 arming (ADR-0037 §Decision 3).  An armed click appends one
+        # seed to the ACTIVE territory; a disarmed click adds nothing.  The
+        # arm state lives HERE (pipeline-managed), not on the interaction
+        # node -- there is no Slicer mouse mode.  The active territory
+        # overrides the ``SetCarrier`` binding for placement.
+        self._active_territory: str | None = None
+        self._armed: bool = False
+
         # Injectable pick core (bare unit layer feeds a known surface).
         self._pick: VesselSurfacePick | None = None
 
@@ -100,6 +108,34 @@ class TerritoryPlacementPipeline(_PipelineBase):
 
     def GetCarrier(self) -> Any | None:  # noqa: N802 - VTK verb
         return self._carrier
+
+    # ------------------------------------------------------------------ #
+    # Active-territory + arm seam (Stage 2, ADR-0037 §Decision 3)
+    # ------------------------------------------------------------------ #
+
+    def SetActiveTerritory(self, territoryId: str | None) -> None:  # noqa: N802 - VTK verb
+        """Set the territory an armed click appends into (the ACTIVE one)."""
+        self._active_territory = territoryId
+
+    def GetActiveTerritory(self) -> str | None:  # noqa: N802 - VTK verb
+        return self._active_territory
+
+    def Arm(self) -> None:  # noqa: N802 - VTK verb
+        """Enable add-on-click into the active territory ("Add Territory" / "Add seeds")."""
+        self._armed = True
+
+    def Disarm(self) -> None:  # noqa: N802 - VTK verb
+        """Disable add-on-click ("Done" / Esc).  A click then adds nothing."""
+        self._armed = False
+
+    def IsArmed(self) -> bool:  # noqa: N802 - VTK verb
+        return self._armed
+
+    def _placement_territory(self) -> str | None:
+        """The territory a click appends into: the active one, else the bound one."""
+        if self._active_territory is not None:
+            return self._active_territory
+        return self._territory_id
 
     def _safe_get_renderer(self) -> Any | None:
         return self._renderer
@@ -176,8 +212,15 @@ class TerritoryPlacementPipeline(_PipelineBase):
 
             _territory, _index, distance2 = self._nearest_point_in_display(renderer, eventData)
             if distance2 <= POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX:
-                # Press near an existing point -> grab it for a drag.
+                # Press near an existing point -> grab it for a drag (an edit
+                # gesture; independent of the arm state).
                 return True, distance2
+
+            # Add-on-click requires an armed pipeline (ADR-0037 §Decision 3):
+            # a disarmed press away from any point leaves the gesture to the
+            # camera.
+            if not self._armed:
+                return False, sys.float_info.max
 
             # Press away from any point: claim only when the ray hits the
             # surface (add-on-click); otherwise leave the press to the camera.
@@ -201,10 +244,15 @@ class TerritoryPlacementPipeline(_PipelineBase):
                     return False
                 territory, index, distance2 = self._nearest_point_in_display(renderer, eventData)
                 if territory is not None and index is not None and distance2 <= POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX:
-                    # Grab the existing point for a drag.
+                    # Grab the existing point for a drag (edit gesture).
                     self._drag_target = (territory, index)
                     return True
-                # Add-on-click: snap to the surface and add exactly one point.
+                # Add-on-click requires an armed pipeline (ADR-0037
+                # §Decision 3): a disarmed click adds nothing.
+                if not self._armed:
+                    return False
+                # Snap to the surface and add exactly one point to the active
+                # territory.
                 world = self._event_world_on_surface(renderer, eventData)
                 if world is None:
                     return False
@@ -243,9 +291,10 @@ class TerritoryPlacementPipeline(_PipelineBase):
 
     def _add_point(self, world: Any) -> None:
         carrier = self._carrier
-        if carrier is None or self._territory_id is None:
+        territory = self._placement_territory()
+        if carrier is None or territory is None:
             return
-        carrier.AddAnnotationPoint(self._territory_id, float(world[0]), float(world[1]), float(world[2]))
+        carrier.AddAnnotationPoint(territory, float(world[0]), float(world[1]), float(world[2]))
 
     def _relocate_grabbed_point(self, world: Any) -> None:
         carrier = self._carrier
@@ -286,7 +335,7 @@ class TerritoryPlacementPipeline(_PipelineBase):
         is no carrier / territory / point.
         """
         carrier = self._carrier
-        territory = self._territory_id
+        territory = self._placement_territory()
         if carrier is None or territory is None:
             return None, None, sys.float_info.max
         count = carrier.GetNumberOfAnnotationPoints(territory)

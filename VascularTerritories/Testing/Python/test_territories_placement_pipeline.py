@@ -249,6 +249,12 @@ def test_click_adds_exactly_one_surface_snapped_point(monkeypatch):
     pipeline = TerritoryPlacementPipeline()
     carrier = _make_carrier_or_skip(slicer)
     _wire_pipeline_or_skip(slicer, pipeline, carrier, monkeypatch)
+    # ADR-0037 §Decision 3 arming model: add-on-click requires an armed
+    # pipeline (Stage-2 addition).  Arm into the wired territory before the
+    # click; the invariant pinned here (one surface-snapped point) is
+    # unchanged.
+    if hasattr(pipeline, "Arm"):
+        pipeline.Arm()
 
     before = carrier.GetNumberOfAnnotationPoints(TERRITORY_A)
     click = _Event(vtk.vtkCommand.LeftButtonPressEvent)

@@ -86,6 +86,16 @@ set(_vascterr_pytest_files
   # TerritoryPlacementPipeline + LayerDMLib; SKIP bare, RUN launched,
   # mirroring the ControlPolygon/LiverBezier interaction suites (ADR-0027).
   test_territories_placement_pipeline.py
+  # ADR-0037 Stage-2 -- the annotation TABLE UI (§Decision 3 / §3 table):
+  # a Python-composed custom QTableWidget over the carrier, header row per
+  # territory + child row per seed; arm-through-the-Pipeline placement into
+  # the ACTIVE territory; delete-row/delete-pick convergence; glyph+text
+  # completeness (ADR-0010); selector retirement with the highlight wiring
+  # surviving and no persisted fiducial.  Needs Qt + the wrapped carrier +
+  # LayerDMLib; import-/hasattr-guarded on the not-yet-existing table widget
+  # + carrier display slot + Pipeline arm seam, they SKIP-PENDING bare and
+  # RUN launched once the seam lands (ADR-0027).
+  test_territories_table.py
 )
 
 foreach(_pytest_file IN LISTS _vascterr_pytest_files)
