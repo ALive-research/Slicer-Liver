@@ -1042,16 +1042,58 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
     ``Groupings`` (centerline node ID -> territory id) so the downstream
     watershed scan resolves it.  A ``None`` result (the extractor stubbed to
     a no-op) wires nothing -- the transient-node lifecycle is unaffected.
+
+    Re-extraction is IDEMPOTENT (ADR-0037 §Decision 4 -- the territory map is
+    one centerline per territory): the territory's PRIOR centerline state is
+    cleared BEFORE the new output is wired, so any number of re-extractions
+    leaves exactly one ``CenterlineRefs`` entry, one ``TerritoryCenterline``
+    model, and a stable ``Groupings`` count for that territory.  The prior
+    model is removed from the scene, not orphaned.
     """
     centerlinePolyData = self._centerlinePolyDataFromResult(result)
     if centerlinePolyData is None:
       return
+    # Clear this territory's prior centerline(s) before wiring the new one so
+    # re-extraction REPLACES rather than APPENDS (no duplicate refs, no orphan
+    # models, stable Groupings count).  The carrier's grouping map is keyed on
+    # the centerline node ID and exposes no per-key removal, so the map is
+    # rebuilt from the surviving references after the prior model is dropped.
+    self._clearTerritoryCenterlines(carrier, territoryId)
     modelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "TerritoryCenterline")
     modelNode.SetAndObserveMesh(centerlinePolyData)
     modelNode.SetAttribute("VascularTerritories.VascTerrId", territoryId)
     carrier.AddNodeReferenceID(self.CENTERLINE_REFERENCE_ROLE, modelNode.GetID())
     carrier.SetGrouping(modelNode.GetID(), territoryId)
     return modelNode
+
+  def _clearTerritoryCenterlines(self, carrier, territoryId):
+    """Drop ``territoryId``'s prior centerline refs + models + grouping entries.
+
+    Removes every ``CenterlineRefs`` reference grouped under ``territoryId``,
+    deletes the referenced model node from the scene, and rebuilds the
+    ``Groupings`` map from the surviving references.  ``vtkMRMLCustomTerritories
+    Node`` exposes only ``SetGrouping`` / ``ClearGroupings`` (no per-key
+    removal), so the map is cleared and repopulated from the references that
+    remain -- keeping the ID-keyed grouping map consistent with the refs.
+    """
+    role = self.CENTERLINE_REFERENCE_ROLE
+    # Partition the existing refs in one pass: this territory's prior models
+    # are removed from the scene; every other (id -> territory) grouping is
+    # snapshotted so the rebuilt map re-uses the ids the cleared map held.
+    survivors = []
+    for centerlineId in self.getCenterlineReferenceIDs(carrier):
+      groupTerritoryId = carrier.GetGrouping(centerlineId)
+      if groupTerritoryId == territoryId:
+        priorModel = slicer.mrmlScene.GetNodeByID(centerlineId)
+        if priorModel is not None:
+          slicer.mrmlScene.RemoveNode(priorModel)
+      else:
+        survivors.append((centerlineId, groupTerritoryId))
+    carrier.RemoveNodeReferenceIDs(role)
+    carrier.ClearGroupings()
+    for centerlineId, groupTerritoryId in survivors:
+      carrier.AddNodeReferenceID(role, centerlineId)
+      carrier.SetGrouping(centerlineId, groupTerritoryId)
 
   def _centerlinePolyDataFromResult(self, result):
     """Extract the centerline polydata from an extractor return value.
