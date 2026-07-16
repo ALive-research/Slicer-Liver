@@ -155,7 +155,6 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     self.logic = None
     self._parameterNode = None
     self._updatingGUIFromParameterNode = False
-    self._updatingGUIFromSegmentationNode = False
     # Vessel-adhering-highlight wiring (ADR-0037).  A single scene-resident
     # ``vtkMRMLTerritoriesHighlightDisplayNode`` whose ``pickSurface``
     # reference tracks the input segmentation and whose Visibility gates
@@ -216,12 +215,10 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     # Connections
     self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
-    self.ui.inputSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.updateParameterNodeFromGUI)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
     self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.segmentationNodeSelected)
     self.ui.selectedVascularTerritorySegmId.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
-    self.ui.selectedVascularTerritorySegmId.connect('currentNodeChanged(bool)', self.vascular_territory_segmentationNodeSelected)
 
     # Vessel-adhering-highlight wiring (ADR-0036 / ADR-0037).  Keep the
     # highlight node's pickSurface aimed at the selected input segmentation.
@@ -254,9 +251,6 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # Buttons
     self.ui.calculateVascularTerritoryMapButton.connect('clicked(bool)', self.onCalculateVascularTerritoryMapButton)
     self.ui.addCenterlineSegmentButton.connect('clicked(bool)', self.onAddCenterlineButton)
-    self.ui.addSegmentationButton.connect('clicked(bool)', self.onAddSegmentationButton)
-    self.ui.ColorPickerButton.connect('colorChanged(QColor)', self.onColorChanged)
-    self.ui.showHideButton.connect('clicked(bool)', self.onShowHideButton)
 
     # ADR-0037 §Decision 4 graceful degradation: disable ONLY the extraction
     # action (with an explaining tooltip) when SlicerVMTK is absent; placement
@@ -266,25 +260,6 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     #self.enableWidgetButtons(False)
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
-
-  def _registerVesselHighlightPipeline(self):
-    """Register the vessel-adhering-highlight LayerDM Pipeline creator.
-
-    ADR-0013 §5 call 3.  Idempotent; a missing LayerDMLib is a real
-    configuration error under ADR-0002 so it logs at ``critical``, but the
-    rest of widget setup continues.
-    """
-    try:
-      from VascularTerritoriesLib import registerVesselHighlightPipelineCreator
-      if registerVesselHighlightPipelineCreator is None:
-        raise ImportError("registerVesselHighlightPipelineCreator unavailable")
-      registerVesselHighlightPipelineCreator()
-    except ImportError as exc:
-      logging.critical(
-        "VascularTerritories: vessel-adhering-highlight LayerDM Pipeline "
-        "creator not registered (%s) -- the highlight is disabled in this "
-        "session.  Loading the SlicerLayerDisplayableManager extension is "
-        "required for the Pipeline path (ADR-0013).", exc)
 
   def _registerTerritoryPlacementPipeline(self):
     """Register the annotation placement/edit LayerDM Pipeline creator.
@@ -443,16 +418,13 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     return node
 
   def enableWidgetButtons(self, state):
-    # The extraction actions additionally require SlicerVMTK (ADR-0037
-    # §Decision 4): never enable them when the extractor is absent, even if
-    # the rest of the panel arms.
+    # The extraction action additionally requires SlicerVMTK (ADR-0037
+    # §Decision 4): never enable it when the extractor is absent, even if the
+    # rest of the panel arms.
     extractionState = state and self.logic.extractionActionEnabled()
-    self.ui.addSegmentationButton.setEnabled(extractionState)
     self.ui.addCenterlineSegmentButton.setEnabled(extractionState)
     self.ui.calculateVascularTerritoryMapButton.setEnabled(state)
     self.ui.inputSurfaceSelector.setEnabled(state)
-    self.ui.vascularTerritoryId.setEnabled(state)
-    self.ui.showHideButton.setEnabled(state)
 
   def segmentationNodeSelected(self):
     self.ui.SegmentationShow3DButton.setEnabled(True)
@@ -463,124 +435,6 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
       return
     displayNode = segmentationNode.GetDisplayNode()
     displayNode.SetOpacity3D(0.3)
-    self.updateShowHideButtonText()
-
-  def onShowHideButton(self):
-    displayNode, segmentId = self.getDisplayNodeAndSegmentId()
-    if displayNode is None:
-      return
-    if self.ui.showHideButton.isChecked() is True:
-      displayNode.SetSegmentVisibility(segmentId, True)
-    else:
-      displayNode.SetSegmentVisibility(segmentId, False)
-    self.updateShowHideButtonText()
-
-  def refreshShowHideButton(self):
-    displayNode, segmentId = self.getDisplayNodeAndSegmentId()
-    if displayNode is None:
-      return
-    self.ui.showHideButton.setChecked(displayNode.GetSegmentVisibility(segmentId))
-    self.updateShowHideButtonText()
-
-  def getDisplayNodeAndSegmentId(self):
-    surface = self.ui.inputSurfaceSelector.currentNode()
-    if surface is None:
-      return None, None
-    displayNode = surface.GetDisplayNode()
-    if displayNode is None:
-      return None, None
-    return displayNode, self.ui.inputSegmentSelectorWidget.currentSegmentID()
-
-  def updateShowHideButtonText(self):
-    if self.ui.showHideButton.isChecked() is True:
-      self.ui.showHideButton.setText('Hide')
-      self.ui.showHideButton.setIcon(qt.QIcon("Icons/VisibleOn.png"))
-    else:
-      self.ui.showHideButton.setText('Show')
-      self.ui.showHideButton.setIcon(qt.QIcon("Icons/VisibleOff.png"))
-
-  def vascular_territory_segmentationNodeSelected(self):
-    self._updatingGUIFromSegmentationNode = True
-    count = self.ui.selectedVascularTerritorySegmId.nodeCount()
-    if count <= 0:
-      self.enableWidgetButtons(False)
-      self._updatingGUIFromSegmentationNode = False
-      return
-    else:
-      self.enableWidgetButtons(True)
-
-    segmId = self.ui.selectedVascularTerritorySegmId.currentNode().GetAttribute("VascularTerritories.SegmentationId")
-
-    vasc_terr_segmentationNode = self.ui.selectedVascularTerritorySegmId.currentNode()
-    vascularTerrSegm = vasc_terr_segmentationNode.GetSegmentation()
-
-    if vasc_terr_segmentationNode is None:
-      logging.warning('No vascular territory segmentationNode')
-      self._updatingGUIFromSegmentationNode = False
-      return
-    if not segmId:
-      segmId = count
-      firstSegmentID = 'Vascular Territory ID 1'
-      vascularTerrSegm.AddEmptySegment(firstSegmentID, firstSegmentID)
-
-    vasc_terr_segmentationNode.SetAttribute("VascularTerritories.SegmentationId", str(segmId))
-
-    segmentationNodeName = vasc_terr_segmentationNode.GetName()
-    vasc_terr_ID_combox = self.ui.vascularTerritoryId
-
-    if 'Vascular_Territory_Segmentation' in segmentationNodeName:
-      self.enableWidgetButtons(True)
-    else:
-      self.enableWidgetButtons(False)
-
-    self.updateVascTerrList(vasc_terr_ID_combox, vasc_terr_segmentationNode)
-    self.ui.vascularTerritoryId.setCurrentIndex(1)
-    displayNode = vasc_terr_segmentationNode.GetDisplayNode()
-    if displayNode:
-      displayNode.SetOpacity3D(0.3)
-    self.updateShowHideButtonText()
-    # Visualisation of centerline segments
-    centerlineSegments = slicer.util.getNodesByClass('vtkMRMLModelNode')
-    for centerlineSegment in centerlineSegments:
-      SegmIdAttribute = centerlineSegment.GetAttribute("VascularTerritories.SegmentationId")
-      if SegmIdAttribute == segmId:
-        centerlineSegment.GetDisplayNode().VisibilityOn()
-      else:
-        centerlineSegment.GetDisplayNode().VisibilityOff()
-    # Visualisation of Vascular Territories
-    segmentationNodes = slicer.util.getNodesByClass('vtkMRMLSegmentationNode')
-    self._updatingGUIFromSegmentationNode = False
-    for node in segmentationNodes:
-      attribute = node.GetAttribute("VascularTerritories.SegmentationId")
-      if attribute is not None:
-        if node.GetDisplayNode():
-          node.GetDisplayNode().SetAllSegmentsVisibility(False)
-
-
-  def updateVascTerrList(self, vasc_terr_ID_list, vascular_territory_segm_node):
-    segmentNames = []
-    segmentIds = vascular_territory_segm_node.GetSegmentation().GetSegmentIDs()
-    for id in segmentIds:
-      segmentName = vascular_territory_segm_node.GetSegmentation().GetSegment(id).GetName()
-      segmentNames.append(segmentName)
-
-    vasc_terr_ID_list.blockSignals(True)
-    vasc_terr_ID_list.clear()
-    initString = 'Create new territory ID'
-    vasc_terr_ID_list.addItem(initString)
-    firstSegmentName = 'Vascular Territory ID 1'
-    if firstSegmentName not in segmentNames:
-      # No vascular territory segmentations
-      return
-    #Start populating Vascular Territory list
-    index = 0
-    for nameString in segmentNames:
-      index = index+1
-      vasc_terr_ID_list.addItem(nameString)
-      self.colormap.SetColorName(index, nameString)
-      vasc_terr_ID_list.setCurrentIndex(index)
-    vasc_terr_ID_list.setCurrentIndex(1)
-    vasc_terr_ID_list.blockSignals(False)
 
   def createColorMap(self):
 #    colorTableNodes = slicer.util.getNodes("SlicerLiverColorMap*")
@@ -691,9 +545,6 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # Update node selectors and sliders
     for nodeSelector, roleName in self.nodeSelectors:
         nodeSelector.setCurrentNode(self._parameterNode.GetNodeReference(roleName))
-    inputSurfaceNode = self._parameterNode.GetNodeReference("InputSurface")
-    if inputSurfaceNode and inputSurfaceNode.IsA("vtkMRMLSegmentationNode"):
-        self.ui.inputSegmentSelectorWidget.setCurrentSegmentID(self._parameterNode.GetParameter("InputSegmentID"))
     vascularTerritorySegmNode = self._parameterNode.GetNodeReference("VascularTerritorySegmentation")
     if vascularTerritorySegmNode and vascularTerritorySegmNode.IsA("vtkMRMLSegmentationNode"):
         self.enableWidgetButtons(True)
@@ -713,69 +564,12 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     for nodeSelector, roleName in self.nodeSelectors:
       self._parameterNode.SetNodeReferenceID(roleName, nodeSelector.currentNodeID)
 
-    inputSurfaceNode = self._parameterNode.GetNodeReference("InputSurface")
-    if inputSurfaceNode and inputSurfaceNode.IsA("vtkMRMLSegmentationNode"):
-        self._parameterNode.SetParameter("InputSegmentID", self.ui.inputSegmentSelectorWidget.currentSegmentID())
-
-    self.ui.inputSegmentSelectorWidget.setCurrentSegmentID(self._parameterNode.GetParameter("InputSegmentID"))
-    self.ui.inputSegmentSelectorWidget.setVisible(inputSurfaceNode and inputSurfaceNode.IsA("vtkMRMLSegmentationNode"))
-
     #    wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
 
     #    self._parameterNode.SetNodeReferenceID("InputVolume", self.ui.inputSelector.currentNodeID)
     #    self._parameterNode.SetNodeReferenceID("OutputVolume", self.ui.outputSelector.currentNodeID)
 
     #    self._parameterNode.EndModify(wasModified)
-
-  def getPreprocessedPolyData(self):
-    surface = self.ui.inputSurfaceSelector.currentNode()
-    segmentId = self.ui.inputSegmentSelectorWidget.currentSegmentID()
-
-    inputSurfacePolyData = self.logic.polyDataFromNode(surface, segmentId)
-    if not inputSurfacePolyData or inputSurfacePolyData.GetNumberOfPoints() == 0:
-        raise ValueError("Valid input surface is required")
-
-    preprocessedPolyData = self.logic.preprocessAndDecimate(inputSurfacePolyData)
-    return preprocessedPolyData
-
-  def createCenterlineNode(self, endPointsMarkupsNode):
-    nodeName = endPointsMarkupsNode.GetName()
-    centerlineModelNode = slicer.mrmlScene.GetNodeByID(nodeName)
-    if centerlineModelNode:
-      logging.info('Adding to existing centerlineModelNode')
-      #slicer.mrmlScene.RemoveNode(centerlineModelNode)
-    else:
-      centerlineModelNode = slicer.mrmlScene.AddNewNodeByClassWithID('vtkMRMLModelNode', nodeName, nodeName)
-
-    if not centerlineModelNode:
-        raise ValueError('Error: Cannot create node: ', nodeName)
-
-    self.logic.copyIndex(endPointsMarkupsNode, centerlineModelNode)
-    return centerlineModelNode
-
-  def getCurrentColor(self):
-    color = [1, 1, 1, 1]
-    index = self.ui.vascularTerritoryId.currentIndex
-    if (index > 0):
-      self.colormap.GetColor(index, color)
-    del color[3:]
-    return color
-
-  def getCurrentColorQt(self):
-    color = self.getCurrentColor()
-    color255 = [int(i * 255) for i in color]
-    qtColor = qt.QColor(color255[0], color255[1], color255[2])
-    return qtColor
-
-  def useColorFromSelector(self, centerlineModelNode):
-    inputColor = self.getCurrentColorQt()
-    centerlineModelNode.GetDisplayNode().SetColor(inputColor.redF(), inputColor.greenF(), inputColor.blueF())
-
-  def onColorChanged(self):
-    colorIndex = self.ui.vascularTerritoryId.currentIndex
-    color = self.ui.ColorPickerButton.color
-    if(colorIndex > 0):
-      self.colormap.SetColor(colorIndex, color.redF(), color.greenF(), color.blueF()) #Update index color in colormap.
 
   def updateExtractionActionEnablement(self):
     """Enable/disable the centerline-extraction action from the VMTK guard.
@@ -789,23 +583,18 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     tooltip = "" if enabled else (
       "Centerline extraction needs the SlicerVMTK extension "
       "(ExtractCenterline), which is not installed.")
-    for button in (self.ui.addCenterlineSegmentButton, self.ui.addSegmentationButton):
-      button.setEnabled(enabled)
-      button.setToolTip(tooltip)
+    self.ui.addCenterlineSegmentButton.setEnabled(enabled)
+    self.ui.addCenterlineSegmentButton.setToolTip(tooltip)
 
   def onAddCenterlineButton(self):
     self.onAddCenterlineSegment()
 
-  def onAddSegmentationButton(self):
-    self.onAddCenterlineSegment(addSegmentationInsteadOfLine = True)
-
-  def onAddCenterlineSegment(self, addSegmentationInsteadOfLine = False):
+  def onAddCenterlineSegment(self):
     # ADR-0037 §Decision 4: the VMTK centerline feed reads the annotation
     # carrier's per-territory points, builds a TRANSIENT fiducial node inside
     # the extraction call, and discards it -- no persistent markups.  When
     # SlicerVMTK is absent the action is disabled upstream, so this only runs
     # with the extractor present.
-    del addSegmentationInsteadOfLine
     if not self.logic.extractionActionEnabled():
       # Belt-and-braces: the action is disabled when VMTK is absent, but
       # guard here too so a programmatic call degrades rather than crashing.
@@ -824,13 +613,6 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     finally:
       slicer.app.resumeRender()
       qt.QApplication.restoreOverrideCursor()
-
-  def mergePolydata(self, existingPolyData, newPolyData):
-    combinedPolyData = vtk.vtkAppendPolyData()
-    combinedPolyData.AddInputData(existingPolyData)
-    combinedPolyData.AddInputData(newPolyData)
-    combinedPolyData.Update()
-    return combinedPolyData.GetOutput()
 
   def onCalculateVascularTerritoryMapButton(self):
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
@@ -1150,9 +932,6 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
 
   def calculateVascularTerritoryMap(self, vascularTerritorySegmentationNode, refVolume, segmentation, centerlineModel, colormap):
     self.scl.calculateVascularTerritoryMap(vascularTerritorySegmentationNode, refVolume, segmentation, centerlineModel, colormap)
-
-  def copyIndex(self, endPointsMarkupsNode, centerlineModelNode):
-    centerlineModelNode.SetAttribute("VascularTerritories.VascTerrId", endPointsMarkupsNode.GetAttribute("VascularTerritories.VascTerrId"))
 
   def preprocessAndDecimate(self, surfacePolyData):
     processedPolyData = vtk.vtkPolyData()
