@@ -226,13 +226,15 @@ class TerritoryPlacementPipeline(_PipelineBase):
         production the carrier is resolved from the display node's reference
         (``_get_carrier``); this direct bind is the unit seam that keeps the
         edit math GL- and scene-free.
+
+        Observation goes through ``_ensure_carrier_observed`` (the single
+        ``_observed_carrier`` dedupe key), NOT a direct attach here -- else a
+        later ``_ensure_carrier_observed`` resolving the same carrier would
+        add a SECOND ModifiedEvent observer (double rebuild per Modified).
         """
-        if self._carrier is not None:
-            self._detach_observer(self._carrier)
         self._carrier = carrier
         self._territory_id = territoryId
-        if carrier is not None:
-            self._attach_observer(carrier)
+        self._ensure_carrier_observed()
 
     def GetCarrier(self) -> Any | None:  # noqa: N802 - VTK verb
         return self._get_carrier()

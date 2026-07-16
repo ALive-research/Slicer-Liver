@@ -2,28 +2,32 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 #
-# VascularTerritories vessel-adhering-highlight — Python install rules
-# for the pure-Python pick core (and, in later increments, the LayerDM
-# highlight pipeline).
+# VascularTerritories annotation + vessel-adhering-highlight — Python
+# install rules for the pure-Python pick core, the shared interaction
+# state, the LayerDM placement/highlight/slice pipelines, and the
+# annotation table widget (ADR-0037).
 #
 # Mirrors the ``<Module>Lib`` convention used by ``LiverResectionsLib``
 # and Slicer-core's ``MarkupsLib``: a Python sub-package staged
 # alongside the scripted module so it is importable at runtime and from
 # the bare unit layer.
 #
-# Layout:
-#
-# * ``VascularTerritoriesLib/__init__.py`` — re-exports the public
-#   pick-core class.
-# * ``VascularTerritoriesLib/VesselSurfacePick.py`` — the pure-VTK pick
-#   core (ADR-0004 Python pick math, ADR-0025 locator pattern).
+# EVERY runtime module MUST be listed below: ctkMacroCompilePythonScript
+# stages ONLY the listed scripts into the build/install tree, and the
+# package ``__init__`` swallows a missing-module ImportError (degrading
+# the feature to silently disabled).  A file present on disk but absent
+# here works in the source tree yet vanishes in an installed build.
 #-----------------------------------------------------------------------------
 
 set(VascularTerritoriesLib_PYTHON_SCRIPTS
   __init__.py
   VesselSurfacePick.py
+  VesselHighlightWiring.py
   VesselHighlightPipeline.py
+  TerritoryInteractionState.py
   TerritoryPlacementPipeline.py
+  TerritorySliceProjection.py
+  TerritorySlicePipeline.py
   TerritoriesTableWidget.py
   )
 

@@ -269,12 +269,18 @@ class TerritorySlicePipeline(_PipelineBase):
                 renderer.AddActor2D(self._seed_actor)
                 renderer.AddActor2D(self._ring_actor)
                 renderer.AddActor2D(self._highlight_actor)
-            # Renderer churn cleared the display handle; re-derive it from the
-            # base's retained display node (the reattach precedent).
+            # Renderer churn cleared the handles (cleanup nulled them to force
+            # this re-derive); re-attach the display + slice observers from the
+            # base's retained nodes (the reattach precedent).
             if self._display_node is None:
                 display = self.GetDisplayNode()
                 if display is not None:
                     self.SetDisplayNode(display)
+            if self._slice_node is None:
+                getView = getattr(self, "GetViewNode", None)
+                view = getView() if getView is not None else None
+                if view is not None:
+                    self.SetViewNode(view)
             self._ensure_carrier_observed()
             self._reproject()
             self._reconcile_highlight()
@@ -319,6 +325,13 @@ class TerritorySlicePipeline(_PipelineBase):
     def cleanup(self) -> None:
         for node in list(self._observed_node_refs):
             self._detach_observer(node)
+        # Drop the display + slice handles too: cleanup detaches their
+        # observers, so leaving the handles set would make the OnRendererAdded
+        # re-derive guard (``if self._display_node is None``) skip re-attaching
+        # them after a renderer removal->re-add -> the cross-view adhering
+        # repaint would go unobserved on the re-added renderer.
+        self._display_node = None
+        self._slice_node = None
         self._observed_carrier = None
         self._drag_target = None
         self._hover_target = None
