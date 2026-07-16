@@ -191,9 +191,11 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     self.ui = slicer.util.childWidgetVariables(uiWidget)
 
+    # ADR-0037 Stage-2: the ``endPointsMarkupsSelector`` (CenterlineSegment)
+    # markups selector is RETIRED with the annotation-off-markups transition;
+    # its entry is dropped from the node-selector list.
     self.nodeSelectors = [
         (self.ui.inputSurfaceSelector, "InputSurface"),
-        (self.ui.endPointsMarkupsSelector, "CenterlineSegment"),
         (self.ui.selectedVascularTerritorySegmId, "VascularTerritorySegmentation")
         ]
 
@@ -214,29 +216,27 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # Connections
     self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
     self.ui.inputSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.updateParameterNodeFromGUI)
-    self.ui.inputSegmentSelectorWidget.connect('currentSegmentChanged(QString)', self.onSegmentChanged)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
-    self.ui.endPointsMarkupsSelector.connect('nodeAddedByUser(vtkMRMLNode*)', self.newEndpointsListCreated)
-    #self.ui.endPointsMarkupsSelector.connect('nodeAdded(vtkMRMLNode*)', self.newEndpointsListCreated)
     self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.segmentationNodeSelected)
-    self.ui.vascularTerritoryId.connect('currentIndexChanged(int)', self.onVascularTerritoryIdChanged)
     self.ui.selectedVascularTerritorySegmId.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
     self.ui.selectedVascularTerritorySegmId.connect('currentNodeChanged(bool)', self.vascular_territory_segmentationNodeSelected)
 
-    # Vessel-adhering-highlight wiring (ADR-0036).  Keep the highlight
-    # node's pickSurface aimed at the selected input segmentation, keep the
-    # snap observer attached to the current endpoints markup, and gate the
-    # highlight's visibility on place mode (see ``_updateHighlightWiring``).
+    # Vessel-adhering-highlight wiring (ADR-0036 / ADR-0037).  Keep the
+    # highlight node's pickSurface aimed at the selected input segmentation.
+    # ADR-0037 Stage-2 retires the markups selector + place widget that used
+    # to also gate the highlight's visibility on place mode; the surviving
+    # invariant is ``updateHighlightPickSurface`` tracking the input
+    # segmentation.
     self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.updateHighlightPickSurface)
-    self.ui.endPointsMarkupsSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.updateHighlightWiring)
-    self.ui.endPointsMarkupsPlaceWidget.connect('placeModeChanged()', self.updateHighlightVisibility)
+
+    # ADR-0037 Stage-2 table (§Decision 3): the annotation table is composed
+    # into the panel here, over the annotation carrier + the placement
+    # Pipeline (Python-widget composition, ADR-0004).
+    self._setupTerritoriesTable()
 
     self.ui.selectedVascularTerritorySegmId.setNodeTypeLabel('Vascular Territory Segmentation', 'vtkMRMLSegmentationNode')
     self.ui.selectedVascularTerritorySegmId.addAttribute("vtkMRMLSegmentationNode", "VascularTerritories.SegmentationId")
-
-    #self.onVascularTerritoryIdChanged()
-    #self.ui.endPointsMarkupsSelector.setEnabled(False)#Disable selector for now, as the lists are automatically managed
 
     # Initialize Vascular Territory Segmentation button at widget start-up
 #    nodeNameID = 'Vascular_Territory_Segmentation'
@@ -349,25 +349,66 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     segmentationId = segmentation.GetID() if segmentation is not None else None
     node.SetAndObservePickSurfaceNodeID(segmentationId)
 
-  def updateHighlightVisibility(self, *args):
-    """Show the highlight only while the endpoints markup is in place mode."""
-    node = self._ensureHighlightDisplayNode()
-    if node is None:
-      return
-    placing = self.ui.endPointsMarkupsPlaceWidget.placeModeEnabled
-    node.SetVisibility(bool(placing))
+  def _setupTerritoriesTable(self):
+    """Compose the ADR-0037 Stage-2 annotation table into the panel.
 
-  def updateHighlightWiring(self, *args):
-    """Sync the hover highlight's pickSurface + visibility.
-
-    Transitional scaffolding (ADR-0037): placement + snap now live on the
-    LayerDM ``TerritoryPlacementPipeline`` against the annotation carrier,
-    not a markup observer.  Stage 2 (the table UI) retires the markups
-    selector this keys off; until then a selector change keeps the hover
-    highlight fully wired in one call.
+    The table is a Python-composed custom widget (ADR-0004 / ADR-0037
+    §Decision 3) over the annotation carrier + the placement Pipeline.  A
+    launch without the module's MRML library or LayerDMLib on the path
+    degrades gracefully: the panel loads without the table.
     """
-    self.updateHighlightPickSurface()
-    self.updateHighlightVisibility()
+    self._territoriesTable = None
+    try:
+      from VascularTerritoriesLib import TerritoriesTableWidget
+    except ImportError as exc:
+      logging.warning(
+        "VascularTerritories: annotation table widget unavailable (%s) -- "
+        "the Stage-2 table is disabled this session.", exc)
+      return
+    if TerritoriesTableWidget is None:
+      return
+    carrier = self._ensureAnnotationCarrier()
+    pipeline = self._territoryPlacementPipeline()
+    self._territoriesTable = TerritoriesTableWidget(carrier=carrier, pipeline=pipeline)
+    self.layout.addWidget(self._territoriesTable)
+
+  def _ensureAnnotationCarrier(self):
+    """Return the scene-resident annotation carrier, creating it once.
+
+    ``None`` when the C++ node class is unavailable (a launch without the
+    module's MRML library on the path) -- the caller degrades gracefully.
+    """
+    node = getattr(self, "_annotationCarrier", None)
+    if node is not None and slicer.mrmlScene.IsNodePresent(node):
+      return node
+    try:
+      node = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLCustomTerritoriesNode", "Vascular Territories Annotation")
+    except Exception:  # noqa: BLE001 - node class not registered in this launch
+      logging.warning(
+        "VascularTerritories: vtkMRMLCustomTerritoriesNode unavailable -- "
+        "annotation table disabled this session.")
+      return None
+    self._annotationCarrier = node
+    return node
+
+  def _territoryPlacementPipeline(self):
+    """The placement Pipeline instance bound to the annotation carrier.
+
+    ``None`` when LayerDMLib is unreachable; the table still works
+    read-only + delete-by-row against the carrier alone.
+    """
+    pipeline = getattr(self, "_placementPipeline", None)
+    if pipeline is not None:
+      return pipeline
+    try:
+      from VascularTerritoriesLib import TerritoryPlacementPipeline
+    except ImportError:
+      return None
+    if TerritoryPlacementPipeline is None:
+      return None
+    self._placementPipeline = TerritoryPlacementPipeline()
+    return self._placementPipeline
 
   def enableWidgetButtons(self, state):
     self.ui.addSegmentationButton.setEnabled(state)
@@ -375,7 +416,6 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     self.ui.calculateVascularTerritoryMapButton.setEnabled(state)
     self.ui.inputSurfaceSelector.setEnabled(state)
     self.ui.vascularTerritoryId.setEnabled(state)
-    self.ui.endPointsMarkupsSelector.setEnabled(state)
     self.ui.showHideButton.setEnabled(state)
 
   def segmentationNodeSelected(self):
@@ -388,41 +428,6 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     displayNode = segmentationNode.GetDisplayNode()
     displayNode.SetOpacity3D(0.3)
     self.updateShowHideButtonText()
-
-  #Auto create if name/id don't exist. Auto switch if it exists
-  def onSegmentChanged(self):
-    endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
-    if endPointsMarkupsNode is not None:
-      endPointsMarkupsNode.SetDisplayVisibility(False)#Hide previous markup points
-    if self.ui.inputSurfaceSelector.currentNode() is None:
-      return
-    if not self.ui.inputSegmentSelectorWidget.currentSegmentID():
-      return
-    #Check if this is a Vascular Territory Segmentation node
-    segmentationNodeAttribute = self.ui.inputSurfaceSelector.currentNode().GetAttribute("VascularTerritories.SegmentationId")
-    if segmentationNodeAttribute is not None:
-      return
-
-    VascSegmIdno = self.ui.selectedVascularTerritorySegmId.currentNode().GetAttribute("VascularTerritories.SegmentationId")
-    VascTerrIdno = self.ui.vascularTerritoryId.currentIndex
-    vesselPointsSelector = self.ui.endPointsMarkupsSelector
-    vesselPointsSelector.blockSignals(True)
-    vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "VascularTerritories.VascTerrId", str(VascTerrIdno))
-    vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "VascularTerritories.SegmentationId", str(VascSegmIdno))
-    vesselPointsSelector.blockSignals(False)
-
-    endPointsMarkupsNode = self.getVesselSegmentfromName()
-    if endPointsMarkupsNode is None:
-      endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.addNode()
-      self.ui.endPointsMarkupsSelector.setCurrentNode(endPointsMarkupsNode)
-#    else:
-    endPointsMarkupsNode.SetAttribute("VascularTerritories.SegmentationId",str(VascSegmIdno))
-    endPointsMarkupsNode.SetAttribute("VascularTerritories.VascTerrId",str(VascTerrIdno))
-#    endPointsMarkupsNode.addAttribute("vtkMRMLMarkupsFiducialNode", "VascularTerritories.SegmentationId",str(Idno))
-
-    self.ui.endPointsMarkupsSelector.baseName = self.getVesselSegmentName()
-    self.refreshShowHideButton()
-    endPointsMarkupsNode.SetDisplayVisibility(True)#Show current markup points
 
   def onShowHideButton(self):
     displayNode, segmentId = self.getDisplayNodeAndSegmentId()
@@ -514,7 +519,6 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
       if attribute is not None:
         if node.GetDisplayNode():
           node.GetDisplayNode().SetAllSegmentsVisibility(False)
-    self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
 
 
   def updateVascTerrList(self, vasc_terr_ID_list, vascular_territory_segm_node):
@@ -539,19 +543,8 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
       vasc_terr_ID_list.addItem(nameString)
       self.colormap.SetColorName(index, nameString)
       vasc_terr_ID_list.setCurrentIndex(index)
-      self.onSegmentChanged()
     vasc_terr_ID_list.setCurrentIndex(1)
     vasc_terr_ID_list.blockSignals(False)
-
-  def getVesselSegmentfromName(self):
-    segmentName = self.getVesselSegmentName()
-    for i in range(self.ui.endPointsMarkupsSelector.nodeCount()):
-      node = self.ui.endPointsMarkupsSelector.nodeFromIndex(i)
-      if segmentName == node.GetName():
-        self.ui.endPointsMarkupsSelector.setCurrentNode(node)
-        return self.ui.endPointsMarkupsSelector.currentNode()
-    logging.info('Found no node called: ' + segmentName)
-    return None
 
   def createColorMap(self):
 #    colorTableNodes = slicer.util.getNodes("SlicerLiverColorMap*")
@@ -568,6 +561,9 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     """
     Called when the application closes and the module widget is destroyed.
     """
+    table = getattr(self, "_territoriesTable", None)
+    if table is not None and hasattr(table, "cleanup"):
+      table.cleanup()
     self.removeObservers()
 
   def enter(self):
@@ -595,9 +591,11 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     """
     Called just after the scene is closed.
     """
-    # The highlight display node was cleared with the scene; drop the stale
-    # handle so the next placement re-creates a fresh one.
+    # The highlight display node + annotation carrier were cleared with the
+    # scene; drop the stale handles so the next placement re-creates fresh
+    # ones.
     self._highlightDisplayNode = None
+    self._annotationCarrier = None
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
     self.initializeParameterNode()
 
@@ -719,31 +717,6 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     self.logic.copyIndex(endPointsMarkupsNode, centerlineModelNode)
     return centerlineModelNode
 
-  def getVesselSegmentName(self):
-    segmentation = self.ui.inputSegmentSelectorWidget.currentNode().GetSegmentation()
-    segmId = self.ui.inputSegmentSelectorWidget.currentSegmentID()
-    segment = segmentation.GetSegment(segmId)
-    name = 'Segment_' + self.ui.selectedVascularTerritorySegmId.currentNode().GetAttribute("VascularTerritories.SegmentationId") \
-      + '_Territory_' + str(self.ui.vascularTerritoryId.currentIndex) + '_' + segment.GetName()
-    return name
-
-  def newEndpointsListCreated(self):
-    #Set baseName, and use this to create new unique names if endPointsMarkupsNode with this name already exist
-    newName = self.getVesselSegmentName()
-    self.updateSelectorColor()
-    if(self.ui.endPointsMarkupsSelector.baseName == newName):
-      return
-    self.ui.endPointsMarkupsSelector.baseName = newName
-
-    endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
-    endPointsMarkupsNode.SetName(newName)
-    self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(True)
-
-  def updateSelectorColor(self):
-    color = self.getCurrentColor()
-    color255 = [int(i * 255) for i in color]
-    self.ui.endPointsMarkupsPlaceWidget.ColorButton.setColor(qt.QColor(color255[0], color255[1], color255[2]))
-
   def getCurrentColor(self):
     color = [1, 1, 1, 1]
     index = self.ui.vascularTerritoryId.currentIndex
@@ -762,42 +735,6 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     inputColor = self.getCurrentColorQt()
     centerlineModelNode.GetDisplayNode().SetColor(inputColor.redF(), inputColor.greenF(), inputColor.blueF())
 
-  def onVascularTerritoryIdChanged(self):
-    index = self.ui.vascularTerritoryId.currentIndex
-    vascularTerrSegmNode = self.ui.selectedVascularTerritorySegmId.currentNode()
-    VascSegmIdno = vascularTerrSegmNode.GetAttribute("VascularTerritories.SegmentationId")
-    # If the GUI is updating - No action
-    if  self._updatingGUIFromSegmentationNode:
-      return
-    #Add new vascular territory ID
-    if(index == 0):
-      numItems = self.ui.vascularTerritoryId.count
-      idString = "Vascular Territory ID " + str(numItems)
-      self.ui.vascularTerritoryId.addItem(idString)
-      self.ui.vascularTerritoryId.setCurrentIndex(numItems)
-      self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(True)
-    else:
-      self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
-    #Add new Vascular Territory Segmentation
-    segmentName = self.ui.vascularTerritoryId.currentText
-    vascularTerrSegm = vascularTerrSegmNode.GetSegmentation()
-    numberOfSegments = vascularTerrSegm.GetNumberOfSegments()
-    if numberOfSegments < index:
-      vascularTerrSegm.AddEmptySegment(segmentName, segmentName)
-
-    #Update color in selector
-    self.ui.ColorPickerButton.setColor(self.getCurrentColorQt())
-    if(index > 0):
-      self.colormap.SetColorName(index, self.ui.vascularTerritoryId.currentText)
-      self.onSegmentChanged()#Also generate new vessel segment point lists when changing territory id
-
-    index = self.ui.vascularTerritoryId.currentIndex
-    vesselPointsSelector = self.ui.endPointsMarkupsSelector
-    vesselPointsSelector.blockSignals(True)
-    vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "VascularTerritories.VascTerrId", str(index))
-    vesselPointsSelector.addAttribute("vtkMRMLMarkupsFiducialNode", "VascularTerritories.SegmentationId", str(VascSegmIdno))
-    vesselPointsSelector.blockSignals(False)
-
   def onColorChanged(self):
     colorIndex = self.ui.vascularTerritoryId.currentIndex
     color = self.ui.ColorPickerButton.color
@@ -811,55 +748,16 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     self.onAddCenterlineSegment(addSegmentationInsteadOfLine = True)
 
   def onAddCenterlineSegment(self, addSegmentationInsteadOfLine = False):
-    if not (self.logic.check_module_Extract_Centerline_installed()):
-      self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
-      slicer.util.errorDisplay("SlicerVMTK Extension not installed")
-      return
-    endPointsMarkupsNode = self.ui.endPointsMarkupsSelector.currentNode()
-    self.ui.endPointsMarkupsPlaceWidget.setPlaceModeEnabled(False)
-    endPointsMarkupsNode.SetAttribute("VascularTerritories.VascTerrId", str(self.ui.vascularTerritoryId.currentIndex))
-    vascularTerritorySegm = self.ui.selectedVascularTerritorySegmId.currentNode()
-    vascularTerritorySegmId = vascularTerritorySegm.GetAttribute("VascularTerritories.SegmentationId")
-    endPointsMarkupsNode.SetAttribute("VascularTerritories.SegmentationId", str(vascularTerritorySegmId))
-
-    slicer.app.pauseRender()
-    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
-
-    try:
-        preprocessedPolyData = self.getPreprocessedPolyData()
-    except ValueError:
-        logging.error("Error: Preprocessing of polydata fails")
-        slicer.app.resumeRender()
-        qt.QApplication.restoreOverrideCursor()
-        raise
-
-    try:
-        centerlineModelNode = self.createCenterlineNode(endPointsMarkupsNode)
-    except ValueError:
-        logging.error("Error: Failed to generate centerline model")
-
-    try:
-      if(addSegmentationInsteadOfLine):
-        mergedLines = self.mergePolydata(centerlineModelNode.GetMesh(), preprocessedPolyData)
-      else:
-        centerlineProcessingLogic = self.logic.getCenterlineLogic()
-        centerlinePolyData, voronoiDiagramPolyData = centerlineProcessingLogic.extractCenterline(preprocessedPolyData, endPointsMarkupsNode)
-        decimatedCenterlinePolyData = self.logic.decimateLine(centerlinePolyData)
-        mergedLines = self.mergePolydata(centerlineModelNode.GetMesh(), decimatedCenterlinePolyData)
-
-      centerlineModelNode.SetAndObserveMesh(mergedLines)
-      centerlineModelNode.SetAttribute("VascularTerritories.SegmentationId", str(vascularTerritorySegmId))
-      centerlineModelNode.SetAttribute("VascularTerritories.VascTerrId", str(self.ui.vascularTerritoryId.currentIndex))
-
-      centerlineModelNode.CreateDefaultDisplayNodes()
-      self.useColorFromSelector(centerlineModelNode)
-      centerlineModelNode.GetDisplayNode().SetLineWidth(3)
-      endPointsMarkupsNode.SetDisplayVisibility(False)
-    except ValueError:
-      logging.error("Error: Failed to extract centerline")
-
-    slicer.app.resumeRender()
-    qt.QApplication.restoreOverrideCursor()
+    # ADR-0037 §Decision 4: the VMTK centerline feed is rewired off Slicer
+    # markups onto the annotation carrier in Stage 3 -- the extraction call
+    # builds a TRANSIENT fiducial node from the carrier's points inside the
+    # call and discards it.  With the Stage-2 markups-selector retirement the
+    # legacy markups-sourced feed is gone; the extraction action is inert
+    # until the Stage-3 carrier feed lands.
+    del addSegmentationInsteadOfLine
+    slicer.util.errorDisplay(
+      "Centerline extraction from the annotation carrier is not available "
+      "yet -- it lands with the VMTK feed transition (ADR-0037 Stage 3).")
 
   def mergePolydata(self, existingPolyData, newPolyData):
     combinedPolyData = vtk.vtkAppendPolyData()

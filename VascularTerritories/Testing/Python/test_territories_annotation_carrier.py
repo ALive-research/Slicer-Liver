@@ -14,7 +14,8 @@ mirroring ``vtkMRMLResectionPlanStorageNode``.  No markups reference
 anywhere on the annotation path (ADR-0037 §Decision 1 + §Conformance
 [test], ADR-0014 §"Fourth layer").
 
-This file pins two Stage-1 increments:
+This file pins the Stage-1 increments and the Stage-2 display-attribute
+increment on the SAME carrier:
 
 * i1 — CARRIER STORAGE.  Ordered per-territory annotation points on the
   C++ ``vtkMRMLCustomTerritoriesNode``: add / get-Nth / count / clear;
@@ -23,6 +24,15 @@ This file pins two Stage-1 increments:
 * i2 — STORAGE ROUND-TRIP.  Writing the carrier's points to a storage
   node and reading them back yields identical ORDERED points per
   territory (mirrors ``vtkMRMLResectionPlanStorageNodeTest1``).
+* i5 (Stage 2) — DISPLAY-ATTRIBUTE SLOT.  ADR-0037 §Decision 3 / §3
+  table: the table row carries per-territory colour (RGB), display
+  label, and visibility.  Stage 2 ADDS these as a per-territoryId slot
+  on the SAME carrier, mirroring the ``AnnotationPoints``
+  ``std::map<std::string, ...>`` idiom, with XML + ``.vta.json``
+  round-trip.  These invariants pin that setting a display attribute
+  does NOT alter ``GetNumberOfAnnotationPoints`` or any point coord (the
+  display slot and the geometry slot are independent), and that the
+  attributes round-trip through storage.
 
 -- SEAM THE IMPLEMENTER MUST PROVIDE (proposed; sharpen at landing) --
 
@@ -85,6 +95,18 @@ ADD_POINT_METHOD = "AddAnnotationPoint"
 COUNT_METHOD = "GetNumberOfAnnotationPoints"
 GET_NTH_METHOD = "GetNthAnnotationPoint"
 CLEAR_METHOD = "ClearAnnotationPoints"
+
+# The per-territory DISPLAY-ATTRIBUTE slot ADR-0037 Stage-2 adds to the
+# carrier (colour / label / visibility), mirroring the AnnotationPoints
+# std::map idiom.  Tests skip-pending on absence (ADR-0027); the skip
+# lifts at the Stage-2 implementation commit.  Method names are PROPOSED;
+# sharpen at landing against the header's std::string-keyed idiom.
+SET_COLOR_METHOD = "SetTerritoryColor"
+GET_COLOR_METHOD = "GetTerritoryColor"
+SET_LABEL_METHOD = "SetTerritoryLabel"
+GET_LABEL_METHOD = "GetTerritoryLabel"
+SET_VISIBILITY_METHOD = "SetTerritoryVisibility"
+GET_VISIBILITY_METHOD = "GetTerritoryVisibility"
 
 # Two distinct surgeon-named territory ids used across the tests.
 TERRITORY_A = "SegmentVII"
@@ -296,6 +318,99 @@ def test_no_markups_fiducial_reference_role_on_the_carrier():
 
 
 # --------------------------------------------------------------------------- #
+# i5 (Stage 2) — per-territory display-attribute slot (launched)
+# --------------------------------------------------------------------------- #
+
+
+def _make_carrier_with_display_or_skip(slicer, name="DisplayAttrCarrierTest"):
+    """Mint a carrier exposing the Stage-2 display-attribute slot, or skip-pend.
+
+    Extends ``_make_custom_territories_or_skip`` with the per-territory
+    colour / label / visibility accessors ADR-0037 Stage-2 adds; skip-pends
+    (ADR-0027) when those accessors have not landed.
+    """
+    node = _make_custom_territories_or_skip(slicer, name)
+    for method in (
+        SET_COLOR_METHOD,
+        GET_COLOR_METHOD,
+        SET_LABEL_METHOD,
+        GET_LABEL_METHOD,
+        SET_VISIBILITY_METHOD,
+        GET_VISIBILITY_METHOD,
+    ):
+        if not hasattr(node, method):
+            pytest.skip(
+                f"{CUSTOM_TERRITORIES_CLASS} has no {method} -- the ADR-0037 "
+                "Stage-2 per-territory display-attribute slot (§Decision 3 / "
+                "§3 table) has not landed.  The skip lifts at the Stage-2 "
+                "implementation commit (ADR-0027)."
+            )
+    return node
+
+
+def test_display_attributes_store_and_read_back_per_territory():
+    """i5: colour / label / visibility store + read back, keyed per territory.
+
+    ADR-0037 §Decision 3 / §3 table: the header row carries a per-territory
+    colour swatch, display label, and visibility.  Two territories keep
+    INDEPENDENT display attributes (same std::map-keyed idiom as the point
+    carrier).
+    """
+    slicer = _slicer_or_skip()
+    node = _make_carrier_with_display_or_skip(slicer)
+
+    node.SetTerritoryColor(TERRITORY_A, 1.0, 0.0, 0.0)
+    node.SetTerritoryLabel(TERRITORY_A, "Right anterior")
+    node.SetTerritoryVisibility(TERRITORY_A, True)
+
+    node.SetTerritoryColor(TERRITORY_B, 0.0, 0.0, 1.0)
+    node.SetTerritoryLabel(TERRITORY_B, "Left lateral")
+    node.SetTerritoryVisibility(TERRITORY_B, False)
+
+    color_a = node.GetTerritoryColor(TERRITORY_A)
+    assert (color_a[0], color_a[1], color_a[2]) == pytest.approx((1.0, 0.0, 0.0), abs=1e-6)
+    assert node.GetTerritoryLabel(TERRITORY_A) == "Right anterior"
+    assert bool(node.GetTerritoryVisibility(TERRITORY_A)) is True
+
+    color_b = node.GetTerritoryColor(TERRITORY_B)
+    assert (color_b[0], color_b[1], color_b[2]) == pytest.approx((0.0, 0.0, 1.0), abs=1e-6)
+    assert node.GetTerritoryLabel(TERRITORY_B) == "Left lateral"
+    assert bool(node.GetTerritoryVisibility(TERRITORY_B)) is False
+
+
+def test_setting_a_display_attribute_does_not_touch_geometry():
+    """i5: a display-attribute write leaves point count + coords byte-identical.
+
+    ADR-0037 §Decision 3: the display slot and the geometry slot are
+    INDEPENDENT.  A colour / label / visibility edit is a "display slot
+    without touching geometry" write — no point added / moved / dropped
+    (the same invariant pinned launched by the table's colour/label/vis
+    edit test in ``test_territories_table.py``, pinned here at the carrier).
+    """
+    slicer = _slicer_or_skip()
+    node = _make_carrier_with_display_or_skip(slicer)
+
+    pts = [(1.0, 2.0, 3.0), (4.0, 5.0, 6.0)]
+    for x, y, z in pts:
+        node.AddAnnotationPoint(TERRITORY_A, x, y, z)
+
+    before_count = node.GetNumberOfAnnotationPoints(TERRITORY_A)
+    before = [_nth(node, TERRITORY_A, i) for i in range(before_count)]
+
+    node.SetTerritoryColor(TERRITORY_A, 0.2, 0.4, 0.6)
+    node.SetTerritoryLabel(TERRITORY_A, "Renamed")
+    node.SetTerritoryVisibility(TERRITORY_A, False)
+
+    assert node.GetNumberOfAnnotationPoints(TERRITORY_A) == before_count, (
+        "a display-attribute write must NOT change the annotation-point count."
+    )
+    for i, expected in enumerate(before):
+        assert _nth(node, TERRITORY_A, i) == pytest.approx(expected, abs=1e-9), (
+            f"point {i} must not move on a display-attribute write."
+        )
+
+
+# --------------------------------------------------------------------------- #
 # i2 — storage round-trip (launched; needs scene + storage node)
 # --------------------------------------------------------------------------- #
 
@@ -373,6 +488,46 @@ def test_carrier_points_round_trip_through_storage():
             assert _nth(sink, TERRITORY_B, i) == pytest.approx(expected, abs=1e-6), (
                 f"territory B point {i} must round-trip in placement order."
             )
+    finally:
+        if os.path.exists(path):
+            os.remove(path)
+
+
+def test_display_attributes_round_trip_through_storage():
+    """i5: colour / label / visibility survive a ``.vta.json`` write+read.
+
+    ADR-0037 §Decision 3 adds the display slot "with XML + ``.vta.json``
+    round-trip" — the same storage node that persists the ordered points
+    also persists the per-territory colour, label, and visibility.  A
+    source carrier's display attributes read back identically on a fresh
+    sink carrier.
+    """
+    import os
+
+    slicer = _slicer_or_skip()
+    source = _make_carrier_with_display_or_skip(slicer, "DisplaySource")
+    storage = _make_storage_or_skip(slicer)
+
+    # At least one point so the territory is enumerable by the storage node.
+    source.AddAnnotationPoint(TERRITORY_A, 1.0, 0.0, 0.0)
+    source.SetTerritoryColor(TERRITORY_A, 0.1, 0.5, 0.9)
+    source.SetTerritoryLabel(TERRITORY_A, "Segment VII")
+    source.SetTerritoryVisibility(TERRITORY_A, False)
+
+    path = _temp_path(slicer, "json")
+    storage.SetFileName(path)
+    assert storage.WriteData(source) == 1, "storage WriteData must succeed."
+
+    try:
+        sink = _make_carrier_with_display_or_skip(slicer, "DisplaySink")
+        read_storage = _make_storage_or_skip(slicer)
+        read_storage.SetFileName(path)
+        assert read_storage.ReadData(sink) == 1, "storage ReadData must succeed."
+
+        color = sink.GetTerritoryColor(TERRITORY_A)
+        assert (color[0], color[1], color[2]) == pytest.approx((0.1, 0.5, 0.9), abs=1e-6)
+        assert sink.GetTerritoryLabel(TERRITORY_A) == "Segment VII"
+        assert bool(sink.GetTerritoryVisibility(TERRITORY_A)) is False
     finally:
         if os.path.exists(path):
             os.remove(path)
