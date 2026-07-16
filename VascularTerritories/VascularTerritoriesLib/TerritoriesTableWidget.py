@@ -38,6 +38,22 @@ from typing import Any
 import qt
 import vtk
 
+try:  # pragma: no cover - exercised once per import path
+    from . import TerritoryInteractionState as _state
+except ImportError:  # top-level import path (the unit layer's sys.path setup)
+    import TerritoryInteractionState as _state  # type: ignore[no-redef]
+
+#: A small distinct palette so minted territories read apart in both the
+#: swatch and the 3D seed glyphs (RGB in 0..1).  Cycled by mint order.
+_TERRITORY_PALETTE = (
+    (0.90, 0.30, 0.24),  # red
+    (0.20, 0.60, 0.86),  # blue
+    (0.18, 0.80, 0.44),  # green
+    (0.95, 0.77, 0.06),  # amber
+    (0.61, 0.35, 0.71),  # purple
+    (0.90, 0.49, 0.13),  # orange
+)
+
 #: Column layout of the custom table.  A HEADER row uses columns as
 #: [visibility | colour | label | status]; a CHILD row uses
 #: [<blank> | <blank> | status text | delete].
@@ -67,21 +83,29 @@ _ROLE_IS_HEADER = qt.Qt.UserRole + 3
 class TerritoriesTableWidget(qt.QWidget):
     """Custom table view + editor over the annotation carrier (ADR-0037).
 
-    Constructed over the Stage-1 carrier and (optionally) the Stage-2
-    placement Pipeline:
+    Constructed over the Stage-1 carrier and the shared highlight display
+    node:
 
         ``TerritoriesTableWidget(carrier=<vtkMRMLCustomTerritoriesNode>,
-                                 pipeline=<TerritoryPlacementPipeline>)``.
+                                 displayNode=<vtkMRMLTerritoriesHighlightDisplayNode>)``.
 
-    The carrier is the model; the pipeline (when present) carries the arm
-    state and the shared point-removal path.
+    The carrier is the model.  Arm state / active territory are written onto
+    the DISPLAY NODE (``TerritoryInteractionState``) — the shared handle the
+    LayerDM-driven placement Pipeline reads at event time, since the widget
+    cannot reach the manager-owned Pipeline instance directly.  Delete goes
+    straight to the carrier (the same ``RemoveNthAnnotationPoint`` the
+    Pipeline's pick-delete uses — one carrier method, ADR-0037 §Decision 3).
     """
 
-    def __init__(self, carrier: Any = None, pipeline: Any = None, parent: Any = None) -> None:
+    def __init__(self, carrier: Any = None, displayNode: Any = None, parent: Any = None) -> None:
         super().__init__(parent)
 
         self._carrier = carrier
-        self._pipeline = pipeline
+        self._displayNode = displayNode
+        # Bind the carrier onto the shared display node so the LayerDM-driven
+        # placement Pipeline (which the widget cannot reach directly) resolves
+        # the same carrier the table edits.
+        _state.set_carrier(displayNode, carrier)
         self._carrier_observer_tag: int | None = None
         # Guards against the write-back edits re-triggering a rebuild mid-edit.
         self._rebuilding = False
@@ -199,12 +223,19 @@ class TerritoriesTableWidget(qt.QWidget):
         """
         if territoryId is None:
             territoryId = self._mintTerritoryId()
-        if territoryId not in self._territory_order:
+        newTerritory = territoryId not in self._territory_order
+        if newTerritory:
             self._territory_order.append(territoryId)
         # Give the territory a display slot so its header row survives before
-        # any seed lands (an empty minted territory is enumerable).
+        # any seed lands (an empty minted territory is enumerable), and a
+        # distinct palette colour so it reads apart in the swatch + 3D seeds.
         if self._carrier is not None:
             self._carrier.SetTerritoryVisibility(territoryId, True)
+            if newTerritory:
+                r, g, b = _TERRITORY_PALETTE[
+                    (len(self._territory_order) - 1) % len(_TERRITORY_PALETTE)
+                ]
+                self._carrier.SetTerritoryColor(territoryId, r, g, b)
         self._rebuild()
         self.selectTerritoryRow(territoryId)
         self._armInto(territoryId)
@@ -224,9 +255,10 @@ class TerritoriesTableWidget(qt.QWidget):
         return self.territoryOfRow(self._table.currentRow)
 
     def done(self) -> None:
-        """Disarm placement ("Done" / Esc)."""
-        if self._pipeline is not None and hasattr(self._pipeline, "Disarm"):
-            self._pipeline.Disarm()
+        """Disarm placement ("Done" / Esc) and hide the adhering highlight."""
+        _state.set_armed(self._displayNode, False)
+        if self._displayNode is not None and hasattr(self._displayNode, "SetVisibility"):
+            self._displayNode.SetVisibility(False)
 
     def selectTerritoryRow(self, territoryId: str) -> None:
         """Select the header row of ``territoryId`` (a no-op if absent)."""
@@ -237,13 +269,17 @@ class TerritoriesTableWidget(qt.QWidget):
                 return
 
     def _armInto(self, territoryId: str) -> None:
-        pipeline = self._pipeline
-        if pipeline is None:
-            return
-        if hasattr(pipeline, "SetActiveTerritory"):
-            pipeline.SetActiveTerritory(territoryId)
-        if hasattr(pipeline, "Arm"):
-            pipeline.Arm()
+        """Arm placement into ``territoryId`` via the shared display node.
+
+        Writes the active territory + armed flag onto the highlight display
+        node the LayerDM-driven Pipeline reads, and makes the node visible so
+        the adhering highlight is live during placement (the retired place-mode
+        visibility gate, re-homed to the arm state — ADR-0037 §Decision 2).
+        """
+        _state.set_active_territory(self._displayNode, territoryId)
+        _state.set_armed(self._displayNode, True)
+        if self._displayNode is not None and hasattr(self._displayNode, "SetVisibility"):
+            self._displayNode.SetVisibility(True)
 
     def _mintTerritoryId(self) -> str:
         while True:
@@ -271,11 +307,10 @@ class TerritoriesTableWidget(qt.QWidget):
     def deleteRow(self, row: int) -> None:
         """Delete-from-table entry point — converges on the shared removal path.
 
-        Routes through the placement Pipeline's ``DeleteAnnotationPoint`` when
-        a pipeline is present (so delete-by-row and delete-by-pick share one
-        path); falls back to the carrier's ``RemoveNthAnnotationPoint``
-        directly when no pipeline is wired.  Both reach the SAME carrier
-        method (ADR-0037 §Decision 3 delete convergence).
+        Routes through ``_removePoint`` to the carrier's
+        ``RemoveNthAnnotationPoint`` — the SAME carrier method the placement
+        Pipeline's pick-delete reaches, so delete-by-row and delete-by-pick
+        converge on one deletion path (ADR-0037 §Decision 3).
         """
         if self.isHeaderRow(row):
             return
@@ -408,15 +443,12 @@ class TerritoriesTableWidget(qt.QWidget):
     def _removePoint(self, territoryId: str, pointIndex: int) -> None:
         """The ONE point-removal path shared by delete-by-row + delete-by-cell.
 
-        Routes through the placement Pipeline's ``DeleteAnnotationPoint`` when
-        a pipeline is present (so delete-by-row and delete-by-pick converge on
-        one carrier deletion path, ADR-0037 §Decision 3); falls back to the
-        carrier's ``RemoveNthAnnotationPoint`` directly when no pipeline is
-        wired.  Both reach the SAME carrier method.
+        Calls the carrier's ``RemoveNthAnnotationPoint`` directly — the SAME
+        carrier method the placement Pipeline's pick-delete
+        (``DeleteAnnotationPoint``) reaches, so delete-by-row and
+        delete-by-pick converge on one deletion path (ADR-0037 §Decision 3).
         """
-        if self._pipeline is not None and hasattr(self._pipeline, "DeleteAnnotationPoint"):
-            self._pipeline.DeleteAnnotationPoint(territoryId, pointIndex)
-        elif self._carrier is not None:
+        if self._carrier is not None:
             self._carrier.RemoveNthAnnotationPoint(territoryId, pointIndex)
 
     def _pickColour(self, territoryId: str) -> None:
