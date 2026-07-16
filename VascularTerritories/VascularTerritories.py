@@ -368,8 +368,15 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     if TerritoriesTableWidget is None:
       return
     carrier = self._ensureAnnotationCarrier()
-    pipeline = self._territoryPlacementPipeline()
-    self._territoriesTable = TerritoriesTableWidget(carrier=carrier, pipeline=pipeline)
+    # The highlight display node is the SHARED handle: the table writes the
+    # arm state / active territory / carrier binding onto it, and the
+    # LayerDM-driven placement Pipeline reads them back (the widget cannot
+    # reach the manager-owned Pipeline instance directly).  Aim its
+    # pickSurface at the current input segmentation so the click-snap + the
+    # adhering highlight resolve against the vessel mesh.
+    displayNode = self._ensureHighlightDisplayNode()
+    self.updateHighlightPickSurface()
+    self._territoriesTable = TerritoriesTableWidget(carrier=carrier, displayNode=displayNode)
     self.layout.addWidget(self._territoriesTable)
 
   def _ensureAnnotationCarrier(self):
@@ -391,24 +398,6 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
       return None
     self._annotationCarrier = node
     return node
-
-  def _territoryPlacementPipeline(self):
-    """The placement Pipeline instance bound to the annotation carrier.
-
-    ``None`` when LayerDMLib is unreachable; the table still works
-    read-only + delete-by-row against the carrier alone.
-    """
-    pipeline = getattr(self, "_placementPipeline", None)
-    if pipeline is not None:
-      return pipeline
-    try:
-      from VascularTerritoriesLib import TerritoryPlacementPipeline
-    except ImportError:
-      return None
-    if TerritoryPlacementPipeline is None:
-      return None
-    self._placementPipeline = TerritoryPlacementPipeline()
-    return self._placementPipeline
 
   def enableWidgetButtons(self, state):
     self.ui.addSegmentationButton.setEnabled(state)
