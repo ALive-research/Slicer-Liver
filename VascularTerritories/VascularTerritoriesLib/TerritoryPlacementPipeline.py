@@ -51,6 +51,13 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
 #: outside it (but over the surface) adds a new point.
 POINT_PICK_RADIUS_PX = 20.0
 
+#: Hover/grab cue colours + halo scale, shared with the resection surface
+#: control points (ControlPolygonPipeline): hover = yellow, grab = green, and
+#: the glow halo is a slightly larger sphere (blurred by vtkOutlineGlowPass).
+HALO_HOVER_COLOR = (1.0, 0.9, 0.2)
+HALO_GRAB_COLOR = (0.3, 1.0, 0.4)
+HALO_HOVER_SCALE = 1.6
+
 #: Interaction state lives on the shared highlight DISPLAY NODE, not on the
 #: Pipeline instance: LayerDM owns the Pipeline instance lifecycle (it creates
 #: its own per view), so the widget/table can only reach the Pipeline the
@@ -136,9 +143,50 @@ class TerritoryPlacementPipeline(_PipelineBase):
         self._seed_glyph.SetColorModeToColorByScalar()
         self._seed_mapper = vtk.vtkPolyDataMapper()
         self._seed_mapper.SetInputConnection(self._seed_glyph.GetOutputPort())
+        # Interpret the per-glyph uchar[3] scalars as RGB directly.  Without
+        # ScalarVisibilityOn + UsePointData the mapper falls back to the LUT
+        # (which maps the 3-component array to near-black) -- the spheres then
+        # render invisible against the dark 3D background.
+        self._seed_mapper.SetScalarModeToUsePointData()
+        self._seed_mapper.ScalarVisibilityOn()
         self._seed_mapper.SetColorModeToDirectScalars()
         self._seed_actor = vtk.vtkActor()
         self._seed_actor.SetMapper(self._seed_mapper)
+
+        # -- hover-adhering MARKER: the sphere that clings to the surface under
+        # the cursor.  This pipeline is the SINGLE 3D pipeline for the
+        # highlight display-node type (ADR-0013 §1, one Pipeline per type), so
+        # it renders the hover marker ITSELF rather than relying on a second
+        # pipeline on the same type (which LayerDM would not create).
+        self._marker_sphere = vtk.vtkSphereSource()
+        self._marker_sphere.SetPhiResolution(16)
+        self._marker_sphere.SetThetaResolution(16)
+        self._marker_sphere.SetRadius(3.0)
+        self._marker_mapper = vtk.vtkPolyDataMapper()
+        self._marker_mapper.SetInputConnection(self._marker_sphere.GetOutputPort())
+        self._marker_actor = vtk.vtkActor()
+        self._marker_actor.SetMapper(self._marker_mapper)
+        self._marker_actor.GetProperty().SetColor(1.0, 0.6, 0.1)
+        self._marker_actor.SetVisibility(False)
+
+        # -- edit hover GLOW halo: a blurred glow around the seed under the
+        # cursor (yellow), swapping to green while grabbed, so the surgeon
+        # knows a marker is about to move -- the ControlPolygonPipeline glow
+        # cue.  Rendered in a private overlay renderer carrying a
+        # vtkOutlineGlowPass (the blur-to-halo pass); degrades to a plain
+        # sphere when the pass class is unavailable.
+        self._hover_target: tuple[str, int] | None = None
+        self._halo_renderer: Any | None = None
+        self._halo_sphere = vtk.vtkSphereSource()
+        self._halo_sphere.SetPhiResolution(16)
+        self._halo_sphere.SetThetaResolution(16)
+        self._halo_sphere.SetRadius(self._seed_sphere.GetRadius() * HALO_HOVER_SCALE)
+        self._halo_mapper = vtk.vtkPolyDataMapper()
+        self._halo_mapper.SetInputConnection(self._halo_sphere.GetOutputPort())
+        self._halo_actor = vtk.vtkActor()
+        self._halo_actor.SetMapper(self._halo_mapper)
+        self._halo_actor.GetProperty().SetColor(*HALO_HOVER_COLOR)
+        self._halo_actor.SetVisibility(False)
 
     # ------------------------------------------------------------------ #
     # Wiring seams (unit + production)
@@ -261,6 +309,8 @@ class TerritoryPlacementPipeline(_PipelineBase):
             self._renderer = renderer
             if renderer is not None:
                 renderer.AddActor(self._seed_actor)
+                renderer.AddActor(self._marker_actor)
+            self._attach_halo_renderer(renderer)
             # Renderer churn cleared the display handle; re-derive it from the
             # base's retained display node (the ControlPolygonPipeline
             # re-attach precedent) so the carrier + seed glyphs come back.
@@ -270,6 +320,7 @@ class TerritoryPlacementPipeline(_PipelineBase):
                     self.SetDisplayNode(display)
             self._ensure_carrier_observed()
             self._rebuild_seed_actor()
+            self._reconcile_highlight()
         except Exception:  # pragma: no cover - C++ boundary must never raise
             pass
 
@@ -277,9 +328,55 @@ class TerritoryPlacementPipeline(_PipelineBase):
         try:
             if renderer is not None:
                 renderer.RemoveActor(self._seed_actor)
+                renderer.RemoveActor(self._marker_actor)
+            self._detach_halo_renderer()
             self._renderer = None
             self.cleanup()
         except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
+
+    def _attach_halo_renderer(self, renderer: Any) -> None:
+        """Build the private glow overlay on ``renderer``'s window.
+
+        A dedicated overlay ``vtkRenderer`` (camera shared with the view
+        renderer) carries the halo actor and a ``vtkOutlineGlowPass`` -- the
+        blur-to-halo pass -- so qMRMLThreeDView's SetPass(nullptr) reset on the
+        VIEW renderer never clobbers it (the ControlPolygonPipeline
+        precedent).  Degrades to the plain halo sphere when the pass class or
+        the render window is unavailable (bare unit layer).
+        """
+        window = getattr(renderer, "GetRenderWindow", None)
+        window = window() if window is not None else None
+        if window is None or self._halo_renderer is not None:
+            return
+        try:
+            overlay = vtk.vtkRenderer()
+            overlay.SetLayer(max(1, window.GetNumberOfLayers()))
+            window.SetNumberOfLayers(overlay.GetLayer() + 1)
+            overlay.InteractiveOff()
+            overlay.SetActiveCamera(renderer.GetActiveCamera())
+            overlay.AddActor(self._halo_actor)
+            glow = getattr(vtk, "vtkOutlineGlowPass", None)
+            steps = getattr(vtk, "vtkRenderStepsPass", None)
+            if glow is not None and steps is not None:
+                glow_pass = glow()
+                glow_pass.SetDelegatePass(steps())
+                overlay.SetPass(glow_pass)
+            window.AddRenderer(overlay)
+            self._halo_renderer = overlay
+        except Exception:  # pragma: no cover - defensive (fake renderers)
+            self._halo_renderer = None
+
+    def _detach_halo_renderer(self) -> None:
+        overlay = self._halo_renderer
+        self._halo_renderer = None
+        if overlay is None:
+            return
+        try:
+            window = overlay.GetRenderWindow()
+            if window is not None:
+                window.RemoveRenderer(overlay)
+        except Exception:  # pragma: no cover - defensive
             pass
 
     def cleanup(self) -> None:
@@ -288,6 +385,8 @@ class TerritoryPlacementPipeline(_PipelineBase):
         self._carrier = None
         self._observed_carrier = None
         self._drag_target = None
+        self._hover_target = None
+        self._halo_actor.SetVisibility(False)
 
     def _ensure_carrier_observed(self) -> None:
         """Observe the in-effect carrier so seed glyphs track its edits.
@@ -304,6 +403,48 @@ class TerritoryPlacementPipeline(_PipelineBase):
         self._observed_carrier = carrier
         if carrier is not None:
             self._attach_observer(carrier)
+
+    def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
+        """LayerDM's re-sync hook (display-node Modified).
+
+        The display node is added to the scene (LayerDM creates this pipeline)
+        BEFORE the table binds the carrier reference onto it, so the carrier is
+        not resolvable at creation.  This hook fires when the reference IS set,
+        so it is where the seed-glyph observer finally attaches -- without it a
+        seed placed from a SLICE view never repaints the 3D glyphs.
+        """
+        try:
+            self._ensure_carrier_observed()
+            self._rebuild_seed_actor()
+            self._reconcile_highlight()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
+
+    def _reconcile_highlight(self) -> None:
+        """Sync the hover-marker sphere to the shared display node's adhering state.
+
+        The single 3D pipeline renders the cross-view hover marker: shown at
+        ``AdheringPointWorld`` when the display node is adhering + visible
+        (published by a hover in ANY view), hidden otherwise.
+        """
+        display = self._display_node
+        if display is None or not hasattr(display, "GetAdhering"):
+            self._marker_actor.SetVisibility(False)
+            return
+        try:
+            self._marker_sphere.SetRadius(float(display.GetRadius()))
+        except Exception:  # pragma: no cover - defensive
+            pass
+        try:
+            color = display.GetColor()
+            self._marker_actor.GetProperty().SetColor(color[0], color[1], color[2])
+        except Exception:  # pragma: no cover - defensive
+            pass
+        adhering = bool(display.GetAdhering()) and bool(display.GetVisibility())
+        self._marker_actor.SetVisibility(adhering)
+        if adhering:
+            point = display.GetAdheringPointWorld()
+            self._marker_actor.SetPosition(point[0], point[1], point[2])
 
     # ------------------------------------------------------------------ #
     # Interaction — placement / edit (ADR-0032 / ADR-0033)
@@ -339,9 +480,23 @@ class TerritoryPlacementPipeline(_PipelineBase):
                 return False, sys.float_info.max
 
             if etype == vtk.vtkCommand.MouseMoveEvent:
-                # Bare hover: raise the highlight as a SIDE EFFECT and
-                # DECLINE -- camera moves stay unclaimed (ADR-0033).
-                self._raise_highlight(renderer, eventData)
+                # Bare hover (ADR-0033: side-effect repaint, DECLINE so the
+                # camera is untouched).  Over an existing seed -> glow halo on
+                # it (about-to-move cue) + suppress the placement preview; over
+                # empty surface -> raise the adhering placement preview.
+                territory, index, distance2 = self._nearest_point_in_display(renderer, eventData)
+                if (
+                    territory is not None
+                    and index is not None
+                    and distance2 <= POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX
+                ):
+                    self._set_hover((territory, index))
+                    self._clear_adhering()
+                else:
+                    self._set_hover(None)
+                    self._raise_highlight(renderer, eventData)
+                self._reconcile_highlight()
+                self.RequestRender()
                 return False, sys.float_info.max
 
             if etype != vtk.vtkCommand.LeftButtonPressEvent:
@@ -356,7 +511,7 @@ class TerritoryPlacementPipeline(_PipelineBase):
             # Add-on-click requires an armed pipeline (ADR-0037 §Decision 3):
             # a disarmed press away from any point leaves the gesture to the
             # camera.
-            if not self._armed:
+            if not self.IsArmed():
                 return False, sys.float_info.max
 
             # Press away from any point: claim only when the ray hits the
@@ -381,12 +536,18 @@ class TerritoryPlacementPipeline(_PipelineBase):
                     return False
                 territory, index, distance2 = self._nearest_point_in_display(renderer, eventData)
                 if territory is not None and index is not None and distance2 <= POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX:
-                    # Grab the existing point for a drag (edit gesture).
+                    # Grab the existing point for a drag (edit gesture): swap the
+                    # glow halo + the seed to the grab colour (green).
                     self._drag_target = (territory, index)
+                    self._position_halo()
+                    self._rebuild_seed_actor()
+                    self.RequestRender()
                     return True
                 # Add-on-click requires an armed pipeline (ADR-0037
-                # §Decision 3): a disarmed click adds nothing.
-                if not self._armed:
+                # §Decision 3): a disarmed click adds nothing.  Read the
+                # display-node-backed arm state (the table writes it there),
+                # NOT the instance flag.
+                if not self.IsArmed():
                     return False
                 # Snap to the surface and add exactly one point to the active
                 # territory.
@@ -394,17 +555,29 @@ class TerritoryPlacementPipeline(_PipelineBase):
                 if world is None:
                     return False
                 self._add_point(world)
+                # Repaint immediately: the carrier observer's RequestRender does
+                # not flush a frame mid-interaction (the slice-pipeline lesson).
+                self._rebuild_seed_actor()
+                self.RequestRender()
                 return True
 
             if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
                 self._drag_target = None
-                return False  # gesture over -- release the focus
+                # Gesture over: drop the grab colour (fall back to hover/none).
+                self._position_halo()
+                self._rebuild_seed_actor()
+                self.RequestRender()
+                return False  # release the focus
 
             if etype == vtk.vtkCommand.MouseMoveEvent:
                 world = self._event_world_on_surface(renderer, eventData)
                 if world is None:
                     return True  # keep the grab; this move just didn't resolve
                 self._relocate_grabbed_point(world)
+                # Track the grabbed seed under the drag + repaint immediately.
+                self._position_halo()
+                self._rebuild_seed_actor()
+                self.RequestRender()
                 return True
 
             return False
@@ -549,6 +722,38 @@ class TerritoryPlacementPipeline(_PipelineBase):
         if changed:
             display.Modified()
 
+    def _clear_adhering(self) -> None:
+        """Retire the placement preview (cursor is over a seed, not empty surface)."""
+        display = self._display_node
+        if display is None or not hasattr(display, "SetAdhering"):
+            return
+        if bool(display.GetAdhering()):
+            display.SetAdhering(False)
+            display.Modified()
+
+    def _set_hover(self, target: tuple[str, int] | None) -> None:
+        """Glow-halo the seed under the cursor (``None`` clears the hover)."""
+        if target == self._hover_target:
+            return
+        self._hover_target = target
+        self._position_halo()
+        self._rebuild_seed_actor()
+
+    def _position_halo(self) -> None:
+        """Place the glow halo on the grabbed (green) or hovered (yellow) seed."""
+        target = self._drag_target or self._hover_target
+        carrier = self._get_carrier()
+        show = False
+        if target is not None and carrier is not None:
+            territory, index = target
+            if 0 <= index < carrier.GetNumberOfAnnotationPoints(territory):
+                point = carrier.GetNthAnnotationPoint(territory, index)
+                self._halo_actor.SetPosition(point[0], point[1], point[2])
+                colour = HALO_GRAB_COLOR if self._drag_target is not None else HALO_HOVER_COLOR
+                self._halo_actor.GetProperty().SetColor(*colour)
+                show = True
+        self._halo_actor.SetVisibility(show)
+
     # ------------------------------------------------------------------ #
     # Observers (reconcile) + plumbing
     # ------------------------------------------------------------------ #
@@ -605,20 +810,30 @@ class TerritoryPlacementPipeline(_PipelineBase):
         self._seed_points.Reset()
         self._seed_colors.Reset()
         self._seed_colors.SetNumberOfComponents(3)
+        grab_rgb = tuple(int(c * 255) for c in HALO_GRAB_COLOR)
+        hover_rgb = tuple(int(c * 255) for c in HALO_HOVER_COLOR)
         carrier = self._get_carrier()
         if carrier is not None:
             for territory in carrier.GetAnnotationTerritoryIds():
                 if not bool(carrier.GetTerritoryVisibility(territory)):
                     continue
                 rgb = carrier.GetTerritoryColor(territory)
-                r = int(max(0.0, min(1.0, rgb[0])) * 255)
-                g = int(max(0.0, min(1.0, rgb[1])) * 255)
-                b = int(max(0.0, min(1.0, rgb[2])) * 255)
+                base = (
+                    int(max(0.0, min(1.0, rgb[0])) * 255),
+                    int(max(0.0, min(1.0, rgb[1])) * 255),
+                    int(max(0.0, min(1.0, rgb[2])) * 255),
+                )
                 count = carrier.GetNumberOfAnnotationPoints(territory)
                 for i in range(count):
                     point = carrier.GetNthAnnotationPoint(territory, i)
                     self._seed_points.InsertNextPoint(point[0], point[1], point[2])
-                    self._seed_colors.InsertNextTuple3(r, g, b)
+                    key = (territory, i)
+                    if key == self._drag_target:
+                        self._seed_colors.InsertNextTuple3(*grab_rgb)  # grabbed: green
+                    elif key == self._hover_target:
+                        self._seed_colors.InsertNextTuple3(*hover_rgb)  # hovered: yellow
+                    else:
+                        self._seed_colors.InsertNextTuple3(*base)
         self._seed_points.Modified()
         self._seed_colors.Modified()
         self._seed_polydata.Modified()
