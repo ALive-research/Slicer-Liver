@@ -14,6 +14,11 @@ from .VesselHighlightWiring import (
     closed_surface_polydata,
 )
 
+# The Stage-3 transient VMTK-seed builder core (ADR-0037 §Decision 4) is
+# dependency-free (no slicer/vtk/Qt) so it imports unconditionally alongside
+# the pure pick core.
+from .TransientVmtkSeeds import build_seed_payload
+
 # The LayerDM highlight Pipeline import depends on LayerDMLib (reachable
 # only from a launched Slicer with the SlicerLayerDisplayableManager
 # extension on the path); guard it so the bare unit layer can still import
@@ -56,12 +61,17 @@ except ImportError:  # pragma: no cover - LayerDMLib unreachable bare
 # package for the pure-VTK pick core alone.
 try:
     from .TerritoriesTableWidget import TerritoriesTableWidget
-except ImportError:  # pragma: no cover - Qt unreachable bare
+except (ImportError, AttributeError):  # pragma: no cover - Qt unreachable bare
+    # A bare ``PythonSlicer -m pytest`` provides a ``qt`` stub without
+    # ``qt.Qt``; the module-scope ``qt.Qt.UserRole`` read then raises
+    # ``AttributeError`` (not ``ImportError``).  Guard both so the pure
+    # builder core (ADR-0037 §Decision 4) stays importable bare.
     TerritoriesTableWidget = None
 
 __all__ = [
     "VesselSurfacePick",
     "closed_surface_polydata",
+    "build_seed_payload",
     "VesselHighlightPipeline",
     "registerVesselHighlightPipelineCreator",
     "TerritoryPlacementPipeline",
