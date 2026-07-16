@@ -52,11 +52,19 @@ def get_active_territory(displayNode: Any) -> str | None:
 
 
 def set_carrier(displayNode: Any, carrier: Any) -> None:
-    """Bind the annotation carrier onto the display node (typed node ref)."""
+    """Bind the annotation carrier onto the display node (typed node ref).
+
+    Fires an explicit ``Modified()``: LayerDM creates the view pipelines when
+    the display node enters the scene, which is BEFORE this bind, and a node-
+    reference change does not reliably emit ``ModifiedEvent``.  The explicit
+    Modified drives LayerDM's ``UpdatePipeline`` on every view so each
+    pipeline (re)attaches its carrier observer and starts tracking seeds.
+    """
     if displayNode is None:
         return
     carrierId = carrier.GetID() if carrier is not None else None
     displayNode.SetNodeReferenceID(CARRIER_REFERENCE_ROLE, carrierId)
+    displayNode.Modified()
 
 
 def get_carrier(displayNode: Any) -> Any | None:

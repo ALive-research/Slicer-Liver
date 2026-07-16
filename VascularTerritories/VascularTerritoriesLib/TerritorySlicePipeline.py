@@ -62,9 +62,22 @@ _REGISTERED = False
 #: seed (mirrors ``TerritoryPlacementPipeline.POINT_PICK_RADIUS_PX``).
 POINT_PICK_RADIUS_PX = 20.0
 
-#: Seed glyph diameter (XY pixels) -- a grab target larger than a default
-#: markups glyph (the slice-control-polygon convention).
-SEED_GLYPH_SCALE_PX = 12.0
+#: Handle / hover-ring glyph diameters (XY pixels), mirroring
+#: ``SliceControlPolygonPipeline``: seeds render as hollow-circle HANDLES
+#: (grab targets), and the ring is a larger hollow circle AROUND the
+#: hovered/grabbed handle.
+HANDLE_GLYPH_SCALE_PX = 13.0
+RING_GLYPH_SCALE_PX = 20.0
+
+#: Interaction colours shared with the resection surface interaction
+#: (``ControlPolygonPipeline``): hover = yellow, grab = green.
+HALO_HOVER_COLOR = (1.0, 0.9, 0.2)
+HALO_GRAB_COLOR = (0.3, 1.0, 0.4)
+
+#: Pull the per-territory base colour toward mid-tone before the signed-
+#: distance side tint, so BOTH the lighter-above and darker-below cues have
+#: headroom (the ``SliceControlPolygonPipeline`` HANDLE_MIDTONE_FACTOR).
+HANDLE_MIDTONE_FACTOR = 0.78
 
 
 def _creator_accepts_view(viewNode: Any) -> bool:  # noqa: N803 - VTK arg name
@@ -108,14 +121,19 @@ class TerritorySlicePipeline(_PipelineBase):
         # (territory id, in-territory index) of the projected seed currently
         # GRABBED by a press/move/release drag -- None when no drag.
         self._drag_target: tuple[str, int] | None = None
+        # (territory id, in-territory index) of the seed under the cursor (the
+        # hover grab affordance), None when the cursor is over none.
+        self._hover_target: tuple[str, int] | None = None
 
-        # Seed glyphs: projected points as 2D circle glyphs with RGBA fading.
+        # Seed HANDLES: projected points as hollow-circle 2D glyphs with RGBA
+        # side-tint + distance fade -- the SliceControlPolygonPipeline handle
+        # style (a grab target you can see is a grab target you can move).
         self._seed_polydata = vtk.vtkPolyData()
         self._seed_polydata.SetPoints(vtk.vtkPoints())
         self._seed_glyph_source = vtk.vtkGlyphSource2D()
         self._seed_glyph_source.SetGlyphTypeToCircle()
-        self._seed_glyph_source.FilledOn()
-        self._seed_glyph_source.SetScale(SEED_GLYPH_SCALE_PX)
+        self._seed_glyph_source.FilledOff()
+        self._seed_glyph_source.SetScale(HANDLE_GLYPH_SCALE_PX)
         self._seed_glyph = vtk.vtkGlyph2D()
         self._seed_glyph.SetInputData(self._seed_polydata)
         self._seed_glyph.SetSourceConnection(self._seed_glyph_source.GetOutputPort())
@@ -124,8 +142,52 @@ class TerritorySlicePipeline(_PipelineBase):
         self._seed_mapper = vtk.vtkPolyDataMapper2D()
         self._seed_mapper.SetInputConnection(self._seed_glyph.GetOutputPort())
         self._seed_actor = vtk.vtkActor2D()
+        self._seed_actor.GetProperty().SetLineWidth(2.0)
         self._seed_actor.SetMapper(self._seed_mapper)
         self._seed_actor.SetVisibility(False)
+
+        # Hover / grab RING: a larger hollow circle on the hovered (yellow) or
+        # grabbed (green) handle -- the 2D analogue of the 3D glow halo, the
+        # SliceControlPolygonPipeline ring.
+        self._ring_polydata = vtk.vtkPolyData()
+        self._ring_polydata.SetPoints(vtk.vtkPoints())
+        self._ring_glyph_source = vtk.vtkGlyphSource2D()
+        self._ring_glyph_source.SetGlyphTypeToCircle()
+        self._ring_glyph_source.FilledOff()
+        self._ring_glyph_source.SetScale(RING_GLYPH_SCALE_PX)
+        self._ring_glyph = vtk.vtkGlyph2D()
+        self._ring_glyph.SetInputData(self._ring_polydata)
+        self._ring_glyph.SetSourceConnection(self._ring_glyph_source.GetOutputPort())
+        self._ring_glyph.ScalingOff()
+        self._ring_mapper = vtk.vtkPolyDataMapper2D()
+        self._ring_mapper.SetInputConnection(self._ring_glyph.GetOutputPort())
+        self._ring_actor = vtk.vtkActor2D()
+        self._ring_actor.GetProperty().SetLineWidth(2.0)
+        self._ring_actor.SetVisibility(False)
+
+        # Adhering-placement PREVIEW: a hollow-circle handle (yellow, the hover
+        # colour) at the shared display node's AdheringPointWorld projected
+        # into THIS slice -- where an armed click would drop a seed.  Published
+        # by whichever view the cursor is in, so it shows in every view at once
+        # (ADR-0033 cross-view cue).  Styled as a handle preview, not a
+        # crosshair, so it reads like the surface interaction.
+        self._highlight_polydata = vtk.vtkPolyData()
+        self._highlight_polydata.SetPoints(vtk.vtkPoints())
+        self._highlight_glyph_source = vtk.vtkGlyphSource2D()
+        self._highlight_glyph_source.SetGlyphTypeToCircle()
+        self._highlight_glyph_source.FilledOff()
+        self._highlight_glyph_source.SetScale(HANDLE_GLYPH_SCALE_PX)
+        self._highlight_glyph = vtk.vtkGlyph2D()
+        self._highlight_glyph.SetInputData(self._highlight_polydata)
+        self._highlight_glyph.SetSourceConnection(self._highlight_glyph_source.GetOutputPort())
+        self._highlight_glyph.ScalingOff()
+        self._highlight_mapper = vtk.vtkPolyDataMapper2D()
+        self._highlight_mapper.SetInputConnection(self._highlight_glyph.GetOutputPort())
+        self._highlight_actor = vtk.vtkActor2D()
+        self._highlight_actor.GetProperty().SetLineWidth(2.0)
+        self._highlight_actor.GetProperty().SetColor(*HALO_HOVER_COLOR)
+        self._highlight_actor.SetMapper(self._highlight_mapper)
+        self._highlight_actor.SetVisibility(False)
 
     # ------------------------------------------------------------------ #
     # Wiring seams (unit + production)
@@ -187,10 +249,17 @@ class TerritorySlicePipeline(_PipelineBase):
 
     def SetDisplayNode(self, displayNode: Any) -> None:  # noqa: N802 - VTK verb
         super().SetDisplayNode(displayNode)
+        if self._display_node is not None and self._display_node is not displayNode:
+            self._detach_observer(self._display_node)
         self._display_node = displayNode
         # A (re)attached display node can carry a different pickSurface /
         # carrier: force both to re-resolve (the highlight-Pipeline precedent).
         self._pick = None
+        # Observe the display node so a cross-view adhering-point change
+        # (published by whichever view the cursor is in) repaints this slice's
+        # hover marker.
+        if displayNode is not None:
+            self._attach_observer(displayNode)
         self._ensure_carrier_observed()
 
     def OnRendererAdded(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
@@ -198,6 +267,8 @@ class TerritorySlicePipeline(_PipelineBase):
             self._renderer = renderer
             if renderer is not None:
                 renderer.AddActor2D(self._seed_actor)
+                renderer.AddActor2D(self._ring_actor)
+                renderer.AddActor2D(self._highlight_actor)
             # Renderer churn cleared the display handle; re-derive it from the
             # base's retained display node (the reattach precedent).
             if self._display_node is None:
@@ -206,6 +277,31 @@ class TerritorySlicePipeline(_PipelineBase):
                     self.SetDisplayNode(display)
             self._ensure_carrier_observed()
             self._reproject()
+            self._reconcile_highlight()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
+
+    def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
+        """LayerDM's re-sync hook: reproject the seeds + repaint the highlight.
+
+        LayerDM's manager owns the display-node observation and calls this when
+        the pipeline's display node is Modified (a hover-published adhering
+        point from ANY view, an arm/visibility change) -- the same hook
+        ``VesselHighlightPipeline`` / ``SliceControlPolygonPipeline`` reconcile
+        in.  This is the channel the cross-view highlight rides, not the raw
+        display-node observer (which LayerDM intercepts).
+
+        Also (re)attaches the carrier observer: the display node is added to
+        the scene (LayerDM creates this pipeline) BEFORE the table binds the
+        carrier reference onto it, so the carrier is not resolvable at
+        creation.  This hook fires when the reference IS set (a display-node
+        Modified), so it is where the seed-tracking observer finally attaches
+        -- without it a passive slice never repaints a seed placed elsewhere.
+        """
+        try:
+            self._ensure_carrier_observed()
+            self._reproject()
+            self._reconcile_highlight()
         except Exception:  # pragma: no cover - C++ boundary must never raise
             pass
 
@@ -213,6 +309,8 @@ class TerritorySlicePipeline(_PipelineBase):
         try:
             if renderer is not None:
                 renderer.RemoveActor2D(self._seed_actor)
+                renderer.RemoveActor2D(self._ring_actor)
+                renderer.RemoveActor2D(self._highlight_actor)
             self._renderer = None
             self.cleanup()
         except Exception:  # pragma: no cover - C++ boundary must never raise
@@ -223,7 +321,10 @@ class TerritorySlicePipeline(_PipelineBase):
             self._detach_observer(node)
         self._observed_carrier = None
         self._drag_target = None
+        self._hover_target = None
         self._seed_actor.SetVisibility(False)
+        self._ring_actor.SetVisibility(False)
+        self._highlight_actor.SetVisibility(False)
 
     def _ensure_carrier_observed(self) -> None:
         """Observe the in-effect carrier so seed glyphs track its edits."""
@@ -268,6 +369,8 @@ class TerritorySlicePipeline(_PipelineBase):
             return False
         origin, normal = frame
 
+        hover_rgb = [int(c * 255) for c in HALO_HOVER_COLOR]
+        grab_rgb = [int(c * 255) for c in HALO_GRAB_COLOR]
         points = vtk.vtkPoints()
         rgba = vtk.vtkUnsignedCharArray()
         rgba.SetNumberOfComponents(4)
@@ -284,11 +387,21 @@ class TerritorySlicePipeline(_PipelineBase):
                     if not _proj.is_present(signed):
                         continue  # HARD presence cutoff
                     xy = _proj.apply_matrix_xy(ras_to_xy, point)
-                    tint = _proj.side_tint(base, signed)
-                    alpha = int(_proj.fade_alpha(signed) * 255)
+                    key = (territory, i)
+                    if key == self._drag_target:
+                        # Grabbed handle: full-alpha grab colour (green).
+                        rgba.InsertNextTuple4(grab_rgb[0], grab_rgb[1], grab_rgb[2], 255)
+                    elif key == self._hover_target:
+                        # Hovered handle: full-alpha hover colour (yellow).
+                        rgba.InsertNextTuple4(hover_rgb[0], hover_rgb[1], hover_rgb[2], 255)
+                    else:
+                        # The markups signed-distance cue: mid-toned base tinted
+                        # toward white (above) / black (below), alpha by distance.
+                        tint = _proj.side_tint(base, signed)
+                        alpha = int(_proj.fade_alpha(signed) * 255)
+                        rgba.InsertNextTuple4(tint[0], tint[1], tint[2], alpha)
                     points.InsertNextPoint(xy[0], xy[1], 0.0)
-                    rgba.InsertNextTuple4(tint[0], tint[1], tint[2], alpha)
-                    self._projected_keys.append((territory, i))
+                    self._projected_keys.append(key)
                     self._projected_xy.append((xy[0], xy[1]))
                     self._plane_distances.append(abs(signed))
         except Exception:  # pragma: no cover - defensive
@@ -299,16 +412,40 @@ class TerritorySlicePipeline(_PipelineBase):
         self._seed_polydata.GetPointData().SetScalars(rgba)
         self._seed_polydata.Modified()
         self._seed_actor.SetVisibility(points.GetNumberOfPoints() > 0)
+        self._update_ring()
         return True
 
-    @staticmethod
-    def _territory_rgb(carrier: Any, territory: str) -> list:
-        """The territory's base display colour as an ``[r, g, b]`` 0..255 list."""
+    def _territory_rgb(self, carrier: Any, territory: str) -> list:
+        """The territory's mid-toned base colour as an ``[r, g, b]`` 0..255 list.
+
+        Pulled toward mid-tone (``HANDLE_MIDTONE_FACTOR``) so the signed-distance
+        side tint has headroom in BOTH directions (the SliceControlPolygonPipeline
+        convention).
+        """
         try:
             rgb = carrier.GetTerritoryColor(territory)
-            return [int(max(0.0, min(1.0, c)) * 255) for c in (rgb[0], rgb[1], rgb[2])]
+            return [
+                int(max(0.0, min(1.0, c)) * 255 * HANDLE_MIDTONE_FACTOR)
+                for c in (rgb[0], rgb[1], rgb[2])
+            ]
         except Exception:  # pragma: no cover - defensive
-            return [255, 255, 255]
+            return [int(255 * HANDLE_MIDTONE_FACTOR)] * 3
+
+    def _update_ring(self) -> None:
+        """Show the hover/grab ring on the grabbed (green) or hovered (yellow) seed."""
+        target = self._drag_target or self._hover_target
+        pts = vtk.vtkPoints()
+        show = False
+        if target is not None and target in self._projected_keys:
+            idx = self._projected_keys.index(target)
+            px, py = self._projected_xy[idx]
+            pts.InsertNextPoint(px, py, 0.0)
+            colour = HALO_GRAB_COLOR if self._drag_target is not None else HALO_HOVER_COLOR
+            self._ring_actor.GetProperty().SetColor(*colour)
+            show = True
+        self._ring_polydata.SetPoints(pts)
+        self._ring_polydata.Modified()
+        self._ring_actor.SetVisibility(show)
 
     # ------------------------------------------------------------------ #
     # Interaction -- placement / slice-side edit (ADR-0032 / ADR-0033)
@@ -337,7 +474,24 @@ class TerritorySlicePipeline(_PipelineBase):
                 return False, sys.float_info.max
 
             if etype == vtk.vtkCommand.MouseMoveEvent:
-                return False, sys.float_info.max  # bare hover: camera untouched
+                # Bare hover (ADR-0033: repaint as a side effect, DECLINE so the
+                # camera is untouched).  Over an existing handle -> mark it the
+                # hover target (yellow ring, grab affordance) and clear the
+                # placement preview; over empty surface -> publish the adhering
+                # point so the placement preview follows the cursor in every
+                # view.  Repaint THIS slice directly -- it must not wait on the
+                # cross-view update path.
+                key, distance2 = self._nearest_seed_in_display(eventData)
+                if key is not None and distance2 <= POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX:
+                    self._hover_target = key
+                    self._clear_highlight()
+                else:
+                    self._hover_target = None
+                    self._publish_highlight(eventData)
+                self._reproject()
+                self._reconcile_highlight()
+                self.RequestRender()
+                return False, sys.float_info.max
 
             if etype != vtk.vtkCommand.LeftButtonPressEvent:
                 return False, sys.float_info.max
@@ -370,6 +524,8 @@ class TerritorySlicePipeline(_PipelineBase):
                 key, distance2 = self._nearest_seed_in_display(eventData)
                 if key is not None and distance2 <= POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX:
                     self._drag_target = key  # grab for a drag (edit gesture)
+                    self._reproject()  # recolour the grabbed handle green + ring
+                    self.RequestRender()
                     return True
                 if not self._is_armed():
                     return False  # a disarmed click adds nothing
@@ -377,10 +533,17 @@ class TerritorySlicePipeline(_PipelineBase):
                 if world is None:
                     return False
                 self._add_point(world)
+                # Repaint THIS slice immediately: a RequestRender from the
+                # carrier observer does not flush a frame mid-interaction (the
+                # seed would otherwise only appear on the next reslice).
+                self._reproject()
+                self.RequestRender()
                 return True
 
             if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
                 self._drag_target = None
+                self._reproject()  # drop the grab colour + ring
+                self.RequestRender()
                 return False  # gesture over -- release the focus
 
             if etype == vtk.vtkCommand.MouseMoveEvent:
@@ -388,6 +551,8 @@ class TerritorySlicePipeline(_PipelineBase):
                 if world is None:
                     return True  # keep the grab; this move just didn't resolve
                 self._relocate_grabbed_point(world)
+                self._reproject()
+                self.RequestRender()
                 return True
 
             return False
@@ -405,7 +570,7 @@ class TerritorySlicePipeline(_PipelineBase):
     # Snap + carrier writes
     # ------------------------------------------------------------------ #
 
-    def _snap_event_to_surface(self, eventData: Any):
+    def _snap_event_to_surface(self, eventData: Any, use_fallback: bool = True):
         """Snap a slice-view pixel onto the vessel surface along the normal.
 
         Resolves the pixel to RAS ON the slice plane (``XYToRAS``), casts a
@@ -413,6 +578,11 @@ class TerritorySlicePipeline(_PipelineBase):
         ``VesselSurfacePick`` -> the surface-snapped world point (``None`` on
         a miss / no surface).  Kept GL-free (the unit layer injects the pick
         result), unlike the 3D pipeline's camera-ray unprojection.
+
+        ``use_fallback`` (placement) lands the in-plane RAS point when the
+        normal ray misses, so an armed click still drops a seed on the plane;
+        the hover highlight passes ``use_fallback=False`` so it hides
+        off-surface (the 3D ``VesselHighlightPipeline`` honest-cue convention).
         """
         pick = self._ensure_pick()
         if pick is None:
@@ -428,9 +598,7 @@ class TerritorySlicePipeline(_PipelineBase):
         if ray is None:
             return None
         p1, p2 = ray
-        # Fall back to the in-plane RAS point when the normal ray misses the
-        # surface, so an armed click still lands a seed on the plane.
-        return pick.pick(p1, p2, fallback_point=ras)
+        return pick.pick(p1, p2, fallback_point=(ras if use_fallback else None))
 
     def _add_point(self, world: Any) -> None:
         carrier = self._get_carrier()
@@ -446,6 +614,85 @@ class TerritorySlicePipeline(_PipelineBase):
             return
         territory, index = target
         carrier.SetNthAnnotationPoint(territory, int(index), float(world[0]), float(world[1]), float(world[2]))
+
+    # ------------------------------------------------------------------ #
+    # Cross-view adhering highlight (publish on hover / render the marker)
+    # ------------------------------------------------------------------ #
+
+    def _publish_highlight(self, eventData: Any) -> None:
+        """Publish the cursor's surface point onto the shared display node.
+
+        A bare hover in this slice resolves the vessel-surface point under the
+        cursor (along the slice normal, no in-plane fallback) and writes it
+        onto the data-only highlight display node, so EVERY view's Pipeline
+        paints the adhering marker there (the cross-view hover cue).
+        Change-gated so the hover does not storm ``Modified``.
+        """
+        display = self._display_node
+        if display is None or not hasattr(display, "SetAdhering"):
+            return
+        world = self._snap_event_to_surface(eventData, use_fallback=False)
+        adhering = world is not None
+        changed = False
+        if bool(display.GetAdhering()) != adhering:
+            display.SetAdhering(adhering)
+            changed = True
+        if adhering:
+            current = display.GetAdheringPointWorld()
+            if tuple(current) != (world[0], world[1], world[2]):
+                display.SetAdheringPointWorld(world[0], world[1], world[2])
+                changed = True
+        if changed:
+            display.Modified()
+
+    def _clear_highlight(self) -> None:
+        """Clear the shared adhering point (cursor is over a handle, not empty surface).
+
+        Publishing ``adhering=False`` retires the placement preview in EVERY
+        view so it does not compete with the grab ring on the hovered handle.
+        """
+        display = self._display_node
+        if display is None or not hasattr(display, "SetAdhering"):
+            return
+        if bool(display.GetAdhering()):
+            display.SetAdhering(False)
+            display.Modified()
+
+    def _reconcile_highlight(self) -> None:
+        """Project the shared adhering point into this slice as the hover marker.
+
+        Reads the data-only display node (the adhering point + flags any view
+        published) and shows a hollow-circle handle PREVIEW (solid yellow, the
+        hover colour, set on the actor) at its projection.  Unlike the seeds,
+        the preview is a TRANSIENT cue and is NOT distance-culled: the surface
+        point under the cursor sits at the vessel's depth (a radius OFF the
+        slice plane along the normal), so a presence cutoff would hide it in
+        the very slice being hovered.  It shows in every slice whenever
+        adhering, so the cue is present in 2D and 3D regardless of where the
+        cursor is.
+        """
+        display = self._display_node
+        slice_node = self._slice_node
+        points = vtk.vtkPoints()
+        show = False
+        try:
+            if (
+                display is not None
+                and slice_node is not None
+                and bool(display.GetAdhering())
+                and bool(display.GetVisibility())
+            ):
+                ras_to_xy = _proj.inverse_xy_to_ras(slice_node)
+                if ras_to_xy is not None:
+                    world = display.GetAdheringPointWorld()
+                    xy = _proj.apply_matrix_xy(ras_to_xy, world)
+                    points.InsertNextPoint(xy[0], xy[1], 0.0)
+                    show = True
+        except Exception:  # pragma: no cover - defensive
+            show = False
+        self._highlight_polydata.SetPoints(points)
+        self._highlight_polydata.Modified()
+        self._highlight_actor.SetVisibility(show)
 
     def _nearest_seed_in_display(self, eventData: Any):
         """``((territoryId, index) | None, distance2)`` of the nearest projected seed.
@@ -514,9 +761,15 @@ class TerritorySlicePipeline(_PipelineBase):
         (a table repaint, a colour change) reprojects without adding / moving
         / dropping any seed (ADR-0037 §Conformance no-drift).
         """
-        del caller, event
+        del event
         try:
-            self._reproject()
+            # A display-node Modified is (almost always) an adhering-point /
+            # visibility change from a hover in SOME view: repaint the marker
+            # only, keeping the per-hover cost off the full seed reprojection.
+            # A carrier / slice Modified reprojects the seeds too.
+            if caller is not self._display_node:
+                self._reproject()
+            self._reconcile_highlight()
             self.RequestRender()
         except Exception:  # pragma: no cover - C++ boundary must never raise
             pass

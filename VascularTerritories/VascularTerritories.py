@@ -170,15 +170,15 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     """
     ScriptedLoadableModuleWidget.setup(self)
 
-    # ADR-0013 §5 call 3 — register the LayerDM Pipeline creator for the
-    # vessel-adhering highlight (``vtkMRMLTerritoriesHighlightDisplayNode``).
-    # The Pipeline class is Python (ADR-0004 §1); one Pipeline per
-    # display-node type (ADR-0013 §1).  Registration is idempotent (a
-    # module-level flag inside the creator).  Guarded: in a launch without
-    # the SlicerLayerDisplayableManager extension on the module path,
-    # ``LayerDMLib`` is unreachable — log loudly (ADR-0002 makes LayerDM a
-    # hard runtime dependency) but let the rest of setup continue.
-    self._registerVesselHighlightPipeline()
+    # Register the LayerDM Pipeline creators (ADR-0013 §5 call 3).  ONE
+    # Pipeline per display-node type (ADR-0013 §1): the highlight display node
+    # gets exactly ONE 3D pipeline -- ``TerritoryPlacementPipeline``, which
+    # renders the placed seeds AND the hover-adhering marker AND handles
+    # placement/edit -- plus ONE slice pipeline (``TerritorySlicePipeline``)
+    # for the 2D views.  ``VesselHighlightPipeline`` is NOT registered: a
+    # second pipeline on the same (view, display) type is never created by
+    # LayerDM, which previously shadowed placement (only the marker showed).
+    # Registration is idempotent; guarded against an unreachable LayerDMLib.
     self._registerTerritoryPlacementPipeline()
     self._registerTerritorySlicePipeline()
 
@@ -349,8 +349,7 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     if node is not None and slicer.mrmlScene.IsNodePresent(node):
       return node
     try:
-      node = slicer.mrmlScene.AddNewNodeByClass(
-        "vtkMRMLTerritoriesHighlightDisplayNode", "Vessel Highlight")
+      node = slicer.mrmlScene.CreateNodeByClass("vtkMRMLTerritoriesHighlightDisplayNode")
     except Exception:  # noqa: BLE001 - node class not registered in this launch
       logging.warning(
         "VascularTerritories: vtkMRMLTerritoriesHighlightDisplayNode "
@@ -358,7 +357,24 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
       return None
     if node is None:
       return None
-    node.SetVisibility(False)  # off until place mode turns it on
+    node.UnRegister(None)
+    node.SetName("Vessel Highlight")
+    node.SetVisibility(False)  # off until arming turns it on
+    # Configure BEFORE AddNode: LayerDM consults the pipeline creators the
+    # moment the node enters the scene, and each created pipeline (3D + every
+    # slice) resolves + OBSERVES the annotation carrier at creation.  So the
+    # carrier reference (and the pickSurface) must already be on the node --
+    # bind them here, pre-add, or a seed placed in one view never repaints the
+    # others until they are individually resliced (the ResectogramViewManager
+    # "configure before AddNode" precedent).
+    carrier = getattr(self, "_annotationCarrier", None)
+    if carrier is not None:
+      from VascularTerritoriesLib import TerritoryInteractionState as _territoryState
+      _territoryState.set_carrier(node, carrier)
+    segmentation = self.ui.inputSurfaceSelector.currentNode()
+    if segmentation is not None:
+      node.SetAndObservePickSurfaceNodeID(segmentation.GetID())
+    node = slicer.mrmlScene.AddNode(node)
     self._highlightDisplayNode = node
     return node
 
