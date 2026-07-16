@@ -70,8 +70,8 @@ class vtkMRMLJsonElement;
  * {
  *   "schemaVersion": 1,
  *   "annotationPoints": {
- *     "SegmentVII":  [ [x, y, z], [x, y, z], ... ],
- *     "SegmentVIII": [ [x, y, z], ... ]
+ *     "SegmentVII":  [ { "xyz": [x, y, z] }, { "xyz": [x, y, z] }, ... ],
+ *     "SegmentVIII": [ { "xyz": [x, y, z] }, ... ]
  *   },
  *   "territoryDisplay": {
  *     "SegmentVII": { "color": [r, g, b], "label": "…", "visibility": true }
