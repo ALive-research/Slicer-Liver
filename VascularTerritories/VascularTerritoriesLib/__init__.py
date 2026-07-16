@@ -39,6 +39,18 @@ except ImportError:  # pragma: no cover - LayerDMLib unreachable bare
     TerritoryPlacementPipeline = None
     registerTerritoryPlacementPipelineCreator = None
 
+# The slice-view annotation Pipeline (ADR-0037 §2D placement) is the slice
+# complement of the placement Pipeline; same LayerDMLib dependency, guarded
+# the same way.
+try:
+    from .TerritorySlicePipeline import (
+        TerritorySlicePipeline,
+        registerTerritorySlicePipelineCreator,
+    )
+except ImportError:  # pragma: no cover - LayerDMLib unreachable bare
+    TerritorySlicePipeline = None
+    registerTerritorySlicePipelineCreator = None
+
 # The Stage-2 annotation table widget (ADR-0037 §Decision 3) needs Qt
 # (``qt.QTableWidget``); guard it so the bare unit layer can still import the
 # package for the pure-VTK pick core alone.
@@ -54,5 +66,7 @@ __all__ = [
     "registerVesselHighlightPipelineCreator",
     "TerritoryPlacementPipeline",
     "registerTerritoryPlacementPipelineCreator",
+    "TerritorySlicePipeline",
+    "registerTerritorySlicePipelineCreator",
     "TerritoriesTableWidget",
 ]
