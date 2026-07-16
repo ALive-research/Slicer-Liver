@@ -114,6 +114,19 @@ set(_vascterr_pytest_files
   # so they SKIP-PENDING bare and RUN launched; the REAL extraction wiring
   # is SlicerVMTK-env-gated and skips cleanly off that image (ADR-0027).
   test_territories_vmtk_feed.py
+  # ADR-0037 §Decision 3 (slice 2) -- the PANEL modernisation to Python-widget
+  # composition (ADR-0004): the table-duplicating v1 selector/place-widget
+  # surface (ColorPickerButton / showHideButton / addSegmentationButton /
+  # SegmentsWidget / inputSegmentSelectorWidget / vascularTerritoryId) + its
+  # handlers retire, while inputSurfaceSelector / SegmentationShow3DButton /
+  # the composed TerritoriesTableWidget / the Extract-centerlines action stay
+  # re-homed, and the slice-3 map path (Compute territory map +
+  # selectedVascularTerritorySegmId) stays FUNCTIONAL.  Builds the module
+  # widget so it needs a launched qSlicerApplication; the behavioural
+  # assertions guard on the retirement having landed, SKIP-PENDING bare AND
+  # while the v1 surface survives, and RUN launched once slice 2 lands
+  # (ADR-0027).
+  test_territories_widget_panel.py
 )
 
 foreach(_pytest_file IN LISTS _vascterr_pytest_files)
