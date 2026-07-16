@@ -180,6 +180,7 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # hard runtime dependency) but let the rest of setup continue.
     self._registerVesselHighlightPipeline()
     self._registerTerritoryPlacementPipeline()
+    self._registerTerritorySlicePipeline()
 
     # Load widget from .ui file (created by Qt Designer)
     uiWidget = slicer.util.loadUI(self.resourcePath('UI/VascularTerritories.ui'))
@@ -298,6 +299,27 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         "not registered (%s) -- annotation placement is disabled in this "
         "session.  Loading the SlicerLayerDisplayableManager extension is "
         "required for the Pipeline path (ADR-0013/0037).", exc)
+
+  def _registerTerritorySlicePipeline(self):
+    """Register the slice-view annotation LayerDM Pipeline creator.
+
+    ADR-0037 §2D placement (ADR-0013 §5 call 3): the slice complement of the
+    3D placement Pipeline, reusing the SAME shared display-node state so 2D
+    and 3D placement stay in lockstep.  Idempotent; a missing LayerDMLib is a
+    real configuration error under ADR-0002 so it logs at ``critical``, but
+    the rest of widget setup continues.
+    """
+    try:
+      from VascularTerritoriesLib import registerTerritorySlicePipelineCreator
+      if registerTerritorySlicePipelineCreator is None:
+        raise ImportError("registerTerritorySlicePipelineCreator unavailable")
+      registerTerritorySlicePipelineCreator()
+    except ImportError as exc:
+      logging.critical(
+        "VascularTerritories: slice-view annotation LayerDM Pipeline creator "
+        "not registered (%s) -- slice-view annotation placement is disabled "
+        "in this session.  Loading the SlicerLayerDisplayableManager "
+        "extension is required for the Pipeline path (ADR-0013/0037).", exc)
 
   # ------------------------------------------------------------------ #
   # Vessel-adhering-highlight wiring (ADR-0036)

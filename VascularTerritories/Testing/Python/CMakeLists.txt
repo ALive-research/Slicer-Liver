@@ -96,6 +96,13 @@ set(_vascterr_pytest_files
   # + carrier display slot + Pipeline arm seam, they SKIP-PENDING bare and
   # RUN launched once the seam lands (ADR-0027).
   test_territories_table.py
+  # ADR-0037 §2D -- the slice-view territory placement + distance-faded viz
+  # (mirrors SliceControlPolygonPipeline, ADR-0033): the projection / signed
+  # distance / presence cutoff are pure math and RUN bare against the
+  # TerritorySliceProjection helper; the snap / arm-gate / bare-move-decline
+  # invariants need LayerDMLib so they SKIP bare and RUN launched, mirroring
+  # the 3D placement suite (ADR-0027).
+  test_territories_slice_pipeline.py
 )
 
 foreach(_pytest_file IN LISTS _vascterr_pytest_files)
