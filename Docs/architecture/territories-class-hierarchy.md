@@ -42,16 +42,50 @@ classDiagram
     }
 
     class vtkMRMLCustomTerritoriesNode {
+        <<manual path — annotation carrier>>
         +CenterlineRefs vtkMRMLModelNode[]
-        +EndpointRefs vtkMRMLMarkupsFiducialNode[]
+        +AnnotationPoints map~territoryId, points[3]~
+        +TerritoryColor/Label/Visibility map~territoryId~
         +Groupings map~CenterlineId, SegmentId~
         +SegmentNames vtkStringArray
+    }
+
+    class vtkMRMLCustomTerritoriesStorageNode {
+        <<storage — .vta.json round-trip>>
+        annotationPoints + territoryDisplay
+    }
+
+    class vtkMRMLTerritoriesHighlightDisplayNode {
+        <<data-only display / interaction channel>>
+        +pickSurface → vtkMRMLSegmentationNode
+        +Armed / ActiveTerritory attrs
+        +carrier → vtkMRMLCustomTerritoriesNode
+        +Adhering / AdheringPointWorld
     }
 
     vtkMRMLAbstractTerritoriesNode <|-- vtkMRMLStdCouinaudTerritoriesNode
     vtkMRMLAbstractTerritoriesNode <|-- vtkMRMLCustomTerritoriesNode
     vtkMRMLAbstractTerritoriesNode --> vtkMRMLSegmentationNode : segments ref
+    vtkMRMLCustomTerritoriesNode --> vtkMRMLCustomTerritoriesStorageNode : storage
+    vtkMRMLTerritoriesHighlightDisplayNode --> vtkMRMLCustomTerritoriesNode : carrier ref
+    vtkMRMLTerritoriesHighlightDisplayNode --> vtkMRMLSegmentationNode : pickSurface ref
 ```
+
+Annotation moved **off Slicer markups** ([ADR-0037][adr-0037]): the
+manual path's endpoints are now an own ordered per-territory
+`AnnotationPoints` carrier on `vtkMRMLCustomTerritoriesNode` (with a
+per-territory colour/label/visibility display slot), round-tripped by
+`vtkMRMLCustomTerritoriesStorageNode` (`.vta.json`). Placement, edit, and
+the cross-view adhering highlight run through LayerDM scripted pipelines
+(`TerritoryPlacementPipeline` for 3D views, `TerritorySlicePipeline` for
+slice views) keyed on the data-only `vtkMRMLTerritoriesHighlightDisplayNode`,
+which also carries the shared arm/active/carrier interaction state
+([ADR-0013][adr-0013] one Pipeline per display-node type; [ADR-0032][adr-0032]
+interaction via the Pipeline seam).
+
+[adr-0037]: ../adr/0037-vascular-territories-off-markups.md
+[adr-0013]: https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0013-layerdm-pipeline-pattern.md
+[adr-0032]: ../adr/0032-v2-interaction-via-layerdm-pipeline-seam.md
 
 The base class exposes only what downstream consumers need
 (Stage 4's classification overlay, Stage 5's per-segment volume
