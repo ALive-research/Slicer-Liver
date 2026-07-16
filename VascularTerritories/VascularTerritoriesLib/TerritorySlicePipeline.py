@@ -162,6 +162,7 @@ class TerritorySlicePipeline(_PipelineBase):
         self._ring_mapper = vtk.vtkPolyDataMapper2D()
         self._ring_mapper.SetInputConnection(self._ring_glyph.GetOutputPort())
         self._ring_actor = vtk.vtkActor2D()
+        self._ring_actor.SetMapper(self._ring_mapper)
         self._ring_actor.GetProperty().SetLineWidth(2.0)
         self._ring_actor.SetVisibility(False)
 

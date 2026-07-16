@@ -23,6 +23,11 @@ scripted Pipeline; this file pins the SLICE-VIEW complement
 * SHARED STATE.  Arm / active-territory / carrier live on the SAME shared
   highlight display node the 3D placement uses
   (``TerritoryInteractionState``), so 2D and 3D placement stay in lockstep.
+* CONSTRUCTION.  Every ``vtkActor2D`` the pipeline adds to the renderer (the
+  seed handles, the hover/grab ring, the adhering-placement preview) is
+  built WITH its ``vtkPolyDataMapper2D`` -- a mapperless 2D actor emits
+  ``vtkActor2D: No mapper set`` on every render and can crash the app under
+  GL, a defect invisible to headless tests + review.
 
 The projection math runs bare; the Pipeline itself needs LayerDMLib
 (reachable only inside a launched Slicer with the module loaded), so the
@@ -433,6 +438,48 @@ def test_reproject_projects_only_present_visible_seeds(monkeypatch):
         "only the present, visible seed survives the projection (HARD presence "
         "cutoff + territory visibility)."
     )
+
+
+# --------------------------------------------------------------------------- #
+# CONSTRUCTION — every 2D actor carries a mapper (LAUNCHED; SKIP bare)
+# --------------------------------------------------------------------------- #
+
+
+def test_every_slice_actor_has_a_mapper():
+    """A freshly built pipeline's 2D actors ALL carry a non-None mapper.
+
+    Each ``vtkActor2D`` the slice pipeline adds to the renderer -- the seed
+    HANDLES, the hover/grab RING, and the adhering-placement PREVIEW -- must
+    be constructed WITH its ``vtkPolyDataMapper2D`` set.  An actor added to a
+    renderer without a mapper emits ``vtkActor2D: No mapper set`` on every
+    render and can crash the app under GL -- a defect invisible to headless
+    tests and review (no mapper, no crash without a live GL context).  Pins
+    the construction contract so a dropped ``SetMapper`` on ANY of the three
+    actors regresses here rather than in the field (ADR-0037 §Decision 2 the
+    LayerDM Pipeline renders the annotation; ADR-0033 the slice handle/ring
+    mirror).
+
+    Launched-only: ``TerritorySlicePipeline`` imports ``LayerDMLib`` at module
+    top, so this SKIPS bare and RUNS launched (the module-load skip idiom).
+    """
+    _slicer_or_skip()
+    TerritorySlicePipeline = _import_pipeline_or_skip()
+    pipeline = TerritorySlicePipeline()
+
+    actors = {
+        "_seed_actor": getattr(pipeline, "_seed_actor", None),
+        "_ring_actor": getattr(pipeline, "_ring_actor", None),
+        "_highlight_actor": getattr(pipeline, "_highlight_actor", None),
+    }
+    for name, actor in actors.items():
+        assert actor is not None, (
+            f"the slice pipeline must construct its {name} 2D actor."
+        )
+        assert actor.GetMapper() is not None, (
+            f"{name} must be constructed WITH a mapper -- a mapperless "
+            "vtkActor2D emits 'No mapper set' on every render and can crash "
+            "the app under GL (ADR-0037 §Decision 2 / ADR-0033)."
+        )
 
 
 if __name__ == "__main__":
