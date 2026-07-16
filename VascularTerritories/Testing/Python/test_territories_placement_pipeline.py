@@ -19,10 +19,17 @@ delete-from-table is the whole lifecycle:
   * DELETE removes exactly one point;
   * an unrelated ``Modified`` causes no drift.
 
-This file pins two Stage-1 increments on the placement Pipeline:
+This file pins the Stage-1 increments + the Stage-2 shared-display-node
+routing on the placement Pipeline:
 
 * i3 — PLACEMENT click->add + bare-move decline.
 * i4 — EDIT (drag) + DELETE, and no-drift-on-unrelated-Modified.
+* i5 — SHARED DISPLAY-NODE routing (Stage 2 / the 3D-fix contract): with a
+  display node present, ``Arm()`` / ``SetActiveTerritory()`` publish onto it
+  and read back via ``IsArmed()`` / ``GetActiveTerritory()``, and a click
+  routes into the display-node-resolved carrier + ACTIVE territory.  The
+  bare-unit i3/i4 path (``SetPickCore`` + ``SetCarrier``, no display node)
+  keeps working via the instance-field fallback.
 
 The point storage lives on ``vtkMRMLCustomTerritoriesNode`` (the carrier
 pinned by ``test_territories_annotation_carrier.py``); this file pins the
@@ -83,7 +90,9 @@ import pytest
 vtk = pytest.importorskip("vtk")
 
 CUSTOM_TERRITORIES_CLASS = "vtkMRMLCustomTerritoriesNode"
+HIGHLIGHT_DISPLAY_CLASS = "vtkMRMLTerritoriesHighlightDisplayNode"
 TERRITORY_A = "SegmentVII"
+TERRITORY_B = "SegmentVIII"
 
 # Carrier API seam (also pinned by test_territories_annotation_carrier.py).
 ADD_POINT_METHOD = "AddAnnotationPoint"
@@ -145,6 +154,29 @@ def _make_carrier_or_skip(slicer, name="PlacementCarrierTest"):
                 "lifts at the implementation commit (ADR-0027)."
             )
     return node
+
+
+def _make_display_node_or_skip(slicer, name="PlacementHighlightTest"):
+    """Mint the shared highlight display node, or skip-pend (ADR-0027)."""
+    node = slicer.mrmlScene.AddNewNodeByClass(HIGHLIGHT_DISPLAY_CLASS, name)
+    if node is None:
+        pytest.skip(
+            f"{HIGHLIGHT_DISPLAY_CLASS} not registered -- the shared highlight "
+            "display node (ADR-0036/0037) is unavailable (launched build)."
+        )
+    return node
+
+
+def _import_interaction_state_or_skip():
+    """Import the shared interaction-state accessors, or skip-pend (ADR-0027)."""
+    try:
+        import TerritoryInteractionState as state
+    except Exception as exc:  # pragma: no cover - import-environment dependent
+        pytest.skip(
+            f"TerritoryInteractionState not importable ({exc!r}) -- the ADR-0037 "
+            "shared display-node state module has not landed (ADR-0027)."
+        )
+    return state
 
 
 def _unit_sphere():
@@ -444,6 +476,73 @@ def test_unrelated_modified_causes_no_point_drift(monkeypatch):
         assert tuple(carrier.GetNthAnnotationPoint(TERRITORY_A, i)) == pytest.approx(
             expected, abs=1e-9
         ), f"point {i} must not drift on an unrelated Modified."
+
+
+# --------------------------------------------------------------------------- #
+# i5 — shared display-node routing (Stage 2 / the 3D-fix contract)
+# --------------------------------------------------------------------------- #
+
+
+def test_display_node_routes_arm_active_and_click(monkeypatch):
+    """i5: with a display node present, arm/active read back + a click routes there.
+
+    The 3D-fix contract: the widget/table cannot reach the manager-created
+    Pipeline instance, so arm state / active territory / carrier ride on the
+    SHARED highlight display node.  A Pipeline whose ``SetDisplayNode`` bound
+    that node must (a) publish ``Arm()`` / ``SetActiveTerritory()`` onto it
+    and read them back via ``IsArmed()`` / ``GetActiveTerritory()``, and (b)
+    route a click into the display-node-resolved carrier + ACTIVE territory —
+    NOT an instance-field carrier.  This is the integration the
+    detached-instance bug slipped through.
+    """
+    slicer = _slicer_or_skip()
+    TerritoryPlacementPipeline = _import_pipeline_or_skip()
+    pipeline = TerritoryPlacementPipeline()
+    carrier = _make_carrier_or_skip(slicer)
+    displayNode = _make_display_node_or_skip(slicer)
+    state = _import_interaction_state_or_skip()
+
+    VesselSurfacePick = _import_pick_or_skip()
+    if not hasattr(pipeline, "SetPickCore") or not hasattr(pipeline, "SetDisplayNode"):
+        pytest.skip(
+            "TerritoryPlacementPipeline lacks SetPickCore / SetDisplayNode -- "
+            "cannot bind the shared display-node state (Stage-2 not landed)."
+        )
+    for method in ("SetActiveTerritory", "GetActiveTerritory", "Arm", "IsArmed"):
+        if not hasattr(pipeline, method):
+            pytest.skip(
+                f"TerritoryPlacementPipeline has no {method} -- the shared "
+                "display-node arm seam has not landed (ADR-0027)."
+            )
+    monkeypatch.setattr(pipeline, "_safe_get_renderer", lambda: _FakeRenderer())
+    pipeline.SetPickCore(VesselSurfacePick(_unit_sphere()))
+
+    # Bind the carrier onto the SHARED display node (NOT via SetCarrier), then
+    # hand the display node to the pipeline: everything resolves from the node.
+    state.set_carrier(displayNode, carrier)
+    pipeline.SetDisplayNode(displayNode)
+
+    # (a) arm + active publish onto the node and read back through the seam.
+    pipeline.SetActiveTerritory(TERRITORY_B)
+    pipeline.Arm()
+    assert pipeline.IsArmed() is True
+    assert pipeline.GetActiveTerritory() == TERRITORY_B
+    assert state.is_armed(displayNode) is True
+    assert state.get_active_territory(displayNode) == TERRITORY_B
+
+    # (b) a click routes into the display-node-resolved carrier + ACTIVE
+    # territory (B), not the other one.
+    before_b = carrier.GetNumberOfAnnotationPoints(TERRITORY_B)
+    before_a = carrier.GetNumberOfAnnotationPoints(TERRITORY_A)
+    click = _Event(vtk.vtkCommand.LeftButtonPressEvent)
+    assert pipeline.ProcessInteractionEvent(click) is True
+
+    assert carrier.GetNumberOfAnnotationPoints(TERRITORY_B) == before_b + 1, (
+        "an armed click must append ONE seed to the display-node ACTIVE territory."
+    )
+    assert carrier.GetNumberOfAnnotationPoints(TERRITORY_A) == before_a, (
+        "the click must not leak into another territory."
+    )
 
 
 if __name__ == "__main__":

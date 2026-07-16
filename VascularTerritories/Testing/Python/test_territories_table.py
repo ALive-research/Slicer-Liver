@@ -24,12 +24,19 @@ invariants pin:
   colour / label / visibility accessors).  It OBSERVES the carrier's
   ``vtkCommand::ModifiedEvent`` and rebuilds; edits write back.
 * ARMING (pipeline-managed, NOT a Slicer mouse mode).  The arm state lives
-  on the ``TerritoryPlacementPipeline``; the interaction node is NOT
-  touched.  "Add Territory" mints a new empty territory on the carrier,
-  selects its row, makes it the pipeline's ACTIVE territory, and arms
-  placement; each surface click through the pipeline seam appends ONE seed
-  to the ACTIVE territory (sequential, unbounded).  "Done" / Esc disarms.
-  Selecting an existing row + "Add seeds" re-arms into THAT territory.
+  on the SHARED highlight DISPLAY NODE (``TerritoryInteractionState``): the
+  table WRITES arm / active-territory / carrier onto it, and the
+  manager-driven placement Pipeline READS them back at event time — the
+  widget cannot reach the manager-owned Pipeline instance directly, so the
+  display node is the shared handle (the 3D-fix contract).  "Add Territory"
+  mints a new empty territory on the carrier, selects its row, makes it the
+  ACTIVE territory, and arms placement; each surface click through the
+  pipeline seam appends ONE seed to the ACTIVE territory (sequential,
+  unbounded).  "Done" / Esc disarms.  Selecting an existing row + "Add
+  seeds" re-arms into THAT territory.  The integration these tests pin: a
+  REAL ``TerritoryPlacementPipeline`` whose ``SetDisplayNode`` was called
+  with the SAME display node the table writes to routes the click into the
+  ACTIVE territory — the gap that let the detached-instance bug through.
 * DELETE CONVERGENCE.  Delete-by-row (table) and delete-by-pick (pipeline)
   route through ONE carrier deletion path — a single point-removal
   implementation reached from both entry points.
@@ -49,11 +56,11 @@ A Python-widget-composed table, mirroring the Stage-2 segments-table
 paradigm (ADR-0034) but CUSTOM (ADR-0037 §Decision 3):
 
   * module path ``VascularTerritoriesLib.TerritoriesTableWidget``, class
-    ``TerritoriesTableWidget`` (a ``qt.QTableWidget`` subclass or a
-    composed widget owning one), constructed over the carrier + the
-    placement Pipeline:
+    ``TerritoriesTableWidget`` (a composed ``qt.QWidget`` owning a
+    ``qt.QTableWidget``), constructed over the carrier + the SHARED
+    highlight display node:
       ``TerritoriesTableWidget(carrier=<vtkMRMLCustomTerritoriesNode>,
-                               pipeline=<TerritoryPlacementPipeline>)``.
+                               displayNode=<vtkMRMLTerritoriesHighlightDisplayNode>)``.
   * ``table()`` -> the underlying ``qt.QTableWidget``;
   * row model helpers: ``isHeaderRow(row) -> bool``,
     ``territoryOfRow(row) -> str``, ``pointIndexOfRow(row) -> int | None``
@@ -64,17 +71,19 @@ paradigm (ADR-0034) but CUSTOM (ADR-0037 §Decision 3):
     row's territory ("Add seeds");
   * ``done()`` — disarm;
   * ``deleteRow(row)`` — the delete-from-table entry point, converging on
-    the pipeline's ``DeleteAnnotationPoint``;
+    the carrier's ``RemoveNthAnnotationPoint`` (the SAME method the
+    pipeline's ``DeleteAnnotationPoint`` reaches);
   * status-cell readers for the completeness assertion:
     ``rowStatusText(row) -> str`` and ``rowHasIncompleteGlyph(row) -> bool``.
 
-The arm state on the Pipeline (a Stage-2 addition to
-``TerritoryPlacementPipeline``): an ``IsArmed() -> bool`` plus an
-"active territory" the click appends into (the current ``SetCarrier``
-binds a single territory; Stage 2 needs "set active territory + arm" so a
-click appends to the ACTIVE territory, not an implicit one).  Proposed:
-``SetActiveTerritory(territoryId)`` / ``GetActiveTerritory()`` +
-``Arm()`` / ``Disarm()`` / ``IsArmed()``.
+The arm state rides on the SHARED highlight DISPLAY NODE
+(``TerritoryInteractionState``: ``set_armed`` / ``is_armed`` /
+``set_active_territory`` / ``get_active_territory`` / ``set_carrier`` /
+``get_carrier``), the handle both the table and the manager-driven Pipeline
+hold.  The Pipeline reads them back via its ``IsArmed()`` /
+``GetActiveTerritory()`` seam once ``SetDisplayNode`` binds the SAME node.
+"Add Territory" writes active-territory + armed onto the display node so a
+click appends to the ACTIVE territory, not an implicit one.
 
 -- WHY LAUNCHED-SLICER --
 
@@ -116,6 +125,7 @@ import pytest
 vtk = pytest.importorskip("vtk")
 
 CUSTOM_TERRITORIES_CLASS = "vtkMRMLCustomTerritoriesNode"
+HIGHLIGHT_DISPLAY_CLASS = "vtkMRMLTerritoriesHighlightDisplayNode"
 TERRITORY_A = "SegmentVII"
 TERRITORY_B = "SegmentVIII"
 
@@ -177,6 +187,34 @@ def _make_carrier_or_skip(slicer, name="TableCarrierTest"):
     return node
 
 
+def _make_display_node_or_skip(slicer, name="TableHighlightTest"):
+    """Mint the shared highlight display node, or skip-pend (ADR-0027).
+
+    The display node is the shared handle both the table and the
+    manager-driven placement Pipeline hold: the table writes arm /
+    active-territory / carrier onto it, the Pipeline reads them back.
+    """
+    node = slicer.mrmlScene.AddNewNodeByClass(HIGHLIGHT_DISPLAY_CLASS, name)
+    if node is None:
+        pytest.skip(
+            f"{HIGHLIGHT_DISPLAY_CLASS} not registered -- the shared highlight "
+            "display node (ADR-0036/0037) is unavailable (launched build)."
+        )
+    return node
+
+
+def _import_interaction_state_or_skip():
+    """Import the shared interaction-state accessors, or skip-pend (ADR-0027)."""
+    try:
+        import TerritoryInteractionState as state
+    except Exception as exc:  # pragma: no cover - import-environment dependent
+        pytest.skip(
+            f"TerritoryInteractionState not importable ({exc!r}) -- the ADR-0037 "
+            "shared display-node state module has not landed (ADR-0027)."
+        )
+    return state
+
+
 def _import_table_or_skip():
     """Import the Stage-2 table widget class or skip-pend (ADR-0027)."""
     try:
@@ -206,18 +244,19 @@ def _import_pipeline_or_skip():
     return TerritoryPlacementPipeline
 
 
-def _make_table_or_skip(slicer, carrier, pipeline=None):
-    """Construct the table over the carrier (+ pipeline), registering teardown.
+def _make_table_or_skip(slicer, carrier, displayNode):
+    """Construct the table over the carrier + shared display node.
 
-    Skip-pends when the table constructor does not yet accept the carrier +
-    pipeline seam (Stage-2 not landed).
+    Skip-pends when the table constructor does not yet accept the
+    ``(carrier=, displayNode=)`` seam (the 3D-fix contract; Stage-2 not
+    landed).
     """
     TerritoriesTableWidget = _import_table_or_skip()
     try:
-        table = TerritoriesTableWidget(carrier=carrier, pipeline=pipeline)
+        table = TerritoriesTableWidget(carrier=carrier, displayNode=displayNode)
     except TypeError as exc:
         pytest.skip(
-            f"TerritoriesTableWidget(carrier=, pipeline=) seam absent ({exc!r}) "
+            f"TerritoriesTableWidget(carrier=, displayNode=) seam absent ({exc!r}) "
             "-- the ADR-0037 Stage-2 table constructor has not landed (ADR-0027)."
         )
     return table
@@ -279,20 +318,34 @@ class _Event:
         return self._pos
 
 
-def _wire_pipeline_or_skip(pipeline, carrier, monkeypatch):
-    """Attach a stub renderer + pick core so a click resolves to the surface."""
+def _wire_pipeline_through_display_or_skip(pipeline, displayNode, carrier, monkeypatch):
+    """Bind a REAL pipeline to the SHARED display node so it reads live state.
+
+    This is the integration the detached-instance bug slipped through: the
+    pipeline resolves its carrier / active territory / arm flag from the
+    display node the TABLE writes to (``SetDisplayNode`` + the carrier bound
+    onto the display node via ``TerritoryInteractionState``), NOT from a
+    hand-armed detached instance.  A stub renderer + injected pick core keep
+    the click GL-free.
+    """
     try:
         from VesselSurfacePick import VesselSurfacePick
     except Exception as exc:  # pragma: no cover - import-environment dependent
         pytest.skip(f"VesselSurfacePick not importable ({exc!r}).")
-    if not hasattr(pipeline, "SetPickCore") or not hasattr(pipeline, "SetCarrier"):
+    if not hasattr(pipeline, "SetPickCore") or not hasattr(pipeline, "SetDisplayNode"):
         pytest.skip(
-            "TerritoryPlacementPipeline lacks SetPickCore / SetCarrier -- "
-            "cannot drive a click (Stage-1 not landed; ADR-0027)."
+            "TerritoryPlacementPipeline lacks SetPickCore / SetDisplayNode -- "
+            "cannot bind the shared display-node state (Stage-1 not landed; "
+            "ADR-0027)."
         )
+    state = _import_interaction_state_or_skip()
     monkeypatch.setattr(pipeline, "_safe_get_renderer", lambda: _FakeRenderer())
     pipeline.SetPickCore(VesselSurfacePick(_unit_sphere()))
-    pipeline.SetCarrier(carrier, TERRITORY_A)
+    # Bind the carrier onto the SHARED display node, then hand the display
+    # node to the pipeline: it now reads the SAME carrier + arm state the
+    # table writes.
+    state.set_carrier(displayNode, carrier)
+    pipeline.SetDisplayNode(displayNode)
 
 
 def _require_arm_seam(pipeline):
@@ -322,7 +375,8 @@ def test_table_builds_header_row_per_territory_and_child_row_per_point(qt_widget
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
-    table = _make_table_or_skip(slicer, carrier)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
     _require_table_row_model(table)
 
@@ -356,7 +410,8 @@ def test_carrier_modified_event_rebuilds_the_table(qt_widgets):
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
-    table = _make_table_or_skip(slicer, carrier)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
     _require_table_row_model(table)
 
@@ -387,16 +442,22 @@ def test_arm_then_click_appends_one_seed_to_active_territory(qt_widgets, monkeyp
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
+    displayNode = _make_display_node_or_skip(slicer)
     pipeline = _import_pipeline_or_skip()()
-    _wire_pipeline_or_skip(pipeline, carrier, monkeypatch)
+    _wire_pipeline_through_display_or_skip(pipeline, displayNode, carrier, monkeypatch)
     _require_arm_seam(pipeline)
-    table = _make_table_or_skip(slicer, carrier, pipeline)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
     if not hasattr(table, "addTerritory"):
         pytest.skip("TerritoriesTableWidget has no addTerritory seam (ADR-0027).")
 
     active = table.addTerritory()  # mints + selects + arms into a new territory
-    assert pipeline.IsArmed() is True, "Add Territory must arm placement."
+    # The table wrote arm + active onto the SHARED display node; the pipeline
+    # (bound to that SAME node via SetDisplayNode) reads them back — the
+    # integration the detached-instance bug slipped through.
+    assert pipeline.IsArmed() is True, (
+        "Add Territory must arm placement via the shared display node."
+    )
     assert pipeline.GetActiveTerritory() == active
 
     before_active = carrier.GetNumberOfAnnotationPoints(active)
@@ -422,13 +483,18 @@ def test_click_with_nothing_armed_appends_nothing(qt_widgets, monkeypatch):
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
+    displayNode = _make_display_node_or_skip(slicer)
     pipeline = _import_pipeline_or_skip()()
-    _wire_pipeline_or_skip(pipeline, carrier, monkeypatch)
+    _wire_pipeline_through_display_or_skip(pipeline, displayNode, carrier, monkeypatch)
     _require_arm_seam(pipeline)
-    table = _make_table_or_skip(slicer, carrier, pipeline)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
 
-    pipeline.Disarm()
+    # An ACTIVE territory is set (so the gate under test is the ARM flag, not a
+    # missing active territory); then the table's "Done" disarms via the
+    # shared display node.
+    pipeline.SetActiveTerritory(TERRITORY_A)
+    table.done()
     assert pipeline.IsArmed() is False
 
     before = carrier.GetNumberOfAnnotationPoints(TERRITORY_A)
@@ -451,9 +517,11 @@ def test_bare_move_stays_declined_while_armed(qt_widgets, monkeypatch):
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
+    displayNode = _make_display_node_or_skip(slicer)
     pipeline = _import_pipeline_or_skip()()
-    _wire_pipeline_or_skip(pipeline, carrier, monkeypatch)
+    _wire_pipeline_through_display_or_skip(pipeline, displayNode, carrier, monkeypatch)
     _require_arm_seam(pipeline)
+    pipeline.SetActiveTerritory(TERRITORY_A)
     pipeline.Arm()
 
     before = carrier.GetNumberOfAnnotationPoints(TERRITORY_A)
@@ -477,10 +545,11 @@ def test_switching_active_territory_redirects_subsequent_clicks(qt_widgets, monk
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
+    displayNode = _make_display_node_or_skip(slicer)
     pipeline = _import_pipeline_or_skip()()
-    _wire_pipeline_or_skip(pipeline, carrier, monkeypatch)
+    _wire_pipeline_through_display_or_skip(pipeline, displayNode, carrier, monkeypatch)
     _require_arm_seam(pipeline)
-    table = _make_table_or_skip(slicer, carrier, pipeline)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
     _require_table_row_model(table)
     for seam in ("addTerritory", "armForSelectedTerritory", "selectTerritoryRow"):
@@ -527,7 +596,8 @@ def test_delete_row_removes_exactly_one_point(qt_widgets):
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
-    table = _make_table_or_skip(slicer, carrier)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
     _require_table_row_model(table)
     if not hasattr(table, "deleteRow"):
@@ -566,14 +636,19 @@ def test_delete_by_row_and_by_pick_share_one_carrier_path(qt_widgets):
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
+    displayNode = _make_display_node_or_skip(slicer)
     pipeline = _import_pipeline_or_skip()()
-    if not hasattr(pipeline, "SetCarrier") or not hasattr(pipeline, "DeleteAnnotationPoint"):
+    if not hasattr(pipeline, "SetDisplayNode") or not hasattr(pipeline, "DeleteAnnotationPoint"):
         pytest.skip(
-            "TerritoryPlacementPipeline lacks SetCarrier / DeleteAnnotationPoint "
+            "TerritoryPlacementPipeline lacks SetDisplayNode / DeleteAnnotationPoint "
             "-- cannot pin delete convergence (ADR-0027)."
         )
-    pipeline.SetCarrier(carrier, TERRITORY_A)
-    table = _make_table_or_skip(slicer, carrier, pipeline)
+    # The pipeline resolves its carrier from the SHARED display node (the same
+    # handle the table binds), so both delete entry points reach one carrier.
+    state = _import_interaction_state_or_skip()
+    state.set_carrier(displayNode, carrier)
+    pipeline.SetDisplayNode(displayNode)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
     _require_table_row_model(table)
     if not hasattr(table, "deleteRow"):
@@ -633,7 +708,8 @@ def test_visibility_colour_label_edits_leave_geometry_unchanged(qt_widgets):
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
-    table = _make_table_or_skip(slicer, carrier)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
     _require_table_row_model(table)
     for seam in ("setTerritoryVisibility", "setTerritoryColor", "setTerritoryLabel"):
@@ -688,7 +764,8 @@ def test_territory_with_fewer_than_two_seeds_is_flagged_incomplete(qt_widgets):
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
-    table = _make_table_or_skip(slicer, carrier)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
     _require_table_row_model(table)
     for seam in ("rowStatusText", "rowHasIncompleteGlyph"):
