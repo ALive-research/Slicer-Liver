@@ -50,6 +50,18 @@ This file pins the Stage-3 increments:
   down), never one merged node — mirroring the legacy per-``VascTerrId``
   grouping.  Asserted by monkeypatching the extraction logic to COUNT
   calls + CAPTURE the fed node, without a real VMTK run.
+* i6 (launched) — RE-EXTRACTION IDEMPOTENCY.  Extracting a territory, then
+  RE-EXTRACTING the SAME carrier/territory, leaves EXACTLY ONE
+  ``CenterlineRefs`` entry, ONE ``TerritoryCenterline`` model, and a STABLE
+  ``Groupings`` count for that territory — the second run REPLACES the
+  first, never appends.  The prior centerline model is not orphaned in the
+  scene.  ADR-0037 §Decision 4 (the Stage-4 territory-map contract is a
+  MAP: one centerline per territory) + §Conformance no-drift.  The
+  extractor is stubbed to a small line polydata (via ``getCenterlineLogic``)
+  so a model is minted + wired without a real VMTK run.  This is the
+  red->green invariant: it FAILS against an append-only
+  ``_wireCenterlineOutput`` and PASSES once re-extraction clears the
+  territory's prior refs + models before wiring (ADR-0027).
 
 -- SEAM THE IMPLEMENTER MUST PROVIDE (proposed; sharpen at landing) --
 
@@ -95,7 +107,10 @@ only inside a launched Slicer, so they SKIP CLEANLY bare and RUN launched.
 i4 additionally needs SlicerVMTK's ``ExtractCenterline`` module present, so
 it SKIPS CLEANLY when the extractor is absent — CI's bare path has no
 SlicerVMTK; the launched self-test image (ALive-Docker layers 5a-5c, see
-the CMakeLists comment) does.
+the CMakeLists comment) does.  i6 needs the module Logic + a live scene (the
+carrier's ``CenterlineRefs`` + ``Groupings`` map, the minted-model
+lifecycle) but NOT SlicerVMTK — the extractor is stubbed via
+``getCenterlineLogic`` — so it SKIPS CLEANLY bare and RUNS launched.
 
 -- RUN-VS-SKIP DISCIPLINE (ADR-0027) --
 
@@ -577,6 +592,130 @@ def test_each_territory_drives_its_own_extraction_invocation(monkeypatch):
         f"(expected per-call counts {sorted([len(a_pts), len(b_pts)])}, got "
         f"{sorted(c for c in captured_counts if c is not None)}) -- the "
         "transient nodes are per-territory, not merged."
+    )
+
+
+# --------------------------------------------------------------------------- #
+# i6 — re-extraction idempotency: one centerline per territory (launched)
+# --------------------------------------------------------------------------- #
+
+
+def _line_polydata():
+    """A tiny 2-point line standing in for an extracted centerline.
+
+    Enough geometry that ``_wireCenterlineOutput`` mints + wires a
+    ``TerritoryCenterline`` model (a ``None`` result wires nothing), without
+    a real VMTK run.
+    """
+    points = vtk.vtkPoints()
+    points.InsertNextPoint(0.0, 0.0, 10.0)
+    points.InsertNextPoint(0.0, 0.0, -10.0)
+    line = vtk.vtkCellArray()
+    line.InsertNextCell(2)
+    line.InsertCellPoint(0)
+    line.InsertCellPoint(1)
+    poly = vtk.vtkPolyData()
+    poly.SetPoints(points)
+    poly.SetLines(line)
+    return poly
+
+
+def _count_centerline_models(slicer):
+    """Number of ``TerritoryCenterline`` model nodes currently in the scene."""
+    count = 0
+    nodes = slicer.mrmlScene.GetNodesByClass("vtkMRMLModelNode")
+    nodes.InitTraversal()
+    node = nodes.GetNextItemAsObject()
+    while node is not None:
+        if node.GetName() == "TerritoryCenterline":
+            count += 1
+        node = nodes.GetNextItemAsObject()
+    return count
+
+
+def test_re_extraction_replaces_the_territorys_centerline(monkeypatch):
+    """i6: re-extracting the SAME territory leaves ONE ref / ONE model / stable grouping.
+
+    ADR-0037 §Decision 4 makes ``CenterlineRefs`` + ``Groupings`` a MAP: one
+    centerline per territory.  A first extraction wires one model; a SECOND
+    extraction of the SAME carrier/territory must REPLACE it, not append --
+    else the carrier accrues duplicate ``CenterlineRefs`` entries, an
+    inconsistent ``Groupings`` count, and orphaned prior
+    ``TerritoryCenterline`` models linger in the scene (ADR-0037 §Conformance
+    no-drift; the Stage-4 territory-map contract).  The extractor is stubbed
+    to a small line polydata so a model is minted + wired WITHOUT a real VMTK
+    run -- the invariant is the ref/model/grouping bookkeeping, not the
+    geometry.
+
+    Red->green (ADR-0027): FAILS against an append-only
+    ``_wireCenterlineOutput`` and PASSES once re-extraction clears the
+    territory's prior refs + removes its prior model before wiring the new
+    one.  Launched-only (module Logic + a live scene); SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    logic = _logic_or_skip(slicer)
+    carrier = _make_carrier_or_skip(slicer)
+    surface = _closed_surface_model(slicer)
+
+    if not hasattr(logic, "getCenterlineLogic"):
+        pytest.skip(
+            "VascularTerritoriesLogic has no getCenterlineLogic -- the "
+            "ADR-0037 Stage-3 extractor injection seam has not landed."
+        )
+    if not hasattr(logic, "getCenterlineReferenceIDs"):
+        pytest.skip(
+            "VascularTerritoriesLogic has no getCenterlineReferenceIDs -- the "
+            "ADR-0037 Stage-3 CenterlineRefs accessor seam has not landed "
+            "(ADR-0027)."
+        )
+    if not hasattr(carrier, "GetGrouping") or not hasattr(carrier, "GetNumberOfGroupings"):
+        pytest.skip(
+            f"{CUSTOM_TERRITORIES_CLASS} has no Groupings API -- the Stage-4 "
+            "territory-map contract accessor is unavailable (ADR-0027)."
+        )
+
+    carrier.AddAnnotationPoint(TERRITORY_A, 0.0, 0.0, 10.0)
+    carrier.AddAnnotationPoint(TERRITORY_A, 0.0, 0.0, -10.0)
+
+    # Stub the extractor so a fresh small line is wired per call (no VMTK).
+    class _LineExtractor:
+        def extractCenterline(self, *args, **kwargs):  # noqa: N802 - VMTK verb
+            return _line_polydata()
+
+    monkeypatch.setattr(logic, "getCenterlineLogic", lambda: _LineExtractor())
+
+    # First extraction: one ref, one model, one grouping for the territory.
+    logic.extractCenterlines(carrier, surface, "")
+    first_ids = logic.getCenterlineReferenceIDs(carrier)
+    assert len(first_ids) == 1, (
+        f"the first extraction must register exactly one centerline "
+        f"(got {first_ids})."
+    )
+    first_groupings = carrier.GetNumberOfGroupings()
+
+    # Second extraction of the SAME carrier/territory must REPLACE, not append.
+    logic.extractCenterlines(carrier, surface, "")
+    second_ids = logic.getCenterlineReferenceIDs(carrier)
+
+    assert len(second_ids) == 1, (
+        f"re-extracting the same territory must leave EXACTLY ONE "
+        f"CenterlineRefs entry, not append (got {second_ids}) -- the "
+        "territory-map contract is one centerline per territory (ADR-0037 "
+        "§Decision 4)."
+    )
+    assert carrier.GetGrouping(second_ids[0]) == TERRITORY_A, (
+        "the surviving centerline must stay grouped under its territory id "
+        f"({TERRITORY_A}); got {carrier.GetGrouping(second_ids[0])!r}."
+    )
+    assert carrier.GetNumberOfGroupings() == first_groupings, (
+        f"the Groupings count for the territory must be STABLE across a "
+        f"re-extraction (was {first_groupings}, now "
+        f"{carrier.GetNumberOfGroupings()}) -- no duplicate/orphan grouping."
+    )
+    assert _count_centerline_models(slicer) == 1, (
+        "the prior TerritoryCenterline model must be removed on "
+        "re-extraction, not orphaned in the scene (ADR-0037 §Conformance "
+        f"no-drift); found {_count_centerline_models(slicer)} models."
     )
 
 
