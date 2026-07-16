@@ -199,6 +199,48 @@ public:
   std::vector<std::string> GetAnnotationTerritoryIds() const;
 
   //--------------------------------------------------------------------------
+  // Per-territory display-attribute slot (ADR-0037 §Decision 3 / §3 table)
+  //--------------------------------------------------------------------------
+  //
+  // The table row carries a per-territory colour swatch, display label, and
+  // visibility toggle.  These live in an OWN per-territoryId slot on this
+  // carrier, mirroring the ``AnnotationPoints`` std::map idiom and keyed on
+  // the same surgeon-named territory id.  The display slot is INDEPENDENT of
+  // the geometry slot: a display write never touches ``AnnotationPoints``.
+  // Round-trips through MRML XML + the ``.vta.json`` storage node.  Each
+  // write fires ONE ModifiedEvent so the table's observer rebuilds.
+
+  /// Set territory ``territoryId``'s display colour (RGB in [0, 1]).  Fires
+  /// ONE ModifiedEvent.  Does NOT touch the annotation-point geometry.
+  void SetTerritoryColor(const std::string& territoryId, double r, double g, double b);
+
+  /// Territory ``territoryId``'s display colour as a 3-tuple in Python
+  /// (``VTK_SIZEHINT``).  An unset territory returns the module default
+  /// (opaque white).  The pointer aliases an internal scratch buffer valid
+  /// until the next call — copy before re-calling.
+  const double* GetTerritoryColor(const std::string& territoryId) VTK_SIZEHINT(3);
+
+  /// Set territory ``territoryId``'s display label.  Fires ONE
+  /// ModifiedEvent.  Does NOT touch the annotation-point geometry.
+  void SetTerritoryLabel(const std::string& territoryId, const std::string& label);
+
+  /// Territory ``territoryId``'s display label (empty string if unset).
+  std::string GetTerritoryLabel(const std::string& territoryId) const;
+
+  /// Set territory ``territoryId``'s display visibility.  Fires ONE
+  /// ModifiedEvent.  Does NOT touch the annotation-point geometry.
+  void SetTerritoryVisibility(const std::string& territoryId, bool visible);
+
+  /// Territory ``territoryId``'s display visibility (defaults to true for an
+  /// unset territory).
+  bool GetTerritoryVisibility(const std::string& territoryId) const;
+
+  /// The territory ids that currently carry a display attribute (colour,
+  /// label, or visibility), in a deterministic (sorted) order.  Used by the
+  /// storage node to enumerate the per-territory display slots.
+  std::vector<std::string> GetDisplayTerritoryIds() const;
+
+  //--------------------------------------------------------------------------
   // Storage
   //--------------------------------------------------------------------------
 
@@ -226,6 +268,19 @@ protected:
   /// return (the ``GetSlicingPlaneInitPoint`` idiom): a stable address to
   /// alias so the wrapped 3-tuple does not point at a temporary.
   double AnnotationPointScratch[3] = { 0.0, 0.0, 0.0 };
+
+  /// Per-territory display attributes (ADR-0037 §Decision 3).  Keyed on the
+  /// same surgeon-named territory id as ``AnnotationPoints`` but kept in
+  /// SEPARATE maps so a display write cannot perturb the geometry map.  A
+  /// territory with no entry falls back to the module defaults (opaque
+  /// white, empty label, visible).
+  std::map<std::string, std::array<double, 3>> TerritoryColors;
+  std::map<std::string, std::string> TerritoryLabels;
+  std::map<std::string, bool> TerritoryVisibilities;
+
+  /// Scratch buffer backing the ``GetTerritoryColor`` size-hinted return
+  /// (same idiom as ``AnnotationPointScratch``).
+  double TerritoryColorScratch[3] = { 1.0, 1.0, 1.0 };
 
   /// Surgeon-defined segment-label list.  Owned by the node; written
   /// to / read from MRML XML via the ``segmentNames`` attribute.
