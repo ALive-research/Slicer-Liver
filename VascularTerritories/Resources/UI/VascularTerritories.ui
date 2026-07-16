@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>SegmentsWidget</class>
- <widget class="qMRMLWidget" name="SegmentsWidget">
+ <class>VascularTerritoriesWidgetRoot</class>
+ <widget class="qMRMLWidget" name="VascularTerritoriesWidgetRoot">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -25,23 +25,6 @@
      <layout class="QGridLayout" name="gridLayout_2">
       <item row="0" column="0">
        <layout class="QGridLayout" name="gridLayout">
-        <item row="1" column="4">
-         <widget class="ctkColorPickerButton" name="ColorPickerButton">
-          <property name="displayColorName">
-           <bool>false</bool>
-          </property>
-         </widget>
-        </item>
-        <item row="5" column="0" colspan="2">
-         <widget class="QPushButton" name="addSegmentationButton">
-          <property name="enabled">
-           <bool>false</bool>
-          </property>
-          <property name="text">
-           <string>Add whole segment</string>
-          </property>
-         </widget>
-        </item>
         <item row="0" column="0" colspan="2">
          <widget class="QLabel" name="label_4">
           <property name="text">
@@ -73,29 +56,10 @@
           </property>
          </widget>
         </item>
-        <item row="1" column="0">
-         <widget class="QLabel" name="label_2">
+        <item row="2" column="0">
+         <widget class="QLabel" name="label">
           <property name="text">
-           <string>Vascular Territory:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="5" column="2" colspan="3">
-         <widget class="QPushButton" name="addCenterlineSegmentButton">
-          <property name="enabled">
-           <bool>false</bool>
-          </property>
-          <property name="text">
-           <string>Add Vessel Centerline </string>
-          </property>
-          <property name="checkable">
-           <bool>false</bool>
-          </property>
-          <property name="checked">
-           <bool>false</bool>
-          </property>
-          <property name="flat">
-           <bool>false</bool>
+           <string>Segmentation:</string>
           </property>
          </widget>
         </item>
@@ -120,57 +84,22 @@
           </property>
          </widget>
         </item>
-        <item row="2" column="0">
-         <widget class="QLabel" name="label">
-          <property name="text">
-           <string>Segmentation:</string>
-          </property>
-         </widget>
-        </item>
         <item row="2" column="4">
          <widget class="qMRMLSegmentationShow3DButton" name="SegmentationShow3DButton"/>
         </item>
-        <item row="3" column="1" colspan="3">
-         <widget class="qMRMLSegmentSelectorWidget" name="inputSegmentSelectorWidget">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="segmentationNodeSelectorVisible">
-           <bool>false</bool>
-          </property>
-         </widget>
-        </item>
-        <item row="1" column="1" colspan="3">
-         <widget class="ctkComboBox" name="vascularTerritoryId">
+        <item row="5" column="0" colspan="5">
+         <widget class="QPushButton" name="addCenterlineSegmentButton">
           <property name="enabled">
            <bool>false</bool>
           </property>
-          <property name="editable">
-           <bool>false</bool>
-          </property>
-          <property name="currentIndex">
-           <number>0</number>
-          </property>
-          <item>
-           <property name="text">
-            <string>Create new territory ID</string>
-           </property>
-          </item>
-         </widget>
-        </item>
-        <item row="3" column="4">
-         <widget class="QPushButton" name="showHideButton">
           <property name="text">
-           <string>Show/Hide</string>
+           <string>Extract centerlines</string>
           </property>
           <property name="checkable">
-           <bool>true</bool>
+           <bool>false</bool>
           </property>
           <property name="checked">
-           <bool>true</bool>
+           <bool>false</bool>
           </property>
           <property name="flat">
            <bool>false</bool>
@@ -220,11 +149,6 @@
    <container>1</container>
   </customwidget>
   <customwidget>
-   <class>qMRMLSegmentSelectorWidget</class>
-   <extends>qMRMLWidget</extends>
-   <header>qMRMLSegmentSelectorWidget.h</header>
-  </customwidget>
-  <customwidget>
    <class>qMRMLSegmentationShow3DButton</class>
    <extends>ctkMenuButton</extends>
    <header>qMRMLSegmentationShow3DButton.h</header>
@@ -236,16 +160,6 @@
    <container>1</container>
   </customwidget>
   <customwidget>
-   <class>ctkColorPickerButton</class>
-   <extends>QPushButton</extends>
-   <header>ctkColorPickerButton.h</header>
-  </customwidget>
-  <customwidget>
-   <class>ctkComboBox</class>
-   <extends>QComboBox</extends>
-   <header>ctkComboBox.h</header>
-  </customwidget>
-  <customwidget>
    <class>ctkMenuButton</class>
    <extends>QPushButton</extends>
    <header>ctkMenuButton.h</header>
@@ -254,7 +168,7 @@
  <resources/>
  <connections>
   <connection>
-   <sender>SegmentsWidget</sender>
+   <sender>VascularTerritoriesWidgetRoot</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>inputSurfaceSelector</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
@@ -270,39 +184,7 @@
    </hints>
   </connection>
   <connection>
-   <sender>SegmentsWidget</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>inputSegmentSelectorWidget</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>235</x>
-     <y>130</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>235</x>
-     <y>64</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>inputSurfaceSelector</sender>
-   <signal>currentNodeChanged(vtkMRMLNode*)</signal>
-   <receiver>inputSegmentSelectorWidget</receiver>
-   <slot>setCurrentNode(vtkMRMLNode*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>235</x>
-     <y>55</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>235</x>
-     <y>95</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>SegmentsWidget</sender>
+   <sender>VascularTerritoriesWidgetRoot</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>selectedVascularTerritorySegmId</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
