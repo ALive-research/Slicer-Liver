@@ -25,6 +25,7 @@
 // STD includes
 #include <cstring>
 #include <iomanip>
+#include <set>
 #include <sstream>
 #include <string>
 
@@ -155,6 +156,52 @@ void decodeAnnotationPoints(const std::string& encoded, std::map<std::string, st
                  });
 }
 
+// Compact encoding for the per-territory colour map: ``territoryId|r,g,b``
+// blocks separated by ``kPairDelimiter``.  Schema-internal (the .vta.json
+// storage surfaces the same data as JSON).
+std::string encodeColors(const std::map<std::string, std::array<double, 3>>& colors)
+{
+  std::ostringstream out;
+  out << std::setprecision(17);
+  bool first = true;
+  for (const auto& kv : colors)
+  {
+    if (!first)
+    {
+      out << kPairDelimiter;
+    }
+    first = false;
+    out << kv.first << kFieldDelimiter << kv.second[0] << kCoordDelimiter << kv.second[1] << kCoordDelimiter << kv.second[2];
+  }
+  return out.str();
+}
+
+void decodeColors(const std::string& encoded, std::map<std::string, std::array<double, 3>>& colors)
+{
+  colors.clear();
+  walkEncodedMap(encoded,
+                 [&colors](const std::string& territoryId, const std::string& rgb)
+                 {
+                   std::array<double, 3> value = { 1.0, 1.0, 1.0 };
+                   std::istringstream stream(rgb);
+                   std::string token;
+                   int c = 0;
+                   while (c < 3 && std::getline(stream, token, kCoordDelimiter))
+                   {
+                     try
+                     {
+                       value[c] = std::stod(token);
+                     }
+                     catch (const std::exception&)
+                     {
+                       // Malformed channel — keep the default.
+                     }
+                     ++c;
+                   }
+                   colors[territoryId] = value;
+                 });
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -186,6 +233,9 @@ void vtkMRMLCustomTerritoriesNode::PrintSelf(ostream& os, vtkIndent indent)
   {
     os << indent.GetNextIndent() << kv.first << ": " << kv.second.size() << " points\n";
   }
+  os << indent << "TerritoryColors: " << this->TerritoryColors.size() << " entries\n";
+  os << indent << "TerritoryLabels: " << this->TerritoryLabels.size() << " entries\n";
+  os << indent << "TerritoryVisibilities: " << this->TerritoryVisibilities.size() << " entries\n";
 }
 
 //------------------------------------------------------------------------------
@@ -224,6 +274,20 @@ void vtkMRMLCustomTerritoriesNode::ReadXMLAttributes(const char** atts)
     else if (!std::strcmp(attName, "annotationPoints"))
     {
       decodeAnnotationPoints(attValue, this->AnnotationPoints);
+    }
+    else if (!std::strcmp(attName, "territoryColors"))
+    {
+      decodeColors(attValue, this->TerritoryColors);
+    }
+    else if (!std::strcmp(attName, "territoryLabels"))
+    {
+      this->TerritoryLabels.clear();
+      walkEncodedMap(attValue, [this](std::string key, std::string value) { this->TerritoryLabels[std::move(key)] = std::move(value); });
+    }
+    else if (!std::strcmp(attName, "territoryVisibilities"))
+    {
+      this->TerritoryVisibilities.clear();
+      walkEncodedMap(attValue, [this](const std::string& key, const std::string& value) { this->TerritoryVisibilities[key] = (value != "0"); });
     }
     else if (!std::strcmp(attName, "segmentNames"))
     {
@@ -267,6 +331,23 @@ void vtkMRMLCustomTerritoriesNode::WriteXML(ostream& of, int nIndent)
   {
     of << " annotationPoints=\"" << this->XMLAttributeEncodeString(encodeAnnotationPoints(this->AnnotationPoints).c_str()) << "\"";
   }
+  if (!this->TerritoryColors.empty())
+  {
+    of << " territoryColors=\"" << this->XMLAttributeEncodeString(encodeColors(this->TerritoryColors).c_str()) << "\"";
+  }
+  if (!this->TerritoryLabels.empty())
+  {
+    of << " territoryLabels=\"" << this->XMLAttributeEncodeString(encodeMap(this->TerritoryLabels).c_str()) << "\"";
+  }
+  if (!this->TerritoryVisibilities.empty())
+  {
+    std::map<std::string, std::string> encodedVis;
+    for (const auto& kv : this->TerritoryVisibilities)
+    {
+      encodedVis[kv.first] = kv.second ? "1" : "0";
+    }
+    of << " territoryVisibilities=\"" << this->XMLAttributeEncodeString(encodeMap(encodedVis).c_str()) << "\"";
+  }
   if (this->SegmentNames && this->SegmentNames->GetNumberOfValues() > 0)
   {
     std::ostringstream names;
@@ -297,6 +378,9 @@ void vtkMRMLCustomTerritoriesNode::CopyContent(vtkMRMLNode* anode, bool deepCopy
   this->Groupings = other->Groupings;
   this->OptInSCTCodes = other->OptInSCTCodes;
   this->AnnotationPoints = other->AnnotationPoints;
+  this->TerritoryColors = other->TerritoryColors;
+  this->TerritoryLabels = other->TerritoryLabels;
+  this->TerritoryVisibilities = other->TerritoryVisibilities;
   if (other->SegmentNames)
   {
     this->SegmentNames->DeepCopy(other->SegmentNames);
@@ -472,6 +556,89 @@ std::vector<std::string> vtkMRMLCustomTerritoriesNode::GetAnnotationTerritoryIds
     }
   }
   return ids;
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLCustomTerritoriesNode::SetTerritoryColor(const std::string& territoryId, double r, double g, double b)
+{
+  this->TerritoryColors[territoryId] = { r, g, b };
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+const double* vtkMRMLCustomTerritoriesNode::GetTerritoryColor(const std::string& territoryId)
+{
+  // Default for an unset territory: opaque white (the module's neutral
+  // swatch until the surgeon picks a colour).
+  this->TerritoryColorScratch[0] = 1.0;
+  this->TerritoryColorScratch[1] = 1.0;
+  this->TerritoryColorScratch[2] = 1.0;
+  auto it = this->TerritoryColors.find(territoryId);
+  if (it != this->TerritoryColors.end())
+  {
+    this->TerritoryColorScratch[0] = it->second[0];
+    this->TerritoryColorScratch[1] = it->second[1];
+    this->TerritoryColorScratch[2] = it->second[2];
+  }
+  return this->TerritoryColorScratch;
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLCustomTerritoriesNode::SetTerritoryLabel(const std::string& territoryId, const std::string& label)
+{
+  this->TerritoryLabels[territoryId] = label;
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+std::string vtkMRMLCustomTerritoriesNode::GetTerritoryLabel(const std::string& territoryId) const
+{
+  auto it = this->TerritoryLabels.find(territoryId);
+  if (it == this->TerritoryLabels.end())
+  {
+    return std::string();
+  }
+  return it->second;
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLCustomTerritoriesNode::SetTerritoryVisibility(const std::string& territoryId, bool visible)
+{
+  this->TerritoryVisibilities[territoryId] = visible;
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+bool vtkMRMLCustomTerritoriesNode::GetTerritoryVisibility(const std::string& territoryId) const
+{
+  auto it = this->TerritoryVisibilities.find(territoryId);
+  if (it == this->TerritoryVisibilities.end())
+  {
+    // An unset territory defaults to visible.
+    return true;
+  }
+  return it->second;
+}
+
+//------------------------------------------------------------------------------
+std::vector<std::string> vtkMRMLCustomTerritoriesNode::GetDisplayTerritoryIds() const
+{
+  // Union of the three display maps' keys, deduplicated + deterministically
+  // ordered (std::set) so the storage node enumerates the slots stably.
+  std::set<std::string> ids;
+  for (const auto& kv : this->TerritoryColors)
+  {
+    ids.insert(kv.first);
+  }
+  for (const auto& kv : this->TerritoryLabels)
+  {
+    ids.insert(kv.first);
+  }
+  for (const auto& kv : this->TerritoryVisibilities)
+  {
+    ids.insert(kv.first);
+  }
+  return std::vector<std::string>(ids.begin(), ids.end());
 }
 
 //------------------------------------------------------------------------------

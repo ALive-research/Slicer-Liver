@@ -50,6 +50,7 @@
 #include <string>
 
 class vtkMRMLCustomTerritoriesNode;
+class vtkMRMLJsonElement;
 
 /**
  * \class vtkMRMLCustomTerritoriesStorageNode
@@ -71,9 +72,17 @@ class vtkMRMLCustomTerritoriesNode;
  *   "annotationPoints": {
  *     "SegmentVII":  [ [x, y, z], [x, y, z], ... ],
  *     "SegmentVIII": [ [x, y, z], ... ]
+ *   },
+ *   "territoryDisplay": {
+ *     "SegmentVII": { "color": [r, g, b], "label": "…", "visibility": true }
  *   }
  * }
  * \endcode
+ *
+ * The ``territoryDisplay`` object carries the per-territory display slot
+ * (colour / label / visibility) ADR-0037 §Decision 3 adds; it is optional
+ * and additive to the v1 schema (a document without it reads back with the
+ * carrier's display defaults).
  *
  * The per-territory arrays are ORDERED — placement order round-trips
  * identically (ADR-0037 §Conformance [test]).  The storage node is typed
@@ -128,6 +137,11 @@ private:
   /// Read the v1 ``.vta.json`` from ``filePath`` into ``carrier``.
   /// Returns 1 on success, 0 on failure.
   int ReadJson(const std::string& filePath, vtkMRMLCustomTerritoriesNode* carrier);
+
+  /// Read the per-territory display slot (colour / label / visibility) from
+  /// the parsed ``territoryDisplay`` object into ``carrier``.  A no-op when
+  /// the document carries no display slot.
+  void ReadDisplay(vtkMRMLJsonElement* root, vtkMRMLCustomTerritoriesNode* carrier, const std::string& filePath);
 };
 
 #endif // __vtkmrmlcustomterritoriesstoragenode_h_
