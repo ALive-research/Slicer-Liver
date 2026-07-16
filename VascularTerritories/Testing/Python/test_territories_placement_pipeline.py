@@ -515,12 +515,15 @@ def test_display_node_routes_arm_active_and_click(monkeypatch):
                 "display-node arm seam has not landed (ADR-0027)."
             )
     monkeypatch.setattr(pipeline, "_safe_get_renderer", lambda: _FakeRenderer())
-    pipeline.SetPickCore(VesselSurfacePick(_unit_sphere()))
 
     # Bind the carrier onto the SHARED display node (NOT via SetCarrier), then
     # hand the display node to the pipeline: everything resolves from the node.
+    # SetDisplayNode resets the pick core to force a re-resolve from the node's
+    # pickSurface (production behaviour), so inject the unit-sphere pick AFTER
+    # the display node is bound.
     state.set_carrier(displayNode, carrier)
     pipeline.SetDisplayNode(displayNode)
+    pipeline.SetPickCore(VesselSurfacePick(_unit_sphere()))
 
     # (a) arm + active publish onto the node and read back through the seam.
     pipeline.SetActiveTerritory(TERRITORY_B)
