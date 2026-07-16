@@ -340,12 +340,14 @@ def _wire_pipeline_through_display_or_skip(pipeline, displayNode, carrier, monke
         )
     state = _import_interaction_state_or_skip()
     monkeypatch.setattr(pipeline, "_safe_get_renderer", lambda: _FakeRenderer())
-    pipeline.SetPickCore(VesselSurfacePick(_unit_sphere()))
     # Bind the carrier onto the SHARED display node, then hand the display
     # node to the pipeline: it now reads the SAME carrier + arm state the
-    # table writes.
+    # table writes.  SetDisplayNode resets the pick to force a re-resolve from
+    # the node's pickSurface (production behaviour), so inject the unit-sphere
+    # pick AFTER binding the display node.
     state.set_carrier(displayNode, carrier)
     pipeline.SetDisplayNode(displayNode)
+    pipeline.SetPickCore(VesselSurfacePick(_unit_sphere()))
 
 
 def _require_arm_seam(pipeline):

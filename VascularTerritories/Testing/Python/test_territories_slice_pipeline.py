@@ -307,10 +307,16 @@ def _wire_slice_pipeline_or_skip(slicer, pipeline, displayNode, carrier, monkeyp
                 f"TerritorySlicePipeline has no {method} seam (ADR-0027)."
             )
     monkeypatch.setattr(pipeline, "_safe_get_renderer", lambda: object())
-    pipeline.SetPickCore(VesselSurfacePick(_unit_sphere()))
-    pipeline.SetViewNode(_FakeSliceNode(z0=0.0))
+    # The C++ base SetViewNode type-checks for a real vtkMRMLAbstractViewNode;
+    # the deterministic _FakeSliceNode drives the pure-Python projection/snap
+    # math, so set the internal slice-node field directly (avoids the C++
+    # marshalling that rejects a duck-typed node).
+    pipeline._slice_node = _FakeSliceNode(z0=0.0)
     state.set_carrier(displayNode, carrier)
     pipeline.SetDisplayNode(displayNode)
+    # SetDisplayNode resets the pick to force a re-resolve from the node's
+    # pickSurface (production behaviour), so inject the pick AFTER binding it.
+    pipeline.SetPickCore(VesselSurfacePick(_unit_sphere()))
 
 
 def test_armed_slice_press_adds_one_surface_snapped_seed(monkeypatch):
@@ -415,7 +421,10 @@ def test_reproject_projects_only_present_visible_seeds(monkeypatch):
     carrier.AddAnnotationPoint(TERRITORY_B, 1.0, 1.0, 0.0)  # invisible -> absent
 
     state.set_carrier(displayNode, carrier)
-    pipeline.SetViewNode(_FakeSliceNode(z0=0.0))
+    # Set the internal slice-node field directly: the C++ base SetViewNode
+    # type-checks for a real view node, while the deterministic _FakeSliceNode
+    # drives the pure-Python projection math under test.
+    pipeline._slice_node = _FakeSliceNode(z0=0.0)
     pipeline.SetDisplayNode(displayNode)
     pipeline._reproject()
 
