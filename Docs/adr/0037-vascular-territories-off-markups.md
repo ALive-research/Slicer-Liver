@@ -234,10 +234,27 @@ panel buttons duplicated per-territory intent.  Slice 4 makes arming an
 explicit, per-territory, exclusive toggle and gates it on the module being
 active.
 
+### Tree UX — a two-level hierarchy (extends §Decision 3)
+
+The panel composes a `qt.QTreeWidget`, not a flat `qt.QTableWidget`:
+territories are TOP-LEVEL items and seed points are CHILD items nested under
+them (disclosure triangle + indentation).  This diverges from the flat
+[ADR-0034](0034-stage2-segments-table.md) segments-table paradigm because
+territories have a genuine parent/child structure — seeds belong *to* a
+territory — that a flat table cannot express without dead cells (the seed
+sub-rows leave the Place / Visibility / Colour columns blank).  The tree makes
+the hierarchy structural: the indentation in the Place column conveys the
+grouping, so a seed child item carries only its on-surface status (in the
+Label column, aligning under the territory label) and a delete affordance (in
+the Status column).  The 5-column layout is otherwise **unchanged** — a
+`QTreeWidget` has columns too — so the column contract below carries over
+verbatim; only navigation changes (flat rows become tree items, addressed via
+`tree()` / `territoryIds()` / `territoryItem()` / `seedItems()`).
+
 ### Per-territory exclusive Place toggle (extends §Decision 2)
 
-The table grows a leftmost **Place** column, so the layout becomes
-`Place | Visibility | Colour | Label | Status`.  Each territory header row
+The tree grows a leftmost **Place** column, so the layout becomes
+`Place | Visibility | Colour | Label | Status`.  Each territory top-level item
 carries a checkable Place button.  Toggling it ON arms placement into THAT
 territory — `set_active_territory` + `set_armed(True)` on the shared display
 node, highlight made visible — and un-checks every other row's toggle
