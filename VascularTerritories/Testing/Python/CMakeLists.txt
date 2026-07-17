@@ -142,6 +142,17 @@ set(_vascterr_pytest_files
   # module widget + Logic so they SKIP-PENDING bare and RUN launched; the real
   # C++ map run stays eyeball-gated (stubbed here) (ADR-0027).
   test_territories_map_compute.py
+  # ADR-0037 §Decision 4 -- the centerline SURFACE-RESOLUTION invariant: a
+  # segmentation input's closed surface must be resolved through the real
+  # segment(s) (converging on VesselHighlightWiring.closed_surface_polydata,
+  # the pick/snap seam), NOT via an empty segment id handed to
+  # GetClosedSurfaceRepresentation (which resolves no segment -> zero points
+  # -> a silently-degraded None the real SlicerVMTK extractor hard-fails on);
+  # and a genuinely empty surface must SKIP extraction, never feed the real
+  # extractor a None/empty mesh.  Needs Slicer's segmentation logic + a live
+  # scene so it SKIP-PENDS bare and RUNS launched; the VMTK compute itself
+  # stays env-/eyeball-gated in test_territories_vmtk_feed.py (ADR-0027).
+  test_territories_surface_resolution.py
 )
 
 foreach(_pytest_file IN LISTS _vascterr_pytest_files)
