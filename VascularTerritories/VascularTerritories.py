@@ -194,9 +194,12 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # ADR-0037 Stage-2: the ``endPointsMarkupsSelector`` (CenterlineSegment)
     # markups selector is RETIRED with the annotation-off-markups transition;
     # its entry is dropped from the node-selector list.
+    # ADR-0037 §Decision 4: the ``selectedVascularTerritorySegmId`` output
+    # selector is RETIRED -- the territory-map output target is DERIVED from
+    # the carrier (``TerritoryMapOutput`` role), so its param-node role
+    # (``VascularTerritorySegmentation``) drops out of the selector list.
     self.nodeSelectors = [
         (self.ui.inputSurfaceSelector, "InputSurface"),
-        (self.ui.selectedVascularTerritorySegmId, "VascularTerritorySegmentation")
         ]
 
     # Set scene in MRML widgets. Make sure that in Qt designer
@@ -218,7 +221,6 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
     self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.segmentationNodeSelected)
-    self.ui.selectedVascularTerritorySegmId.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
 
     # Vessel-adhering-highlight wiring (ADR-0036 / ADR-0037).  Keep the
     # highlight node's pickSurface aimed at the selected input segmentation.
@@ -232,16 +234,6 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # into the panel here, over the annotation carrier + the placement
     # Pipeline (Python-widget composition, ADR-0004).
     self._setupTerritoriesTable()
-
-    self.ui.selectedVascularTerritorySegmId.setNodeTypeLabel('Vascular Territory Segmentation', 'vtkMRMLSegmentationNode')
-    self.ui.selectedVascularTerritorySegmId.addAttribute("vtkMRMLSegmentationNode", "VascularTerritories.SegmentationId")
-
-    # Initialize Vascular Territory Segmentation button at widget start-up
-#    nodeNameID = 'Vascular_Territory_Segmentation'
-#    vasc_terr_segm_node = slicer.mrmlScene.GetNodeByID(nodeNameID)
-#    if not vasc_terr_segm_node:
-#      vasc_terr_segm_node = slicer.mrmlScene.AddNewNodeByClassWithID('vtkMRMLSegmentationNode', nodeNameID, nodeNameID)
-#    self.ui.selectedVascularTerritorySegmId.setCurrentNodeID(nodeNameID)
 
     #TODO: Store all GUI settings
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
@@ -545,8 +537,12 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # Update node selectors and sliders
     for nodeSelector, roleName in self.nodeSelectors:
         nodeSelector.setCurrentNode(self._parameterNode.GetNodeReference(roleName))
-    vascularTerritorySegmNode = self._parameterNode.GetNodeReference("VascularTerritorySegmentation")
-    if vascularTerritorySegmNode and vascularTerritorySegmNode.IsA("vtkMRMLSegmentationNode"):
+    # ADR-0037 §Decision 4: the output map target is DERIVED from the carrier,
+    # so the compute action gates on an input surface being selected (the
+    # two-step flow: select surface -> Extract centerlines -> Compute map),
+    # not on a retired output-segmentation selector.
+    inputSurfaceNode = self._parameterNode.GetNodeReference("InputSurface")
+    if inputSurfaceNode and inputSurfaceNode.IsA("vtkMRMLSegmentationNode"):
         self.enableWidgetButtons(True)
 
     # All the GUI updates are done
@@ -615,26 +611,33 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
       qt.QApplication.restoreOverrideCursor()
 
   def onCalculateVascularTerritoryMapButton(self):
+    # ADR-0037 §Decision 4: resolve every input from the carrier +
+    # inputSurfaceSelector -- the output map target is DERIVED from the
+    # carrier (``TerritoryMapOutput`` role), not selected.  The retired
+    # ``selectedVascularTerritorySegmId`` selector is gone.
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
-    vascTerrSegmentationId = int(self.ui.selectedVascularTerritorySegmId.currentNode().GetAttribute("VascularTerritories.SegmentationId"))
-    centerlineModel = self.logic.build_centerline_model(self.colormap, vascTerrSegmentationId)
+    carrier = self._ensureAnnotationCarrier()
+    centerlineModel = self.logic.build_centerline_model(carrier, self.colormap)
     centerlineModelPoints = centerlineModel.GetMesh()
     numberOfPoints = centerlineModelPoints.GetNumberOfPoints()
     refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
     if not (refVolumeNode) or (numberOfPoints<2):
         raise ValueError("Missing inputs to calculate vascular segments")
 
-    slicer.app.pauseRender()
-    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
-    vascularTerritorySegmentationNode = self.ui.selectedVascularTerritorySegmId.currentNode()
+    vascularTerritorySegmentationNode = self.logic.ensureTerritoryMapOutput(carrier)
+    # The C++ ``calculateVascularTerritoryMap`` reads + re-stamps the target's
+    # ``VascularTerritories.SegmentationId``; mirror it onto the centerline
+    # model as the pre-transition path did (the derived output already carries
+    # the ordinal).
     segmId = vascularTerritorySegmentationNode.GetAttribute("VascularTerritories.SegmentationId")
     centerlineModel.SetAttribute("VascularTerritories.SegmentationId", segmId)
 
+    slicer.app.pauseRender()
+    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
     try:
        self.logic.calculateVascularTerritoryMap(vascularTerritorySegmentationNode, refVolumeNode, segmentationNode, centerlineModel, self.colormap)
     except ValueError:
         logging.error("Error: Failing when calculating vascular segments")
-
 
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
