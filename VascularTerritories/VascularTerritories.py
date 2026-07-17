@@ -452,6 +452,9 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     """
     Called each time the user opens this module.
     """
+    # ADR-0037 §Decision 2 slice-4 module-active gate: entering auto-arms
+    # NOTHING.  Placement is an explicit per-territory Place toggle in the
+    # table, so no view claims an add-on-click merely from opening the module.
     # Make sure parameter node exists and observed
     self.initializeParameterNode()
 
@@ -459,6 +462,14 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     """
     Called each time the user opens a different module.
     """
+    # ADR-0037 §Decision 2 slice-4 module-active gate: disarm placement on the
+    # way out so no view claims an add-on-click while VascularTerritories is
+    # inactive.  Reuse the table's shared disarm body (clears the display
+    # node's armed/active + hides the highlight); the follow-up rebuild
+    # re-derives every Place toggle un-checked.
+    table = getattr(self, "_territoriesTable", None)
+    if table is not None and hasattr(table, "disarm"):
+      table.disarm()
     # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
     self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
 
