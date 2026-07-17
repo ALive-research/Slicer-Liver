@@ -35,6 +35,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import ctk
 import qt
 import vtk
 
@@ -395,14 +396,22 @@ class TerritoriesTableWidget(qt.QWidget):
         )
         self._table.setCellWidget(row, _COL_VISIBILITY, visibilityBox)
 
-        # Colour swatch (a button whose background carries the RGB; a click
-        # opens the colour picker).
-        colourButton = qt.QPushButton()
-        colourButton.setFlat(True)
-        colourButton.setAutoFillBackground(True)
-        qcolor = qt.QColor(int(color[0] * 255), int(color[1] * 255), int(color[2] * 255))
-        colourButton.setStyleSheet(f"background-color: {qcolor.name()};")
-        colourButton.connect("clicked(bool)", lambda _checked, t=territoryId: self._pickColour(t))
+        # Colour swatch: the Slicer-idiomatic ``ctkColorPickerButton`` (the
+        # segmentation / resection convention) -- it renders its own colour
+        # square, opens the picker on click, and emits ``colorChanged``.
+        # ``setColor`` BEFORE ``connect`` so seeding the initial colour does
+        # not fire the write-back.
+        colourButton = ctk.ctkColorPickerButton()
+        colourButton.displayColorName = False
+        colourButton.setColor(
+            qt.QColor(int(color[0] * 255), int(color[1] * 255), int(color[2] * 255))
+        )
+        colourButton.connect(
+            "colorChanged(QColor)",
+            lambda c, t=territoryId: self.setTerritoryColor(
+                t, c.redF(), c.greenF(), c.blueF()
+            ),
+        )
         self._table.setCellWidget(row, _COL_COLOUR, colourButton)
 
         # Editable label; header rows carry the territory id / point index on
@@ -450,15 +459,6 @@ class TerritoriesTableWidget(qt.QWidget):
         """
         if self._carrier is not None:
             self._carrier.RemoveNthAnnotationPoint(territoryId, pointIndex)
-
-    def _pickColour(self, territoryId: str) -> None:
-        current = qt.QColor(255, 255, 255)
-        if self._carrier is not None:
-            rgb = self._carrier.GetTerritoryColor(territoryId)
-            current = qt.QColor(int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255))
-        chosen = qt.QColorDialog.getColor(current, self)
-        if chosen.isValid():
-            self.setTerritoryColor(territoryId, chosen.redF(), chosen.greenF(), chosen.blueF())
 
     def _onItemChanged(self, item: Any) -> None:
         """Write an edited header label back to the carrier's display slot."""
