@@ -879,5 +879,89 @@ def test_calculate_button_resolves_inputs_without_selector(qt_widgets, monkeypat
     )
 
 
+# --------------------------------------------------------------------------- #
+# Liver-segment resolution — the map compute finds the liver region by its
+# SNOMED-CT tag (ADR-0011), and fails legibly when no such segment exists.
+# --------------------------------------------------------------------------- #
+
+_LIVER_TERMINOLOGY = (
+    "Segmentation category and type - 3D Slicer General Anatomy list"
+    "~SCT^123037004^Anatomical Structure~SCT^10200004^Liver~^^~Anatomic codes~^^~^^"
+)
+
+
+def _cpp_logic_or_skip(logic):
+    """The wrapped C++ ``vtkSlicerVascularTerritoriesLogic`` (``logic.scl``).
+
+    ``GetLiverSegmentId`` lives on the C++ logic, not the Python
+    ``VascularTerritoriesLogic`` wrapper -- reach it through ``scl``.
+    """
+    cpp = getattr(logic, "scl", None)
+    if cpp is None or not hasattr(cpp, "GetLiverSegmentId"):
+        pytest.skip(
+            "vtkSlicerVascularTerritoriesLogic has no GetLiverSegmentId -- the "
+            "C++ logic is unavailable on this build (ADR-0027)."
+        )
+    return cpp
+
+
+def _one_segment_segmentation(slicer, terminology=None, name="LiverResolveSeg"):
+    """A one-segment segmentation, optionally SCT-tagged as liver."""
+    import vtk
+
+    source = vtk.vtkSphereSource()
+    source.SetRadius(20.0)
+    source.Update()
+    modelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "ResolveModel")
+    modelNode.SetAndObservePolyData(source.GetOutput())
+    seg = slicer.mrmlScene.AddNewNodeByClass(SEGMENTATION_CLASS, name)
+    seg.CreateDefaultDisplayNodes()
+    slicer.modules.segmentations.logic().ImportModelToSegmentationNode(modelNode, seg)
+    slicer.mrmlScene.RemoveNode(modelNode)
+    if terminology is not None:
+        segId = seg.GetSegmentation().GetNthSegmentID(0)
+        seg.GetSegmentation().GetSegment(segId).SetTag("TerminologyEntry", terminology)
+    return seg
+
+
+def test_liver_segment_resolves_by_sct_tag():
+    """``GetLiverSegmentId`` resolves the liver segment by its SCT tag.
+
+    The territory-map compute finds the liver region by the SNOMED-CT liver
+    code (ADR-0011), not the segment name.  A tagged segment resolves to a
+    non-empty id.  [launched.]
+    """
+    slicer = _slicer_or_skip()
+    logic = _logic_or_skip(slicer)
+    cpp = _cpp_logic_or_skip(logic)
+    seg = _one_segment_segmentation(slicer, terminology=_LIVER_TERMINOLOGY)
+
+    segId = cpp.GetLiverSegmentId(seg)
+
+    assert segId, (
+        "an SCT^10200004-tagged segment must resolve to a non-empty segment id "
+        "(ADR-0011)."
+    )
+    assert seg.GetSegmentation().GetSegment(segId) is not None
+
+
+def test_liver_segment_unresolved_is_empty_not_a_guess():
+    """``GetLiverSegmentId`` returns '' when no liver-tagged segment exists.
+
+    An untagged segmentation must resolve to the empty string (the map compute
+    then fails legibly rather than exporting an empty labelmap for an empty
+    segment id).  [launched.]
+    """
+    slicer = _slicer_or_skip()
+    logic = _logic_or_skip(slicer)
+    cpp = _cpp_logic_or_skip(logic)
+    seg = _one_segment_segmentation(slicer, terminology=None)
+
+    assert cpp.GetLiverSegmentId(seg) == "", (
+        "an untagged segmentation must resolve to the empty string, not a "
+        "guessed segment id (ADR-0011)."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
