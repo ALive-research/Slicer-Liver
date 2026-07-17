@@ -1,25 +1,25 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital.  All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 
-"""ADR-0037 slice 4 — per-territory Place mode + module-active gate + table-UX polish.
+"""ADR-0037 slice 4 — per-territory Place mode + module-active gate + tree-UX polish.
 
 ADR-0037 §Decision 2 (placement/edit via the Pipeline seam) + §Decision 3
 (the table UI) — sharpened by the slice-4 amendment recording the place-mode
 UX.  Slice 4 makes placement an EXPLICIT, per-territory, exclusive arm toggle
-driven from the table (not an implicit "Add Territory arms it and never
-disarms"), gates arming on the module being active, and polishes the table to
+driven from the tree (not an implicit "Add Territory arms it and never
+disarms"), gates arming on the module being active, and polishes the panel to
 the Slicer-idiomatic eye-icon visibility toggle.
 
 The confirmed slice-4 design (maintainer-LOCKED this session), each pinned
 below:
 
-1.  PER-TERRITORY EXCLUSIVE PLACE TOGGLE.  Each territory HEADER row gets a
-    checkable "Place" button in a NEW leftmost column.  The 5-column layout
-    becomes ``Place | Visibility | Colour | Label | Status``.  Toggling ON
-    arms placement into THAT territory (``set_active_territory`` +
+1.  PER-TERRITORY EXCLUSIVE PLACE TOGGLE.  Each territory TOP-LEVEL item gets a
+    checkable "Place" button in the leftmost column.  The 5-column layout is
+    ``Place | Visibility | Colour | Label | Status``.  Toggling ON arms
+    placement into THAT territory (``set_active_territory`` +
     ``set_armed(True)`` + the highlight visible via ``TerritoryInteractionState``)
-    and un-checks EVERY other row's toggle (EXCLUSIVE — one territory armed at
-    a time); toggling OFF disarms.  The armed row's checked state is
+    and un-checks EVERY other territory's toggle (EXCLUSIVE — one territory
+    armed at a time); toggling OFF disarms.  The armed item's checked state is
     RE-DERIVED from the display node on each rebuild
     (``checked = is_armed(dn) and get_active_territory(dn) == territoryId``),
     NOT stored in a Python field, so it survives the carrier-Modified rebuild.
@@ -35,39 +35,59 @@ below:
     ``qt.QToolButton`` (NOT a ``QCheckBox``) toggling
     ``carrier.SetTerritoryVisibility``.
 
-4.  HIERARCHICAL CHILD ROWS ON PLACEMENT.  Placing a seed into the armed
+4.  HIERARCHICAL CHILD ITEMS ON PLACEMENT.  Placing a seed into the armed
     territory (carrier ``AddAnnotationPoint`` / a click through the
-    display-node-wired pipeline) adds EXACTLY ONE child row under that
-    territory's header on the next rebuild, in the right columns of the
+    display-node-wired pipeline) adds EXACTLY ONE child item under that
+    territory's top-level item on the next rebuild, in the right columns of the
     5-column layout.
 
-5.  PANEL BUTTONS.  ``Add Territory`` mints a new empty territory row AND arms
+5.  PANEL BUTTONS.  ``Add Territory`` mints a new empty territory item AND arms
     it (its Place toggle reads checked after rebuild).  ``Add seeds`` + ``Done``
     panel buttons are RETIRED (absent).  The ``done()`` disarm logic survives
     as the shared body reused by ``exit()`` + toggle-OFF.
 
 6.  COLOUR CELL guard.  The colour cell is a ``ctkColorPickerButton``
-    (committed in slice 2/3); a light guard that the 5-column shift does not
+    (committed in slice 2/3); a light guard that the tree rewrite does not
     regress it (``colorChanged`` -> ``setTerritoryColor``).
+
+-- THE TREE (two-level hierarchy) --
+
+The panel composes a ``qt.QTreeWidget``: territories are TOP-LEVEL items,
+seed points are CHILD items nested under their territory (disclosure triangle
++ indentation, a genuine two-level hierarchy — unlike the flat ADR-0034
+segments table).  The 5-column layout is UNCHANGED
+(``Place | Visibility | Colour | Label | Status``, ``columnCount == 5``); what
+changes from the retired flat table is navigation — flat rows become tree
+items, addressed via the item-based reader seams below.
+
+* TERRITORY (top-level) item: the Place / Visibility / Colour cell widgets in
+  cols 0/1/2 (``tree.itemWidget(item, col)``), the editable label text in col 3
+  (``item.text(3)``), and the status glyph+text in col 4.
+* SEED (child) item: nested under its territory's top-level item.  The seed
+  status TEXT lives in the Label column (``item.text(3)``, aligning under the
+  territory label); the DELETE affordance is a cell widget in col 4
+  (``tree.itemWidget(item, 4)``); cols 0/1/2 carry NO widget and NO text (the
+  tree indentation in col 0 conveys the hierarchy).
 
 -- BARE vs LAUNCHED --
 
 The Place-toggle EXCLUSIVITY / re-derivation logic can be driven purely
-through the table + a display node (no GL, no pipeline event dispatch), so
+through the tree + a display node (no GL, no pipeline event dispatch), so
 those RUN launched where the wrapped display node is reachable, and SKIP
 cleanly bare (no Qt, no wrapped node).  The exit()-disarms-a-click and
-click-adds-a-child-row invariants need a REAL pipeline bound to the SAME
-display node the table writes (the detached-instance contract), so they are
+click-adds-a-child-item invariants need a REAL pipeline bound to the SAME
+display node the tree writes (the detached-instance contract), so they are
 LAUNCHED, pipeline wired via the display node.  Every test SKIPS cleanly bare
 via the shared ``conftest`` guards.
 
 -- RUN-VS-SKIP DISCIPLINE (ADR-0027) --
 
-Pre-implementation the Place column / eye-icon toggle / exit-disarm /
-child-row-on-placement do not exist, so the ``hasattr`` / column-shape guards
-skip-pend; the skips lift at the slice-4 implementation commit.  Under a
-launched Slicer, verify run-vs-skip in the CI log once the seam lands — never
-trust overall green (the launched harness is green-but-skipping prone).
+Pre-implementation the tree seam / Place column / eye-icon toggle /
+exit-disarm / child-item-on-placement do not exist, so the ``tree()`` /
+column-shape / ``hasattr`` guards skip-pend; the skips lift at the slice-4
+tree rewrite commit.  Under a launched Slicer, verify run-vs-skip in the CI
+log once the seam lands — never trust overall green (the launched harness is
+green-but-skipping prone).
 
 See also:
   * Docs/adr/0037-vascular-territories-off-markups.md  (§Decision 2 / §3)
@@ -108,18 +128,18 @@ DISPLAY_METHODS = (
 # ---------------------------------------------------------------------------
 # THE 5-COLUMN CONTRACT the implementer MUST honour (slice 4).
 #
-# The Place column is inserted LEFTMOST; every downstream column shifts right
-# by one.  The old 4-column layout was:
-#     [Visibility=0 | Colour=1 | Label=2 | Status=3]  (_COLUMN_COUNT == 4)
-# The slice-4 layout is:
-#     [Place=0 | Visibility=1 | Colour=2 | Label=3 | Status=4]  (== 5)
+# The 5-column layout is UNCHANGED from the retired flat table; the tree
+# rewrite changes only navigation (flat rows -> tree items).  A QTreeWidget
+# has columns too:
+#     [Place=0 | Visibility=1 | Colour=2 | Label=3 | Status=4]  (columnCount == 5)
 #
-# ``_appendChildRow`` must move with the shift: the child-row STATUS TEXT
-# (formerly in _COL_LABEL == 2) moves to the new label column (3), and the
-# child-row DELETE affordance (formerly in _COL_STATUS == 3) moves to the new
-# status column (4).  The Place + Visibility + Colour cells stay blank on a
-# child row.  These offsets are asserted below so the implementer's
-# ``_COL_*`` constants + ``_appendHeaderRow`` / ``_appendChildRow`` matches.
+# A TERRITORY (top-level) item carries the Place / Visibility / Colour cell
+# widgets in cols 0/1/2, the editable label text in col 3, the status text in
+# col 4.  A SEED (child) item carries its status TEXT in the Label column (3)
+# — aligning under the territory label — and the DELETE affordance as a cell
+# widget in the Status column (4); cols 0/1/2 stay blank (no widget, no text)
+# because the tree indentation in col 0 conveys the hierarchy.  These offsets
+# are asserted below so the implementer's ``_COL_*`` constants match.
 # ---------------------------------------------------------------------------
 EXPECTED_COLUMN_COUNT = 5
 EXPECTED_COL_PLACE = 0
@@ -195,7 +215,7 @@ def _import_interaction_state_or_skip():
 
 
 def _import_table_or_skip():
-    """Import the Stage-2 table widget class or skip-pend (ADR-0027)."""
+    """Import the tree widget class or skip-pend (ADR-0027)."""
     try:
         from VascularTerritoriesLib.TerritoriesTableWidget import (
             TerritoriesTableWidget,
@@ -203,8 +223,8 @@ def _import_table_or_skip():
     except Exception as exc:  # pragma: no cover - import-environment dependent
         pytest.skip(
             f"TerritoriesTableWidget not importable ({exc!r}) -- the ADR-0037 "
-            "table widget has not landed OR Qt/LayerDMLib is not reachable here "
-            "(ADR-0027)."
+            "territories widget has not landed OR Qt/LayerDMLib is not reachable "
+            "here (ADR-0027)."
         )
     return TerritoriesTableWidget
 
@@ -223,68 +243,70 @@ def _import_pipeline_or_skip():
 
 
 def _make_table_or_skip(slicer, carrier, displayNode):
-    """Construct the table over the carrier + shared display node, or skip-pend."""
+    """Construct the widget over the carrier + shared display node, or skip-pend."""
     TerritoriesTableWidget = _import_table_or_skip()
     try:
         table = TerritoriesTableWidget(carrier=carrier, displayNode=displayNode)
     except TypeError as exc:
         pytest.skip(
             f"TerritoriesTableWidget(carrier=, displayNode=) seam absent ({exc!r}) "
-            "-- the ADR-0037 table constructor has not landed (ADR-0027)."
+            "-- the ADR-0037 widget constructor has not landed (ADR-0027)."
         )
     return table
 
 
-def _require_table_row_model(table):
-    """Skip-pend unless the table exposes the row-model reader seams."""
-    for method in ("table", "isHeaderRow", "territoryOfRow", "pointIndexOfRow"):
+def _require_tree_model(table):
+    """Skip-pend unless the widget exposes the item-based tree reader seams."""
+    for method in ("tree", "territoryIds", "territoryItem", "seedItems"):
         if not hasattr(table, method):
             pytest.skip(
-                f"TerritoriesTableWidget has no {method} row-model seam -- "
-                "the ADR-0037 table has not landed (ADR-0027)."
+                f"TerritoriesTableWidget has no {method} tree seam -- the "
+                "ADR-0037 slice-4 QTreeWidget rewrite has not landed (ADR-0027)."
             )
 
 
-def _require_five_column_layout_or_skip(table):
-    """Skip-pend unless the table adopted the slice-4 5-column Place layout.
+def _require_tree_layout_or_skip(table):
+    """Skip-pend unless the widget adopted the slice-4 QTreeWidget 5-column layout.
 
-    The gate for every slice-4-shape assertion: while the pre-slice-4
-    4-column layout survives, the table has no Place column, so the tests
-    collect + SKIP-PENDING and RUN once the leftmost Place column lands
-    (ADR-0037 §Decision 2 slice-4 amendment; ADR-0027).
+    The gate for every slice-4 tree assertion: while the ``tree()`` seam is
+    absent OR the column count is not the 5-column
+    (``Place | Visibility | Colour | Label | Status``) layout, the tests
+    collect + SKIP-PENDING and RUN once the tree rewrite lands (ADR-0037
+    §Decision 2 slice-4 amendment; ADR-0027).
     """
-    widget = table.table()
-    if widget.columnCount != EXPECTED_COLUMN_COUNT:
+    if not hasattr(table, "tree"):
         pytest.skip(
-            f"table has {widget.columnCount} columns, not the slice-4 "
+            "TerritoriesTableWidget has no tree() seam -- the ADR-0037 slice-4 "
+            "QTreeWidget rewrite has not landed (ADR-0027)."
+        )
+    tree = table.tree()
+    if tree.columnCount != EXPECTED_COLUMN_COUNT:
+        pytest.skip(
+            f"tree has {tree.columnCount} columns, not the slice-4 "
             f"{EXPECTED_COLUMN_COUNT} (Place | Visibility | Colour | Label | "
             "Status) -- the per-territory Place column has not landed (ADR-0027)."
         )
 
 
-def _place_cell_or_skip(table, row):
-    """Return the header row's Place toggle widget, or skip-pend.
+def _place_cell_or_skip(table, territoryId):
+    """Return the territory item's Place toggle widget, or skip-pend.
 
     Skips while the Place column is absent so the toggle-behaviour tests
     remain collectible pre-implementation.
     """
-    widget = table.table()
-    cell = widget.cellWidget(row, EXPECTED_COL_PLACE)
+    item = table.territoryItem(territoryId)
+    if item is None:
+        pytest.skip(
+            f"no top-level tree item for {territoryId!r} -- the ADR-0037 slice-4 "
+            "QTreeWidget rewrite has not landed (ADR-0027)."
+        )
+    cell = table.tree().itemWidget(item, EXPECTED_COL_PLACE)
     if cell is None:
         pytest.skip(
-            "no Place-toggle cell widget on the header row -- the ADR-0037 "
+            "no Place-toggle cell widget on the territory item -- the ADR-0037 "
             "slice-4 per-territory Place toggle has not landed (ADR-0027)."
         )
     return cell
-
-
-def _header_row_for(table, territoryId):
-    """The header-row index for ``territoryId`` (raises if absent)."""
-    return next(
-        r
-        for r in range(table.table().rowCount)
-        if table.isHeaderRow(r) and table.territoryOfRow(r) == territoryId
-    )
 
 
 # --------------------------------------------------------------------------- #
@@ -337,7 +359,7 @@ def _wire_pipeline_through_display_or_skip(pipeline, displayNode, carrier, monke
     """Bind a REAL pipeline to the SHARED display node so it reads live state.
 
     The detached-instance contract: the pipeline resolves its carrier / active
-    territory / arm flag from the display node the TABLE writes to, NOT from a
+    territory / arm flag from the display node the TREE writes to, NOT from a
     hand-armed detached instance.  A stub renderer + injected pick core keep
     the click GL-free.  (Same helper shape as test_territories_table.py.)
     """
@@ -363,12 +385,13 @@ def _wire_pipeline_through_display_or_skip(pipeline, displayNode, carrier, monke
 # ===========================================================================
 
 
-def test_table_has_five_columns_with_place_leftmost(qt_widgets):
-    """The table adopts the slice-4 5-column layout, Place leftmost.
+def test_tree_has_five_columns_with_place_leftmost(qt_widgets):
+    """The tree adopts the slice-4 5-column layout, Place leftmost.
 
-    ADR-0037 §Decision 2 (slice-4 amendment): the columns become
-    ``Place | Visibility | Colour | Label | Status``.  The Place column is
-    inserted LEFTMOST (index 0); the downstream columns shift right by one.
+    ADR-0037 §Decision 2 (slice-4 amendment): the columns are
+    ``Place | Visibility | Colour | Label | Status`` on the ``QTreeWidget``.
+    The Place column is the leftmost (index 0); the layout is unchanged from
+    the retired flat table save for the flat-rows -> tree-items navigation.
     """
     slicer = _slicer_or_skip()
     _qt_or_skip()
@@ -376,23 +399,25 @@ def test_table_has_five_columns_with_place_leftmost(qt_widgets):
     displayNode = _make_display_node_or_skip(slicer)
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
-    _require_five_column_layout_or_skip(table)
+    _require_tree_model(table)
+    _require_tree_layout_or_skip(table)
 
     # TODO(slice-4 implementer): the invariant body below is authoritative once
-    # the Place column lands; it is unreachable while the guard skip-pends.
-    assert table.table().columnCount == EXPECTED_COLUMN_COUNT
+    # the tree rewrite lands; it is unreachable while the guard skip-pends.
+    assert table.tree().columnCount == EXPECTED_COLUMN_COUNT
 
 
-def test_child_row_status_and_delete_shift_into_the_five_column_offsets(qt_widgets):
-    """Child rows render in the shifted 5-column offsets (the column contract).
+def test_seed_child_item_carries_status_at_label_and_delete_at_status(qt_widgets):
+    """A seed CHILD item renders in the shifted 5-column offsets (the column contract).
 
-    ADR-0037 §Decision 2 (slice-4): with the leftmost Place column inserted,
-    ``_appendChildRow`` must move — the seed STATUS TEXT into the label column
-    (index ``EXPECTED_COL_LABEL == 3``) and the DELETE affordance into the
-    status column (index ``EXPECTED_COL_STATUS == 4``); Place / Visibility /
-    Colour stay blank on a child row.  This pins the exact offsets the
-    implementer's ``_appendChildRow`` must honour.
+    ADR-0037 §Decision 2 (slice-4): a seed is a CHILD item nested under its
+    territory's top-level item.  Its status TEXT lives in the Label column
+    (index ``EXPECTED_COL_LABEL == 3``, aligning under the territory label) and
+    its DELETE affordance is a cell widget in the Status column (index
+    ``EXPECTED_COL_STATUS == 4``); cols 0/1/2 (Place / Visibility / Colour) stay
+    blank — no widget and no text — because the tree indentation in col 0
+    conveys the hierarchy.  This pins the exact offsets the implementer's seed
+    child-item construction must honour.
     """
     slicer = _slicer_or_skip()
     _qt_or_skip()
@@ -400,32 +425,40 @@ def test_child_row_status_and_delete_shift_into_the_five_column_offsets(qt_widge
     displayNode = _make_display_node_or_skip(slicer)
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
-    _require_five_column_layout_or_skip(table)
+    _require_tree_model(table)
+    _require_tree_layout_or_skip(table)
 
     for x, y, z in [(1.0, 0.0, 0.0), (2.0, 0.0, 0.0)]:
         carrier.AddAnnotationPoint(TERRITORY_A, x, y, z)
     carrier.Modified()
 
-    widget = table.table()
-    child_row = next(r for r in range(widget.rowCount) if not table.isHeaderRow(r))
+    tree = table.tree()
+    seeds = table.seedItems(TERRITORY_A)
+    assert len(seeds) >= 1, "the armed territory must carry at least one seed child item."
+    seed = seeds[0]
 
-    # Status TEXT lives in the label column (index 3) — a QTableWidgetItem.
-    label_item = widget.item(child_row, EXPECTED_COL_LABEL)
-    assert label_item is not None and label_item.text().strip() != "", (
-        "child-row status text must live in the shifted label column "
+    # The seed is genuinely a CHILD of its territory's top-level item.
+    territory_item = table.territoryItem(TERRITORY_A)
+    assert territory_item is not None
+    assert seed.parent() is territory_item, (
+        "a seed must be a CHILD item nested under its territory's top-level item."
+    )
+
+    # Status TEXT lives in the Label column (index 3).
+    assert seed.text(EXPECTED_COL_LABEL).strip() != "", (
+        "the seed's status text must live in the Label column "
         f"(index {EXPECTED_COL_LABEL})."
     )
-    # Delete affordance lives in the status column (index 4) — a cell widget.
-    delete_cell = widget.cellWidget(child_row, EXPECTED_COL_STATUS)
+    # Delete affordance lives in the Status column (index 4) — a cell widget.
+    delete_cell = tree.itemWidget(seed, EXPECTED_COL_STATUS)
     assert delete_cell is not None, (
-        "child-row delete affordance must live in the shifted status column "
+        "the seed's delete affordance must live in the Status column "
         f"(index {EXPECTED_COL_STATUS})."
     )
-    # Place / Visibility / Colour stay blank on a child row.
+    # Place / Visibility / Colour stay blank on a seed child item.
     for col in (EXPECTED_COL_PLACE, EXPECTED_COL_VISIBILITY, EXPECTED_COL_COLOUR):
-        assert widget.cellWidget(child_row, col) is None and widget.item(child_row, col) is None, (
-            f"child-row column {col} must be blank in the 5-column layout."
+        assert tree.itemWidget(seed, col) is None and seed.text(col) == "", (
+            f"seed child column {col} must be blank in the 5-column tree layout."
         )
 
 
@@ -437,11 +470,11 @@ def test_child_row_status_and_delete_shift_into_the_five_column_offsets(qt_widge
 def test_place_toggle_arms_its_territory_on_the_display_node(qt_widgets):
     """Toggling a Place button ON arms THAT territory on the display node.
 
-    ADR-0037 §Decision 2 (slice-4): the header's Place toggle writes
+    ADR-0037 §Decision 2 (slice-4): the territory item's Place toggle writes
     ``set_active_territory`` + ``set_armed(True)`` onto the SHARED display node
     (``TerritoryInteractionState``) and makes the highlight visible.  [launched
     where the wrapped display node is reachable; the toggle logic is driven via
-    the table + display node, no pipeline dispatch needed.]
+    the tree + display node, no pipeline dispatch needed.]
     """
     slicer = _slicer_or_skip()
     _qt_or_skip()
@@ -450,14 +483,13 @@ def test_place_toggle_arms_its_territory_on_the_display_node(qt_widgets):
     state = _import_interaction_state_or_skip()
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
-    _require_five_column_layout_or_skip(table)
+    _require_tree_model(table)
+    _require_tree_layout_or_skip(table)
     if not hasattr(table, "addTerritory"):
         pytest.skip("TerritoriesTableWidget has no addTerritory seam (ADR-0027).")
 
     territory = table.addTerritory()
-    header = _header_row_for(table, territory)
-    place = _place_cell_or_skip(table, header)
+    place = _place_cell_or_skip(table, territory)
 
     place.setChecked(True)
 
@@ -476,8 +508,8 @@ def test_place_toggle_is_exclusive_arm_b_unchecks_a(qt_widgets):
     """Arming territory B un-arms A (EXCLUSIVE — one territory armed at a time).
 
     ADR-0037 §Decision 2 (slice-4): toggling one Place button ON un-checks
-    every other row's toggle and re-points the display node's ACTIVE territory
-    at B.  [launched; toggle logic driven via the table + display node.]
+    every other territory's toggle and re-points the display node's ACTIVE
+    territory at B.  [launched; toggle logic driven via the tree + display node.]
     """
     slicer = _slicer_or_skip()
     _qt_or_skip()
@@ -486,27 +518,27 @@ def test_place_toggle_is_exclusive_arm_b_unchecks_a(qt_widgets):
     state = _import_interaction_state_or_skip()
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
-    _require_five_column_layout_or_skip(table)
+    _require_tree_model(table)
+    _require_tree_layout_or_skip(table)
     if not hasattr(table, "addTerritory"):
         pytest.skip("TerritoriesTableWidget has no addTerritory seam (ADR-0027).")
 
     territory_a = table.addTerritory()
     territory_b = table.addTerritory()
 
-    place_a = _place_cell_or_skip(table, _header_row_for(table, territory_a))
+    place_a = _place_cell_or_skip(table, territory_a)
     place_a.setChecked(True)
     assert state.get_active_territory(displayNode) == territory_a
 
-    place_b = _place_cell_or_skip(table, _header_row_for(table, territory_b))
+    place_b = _place_cell_or_skip(table, territory_b)
     place_b.setChecked(True)
 
     assert state.get_active_territory(displayNode) == territory_b, (
         "arming B must re-point the ACTIVE territory at B."
     )
     # A's toggle must have been un-checked (exclusivity) — re-read from the
-    # rebuilt row (the checked state is display-node-derived, not stored).
-    place_a_after = _place_cell_or_skip(table, _header_row_for(table, territory_a))
+    # rebuilt item (the checked state is display-node-derived, not stored).
+    place_a_after = _place_cell_or_skip(table, territory_a)
     assert place_a_after.isChecked() is False, (
         "arming B must un-check A's Place toggle (EXCLUSIVE arming)."
     )
@@ -517,7 +549,7 @@ def test_place_toggle_off_disarms(qt_widgets):
 
     ADR-0037 §Decision 2 (slice-4): toggling OFF clears the display node's
     armed flag (reusing the shared ``done()`` disarm body).  [launched; toggle
-    logic driven via the table + display node.]
+    logic driven via the tree + display node.]
     """
     slicer = _slicer_or_skip()
     _qt_or_skip()
@@ -526,17 +558,17 @@ def test_place_toggle_off_disarms(qt_widgets):
     state = _import_interaction_state_or_skip()
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
-    _require_five_column_layout_or_skip(table)
+    _require_tree_model(table)
+    _require_tree_layout_or_skip(table)
     if not hasattr(table, "addTerritory"):
         pytest.skip("TerritoriesTableWidget has no addTerritory seam (ADR-0027).")
 
     territory = table.addTerritory()
-    place = _place_cell_or_skip(table, _header_row_for(table, territory))
+    place = _place_cell_or_skip(table, territory)
     place.setChecked(True)
     assert state.is_armed(displayNode) is True
 
-    place_after = _place_cell_or_skip(table, _header_row_for(table, territory))
+    place_after = _place_cell_or_skip(table, territory)
     place_after.setChecked(False)
 
     assert state.is_armed(displayNode) is False, (
@@ -545,7 +577,7 @@ def test_place_toggle_off_disarms(qt_widgets):
 
 
 def test_checked_state_rederived_from_display_node_on_rebuild(qt_widgets):
-    """The armed row's checked state survives a carrier-Modified rebuild.
+    """The armed item's checked state survives a carrier-Modified rebuild.
 
     ADR-0037 §Decision 2 (slice-4): ``checked = is_armed(dn) and
     get_active_territory(dn) == territoryId`` is RE-DERIVED on each rebuild,
@@ -560,22 +592,22 @@ def test_checked_state_rederived_from_display_node_on_rebuild(qt_widgets):
     displayNode = _make_display_node_or_skip(slicer)
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
-    _require_five_column_layout_or_skip(table)
+    _require_tree_model(table)
+    _require_tree_layout_or_skip(table)
     if not hasattr(table, "addTerritory"):
         pytest.skip("TerritoriesTableWidget has no addTerritory seam (ADR-0027).")
 
     territory_a = table.addTerritory()
     territory_b = table.addTerritory()
-    place_a = _place_cell_or_skip(table, _header_row_for(table, territory_a))
+    place_a = _place_cell_or_skip(table, territory_a)
     place_a.setChecked(True)
 
     # Force a full rebuild by adding a seed to the OTHER territory.
     carrier.AddAnnotationPoint(territory_b, 1.0, 0.0, 0.0)
     carrier.Modified()
 
-    place_a_after = _place_cell_or_skip(table, _header_row_for(table, territory_a))
-    place_b_after = _place_cell_or_skip(table, _header_row_for(table, territory_b))
+    place_a_after = _place_cell_or_skip(table, territory_a)
+    place_b_after = _place_cell_or_skip(table, territory_b)
     assert place_a_after.isChecked() is True, (
         "the armed territory's Place toggle must stay checked across a rebuild "
         "(checked state re-derived from the display node, not stored)."
@@ -606,15 +638,16 @@ def test_visibility_cell_is_eye_icon_tool_button_not_checkbox(qt_widgets):
     displayNode = _make_display_node_or_skip(slicer)
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
-    _require_five_column_layout_or_skip(table)
+    _require_tree_model(table)
+    _require_tree_layout_or_skip(table)
     if not hasattr(table, "addTerritory"):
         pytest.skip("TerritoriesTableWidget has no addTerritory seam (ADR-0027).")
 
     territory = table.addTerritory()
-    header = _header_row_for(table, territory)
-    cell = table.table().cellWidget(header, EXPECTED_COL_VISIBILITY)
-    assert cell is not None, "the header row must carry a visibility cell widget."
+    item = table.territoryItem(territory)
+    assert item is not None, "the armed territory must have a top-level tree item."
+    cell = table.tree().itemWidget(item, EXPECTED_COL_VISIBILITY)
+    assert cell is not None, "the territory item must carry a visibility cell widget."
 
     assert isinstance(cell, qt.QToolButton), (
         "the visibility cell must be an eye-icon QToolButton (segmentation "
@@ -640,11 +673,11 @@ def test_visibility_cell_is_eye_icon_tool_button_not_checkbox(qt_widgets):
 
 
 def test_colour_cell_stays_ctk_color_picker_button(qt_widgets):
-    """The colour cell survives the 5-column shift as a ``ctkColorPickerButton``.
+    """The colour cell survives the tree rewrite as a ``ctkColorPickerButton``.
 
     ADR-0037 §Decision 3 (already committed): the colour swatch is a
     ``ctkColorPickerButton`` emitting ``colorChanged`` -> ``setTerritoryColor``.
-    A light regression guard that the leftmost-Place-column shift does not turn
+    A light regression guard that the flat-table -> tree rewrite does not turn
     it back into a bare swatch.  [launched.]
     """
     import ctk
@@ -655,18 +688,19 @@ def test_colour_cell_stays_ctk_color_picker_button(qt_widgets):
     displayNode = _make_display_node_or_skip(slicer)
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
-    _require_five_column_layout_or_skip(table)
+    _require_tree_model(table)
+    _require_tree_layout_or_skip(table)
     if not hasattr(table, "addTerritory"):
         pytest.skip("TerritoriesTableWidget has no addTerritory seam (ADR-0027).")
 
     territory = table.addTerritory()
-    header = _header_row_for(table, territory)
-    cell = table.table().cellWidget(header, EXPECTED_COL_COLOUR)
-    assert cell is not None, "the header row must carry a colour cell widget."
+    item = table.territoryItem(territory)
+    assert item is not None, "the armed territory must have a top-level tree item."
+    cell = table.tree().itemWidget(item, EXPECTED_COL_COLOUR)
+    assert cell is not None, "the territory item must carry a colour cell widget."
     assert isinstance(cell, ctk.ctkColorPickerButton), (
-        "the colour cell must stay a ctkColorPickerButton after the 5-column "
-        "shift (ADR-0037 §Decision 3)."
+        "the colour cell must stay a ctkColorPickerButton after the tree "
+        "rewrite (ADR-0037 §Decision 3)."
     )
 
     # colorChanged -> setTerritoryColor: the emitted signal writes the carrier.
@@ -689,9 +723,9 @@ def test_add_territory_mints_and_arms_its_toggle_reads_checked_after_rebuild(qt_
     """``Add Territory`` mints a territory AND arms it; its Place toggle checks.
 
     ADR-0037 §Decision 2 (slice-4): "Add Territory" mints a new empty territory
-    row and arms it — after the rebuild that follows, that row's Place toggle
-    reads checked (the checked state re-derived from the display node).
-    [launched or bare where the display node is reachable.]
+    top-level item and arms it — after the rebuild that follows, that item's
+    Place toggle reads checked (the checked state re-derived from the display
+    node).  [launched or bare where the display node is reachable.]
     """
     slicer = _slicer_or_skip()
     _qt_or_skip()
@@ -700,8 +734,8 @@ def test_add_territory_mints_and_arms_its_toggle_reads_checked_after_rebuild(qt_
     state = _import_interaction_state_or_skip()
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
-    _require_five_column_layout_or_skip(table)
+    _require_tree_model(table)
+    _require_tree_layout_or_skip(table)
     if not hasattr(table, "addTerritory"):
         pytest.skip("TerritoriesTableWidget has no addTerritory seam (ADR-0027).")
 
@@ -709,7 +743,7 @@ def test_add_territory_mints_and_arms_its_toggle_reads_checked_after_rebuild(qt_
 
     assert state.is_armed(displayNode) is True, "Add Territory must arm placement."
     assert state.get_active_territory(displayNode) == territory
-    place = _place_cell_or_skip(table, _header_row_for(table, territory))
+    place = _place_cell_or_skip(table, territory)
     assert place.isChecked() is True, (
         "the minted territory's Place toggle must read checked after rebuild."
     )
@@ -730,8 +764,8 @@ def test_add_seeds_and_done_panel_buttons_retired(qt_widgets):
     displayNode = _make_display_node_or_skip(slicer)
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
-    _require_five_column_layout_or_skip(table)
+    _require_tree_model(table)
+    _require_tree_layout_or_skip(table)
 
     # The retired panel buttons must not survive as private attributes ...
     for attr in ("_addSeedsButton", "_doneButton"):
@@ -758,17 +792,17 @@ def test_add_seeds_and_done_panel_buttons_retired(qt_widgets):
 
 # ===========================================================================
 # Invariant 4 — a click while armed places into THAT territory + adds one child
-# row.  [launched, pipeline wired via the display node.]
+# item.  [launched, pipeline wired via the display node.]
 # ===========================================================================
 
 
-def test_click_while_armed_places_into_territory_and_adds_one_child_row(qt_widgets, monkeypatch):
-    """An armed click appends one seed AND yields exactly one new child row.
+def test_click_while_armed_places_into_territory_and_adds_one_child_item(qt_widgets, monkeypatch):
+    """An armed click appends one seed AND yields exactly one new child item.
 
     ADR-0037 §Decision 2/3 (slice-4 invariant 4): with a territory armed via
     its Place toggle, a click through the display-node-wired pipeline adds one
     surface-snapped point to the carrier AND — on the carrier-Modified rebuild
-    — exactly one CHILD ROW appears under that territory's header (the
+    — exactly one CHILD ITEM appears under that territory's top-level item (the
     maintainer-reported "no child rows" symptom, pinned).  [launched, pipeline
     wired via the display node.]
     """
@@ -780,24 +814,16 @@ def test_click_while_armed_places_into_territory_and_adds_one_child_row(qt_widge
     _wire_pipeline_through_display_or_skip(pipeline, displayNode, carrier, monkeypatch)
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
-    _require_five_column_layout_or_skip(table)
+    _require_tree_model(table)
+    _require_tree_layout_or_skip(table)
     if not hasattr(table, "addTerritory"):
         pytest.skip("TerritoriesTableWidget has no addTerritory seam (ADR-0027).")
 
     territory = table.addTerritory()
-    place = _place_cell_or_skip(table, _header_row_for(table, territory))
+    place = _place_cell_or_skip(table, territory)
     place.setChecked(True)  # arm via the Place toggle (writes the display node)
 
-    def _child_rows_for(territoryId):
-        w = table.table()
-        return [
-            r
-            for r in range(w.rowCount)
-            if not table.isHeaderRow(r) and table.territoryOfRow(r) == territoryId
-        ]
-
-    before_rows = len(_child_rows_for(territory))
+    before_children = len(table.seedItems(territory))
     before_points = carrier.GetNumberOfAnnotationPoints(territory)
 
     assert pipeline.ProcessInteractionEvent(_Event(vtk.vtkCommand.LeftButtonPressEvent)) is True
@@ -805,19 +831,22 @@ def test_click_while_armed_places_into_territory_and_adds_one_child_row(qt_widge
     assert carrier.GetNumberOfAnnotationPoints(territory) == before_points + 1, (
         "an armed click must append EXACTLY ONE seed to the ACTIVE territory."
     )
-    after_rows = _child_rows_for(territory)
-    assert len(after_rows) == before_rows + 1, (
-        "an armed click must add EXACTLY ONE child row under the armed "
-        "territory's header (ADR-0037 slice-4 invariant 4)."
+    after_children = table.seedItems(territory)
+    assert len(after_children) == before_children + 1, (
+        "an armed click must add EXACTLY ONE child item under the armed "
+        "territory's top-level item (ADR-0037 slice-4 invariant 4)."
     )
-    # The new child row renders in the shifted 5-column offsets.
-    child_row = after_rows[-1]
-    widget = table.table()
-    assert widget.item(child_row, EXPECTED_COL_LABEL) is not None, (
-        "the new child row's status text must land in the label column (index 3)."
+    # The new child item renders in the shifted 5-column offsets.
+    seed = after_children[-1]
+    tree = table.tree()
+    assert seed.parent() is table.territoryItem(territory), (
+        "the new seed must be a child of the armed territory's top-level item."
     )
-    assert widget.cellWidget(child_row, EXPECTED_COL_STATUS) is not None, (
-        "the new child row's delete affordance must land in the status column "
+    assert seed.text(EXPECTED_COL_LABEL).strip() != "", (
+        "the new seed's status text must land in the Label column (index 3)."
+    )
+    assert tree.itemWidget(seed, EXPECTED_COL_STATUS) is not None, (
+        "the new seed's delete affordance must land in the Status column "
         "(index 4)."
     )
 
@@ -862,8 +891,8 @@ def test_exit_disarms_and_a_later_click_places_nothing(qt_widgets, monkeypatch):
             "composed TerritoriesTableWidget absent -- LayerDMLib / the wrapped "
             "carrier is off the launched path (ADR-0027)."
         )
-    _require_table_row_model(table)
-    _require_five_column_layout_or_skip(table)
+    _require_tree_model(table)
+    _require_tree_layout_or_skip(table)
     displayNode = getattr(widget, "_highlightDisplayNode", None)
     carrier = getattr(widget, "_annotationCarrier", None)
     if displayNode is None or carrier is None:
@@ -873,12 +902,12 @@ def test_exit_disarms_and_a_later_click_places_nothing(qt_widgets, monkeypatch):
         )
     state = _import_interaction_state_or_skip()
 
-    # Arm via the table's Place toggle, then bind a REAL pipeline to the SAME
-    # display node the widget/table write.
+    # Arm via the tree's Place toggle, then bind a REAL pipeline to the SAME
+    # display node the widget/tree write.
     if not hasattr(table, "addTerritory"):
         pytest.skip("TerritoriesTableWidget has no addTerritory seam (ADR-0027).")
     territory = table.addTerritory()
-    place = _place_cell_or_skip(table, _header_row_for(table, territory))
+    place = _place_cell_or_skip(table, territory)
     place.setChecked(True)
     assert state.is_armed(displayNode) is True
 
@@ -937,7 +966,7 @@ def test_enter_auto_arms_nothing(qt_widgets):
     table = getattr(widget, "_territoriesTable", None)
     if table is None:
         pytest.skip("composed TerritoriesTableWidget absent (ADR-0027).")
-    _require_five_column_layout_or_skip(table)
+    _require_tree_layout_or_skip(table)
     state = _import_interaction_state_or_skip()
 
     widget.enter()

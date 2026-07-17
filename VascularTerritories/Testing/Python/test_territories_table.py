@@ -1,23 +1,25 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital.  All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 
-"""ADR-0037 Stage-2 — the VascularTerritories annotation table UI.
+"""ADR-0037 Stage-2 — the VascularTerritories annotation tree UI.
 
 ADR-0037 §Decision 3 (§3 table) replaces the legacy
 ``inputSurfaceSelector`` / ``endPointsMarkupsSelector`` place-widget panel
-with a Python-composed custom ``QTableWidget`` (ADR-0004): a CUSTOM table,
-not a stock point-list view, because the surface-snap + territory-grouping
-contract has no stock fit (the same call ADR-0034 made against
+with a Python-composed custom tree (ADR-0004): a CUSTOM view, not a stock
+point-list view, because the surface-snap + territory-grouping contract has
+no stock fit (the same call ADR-0034 made against
 ``qMRMLSegmentsTableView``).
 
-The confirmed Stage-2 design (maintainer-approved this session) that these
+The confirmed design (maintainer-approved this session) that these
 invariants pin:
 
-* TABLE SHAPE.  Rows are PER-POINT, grouped under per-territory HEADER
-  rows.  Each territory has a header row (per-territory visibility, colour
-  swatch, label) and one CHILD row per seed point (on-surface status +
-  delete).
-* CARRIER IS THE MODEL.  The table reads/writes the Stage-1 annotation
+* TREE SHAPE (two-level hierarchy).  Territories are TOP-LEVEL items; seed
+  points are CHILD items nested under their territory (disclosure triangle +
+  indentation) — a genuine parent/child hierarchy, unlike the flat ADR-0034
+  segments table.  Each territory item carries per-territory visibility, a
+  colour swatch, and an editable label; each seed child item carries an
+  on-surface status + a delete affordance.
+* CARRIER IS THE MODEL.  The tree reads/writes the Stage-1 annotation
   carrier ``vtkMRMLCustomTerritoriesNode`` (points via ``AddAnnotationPoint``
   / ``GetNumberOfAnnotationPoints`` / ``GetNthAnnotationPoint`` /
   ``ClearAnnotationPoints``; the Stage-2 display slot via the per-territory
@@ -25,19 +27,19 @@ invariants pin:
   ``vtkCommand::ModifiedEvent`` and rebuilds; edits write back.
 * ARMING (pipeline-managed, NOT a Slicer mouse mode).  The arm state lives
   on the SHARED highlight DISPLAY NODE (``TerritoryInteractionState``): the
-  table WRITES arm / active-territory / carrier onto it, and the
+  tree WRITES arm / active-territory / carrier onto it, and the
   manager-driven placement Pipeline READS them back at event time — the
   widget cannot reach the manager-owned Pipeline instance directly, so the
   display node is the shared handle (the 3D-fix contract).  "Add Territory"
-  mints a new empty territory on the carrier, selects its row, makes it the
+  mints a new empty territory on the carrier, selects its item, makes it the
   ACTIVE territory, and arms placement; each surface click through the
   pipeline seam appends ONE seed to the ACTIVE territory (sequential,
-  unbounded).  "Done" / Esc disarms.  Selecting an existing row + "Add
-  seeds" re-arms into THAT territory.  The integration these tests pin: a
-  REAL ``TerritoryPlacementPipeline`` whose ``SetDisplayNode`` was called
-  with the SAME display node the table writes to routes the click into the
+  unbounded).  "Done" / Esc disarms.  Selecting an existing territory +
+  "Add seeds" re-arms into THAT territory.  The integration these tests pin:
+  a REAL ``TerritoryPlacementPipeline`` whose ``SetDisplayNode`` was called
+  with the SAME display node the tree writes to routes the click into the
   ACTIVE territory — the gap that let the detached-instance bug through.
-* DELETE CONVERGENCE.  Delete-by-row (table) and delete-by-pick (pipeline)
+* DELETE CONVERGENCE.  Delete-by-seed (tree) and delete-by-pick (pipeline)
   route through ONE carrier deletion path — a single point-removal
   implementation reached from both entry points.
 * SEED-COUNT COMPLETENESS.  A territory with < 2 seeds is flagged
@@ -52,34 +54,38 @@ invariants pin:
 
 -- SEAM THE IMPLEMENTER MUST PROVIDE (proposed; sharpen at landing) --
 
-A Python-widget-composed table, mirroring the Stage-2 segments-table
-paradigm (ADR-0034) but CUSTOM (ADR-0037 §Decision 3):
+A Python-widget-composed tree, mirroring the Stage-2 table paradigm
+(ADR-0034) but CUSTOM and HIERARCHICAL (ADR-0037 §Decision 3):
 
   * module path ``VascularTerritoriesLib.TerritoriesTableWidget``, class
     ``TerritoriesTableWidget`` (a composed ``qt.QWidget`` owning a
-    ``qt.QTableWidget``), constructed over the carrier + the SHARED
-    highlight display node:
+    ``qt.QTreeWidget``), constructed over the carrier + the SHARED highlight
+    display node:
       ``TerritoriesTableWidget(carrier=<vtkMRMLCustomTerritoriesNode>,
                                displayNode=<vtkMRMLTerritoriesHighlightDisplayNode>)``.
-  * ``table()`` -> the underlying ``qt.QTableWidget``;
-  * row model helpers: ``isHeaderRow(row) -> bool``,
-    ``territoryOfRow(row) -> str``, ``pointIndexOfRow(row) -> int | None``
-    (``None`` for a header row);
+  * ``tree()`` -> the underlying ``qt.QTreeWidget``;
+  * item-model helpers:
+      ``territoryIds() -> list[str]`` (top-level items, in order),
+      ``territoryItem(territoryId) -> QTreeWidgetItem`` (the top-level item),
+      ``seedItems(territoryId) -> list[QTreeWidgetItem]`` (child items, in
+      order);
   * ``addTerritory(territoryId=None) -> str`` — mint an empty territory,
-    select its header row, arm the pipeline into it;
+    select its item, arm the pipeline into it;
   * ``armForSelectedTerritory()`` — re-arm placement into the selected
-    row's territory ("Add seeds");
+    territory ("Add seeds");
+  * ``selectTerritoryRow(territoryId)`` — select a territory's top-level item;
   * ``done()`` — disarm;
-  * ``deleteRow(row)`` — the delete-from-table entry point, converging on
-    the carrier's ``RemoveNthAnnotationPoint`` (the SAME method the
-    pipeline's ``DeleteAnnotationPoint`` reaches);
-  * status-cell readers for the completeness assertion:
-    ``rowStatusText(row) -> str`` and ``rowHasIncompleteGlyph(row) -> bool``.
+  * ``deleteSeed(territoryId, pointIndex)`` — the delete-from-tree entry
+    point, converging on the carrier's ``RemoveNthAnnotationPoint`` (the SAME
+    method the pipeline's ``DeleteAnnotationPoint`` reaches);
+  * completeness readers on the territory item:
+    ``territoryStatusText(territoryId) -> str`` and
+    ``territoryHasIncompleteGlyph(territoryId) -> bool``.
 
 The arm state rides on the SHARED highlight DISPLAY NODE
 (``TerritoryInteractionState``: ``set_armed`` / ``is_armed`` /
 ``set_active_territory`` / ``get_active_territory`` / ``set_carrier`` /
-``get_carrier``), the handle both the table and the manager-driven Pipeline
+``get_carrier``), the handle both the tree and the manager-driven Pipeline
 hold.  The Pipeline reads them back via its ``IsArmed()`` /
 ``GetActiveTerritory()`` seam once ``SetDisplayNode`` binds the SAME node.
 "Add Territory" writes active-territory + armed onto the display node so a
@@ -87,7 +93,7 @@ click appends to the ACTIVE territory, not an implicit one.
 
 -- WHY LAUNCHED-SLICER --
 
-The table needs Qt (``qt.QTableWidget``) + the wrapped
+The tree needs Qt (``qt.QTreeWidget``) + the wrapped
 ``vtkMRMLCustomTerritoriesNode`` carrier + (for the arming tests) the
 LayerDM ``TerritoryPlacementPipeline``.  A bare ``PythonSlicer -m pytest``
 has ``slicer.mrmlScene is None``, no Qt, and LayerDMLib off the path, so
@@ -96,12 +102,12 @@ guards.
 
 -- RUN-VS-SKIP DISCIPLINE (ADR-0027) --
 
-Pre-implementation the table widget + the carrier display slot + the
-Pipeline arm seam do not exist, so the import / ``hasattr`` guards
-skip-pend; the skips lift at the Stage-2 implementation commit.  Under a
-launched Slicer, verify run-vs-skip in the CI log once the seam lands —
-never trust overall green (the launched harness is green-but-skipping
-prone).
+Pre-implementation the tree widget + the carrier display slot + the
+Pipeline arm seam do not exist, so the import / ``tree()`` / ``hasattr``
+guards skip-pend; the skips lift at the tree-rewrite implementation commit.
+Under a launched Slicer, verify run-vs-skip in the CI log once the seam
+lands — never trust overall green (the launched harness is
+green-but-skipping prone).
 
 See also:
   * Docs/adr/0037-vascular-territories-off-markups.md  (the decision)
@@ -144,6 +150,15 @@ DISPLAY_METHODS = (
     "SetTerritoryVisibility",
     "GetTerritoryVisibility",
 )
+
+# The 5-column layout is UNCHANGED across the flat-table -> tree rewrite
+# (ADR-0037 §Decision 2 slice-4 amendment): a QTreeWidget has columns too.
+EXPECTED_COLUMN_COUNT = 5
+EXPECTED_COL_PLACE = 0
+EXPECTED_COL_VISIBILITY = 1
+EXPECTED_COL_COLOUR = 2
+EXPECTED_COL_LABEL = 3
+EXPECTED_COL_STATUS = 4
 
 
 # --------------------------------------------------------------------------- #
@@ -190,8 +205,8 @@ def _make_carrier_or_skip(slicer, name="TableCarrierTest"):
 def _make_display_node_or_skip(slicer, name="TableHighlightTest"):
     """Mint the shared highlight display node, or skip-pend (ADR-0027).
 
-    The display node is the shared handle both the table and the
-    manager-driven placement Pipeline hold: the table writes arm /
+    The display node is the shared handle both the tree and the
+    manager-driven placement Pipeline hold: the tree writes arm /
     active-territory / carrier onto it, the Pipeline reads them back.
     """
     node = slicer.mrmlScene.AddNewNodeByClass(HIGHLIGHT_DISPLAY_CLASS, name)
@@ -216,7 +231,7 @@ def _import_interaction_state_or_skip():
 
 
 def _import_table_or_skip():
-    """Import the Stage-2 table widget class or skip-pend (ADR-0027)."""
+    """Import the tree widget class or skip-pend (ADR-0027)."""
     try:
         from VascularTerritoriesLib.TerritoriesTableWidget import (
             TerritoriesTableWidget,
@@ -224,8 +239,8 @@ def _import_table_or_skip():
     except Exception as exc:  # pragma: no cover - import-environment dependent
         pytest.skip(
             f"TerritoriesTableWidget not importable ({exc!r}) -- the ADR-0037 "
-            "Stage-2 table widget has not landed OR Qt/LayerDMLib is not "
-            "reachable here.  The skip lifts at the Stage-2 implementation "
+            "territories widget has not landed OR Qt/LayerDMLib is not "
+            "reachable here.  The skip lifts at the tree-rewrite implementation "
             "commit (ADR-0027)."
         )
     return TerritoriesTableWidget
@@ -245,10 +260,10 @@ def _import_pipeline_or_skip():
 
 
 def _make_table_or_skip(slicer, carrier, displayNode):
-    """Construct the table over the carrier + shared display node.
+    """Construct the tree over the carrier + shared display node.
 
-    Skip-pends when the table constructor does not yet accept the
-    ``(carrier=, displayNode=)`` seam (the 3D-fix contract; Stage-2 not
+    Skip-pends when the widget constructor does not yet accept the
+    ``(carrier=, displayNode=)`` seam (the 3D-fix contract; tree rewrite not
     landed).
     """
     TerritoriesTableWidget = _import_table_or_skip()
@@ -257,19 +272,42 @@ def _make_table_or_skip(slicer, carrier, displayNode):
     except TypeError as exc:
         pytest.skip(
             f"TerritoriesTableWidget(carrier=, displayNode=) seam absent ({exc!r}) "
-            "-- the ADR-0037 Stage-2 table constructor has not landed (ADR-0027)."
+            "-- the ADR-0037 widget constructor has not landed (ADR-0027)."
         )
     return table
 
 
-def _require_table_row_model(table):
-    """Skip-pend unless the table exposes the row-model reader seams."""
-    for method in ("table", "isHeaderRow", "territoryOfRow", "pointIndexOfRow"):
+def _require_tree_model(table):
+    """Skip-pend unless the widget exposes the item-based tree reader seams."""
+    for method in ("tree", "territoryIds", "territoryItem", "seedItems"):
         if not hasattr(table, method):
             pytest.skip(
-                f"TerritoriesTableWidget has no {method} row-model seam -- "
-                "the ADR-0037 Stage-2 table has not landed (ADR-0027)."
+                f"TerritoriesTableWidget has no {method} tree seam -- the "
+                "ADR-0037 QTreeWidget rewrite has not landed (ADR-0027)."
             )
+
+
+def _require_tree_layout_or_skip(table):
+    """Skip-pend unless the widget adopted the QTreeWidget 5-column layout.
+
+    The gate for the tree-shape assertions: while the ``tree()`` seam is
+    absent OR the column count is not the 5-column
+    (``Place | Visibility | Colour | Label | Status``) layout, the tests
+    collect + SKIP-PENDING and RUN once the tree rewrite lands (ADR-0037
+    §Decision 2 slice-4 amendment; ADR-0027).
+    """
+    if not hasattr(table, "tree"):
+        pytest.skip(
+            "TerritoriesTableWidget has no tree() seam -- the ADR-0037 "
+            "QTreeWidget rewrite has not landed (ADR-0027)."
+        )
+    tree = table.tree()
+    if tree.columnCount != EXPECTED_COLUMN_COUNT:
+        pytest.skip(
+            f"tree has {tree.columnCount} columns, not the "
+            f"{EXPECTED_COLUMN_COUNT} (Place | Visibility | Colour | Label | "
+            "Status) -- the tree rewrite has not landed (ADR-0027)."
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -323,7 +361,7 @@ def _wire_pipeline_through_display_or_skip(pipeline, displayNode, carrier, monke
 
     This is the integration the detached-instance bug slipped through: the
     pipeline resolves its carrier / active territory / arm flag from the
-    display node the TABLE writes to (``SetDisplayNode`` + the carrier bound
+    display node the TREE writes to (``SetDisplayNode`` + the carrier bound
     onto the display node via ``TerritoryInteractionState``), NOT from a
     hand-armed detached instance.  A stub renderer + injected pick core keep
     the click GL-free.
@@ -342,7 +380,7 @@ def _wire_pipeline_through_display_or_skip(pipeline, displayNode, carrier, monke
     monkeypatch.setattr(pipeline, "_safe_get_renderer", lambda: _FakeRenderer())
     # Bind the carrier onto the SHARED display node, then hand the display
     # node to the pipeline: it now reads the SAME carrier + arm state the
-    # table writes.  SetDisplayNode resets the pick to force a re-resolve from
+    # tree writes.  SetDisplayNode resets the pick to force a re-resolve from
     # the node's pickSurface (production behaviour), so inject the unit-sphere
     # pick AFTER binding the display node.
     state.set_carrier(displayNode, carrier)
@@ -351,28 +389,29 @@ def _wire_pipeline_through_display_or_skip(pipeline, displayNode, carrier, monke
 
 
 def _require_arm_seam(pipeline):
-    """Skip-pend unless the Pipeline exposes the Stage-2 active-territory + arm seam."""
+    """Skip-pend unless the Pipeline exposes the active-territory + arm seam."""
     for method in ("SetActiveTerritory", "GetActiveTerritory", "Arm", "Disarm", "IsArmed"):
         if not hasattr(pipeline, method):
             pytest.skip(
                 f"TerritoryPlacementPipeline has no {method} -- the ADR-0037 "
-                "Stage-2 active-territory + arm seam has not landed.  A click "
-                "must append to the ACTIVE territory, not an implicit one "
+                "active-territory + arm seam has not landed.  A click must "
+                "append to the ACTIVE territory, not an implicit one "
                 "(§Decision 3 arming model; ADR-0027)."
             )
 
 
 # --------------------------------------------------------------------------- #
-# TABLE SHAPE — header row per territory + child row per seed
+# TREE SHAPE — top-level item per territory + child item per seed
 # --------------------------------------------------------------------------- #
 
 
-def test_table_builds_header_row_per_territory_and_child_row_per_point(qt_widgets):
-    """The table has one header row per territory + one child row per seed.
+def test_tree_builds_top_level_item_per_territory_and_child_item_per_point(qt_widgets):
+    """The tree has one top-level item per territory + one child item per seed.
 
-    ADR-0037 §Decision 3 / §3 table: rows are per-point, grouped under
-    per-territory header rows.  A carrier with two territories (2 + 3 seeds)
-    yields 2 header rows + 5 child rows, in territory order.
+    ADR-0037 §Decision 3 / §3 table: territories are TOP-LEVEL items, seed
+    points CHILD items nested under them.  A carrier with two territories
+    (2 + 3 seeds) yields 2 top-level items with 2 + 3 child items, in
+    territory order.
     """
     slicer = _slicer_or_skip()
     _qt_or_skip()
@@ -380,7 +419,8 @@ def test_table_builds_header_row_per_territory_and_child_row_per_point(qt_widget
     displayNode = _make_display_node_or_skip(slicer)
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
+    _require_tree_model(table)
+    _require_tree_layout_or_skip(table)
 
     for x, y, z in [(1.0, 0.0, 0.0), (2.0, 0.0, 0.0)]:
         carrier.AddAnnotationPoint(TERRITORY_A, x, y, z)
@@ -388,26 +428,32 @@ def test_table_builds_header_row_per_territory_and_child_row_per_point(qt_widget
         carrier.AddAnnotationPoint(TERRITORY_B, x, y, z)
     carrier.Modified()
 
-    widget = table.table()
-    header_rows = [r for r in range(widget.rowCount) if table.isHeaderRow(r)]
-    child_rows = [r for r in range(widget.rowCount) if not table.isHeaderRow(r)]
+    tree = table.tree()
+    assert tree.topLevelItemCount == 2, "one top-level item per territory."
+    assert TERRITORY_A in table.territoryIds()
+    assert TERRITORY_B in table.territoryIds()
 
-    assert len(header_rows) == 2, "one header row per territory."
-    assert len(child_rows) == 5, "one child row per seed point across both territories."
-    # Every child row resolves to a real point index within its territory.
-    for r in child_rows:
-        territory = table.territoryOfRow(r)
-        idx = table.pointIndexOfRow(r)
-        assert idx is not None and 0 <= idx < carrier.GetNumberOfAnnotationPoints(territory)
+    # Each territory's child-item count matches its seed count, and each child
+    # is genuinely nested under its territory's top-level item.
+    for territory, expected in ((TERRITORY_A, 2), (TERRITORY_B, 3)):
+        parent = table.territoryItem(territory)
+        assert parent is not None
+        seeds = table.seedItems(territory)
+        assert len(seeds) == expected, f"one child item per seed for {territory}."
+        assert parent.childCount() == expected
+        for j, seed in enumerate(seeds):
+            assert seed.parent() is parent, "each seed must nest under its territory."
+            assert parent.child(j) is seed, "seedItems order must match child() order."
+        assert expected == carrier.GetNumberOfAnnotationPoints(territory)
 
 
-def test_carrier_modified_event_rebuilds_the_table(qt_widgets):
-    """A carrier ``ModifiedEvent`` triggers a table rebuild (the carrier is the model).
+def test_carrier_modified_event_rebuilds_the_tree(qt_widgets):
+    """A carrier ``ModifiedEvent`` triggers a tree rebuild (the carrier is the model).
 
-    ADR-0037 §Decision 3: the table OBSERVES the carrier's
+    ADR-0037 §Decision 3: the tree OBSERVES the carrier's
     ``vtkCommand::ModifiedEvent`` and rebuilds.  Adding a point to the
-    carrier (outside the table) grows the child-row count without an
-    explicit table refresh call.
+    carrier (outside the tree) grows the child-item count without an
+    explicit tree refresh call.
     """
     slicer = _slicer_or_skip()
     _qt_or_skip()
@@ -415,16 +461,17 @@ def test_carrier_modified_event_rebuilds_the_table(qt_widgets):
     displayNode = _make_display_node_or_skip(slicer)
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
+    _require_tree_model(table)
+    _require_tree_layout_or_skip(table)
 
     carrier.AddAnnotationPoint(TERRITORY_A, 1.0, 0.0, 0.0)
-    before = sum(1 for r in range(table.table().rowCount) if not table.isHeaderRow(r))
+    before = len(table.seedItems(TERRITORY_A))
 
     carrier.AddAnnotationPoint(TERRITORY_A, 2.0, 0.0, 0.0)  # fires ModifiedEvent
 
-    after = sum(1 for r in range(table.table().rowCount) if not table.isHeaderRow(r))
+    after = len(table.seedItems(TERRITORY_A))
     assert after == before + 1, (
-        "a carrier ModifiedEvent must rebuild the table (child-row count grows "
+        "a carrier ModifiedEvent must rebuild the tree (child-item count grows "
         "with the seed count) -- the carrier is the model, no manual refresh."
     )
 
@@ -454,7 +501,7 @@ def test_arm_then_click_appends_one_seed_to_active_territory(qt_widgets, monkeyp
         pytest.skip("TerritoriesTableWidget has no addTerritory seam (ADR-0027).")
 
     active = table.addTerritory()  # mints + selects + arms into a new territory
-    # The table wrote arm + active onto the SHARED display node; the pipeline
+    # The tree wrote arm + active onto the SHARED display node; the pipeline
     # (bound to that SAME node via SetDisplayNode) reads them back — the
     # integration the detached-instance bug slipped through.
     assert pipeline.IsArmed() is True, (
@@ -493,7 +540,7 @@ def test_click_with_nothing_armed_appends_nothing(qt_widgets, monkeypatch):
     qt_widgets.append(table)
 
     # An ACTIVE territory is set (so the gate under test is the ARM flag, not a
-    # missing active territory); then the table's "Done" disarms via the
+    # missing active territory); then the tree's "Done" disarms via the
     # shared display node.
     pipeline.SetActiveTerritory(TERRITORY_A)
     table.done()
@@ -538,11 +585,11 @@ def test_bare_move_stays_declined_while_armed(qt_widgets, monkeypatch):
 
 
 def test_switching_active_territory_redirects_subsequent_clicks(qt_widgets, monkeypatch):
-    """Selecting a row + Add seeds redirects clicks to the newly ACTIVE territory.
+    """Selecting a territory + Add seeds redirects clicks to the newly ACTIVE one.
 
-    ADR-0037 §Decision 3: "Selecting an existing row + 'Add seeds' re-arms
-    into that territory."  After re-arming into territory B, a click lands in
-    B — not the previously active A.
+    ADR-0037 §Decision 3: "Selecting an existing territory + 'Add seeds'
+    re-arms into that territory."  After re-arming into territory B, a click
+    lands in B — not the previously active A.
     """
     slicer = _slicer_or_skip()
     _qt_or_skip()
@@ -553,7 +600,7 @@ def test_switching_active_territory_redirects_subsequent_clicks(qt_widgets, monk
     _require_arm_seam(pipeline)
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
+    _require_tree_model(table)
     for seam in ("addTerritory", "armForSelectedTerritory", "selectTerritoryRow"):
         if not hasattr(table, seam):
             pytest.skip(
@@ -563,7 +610,7 @@ def test_switching_active_territory_redirects_subsequent_clicks(qt_widgets, monk
 
     territory_a = table.addTerritory()
     territory_b = table.addTerritory()
-    # Re-arm into A first, then switch back to B via the row selection.
+    # Re-arm into A first, then switch back to B via the item selection.
     table.selectTerritoryRow(territory_a)
     table.armForSelectedTerritory()
     assert pipeline.GetActiveTerritory() == territory_a
@@ -585,15 +632,15 @@ def test_switching_active_territory_redirects_subsequent_clicks(qt_widgets, monk
 
 
 # --------------------------------------------------------------------------- #
-# DELETE convergence — table + pipeline share one carrier deletion path
+# DELETE convergence — tree + pipeline share one carrier deletion path
 # --------------------------------------------------------------------------- #
 
 
-def test_delete_row_removes_exactly_one_point(qt_widgets):
-    """Delete-by-row removes EXACTLY ONE carrier point (§Decision 3 / §Decision 2).
+def test_delete_seed_removes_exactly_one_point(qt_widgets):
+    """Delete-by-seed removes EXACTLY ONE carrier point (§Decision 3 / §Decision 2).
 
-    Deleting a child row drops that one seed from the carrier; the count
-    falls by one and the survivors keep their order.
+    Deleting a seed child item drops that one seed from the carrier; the
+    count falls by one and the survivors keep their order.
     """
     slicer = _slicer_or_skip()
     _qt_or_skip()
@@ -601,34 +648,27 @@ def test_delete_row_removes_exactly_one_point(qt_widgets):
     displayNode = _make_display_node_or_skip(slicer)
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
-    if not hasattr(table, "deleteRow"):
-        pytest.skip("TerritoriesTableWidget has no deleteRow seam (ADR-0027).")
+    _require_tree_model(table)
+    if not hasattr(table, "deleteSeed"):
+        pytest.skip("TerritoriesTableWidget has no deleteSeed seam (ADR-0027).")
 
     pts = [(0.0, 0.0, 1.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
     for x, y, z in pts:
         carrier.AddAnnotationPoint(TERRITORY_A, x, y, z)
     carrier.Modified()
 
-    # The child row for territory A, point index 1.
-    target_row = next(
-        r
-        for r in range(table.table().rowCount)
-        if not table.isHeaderRow(r)
-        and table.territoryOfRow(r) == TERRITORY_A
-        and table.pointIndexOfRow(r) == 1
-    )
-    table.deleteRow(target_row)
+    # Delete territory A, point index 1.
+    table.deleteSeed(TERRITORY_A, 1)
 
     assert carrier.GetNumberOfAnnotationPoints(TERRITORY_A) == len(pts) - 1, (
-        "delete-by-row must remove EXACTLY ONE carrier point."
+        "delete-by-seed must remove EXACTLY ONE carrier point."
     )
     assert tuple(carrier.GetNthAnnotationPoint(TERRITORY_A, 0)) == pytest.approx(pts[0], abs=1e-6)
     assert tuple(carrier.GetNthAnnotationPoint(TERRITORY_A, 1)) == pytest.approx(pts[2], abs=1e-6)
 
 
-def test_delete_by_row_and_by_pick_share_one_carrier_path(qt_widgets):
-    """Delete-by-row and the pipeline's ``DeleteAnnotationPoint`` converge.
+def test_delete_by_seed_and_by_pick_share_one_carrier_path(qt_widgets):
+    """Delete-by-seed and the pipeline's ``DeleteAnnotationPoint`` converge.
 
     ADR-0037 §Decision 3 delete convergence: BOTH entry points route through
     ONE carrier deletion path.  Deleting index 1 via each entry point removes
@@ -646,15 +686,15 @@ def test_delete_by_row_and_by_pick_share_one_carrier_path(qt_widgets):
             "-- cannot pin delete convergence (ADR-0027)."
         )
     # The pipeline resolves its carrier from the SHARED display node (the same
-    # handle the table binds), so both delete entry points reach one carrier.
+    # handle the tree binds), so both delete entry points reach one carrier.
     state = _import_interaction_state_or_skip()
     state.set_carrier(displayNode, carrier)
     pipeline.SetDisplayNode(displayNode)
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
-    if not hasattr(table, "deleteRow"):
-        pytest.skip("TerritoriesTableWidget has no deleteRow seam (ADR-0027).")
+    _require_tree_model(table)
+    if not hasattr(table, "deleteSeed"):
+        pytest.skip("TerritoriesTableWidget has no deleteSeed seam (ADR-0027).")
 
     # Seed two identical-shaped territories to delete-index-1 from each way.
     pts = [(0.0, 0.0, 1.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
@@ -671,15 +711,8 @@ def test_delete_by_row_and_by_pick_share_one_carrier_path(qt_widgets):
         for i in range(carrier.GetNumberOfAnnotationPoints(TERRITORY_B))
     ]
 
-    # Route 2: table delete-by-row on territory A, index 1.
-    target_row = next(
-        r
-        for r in range(table.table().rowCount)
-        if not table.isHeaderRow(r)
-        and table.territoryOfRow(r) == TERRITORY_A
-        and table.pointIndexOfRow(r) == 1
-    )
-    table.deleteRow(target_row)
+    # Route 2: tree delete-by-seed on territory A, index 1.
+    table.deleteSeed(TERRITORY_A, 1)
     a_after = [
         tuple(carrier.GetNthAnnotationPoint(TERRITORY_A, i))
         for i in range(carrier.GetNumberOfAnnotationPoints(TERRITORY_A))
@@ -689,7 +722,7 @@ def test_delete_by_row_and_by_pick_share_one_carrier_path(qt_widgets):
     assert carrier.GetNumberOfAnnotationPoints(TERRITORY_A) == len(pts) - 1
     assert carrier.GetNumberOfAnnotationPoints(TERRITORY_B) == len(pts) - 1
     assert a_after == pytest.approx(b_after, abs=1e-6), (
-        "delete-by-row and delete-by-pick must converge on one carrier path "
+        "delete-by-seed and delete-by-pick must converge on one carrier path "
         "(identical survivors) -- no divergent deletion routes."
     )
 
@@ -700,9 +733,9 @@ def test_delete_by_row_and_by_pick_share_one_carrier_path(qt_widgets):
 
 
 def test_visibility_colour_label_edits_leave_geometry_unchanged(qt_widgets):
-    """Header-row visibility / colour / label edits write the display slot only.
+    """Territory visibility / colour / label edits write the display slot only.
 
-    ADR-0037 §Decision 3: the header row carries per-territory visibility,
+    ADR-0037 §Decision 3: the territory item carries per-territory visibility,
     colour swatch, and label; editing them writes the carrier's display slot
     "without touching geometry" — the annotation-point count + coords stay
     byte-identical.
@@ -713,7 +746,7 @@ def test_visibility_colour_label_edits_leave_geometry_unchanged(qt_widgets):
     displayNode = _make_display_node_or_skip(slicer)
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
+    _require_tree_model(table)
     for seam in ("setTerritoryVisibility", "setTerritoryColor", "setTerritoryLabel"):
         if not hasattr(table, seam):
             pytest.skip(
@@ -732,11 +765,11 @@ def test_visibility_colour_label_edits_leave_geometry_unchanged(qt_widgets):
 
     table.setTerritoryVisibility(TERRITORY_A, False)
     table.setTerritoryColor(TERRITORY_A, 0.3, 0.6, 0.9)
-    table.setTerritoryLabel(TERRITORY_A, "Renamed via table")
+    table.setTerritoryLabel(TERRITORY_A, "Renamed via tree")
 
     # The display slot took the edit ...
     assert bool(carrier.GetTerritoryVisibility(TERRITORY_A)) is False
-    assert carrier.GetTerritoryLabel(TERRITORY_A) == "Renamed via table"
+    assert carrier.GetTerritoryLabel(TERRITORY_A) == "Renamed via tree"
     color = carrier.GetTerritoryColor(TERRITORY_A)
     assert (color[0], color[1], color[2]) == pytest.approx((0.3, 0.6, 0.9), abs=1e-6)
 
@@ -769,8 +802,8 @@ def test_territory_with_fewer_than_two_seeds_is_flagged_incomplete(qt_widgets):
     displayNode = _make_display_node_or_skip(slicer)
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
-    _require_table_row_model(table)
-    for seam in ("rowStatusText", "rowHasIncompleteGlyph"):
+    _require_tree_model(table)
+    for seam in ("territoryStatusText", "territoryHasIncompleteGlyph"):
         if not hasattr(table, seam):
             pytest.skip(
                 f"TerritoriesTableWidget has no {seam} status seam -- cannot "
@@ -782,23 +815,14 @@ def test_territory_with_fewer_than_two_seeds_is_flagged_incomplete(qt_widgets):
         carrier.AddAnnotationPoint(TERRITORY_B, x, y, z)  # two seeds -> complete
     carrier.Modified()
 
-    header_a = next(
-        r for r in range(table.table().rowCount)
-        if table.isHeaderRow(r) and table.territoryOfRow(r) == TERRITORY_A
-    )
-    header_b = next(
-        r for r in range(table.table().rowCount)
-        if table.isHeaderRow(r) and table.territoryOfRow(r) == TERRITORY_B
-    )
-
     # Assert the GLYPH + TEXT indicator, never a colour.
-    assert table.rowHasIncompleteGlyph(header_a) is True, (
+    assert table.territoryHasIncompleteGlyph(TERRITORY_A) is True, (
         "a < 2-seed territory must carry an incomplete GLYPH (ADR-0010)."
     )
-    assert table.rowStatusText(header_a).strip() != "", (
+    assert table.territoryStatusText(TERRITORY_A).strip() != "", (
         "the incomplete state must also carry TEXT (ADR-0010, never colour alone)."
     )
-    assert table.rowHasIncompleteGlyph(header_b) is False, (
+    assert table.territoryHasIncompleteGlyph(TERRITORY_B) is False, (
         "a >= 2-seed territory must NOT be flagged incomplete."
     )
 
@@ -868,7 +892,7 @@ def test_no_endpoints_selector_and_no_persisted_fiducial(qt_widgets):
     """``endPointsMarkupsSelector`` is gone AND no fiducial is persisted.
 
     ADR-0037 §Consequences + §Conformance [review]: the markups-selector /
-    place-widget wiring retires, and the annotation/table path persists NO
+    place-widget wiring retires, and the annotation/tree path persists NO
     ``vtkMRMLMarkupsFiducialNode``.  Both have a credible creep-in path (a
     left-in selector; a fallback fiducial), so per the no-colour-of-the-sky
     discipline this narrow absence stays pinned.
@@ -898,11 +922,11 @@ def test_no_endpoints_selector_and_no_persisted_fiducial(qt_widgets):
             "retirement commit (ADR-0027)."
         )
 
-    # (2) no fiducial persisted by the annotation/table path.
+    # (2) no fiducial persisted by the annotation/tree path.
     fiducials = slicer.mrmlScene.GetNodesByClass("vtkMRMLMarkupsFiducialNode")
     count = fiducials.GetNumberOfItems() if fiducials is not None else 0
     assert count == 0, (
-        "the annotation/table path must persist NO vtkMRMLMarkupsFiducialNode "
+        "the annotation/tree path must persist NO vtkMRMLMarkupsFiducialNode "
         "(ADR-0037 §Conformance [review])."
     )
 
