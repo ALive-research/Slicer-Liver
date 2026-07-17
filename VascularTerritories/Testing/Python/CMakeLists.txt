@@ -154,20 +154,21 @@ set(_vascterr_pytest_files
   # stays env-/eyeball-gated in test_territories_vmtk_feed.py (ADR-0027).
   test_territories_surface_resolution.py
   # ADR-0037 §Decision 2/3 (slice 4) -- per-territory Place mode + module-active
-  # gate + table-UX polish.  Placement becomes an EXPLICIT, exclusive, per-
-  # territory arm toggle in a NEW leftmost Place column (Place | Visibility |
-  # Colour | Label | Status): toggling ON arms THAT territory on the shared
-  # display node and un-checks every other row; toggling OFF disarms; the
-  # armed row's checked state is re-derived from the display node on each
-  # rebuild.  The widget's exit() disarms so no view claims an add-on-click
-  # while the module is inactive; enter() auto-arms nothing.  The visibility
-  # cell becomes an eye-icon QToolButton (not QCheckBox); Add seeds / Done
-  # panel buttons retire (done() disarm body survives); an armed click adds one
-  # child row under the header.  The exclusivity / re-derivation logic drives
-  # via the table + display node; the exit-disarm + click-adds-a-child-row
-  # invariants need a REAL pipeline bound to the SAME display node -- all
-  # SKIP-PENDING bare / while the 4-column layout survives, and RUN launched
-  # once the slice-4 Place column + eye toggle land (ADR-0027).
+  # gate + composite-row panel polish.  Placement becomes an EXPLICIT,
+  # exclusive, per-territory arm toggle: toggling ON arms THAT territory on the
+  # shared display node and un-checks every other territory; toggling OFF
+  # disarms; the armed territory's checked state is re-derived from the display
+  # node on each rebuild.  The widget's exit() disarms so no view claims an
+  # add-on-click while the module is inactive; enter() auto-arms nothing.  The
+  # visibility control is an eye-icon QToolButton (not QCheckBox); Add seeds /
+  # Done panel buttons retire (done() disarm body survives); an armed click
+  # adds one seed child item under the territory.  The panel is a header-less,
+  # single-column tree of composite row widgets (a per-row Place / eye / colour
+  # / label / status strip; no column grid).  The exclusivity / re-derivation
+  # logic drives via the tree + display node; the exit-disarm + click-adds-a-
+  # child invariants need a REAL pipeline bound to the SAME display node -- all
+  # SKIP-PENDING bare / while the composite-row seam is absent, and RUN launched
+  # once the composite-row tree + eye toggle land (ADR-0027).
   test_territories_placemode.py
 )
 
