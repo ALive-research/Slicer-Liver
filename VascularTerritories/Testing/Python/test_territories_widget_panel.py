@@ -92,11 +92,13 @@ RETIRED_LOGIC_METHODS = (
 )
 
 # ``ui.*`` widgets re-homed into the Python-composed panel and KEPT.
+# NOTE: ``selectedVascularTerritorySegmId`` was KEEP-guarded in slice 2 but is
+# RETIRED in slice 3 (ADR-0037 §Decision 4) — it is asserted ABSENT by
+# ``test_map_path_selector_retired`` below, so it is NOT listed here (a KEPT
+# assertion would break once slice 3 retires it).
 KEPT_UI_WIDGETS = (
     "inputSurfaceSelector",
     "SegmentationShow3DButton",
-    # Slice-3 rework territory; must STAY present + wired this slice.
-    "selectedVascularTerritorySegmId",
     "addCenterlineSegmentButton",
     "calculateVascularTerritoryMapButton",
 )
@@ -356,17 +358,22 @@ def test_panel_builds_cleanly(qt_widgets):
 
 
 # ===========================================================================
-# Invariant 4 — Map path still functional (slice-2 guard).  (pure presence)
+# Invariant 4 — Map path re-sourced (slice-3 guard).  (pure presence)
 # ===========================================================================
 #
-# The "Compute territory map" action, its ``selectedVascularTerritorySegmId``
-# selector, and the ``calculateVascularTerritoryMap`` path are reworked in
-# SLICE 3 — this slice they must STAY present + wired.  This invariant does
-# NOT gate on ``_slice2_landed`` (these names exist both before and after
-# slice 2) and MUST NOT assert their removal.
+# FLIPPED for slice 3 (ADR-0037 §Decision 4, maintainer-locked): the
+# ``selectedVascularTerritorySegmId`` selector was KEEP-guarded in slice 2 and
+# is RETIRED in slice 3 — the output map target is DERIVED from the carrier
+# (``TerritoryMapOutput`` role), not selected.  The "Compute territory map"
+# BUTTON + ``onCalculateVascularTerritoryMapButton`` +
+# ``calculateVascularTerritoryMap`` REMAIN, but resolve inputs without the
+# selector.  Gated on the retirement having landed so it collects +
+# SKIP-PENDINGs cleanly while the selector survives, and RUNS once slice 3
+# retires it (the slice-3 compute invariants — string->int mapping, carrier
+# sourcing, derived output — live in ``test_territories_map_compute.py``).
 
-def test_map_path_still_present(qt_widgets):
-    """The slice-3 map path (button + selector + logic) is untouched by slice 2."""
+def test_map_path_selector_retired(qt_widgets):
+    """The slice-3 map path retires the selector; button + logic remain."""
     _require_qt_widget()
     _require_mrml_scene()
     import slicer
@@ -375,10 +382,21 @@ def test_map_path_still_present(qt_widgets):
     qt_widgets.append(widget)
     _detach_scene_observers(slicer, widget)
 
+    # The button + handler + logic entry point survive the re-source.
     assert hasattr(widget.ui, "calculateVascularTerritoryMapButton")
-    assert hasattr(widget.ui, "selectedVascularTerritorySegmId")
     assert hasattr(widget, "onCalculateVascularTerritoryMapButton")
     assert hasattr(widget.logic, "calculateVascularTerritoryMap")
+
+    if hasattr(widget.ui, "selectedVascularTerritorySegmId"):
+        pytest.skip(
+            "selectedVascularTerritorySegmId still present -- the ADR-0037 "
+            "slice-3 selector retirement (§Decision 4) has not landed "
+            "(ADR-0027).")
+
+    assert not hasattr(widget.ui, "selectedVascularTerritorySegmId"), (
+        "the selectedVascularTerritorySegmId selector must be retired in "
+        "slice 3 -- the output map target is carrier-derived (ADR-0037 "
+        "§Decision 4).")
 
 
 # ===========================================================================
