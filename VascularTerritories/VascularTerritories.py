@@ -755,7 +755,11 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
     extractor = self.getCenterlineLogic()
     for territoryId in territoryIds:
       count = carrier.GetNumberOfAnnotationPoints(territoryId)
-      if count <= 0:
+      # A centerline needs at least two endpoints (one inlet + one target);
+      # a territory carrying fewer points is INCOMPLETE (the same threshold
+      # the table flags) -- skip it so one under-seeded territory does not
+      # abort extraction for the rest.
+      if count < 2:
         continue
       points = []
       for i in range(count):
