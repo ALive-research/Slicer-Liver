@@ -127,6 +127,21 @@ set(_vascterr_pytest_files
   # while the v1 surface survives, and RUN launched once slice 2 lands
   # (ADR-0027).
   test_territories_widget_panel.py
+  # ADR-0037 §Decision 4 (slice 3) -- the territory-map COMPUTE path re-sourced
+  # off the getNodes("*Territory*") scene scan + the retired
+  # selectedVascularTerritorySegmId selector ONTO the annotation carrier: a
+  # deterministic string->int label map (enumerate GetAnnotationTerritoryIds()
+  # -> index + 1); build_centerline_model sourcing from CenterlineRefs +
+  # Groupings (one carrier == one map == all its centerlines) and marking each
+  # centerline with its derived int; the output segmentation DERIVED from the
+  # carrier's TerritoryMapOutput role (auto-created + reused, per-carrier-ordinal
+  # SegmentationId, no cross-carrier collision); the selector retirement; and
+  # the button resolving all inputs from the carrier + inputSurfaceSelector.
+  # The pure label-map core RUNS BARE; the carrier-sourcing / derived-output /
+  # selector-retirement / button-wiring invariants need the wrapped carrier +
+  # module widget + Logic so they SKIP-PENDING bare and RUN launched; the real
+  # C++ map run stays eyeball-gated (stubbed here) (ADR-0027).
+  test_territories_map_compute.py
 )
 
 foreach(_pytest_file IN LISTS _vascterr_pytest_files)
