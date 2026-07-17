@@ -11,9 +11,7 @@ Unlike the flat ADR-0034 segments table, territories have a genuine
 parent/child structure — seed points nest under their territory — so the
 panel composes a two-level ``qt.QTreeWidget`` (territories as TOP-LEVEL
 items, seed points as CHILD items with a disclosure triangle + indentation)
-rather than a flat ``qt.QTableWidget`` whose seed sub-rows leave dead cells
-under the Place / Visibility / Colour columns (§Decision 2 slice-4
-amendment).
+rather than a flat ``qt.QTableWidget`` (§Decision 2 slice-4 amendment).
 
 The tree is a VIEW over the Stage-1 annotation carrier
 (``vtkMRMLCustomTerritoriesNode``): it OBSERVES the carrier's
@@ -25,20 +23,22 @@ not a Slicer mouse mode); "Add Territory" mints an empty territory + arms
 into it, and a surface click through the pipeline seam appends one seed to
 the ACTIVE territory.
 
-The 5-column layout (``Place | Visibility | Colour | Label | Status``) is
-UNCHANGED across the flat-table -> tree rewrite; a ``QTreeWidget`` has
-columns too:
+The panel is a SINGLE-COLUMN, HEADER-LESS tree of composite row widgets
+(ADR-0037 §Decision 2 slice-4 amendment): the column grid + header row are
+dropped.  ``columnCount == 1`` and ``header().isHidden()``; each item —
+territory top-level AND seed child — carries ONE composite ``QWidget`` on
+column 0 (``tree.itemWidget(item, 0)``) whose ``QHBoxLayout`` holds the row's
+controls as a horizontal STRIP, addressed by NAME (never by column index):
 
-* TERRITORY (top-level) item: per-territory Place toggle / eye-icon
-  visibility toggle / colour swatch in cols 0/1/2, an editable label in
-  col 3, and a completeness indicator rendered as GLYPH + TEXT (ADR-0010,
-  never colour alone) in col 4 — display-only in Stage 2 (extraction gating
-  is Stage 3).
-* SEED (child) item: nested under its territory's top-level item; the
-  on-surface status text lives in the Label column (col 3, aligning under
-  the territory label) and the delete affordance is a cell widget in the
-  Status column (col 4); cols 0/1/2 stay blank because the tree indentation
-  conveys the hierarchy.
+* TERRITORY (top-level) row widget, in order: a per-territory Place toggle
+  (``qt.QToolButton``, checkable), an eye-icon visibility toggle
+  (``qt.QToolButton``, checkable), a colour button (``ctk.ctkColorPickerButton``),
+  an editable label (``qt.QLineEdit``, stretch), and a completeness status
+  label (``qt.QLabel``) rendered as GLYPH + TEXT (ADR-0010, never colour
+  alone) — display-only in Stage 2 (extraction gating is Stage 3).
+* SEED (child) row widget: an on-surface status label (``qt.QLabel``,
+  stretch) + a delete button (``qt.QToolButton``), nested under its
+  territory's top-level item (the tree indentation conveys the hierarchy).
 
 See also:
   * Docs/adr/0037-vascular-territories-off-markups.md  (the decision)
@@ -70,22 +70,11 @@ _TERRITORY_PALETTE = (
     (0.90, 0.49, 0.13),  # orange
 )
 
-#: Column layout of the custom tree (ADR-0037 §Decision 2 slice-4 amendment).
-#: A leftmost per-territory Place toggle drives explicit, exclusive arming.  A
-#: TERRITORY (top-level) item uses columns as
-#: [place | visibility | colour | label | status]; a SEED (child) item uses
-#: [<blank> | <blank> | <blank> | status text | delete].
-_COL_PLACE = 0
-_COL_VISIBILITY = 1
-_COL_COLOUR = 2
-_COL_LABEL = 3
-_COL_STATUS = 4
-_COLUMN_COUNT = 5
-
-#: The tree column the top-level territory id is stashed on (item data is
-#: per-column on a ``QTreeWidgetItem``); the Label column doubles as the id
-#: carrier so the itemChanged / reader seams read it back off one column.
-_COL_TERRITORY_DATA_COL = _COL_LABEL
+#: The single column the composite row widget lives on (ADR-0037 §Decision 2
+#: slice-4 amendment): the column grid + header row are dropped, so every item
+#: carries ONE composite ``QWidget`` on column 0.
+_COMPOSITE_COLUMN = 0
+_COLUMN_COUNT = 1
 
 #: A territory needs at least this many seeds to be complete (a centerline
 #: needs a start + an end); fewer reads incomplete (display-only, Stage 2).
@@ -97,17 +86,15 @@ _INCOMPLETE_GLYPH = "⚠"  # WARNING SIGN
 _INCOMPLETE_TEXT = "Incomplete — needs at least two seeds"
 _COMPLETE_TEXT = "Ready"
 
-#: The Qt item-data role carrying a top-level item's territory id.  Used by
-#: the itemChanged label write-back to identify which territory was renamed.
-_ROLE_TERRITORY = qt.Qt.UserRole + 1
-
 
 class TerritoriesTableWidget(qt.QWidget):
-    """Custom tree view + editor over the annotation carrier (ADR-0037).
+    """Custom composite-row tree over the annotation carrier (ADR-0037).
 
-    Composes a two-level ``qt.QTreeWidget`` — territories are TOP-LEVEL
-    items, seed points CHILD items nested under them — constructed over the
-    Stage-1 carrier and the shared highlight display node:
+    Composes a SINGLE-COLUMN, HEADER-LESS two-level ``qt.QTreeWidget`` —
+    territories are TOP-LEVEL items, seed points CHILD items nested under
+    them — where each item carries ONE composite ``QWidget`` (a horizontal
+    STRIP of controls) on column 0.  Constructed over the Stage-1 carrier and
+    the shared highlight display node:
 
         ``TerritoriesTableWidget(carrier=<vtkMRMLCustomTerritoriesNode>,
                                  displayNode=<vtkMRMLTerritoriesHighlightDisplayNode>)``.
@@ -118,6 +105,11 @@ class TerritoriesTableWidget(qt.QWidget):
     cannot reach the manager-owned Pipeline instance directly.  Delete goes
     straight to the carrier (the same ``RemoveNthAnnotationPoint`` the
     Pipeline's pick-delete uses — one carrier method, ADR-0037 §Decision 3).
+
+    Controls are addressed by NAME through the composite sub-widget getters
+    (``placeButton`` / ``visibilityButton`` / ``colourButton`` /
+    ``territoryLabelEdit`` / ``seedDeleteButton`` ...), never by column index —
+    the columns no longer exist.
     """
 
     def __init__(self, carrier: Any = None, displayNode: Any = None, parent: Any = None) -> None:
@@ -138,6 +130,12 @@ class TerritoriesTableWidget(qt.QWidget):
         self._territory_order: list[str] = []
         # territoryId -> its top-level QTreeWidgetItem; rebuilt every repaint.
         self._territory_items: dict[str, Any] = {}
+        # territoryId -> the composite row QWidget on the top-level item, and
+        # the named controls parsed out of it (rebuilt every repaint).
+        self._territory_rows: dict[str, dict[str, Any]] = {}
+        # (territoryId, pointIndex) -> the seed composite row QWidget + its
+        # named controls (rebuilt every repaint).
+        self._seed_rows: dict[tuple[str, int], dict[str, Any]] = {}
         # Auto-mint counter for "Add Territory".
         self._mint_counter = 0
         # The territory the surgeon last selected (drives "Add seeds"); the
@@ -146,19 +144,21 @@ class TerritoriesTableWidget(qt.QWidget):
 
         layout = qt.QVBoxLayout(self)
 
+        # Single-column, header-less tree (ADR-0037 §Decision 2 slice-4
+        # amendment): each item carries a composite row widget on column 0, so
+        # there is no column grid and no header row.  The disclosure triangle
+        # (setRootIsDecorated) stays so seeds expand/collapse under a territory.
         self._tree = qt.QTreeWidget()
         self._tree.setColumnCount(_COLUMN_COUNT)
-        self._tree.setHeaderLabels(
-            ["Place", "Visible", "Colour", "Territory / label", "Status"]
-        )
-        self._tree.header().setStretchLastSection(True)
+        self._tree.setHeaderHidden(True)
+        self._tree.setRootIsDecorated(True)
         self._tree.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
         self._tree.setSelectionMode(qt.QAbstractItemView.SingleSelection)
         layout.addWidget(self._tree)
 
         buttons = qt.QHBoxLayout()
         # ADR-0037 §Decision 2 slice-4: placement is an explicit per-territory
-        # Place toggle in the leftmost column, so the "Add seeds" + "Done" panel
+        # Place toggle in each territory row, so the "Add seeds" + "Done" panel
         # buttons retire; the shared disarm body survives as ``done()``.
         self._addTerritoryButton = qt.QPushButton("Add Territory")
         buttons.addWidget(self._addTerritoryButton)
@@ -166,7 +166,6 @@ class TerritoriesTableWidget(qt.QWidget):
         layout.addLayout(buttons)
 
         self._addTerritoryButton.connect("clicked(bool)", lambda _checked: self.addTerritory())
-        self._tree.connect("itemChanged(QTreeWidgetItem*,int)", self._onItemChanged)
 
         self._attachCarrierObserver()
         self._rebuild()
@@ -230,13 +229,60 @@ class TerritoriesTableWidget(qt.QWidget):
         return [parent.child(j) for j in range(parent.childCount())]
 
     def territoryStatusText(self, territoryId: str) -> str:
-        """The completeness status TEXT shown on the territory's top-level item."""
-        item = self._territory_items.get(territoryId)
-        return item.text(_COL_STATUS) if item is not None else ""
+        """The completeness status TEXT shown on the territory's row widget."""
+        status = self._territoryControl(territoryId, "status")
+        return status.text if status is not None else ""
 
     def territoryHasIncompleteGlyph(self, territoryId: str) -> bool:
         """Whether the territory carries the incomplete GLYPH (ADR-0010)."""
         return _INCOMPLETE_GLYPH in self.territoryStatusText(territoryId)
+
+    # ------------------------------------------------------------------ #
+    # Composite sub-widget getters (controls addressed by NAME, never column)
+    # ------------------------------------------------------------------ #
+
+    def _territoryControl(self, territoryId: str, key: str) -> Any:
+        """The named control from a territory's composite row (or ``None``)."""
+        row = self._territory_rows.get(territoryId)
+        return row[key] if row is not None else None
+
+    def _seedControl(self, territoryId: str, pointIndex: int, key: str) -> Any:
+        """The named control from a seed's composite row (or ``None``)."""
+        row = self._seed_rows.get((territoryId, int(pointIndex)))
+        return row[key] if row is not None else None
+
+    def territoryRowWidget(self, territoryId: str) -> Any:
+        """The composite ``QWidget`` on the territory's top-level item (col 0)."""
+        return self._territoryControl(territoryId, "widget")
+
+    def placeButton(self, territoryId: str) -> Any:
+        """The checkable Place ``qt.QToolButton`` on the territory row."""
+        return self._territoryControl(territoryId, "place")
+
+    def visibilityButton(self, territoryId: str) -> Any:
+        """The checkable eye-icon ``qt.QToolButton`` on the territory row."""
+        return self._territoryControl(territoryId, "visibility")
+
+    def colourButton(self, territoryId: str) -> Any:
+        """The ``ctk.ctkColorPickerButton`` on the territory row."""
+        return self._territoryControl(territoryId, "colour")
+
+    def territoryLabelEdit(self, territoryId: str) -> Any:
+        """The editable label ``qt.QLineEdit`` on the territory row."""
+        return self._territoryControl(territoryId, "label")
+
+    def seedRowWidget(self, territoryId: str, pointIndex: int) -> Any:
+        """The composite ``QWidget`` on the seed child item (col 0)."""
+        return self._seedControl(territoryId, pointIndex, "widget")
+
+    def seedDeleteButton(self, territoryId: str, pointIndex: int) -> Any:
+        """The delete ``qt.QToolButton`` on the seed row."""
+        return self._seedControl(territoryId, pointIndex, "delete")
+
+    def seedStatusText(self, territoryId: str, pointIndex: int) -> str:
+        """The on-surface status label text on the seed row."""
+        status = self._seedControl(territoryId, pointIndex, "status")
+        return status.text if status is not None else ""
 
     # ------------------------------------------------------------------ #
     # Territory lifecycle (arming)
@@ -346,6 +392,17 @@ class TerritoriesTableWidget(qt.QWidget):
         self.setTerritoryVisibility(territoryId, checked)
         self._applyEyeIcon(button, checked)
 
+    def _onLabelEdited(self, territoryId: str, edit: Any) -> None:
+        """Write an edited label ``QLineEdit`` back to the carrier's display slot.
+
+        The composite-row replacement for the retired in-item editable text
+        (ADR-0037 §Decision 3 slice-4): the ``QLineEdit``'s ``editingFinished``
+        routes through ``setTerritoryLabel``.
+        """
+        if self._rebuilding:
+            return
+        self.setTerritoryLabel(territoryId, edit.text)
+
     def _applyEyeIcon(self, button: Any, visible: bool) -> None:
         """Paint the eye-on / eye-off affordance on a visibility toggle.
 
@@ -425,14 +482,14 @@ class TerritoriesTableWidget(qt.QWidget):
     def _rebuild(self) -> None:
         self._rebuilding = True
         try:
-            self._tree.blockSignals(True)
             self._tree.clear()
             self._territory_items = {}
+            self._territory_rows = {}
+            self._seed_rows = {}
             for territory in self._territories():
                 self._appendTerritoryItem(territory)
             self._tree.expandAll()
         finally:
-            self._tree.blockSignals(False)
             self._rebuilding = False
 
     def _appendTerritoryItem(self, territoryId: str) -> None:
@@ -446,7 +503,7 @@ class TerritoriesTableWidget(qt.QWidget):
             if self._carrier is not None
             else True
         )
-        label = ""
+        label = territoryId
         color = (1.0, 1.0, 1.0)
         if self._carrier is not None:
             label = self._carrier.GetTerritoryLabel(territoryId) or territoryId
@@ -454,17 +511,40 @@ class TerritoriesTableWidget(qt.QWidget):
             color = (rgb[0], rgb[1], rgb[2])
 
         item = qt.QTreeWidgetItem(self._tree)
-        item.setData(_COL_TERRITORY_DATA_COL, _ROLE_TERRITORY, territoryId)
-        # The Label column carries the editable territory label.
-        item.setText(_COL_LABEL, label)
-        item.setFlags(item.flags() | qt.Qt.ItemIsEditable)
         self._territory_items[territoryId] = item
 
-        # Place toggle (ADR-0037 §Decision 2 slice-4): a checkable button that
-        # arms placement into THIS territory, exclusively.  Its checked state is
-        # RE-DERIVED from the shared display node on every rebuild, never stored
-        # in a Python field, so it survives the carrier-Modified rebuild.
+        rowWidget = self._buildTerritoryRow(territoryId, label, color, visible, seedCount)
+        self._tree.setItemWidget(item, _COMPOSITE_COLUMN, rowWidget)
+
+        for pointIndex in range(seedCount):
+            self._appendSeedItem(item, territoryId, pointIndex)
+
+    def _buildTerritoryRow(
+        self,
+        territoryId: str,
+        label: str,
+        color: tuple[float, float, float],
+        visible: bool,
+        seedCount: int,
+    ) -> Any:
+        """Compose a territory row's horizontal control STRIP (ADR-0037 slice-4).
+
+        Order: Place toggle -> eye-icon visibility toggle -> colour button ->
+        label QLineEdit (stretch) -> completeness status label.  Controls are
+        registered by NAME in ``_territory_rows`` so the getters resolve them
+        without any column index.
+        """
+        rowWidget = qt.QWidget()
+        rowLayout = qt.QHBoxLayout(rowWidget)
+        rowLayout.setContentsMargins(2, 1, 2, 1)
+        rowLayout.setSpacing(4)
+
+        # Place toggle: a checkable button that arms placement into THIS
+        # territory, exclusively.  Its checked state is RE-DERIVED from the
+        # shared display node on every rebuild, never stored in a Python field,
+        # so it survives the carrier-Modified rebuild.
         placeButton = qt.QToolButton()
+        placeButton.setAutoRaise(True)
         placeButton.setCheckable(True)
         placeButton.setText("Place")
         placeButton.setToolTip("Arm placement into this territory (exclusive)")
@@ -476,12 +556,13 @@ class TerritoriesTableWidget(qt.QWidget):
             "toggled(bool)",
             lambda checked, t=territoryId: self._onPlaceToggled(t, checked),
         )
-        self._tree.setItemWidget(item, _COL_PLACE, placeButton)
+        rowLayout.addWidget(placeButton)
 
         # Visibility: a Slicer-idiomatic eye-on / eye-off ``QToolButton`` (the
         # segmentation convention, ADR-0037 §Decision 3 slice-4 UX polish), NOT
         # a bare QCheckBox.  Checked state is derived from the carrier.
         visibilityButton = qt.QToolButton()
+        visibilityButton.setAutoRaise(True)
         visibilityButton.setCheckable(True)
         visibilityButton.setChecked(visible)
         self._applyEyeIcon(visibilityButton, visible)
@@ -489,7 +570,7 @@ class TerritoriesTableWidget(qt.QWidget):
             "toggled(bool)",
             lambda checked, t=territoryId, b=visibilityButton: self._onVisibilityToggled(t, b, checked),
         )
-        self._tree.setItemWidget(item, _COL_VISIBILITY, visibilityButton)
+        rowLayout.addWidget(visibilityButton)
 
         # Colour swatch: the Slicer-idiomatic ``ctkColorPickerButton`` (the
         # segmentation / resection convention) -- it renders its own colour
@@ -507,29 +588,71 @@ class TerritoriesTableWidget(qt.QWidget):
                 t, c.redF(), c.greenF(), c.blueF()
             ),
         )
-        self._tree.setItemWidget(item, _COL_COLOUR, colourButton)
+        rowLayout.addWidget(colourButton)
+
+        # Editable label: a ``QLineEdit`` (the composite-row replacement for the
+        # retired in-item editable text); ``editingFinished`` writes the
+        # carrier's display slot.  It takes the row's slack (stretch=1).
+        labelEdit = qt.QLineEdit()
+        labelEdit.setText(label)
+        labelEdit.connect(
+            "editingFinished()",
+            lambda t=territoryId, e=labelEdit: self._onLabelEdited(t, e),
+        )
+        rowLayout.addWidget(labelEdit, 1)
 
         # Completeness indicator: GLYPH + TEXT (ADR-0010, never colour alone).
         incomplete = seedCount < _MIN_SEEDS_FOR_COMPLETE
         statusText = f"{_INCOMPLETE_GLYPH} {_INCOMPLETE_TEXT}" if incomplete else _COMPLETE_TEXT
-        item.setText(_COL_STATUS, statusText)
+        statusLabel = qt.QLabel(statusText)
+        rowLayout.addWidget(statusLabel)
 
-        for pointIndex in range(seedCount):
-            self._appendSeedItem(item, territoryId, pointIndex)
+        self._territory_rows[territoryId] = {
+            "widget": rowWidget,
+            "place": placeButton,
+            "visibility": visibilityButton,
+            "colour": colourButton,
+            "label": labelEdit,
+            "status": statusLabel,
+        }
+        return rowWidget
 
     def _appendSeedItem(self, parentItem: Any, territoryId: str, pointIndex: int) -> None:
         child = qt.QTreeWidgetItem(parentItem)
-        # On-surface status text for the seed (surface-snapped on placement)
-        # lives in the Label column so it aligns under the territory label;
-        # the tree indentation in col 0 conveys the hierarchy.
-        child.setText(_COL_LABEL, f"Seed {pointIndex + 1} — on surface")
+        rowWidget = self._buildSeedRow(territoryId, pointIndex)
+        self._tree.setItemWidget(child, _COMPOSITE_COLUMN, rowWidget)
 
-        deleteButton = qt.QPushButton("Delete")
+    def _buildSeedRow(self, territoryId: str, pointIndex: int) -> Any:
+        """Compose a seed row's horizontal control STRIP (ADR-0037 slice-4).
+
+        Order: on-surface status label (stretch) -> delete ``QToolButton``.
+        The tree indentation under the territory item conveys the hierarchy.
+        """
+        rowWidget = qt.QWidget()
+        rowLayout = qt.QHBoxLayout(rowWidget)
+        rowLayout.setContentsMargins(2, 1, 2, 1)
+        rowLayout.setSpacing(4)
+
+        # On-surface status text (surface-snapped on placement).
+        statusLabel = qt.QLabel(f"Seed {pointIndex + 1} — on surface")
+        rowLayout.addWidget(statusLabel, 1)
+
+        deleteButton = qt.QToolButton()
+        deleteButton.setAutoRaise(True)
+        deleteButton.setText("Delete")
+        deleteButton.setToolTip("Remove this seed")
         deleteButton.connect(
             "clicked(bool)",
             lambda _checked, t=territoryId, i=pointIndex: self._removePoint(t, i),
         )
-        self._tree.setItemWidget(child, _COL_STATUS, deleteButton)
+        rowLayout.addWidget(deleteButton)
+
+        self._seed_rows[(territoryId, pointIndex)] = {
+            "widget": rowWidget,
+            "status": statusLabel,
+            "delete": deleteButton,
+        }
+        return rowWidget
 
     def _removePoint(self, territoryId: str, pointIndex: int) -> None:
         """The ONE point-removal path shared by delete-by-seed + delete-by-pick.
@@ -541,11 +664,3 @@ class TerritoriesTableWidget(qt.QWidget):
         """
         if self._carrier is not None:
             self._carrier.RemoveNthAnnotationPoint(territoryId, pointIndex)
-
-    def _onItemChanged(self, item: Any, column: int) -> None:
-        """Write an edited territory label back to the carrier's display slot."""
-        if item is None or self._rebuilding or column != _COL_LABEL:
-            return
-        territory = item.data(_COL_TERRITORY_DATA_COL, _ROLE_TERRITORY)
-        if territory:
-            self.setTerritoryLabel(territory, item.text(_COL_LABEL))
