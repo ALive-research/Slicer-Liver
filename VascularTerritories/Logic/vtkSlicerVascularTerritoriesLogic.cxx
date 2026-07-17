@@ -387,6 +387,16 @@ void vtkSlicerVascularTerritoriesLogic::calculateVascularTerritoryMap(vtkMRMLSeg
     std::cout << "Segment name: " << liverSegm->GetName() << " Segment label: " << liverSegm->GetLabelValue() << std::endl;
   }
 
+  // No liver-tagged segment resolved: exporting an empty segment id yields an
+  // empty labelmap and a silently-blank territory map.  Fail loudly instead so
+  // the missing SCT^10200004 tag on the input is legible (ADR-0011).
+  if (segmentId.empty())
+  {
+    vtkErrorMacro("calculateVascularTerritoryMap: no liver segment (SCT^10200004) "
+                  "found in the input segmentation -- cannot compute the territory map.");
+    return;
+  }
+
   segmentationIds->InsertNextValue(segmentId);
   vtkSlicerSegmentationsModuleLogic::ExportSegmentsToLabelmapNode(segmentation, segmentationIds, labelmapVolumeNode, refVolume);
   int result = SegmentClassificationProcessing(centerlineModel, labelmapVolumeNode);
