@@ -13,12 +13,17 @@ no stock fit (the same call ADR-0034 made against
 The confirmed design (maintainer-approved this session) that these
 invariants pin:
 
-* TREE SHAPE (two-level hierarchy).  Territories are TOP-LEVEL items; seed
-  points are CHILD items nested under their territory (disclosure triangle +
-  indentation) — a genuine parent/child hierarchy, unlike the flat ADR-0034
-  segments table.  Each territory item carries per-territory visibility, a
-  colour swatch, and an editable label; each seed child item carries an
-  on-surface status + a delete affordance.
+* TREE SHAPE (composite-row, two-level hierarchy).  The tree is SINGLE-COLUMN
+  with NO header row and NO visible column grid (``columnCount == 1``,
+  ``header().isHidden()``).  Territories are TOP-LEVEL items; seed points are
+  CHILD items nested under their territory (disclosure triangle + indentation)
+  — a genuine parent/child hierarchy, unlike the flat ADR-0034 segments table.
+  Each item carries ONE composite ``QWidget`` on column 0
+  (``tree.itemWidget(item, 0)``) holding the row's controls as a horizontal
+  STRIP, addressed by NAME (never by column).  A territory row carries a Place
+  toggle, an eye-icon visibility toggle, a colour button, an editable label,
+  and a status label; each seed child row carries an on-surface status label +
+  a delete button.
 * CARRIER IS THE MODEL.  The tree reads/writes the Stage-1 annotation
   carrier ``vtkMRMLCustomTerritoriesNode`` (points via ``AddAnnotationPoint``
   / ``GetNumberOfAnnotationPoints`` / ``GetNthAnnotationPoint`` /
@@ -69,6 +74,16 @@ A Python-widget-composed tree, mirroring the Stage-2 table paradigm
       ``territoryItem(territoryId) -> QTreeWidgetItem`` (the top-level item),
       ``seedItems(territoryId) -> list[QTreeWidgetItem]`` (child items, in
       order);
+  * composite sub-widget getters (controls addressed by NAME, never column):
+      ``territoryRowWidget(territoryId) -> QWidget``,
+      ``placeButton(territoryId) -> QToolButton`` (checkable),
+      ``visibilityButton(territoryId) -> QToolButton`` (checkable eye),
+      ``colourButton(territoryId) -> ctkColorPickerButton``,
+      ``territoryLabelEdit(territoryId) -> QLineEdit`` (editing writes
+      ``setTerritoryLabel``),
+      ``seedRowWidget(territoryId, pointIndex) -> QWidget``,
+      ``seedDeleteButton(territoryId, pointIndex) -> QToolButton``,
+      ``seedStatusText(territoryId, pointIndex) -> str``;
   * ``addTerritory(territoryId=None) -> str`` — mint an empty territory,
     select its item, arm the pipeline into it;
   * ``armForSelectedTerritory()`` — re-arm placement into the selected
@@ -102,12 +117,12 @@ guards.
 
 -- RUN-VS-SKIP DISCIPLINE (ADR-0027) --
 
-Pre-implementation the tree widget + the carrier display slot + the
-Pipeline arm seam do not exist, so the import / ``tree()`` / ``hasattr``
-guards skip-pend; the skips lift at the tree-rewrite implementation commit.
-Under a launched Slicer, verify run-vs-skip in the CI log once the seam
-lands — never trust overall green (the launched harness is
-green-but-skipping prone).
+Pre-implementation the composite-row widget + the carrier display slot + the
+Pipeline arm seam do not exist, so the import / ``tree()`` / single-column /
+header-hidden / ``territoryRowWidget`` / ``placeButton`` / ``hasattr`` guards
+skip-pend; the skips lift at the composite-row implementation commit.  Under a
+launched Slicer, verify run-vs-skip in the CI log once the seam lands — never
+trust overall green (the launched harness is green-but-skipping prone).
 
 See also:
   * Docs/adr/0037-vascular-territories-off-markups.md  (the decision)
@@ -151,14 +166,12 @@ DISPLAY_METHODS = (
     "GetTerritoryVisibility",
 )
 
-# The 5-column layout is UNCHANGED across the flat-table -> tree rewrite
-# (ADR-0037 §Decision 2 slice-4 amendment): a QTreeWidget has columns too.
-EXPECTED_COLUMN_COUNT = 5
-EXPECTED_COL_PLACE = 0
-EXPECTED_COL_VISIBILITY = 1
-EXPECTED_COL_COLOUR = 2
-EXPECTED_COL_LABEL = 3
-EXPECTED_COL_STATUS = 4
+# The columns + header row are DROPPED (ADR-0037 §Decision 2 slice-4
+# amendment): the tree is SINGLE-COLUMN with a hidden header, each item
+# carrying ONE composite QWidget on column 0.  Controls are addressed by NAME
+# through the composite getters, never by column index.
+EXPECTED_COLUMN_COUNT = 1  # single-column tree; the composite row lives on col 0
+COMPOSITE_COLUMN = 0
 
 
 # --------------------------------------------------------------------------- #
@@ -287,27 +300,40 @@ def _require_tree_model(table):
             )
 
 
-def _require_tree_layout_or_skip(table):
-    """Skip-pend unless the widget adopted the QTreeWidget 5-column layout.
+def _require_composite_rows_or_skip(table):
+    """Skip-pend unless the widget adopted the composite-row layout.
 
     The gate for the tree-shape assertions: while the ``tree()`` seam is
-    absent OR the column count is not the 5-column
-    (``Place | Visibility | Colour | Label | Status``) layout, the tests
-    collect + SKIP-PENDING and RUN once the tree rewrite lands (ADR-0037
-    §Decision 2 slice-4 amendment; ADR-0027).
+    absent, OR the tree is not single-column (``columnCount != 1``), OR its
+    header is not hidden, OR the ``territoryRowWidget`` / ``placeButton``
+    composite getters are absent, the tests collect + SKIP-PENDING and RUN
+    once the composite-row rewrite lands (ADR-0037 §Decision 2 slice-4
+    amendment; ADR-0027).
     """
     if not hasattr(table, "tree"):
         pytest.skip(
             "TerritoriesTableWidget has no tree() seam -- the ADR-0037 "
-            "QTreeWidget rewrite has not landed (ADR-0027)."
+            "composite-row rewrite has not landed (ADR-0027)."
         )
     tree = table.tree()
     if tree.columnCount != EXPECTED_COLUMN_COUNT:
         pytest.skip(
-            f"tree has {tree.columnCount} columns, not the "
-            f"{EXPECTED_COLUMN_COUNT} (Place | Visibility | Colour | Label | "
-            "Status) -- the tree rewrite has not landed (ADR-0027)."
+            f"tree has {tree.columnCount} columns, not the slice-4 single-column "
+            "(composite-row) layout -- the column-drop rewrite has not landed "
+            "(ADR-0027)."
         )
+    header = tree.header()
+    if header is None or not header.isHidden():
+        pytest.skip(
+            "tree header is not hidden -- the slice-4 header-drop has not landed "
+            "(ADR-0027)."
+        )
+    for method in ("territoryRowWidget", "placeButton"):
+        if not hasattr(table, method):
+            pytest.skip(
+                f"TerritoriesTableWidget has no {method} composite getter -- the "
+                "ADR-0037 slice-4 composite-row rewrite has not landed (ADR-0027)."
+            )
 
 
 # --------------------------------------------------------------------------- #
@@ -420,7 +446,7 @@ def test_tree_builds_top_level_item_per_territory_and_child_item_per_point(qt_wi
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
     _require_tree_model(table)
-    _require_tree_layout_or_skip(table)
+    _require_composite_rows_or_skip(table)
 
     for x, y, z in [(1.0, 0.0, 0.0), (2.0, 0.0, 0.0)]:
         carrier.AddAnnotationPoint(TERRITORY_A, x, y, z)
@@ -462,7 +488,7 @@ def test_carrier_modified_event_rebuilds_the_tree(qt_widgets):
     table = _make_table_or_skip(slicer, carrier, displayNode)
     qt_widgets.append(table)
     _require_tree_model(table)
-    _require_tree_layout_or_skip(table)
+    _require_composite_rows_or_skip(table)
 
     carrier.AddAnnotationPoint(TERRITORY_A, 1.0, 0.0, 0.0)
     before = len(table.seedItems(TERRITORY_A))
@@ -781,6 +807,76 @@ def test_visibility_colour_label_edits_leave_geometry_unchanged(qt_widgets):
         assert tuple(carrier.GetNthAnnotationPoint(TERRITORY_A, i)) == pytest.approx(
             expected, abs=1e-9
         ), f"point {i} must not move on a display edit."
+
+
+def test_editing_the_label_line_edit_writes_set_territory_label(qt_widgets):
+    """Editing the row's ``QLineEdit`` writes ``setTerritoryLabel`` on the carrier.
+
+    ADR-0037 §Decision 3 (slice-4 composite-row): the editable label is a
+    ``qt.QLineEdit`` in the territory row widget (``territoryLabelEdit``).
+    Committing an edit (setting the text + emitting ``editingFinished``) routes
+    through the tree's ``setTerritoryLabel`` and writes the carrier's display
+    slot — the composite-row replacement for the retired in-item editable text.
+    """
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
+    qt_widgets.append(table)
+    _require_tree_model(table)
+    _require_composite_rows_or_skip(table)
+    if not hasattr(table, "addTerritory") or not hasattr(table, "territoryLabelEdit"):
+        pytest.skip(
+            "TerritoriesTableWidget has no addTerritory / territoryLabelEdit seam "
+            "(ADR-0027)."
+        )
+
+    territory = table.addTerritory()
+    edit = table.territoryLabelEdit(territory)
+    assert edit is not None, "the territory row must carry an editable label QLineEdit."
+
+    edit.setText("Renamed via line edit")
+    edit.editingFinished()  # commit the edit
+
+    assert carrier.GetTerritoryLabel(territory) == "Renamed via line edit", (
+        "committing the label QLineEdit must write setTerritoryLabel on the "
+        "carrier (ADR-0037 §Decision 3 composite-row)."
+    )
+
+
+def test_seed_delete_button_removes_exactly_that_seed(qt_widgets):
+    """Clicking a seed's delete button removes exactly that seed via the carrier.
+
+    ADR-0037 §Decision 3 delete convergence (slice-4 composite-row): each seed
+    row's delete affordance (``seedDeleteButton``) drives the SAME carrier
+    removal path as ``deleteSeed``; clicking it drops exactly that one seed.
+    """
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
+    qt_widgets.append(table)
+    _require_tree_model(table)
+    _require_composite_rows_or_skip(table)
+    if not hasattr(table, "seedDeleteButton"):
+        pytest.skip("TerritoriesTableWidget has no seedDeleteButton seam (ADR-0027).")
+
+    pts = [(0.0, 0.0, 1.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
+    for x, y, z in pts:
+        carrier.AddAnnotationPoint(TERRITORY_A, x, y, z)
+    carrier.Modified()
+
+    delete = table.seedDeleteButton(TERRITORY_A, 1)
+    assert delete is not None, "the seed row must carry a delete button."
+    delete.click()
+
+    assert carrier.GetNumberOfAnnotationPoints(TERRITORY_A) == len(pts) - 1, (
+        "clicking a seed's delete button must remove EXACTLY ONE carrier point."
+    )
+    assert tuple(carrier.GetNthAnnotationPoint(TERRITORY_A, 0)) == pytest.approx(pts[0], abs=1e-6)
+    assert tuple(carrier.GetNthAnnotationPoint(TERRITORY_A, 1)) == pytest.approx(pts[2], abs=1e-6)
 
 
 # --------------------------------------------------------------------------- #
