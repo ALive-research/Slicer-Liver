@@ -234,28 +234,35 @@ panel buttons duplicated per-territory intent.  Slice 4 makes arming an
 explicit, per-territory, exclusive toggle and gates it on the module being
 active.
 
-### Tree UX — a two-level hierarchy (extends §Decision 3)
+### Tree UX — a single-column, header-less tree of composite row widgets (extends §Decision 3)
 
 The panel composes a `qt.QTreeWidget`, not a flat `qt.QTableWidget`:
 territories are TOP-LEVEL items and seed points are CHILD items nested under
 them (disclosure triangle + indentation).  This diverges from the flat
 [ADR-0034](0034-stage2-segments-table.md) segments-table paradigm because
 territories have a genuine parent/child structure — seeds belong *to* a
-territory — that a flat table cannot express without dead cells (the seed
-sub-rows leave the Place / Visibility / Colour columns blank).  The tree makes
-the hierarchy structural: the indentation in the Place column conveys the
-grouping, so a seed child item carries only its on-surface status (in the
-Label column, aligning under the territory label) and a delete affordance (in
-the Status column).  The 5-column layout is otherwise **unchanged** — a
-`QTreeWidget` has columns too — so the column contract below carries over
-verbatim; only navigation changes (flat rows become tree items, addressed via
-`tree()` / `territoryIds()` / `territoryItem()` / `seedItems()`).
+territory — that a flat table cannot express.
+
+The tree drops the column grid and the header entirely: it is **single-column**
+(`columnCount == 1`) with a **hidden header** (`header().isHidden()`), and each
+item — territory top-level AND seed child — carries ONE composite `QWidget` on
+column 0 (`tree.itemWidget(item, 0)`) whose `QHBoxLayout` holds the row's
+controls as a **horizontal strip**.  There is no per-column cell layout and no
+dead cells under a seed row; the two-level territory→seeds hierarchy is
+conveyed structurally by the disclosure triangle + indentation.  The controls
+are addressed by NAME (`territoryRowWidget` / `placeButton` /
+`visibilityButton` / `colourButton` / `territoryLabelEdit` / `seedRowWidget` /
+`seedDeleteButton` / `seedStatusText`), never by column index — the columns no
+longer exist.  A **territory** row strip carries, in order, the Place toggle,
+the eye-icon visibility toggle, the colour button, an editable label
+`QLineEdit`, and a completeness status label; a **seed** row strip carries the
+on-surface status label + a delete button.  Navigation stays via `tree()` /
+`territoryIds()` / `territoryItem()` / `seedItems()`.
 
 ### Per-territory exclusive Place toggle (extends §Decision 2)
 
-The tree grows a leftmost **Place** column, so the layout becomes
-`Place | Visibility | Colour | Label | Status`.  Each territory top-level item
-carries a checkable Place button.  Toggling it ON arms placement into THAT
+Each territory row strip leads with a checkable **Place** `QToolButton`.
+Toggling it ON arms placement into THAT
 territory — `set_active_territory` + `set_armed(True)` on the shared display
 node, highlight made visible — and un-checks every other row's toggle
 (**exclusive**: one territory armed at a time).  Toggling OFF disarms through
@@ -277,7 +284,14 @@ arm state — intended, not gated.
 
 ### Eye-icon visibility (extends §Decision 3)
 
-The visibility column becomes a Slicer-idiomatic eye-on / eye-off
+The visibility control is a Slicer-idiomatic eye-on / eye-off
 `qt.QToolButton` (the segmentation convention), not a `QCheckBox`; toggling it
 flips `SetTerritoryVisibility` and its checked state is derived from
 `GetTerritoryVisibility` on rebuild.
+
+### Editable label moves to a `QLineEdit` (extends §Decision 3)
+
+With the column grid gone, the territory label is an editable `qt.QLineEdit`
+in the row strip whose `editingFinished` routes through `setTerritoryLabel` to
+the carrier's display slot — the composite-row replacement for the retired
+in-item editable text (and its tree `itemChanged` label handler).
