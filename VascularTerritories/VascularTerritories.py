@@ -746,9 +746,10 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
       territoryIds = [tid for tid in territoryIds if tid == segmentId]
 
     # Decimate the input surface once; every territory shares the same input
-    # mesh.  Best-effort: a missing/empty surface still lets the
-    # transient-node lifecycle run (the extractor stub tolerates it), so the
-    # feed degrades rather than crashing.
+    # mesh.  A missing/empty surface degrades HONESTLY: the real SlicerVMTK
+    # extractor hard-fails on a None/empty surface (no Voronoi diagram / 0 cap
+    # connections / no surface normals), so ``_extractOneTerritory`` skips the
+    # extraction instead of feeding it a bad surface.
     surfacePolyData = self._preprocessedSurface(surfaceNode)
 
     extractor = self.getCenterlineLogic()
@@ -774,11 +775,22 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
     except Exception:  # noqa: BLE001 - degrade gracefully when preprocessing fails
       logging.warning(
         "VascularTerritories: input-surface preprocessing failed -- the "
-        "centerline feed proceeds without a decimated surface.")
+        "centerline extraction is skipped (no surface to run over).")
       return None
 
   def _extractOneTerritory(self, carrier, extractor, surfacePolyData, territoryId, points):
-    """Build a transient fiducial, extract, wire the output, tear the node down."""
+    """Build a transient fiducial, extract, wire the output, tear the node down.
+
+    A None/empty ``surfacePolyData`` is NOT fed to the extractor: the real
+    SlicerVMTK extractor hard-fails on it, so the territory's extraction is
+    skipped with a warning (honest degradation, not a silent no-op).  The
+    transient-fiducial lifecycle stays intact for the real path.
+    """
+    if surfacePolyData is None or surfacePolyData.GetNumberOfPoints() == 0:
+      logging.warning(
+        "VascularTerritories: no input surface -- cannot extract the "
+        "centerline for territory %s (skipped).", territoryId)
+      return
     from VascularTerritoriesLib.TransientVmtkSeeds import build_seed_payload
     payload = build_seed_payload(points)
     seedsNode = self._buildTransientFiducial(payload)
@@ -1037,13 +1049,21 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
     if surfaceNode.IsA("vtkMRMLModelNode"):
         return surfaceNode.GetPolyData()
     elif surfaceNode.IsA("vtkMRMLSegmentationNode"):
-        # Segmentation node
-        polyData = vtk.vtkPolyData()
-        surfaceNode.CreateClosedSurfaceRepresentation()
-        surfaceNode.GetClosedSurfaceRepresentation(segmentId, polyData)
-        return polyData
+        # ``segmentId`` here carries the feed's TERRITORY semantics (or the
+        # empty string == "every territory"), NOT a segmentation *segment*
+        # id -- so it must never be handed straight to
+        # GetClosedSurfaceRepresentation, which would resolve no segment and
+        # yield a zero-point mesh.  Converge on the SAME whole-vessel-tree
+        # resolution the pick/highlight path uses
+        # (VesselHighlightWiring.closed_surface_polydata): every segment's
+        # closed surface appended into one mesh, so placement-snap and
+        # centerline extraction see the identical surface.  ``None`` when the
+        # segmentation carries no segment geometry.
+        from VascularTerritoriesLib.VesselHighlightWiring import closed_surface_polydata
+        return closed_surface_polydata(surfaceNode)
     else:
-        logging.error
+        logging.error("Unsupported input surface node type")
+        return None
 
 class VascularTerritoriesTest(ScriptedLoadableModuleTest):
   """
