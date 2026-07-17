@@ -223,3 +223,44 @@ labelmap background), so the same territories derive the same ints across
 repeated calls (the pure `VascularTerritoriesLib.TerritoryLabelMap` core); the
 per-map ordinal is issued one past the maximum `SegmentationId` already
 stamped in the scene, so two carriers never collide.
+
+## Amendment — per-territory Place mode + module-active gate (slice 4)
+
+§Decision 2 said placement "adds one point per click" but left the *arming*
+implicit ("Add Territory" armed and never disarmed, a panel "Add seeds" /
+"Done" pair the only re-arm/disarm).  In use this leaked an armed view across
+module switches (a click in another module could still land a seed) and the
+panel buttons duplicated per-territory intent.  Slice 4 makes arming an
+explicit, per-territory, exclusive toggle and gates it on the module being
+active.
+
+### Per-territory exclusive Place toggle (extends §Decision 2)
+
+The table grows a leftmost **Place** column, so the layout becomes
+`Place | Visibility | Colour | Label | Status`.  Each territory header row
+carries a checkable Place button.  Toggling it ON arms placement into THAT
+territory — `set_active_territory` + `set_armed(True)` on the shared display
+node, highlight made visible — and un-checks every other row's toggle
+(**exclusive**: one territory armed at a time).  Toggling OFF disarms through
+the shared `done()` body.  The checked state is **re-derived** from the
+display node on every rebuild (`is_armed(dn) and get_active_territory(dn) ==
+territoryId`), never stored in a Python field, so it survives the
+carrier-`Modified` rebuild.  `Add Territory` still mints a territory and arms
+it (its toggle then re-derives checked); the panel `Add seeds` + `Done`
+buttons **retire** — only the `done()` disarm logic survives, as the shared
+body reused by a toggle-OFF and by the module-active gate below.
+
+### Module-active gate (extends §Decision 2)
+
+The widget's `exit()` disarms placement (the table's shared `disarm()`/`done()`
+body, then a rebuild so the toggles re-derive un-checked), so no view claims an
+add-on-click while VascularTerritories is inactive.  `enter()` auto-arms
+nothing.  Edits (grab/drag/delete of existing seeds) stay **independent** of
+arm state — intended, not gated.
+
+### Eye-icon visibility (extends §Decision 3)
+
+The visibility column becomes a Slicer-idiomatic eye-on / eye-off
+`qt.QToolButton` (the segmentation convention), not a `QCheckBox`; toggling it
+flips `SetTerritoryVisibility` and its checked state is derived from
+`GetTerritoryVisibility` on rebuild.
