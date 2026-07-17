@@ -166,3 +166,60 @@ modernisation; (3) the VMTK feed + graceful degradation.
   consumer of the vessel highlight.
 - [future] The Auto/Couinaud path modernisation, if ever taken off its
   current stock display.
+
+## Amendment — the territory-map compute path off the carrier (slices 2 + 3)
+
+The staged transition (§Staging) completed the panel-modernisation half in
+two increments beyond §Decision 3.  This amendment records the compute-path
+decisions the implementation crystallised, so the retired-widget set and the
+final workflow are documented in one place.
+
+### Retired-widget set across slices 2 + 3
+
+Slice 2 retired the table-duplicating v1 surface (`ColorPickerButton`,
+`showHideButton`, `addSegmentationButton`, `SegmentsWidget`,
+`inputSegmentSelectorWidget`, `vascularTerritoryId`) and their handlers, plus
+the dead `_registerVesselHighlightPipeline` and the `copyIndex` Logic helper.
+**Slice 3 additionally retires `selectedVascularTerritorySegmId`** — the
+per-map output-segmentation selector — together with its `.ui` widget, its
+`VascularTerritorySegmentation` param-node role, and its `setup()` wiring.
+The Compute-territory-map button and `onCalculateVascularTerritoryMapButton`
+survive; only the output *selection* is gone.
+
+### Coherent two-step compute flow
+
+The surviving workflow is a coherent two-step sequence over one input
+surface: **place seeds** (add-on-click into the carrier, per §Decision 2) →
+**Extract centerlines** (`onAddCenterlineButton` → `extractCenterlines`, the
+transient-markups VMTK feed of §Decision 4) → **Compute territory map**
+(`onCalculateVascularTerritoryMapButton`).  The compute action gates on an
+input surface being selected rather than on a separate output selector.
+
+### Derive the map target from the carrier
+
+The output map target is **derived from the carrier, not selected** — a
+carrier node-reference role (`TerritoryMapOutput`) resolves to exactly one
+`vtkMRMLSegmentationNode`, auto-created and attached on first compute and
+reused thereafter (one carrier == one map, consistent with the
+`CenterlineRefs` + `Groupings` map of §Decision 4).  Dropping the selector
+removes a manual step and the class of "wrong output picked" error; it also
+retires the redundant `int(...)` string-tag reader the old
+`slicer.util.getNodes("*Territory*")` scene scan depended on, because
+`build_centerline_model` now sources the carrier's `CenterlineRefs` directly.
+
+### Arbitrary-int labelmap scalar (explicitly not an SCT code)
+
+`vtkSlicerVascularTerritoriesLogic::MarkSegmentWithID` stamps a per-territory
+integer into each centerline's `segmentId` point-scalar, and
+`calculateVascularTerritoryMap` reads + re-stamps a per-map
+`VascularTerritories.SegmentationId` ordinal on the output.  Both are
+**arbitrary distinct positive labelmap scalars, NOT SCT terminology codes**
+([ADR-0011](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0011-sct-terminology-dispatch.md)
+reserves SCT for the accepted-plan terminology surface, not this internal
+watershed label).  The transition
+derives them deterministically: the per-territory int is
+`index + 1` over the carrier's `GetAnnotationTerritoryIds()` order (0 is the
+labelmap background), so the same territories derive the same ints across
+repeated calls (the pure `VascularTerritoriesLib.TerritoryLabelMap` core); the
+per-map ordinal is issued one past the maximum `SegmentationId` already
+stamped in the scene, so two carriers never collide.
