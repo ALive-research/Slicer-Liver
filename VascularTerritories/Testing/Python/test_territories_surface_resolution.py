@@ -199,6 +199,45 @@ def test_preprocessed_surface_of_segmentation_is_non_empty():
     )
 
 
+def test_preprocess_tolerates_triangle_strip_surface():
+    """i1: ``preprocessAndDecimate`` survives a triangle-STRIP input surface.
+
+    A segmentation's closed-surface representation arrives as triangle strips
+    (``GetNumberOfPolys() == 0``); ``vtkDecimatePro`` decimates polygons, so
+    fed strips it emits an empty mesh unless the preprocessing triangulates
+    FIRST.  This pins the strip case directly (the sphere-model fixture above
+    retains polygons and never exercises it).  ADR-0037 §Decision 4.
+    """
+    slicer = _slicer_or_skip()
+    logic = _logic_or_skip(slicer)
+    if not hasattr(logic, "preprocessAndDecimate"):
+        pytest.skip(
+            "VascularTerritoriesLogic has no preprocessAndDecimate -- the "
+            "surface-preprocessing seam is unavailable (ADR-0027)."
+        )
+
+    source = vtk.vtkSphereSource()
+    source.SetRadius(20.0)
+    source.SetThetaResolution(32)
+    source.SetPhiResolution(32)
+    source.Update()
+    stripper = vtk.vtkStripper()
+    stripper.SetInputData(source.GetOutput())
+    stripper.Update()
+    stripSurface = stripper.GetOutput()
+    assert stripSurface.GetNumberOfPolys() == 0 and stripSurface.GetNumberOfPoints() > 0, (
+        "the fixture must be a genuine triangle-strip surface (0 polys)."
+    )
+
+    processed = logic.preprocessAndDecimate(stripSurface)
+
+    assert processed is not None and processed.GetNumberOfPoints() > 0, (
+        "preprocessAndDecimate must triangulate a strip surface before "
+        "decimating -- a strip input must NOT decimate to an empty mesh "
+        "(ADR-0037 §Decision 4)."
+    )
+
+
 # --------------------------------------------------------------------------- #
 # i2 — honest degradation: never feed None/empty to the real extractor
 # --------------------------------------------------------------------------- #

@@ -425,15 +425,26 @@ void vtkSlicerVascularTerritoriesLogic::preprocessAndDecimate(vtkPolyData* surfa
   {
     vtkErrorMacro("Error in preprocessAndDecimate: no valid MRML scene.");
   }
-  if (!surfacePolyData || (surfacePolyData->GetPointData()->GetNumberOfArrays() == 0 && surfacePolyData->GetCellData()->GetNumberOfArrays() == 0))
+  if (!surfacePolyData || surfacePolyData->GetNumberOfPoints() == 0)
   {
     std::cout << "preprocessAndDecimate Error: no input surfacePolyData." << std::endl;
     return;
   }
 
+  // Triangulate FIRST: a segmentation's closed-surface representation arrives
+  // as triangle strips (GetNumberOfPolys() == 0), and vtkDecimatePro decimates
+  // polygons -- fed strips it emits an empty mesh.  Converting strips to
+  // triangles up front is what lets the decimator (and the downstream VMTK
+  // centerline filter) see a non-empty surface.
+  vtkSmartPointer<vtkTriangleFilter> surfaceTriangulator = vtkSmartPointer<vtkTriangleFilter>::New();
+  surfaceTriangulator->SetInputData(surfacePolyData);
+  surfaceTriangulator->PassLinesOff();
+  surfaceTriangulator->PassVertsOff();
+  surfaceTriangulator->Update();
+
   vtkSmartPointer<vtkDecimatePro> decimator = vtkSmartPointer<vtkDecimatePro>::New();
   double decimationFactor = 0.8;
-  decimator->SetInputData(surfacePolyData);
+  decimator->SetInputData(surfaceTriangulator->GetOutput());
   decimator->SetFeatureAngle(60);
   decimator->SplittingOff();
   decimator->PreserveTopologyOn();
@@ -446,14 +457,8 @@ void vtkSlicerVascularTerritoriesLogic::preprocessAndDecimate(vtkPolyData* surfa
   surfaceCleaner->SetInputData(decimator->GetOutput());
   surfaceCleaner->Update();
 
-  vtkSmartPointer<vtkTriangleFilter> surfaceTriangulator = vtkSmartPointer<vtkTriangleFilter>::New();
-  surfaceTriangulator->SetInputData(surfaceCleaner->GetOutput());
-  surfaceTriangulator->PassLinesOff();
-  surfaceTriangulator->PassVertsOff();
-  surfaceTriangulator->Update();
-
   vtkSmartPointer<vtkPolyDataNormals> normals = vtkSmartPointer<vtkPolyDataNormals>::New();
-  normals->SetInputData(surfaceTriangulator->GetOutput());
+  normals->SetInputData(surfaceCleaner->GetOutput());
   normals->SetAutoOrientNormals(1);
   normals->SetFlipNormals(0);
   normals->SetConsistency(1);
