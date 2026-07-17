@@ -19,6 +19,12 @@ from .VesselHighlightWiring import (
 # the pure pick core.
 from .TransientVmtkSeeds import build_seed_payload
 
+# The Stage-3 territory string->int label map (ADR-0037 §Decision 4) is
+# dependency-free too (the pure core takes an ordered id list; the live reader
+# only calls the carrier's GetAnnotationTerritoryIds), so it also imports
+# unconditionally alongside the pure builder core.
+from .TerritoryLabelMap import territory_label_int, territory_label_ints
+
 # The LayerDM highlight Pipeline import depends on LayerDMLib (reachable
 # only from a launched Slicer with the SlicerLayerDisplayableManager
 # extension on the path); guard it so the bare unit layer can still import
@@ -72,6 +78,8 @@ __all__ = [
     "VesselSurfacePick",
     "closed_surface_polydata",
     "build_seed_payload",
+    "territory_label_ints",
+    "territory_label_int",
     "VesselHighlightPipeline",
     "registerVesselHighlightPipelineCreator",
     "TerritoryPlacementPipeline",

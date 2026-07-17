@@ -22,6 +22,7 @@
 set(VascularTerritoriesLib_PYTHON_SCRIPTS
   __init__.py
   TransientVmtkSeeds.py
+  TerritoryLabelMap.py
   VesselSurfacePick.py
   VesselHighlightWiring.py
   VesselHighlightPipeline.py
