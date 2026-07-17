@@ -843,7 +843,15 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
     self._clearTerritoryCenterlines(carrier, territoryId)
     modelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "TerritoryCenterline")
     modelNode.SetAndObserveMesh(centerlinePolyData)
-    modelNode.SetAttribute("VascularTerritories.VascTerrId", territoryId)
+    # ADR-0037 §Decision 4: tag the centerline with the DERIVED labelmap int
+    # (from the carrier's territory-id order), not the old string
+    # ``VascularTerritories.VascTerrId``.  The scene-scan reader that parsed
+    # that string is gone (build_centerline_model now sources the carrier
+    # refs), so the redundant string tag + its ``int(...)`` reader retire.
+    from VascularTerritoriesLib.TerritoryLabelMap import territory_label_int
+    derivedInt = territory_label_int(carrier, territoryId)
+    if derivedInt is not None:
+      modelNode.SetAttribute("VascularTerritories.VascTerrId", str(derivedInt))
     carrier.AddNodeReferenceID(self.CENTERLINE_REFERENCE_ROLE, modelNode.GetID())
     carrier.SetGrouping(modelNode.GetID(), territoryId)
     return modelNode
@@ -917,18 +925,90 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
 
     return completeCenterlineModelNode
 
-  def build_centerline_model(self, colormap, vascSegmSelected):
+  def build_centerline_model(self, carrier, colormap):
+    """Assemble the summed centerline model from the carrier's centerlines.
+
+    ADR-0037 §Decision 4: one carrier == one territory map == all its
+    centerlines.  Sources the centerlines from the carrier's ``CenterlineRefs``
+    node-reference role (via ``getCenterlineReferenceIDs``) + ``Groupings``
+    (centerline node ID -> territory id), NOT the retired
+    ``slicer.util.getNodes("*Territory*")`` scene scan or the collapsed
+    ``SegmentationId`` int filter.  Each centerline is marked with the DERIVED
+    labelmap int (its territory's ``index + 1`` in the carrier's id order) so
+    the downstream watershed separates the territories.
+    """
+    from VascularTerritoriesLib.TerritoryLabelMap import territory_label_ints
     centerlineModel = self.createCompleteCenterlineModel(colormap)
-    centerlineSegmentsDict = slicer.util.getNodes("*Territory*")
-    for name, segmentObject in centerlineSegmentsDict.items():
-      if segmentObject.GetClassName() == "vtkMRMLModelNode":
-        VascTerrId = int(segmentObject.GetAttribute("VascularTerritories.VascTerrId"))
-        VascTerrSegmId = int(segmentObject.GetAttribute("VascularTerritories.SegmentationId"))
-        if VascTerrSegmId == vascSegmSelected:
-          self.scl.MarkSegmentWithID(segmentObject, VascTerrId)
-          self.scl.AddSegmentToCenterlineModel(centerlineModel, segmentObject)
+    if carrier is None:
+      self.scl.InitializeCenterlineSearchModel(centerlineModel)
+      return centerlineModel
+    labelInts = territory_label_ints(list(carrier.GetAnnotationTerritoryIds()))
+    for centerlineId in self.getCenterlineReferenceIDs(carrier):
+      segmentObject = slicer.mrmlScene.GetNodeByID(centerlineId)
+      if segmentObject is None or not segmentObject.IsA("vtkMRMLModelNode"):
+        continue
+      territoryId = carrier.GetGrouping(centerlineId)
+      derivedInt = labelInts.get(territoryId)
+      if derivedInt is None:
+        continue
+      self.scl.MarkSegmentWithID(segmentObject, derivedInt)
+      self.scl.AddSegmentToCenterlineModel(centerlineModel, segmentObject)
     self.scl.InitializeCenterlineSearchModel(centerlineModel)
     return centerlineModel
+
+  # The carrier node-reference role holding the DERIVED territory-map output
+  # segmentation (ADR-0037 §Decision 4): one carrier -> one output map,
+  # auto-created + reused rather than selected.
+  TERRITORY_MAP_OUTPUT_ROLE = "TerritoryMapOutput"
+
+  def ensureTerritoryMapOutput(self, carrier):
+    """Resolve (create + attach, or reuse) the carrier's territory-map output.
+
+    ADR-0037 §Decision 4: the output map target is DERIVED from the carrier,
+    not selected -- the carrier's ``TerritoryMapOutput`` node-reference role
+    resolves to exactly one ``vtkMRMLSegmentationNode``.  On the first call it
+    is minted, attached, and stamped with a per-carrier ordinal in
+    ``VascularTerritories.SegmentationId`` (the int the C++
+    ``calculateVascularTerritoryMap`` reads + re-stamps).  Subsequent calls
+    reuse the same node -- one carrier == one map.  The ordinal is stable per
+    carrier and distinct across carriers: it is issued as one past the maximum
+    ordinal already stamped on any segmentation in the scene, so two carriers
+    never collide.
+    """
+    if carrier is None:
+      return None
+    role = self.TERRITORY_MAP_OUTPUT_ROLE
+    existing = carrier.GetNodeReference(role)
+    if existing is not None and existing.IsA("vtkMRMLSegmentationNode"):
+      return existing
+    target = slicer.mrmlScene.AddNewNodeByClass(
+      "vtkMRMLSegmentationNode", "Vascular Territory Map")
+    if target is None:
+      return None
+    target.SetAttribute(
+      "VascularTerritories.SegmentationId", str(self._nextSegmentationOrdinal()))
+    carrier.SetNodeReferenceID(role, target.GetID())
+    return target
+
+  def _nextSegmentationOrdinal(self):
+    """Return one past the max ``SegmentationId`` ordinal stamped in the scene.
+
+    Scanning every segmentation's ``VascularTerritories.SegmentationId`` keeps
+    two carriers from colliding: whichever computes second sees the first's
+    ordinal and issues the next one (ADR-0037 §Decision 4).
+    """
+    maxOrdinal = 0
+    segmentations = slicer.mrmlScene.GetNodesByClass("vtkMRMLSegmentationNode")
+    segmentations.InitTraversal()
+    node = segmentations.GetNextItemAsObject()
+    while node is not None:
+      stamped = node.GetAttribute("VascularTerritories.SegmentationId")
+      try:
+        maxOrdinal = max(maxOrdinal, int(stamped))
+      except (TypeError, ValueError):
+        pass
+      node = segmentations.GetNextItemAsObject()
+    return maxOrdinal + 1
 
   def calculateVascularTerritoryMap(self, vascularTerritorySegmentationNode, refVolume, segmentation, centerlineModel, colormap):
     self.scl.calculateVascularTerritoryMap(vascularTerritorySegmentationNode, refVolume, segmentation, centerlineModel, colormap)
