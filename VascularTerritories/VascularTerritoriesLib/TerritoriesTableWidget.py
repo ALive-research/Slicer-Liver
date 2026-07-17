@@ -55,14 +55,16 @@ _TERRITORY_PALETTE = (
     (0.90, 0.49, 0.13),  # orange
 )
 
-#: Column layout of the custom table.  A HEADER row uses columns as
-#: [visibility | colour | label | status]; a CHILD row uses
-#: [<blank> | <blank> | status text | delete].
-_COL_VISIBILITY = 0
-_COL_COLOUR = 1
-_COL_LABEL = 2
-_COL_STATUS = 3
-_COLUMN_COUNT = 4
+#: Column layout of the custom table (ADR-0037 §Decision 2 slice-4 amendment).
+#: A leftmost per-territory Place toggle drives explicit, exclusive arming.  A
+#: HEADER row uses columns as [place | visibility | colour | label | status]; a
+#: CHILD row uses [<blank> | <blank> | <blank> | status text | delete].
+_COL_PLACE = 0
+_COL_VISIBILITY = 1
+_COL_COLOUR = 2
+_COL_LABEL = 3
+_COL_STATUS = 4
+_COLUMN_COUNT = 5
 
 #: A territory needs at least this many seeds to be complete (a centerline
 #: needs a start + an end); fewer reads incomplete (display-only, Stage 2).
@@ -126,7 +128,9 @@ class TerritoriesTableWidget(qt.QWidget):
 
         self._table = qt.QTableWidget()
         self._table.setColumnCount(_COLUMN_COUNT)
-        self._table.setHorizontalHeaderLabels(["Visible", "Colour", "Territory / label", "Status"])
+        self._table.setHorizontalHeaderLabels(
+            ["Place", "Visible", "Colour", "Territory / label", "Status"]
+        )
         self._table.horizontalHeader().setStretchLastSection(True)
         self._table.verticalHeader().setVisible(False)
         self._table.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
@@ -134,18 +138,15 @@ class TerritoriesTableWidget(qt.QWidget):
         layout.addWidget(self._table)
 
         buttons = qt.QHBoxLayout()
+        # ADR-0037 §Decision 2 slice-4: placement is an explicit per-territory
+        # Place toggle in the leftmost column, so the "Add seeds" + "Done" panel
+        # buttons retire; the shared disarm body survives as ``done()``.
         self._addTerritoryButton = qt.QPushButton("Add Territory")
-        self._addSeedsButton = qt.QPushButton("Add seeds")
-        self._doneButton = qt.QPushButton("Done")
         buttons.addWidget(self._addTerritoryButton)
-        buttons.addWidget(self._addSeedsButton)
-        buttons.addWidget(self._doneButton)
         buttons.addStretch(1)
         layout.addLayout(buttons)
 
         self._addTerritoryButton.connect("clicked(bool)", lambda _checked: self.addTerritory())
-        self._addSeedsButton.connect("clicked(bool)", lambda _checked: self.armForSelectedTerritory())
-        self._doneButton.connect("clicked(bool)", lambda _checked: self.done())
         self._table.connect("itemChanged(QTableWidgetItem*)", self._onItemChanged)
 
         self._attachCarrierObserver()
@@ -237,29 +238,36 @@ class TerritoriesTableWidget(qt.QWidget):
                     (len(self._territory_order) - 1) % len(_TERRITORY_PALETTE)
                 ]
                 self._carrier.SetTerritoryColor(territoryId, r, g, b)
+        # Arm BEFORE the rebuild so the minted territory's Place toggle
+        # re-derives as checked (the checked state is display-node-derived, not
+        # stored — ADR-0037 §Decision 2 slice-4).  Arming is exclusive, so any
+        # previously-armed territory's toggle re-derives un-checked.
+        self._armInto(territoryId)
         self._rebuild()
         self.selectTerritoryRow(territoryId)
-        self._armInto(territoryId)
         return territoryId
 
-    def armForSelectedTerritory(self) -> None:
-        """Re-arm placement into the selected row's territory ("Add seeds")."""
-        territory = self._selectedTerritory()
-        if not territory:
-            return
-        self._armInto(territory)
-
-    def _selectedTerritory(self) -> str:
-        """The selected row's territory (explicit selection wins over the row)."""
-        if self._selected_territory:
-            return self._selected_territory
-        return self.territoryOfRow(self._table.currentRow)
-
     def done(self) -> None:
-        """Disarm placement ("Done" / Esc) and hide the adhering highlight."""
+        """The shared disarm body: clear the arm state + hide the highlight.
+
+        The single disarm path reused by a Place toggle switching OFF and by
+        the widget's ``exit()`` module-active gate (ADR-0037 §Decision 2
+        slice-4).  Idempotent.
+        """
         _state.set_armed(self._displayNode, False)
         if self._displayNode is not None and hasattr(self._displayNode, "SetVisibility"):
             self._displayNode.SetVisibility(False)
+
+    def disarm(self) -> None:
+        """Disarm + refresh the toggles (the widget's module-active gate seam).
+
+        The public entry the widget's ``exit()`` calls: the shared ``done()``
+        body plus a rebuild so every Place toggle re-derives un-checked
+        (ADR-0037 §Decision 2 slice-4).  The toggle-OFF path drives ``done()``
+        + its own rebuild directly, so it does not go through here.
+        """
+        self.done()
+        self._rebuild()
 
     def selectTerritoryRow(self, territoryId: str) -> None:
         """Select the header row of ``territoryId`` (a no-op if absent)."""
@@ -281,6 +289,46 @@ class TerritoriesTableWidget(qt.QWidget):
         _state.set_armed(self._displayNode, True)
         if self._displayNode is not None and hasattr(self._displayNode, "SetVisibility"):
             self._displayNode.SetVisibility(True)
+
+    def _onPlaceToggled(self, territoryId: str, checked: bool) -> None:
+        """Handle a per-territory Place toggle (ADR-0037 §Decision 2 slice-4).
+
+        Toggling ON arms placement into ``territoryId`` EXCLUSIVELY (one armed
+        at a time); toggling OFF disarms via the shared ``done()`` body.  The
+        follow-up rebuild re-derives every Place toggle's checked state from the
+        display node, so the other rows un-check themselves.  Ignored while a
+        rebuild is programmatically setting the derived checked state (the
+        ``_rebuilding`` guard) so re-deriving does not recursively re-arm.
+        """
+        if self._rebuilding:
+            return
+        if checked:
+            self._armInto(territoryId)
+        else:
+            self.done()
+        self._rebuild()
+
+    def _onVisibilityToggled(self, territoryId: str, button: Any, checked: bool) -> None:
+        """Flip the carrier's per-territory visibility + swap the eye icon."""
+        if self._rebuilding:
+            return
+        self.setTerritoryVisibility(territoryId, checked)
+        self._applyEyeIcon(button, checked)
+
+    def _applyEyeIcon(self, button: Any, visible: bool) -> None:
+        """Paint the eye-on / eye-off affordance on a visibility toggle.
+
+        Prefers Slicer's stock segmentation eye icons; falls back to a glyph so
+        the toggle stays usable when the resource is unavailable.
+        """
+        iconPath = ":/Icons/Small/SlicerVisible.png" if visible else ":/Icons/Small/SlicerInvisible.png"
+        icon = qt.QIcon(iconPath)
+        if icon.isNull():
+            button.setIcon(qt.QIcon())
+            button.setText("👁" if visible else "—")
+        else:
+            button.setText("")
+            button.setIcon(icon)
 
     def _mintTerritoryId(self) -> str:
         while True:
@@ -387,14 +435,36 @@ class TerritoriesTableWidget(qt.QWidget):
             rgb = self._carrier.GetTerritoryColor(territoryId)
             color = (rgb[0], rgb[1], rgb[2])
 
-        # Visibility toggle.
-        visibilityBox = qt.QCheckBox()
-        visibilityBox.setChecked(visible)
-        visibilityBox.connect(
-            "toggled(bool)",
-            lambda checked, t=territoryId: self.setTerritoryVisibility(t, checked),
+        # Place toggle (ADR-0037 §Decision 2 slice-4): a checkable button that
+        # arms placement into THIS territory, exclusively.  Its checked state is
+        # RE-DERIVED from the shared display node on every rebuild, never stored
+        # in a Python field, so it survives the carrier-Modified rebuild.
+        placeButton = qt.QToolButton()
+        placeButton.setCheckable(True)
+        placeButton.setText("Place")
+        placeButton.setToolTip("Arm placement into this territory (exclusive)")
+        placeButton.setChecked(
+            _state.is_armed(self._displayNode)
+            and _state.get_active_territory(self._displayNode) == territoryId
         )
-        self._table.setCellWidget(row, _COL_VISIBILITY, visibilityBox)
+        placeButton.connect(
+            "toggled(bool)",
+            lambda checked, t=territoryId: self._onPlaceToggled(t, checked),
+        )
+        self._table.setCellWidget(row, _COL_PLACE, placeButton)
+
+        # Visibility: a Slicer-idiomatic eye-on / eye-off ``QToolButton`` (the
+        # segmentation convention, ADR-0037 §Decision 3 slice-4 UX polish), NOT
+        # a bare QCheckBox.  Checked state is derived from the carrier.
+        visibilityButton = qt.QToolButton()
+        visibilityButton.setCheckable(True)
+        visibilityButton.setChecked(visible)
+        self._applyEyeIcon(visibilityButton, visible)
+        visibilityButton.connect(
+            "toggled(bool)",
+            lambda checked, t=territoryId, b=visibilityButton: self._onVisibilityToggled(t, b, checked),
+        )
+        self._table.setCellWidget(row, _COL_VISIBILITY, visibilityButton)
 
         # Colour swatch: the Slicer-idiomatic ``ctkColorPickerButton`` (the
         # segmentation / resection convention) -- it renders its own colour
