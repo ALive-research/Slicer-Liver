@@ -152,6 +152,12 @@ set(_vascterr_pytest_files
   # extractor a None/empty mesh.  Needs Slicer's segmentation logic + a live
   # scene so it SKIP-PENDS bare and RUNS launched; the VMTK compute itself
   # stays env-/eyeball-gated in test_territories_vmtk_feed.py (ADR-0027).
+  # ALSO hosts the ADR-0037 slice-5 (PR-A) vessel-SCT-filter invariant (T1):
+  # GetVascularSegmentIds keeps only vascular-SCT-typed segments (Vein
+  # SCT^29092000 / Artery SCT^51114001) and excludes the liver (SCT^10200004)
+  # and tumour segments, mirroring the GetLiverSegmentId C++ idiom on logic.scl;
+  # launched (segmentation infra + wrapped C++ logic), SKIP-PENDING bare + until
+  # the resolver lands (ADR-0027).
   test_territories_surface_resolution.py
   # ADR-0037 §Decision 2/3 (slice 4) -- per-territory Place mode + module-active
   # gate + composite-row panel polish.  Placement becomes an EXPLICIT,
@@ -170,6 +176,22 @@ set(_vascterr_pytest_files
   # SKIP-PENDING bare / while the composite-row seam is absent, and RUN launched
   # once the composite-row tree + eye toggle land (ADR-0027).
   test_territories_placemode.py
+  # ADR-0037 slice 5 (PR-A, connected-tree seeding) -- the connectivity-recovery
+  # invariant.  The compute amendment merged EVERY segment into the VMTK input;
+  # real liver data (portal + hepatic are disjoint components) makes merge-all
+  # wrong, so a territory's active surface narrows to the single connected
+  # component its index-0 seed lands on.  The recovery is a PURE-VTK helper
+  # (vtkPolyDataConnectivityFilter in ClosestPointRegion mode; no MRML, no GL):
+  # a seed on one of two disjoint spheres recovers ONLY that sphere's component
+  # (single region, zero points from the other); two disjoint seeds resolve to
+  # different trees; and re-deriving from a NEW index-0 (after first-seed
+  # deletion) recovers the SAME component (the reuse-AnnotationPoints[0]
+  # persistence decision).  Import-guarded on the not-yet-existing
+  # VascularTerritoriesLib/VesselConnectivity.py; the file COLLECTS + SKIP-
+  # PENDINGs cleanly bare and genuinely RUNS bare (pure VTK) once the helper
+  # lands (ADR-0027).  The vessel-SCT-filter twin (T1) lives launched in
+  # test_territories_surface_resolution.py.
+  test_territories_connectivity.py
 )
 
 foreach(_pytest_file IN LISTS _vascterr_pytest_files)

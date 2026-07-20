@@ -42,11 +42,29 @@ the feed handing ``None`` to the extractor and PASSES once the feed skips a
 missing surface.  Launched-only (Slicer segmentation logic + a live scene);
 SKIP bare.
 
+This file also pins the slice-5 (PR-A) VESSEL-SCT-FILTER invariant (T1):
+
+* T1 (launched) — VESSEL-SCT RESOLVER.  ADR-0037 slice 5 narrows the
+  centerline surface candidates to segments whose ``TerminologyEntry`` TYPE
+  code is vascular (``SCT^29092000`` Vein / ``SCT^51114001`` Artery + a
+  documented allowlist), EXCLUDING the liver (``SCT^10200004``) and tumour
+  segments.  Given a multi-segment segmentation carrying real-data-shaped tags
+  (liver, vein, artery, tumour), the resolver returns ONLY the vessel segment
+  ids.  Mirrors the ``GetLiverSegmentId`` C++ idiom (``logic.scl``); needs
+  segmentation infra + the wrapped C++ logic so it SKIPS cleanly bare and RUNS
+  launched, and SKIP-PENDINGs on the not-yet-existing resolver method until
+  PR-A lands (ADR-0027).
+
 See also:
-  * Docs/adr/0037-vascular-territories-off-markups.md  (§Decision 4)
+  * Docs/adr/0037-vascular-territories-off-markups.md  (§Decision 4;
+    §Amendment — connected-tree-constrained centerline seeding (slice 5))
+  * Docs/adr/0011-terminology-standard-clinical-terms.md  (the SCT-tag match)
   * Docs/adr/0027-invariant-test-first.md  (RED / skip-pending discipline)
+  * Docs/design/connected-tree-seeding-plan.md  (C1 vessel-surface resolver; T1)
   * VascularTerritories/VascularTerritoriesLib/VesselHighlightWiring.py
     (closed_surface_polydata — the shared surface-resolution seam)
+  * VascularTerritories/Testing/Python/test_territories_connectivity.py
+    (the bare pure-VTK connectivity twin, T2/T3)
   * VascularTerritories/Testing/Python/test_territories_vmtk_feed.py
     (the transient-node lifecycle + real VMTK run)
   * VascularTerritories/Testing/Python/conftest.py  (the skip guards)
@@ -59,6 +77,7 @@ import pytest
 vtk = pytest.importorskip("vtk")
 
 CUSTOM_TERRITORIES_CLASS = "vtkMRMLCustomTerritoriesNode"
+SEGMENTATION_CLASS = "vtkMRMLSegmentationNode"
 
 TERRITORY_A = "SegmentVII"
 
@@ -295,6 +314,146 @@ def test_empty_surface_is_not_fed_to_the_extractor(monkeypatch):
             "the feed must NOT invoke the real extractor with an EMPTY "
             "surface (0 points) (ADR-0037 §Decision 4)."
         )
+
+
+# =========================================================================== #
+# T1 — vessel-SCT resolver keeps vessels, excludes liver + tumour (launched)
+# =========================================================================== #
+#
+# ADR-0037 slice 5 (PR-A): the centerline surface candidates are the input
+# segments whose TerminologyEntry TYPE code is a vascular concept (Vein /
+# Artery + a documented allowlist); the liver-SCT and tumour segments are
+# excluded.  Real data tags vessels under category SCT^85756007 (Tissue) with
+# the generic Vein/Artery types, so the fixtures use those real-data shapes.
+
+# Slice-5 (PR-A) vessel-resolver seam (proposed; sharpen at landing).  Mirrors
+# the GetLiverSegmentId idiom on the wrapped C++ logic (logic.scl).
+VASCULAR_SEGMENT_IDS_METHOD = "GetVascularSegmentIds"
+
+# Real-data-shaped TerminologyEntry tags (category ~ type), matching the
+# _LIVER_TERMINOLOGY shape used in test_territories_map_compute.py.  Vessels
+# are tagged under category SCT^85756007 (Tissue) with the generic Vein/Artery
+# types; the liver + tumour carry their own category/type pairs.
+_LIVER_TERMINOLOGY = (
+    "Segmentation category and type - 3D Slicer General Anatomy list"
+    "~SCT^123037004^Anatomical Structure~SCT^10200004^Liver~^^~Anatomic codes~^^~^^"
+)
+_VEIN_TERMINOLOGY = (
+    "Segmentation category and type - 3D Slicer General Anatomy list"
+    "~SCT^85756007^Body tissue~SCT^29092000^Vein~^^~Anatomic codes~^^~^^"
+)
+_ARTERY_TERMINOLOGY = (
+    "Segmentation category and type - 3D Slicer General Anatomy list"
+    "~SCT^85756007^Body tissue~SCT^51114001^Artery~^^~Anatomic codes~^^~^^"
+)
+_TUMOUR_TERMINOLOGY = (
+    "Segmentation category and type - 3D Slicer General Anatomy list"
+    "~SCT^260787004^Physical object~SCT^19227008^Malignant neoplasm~^^~Anatomic codes~^^~^^"
+)
+
+
+def _cpp_vascular_logic_or_skip(logic):
+    """The wrapped C++ logic exposing ``GetVascularSegmentIds`` (``logic.scl``).
+
+    The vessel-SCT resolver mirrors ``GetLiverSegmentId`` — it lives on the C++
+    logic (it reads MRML segment tags), reached through ``scl``.  SKIP-PENDINGs
+    on the not-yet-existing resolver method until PR-A lands (ADR-0027).
+    """
+    cpp = getattr(logic, "scl", None)
+    if cpp is None:
+        pytest.skip(
+            "VascularTerritoriesLogic has no scl (the wrapped C++ logic) -- "
+            "launched build required (ADR-0027)."
+        )
+    if not hasattr(cpp, VASCULAR_SEGMENT_IDS_METHOD):
+        pytest.skip(
+            f"vtkSlicerVascularTerritoriesLogic has no {VASCULAR_SEGMENT_IDS_METHOD}"
+            " -- the ADR-0037 slice-5 (PR-A) vessel-SCT resolver has not landed."
+            "  The skip lifts at the implementation commit (ADR-0027)."
+        )
+    return cpp
+
+
+def _add_tagged_segment(slicer, segmentation, terminology, name, center):
+    """Import one closed-surface sphere segment tagged with ``terminology``."""
+    source = vtk.vtkSphereSource()
+    source.SetCenter(*center)
+    source.SetRadius(10.0)
+    source.SetThetaResolution(16)
+    source.SetPhiResolution(16)
+    source.Update()
+    modelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", name)
+    modelNode.SetAndObservePolyData(source.GetOutput())
+    slicer.modules.segmentations.logic().ImportModelToSegmentationNode(
+        modelNode, segmentation)
+    slicer.mrmlScene.RemoveNode(modelNode)
+    segmentation_obj = segmentation.GetSegmentation()
+    segId = segmentation_obj.GetNthSegmentID(segmentation_obj.GetNumberOfSegments() - 1)
+    segmentation_obj.GetSegment(segId).SetTag("TerminologyEntry", terminology)
+    return segId
+
+
+def _multi_segment_segmentation(slicer):
+    """A segmentation with liver + vein + artery + tumour segments (tagged).
+
+    Returns ``(segmentation, {role: segId})`` so the test can assert the
+    resolver keeps the two vessel segments and drops the liver + tumour.
+    """
+    seg = slicer.mrmlScene.AddNewNodeByClass(
+        SEGMENTATION_CLASS, "VesselResolveMultiSeg")
+    seg.CreateDefaultDisplayNodes()
+    ids = {
+        "liver": _add_tagged_segment(
+            slicer, seg, _LIVER_TERMINOLOGY, "LiverModel", (0.0, 0.0, 0.0)),
+        "vein": _add_tagged_segment(
+            slicer, seg, _VEIN_TERMINOLOGY, "VeinModel", (40.0, 0.0, 0.0)),
+        "artery": _add_tagged_segment(
+            slicer, seg, _ARTERY_TERMINOLOGY, "ArteryModel", (80.0, 0.0, 0.0)),
+        "tumour": _add_tagged_segment(
+            slicer, seg, _TUMOUR_TERMINOLOGY, "TumourModel", (120.0, 0.0, 0.0)),
+    }
+    return seg, ids
+
+
+def test_vascular_resolver_keeps_vessels_excludes_liver_and_tumour():
+    """T1: ``GetVascularSegmentIds`` keeps vessels, drops liver + tumour.
+
+    ADR-0037 slice 5 narrows the centerline surface candidates to segments
+    whose ``TerminologyEntry`` TYPE code is vascular (``SCT^29092000`` Vein /
+    ``SCT^51114001`` Artery), EXCLUDING the liver (``SCT^10200004``) and tumour
+    segments.  Given a segmentation carrying real-data-shaped tags for all
+    four, the resolver returns EXACTLY the vein + artery segment ids — never the
+    liver or the tumour (ADR-0037 slice-5 Conformance [test]; ADR-0011 SCT-tag
+    match).  Launched-only (segmentation infra + wrapped C++ logic); SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    logic = _logic_or_skip(slicer)
+    cpp = _cpp_vascular_logic_or_skip(logic)
+    segmentation, ids = _multi_segment_segmentation(slicer)
+
+    resolved = set(cpp.GetVascularSegmentIds(segmentation))
+
+    assert ids["vein"] in resolved, (
+        "the vessel resolver must KEEP the SCT^29092000 (Vein) segment "
+        "(ADR-0037 slice 5)."
+    )
+    assert ids["artery"] in resolved, (
+        "the vessel resolver must KEEP the SCT^51114001 (Artery) segment "
+        "(ADR-0037 slice 5)."
+    )
+    assert ids["liver"] not in resolved, (
+        "the vessel resolver must EXCLUDE the SCT^10200004 (Liver) segment -- "
+        "the liver supplies the map region, not a vessel tree (ADR-0037 slice "
+        "5; ADR-0011)."
+    )
+    assert ids["tumour"] not in resolved, (
+        "the vessel resolver must EXCLUDE the tumour segment (ADR-0037 slice 5)."
+    )
+    assert resolved == {ids["vein"], ids["artery"]}, (
+        "the vessel resolver must return EXACTLY the vessel segments "
+        f"({{{ids['vein']}, {ids['artery']}}}), got {resolved} (ADR-0037 slice "
+        "5)."
+    )
 
 
 if __name__ == "__main__":
