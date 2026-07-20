@@ -25,6 +25,7 @@ set(VascularTerritoriesLib_PYTHON_SCRIPTS
   TerritoryLabelMap.py
   VesselSurfacePick.py
   VesselHighlightWiring.py
+  VesselConnectivity.py
   VesselHighlightPipeline.py
   TerritoryInteractionState.py
   TerritoryPlacementPipeline.py
