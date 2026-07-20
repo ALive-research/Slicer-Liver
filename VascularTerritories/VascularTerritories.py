@@ -756,12 +756,13 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
     if segmentId:
       territoryIds = [tid for tid in territoryIds if tid == segmentId]
 
-    # Decimate the input surface once; every territory shares the same input
-    # mesh.  A missing/empty surface degrades HONESTLY: the real SlicerVMTK
-    # extractor hard-fails on a None/empty surface (no Voronoi diagram / 0 cap
-    # connections / no surface normals), so ``_extractOneTerritory`` skips the
-    # extraction instead of feeding it a bad surface.
-    surfacePolyData = self._preprocessedSurface(surfaceNode)
+    # ADR-0037 slice 5 supersedes the merge-all input: resolve the vessels-only
+    # surface at FULL resolution (so connectivity is not fragmented by
+    # decimation), then per territory recover the single connected component
+    # its first seed (index-0) lands on and decimate THAT component.  Portal
+    # and hepatic systems are disjoint; a per-territory single-component
+    # surface keeps a medial path from tunnelling between them.
+    vascularSurface = self._vascularSurface(surfaceNode)
 
     extractor = self.getCenterlineLogic()
     for territoryId in territoryIds:
@@ -769,17 +770,76 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
       # A centerline needs at least two endpoints (one inlet + one target);
       # a territory carrying fewer points is INCOMPLETE (the same threshold
       # the table flags) -- skip it so one under-seeded territory does not
-      # abort extraction for the rest.
+      # abort extraction for the rest.  Runs BEFORE component recovery so an
+      # under-seeded territory never triggers connectivity.
       if count < 2:
         continue
       points = []
       for i in range(count):
         p = carrier.GetNthAnnotationPoint(territoryId, i)
         points.append((p[0], p[1], p[2]))
+      surfacePolyData = self._territorySurface(vascularSurface, points[0])
       self._extractOneTerritory(carrier, extractor, surfacePolyData, territoryId, points)
 
+  def _vascularSurface(self, surfaceNode):
+    """The vessels-only input surface polydata (full-res), or ``None``.
+
+    For a segmentation the vessels-only merge is resolved by the C++ resolver
+    (``GetVascularSurfacePolyData`` — vascular-SCT segments only, ADR-0037
+    slice 5); a model node passes its polydata straight through.  This is the
+    surface connectivity is run over per territory; the pick/highlight path
+    keeps snapping to all vessels via ``closed_surface_polydata``.
+    """
+    if surfaceNode is None:
+      return None
+    try:
+      if surfaceNode.IsA("vtkMRMLModelNode"):
+        polyData = surfaceNode.GetPolyData()
+      elif surfaceNode.IsA("vtkMRMLSegmentationNode"):
+        polyData = vtk.vtkPolyData()
+        self.scl.GetVascularSurfacePolyData(surfaceNode, polyData)
+      else:
+        return None
+      if not polyData or polyData.GetNumberOfPoints() == 0:
+        return None
+      return polyData
+    except Exception:  # noqa: BLE001 - degrade gracefully when resolution fails
+      logging.warning(
+        "VascularTerritories: vessel-surface resolution failed -- the "
+        "centerline extraction is skipped (no surface to run over).")
+      return None
+
+  def _territorySurface(self, vascularSurface, seed):
+    """The decimated single connected component of ``vascularSurface`` at ``seed``.
+
+    Recovers the connected component the territory's first seed (index-0) lands
+    on (ADR-0037 slice 5, reuse-index-0 persistence) on the FULL-res vessel
+    surface, then triangulates + decimates THAT component -- preserving the
+    triangulate-before-decimate ordering ``preprocessAndDecimate`` enforces.
+    ``None`` when there is no vessel surface (honest degradation).
+    """
+    if vascularSurface is None or vascularSurface.GetNumberOfPoints() == 0:
+      return None
+    try:
+      from VascularTerritoriesLib.VesselConnectivity import connected_component_at
+      component = connected_component_at(vascularSurface, seed)
+      if not component or component.GetNumberOfPoints() == 0:
+        return None
+      return self.preprocessAndDecimate(component)
+    except Exception:  # noqa: BLE001 - degrade gracefully when preprocessing fails
+      logging.warning(
+        "VascularTerritories: territory-surface preprocessing failed -- the "
+        "centerline extraction is skipped (no surface to run over).")
+      return None
+
   def _preprocessedSurface(self, surfaceNode):
-    """Return the decimated input-surface polydata, or ``None`` on any failure."""
+    """Return the decimated input-surface polydata, or ``None`` on any failure.
+
+    Kept as the whole-surface decimation seam pinned by the surface-resolution
+    invariant (``test_territories_surface_resolution`` i1); the per-territory
+    extraction path resolves its own single-component surface via
+    ``_vascularSurface`` + ``_territorySurface`` (ADR-0037 slice 5).
+    """
     if surfaceNode is None:
       return None
     try:
@@ -1071,9 +1131,11 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
         # yield a zero-point mesh.  Converge on the SAME whole-vessel-tree
         # resolution the pick/highlight path uses
         # (VesselHighlightWiring.closed_surface_polydata): every segment's
-        # closed surface appended into one mesh, so placement-snap and
-        # centerline extraction see the identical surface.  ``None`` when the
-        # segmentation carries no segment geometry.
+        # closed surface appended into one mesh, so placement-snap sees the
+        # whole vessel surface.  The centerline EXTRACTION path no longer uses
+        # this merge -- it narrows to the per-territory single connected
+        # component via _vascularSurface + _territorySurface (ADR-0037 slice
+        # 5).  ``None`` when the segmentation carries no segment geometry.
         from VascularTerritoriesLib.VesselHighlightWiring import closed_surface_polydata
         return closed_surface_polydata(surfaceNode)
     else:
