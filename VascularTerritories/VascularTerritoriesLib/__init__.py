@@ -14,6 +14,11 @@ from .VesselHighlightWiring import (
     closed_surface_polydata,
 )
 
+# The connected-vessel-tree recovery (ADR-0037 slice 5) is pure-VTK
+# (``vtkPolyDataConnectivityFilter``), so it imports unconditionally
+# alongside the pick core and the surface-resolution seam.
+from .VesselConnectivity import connected_component_at
+
 # The Stage-3 transient VMTK-seed builder core (ADR-0037 §Decision 4) is
 # dependency-free (no slicer/vtk/Qt) so it imports unconditionally alongside
 # the pure pick core.
@@ -77,6 +82,7 @@ except (ImportError, AttributeError):  # pragma: no cover - Qt unreachable bare
 __all__ = [
     "VesselSurfacePick",
     "closed_surface_polydata",
+    "connected_component_at",
     "build_seed_payload",
     "territory_label_ints",
     "territory_label_int",

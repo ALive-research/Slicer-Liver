@@ -349,6 +349,130 @@ std::string vtkSlicerVascularTerritoriesLogic::GetLiverSegmentId(vtkMRMLSegmenta
   return "";
 }
 
+namespace
+{
+// ADR-0037 slice 5 (Q1): the vascular TYPE-code allowlist.  Real liver data
+// tags vessels under category SCT^85756007 (Tissue) with the generic Vein /
+// Artery TYPE codes, so the match set is the two generic codes rather than the
+// per-vessel portal/hepatic codes.  Substring match on scheme+code in the
+// segment's TerminologyEntry tag, tolerant of the meaning string (identical to
+// GetLiverSegmentId, ADR-0011).  Kept as ONE named constant so the terminology
+// dispatch has a single site.
+const std::vector<std::string>& VascularTypeTokens()
+{
+  static const std::vector<std::string> tokens = {
+    "SCT^29092000", // Vein
+    "SCT^51114001", // Artery
+  };
+  return tokens;
+}
+
+// Segment TYPE codes explicitly excluded from the vessel set: the liver
+// parenchyma supplies the map region (not a vessel tree) and the tumour is not
+// a vascular structure (ADR-0037 slice 5; ADR-0011).
+const std::vector<std::string>& NonVascularTypeTokens()
+{
+  static const std::vector<std::string> tokens = {
+    "SCT^10200004", // Liver
+    "SCT^19227008", // Malignant neoplasm (tumour)
+  };
+  return tokens;
+}
+} // namespace
+
+//----------------------------------------------------------------------------
+std::vector<std::string> vtkSlicerVascularTerritoriesLogic::GetVascularSegmentIds(vtkMRMLSegmentationNode* segmentationNode)
+{
+  // Return a std::vector<std::string>: the VTK Python wrapper exposes it as a
+  // plain iterable list (a vtkStringArray return is NOT Python-iterable).
+  std::vector<std::string> vascularSegmentIds;
+  if (!segmentationNode)
+  {
+    return vascularSegmentIds;
+  }
+  vtkSegmentation* segmentation = segmentationNode->GetSegmentation();
+  if (!segmentation)
+  {
+    return vascularSegmentIds;
+  }
+  // Keep segments whose TerminologyEntry TYPE code is vascular (Vein / Artery),
+  // dropping the liver + tumour segments -- the inverse of GetLiverSegmentId,
+  // reusing the same SCT-substring idiom (ADR-0011).
+  std::vector<std::string> segmentIds;
+  segmentation->GetSegmentIDs(segmentIds);
+  for (const std::string& segmentId : segmentIds)
+  {
+    vtkSegment* segment = segmentation->GetSegment(segmentId);
+    if (!segment)
+    {
+      continue;
+    }
+    std::string tag;
+    if (!segment->GetTag("TerminologyEntry", tag))
+    {
+      continue;
+    }
+    bool excluded = false;
+    for (const std::string& token : NonVascularTypeTokens())
+    {
+      if (tag.find(token) != std::string::npos)
+      {
+        excluded = true;
+        break;
+      }
+    }
+    if (excluded)
+    {
+      continue;
+    }
+    for (const std::string& token : VascularTypeTokens())
+    {
+      if (tag.find(token) != std::string::npos)
+      {
+        vascularSegmentIds.push_back(segmentId);
+        break;
+      }
+    }
+  }
+  return vascularSegmentIds;
+}
+
+//----------------------------------------------------------------------------
+void vtkSlicerVascularTerritoriesLogic::GetVascularSurfacePolyData(vtkMRMLSegmentationNode* segmentationNode, vtkPolyData* outPolyData)
+{
+  if (!outPolyData)
+  {
+    return;
+  }
+  outPolyData->Initialize();
+  if (!segmentationNode)
+  {
+    return;
+  }
+  // Resolve the vessels-only surface: append the closed-surface reps of just
+  // the vascular segments (the merge connectivity later splits per territory,
+  // ADR-0037 slice 5).  This supersedes the merge-all input on the extraction
+  // path while the pick/highlight path keeps snapping to all vessels.
+  std::vector<std::string> vascularSegmentIds = this->GetVascularSegmentIds(segmentationNode);
+  segmentationNode->CreateClosedSurfaceRepresentation();
+  vtkNew<vtkAppendPolyData> append;
+  for (const std::string& vascularSegmentId : vascularSegmentIds)
+  {
+    vtkNew<vtkPolyData> mesh;
+    segmentationNode->GetClosedSurfaceRepresentation(vascularSegmentId, mesh);
+    if (mesh->GetNumberOfPoints() > 0)
+    {
+      append->AddInputData(mesh);
+    }
+  }
+  if (append->GetNumberOfInputConnections(0) == 0)
+  {
+    return;
+  }
+  append->Update();
+  outPolyData->ShallowCopy(append->GetOutput());
+}
+
 void vtkSlicerVascularTerritoriesLogic::calculateVascularTerritoryMap(vtkMRMLSegmentationNode* vascularTerritorySegmentationNode,
                                                                       vtkMRMLScalarVolumeNode* refVolume,
                                                                       vtkMRMLSegmentationNode* segmentation,

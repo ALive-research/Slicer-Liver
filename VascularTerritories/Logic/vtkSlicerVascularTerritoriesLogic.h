@@ -49,6 +49,7 @@
 #include <vtkSmartPointer.h>
 
 #include <string>
+#include <vector>
 
 // Forward delcarations
 class vtkKdTreePointLocator;
@@ -122,6 +123,24 @@ public:
   /// with arbitrary segment names).  Empty string when there is no scene / no
   /// segmentation / no SCT-liver-tagged segment.
   std::string GetLiverSegmentId(vtkMRMLSegmentationNode* segmentationNode);
+
+  /// Return the segment ids of ``segmentationNode`` whose ``TerminologyEntry``
+  /// TYPE code is vascular (Vein ``SCT^29092000`` / Artery ``SCT^51114001`` —
+  /// the documented allowlist), EXCLUDING the liver (``SCT^10200004``) and
+  /// tumour (``SCT^19227008``) segments.  Mirrors the ``GetLiverSegmentId``
+  /// SCT-substring idiom (ADR-0011); narrows the centerline surface candidates
+  /// to vessels (ADR-0037 slice 5).  Returned as a ``std::vector<std::string>``
+  /// (the VTK Python wrapper exposes it as a plain iterable list — a
+  /// ``vtkStringArray`` return is not Python-iterable); empty when there is no
+  /// scene / segmentation / vessel-tagged segment.
+  std::vector<std::string> GetVascularSegmentIds(vtkMRMLSegmentationNode* segmentationNode);
+
+  /// Append the closed-surface representations of only the vascular segments
+  /// (as resolved by ``GetVascularSegmentIds``) into ``outPolyData`` — the
+  /// vessels-only merge the per-territory connectivity later splits (ADR-0037
+  /// slice 5, supersedes the merge-all extraction input).  Initialises
+  /// ``outPolyData`` first; leaves it empty when no vascular segment resolves.
+  void GetVascularSurfacePolyData(vtkMRMLSegmentationNode* segmentationNode, vtkPolyData* outPolyData);
 
 protected:
   vtkSlicerVascularTerritoriesLogic();
