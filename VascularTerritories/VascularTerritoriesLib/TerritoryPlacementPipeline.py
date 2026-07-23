@@ -495,6 +495,10 @@ class TerritoryPlacementPipeline(_PipelineBase):
         if adhering:
             point = display.GetAdheringPointWorld()
             self._marker_actor.SetPosition(point[0], point[1], point[2])
+            # Follow the hovered vessel point: reslice the 2D views to the
+            # adhering point WHILE AIMING (not just on the click), so the slice
+            # marker tracks the cursor over the vessel in 3D (ADR-0037 slice 5).
+            self._jump_slices_to_world(point)
         # Repaint the active-tree highlight alongside the hover marker so an
         # arm / active-territory / seed change refreshes the painted tree.
         self._reconcile_active_tree_highlight()
