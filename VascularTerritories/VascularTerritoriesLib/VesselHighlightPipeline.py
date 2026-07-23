@@ -42,10 +42,10 @@ from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
 
 try:  # pragma: no cover - exercised once per import path
     from .VesselSurfacePick import VesselSurfacePick
-    from .VesselHighlightWiring import vascular_surface_polydata
+    from .VesselHighlightWiring import vascular_surface_polydata, visibility_mtime as _visibility_mtime
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from VesselSurfacePick import VesselSurfacePick  # type: ignore[no-redef]
-    from VesselHighlightWiring import vascular_surface_polydata  # type: ignore[no-redef]
+    from VesselHighlightWiring import vascular_surface_polydata, visibility_mtime as _visibility_mtime  # type: ignore[no-redef]
 
 _REGISTERED = False
 
@@ -69,8 +69,12 @@ class VesselHighlightPipeline(_PipelineBase):
 
         # Injectable pick core (bare unit layer feeds a known surface);
         # rebuilt when the display node is (re)attached, since that is
-        # where the pickSurface reference can change.
+        # where the pickSurface reference can change.  ``_pick_injected``
+        # marks a test-injected core (never rebuilt); the production core is
+        # rebuilt when segment visibility changes (``_pick_surface_mtime``).
         self._pick: VesselSurfacePick | None = None
+        self._pick_injected: bool = False
+        self._pick_surface_mtime: int | None = None
 
         # Last adhering (point, on-surface) a render was requested for —
         # the digest gate that keeps a fixed cursor from storming renders.
@@ -270,13 +274,12 @@ class VesselHighlightPipeline(_PipelineBase):
         """Build the pick core against the referenced segmentation's mesh.
 
         Resolves the display node's ``pickSurface`` segmentation, ensures a
-        closed-surface representation (creating it if absent — the
-        module's ``polyDataFromNode`` precedent), and rebuilds the pick
-        core when the referenced node changes.  ``None`` when no surface is
-        wired.  A test-injected ``self._pick`` short-circuits this in the
-        bare unit layer.
+        closed-surface representation, and rebuilds the pick core when the
+        referenced node's segment VISIBILITY changes (tracked via the display
+        node MTime).  ``None`` when no surface is wired.  A test-injected
+        ``self._pick`` short-circuits this in the bare unit layer.
         """
-        if self._pick is not None:
+        if self._pick_injected:
             return self._pick
         display = self._display_node
         if display is None:
@@ -284,10 +287,15 @@ class VesselHighlightPipeline(_PipelineBase):
         segmentation = display.GetPickSurfaceNode()
         if segmentation is None:
             return None
+        mtime = _visibility_mtime(segmentation)
+        if self._pick is not None and mtime == self._pick_surface_mtime:
+            return self._pick
         # Shared surface-resolution seam (VesselHighlightWiring): the hover
-        # Pipeline and the snap-on-place path resolve the pick target the
-        # same way (vessels-only, so hover never lights up the parenchyma or a
-        # tumour), so neither duplicates the representation-building logic.
+        # Pipeline and the snap-on-place path resolve the pick target the same
+        # way -- VISIBLE vessels only, so hover never lights up the parenchyma,
+        # a tumour, or a hidden vessel (ADR-0037 slice 5).
+        self._pick = None
+        self._pick_surface_mtime = mtime
         polydata = vascular_surface_polydata(segmentation)
         if polydata is None:
             return None
@@ -304,6 +312,7 @@ class VesselHighlightPipeline(_PipelineBase):
     def SetPickCore(self, pick: VesselSurfacePick | None) -> None:  # noqa: N802 - VTK verb
         """Inject a pick core (bare unit layer seam)."""
         self._pick = pick
+        self._pick_injected = pick is not None
 
     def _safe_get_renderer(self) -> Any | None:
         return self._renderer

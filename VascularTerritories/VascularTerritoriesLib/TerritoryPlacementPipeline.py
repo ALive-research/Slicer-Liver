@@ -40,11 +40,11 @@ from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
 
 try:  # pragma: no cover - exercised once per import path
     from .VesselSurfacePick import VesselSurfacePick
-    from .VesselHighlightWiring import vascular_surface_polydata
+    from .VesselHighlightWiring import vascular_surface_polydata, visibility_mtime as _visibility_mtime
     from .VesselConnectivity import connected_component_at, nearest_point_on
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from VesselSurfacePick import VesselSurfacePick  # type: ignore[no-redef]
-    from VesselHighlightWiring import vascular_surface_polydata  # type: ignore[no-redef]
+    from VesselHighlightWiring import vascular_surface_polydata, visibility_mtime as _visibility_mtime  # type: ignore[no-redef]
     from VesselConnectivity import connected_component_at, nearest_point_on  # type: ignore[no-redef]
 
 #: Display-space pick radius for grabbing an existing point, in pixels
@@ -127,8 +127,12 @@ class TerritoryPlacementPipeline(_PipelineBase):
 
         # Injectable pick core (bare unit layer feeds a known surface); in
         # production ``_ensure_pick`` builds it from the display node's
-        # pickSurface.
+        # pickSurface.  ``_pick_injected`` distinguishes a test-injected core
+        # (never rebuilt) from a production-built one (rebuilt when segment
+        # visibility changes, tracked by ``_pick_surface_mtime``).
         self._pick: VesselSurfacePick | None = None
+        self._pick_injected: bool = False
+        self._pick_surface_mtime: int | None = None
 
         # (territory id, in-territory index) of the point currently GRABBED
         # by a press/move/release drag -- None when no drag is in flight.
@@ -231,6 +235,7 @@ class TerritoryPlacementPipeline(_PipelineBase):
     def SetPickCore(self, pick: VesselSurfacePick | None) -> None:  # noqa: N802 - VTK verb
         """Inject the ``VesselSurfacePick`` over the target surface (unit seam)."""
         self._pick = pick
+        self._pick_injected = pick is not None
 
     def _ensure_pick(self) -> VesselSurfacePick | None:
         """Build the pick core against the display node's ``pickSurface`` mesh.
@@ -238,10 +243,15 @@ class TerritoryPlacementPipeline(_PipelineBase):
         Production (LayerDM-created) instances resolve the surface from the
         shared display node exactly as ``VesselHighlightPipeline`` does, so
         the click-snap and the hover marker adhere to the same mesh with no
-        injection.  A test-injected ``self._pick`` short-circuits this for the
-        bare unit layer.
+        injection.  A test-injected ``self._pick`` (``SetPickCore``)
+        short-circuits this for the bare unit layer.
+
+        The production pick is rebuilt when segment VISIBILITY changes (tracked
+        via the display node's MTime), so hiding a vessel in the structures
+        table removes it from collision detection live -- the cursor can only
+        snap to a visible vessel (ADR-0037 slice 5).
         """
-        if self._pick is not None:
+        if self._pick_injected:
             return self._pick
         display = self._display_node
         if display is None:
@@ -249,8 +259,13 @@ class TerritoryPlacementPipeline(_PipelineBase):
         segmentation = display.GetPickSurfaceNode()
         if segmentation is None:
             return None
-        # Vessels-only: the cursor snaps to a vessel, never the liver
-        # parenchyma or a tumour (ADR-0037 slice 5).
+        mtime = _visibility_mtime(segmentation)
+        if self._pick is not None and mtime == self._pick_surface_mtime:
+            return self._pick
+        # Visible vessels only: the cursor snaps to a vessel you can see, never
+        # the liver parenchyma, a tumour, or a hidden vessel (ADR-0037 slice 5).
+        self._pick = None
+        self._pick_surface_mtime = mtime
         polydata = vascular_surface_polydata(segmentation)
         if polydata is None:
             return None
