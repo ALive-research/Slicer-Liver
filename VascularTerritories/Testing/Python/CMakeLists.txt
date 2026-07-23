@@ -192,6 +192,28 @@ set(_vascterr_pytest_files
   # lands (ADR-0027).  The vessel-SCT-filter twin (T1) lives launched in
   # test_territories_surface_resolution.py.
   test_territories_connectivity.py
+  # ADR-0037 slice 5 (PR-B, placement UX) -- the active-tree seed CONSTRAINT +
+  # highlight + module-active gate on the placement pipelines.  PR-A landed the
+  # compute core (vessels-only surface, C++ GetVascularSegmentIds, the pure-VTK
+  # connected_component_at, per-extraction single-component surface); PR-B adds
+  # the interaction layer: the first seed of an armed territory DEFINES its
+  # active vessel tree (the connected component of that point), a later seed on a
+  # DIFFERENT component is re-snapped onto the active component (never off-tree),
+  # so a territory's seeds always lie on ONE connected component (the component
+  # of AnnotationPoints[territory][0]); an active-tree highlight actor (owned by
+  # the placement pipeline, no new displayable manager per ADR-0013) takes the
+  # seed[0] component as its INPUT (styling deferred -- only the input identity
+  # is pinned); and the module-active gate declines an add-on-click while the
+  # owning module is inactive (belt-and-suspenders beyond the display-node armed
+  # flag).  The SUT surface is TWO disjoint spheres (vtkAppendPolyData of two
+  # separated vtkSphereSource) wired as the vessels-only pick surface, with the
+  # stub-renderer + injected-pick pattern from test_territories_placement_pipeline
+  # so clicks map to chosen world points on sphere A or sphere B.  Needs
+  # LayerDMLib + the wrapped carrier + the shared highlight display node;
+  # import-/hasattr-guarded on the not-yet-existing PR-B seams (activeTreePolyData
+  # / highlightActor / SetModuleActive + the later-seed constraint gate), they
+  # SKIP-PENDING bare and RUN launched once PR-B lands (ADR-0027).
+  test_territories_placemode_constraint.py
 )
 
 foreach(_pytest_file IN LISTS _vascterr_pytest_files)
