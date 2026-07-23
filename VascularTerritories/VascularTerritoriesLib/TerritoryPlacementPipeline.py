@@ -41,11 +41,9 @@ from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
 try:  # pragma: no cover - exercised once per import path
     from .VesselSurfacePick import VesselSurfacePick
     from .VesselHighlightWiring import vascular_surface_polydata, visibility_mtime as _visibility_mtime
-    from .VesselConnectivity import connected_component_at, nearest_point_on
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from VesselSurfacePick import VesselSurfacePick  # type: ignore[no-redef]
     from VesselHighlightWiring import vascular_surface_polydata, visibility_mtime as _visibility_mtime  # type: ignore[no-redef]
-    from VesselConnectivity import connected_component_at, nearest_point_on  # type: ignore[no-redef]
 
 #: Display-space pick radius for grabbing an existing point, in pixels
 #: (mirrors ``ControlPolygonPipeline.CONTROL_POINT_PICK_RADIUS_PX``).  A
@@ -59,12 +57,6 @@ POINT_PICK_RADIUS_PX = 20.0
 HALO_HOVER_COLOR = (1.0, 0.9, 0.2)
 HALO_GRAB_COLOR = (0.3, 1.0, 0.4)
 HALO_HOVER_SCALE = 1.6
-
-#: Active-tree glow colour -- a cyan halo around the armed vessel tree,
-#: distinct from the yellow seed-hover / green seed-grab cues.  Rendered
-#: through the same vtkOutlineGlowPass overlay as the seed halo, so the whole
-#: connected tree reads as a glow, not a flat surface tint (ADR-0037 slice 5).
-ACTIVE_TREE_GLOW_COLOR = (0.2, 0.8, 1.0)
 
 #: Interaction state lives on the shared highlight DISPLAY NODE, not on the
 #: Pipeline instance: LayerDM owns the Pipeline instance lifecycle (it creates
@@ -209,24 +201,6 @@ class TerritoryPlacementPipeline(_PipelineBase):
         self._halo_actor.SetMapper(self._halo_mapper)
         self._halo_actor.GetProperty().SetColor(*HALO_HOVER_COLOR)
         self._halo_actor.SetVisibility(False)
-
-        # -- active-tree HIGHLIGHT (ADR-0037 slice 5, C5): a THIRD pipeline-
-        # owned actor (no new displayable manager, ADR-0013 §1) that paints the
-        # active territory's connected vessel tree while armed -- the seed[0]
-        # component recovered over the pick core's surface.  Rendered through
-        # the shared vtkOutlineGlowPass overlay (see ``_attach_halo_renderer``)
-        # so the whole tree reads as a GLOW HALO, not a flat surface tint; the
-        # pinned invariant is the INPUT identity == ``activeTreePolyData()``.
-        # Cached per (surface MTime, seed) so connectivity does not re-run per
-        # mouse event.
-        self._active_tree_polydata: Any | None = None
-        self._active_tree_cache_key: tuple | None = None
-        self._highlight_tree_mapper = vtk.vtkPolyDataMapper()
-        self._highlight_tree_actor = vtk.vtkActor()
-        self._highlight_tree_actor.SetMapper(self._highlight_tree_mapper)
-        self._highlight_tree_actor.GetProperty().SetColor(*ACTIVE_TREE_GLOW_COLOR)
-        self._highlight_tree_actor.GetProperty().SetLighting(False)
-        self._highlight_tree_actor.SetVisibility(False)
 
     # ------------------------------------------------------------------ #
     # Wiring seams (unit + production)
@@ -429,10 +403,6 @@ class TerritoryPlacementPipeline(_PipelineBase):
             overlay.InteractiveOff()
             overlay.SetActiveCamera(renderer.GetActiveCamera())
             overlay.AddActor(self._halo_actor)
-            # Route the active-tree highlight through the glow pass too, so the
-            # armed vessel tree reads as a cyan HALO around the vessel rather
-            # than a flat surface tint (ADR-0037 slice 5).
-            overlay.AddActor(self._highlight_tree_actor)
             glow = getattr(vtk, "vtkOutlineGlowPass", None)
             steps = getattr(vtk, "vtkRenderStepsPass", None)
             if glow is not None and steps is not None:
@@ -526,9 +496,6 @@ class TerritoryPlacementPipeline(_PipelineBase):
             # adhering point WHILE AIMING (not just on the click), so the slice
             # marker tracks the cursor over the vessel in 3D (ADR-0037 slice 5).
             self._jump_slices_to_world(point)
-        # Repaint the active-tree highlight alongside the hover marker so an
-        # arm / active-territory / seed change refreshes the painted tree.
-        self._reconcile_active_tree_highlight()
 
     # ------------------------------------------------------------------ #
     # Interaction — placement / edit (ADR-0032 / ADR-0033)
@@ -643,10 +610,11 @@ class TerritoryPlacementPipeline(_PipelineBase):
                 world = self._event_world_on_surface(renderer, eventData)
                 if world is None:
                     return False
-                # Active-tree constraint (ADR-0037 slice 5, C4): the first seed
-                # defines the tree; a later seed off the active component is
-                # re-snapped onto it, so a territory never straddles two trees.
-                world = self._constrain_to_active_tree(world)
+                # A later seed is placed WHERE THE PICK SNAPS IT -- on the
+                # visible vessel under the cursor -- with no snap-back.  A
+                # territory may straddle disjoint structures (portal + hepatic);
+                # the visibility-gated pick is the only placement constraint
+                # (revised ADR-0037 slice 5, no straddle-snap).
                 self._add_point(world)
                 # Repaint immediately: the carrier observer's RequestRender does
                 # not flush a frame mid-interaction (the slice-pipeline lesson).
@@ -732,72 +700,6 @@ class TerritoryPlacementPipeline(_PipelineBase):
             return
         territory, index = target
         carrier.SetNthAnnotationPoint(territory, int(index), float(world[0]), float(world[1]), float(world[2]))
-
-    # ------------------------------------------------------------------ #
-    # Active-tree constraint + highlight (ADR-0037 slice 5, C4/C5)
-    # ------------------------------------------------------------------ #
-
-    def activeTreePolyData(self):  # noqa: N802 - project accessor convention
-        """The active territory's connected vessel tree, or ``None``.
-
-        Recovers the connected component of ``AnnotationPoints[territory][0]``
-        over the SAME surface the pick core holds (the injected surface under
-        test, the vessels-only mesh in production) via
-        ``VesselConnectivity.connected_component_at``.  Returns ``None`` when
-        there is no active territory, no seed, or no pick surface.  Cached per
-        (surface MTime, seed) so connectivity does not re-run per mouse event.
-        """
-        territory = self._placement_territory()
-        carrier = self._get_carrier()
-        if territory is None or carrier is None:
-            return None
-        if carrier.GetNumberOfAnnotationPoints(territory) == 0:
-            return None
-        pick = self._ensure_pick()
-        surface = pick.surface() if pick is not None else None
-        if surface is None:
-            return None
-        seed = tuple(carrier.GetNthAnnotationPoint(territory, 0))
-        key = (surface.GetMTime(), seed)
-        if key != self._active_tree_cache_key:
-            self._active_tree_polydata = connected_component_at(surface, seed)
-            self._active_tree_cache_key = key
-        return self._active_tree_polydata
-
-    def highlightActor(self):  # noqa: N802 - project accessor convention
-        """The pipeline-owned active-tree highlight actor (C5).
-
-        Its mapper input IS ``activeTreePolyData()`` while armed; hidden with an
-        empty input when nothing is armed.  A THIRD actor alongside the seed /
-        marker actors -- never a new pipeline on the same display-node type
-        (ADR-0013 §1).
-        """
-        self._reconcile_active_tree_highlight()
-        return self._highlight_tree_actor
-
-    def _reconcile_active_tree_highlight(self) -> None:
-        """Sync the highlight actor's input + visibility to the active tree."""
-        tree = self.activeTreePolyData() if self.IsArmed() else None
-        if tree is None:
-            self._highlight_tree_mapper.RemoveAllInputs()
-            self._highlight_tree_actor.SetVisibility(False)
-            return
-        self._highlight_tree_mapper.SetInputData(tree)
-        self._highlight_tree_actor.SetVisibility(True)
-
-    def _constrain_to_active_tree(self, world: Any):
-        """Re-snap ``world`` onto the active tree when it lands off-component.
-
-        First seed (no active tree yet) is accepted as-is.  A later seed whose
-        raw snap lands on a DIFFERENT connected component is re-snapped to the
-        nearest point on the active component (``vtkPointLocator``); a seed
-        already on the active tree is unchanged.
-        """
-        tree = self.activeTreePolyData()
-        if tree is None:
-            return world
-        snapped = nearest_point_on(tree, (float(world[0]), float(world[1]), float(world[2])))
-        return snapped if snapped is not None else world
 
     # ------------------------------------------------------------------ #
     # Geometry seams (monkeypatched in the unit layer)
