@@ -1,14 +1,15 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital.  All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
-"""Connected-vessel-tree recovery for the centerline feed (ADR-0037 slice 5).
+"""Connected-component recovery for the centerline feed (ADR-0037 slice 5).
 
 The compute amendment resolved the VMTK input surface by MERGING every
 segment; real liver data (parenchyma + portal + hepatic + tumour in one
 node) makes merge-all wrong — portal and hepatic veins are DISJOINT connected
-components and a medial path tunnelling between them is meaningless.  Slice 5
-narrows a territory's active surface to the SINGLE connected component its
-first seed lands on (``AnnotationPoints[territory][0]`` is the RESOLVED
-connectivity seed, per the ADR's "reuse index-0" persistence decision).
+components and a medial path tunnelling between them is meaningless.  The
+revised multi-system design GROUPS a territory's seeds by structure and
+narrows each PER-STRUCTURE surface to the SINGLE connected component the
+structure's own seed lands on, so a single input segment that accidentally
+carries two disjoint tubes still feeds VMTK one coherent tree.
 
 This module is a PURE-VTK helper: no MRML scene, no Slicer, no Qt, no GL — so
 it runs on the bare unit layer.  ``vtkPolyDataConnectivityFilter`` is fully
@@ -62,22 +63,3 @@ def connected_component_at(polydata: Any, seed: Sequence[float]):
     cleaner.PointMergingOff()
     cleaner.Update()
     return cleaner.GetOutput()
-
-
-def nearest_point_on(polydata: Any, point: Sequence[float]):
-    """The point of ``polydata`` nearest ``point``, or ``None`` when empty.
-
-    Used by the placement pipelines to re-snap an off-tree later seed onto the
-    active connected component (ADR-0037 slice 5, C4).  Pure-VTK
-    (``vtkPointLocator``) so it stays on the bare unit layer alongside
-    ``connected_component_at``.
-    """
-    if polydata is None or polydata.GetNumberOfPoints() == 0:
-        return None
-    locator = vtk.vtkPointLocator()
-    locator.SetDataSet(polydata)
-    locator.BuildLocator()
-    closest_id = locator.FindClosestPoint(point[0], point[1], point[2])
-    if closest_id < 0:
-        return None
-    return tuple(polydata.GetPoint(closest_id))
