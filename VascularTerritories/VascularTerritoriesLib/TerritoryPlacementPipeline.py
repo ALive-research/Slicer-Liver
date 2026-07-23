@@ -667,6 +667,32 @@ class TerritoryPlacementPipeline(_PipelineBase):
         if carrier is None or territory is None:
             return
         carrier.AddAnnotationPoint(territory, float(world[0]), float(world[1]), float(world[2]))
+        # A seed placed in a 3D view leaves the 2D slices on whatever plane
+        # they were showing, so the projected slice marker floats off the
+        # seed's anatomy; reslice every slice plane onto the seed (mirrors
+        # LocatorReslicer, ADR-0025) so the 2D views show the slice through it.
+        self._jump_slices_to_world(world)
+
+    def _jump_slices_to_world(self, world: Any) -> None:
+        """Offset every slice view's plane onto ``world`` (JumpSliceByOffsetting).
+
+        Translates each plane along its OWN normal (orientation preserved), so
+        the 2D views reslice to the placed seed.  A no-op (never raising) when
+        the scene or the jump API is unavailable.
+        """
+        if world is None:
+            return
+        scene = self._display_node.GetScene() if self._display_node is not None else None
+        if scene is None:
+            carrier = self._get_carrier()
+            scene = carrier.GetScene() if carrier is not None else None
+        if scene is None:
+            return
+        for i in range(scene.GetNumberOfNodesByClass("vtkMRMLSliceNode")):
+            slice_node = scene.GetNthNodeByClass(i, "vtkMRMLSliceNode")
+            jump = getattr(slice_node, "JumpSliceByOffsetting", None)
+            if jump is not None:
+                jump(float(world[0]), float(world[1]), float(world[2]))
 
     def _relocate_grabbed_point(self, world: Any) -> None:
         carrier = self._get_carrier()
