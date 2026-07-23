@@ -25,6 +25,7 @@ from typing import Any
 #: Display-node attribute keys / reference role for the interaction state.
 ARMED_ATTR = "VascularTerritories.Armed"
 ACTIVE_TERRITORY_ATTR = "VascularTerritories.ActiveTerritory"
+MODULE_ACTIVE_ATTR = "VascularTerritories.ModuleActive"
 CARRIER_REFERENCE_ROLE = "VascularTerritories.carrier"
 
 
@@ -36,6 +37,29 @@ def set_armed(displayNode: Any, armed: bool) -> None:
 
 def is_armed(displayNode: Any) -> bool:
     return displayNode is not None and displayNode.GetAttribute(ARMED_ATTR) == "1"
+
+
+def set_module_active(displayNode: Any, active: bool) -> None:
+    """Publish the module-active gate onto the shared highlight display node.
+
+    Belt-and-suspenders beyond the armed flag (ADR-0037 slice-5 concern #1):
+    the owning module's ``enter()`` / ``exit()`` flips this so no view lands a
+    seed while VascularTerritories is not the active module.
+    """
+    if displayNode is not None:
+        displayNode.SetAttribute(MODULE_ACTIVE_ATTR, "1" if active else "0")
+
+
+def is_module_active(displayNode: Any) -> bool:
+    """True unless the module has EXPLICITLY closed the gate.
+
+    An UNSET attribute reads active: LayerDM creates the placement Pipelines
+    the moment the display node enters the scene (before any ``enter()``), and
+    a placement/edit gesture must still land in that window.  The gate is the
+    module's ``exit()`` writing ``"0"`` -- the decline is opt-in, so opening
+    the module (or never touching the flag) leaves placement enabled.
+    """
+    return displayNode is None or displayNode.GetAttribute(MODULE_ACTIVE_ATTR) != "0"
 
 
 def set_active_territory(displayNode: Any, territoryId: str | None) -> None:

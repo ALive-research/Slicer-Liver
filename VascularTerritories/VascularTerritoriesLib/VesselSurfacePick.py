@@ -36,6 +36,16 @@ class VesselSurfacePick:
         self._locator: vtk.vtkCellLocator | None = None
         self._built_mtime: int | None = None
 
+    def surface(self) -> vtk.vtkPolyData | None:
+        """The surface this pick core holds.
+
+        The active-tree recovery (ADR-0037 slice 5) must run connectivity over
+        the SAME surface the pick uses to snap clicks -- the injected surface
+        under test, the vessels-only mesh in production -- so it is exposed here
+        rather than re-derived from the display node.
+        """
+        return self._polydata
+
     # ------------------------------------------------------------------ #
     # Locator lifecycle
     # ------------------------------------------------------------------ #

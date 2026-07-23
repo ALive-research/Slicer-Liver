@@ -41,9 +41,11 @@ from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
 try:  # pragma: no cover - exercised once per import path
     from .VesselSurfacePick import VesselSurfacePick
     from .VesselHighlightWiring import vascular_surface_polydata
+    from .VesselConnectivity import connected_component_at, nearest_point_on
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from VesselSurfacePick import VesselSurfacePick  # type: ignore[no-redef]
     from VesselHighlightWiring import vascular_surface_polydata  # type: ignore[no-redef]
+    from VesselConnectivity import connected_component_at, nearest_point_on  # type: ignore[no-redef]
 
 #: Display-space pick radius for grabbing an existing point, in pixels
 #: (mirrors ``ControlPolygonPipeline.CONTROL_POINT_PICK_RADIUS_PX``).  A
@@ -106,6 +108,16 @@ class TerritoryPlacementPipeline(_PipelineBase):
         # Slicer interaction node / mouse mode.
         self._active_territory: str | None = None
         self._armed: bool = False
+
+        # Module-active gate (ADR-0037 slice-5 concern #1): a belt-and-
+        # suspenders decline BEYOND the armed flag -- an add-on-click places
+        # nothing while the owning module has EXPLICITLY closed the gate (its
+        # ``exit()``).  Rides the shared display node in production (read by
+        # ``IsModuleActive``); this instance field is the BARE-unit fallback
+        # (no display node).  Defaults OPEN -- the decline is opt-in, matching
+        # the display-node "unset reads active" rule -- so a Pipeline created
+        # before any ``enter()`` still lands a gesture.
+        self._module_active: bool = True
 
         # Injectable pick core (bare unit layer feeds a known surface); in
         # production ``_ensure_pick`` builds it from the display node's
@@ -187,6 +199,22 @@ class TerritoryPlacementPipeline(_PipelineBase):
         self._halo_actor.SetMapper(self._halo_mapper)
         self._halo_actor.GetProperty().SetColor(*HALO_HOVER_COLOR)
         self._halo_actor.SetVisibility(False)
+
+        # -- active-tree HIGHLIGHT (ADR-0037 slice 5, C5): a THIRD pipeline-
+        # owned actor (no new displayable manager, ADR-0013 §1) that paints the
+        # active territory's connected vessel tree while armed -- the seed[0]
+        # component recovered over the pick core's surface.  Styling is a plain
+        # semi-transparent tint (deferred); the pinned invariant is the INPUT
+        # identity == ``activeTreePolyData()``.  Cached per (surface MTime,
+        # seed) so the connectivity filter does not re-run per mouse event.
+        self._active_tree_polydata: Any | None = None
+        self._active_tree_cache_key: tuple | None = None
+        self._highlight_tree_mapper = vtk.vtkPolyDataMapper()
+        self._highlight_tree_actor = vtk.vtkActor()
+        self._highlight_tree_actor.SetMapper(self._highlight_tree_mapper)
+        self._highlight_tree_actor.GetProperty().SetColor(*HALO_HOVER_COLOR)
+        self._highlight_tree_actor.GetProperty().SetOpacity(0.3)
+        self._highlight_tree_actor.SetVisibility(False)
 
     # ------------------------------------------------------------------ #
     # Wiring seams (unit + production)
@@ -286,6 +314,22 @@ class TerritoryPlacementPipeline(_PipelineBase):
             return _state.is_armed(self._display_node)
         return self._armed
 
+    def SetModuleActive(self, active: bool) -> None:  # noqa: N802 - VTK verb
+        """Open/close the module-active add-on-click gate (concern #1).
+
+        The owning module's ``enter()`` / ``exit()`` flips this; an add-on-click
+        is declined while inactive, independent of the armed flag.  Rides the
+        shared display node in production, the instance field bare.
+        """
+        if self._display_node is not None:
+            _state.set_module_active(self._display_node, bool(active))
+        self._module_active = bool(active)
+
+    def IsModuleActive(self) -> bool:  # noqa: N802 - VTK verb
+        if self._display_node is not None:
+            return _state.is_module_active(self._display_node)
+        return self._module_active
+
     def _placement_territory(self) -> str | None:
         """The territory a click appends into: the active one, else the bound one."""
         active = self.GetActiveTerritory()
@@ -314,6 +358,7 @@ class TerritoryPlacementPipeline(_PipelineBase):
             if renderer is not None:
                 renderer.AddActor(self._seed_actor)
                 renderer.AddActor(self._marker_actor)
+                renderer.AddActor(self._highlight_tree_actor)
             self._attach_halo_renderer(renderer)
             # Renderer churn cleared the display handle; re-derive it from the
             # base's retained display node (the ControlPolygonPipeline
@@ -333,6 +378,7 @@ class TerritoryPlacementPipeline(_PipelineBase):
             if renderer is not None:
                 renderer.RemoveActor(self._seed_actor)
                 renderer.RemoveActor(self._marker_actor)
+                renderer.RemoveActor(self._highlight_tree_actor)
             self._detach_halo_renderer()
             self._renderer = None
             self.cleanup()
@@ -449,6 +495,9 @@ class TerritoryPlacementPipeline(_PipelineBase):
         if adhering:
             point = display.GetAdheringPointWorld()
             self._marker_actor.SetPosition(point[0], point[1], point[2])
+        # Repaint the active-tree highlight alongside the hover marker so an
+        # arm / active-territory / seed change refreshes the painted tree.
+        self._reconcile_active_tree_highlight()
 
     # ------------------------------------------------------------------ #
     # Interaction — placement / edit (ADR-0032 / ADR-0033)
@@ -553,11 +602,20 @@ class TerritoryPlacementPipeline(_PipelineBase):
                 # NOT the instance flag.
                 if not self.IsArmed():
                     return False
+                # Module-active gate (ADR-0037 slice-5 concern #1): belt-and-
+                # suspenders beyond the armed flag -- decline while the owning
+                # module is inactive so no view lands a seed off-module.
+                if not self.IsModuleActive():
+                    return False
                 # Snap to the surface and add exactly one point to the active
                 # territory.
                 world = self._event_world_on_surface(renderer, eventData)
                 if world is None:
                     return False
+                # Active-tree constraint (ADR-0037 slice 5, C4): the first seed
+                # defines the tree; a later seed off the active component is
+                # re-snapped onto it, so a territory never straddles two trees.
+                world = self._constrain_to_active_tree(world)
                 self._add_point(world)
                 # Repaint immediately: the carrier observer's RequestRender does
                 # not flush a frame mid-interaction (the slice-pipeline lesson).
@@ -617,6 +675,72 @@ class TerritoryPlacementPipeline(_PipelineBase):
             return
         territory, index = target
         carrier.SetNthAnnotationPoint(territory, int(index), float(world[0]), float(world[1]), float(world[2]))
+
+    # ------------------------------------------------------------------ #
+    # Active-tree constraint + highlight (ADR-0037 slice 5, C4/C5)
+    # ------------------------------------------------------------------ #
+
+    def activeTreePolyData(self):  # noqa: N802 - project accessor convention
+        """The active territory's connected vessel tree, or ``None``.
+
+        Recovers the connected component of ``AnnotationPoints[territory][0]``
+        over the SAME surface the pick core holds (the injected surface under
+        test, the vessels-only mesh in production) via
+        ``VesselConnectivity.connected_component_at``.  Returns ``None`` when
+        there is no active territory, no seed, or no pick surface.  Cached per
+        (surface MTime, seed) so connectivity does not re-run per mouse event.
+        """
+        territory = self._placement_territory()
+        carrier = self._get_carrier()
+        if territory is None or carrier is None:
+            return None
+        if carrier.GetNumberOfAnnotationPoints(territory) == 0:
+            return None
+        pick = self._ensure_pick()
+        surface = pick.surface() if pick is not None else None
+        if surface is None:
+            return None
+        seed = tuple(carrier.GetNthAnnotationPoint(territory, 0))
+        key = (surface.GetMTime(), seed)
+        if key != self._active_tree_cache_key:
+            self._active_tree_polydata = connected_component_at(surface, seed)
+            self._active_tree_cache_key = key
+        return self._active_tree_polydata
+
+    def highlightActor(self):  # noqa: N802 - project accessor convention
+        """The pipeline-owned active-tree highlight actor (C5).
+
+        Its mapper input IS ``activeTreePolyData()`` while armed; hidden with an
+        empty input when nothing is armed.  A THIRD actor alongside the seed /
+        marker actors -- never a new pipeline on the same display-node type
+        (ADR-0013 §1).
+        """
+        self._reconcile_active_tree_highlight()
+        return self._highlight_tree_actor
+
+    def _reconcile_active_tree_highlight(self) -> None:
+        """Sync the highlight actor's input + visibility to the active tree."""
+        tree = self.activeTreePolyData() if self.IsArmed() else None
+        if tree is None:
+            self._highlight_tree_mapper.RemoveAllInputs()
+            self._highlight_tree_actor.SetVisibility(False)
+            return
+        self._highlight_tree_mapper.SetInputData(tree)
+        self._highlight_tree_actor.SetVisibility(True)
+
+    def _constrain_to_active_tree(self, world: Any):
+        """Re-snap ``world`` onto the active tree when it lands off-component.
+
+        First seed (no active tree yet) is accepted as-is.  A later seed whose
+        raw snap lands on a DIFFERENT connected component is re-snapped to the
+        nearest point on the active component (``vtkPointLocator``); a seed
+        already on the active tree is unchanged.
+        """
+        tree = self.activeTreePolyData()
+        if tree is None:
+            return world
+        snapped = nearest_point_on(tree, (float(world[0]), float(world[1]), float(world[2])))
+        return snapped if snapped is not None else world
 
     # ------------------------------------------------------------------ #
     # Geometry seams (monkeypatched in the unit layer)

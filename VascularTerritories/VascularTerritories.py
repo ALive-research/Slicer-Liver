@@ -455,6 +455,13 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # ADR-0037 §Decision 2 slice-4 module-active gate: entering auto-arms
     # NOTHING.  Placement is an explicit per-territory Place toggle in the
     # table, so no view claims an add-on-click merely from opening the module.
+    # Open the module-active gate (ADR-0037 slice-5 concern #1): the
+    # LayerDM-created placement Pipelines read this flag off the shared display
+    # node, so an armed click only lands while VascularTerritories is active.
+    node = self._ensureHighlightDisplayNode()
+    if node is not None:
+      from VascularTerritoriesLib import TerritoryInteractionState as _territoryState
+      _territoryState.set_module_active(node, True)
     # Make sure parameter node exists and observed
     self.initializeParameterNode()
 
@@ -470,6 +477,12 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     table = getattr(self, "_territoriesTable", None)
     if table is not None and hasattr(table, "disarm"):
       table.disarm()
+    # Close the module-active gate (ADR-0037 slice-5 concern #1): no view
+    # claims an add-on-click while VascularTerritories is inactive.
+    node = getattr(self, "_highlightDisplayNode", None)
+    if node is not None:
+      from VascularTerritoriesLib import TerritoryInteractionState as _territoryState
+      _territoryState.set_module_active(node, False)
     # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
     self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
 
