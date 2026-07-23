@@ -113,6 +113,12 @@ set(_vascterr_pytest_files
   # guard / per-territory invariants need the module Logic + a live scene
   # so they SKIP-PENDING bare and RUN launched; the REAL extraction wiring
   # is SlicerVMTK-env-gated and skips cleanly off that image (ADR-0027).
+  # ALSO hosts the REVISED slice-5 GROUP-BY-STRUCTURE invariant (i7): a
+  # territory with >=2 seeds on TWO structures (vein + artery) yields TWO
+  # centerlines, both grouped under the territory; a structure with <2 seeds is
+  # SKIPPED (the per-structure >=2 gate).  Launched (module Logic + a real
+  # multi-segment segmentation + a stubbed line extractor, so no SlicerVMTK is
+  # needed); SKIPS bare (ADR-0027).
   test_territories_vmtk_feed.py
   # ADR-0037 §Decision 3 (slice 2) -- the PANEL modernisation to Python-widget
   # composition (ADR-0004): the table-duplicating v1 selector/place-widget
@@ -176,44 +182,67 @@ set(_vascterr_pytest_files
   # SKIP-PENDING bare / while the composite-row seam is absent, and RUN launched
   # once the composite-row tree + eye toggle land (ADR-0027).
   test_territories_placemode.py
-  # ADR-0037 slice 5 (PR-A, connected-tree seeding) -- the connectivity-recovery
-  # invariant.  The compute amendment merged EVERY segment into the VMTK input;
-  # real liver data (portal + hepatic are disjoint components) makes merge-all
-  # wrong, so a territory's active surface narrows to the single connected
-  # component its index-0 seed lands on.  The recovery is a PURE-VTK helper
+  # ADR-0037 slice 5 (REVISED, multi-system seeding) -- the PER-STRUCTURE
+  # connected-component narrow.  The compute amendment merged EVERY segment into
+  # the VMTK input; real liver data (portal + hepatic are disjoint) makes
+  # merge-all wrong.  The REVISED design drops the single-active-tree LOCK (a
+  # territory may straddle disjoint structures; extraction groups by structure),
+  # but connectivity SURVIVES for a different job: narrowing each PER-STRUCTURE
+  # surface to the connected component of that structure's OWN seed, so a single
+  # input segment carrying two disjoint tubes still feeds VMTK one coherent tree
+  # (the A3/Q2 edge case).  The recovery is a PURE-VTK helper
   # (vtkPolyDataConnectivityFilter in ClosestPointRegion mode; no MRML, no GL):
   # a seed on one of two disjoint spheres recovers ONLY that sphere's component
-  # (single region, zero points from the other); two disjoint seeds resolve to
-  # different trees; and re-deriving from a NEW index-0 (after first-seed
-  # deletion) recovers the SAME component (the reuse-AnnotationPoints[0]
-  # persistence decision).  Import-guarded on the not-yet-existing
-  # VascularTerritoriesLib/VesselConnectivity.py; the file COLLECTS + SKIP-
-  # PENDINGs cleanly bare and genuinely RUNS bare (pure VTK) once the helper
-  # lands (ADR-0027).  The vessel-SCT-filter twin (T1) lives launched in
-  # test_territories_surface_resolution.py.
+  # (single region, zero points from the other).  The retired reuse-index-0
+  # persistence test is REMOVED with the lock.  Import-guarded on the
+  # not-yet-existing VascularTerritoriesLib/VesselConnectivity.py; the file
+  # COLLECTS + SKIP-PENDINGs cleanly bare and genuinely RUNS bare (pure VTK) once
+  # the helper lands (ADR-0027).  The vessel-SCT-filter twin (T1) + per-segment
+  # closed-surface split (T1d) live launched in
+  # test_territories_surface_resolution.py; the seed->structure mapping twin is
+  # test_territories_seed_structure.py.
   test_territories_connectivity.py
-  # ADR-0037 slice 5 (PR-B, placement UX) -- the active-tree seed CONSTRAINT +
-  # highlight + module-active gate on the placement pipelines.  PR-A landed the
-  # compute core (vessels-only surface, C++ GetVascularSegmentIds, the pure-VTK
-  # connected_component_at, per-extraction single-component surface); PR-B adds
-  # the interaction layer: the first seed of an armed territory DEFINES its
-  # active vessel tree (the connected component of that point), a later seed on a
-  # DIFFERENT component is re-snapped onto the active component (never off-tree),
-  # so a territory's seeds always lie on ONE connected component (the component
-  # of AnnotationPoints[territory][0]); an active-tree highlight actor (owned by
-  # the placement pipeline, no new displayable manager per ADR-0013) takes the
-  # seed[0] component as its INPUT (styling deferred -- only the input identity
-  # is pinned); and the module-active gate declines an add-on-click while the
-  # owning module is inactive (belt-and-suspenders beyond the display-node armed
-  # flag).  The SUT surface is TWO disjoint spheres (vtkAppendPolyData of two
-  # separated vtkSphereSource) wired as the vessels-only pick surface, with the
-  # stub-renderer + injected-pick pattern from test_territories_placement_pipeline
-  # so clicks map to chosen world points on sphere A or sphere B.  Needs
-  # LayerDMLib + the wrapped carrier + the shared highlight display node;
-  # import-/hasattr-guarded on the not-yet-existing PR-B seams (activeTreePolyData
-  # / highlightActor / SetModuleActive + the later-seed constraint gate), they
-  # SKIP-PENDING bare and RUN launched once PR-B lands (ADR-0027).
+  # ADR-0037 slice 5 (REVISED, multi-system seeding) -- placement no longer
+  # LOCKS a territory to one connected vessel tree.  The landed slice-5 design
+  # (first seed defines the active tree, later seeds snap back, the component
+  # glows) was clinically wrong: a vascular territory may own seeds across
+  # MULTIPLE disjoint structures (portal + hepatic), derived independently and
+  # both feeding the one map region.  This suite pins the FLIP: NO STRADDLE-SNAP
+  # -- a later add-on-click on a DIFFERENT visible structure STAYS there (two
+  # seeds, two structures); the retired active-tree lock+halo (activeTreePolyData
+  # / highlightActor / _constrain_to_active_tree / _highlight_tree_actor) are
+  # asserted GONE (an absence pin with a credible creep-in path -- the named
+  # attributes exist on the landed branch and must be removed); the visibility-
+  # gated pick is the only placement constraint (pinned in
+  # test_territories_surface_resolution T1c, not here); and the retained
+  # module-active + armed gates still decline clicks.  The SUT surface is TWO
+  # disjoint spheres (vtkAppendPolyData of two separated vtkSphereSource) wired
+  # as the vessels-only pick surface, with the stub-renderer + injected-pick
+  # pattern from test_territories_placement_pipeline so clicks map to chosen
+  # world points on structure A or structure B.  Needs LayerDMLib + the wrapped
+  # carrier + the shared highlight display node; the no-straddle-snap + retired-
+  # halo invariants go GREEN when the implementer removes the lock+halo, the
+  # module-gate invariants SKIP-PENDING until the pipeline seams land, all RUN
+  # launched (ADR-0027).
   test_territories_placemode_constraint.py
+  # ADR-0037 slice 5 (REVISED, multi-system seeding) -- the seed->structure
+  # mapping (pure-VTK).  Each of a territory's seeds is assigned to the input
+  # SEGMENT (structure) whose CLOSED SURFACE it is nearest (portal / hepatic /
+  # ...), so a territory may straddle disjoint structures and extraction can
+  # group by structure.  The geometry (nearest closed surface to a point) is
+  # PURE polydata -> Python (ADR-0004 split): nearest_structure(structures,
+  # point) -> key builds one vtkCellLocator per structure surface and returns
+  # the nearest structure's key, with a deterministic first-in-order tiebreak on
+  # a boundary point (Q3); territory_structure_seed_counts(assignments) groups
+  # mapped (seed, structureKey) pairs into {key: count}, the SAME >=2-per-
+  # structure gate the extractor (test_territories_vmtk_feed) and the table
+  # warning (test_territories_table) read so they agree.  Import-guarded on the
+  # not-yet-existing VascularTerritoriesLib/SeedStructureMapping.py; the file
+  # COLLECTS + SKIP-PENDINGs cleanly bare and genuinely RUNS bare (pure VTK) once
+  # the helper lands (ADR-0027).  The MRML-facing segment->surface/colour
+  # resolution rides existing seams, pinned launched in
+  # test_territories_surface_resolution (T1d) + test_territories_table.
+  test_territories_seed_structure.py
 )
 
 foreach(_pytest_file IN LISTS _vascterr_pytest_files)

@@ -50,6 +50,20 @@ This file pins the Stage-3 increments:
   down), never one merged node — mirroring the legacy per-``VascTerrId``
   grouping.  Asserted by monkeypatching the extraction logic to COUNT
   calls + CAPTURE the fed node, without a real VMTK run.
+* i7 (launched) — GROUP BY STRUCTURE (revised slice 5).  A territory carrying
+  ≥2 seeds on structure A AND ≥2 on structure B (portal + hepatic) yields TWO
+  centerlines — one VMTK run PER ≥2-seed structure — BOTH in ``CenterlineRefs``
+  and BOTH grouped under the territory id (the multi-system map region, §B4/§B5).
+  A territory with 2 seeds on A but only 1 on B yields exactly ONE centerline
+  (A's); the under-seeded structure B is SKIPPED (the per-structure ≥2 gate,
+  §B4).  The extractor is stubbed to a small line polydata (via
+  ``getCenterlineLogic``) so N models are minted without a real VMTK run — the
+  invariant is the group-by-structure invocation shape + the per-structure gate,
+  not the geometry.  Red->green (ADR-0027): FAILS against the landed
+  single-tree extraction (one centerline per territory, later structures lost)
+  and PASSES once extraction groups by structure and appends one centerline per
+  ≥2-seed structure.  Launched (module Logic + a real multi-segment
+  segmentation + stubbed extractor); SKIPS bare.
 * i6 (launched) — RE-EXTRACTION IDEMPOTENCY.  Extracting a territory, then
   RE-EXTRACTING the SAME carrier/territory, leaves EXACTLY ONE
   ``CenterlineRefs`` entry, ONE ``TerritoryCenterline`` model, and a STABLE
@@ -139,6 +153,7 @@ vtk = pytest.importorskip("vtk")
 
 CUSTOM_TERRITORIES_CLASS = "vtkMRMLCustomTerritoriesNode"
 MARKUPS_FIDUCIAL_CLASS = "vtkMRMLMarkupsFiducialNode"
+SEGMENTATION_CLASS = "vtkMRMLSegmentationNode"
 EXTRACT_CENTERLINE_MODULE = "ExtractCenterline"
 
 # Carrier API seam (also pinned by test_territories_annotation_carrier.py).
@@ -716,6 +731,180 @@ def test_re_extraction_replaces_the_territorys_centerline(monkeypatch):
         "the prior TerritoryCenterline model must be removed on "
         "re-extraction, not orphaned in the scene (ADR-0037 §Conformance "
         f"no-drift); found {_count_centerline_models(slicer)} models."
+    )
+
+
+# --------------------------------------------------------------------------- #
+# i7 — group by structure: one centerline per >=2-seed structure (launched)
+# --------------------------------------------------------------------------- #
+#
+# Revised slice 5 (multi-system-territory-plan §B4/§B5): a territory owns seeds
+# across possibly-multiple disjoint structures.  Extraction GROUPS the seeds by
+# structure and runs VMTK ONCE per structure with >=2 seeds; a structure with
+# <2 seeds is skipped.  N centerlines per territory, all grouped under the
+# territory id.  These pin the invocation shape + the per-structure gate with a
+# stubbed extractor (no SlicerVMTK), over a REAL multi-segment segmentation so
+# the seed->structure mapping resolves each seed to a genuine vessel surface.
+
+# Two vessel segments placed far apart so their closed surfaces are disjoint and
+# a seed near each maps unambiguously to that structure.
+_VEIN_CENTRE = (0.0, 0.0, 0.0)
+_ARTERY_CENTRE = (100.0, 0.0, 0.0)
+_VESSEL_RADIUS = 10.0
+
+_VEIN_TERMINOLOGY = (
+    "Segmentation category and type - 3D Slicer General Anatomy list"
+    "~SCT^85756007^Body tissue~SCT^29092000^Vein~^^~Anatomic codes~^^~^^"
+)
+_ARTERY_TERMINOLOGY = (
+    "Segmentation category and type - 3D Slicer General Anatomy list"
+    "~SCT^85756007^Body tissue~SCT^51114001^Artery~^^~Anatomic codes~^^~^^"
+)
+
+
+def _add_tagged_vessel(slicer, segmentation, terminology, name, center):
+    """Import one closed-surface sphere vessel segment tagged with ``terminology``."""
+    source = vtk.vtkSphereSource()
+    source.SetCenter(*center)
+    source.SetRadius(_VESSEL_RADIUS)
+    source.SetThetaResolution(16)
+    source.SetPhiResolution(16)
+    source.Update()
+    modelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", name)
+    modelNode.SetAndObservePolyData(source.GetOutput())
+    slicer.modules.segmentations.logic().ImportModelToSegmentationNode(
+        modelNode, segmentation)
+    slicer.mrmlScene.RemoveNode(modelNode)
+    seg = segmentation.GetSegmentation()
+    segId = seg.GetNthSegmentID(seg.GetNumberOfSegments() - 1)
+    seg.GetSegment(segId).SetTag("TerminologyEntry", terminology)
+    return segId
+
+
+def _two_vessel_segmentation_or_skip(slicer):
+    """A segmentation with a Vein + Artery vessel segment (disjoint surfaces)."""
+    seg = slicer.mrmlScene.AddNewNodeByClass(SEGMENTATION_CLASS, "VmtkTwoVessels")
+    if seg is None:
+        pytest.skip("vtkMRMLSegmentationNode not registered (launched build).")
+    seg.CreateDefaultDisplayNodes()
+    _add_tagged_vessel(slicer, seg, _VEIN_TERMINOLOGY, "VeinModel", _VEIN_CENTRE)
+    _add_tagged_vessel(slicer, seg, _ARTERY_TERMINOLOGY, "ArteryModel", _ARTERY_CENTRE)
+    return seg
+
+
+def _points_on_structure(center, n):
+    """``n`` distinct genuine-ish points on the sphere of radius _VESSEL_RADIUS."""
+    pts = []
+    for k in range(n):
+        # Spread the points around the sphere so they are distinct.
+        offset = (k - (n - 1) / 2.0) * (_VESSEL_RADIUS / max(n, 1))
+        pts.append((center[0], center[1] + offset, center[2] + _VESSEL_RADIUS))
+    return pts
+
+
+def _stub_line_extractor(logic, monkeypatch):
+    """Stub the extractor so each call mints a fresh small line (no SlicerVMTK)."""
+    class _LineExtractor:
+        def extractCenterline(self, *args, **kwargs):  # noqa: N802 - VMTK verb
+            return _line_polydata()
+
+    monkeypatch.setattr(logic, "getCenterlineLogic", lambda: _LineExtractor())
+
+
+def test_mixed_system_territory_yields_two_centerlines(monkeypatch):
+    """i7: 2 seeds on vein + 2 on artery -> TWO centerlines, both the territory's.
+
+    A territory straddling two disjoint structures runs VMTK once per structure
+    (each with >=2 seeds), so it registers TWO ``CenterlineRefs`` entries, BOTH
+    grouped under the SAME territory id — both feed the one map region (revised
+    ADR-0037 slice 5; multi-system plan §B4/§B5).  The extractor is stubbed to a
+    line so two models are minted without SlicerVMTK.  Launched; SKIPS bare.
+
+    Red->green: FAILS against the landed single-tree extraction (one centerline
+    per territory), PASSES once extraction groups by structure.
+    """
+    slicer = _slicer_or_skip()
+    logic = _logic_or_skip(slicer)
+    carrier = _make_carrier_or_skip(slicer)
+
+    if not hasattr(logic, "getCenterlineLogic"):
+        pytest.skip(
+            "VascularTerritoriesLogic has no getCenterlineLogic (ADR-0027).")
+    if not hasattr(logic, "getCenterlineReferenceIDs"):
+        pytest.skip(
+            "VascularTerritoriesLogic has no getCenterlineReferenceIDs "
+            "(ADR-0027).")
+    if not hasattr(carrier, "GetGrouping"):
+        pytest.skip(
+            f"{CUSTOM_TERRITORIES_CLASS} has no Groupings API (ADR-0027).")
+
+    segmentation = _two_vessel_segmentation_or_skip(slicer)
+    for x, y, z in _points_on_structure(_VEIN_CENTRE, 2):
+        carrier.AddAnnotationPoint(TERRITORY_A, x, y, z)
+    for x, y, z in _points_on_structure(_ARTERY_CENTRE, 2):
+        carrier.AddAnnotationPoint(TERRITORY_A, x, y, z)
+
+    _stub_line_extractor(logic, monkeypatch)
+    logic.extractCenterlines(carrier, segmentation, "")
+
+    refs = logic.getCenterlineReferenceIDs(carrier)
+    assert len(refs) == 2, (
+        "a territory with >=2 seeds on TWO structures must yield TWO centerlines "
+        f"(one VMTK run per >=2-seed structure); got {refs} (revised ADR-0037 "
+        "slice 5, §B4/§B5)."
+    )
+    for ref in refs:
+        assert carrier.GetGrouping(ref) == TERRITORY_A, (
+            "both centerlines must be grouped under the SAME territory id "
+            f"({TERRITORY_A}) -- both feed the one map region; got "
+            f"{carrier.GetGrouping(ref)!r} for {ref}."
+        )
+
+
+def test_under_seeded_structure_is_skipped(monkeypatch):
+    """i7: 2 seeds on vein + 1 on artery -> ONE centerline (artery skipped).
+
+    The per-structure ≥2 gate: only a structure with >=2 seeds yields a
+    centerline, so a territory with 2 seeds on the vein but only 1 on the artery
+    produces exactly ONE ``CenterlineRefs`` entry (the vein's) — the under-seeded
+    artery is skipped (revised ADR-0037 slice 5; multi-system plan §B4).  The
+    same gate drives the table warning (§B6, pinned in test_territories_table).
+    Launched; SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    logic = _logic_or_skip(slicer)
+    carrier = _make_carrier_or_skip(slicer)
+
+    if not hasattr(logic, "getCenterlineLogic"):
+        pytest.skip(
+            "VascularTerritoriesLogic has no getCenterlineLogic (ADR-0027).")
+    if not hasattr(logic, "getCenterlineReferenceIDs"):
+        pytest.skip(
+            "VascularTerritoriesLogic has no getCenterlineReferenceIDs "
+            "(ADR-0027).")
+    if not hasattr(carrier, "GetGrouping"):
+        pytest.skip(
+            f"{CUSTOM_TERRITORIES_CLASS} has no Groupings API (ADR-0027).")
+
+    segmentation = _two_vessel_segmentation_or_skip(slicer)
+    for x, y, z in _points_on_structure(_VEIN_CENTRE, 2):
+        carrier.AddAnnotationPoint(TERRITORY_A, x, y, z)
+    # Only ONE seed on the artery -- under the >=2 gate.
+    single_artery = _points_on_structure(_ARTERY_CENTRE, 1)[0]
+    carrier.AddAnnotationPoint(TERRITORY_A, *single_artery)
+
+    _stub_line_extractor(logic, monkeypatch)
+    logic.extractCenterlines(carrier, segmentation, "")
+
+    refs = logic.getCenterlineReferenceIDs(carrier)
+    assert len(refs) == 1, (
+        "a structure with <2 seeds must be SKIPPED (the per-structure >=2 gate) "
+        "-- 2 seeds on the vein + 1 on the artery yields ONE centerline (the "
+        f"vein's); got {refs} (revised ADR-0037 slice 5, §B4)."
+    )
+    assert carrier.GetGrouping(refs[0]) == TERRITORY_A, (
+        "the single surviving centerline must be grouped under the territory id "
+        f"({TERRITORY_A}); got {carrier.GetGrouping(refs[0])!r}."
     )
 
 
