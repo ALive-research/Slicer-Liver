@@ -62,3 +62,22 @@ def connected_component_at(polydata: Any, seed: Sequence[float]):
     cleaner.PointMergingOff()
     cleaner.Update()
     return cleaner.GetOutput()
+
+
+def nearest_point_on(polydata: Any, point: Sequence[float]):
+    """The point of ``polydata`` nearest ``point``, or ``None`` when empty.
+
+    Used by the placement pipelines to re-snap an off-tree later seed onto the
+    active connected component (ADR-0037 slice 5, C4).  Pure-VTK
+    (``vtkPointLocator``) so it stays on the bare unit layer alongside
+    ``connected_component_at``.
+    """
+    if polydata is None or polydata.GetNumberOfPoints() == 0:
+        return None
+    locator = vtk.vtkPointLocator()
+    locator.SetDataSet(polydata)
+    locator.BuildLocator()
+    closest_id = locator.FindClosestPoint(point[0], point[1], point[2])
+    if closest_id < 0:
+        return None
+    return tuple(polydata.GetPoint(closest_id))

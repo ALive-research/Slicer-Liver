@@ -48,11 +48,13 @@ from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
 try:  # pragma: no cover - exercised once per import path
     from .VesselSurfacePick import VesselSurfacePick
     from .VesselHighlightWiring import vascular_surface_polydata
+    from .VesselConnectivity import connected_component_at, nearest_point_on
     from . import TerritoryInteractionState as _state
     from . import TerritorySliceProjection as _proj
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from VesselSurfacePick import VesselSurfacePick  # type: ignore[no-redef]
     from VesselHighlightWiring import vascular_surface_polydata  # type: ignore[no-redef]
+    from VesselConnectivity import connected_component_at, nearest_point_on  # type: ignore[no-redef]
     import TerritoryInteractionState as _state  # type: ignore[no-redef]
     import TerritorySliceProjection as _proj  # type: ignore[no-redef]
 
@@ -110,6 +112,16 @@ class TerritorySlicePipeline(_PipelineBase):
         # production ``_ensure_pick`` builds it from the display node's
         # pickSurface (the ``TerritoryPlacementPipeline`` precedent).
         self._pick: VesselSurfacePick | None = None
+
+        # Module-active gate (ADR-0037 slice-5 concern #1) + active-tree cache
+        # (C4/C5).  The gate rides the shared display node in production (read
+        # by ``IsModuleActive``), the instance field bare; defaults OPEN (the
+        # decline is opt-in, matching the display-node "unset reads active"
+        # rule).  The recovered tree is cached per (surface MTime, seed) so
+        # connectivity does not re-run per mouse event.
+        self._module_active: bool = True
+        self._active_tree_polydata: Any | None = None
+        self._active_tree_cache_key: tuple | None = None
 
         # Projected-seed bookkeeping (pick arbitration): parallel lists of
         # (territoryId, index) keys, their XY positions, and |distance| to
@@ -232,6 +244,26 @@ class TerritorySlicePipeline(_PipelineBase):
 
     def _is_armed(self) -> bool:
         return _state.is_armed(self._display_node)
+
+    def SetActiveTerritory(self, territoryId: str | None) -> None:  # noqa: N802 - VTK verb
+        """Set the territory an armed slice click appends into (the ACTIVE one)."""
+        _state.set_active_territory(self._display_node, territoryId)
+
+    def SetModuleActive(self, active: bool) -> None:  # noqa: N802 - VTK verb
+        """Open/close the module-active add-on-click gate (concern #1).
+
+        Mirrors ``TerritoryPlacementPipeline``: a slice add-on-click is declined
+        while the owning module is inactive, independent of the armed flag.
+        Rides the shared display node in production, the instance field bare.
+        """
+        if self._display_node is not None:
+            _state.set_module_active(self._display_node, bool(active))
+        self._module_active = bool(active)
+
+    def IsModuleActive(self) -> bool:  # noqa: N802 - VTK verb
+        if self._display_node is not None:
+            return _state.is_module_active(self._display_node)
+        return self._module_active
 
     def _safe_get_renderer(self) -> Any | None:
         return self._renderer
@@ -545,9 +577,16 @@ class TerritorySlicePipeline(_PipelineBase):
                     return True
                 if not self._is_armed():
                     return False  # a disarmed click adds nothing
+                # Module-active gate (ADR-0037 slice-5 concern #1): decline
+                # while the owning module is inactive, beyond the armed flag.
+                if not self.IsModuleActive():
+                    return False
                 world = self._snap_event_to_surface(eventData)
                 if world is None:
                     return False
+                # Active-tree constraint (ADR-0037 slice 5, C4): a later seed
+                # off the active component is re-snapped onto it.
+                world = self._constrain_to_active_tree(world)
                 self._add_point(world)
                 # Repaint THIS slice immediately: a RequestRender from the
                 # carrier observer does not flush a frame mid-interaction (the
@@ -630,6 +669,50 @@ class TerritorySlicePipeline(_PipelineBase):
             return
         territory, index = target
         carrier.SetNthAnnotationPoint(territory, int(index), float(world[0]), float(world[1]), float(world[2]))
+
+    # ------------------------------------------------------------------ #
+    # Active-tree constraint (ADR-0037 slice 5, C4) -- shared with the 3D pipeline
+    # ------------------------------------------------------------------ #
+
+    def activeTreePolyData(self):  # noqa: N802 - project accessor convention
+        """The active territory's connected vessel tree, or ``None``.
+
+        The 2D twin of ``TerritoryPlacementPipeline.activeTreePolyData``:
+        recovers the connected component of
+        ``AnnotationPoints[territory][0]`` over the SAME surface the pick core
+        holds (vessels-only in production).  Cached per (surface MTime, seed).
+        """
+        territory = self._placement_territory()
+        carrier = self._get_carrier()
+        if territory is None or carrier is None:
+            return None
+        if carrier.GetNumberOfAnnotationPoints(territory) == 0:
+            return None
+        pick = self._ensure_pick()
+        surface = pick.surface() if pick is not None else None
+        if surface is None:
+            return None
+        seed = tuple(carrier.GetNthAnnotationPoint(territory, 0))
+        key = (surface.GetMTime(), seed)
+        if key != self._active_tree_cache_key:
+            self._active_tree_polydata = connected_component_at(surface, seed)
+            self._active_tree_cache_key = key
+        return self._active_tree_polydata
+
+    def _constrain_to_active_tree(self, world: Any):
+        """Re-snap ``world`` onto the active tree when it lands off-component.
+
+        First seed (no active tree yet) is accepted as-is; a later seed off the
+        active component is re-snapped to its nearest point (``vtkPointLocator``),
+        so a territory never straddles two vessel trees.  The snap runs in world
+        space, so the slice-normal ray result feeds the SAME gate as the 3D
+        camera-ray result.
+        """
+        tree = self.activeTreePolyData()
+        if tree is None:
+            return world
+        snapped = nearest_point_on(tree, (float(world[0]), float(world[1]), float(world[2])))
+        return snapped if snapped is not None else world
 
     # ------------------------------------------------------------------ #
     # Cross-view adhering highlight (publish on hover / render the marker)
