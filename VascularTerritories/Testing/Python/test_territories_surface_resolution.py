@@ -42,7 +42,9 @@ the feed handing ``None`` to the extractor and PASSES once the feed skips a
 missing surface.  Launched-only (Slicer segmentation logic + a live scene);
 SKIP bare.
 
-This file also pins the slice-5 (PR-A) VESSEL-SCT-FILTER invariant (T1):
+This file also pins the slice-5 VESSEL-SCT-FILTER invariant (T1) and, for the
+REVISED multi-system design, the PER-SEGMENT closed-surface split (T1d) the
+seed->structure mapping consumes (multi-system-territory-plan §Part B B1):
 
 * T1 (launched) — VESSEL-SCT RESOLVER.  ADR-0037 slice 5 narrows the
   centerline surface candidates to segments whose ``TerminologyEntry`` TYPE
@@ -519,6 +521,79 @@ def test_pick_surface_excludes_a_hidden_vessel():
     assert artery_only.GetNumberOfPoints() < both_visible.GetNumberOfPoints(), (
         "hiding the vein must shrink the pick surface -- a hidden vessel is not "
         "pickable (ADR-0037 slice 5)."
+    )
+
+
+# =========================================================================== #
+# T1d — per-segment closed-surface split (revised slice 5 seed->structure map)
+# =========================================================================== #
+#
+# The REVISED slice 5 (multi-system-territory-plan §Part B B1) needs the
+# per-SEGMENT closed surfaces, NOT the merged vessels-only mesh: the
+# seed->structure mapping builds one cell locator per vessel segment surface to
+# find the nearest structure to a seed.  The merged GetVascularSurfacePolyData
+# loses the id->surface split, so the mapping resolves each vessel segment's
+# closed surface independently via GetVascularSegmentIds +
+# GetClosedSurfaceRepresentation(segmentId).  This pins that split is available
+# and yields a distinct, non-empty surface per vessel segment.
+
+
+def test_per_segment_closed_surfaces_are_distinct_and_non_empty():
+    """T1d: each vessel segment resolves its OWN non-empty closed surface.
+
+    The seed->structure mapping (revised slice 5) needs an ORDERED
+    ``(segmentId, closed_surface)`` list — one surface per vessel segment — so
+    it can find the nearest structure to a seed.  The C++ resolver's
+    ``GetVascularSegmentIds`` supplies the ordered vessel ids; each id resolves
+    a non-empty closed surface via ``GetClosedSurfaceRepresentation(segmentId)``,
+    and the two vessel surfaces are DISTINCT (the vein surface sits near its own
+    centre, the artery near the artery centre) — the merged mesh would fuse
+    them and lose the split.  Launched-only (segmentation infra + wrapped C++
+    logic); SKIPS bare, and SKIP-PENDINGs until the resolver lands (ADR-0027).
+    """
+    slicer = _slicer_or_skip()
+    logic = _logic_or_skip(slicer)
+    cpp = _cpp_vascular_logic_or_skip(logic)
+    segmentation, ids = _multi_segment_segmentation(slicer)
+
+    vesselIds = list(cpp.GetVascularSegmentIds(segmentation))
+    assert set(vesselIds) == {ids["vein"], ids["artery"]}, (
+        "the per-segment split must enumerate exactly the vessel segments "
+        f"(vein + artery); got {vesselIds} (revised ADR-0037 slice 5)."
+    )
+
+    # Resolve each vessel segment's own closed surface (the mapping's per-segment
+    # locator input); the segmentation node exposes GetClosedSurfaceRepresentation.
+    if not hasattr(segmentation, "GetClosedSurfaceRepresentation"):
+        pytest.skip(
+            "segmentation node lacks GetClosedSurfaceRepresentation -- the "
+            "per-segment surface resolution seam is unavailable (ADR-0027)."
+        )
+    surfaces = {}
+    for segId in vesselIds:
+        mesh = vtk.vtkPolyData()
+        segmentation.GetClosedSurfaceRepresentation(segId, mesh)
+        surfaces[segId] = mesh
+
+    for segId, mesh in surfaces.items():
+        assert mesh.GetNumberOfPoints() > 0, (
+            f"vessel segment {segId!r} must resolve a NON-EMPTY closed surface "
+            "for the seed->structure mapping (revised ADR-0037 slice 5)."
+        )
+
+    # The two vessel surfaces sit at DISTINCT locations (their bounds centres are
+    # the vein-centre and artery-centre the fixture placed apart) -- the merged
+    # mesh would collapse the id->surface split the mapping relies on.
+    def _bounds_centre(poly):
+        b = poly.GetBounds()
+        return ((b[0] + b[1]) / 2.0, (b[2] + b[3]) / 2.0, (b[4] + b[5]) / 2.0)
+
+    centres = [_bounds_centre(surfaces[i]) for i in vesselIds]
+    dx = sum((centres[0][k] - centres[1][k]) ** 2 for k in range(3)) ** 0.5
+    assert dx > 1.0, (
+        "the two vessel segments' closed surfaces must be DISTINCT (separated "
+        "centres) -- the per-segment split must not fuse them (revised ADR-0037 "
+        f"slice 5); centre distance was {dx:.3f}."
     )
 
 

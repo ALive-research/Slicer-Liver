@@ -924,6 +924,212 @@ def test_territory_with_fewer_than_two_seeds_is_flagged_incomplete(qt_widgets):
 
 
 # --------------------------------------------------------------------------- #
+# REVISED slice 5 — coloured seed rows + per-structure warning glyph
+# --------------------------------------------------------------------------- #
+#
+# The revised multi-system design (Docs/design/multi-system-territory-plan.md
+# §B3 / §B6): each seed child row carries a colour swatch tinted with the seed's
+# STRUCTURE colour (the input segmentation's per-segment display colour) PAIRED
+# with the structure NAME (ADR-0010, never colour alone); and a territory
+# touching any structure with <2 seeds shows the WARNING glyph+text (that
+# structure cannot yield a centerline).  The table resolves a seed's structure
+# via the seed->structure mapping (§B1) over the input segmentation, so it needs
+# the segmentation bound.
+
+# Two disjoint vessel segments (Vein + Artery) with distinct display colours so
+# the seed rows can be tinted per structure.
+_VEIN_TERMINOLOGY = (
+    "Segmentation category and type - 3D Slicer General Anatomy list"
+    "~SCT^85756007^Body tissue~SCT^29092000^Vein~^^~Anatomic codes~^^~^^"
+)
+_ARTERY_TERMINOLOGY = (
+    "Segmentation category and type - 3D Slicer General Anatomy list"
+    "~SCT^85756007^Body tissue~SCT^51114001^Artery~^^~Anatomic codes~^^~^^"
+)
+_VEIN_CENTRE = (0.0, 0.0, 0.0)
+_ARTERY_CENTRE = (100.0, 0.0, 0.0)
+_VESSEL_RADIUS = 10.0
+
+# Table structure-colour reader seams (proposed; sharpen at landing).  §B3.
+SEED_STRUCTURE_ID_ACCESSOR = "seedStructureId"
+SEED_STRUCTURE_COLOR_ACCESSOR = "seedStructureColor"
+SET_INPUT_SEGMENTATION_SEAM = "setInputSegmentation"
+
+
+def _two_vessel_segmentation_or_skip(slicer):
+    """A segmentation with a Vein + Artery vessel segment, distinct colours."""
+    import vtk  # local: the table test module does not import vtk at top level
+
+    seg = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLSegmentationNode", "TableTwoVessels")
+    if seg is None:
+        pytest.skip("vtkMRMLSegmentationNode not registered (launched build).")
+    seg.CreateDefaultDisplayNodes()
+
+    def _add(terminology, name, center, colour):
+        source = vtk.vtkSphereSource()
+        source.SetCenter(*center)
+        source.SetRadius(_VESSEL_RADIUS)
+        source.SetThetaResolution(16)
+        source.SetPhiResolution(16)
+        source.Update()
+        modelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", name)
+        modelNode.SetAndObservePolyData(source.GetOutput())
+        slicer.modules.segmentations.logic().ImportModelToSegmentationNode(
+            modelNode, seg)
+        slicer.mrmlScene.RemoveNode(modelNode)
+        segmentation = seg.GetSegmentation()
+        segId = segmentation.GetNthSegmentID(segmentation.GetNumberOfSegments() - 1)
+        segmentation.GetSegment(segId).SetTag("TerminologyEntry", terminology)
+        segmentation.GetSegment(segId).SetColor(*colour)
+        return segId
+
+    veinId = _add(_VEIN_TERMINOLOGY, "VeinModel", _VEIN_CENTRE, (0.1, 0.2, 0.9))
+    arteryId = _add(_ARTERY_TERMINOLOGY, "ArteryModel", _ARTERY_CENTRE, (0.9, 0.1, 0.1))
+    return seg, {"vein": veinId, "artery": arteryId}
+
+
+def _bind_segmentation_or_skip(table, segmentation):
+    """Bind the input segmentation to the table, or skip-pend (ADR-0027)."""
+    if not hasattr(table, SET_INPUT_SEGMENTATION_SEAM):
+        pytest.skip(
+            f"TerritoriesTableWidget has no {SET_INPUT_SEGMENTATION_SEAM} seam "
+            "-- the revised slice-5 seed-row structure-colour binding has not "
+            "landed (ADR-0027)."
+        )
+    getattr(table, SET_INPUT_SEGMENTATION_SEAM)(segmentation)
+
+
+def test_seed_row_is_coloured_by_its_structure(qt_widgets):
+    """Each seed child row carries its STRUCTURE's segment display colour + name.
+
+    Revised slice 5 (§B3): a seed on the vein reads the vein segment's display
+    colour, a seed on the artery reads the artery's — NOT the territory palette.
+    The colour is paired with the structure NAME in the row text (ADR-0010,
+    never colour alone).  Pinned via the ``seedStructureId`` / ``seedStructureColor``
+    reader seams.  Launched (Qt + segmentation); SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
+    qt_widgets.append(table)
+    _require_tree_model(table)
+    for seam in (SEED_STRUCTURE_ID_ACCESSOR, SEED_STRUCTURE_COLOR_ACCESSOR):
+        if not hasattr(table, seam):
+            pytest.skip(
+                f"TerritoriesTableWidget has no {seam} seam -- the revised "
+                "slice-5 seed-row structure colour reader has not landed "
+                "(ADR-0027)."
+            )
+
+    segmentation, ids = _two_vessel_segmentation_or_skip(slicer)
+    _bind_segmentation_or_skip(table, segmentation)
+
+    # One seed on the vein surface, one on the artery surface.
+    vein_seed = (_VEIN_CENTRE[0], _VEIN_CENTRE[1], _VEIN_CENTRE[2] + _VESSEL_RADIUS)
+    artery_seed = (_ARTERY_CENTRE[0], _ARTERY_CENTRE[1], _ARTERY_CENTRE[2] + _VESSEL_RADIUS)
+    carrier.AddAnnotationPoint(TERRITORY_A, *vein_seed)
+    carrier.AddAnnotationPoint(TERRITORY_A, *artery_seed)
+    carrier.Modified()
+
+    assert table.seedStructureId(TERRITORY_A, 0) == ids["vein"], (
+        "the first seed (on the vein surface) must map to the vein segment id "
+        f"({ids['vein']!r}); got {table.seedStructureId(TERRITORY_A, 0)!r} "
+        "(revised ADR-0037 slice 5, §B3)."
+    )
+    assert table.seedStructureId(TERRITORY_A, 1) == ids["artery"], (
+        "the second seed (on the artery surface) must map to the artery segment "
+        f"id ({ids['artery']!r}); got {table.seedStructureId(TERRITORY_A, 1)!r}."
+    )
+
+    vein_colour = table.seedStructureColor(TERRITORY_A, 0)
+    artery_colour = table.seedStructureColor(TERRITORY_A, 1)
+    assert vein_colour is not None and artery_colour is not None, (
+        "each seed row must resolve its structure's display colour (§B3)."
+    )
+    # The two structures were given distinct segment display colours, so the two
+    # seed rows must read DIFFERENT colours -- the swatch is per-structure, not
+    # the (single) territory palette colour.
+    assert tuple(round(c, 3) for c in vein_colour) != tuple(
+        round(c, 3) for c in artery_colour
+    ), (
+        "seeds on DIFFERENT structures must carry DIFFERENT swatch colours -- "
+        "the swatch is the segment display colour, not the territory palette "
+        "(revised ADR-0037 slice 5, §B3)."
+    )
+    # ADR-0010: colour never alone -- the row text names the structure.
+    vein_text = table.seedStatusText(TERRITORY_A, 0) if hasattr(table, "seedStatusText") else ""
+    assert vein_text.strip() != "", (
+        "the seed row must pair its colour swatch with structure TEXT (ADR-0010, "
+        "never colour alone)."
+    )
+
+
+def test_under_seeded_structure_flags_the_territory(qt_widgets):
+    """A territory touching a <2-seed structure shows the WARNING glyph+text.
+
+    Revised slice 5 (§B6): the completeness check is PER STRUCTURE, not a flat
+    seed count.  A territory with 2 seeds on the vein but only 1 on the artery
+    has a structure (the artery) that cannot yield a centerline, so the
+    territory is flagged (glyph + text, ADR-0010); a 2-on-vein + 2-on-artery
+    territory is NOT flagged.  Pinned via the existing
+    ``territoryHasIncompleteGlyph`` reader, extended to the per-structure gate.
+    Launched (Qt + segmentation); SKIPS bare.
+
+    Red->green: FAILS against the flat ``seedCount < 2`` check (a 3-seed
+    territory reads complete regardless of structure split), PASSES once the
+    check groups by structure.
+    """
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
+    qt_widgets.append(table)
+    _require_tree_model(table)
+    for seam in ("territoryStatusText", "territoryHasIncompleteGlyph"):
+        if not hasattr(table, seam):
+            pytest.skip(
+                f"TerritoriesTableWidget has no {seam} status seam (ADR-0027).")
+
+    segmentation, _ids = _two_vessel_segmentation_or_skip(slicer)
+    _bind_segmentation_or_skip(table, segmentation)
+
+    def _vein(k):
+        return (_VEIN_CENTRE[0], _VEIN_CENTRE[1] + k, _VEIN_CENTRE[2] + _VESSEL_RADIUS)
+
+    def _artery(k):
+        return (_ARTERY_CENTRE[0], _ARTERY_CENTRE[1] + k, _ARTERY_CENTRE[2] + _VESSEL_RADIUS)
+
+    # TERRITORY_A: 2 on the vein + 1 on the artery -> artery under-seeded -> flag.
+    carrier.AddAnnotationPoint(TERRITORY_A, *_vein(0.0))
+    carrier.AddAnnotationPoint(TERRITORY_A, *_vein(2.0))
+    carrier.AddAnnotationPoint(TERRITORY_A, *_artery(0.0))
+    # TERRITORY_B: 2 on the vein + 2 on the artery -> no under-seeded structure.
+    carrier.AddAnnotationPoint(TERRITORY_B, *_vein(0.0))
+    carrier.AddAnnotationPoint(TERRITORY_B, *_vein(2.0))
+    carrier.AddAnnotationPoint(TERRITORY_B, *_artery(0.0))
+    carrier.AddAnnotationPoint(TERRITORY_B, *_artery(2.0))
+    carrier.Modified()
+
+    assert table.territoryHasIncompleteGlyph(TERRITORY_A) is True, (
+        "a territory with a <2-seed structure (2 on the vein, 1 on the artery) "
+        "must be FLAGGED -- the under-seeded structure cannot yield a centerline "
+        "(revised ADR-0037 slice 5, §B6).  A flat 3-seed count would wrongly read "
+        "complete."
+    )
+    assert table.territoryStatusText(TERRITORY_A).strip() != "", (
+        "the per-structure warning must carry TEXT (ADR-0010, never colour alone)."
+    )
+    assert table.territoryHasIncompleteGlyph(TERRITORY_B) is False, (
+        "a territory with >=2 seeds on EVERY touched structure (2 vein + 2 "
+        "artery) must NOT be flagged (revised ADR-0037 slice 5, §B6)."
+    )
+
+
+# --------------------------------------------------------------------------- #
 # RETIREMENT — selector gone; highlight wiring survives; no persisted markups
 # --------------------------------------------------------------------------- #
 
