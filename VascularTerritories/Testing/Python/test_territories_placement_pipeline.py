@@ -548,5 +548,77 @@ def test_display_node_routes_arm_active_and_click(monkeypatch):
     )
 
 
+# --------------------------------------------------------------------------- #
+# slice-5 (PR-B) — module-active gate (concern #1) at the pipeline level
+# --------------------------------------------------------------------------- #
+
+
+def test_module_inactive_pipeline_declines_add_on_click(monkeypatch):
+    """#1a: an armed add-on-click places nothing while the module is inactive.
+
+    ADR-0037 slice-5 (PR-B) concern #1: a belt-and-suspenders gate BEYOND the
+    display-node armed flag -- even armed, the placement Pipeline declines an
+    add-on-click while the owning module is not active, so no view lands a seed
+    while VascularTerritories is inactive.  Modelled via the ``SetModuleActive``
+    seam the PR-B implementer adds; skip-pends until it lands (ADR-0027).
+    """
+    slicer = _slicer_or_skip()
+    TerritoryPlacementPipeline = _import_pipeline_or_skip()
+    pipeline = TerritoryPlacementPipeline()
+    carrier = _make_carrier_or_skip(slicer)
+    _wire_pipeline_or_skip(slicer, pipeline, carrier, monkeypatch)
+    if not hasattr(pipeline, "SetModuleActive"):
+        pytest.skip(
+            "TerritoryPlacementPipeline has no SetModuleActive() gate -- the "
+            "ADR-0037 slice-5 (PR-B) module-active gate (concern #1) has not "
+            "landed (ADR-0027)."
+        )
+    if hasattr(pipeline, "Arm"):
+        pipeline.Arm()
+
+    pipeline.SetModuleActive(False)
+    before = carrier.GetNumberOfAnnotationPoints(TERRITORY_A)
+    pipeline.ProcessInteractionEvent(_Event(vtk.vtkCommand.LeftButtonPressEvent))
+    assert carrier.GetNumberOfAnnotationPoints(TERRITORY_A) == before, (
+        "an add-on-click must place NOTHING while the module is inactive "
+        "(ADR-0037 slice-5 concern #1, belt-and-suspenders beyond the armed "
+        "flag)."
+    )
+
+    pipeline.SetModuleActive(True)
+    assert pipeline.ProcessInteractionEvent(_Event(vtk.vtkCommand.LeftButtonPressEvent)) is True
+    assert carrier.GetNumberOfAnnotationPoints(TERRITORY_A) == before + 1, (
+        "with the module active + armed, the add-on-click must land ONE seed."
+    )
+
+
+def test_disarmed_pipeline_click_places_nothing(monkeypatch):
+    """#1b: a dis-armed pipeline click places nothing (arm-gate regression pin).
+
+    ADR-0037 §Decision 3 (re-pinned under slice 5): a click while the pipeline
+    is dis-armed adds no seed.  A regression guard so the PR-B constraint /
+    highlight changes do not accidentally relax the arm gate.
+    """
+    slicer = _slicer_or_skip()
+    TerritoryPlacementPipeline = _import_pipeline_or_skip()
+    pipeline = TerritoryPlacementPipeline()
+    carrier = _make_carrier_or_skip(slicer)
+    _wire_pipeline_or_skip(slicer, pipeline, carrier, monkeypatch)
+    if not hasattr(pipeline, "Disarm"):
+        pytest.skip(
+            "TerritoryPlacementPipeline has no Disarm() seam -- the ADR-0037 "
+            "arm gate has not landed (ADR-0027)."
+        )
+    if hasattr(pipeline, "SetModuleActive"):
+        pipeline.SetModuleActive(True)  # isolate the arm gate from the module gate
+    pipeline.Disarm()
+
+    before = carrier.GetNumberOfAnnotationPoints(TERRITORY_A)
+    pipeline.ProcessInteractionEvent(_Event(vtk.vtkCommand.LeftButtonPressEvent))
+    assert carrier.GetNumberOfAnnotationPoints(TERRITORY_A) == before, (
+        "a dis-armed add-on-click must place nothing (ADR-0037 §Decision 3)."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
