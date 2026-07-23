@@ -490,5 +490,37 @@ def test_pick_surface_is_vessels_only_excluding_parenchyma():
     )
 
 
+def test_pick_surface_excludes_a_hidden_vessel():
+    """T1c: hiding a vessel drops it from the pick surface (collision).
+
+    ADR-0037 slice 5: "collision detection is not done for objects not shown."
+    ``vascular_surface_polydata`` appends only VISIBLE vascular segments, so
+    hiding the vein (e.g. via the panel's structures table) removes it from the
+    pick + connectivity + highlight surface -- a click can then only snap to the
+    still-visible artery even where the two overlap.  Launched-only.
+    """
+    slicer = _slicer_or_skip()
+    try:
+        from VascularTerritoriesLib.VesselHighlightWiring import (
+            vascular_surface_polydata,
+        )
+    except Exception as exc:  # pragma: no cover - import-environment dependent
+        pytest.skip(f"VesselHighlightWiring vessels-only seam absent ({exc!r}).")
+    segmentation, ids = _multi_segment_segmentation(slicer)
+    display = segmentation.GetDisplayNode()
+    if display is None or not hasattr(display, "SetSegmentVisibility"):
+        pytest.skip("segmentation display node lacks SetSegmentVisibility.")
+
+    both_visible = vascular_surface_polydata(segmentation)
+    display.SetSegmentVisibility(ids["vein"], False)
+    artery_only = vascular_surface_polydata(segmentation)
+
+    assert both_visible is not None and artery_only is not None
+    assert artery_only.GetNumberOfPoints() < both_visible.GetNumberOfPoints(), (
+        "hiding the vein must shrink the pick surface -- a hidden vessel is not "
+        "pickable (ADR-0037 slice 5)."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
