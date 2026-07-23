@@ -60,6 +60,12 @@ HALO_HOVER_COLOR = (1.0, 0.9, 0.2)
 HALO_GRAB_COLOR = (0.3, 1.0, 0.4)
 HALO_HOVER_SCALE = 1.6
 
+#: Active-tree glow colour -- a cyan halo around the armed vessel tree,
+#: distinct from the yellow seed-hover / green seed-grab cues.  Rendered
+#: through the same vtkOutlineGlowPass overlay as the seed halo, so the whole
+#: connected tree reads as a glow, not a flat surface tint (ADR-0037 slice 5).
+ACTIVE_TREE_GLOW_COLOR = (0.2, 0.8, 1.0)
+
 #: Interaction state lives on the shared highlight DISPLAY NODE, not on the
 #: Pipeline instance: LayerDM owns the Pipeline instance lifecycle (it creates
 #: its own per view), so the widget/table can only reach the Pipeline the
@@ -203,17 +209,19 @@ class TerritoryPlacementPipeline(_PipelineBase):
         # -- active-tree HIGHLIGHT (ADR-0037 slice 5, C5): a THIRD pipeline-
         # owned actor (no new displayable manager, ADR-0013 §1) that paints the
         # active territory's connected vessel tree while armed -- the seed[0]
-        # component recovered over the pick core's surface.  Styling is a plain
-        # semi-transparent tint (deferred); the pinned invariant is the INPUT
-        # identity == ``activeTreePolyData()``.  Cached per (surface MTime,
-        # seed) so the connectivity filter does not re-run per mouse event.
+        # component recovered over the pick core's surface.  Rendered through
+        # the shared vtkOutlineGlowPass overlay (see ``_attach_halo_renderer``)
+        # so the whole tree reads as a GLOW HALO, not a flat surface tint; the
+        # pinned invariant is the INPUT identity == ``activeTreePolyData()``.
+        # Cached per (surface MTime, seed) so connectivity does not re-run per
+        # mouse event.
         self._active_tree_polydata: Any | None = None
         self._active_tree_cache_key: tuple | None = None
         self._highlight_tree_mapper = vtk.vtkPolyDataMapper()
         self._highlight_tree_actor = vtk.vtkActor()
         self._highlight_tree_actor.SetMapper(self._highlight_tree_mapper)
-        self._highlight_tree_actor.GetProperty().SetColor(*HALO_HOVER_COLOR)
-        self._highlight_tree_actor.GetProperty().SetOpacity(0.3)
+        self._highlight_tree_actor.GetProperty().SetColor(*ACTIVE_TREE_GLOW_COLOR)
+        self._highlight_tree_actor.GetProperty().SetLighting(False)
         self._highlight_tree_actor.SetVisibility(False)
 
     # ------------------------------------------------------------------ #
@@ -358,7 +366,8 @@ class TerritoryPlacementPipeline(_PipelineBase):
             if renderer is not None:
                 renderer.AddActor(self._seed_actor)
                 renderer.AddActor(self._marker_actor)
-                renderer.AddActor(self._highlight_tree_actor)
+            # The active-tree highlight renders in the glow overlay (halo), not
+            # the view renderer -- added in _attach_halo_renderer.
             self._attach_halo_renderer(renderer)
             # Renderer churn cleared the display handle; re-derive it from the
             # base's retained display node (the ControlPolygonPipeline
@@ -378,7 +387,6 @@ class TerritoryPlacementPipeline(_PipelineBase):
             if renderer is not None:
                 renderer.RemoveActor(self._seed_actor)
                 renderer.RemoveActor(self._marker_actor)
-                renderer.RemoveActor(self._highlight_tree_actor)
             self._detach_halo_renderer()
             self._renderer = None
             self.cleanup()
@@ -406,6 +414,10 @@ class TerritoryPlacementPipeline(_PipelineBase):
             overlay.InteractiveOff()
             overlay.SetActiveCamera(renderer.GetActiveCamera())
             overlay.AddActor(self._halo_actor)
+            # Route the active-tree highlight through the glow pass too, so the
+            # armed vessel tree reads as a cyan HALO around the vessel rather
+            # than a flat surface tint (ADR-0037 slice 5).
+            overlay.AddActor(self._highlight_tree_actor)
             glow = getattr(vtk, "vtkOutlineGlowPass", None)
             steps = getattr(vtk, "vtkRenderStepsPass", None)
             if glow is not None and steps is not None:
