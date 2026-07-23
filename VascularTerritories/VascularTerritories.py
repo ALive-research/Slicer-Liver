@@ -428,6 +428,10 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     displayNode = self._ensureHighlightDisplayNode()
     self.updateHighlightPickSurface()
     self._territoriesTable = TerritoriesTableWidget(carrier=carrier, displayNode=displayNode)
+    # Bind the current input segmentation so seed rows read their structure's
+    # colour + name from the start (revised ADR-0037 slice 5, §B3/§B7).
+    if hasattr(self._territoriesTable, "setInputSegmentation"):
+      self._territoriesTable.setInputSegmentation(self.ui.inputSurfaceSelector.currentNode())
     self.layout.addWidget(self._territoriesTable)
 
   def _ensureAnnotationCarrier(self):
@@ -466,6 +470,12 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     structures = getattr(self, "_structuresTable", None)
     if structures is not None:
       structures.setSegmentationNode(segmentationNode)
+    # Bind the input segmentation to the annotation table too, so each seed row
+    # can read its structure's per-segment display colour + name (revised
+    # ADR-0037 slice 5, §B3/§B7).
+    territoriesTable = getattr(self, "_territoriesTable", None)
+    if territoriesTable is not None and hasattr(territoriesTable, "setInputSegmentation"):
+      territoriesTable.setInputSegmentation(segmentationNode)
     if segmentationNode is None:
       logging.warning('No segmentationNode')
       return
@@ -813,73 +823,112 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
     if segmentId:
       territoryIds = [tid for tid in territoryIds if tid == segmentId]
 
-    # ADR-0037 slice 5 supersedes the merge-all input: resolve the vessels-only
-    # surface at FULL resolution (so connectivity is not fragmented by
-    # decimation), then per territory recover the single connected component
-    # its first seed (index-0) lands on and decimate THAT component.  Portal
-    # and hepatic systems are disjoint; a per-territory single-component
-    # surface keeps a medial path from tunnelling between them.
-    vascularSurface = self._vascularSurface(surfaceNode)
+    # Revised ADR-0037 slice 5 (multi-system): a territory may own seeds across
+    # MULTIPLE disjoint structures (portal + hepatic).  Resolve the per-segment
+    # closed surfaces once (each vessel segment is one coherent structure), map
+    # each of a territory's seeds to the structure it is nearest, GROUP by
+    # structure, and run VMTK ONCE per structure with >=2 seeds.  Portal and
+    # hepatic systems are disjoint; the per-structure surface (narrowed to the
+    # seed's connected component) keeps a medial path from tunnelling between
+    # them.
+    structures = self._perSegmentClosedSurfaces(surfaceNode)
 
     extractor = self.getCenterlineLogic()
     for territoryId in territoryIds:
       count = carrier.GetNumberOfAnnotationPoints(territoryId)
-      # A centerline needs at least two endpoints (one inlet + one target);
-      # a territory carrying fewer points is INCOMPLETE (the same threshold
-      # the table flags) -- skip it so one under-seeded territory does not
-      # abort extraction for the rest.  Runs BEFORE component recovery so an
-      # under-seeded territory never triggers connectivity.
-      if count < 2:
+      if count == 0:
         continue
       points = []
       for i in range(count):
         p = carrier.GetNthAnnotationPoint(territoryId, i)
         points.append((p[0], p[1], p[2]))
-      surfacePolyData = self._territorySurface(vascularSurface, points[0])
-      self._extractOneTerritory(carrier, extractor, surfacePolyData, territoryId, points)
+      # Clear this territory's prior centerline(s) ONCE, before the structure
+      # loop, then APPEND one centerline per >=2-seed structure -- so a
+      # territory spanning two structures ends with two refs and re-extraction
+      # replaces rather than accrues (idempotency; §B4).
+      self._clearTerritoryCenterlines(carrier, territoryId)
+      for structureSurface, structurePoints in self._groupSeedsByStructure(points, structures):
+        # A centerline needs at least two endpoints (one inlet + one target);
+        # a structure carrying fewer seeds is under-seeded (the same threshold
+        # the table flags) and is SKIPPED (the per-structure >=2 gate, §B4).
+        if len(structurePoints) < 2:
+          continue
+        surfacePolyData = self._territorySurface(structureSurface, structurePoints[0])
+        self._extractOneTerritory(carrier, extractor, surfacePolyData, territoryId, structurePoints)
 
-  def _vascularSurface(self, surfaceNode):
-    """The vessels-only input surface polydata (full-res), or ``None``.
+  def _perSegmentClosedSurfaces(self, surfaceNode):
+    """The vessel structures as an ordered ``[(segmentId, surface), ...]`` list.
 
-    For a segmentation the vessels-only merge is resolved by the C++ resolver
-    (``GetVascularSurfacePolyData`` — vascular-SCT segments only, ADR-0037
-    slice 5); a model node passes its polydata straight through.  This is the
-    surface connectivity is run over per territory; the pick/highlight path
-    keeps snapping to all vessels via ``closed_surface_polydata``.
+    Mirrors the C++ ``GetVascularSurfacePolyData`` resolution but keeps the
+    per-segment SPLIT (each vascular-SCT segment's closed-surface rep) instead
+    of merging them: the split is the structure identity the seed->structure
+    mapping keys on (revised ADR-0037 slice 5, §B1).  A model node has no
+    segment split, so it presents as a single unnamed structure carrying its
+    own polydata.  Returns ``[]`` when nothing resolves.
     """
     if surfaceNode is None:
-      return None
+      return []
     try:
       if surfaceNode.IsA("vtkMRMLModelNode"):
         polyData = surfaceNode.GetPolyData()
-      elif surfaceNode.IsA("vtkMRMLSegmentationNode"):
-        polyData = vtk.vtkPolyData()
-        self.scl.GetVascularSurfacePolyData(surfaceNode, polyData)
-      else:
-        return None
-      if not polyData or polyData.GetNumberOfPoints() == 0:
-        return None
-      return polyData
+        if not polyData or polyData.GetNumberOfPoints() == 0:
+          return []
+        return [("", polyData)]
+      if not surfaceNode.IsA("vtkMRMLSegmentationNode"):
+        return []
+      surfaceNode.CreateClosedSurfaceRepresentation()
+      structures = []
+      for segId in self.scl.GetVascularSegmentIds(surfaceNode):
+        mesh = vtk.vtkPolyData()
+        surfaceNode.GetClosedSurfaceRepresentation(segId, mesh)
+        if mesh.GetNumberOfPoints() > 0:
+          structures.append((segId, mesh))
+      return structures
     except Exception:  # noqa: BLE001 - degrade gracefully when resolution fails
       logging.warning(
-        "VascularTerritories: vessel-surface resolution failed -- the "
-        "centerline extraction is skipped (no surface to run over).")
-      return None
+        "VascularTerritories: per-segment vessel-surface resolution failed -- "
+        "the centerline extraction is skipped (no structures to run over).")
+      return []
 
-  def _territorySurface(self, vascularSurface, seed):
-    """The decimated single connected component of ``vascularSurface`` at ``seed``.
+  def _groupSeedsByStructure(self, points, structures):
+    """Group a territory's ordered seeds by their nearest structure.
 
-    Recovers the connected component the territory's first seed (index-0) lands
-    on (ADR-0037 slice 5, reuse-index-0 persistence) on the FULL-res vessel
-    surface, then triangulates + decimates THAT component -- preserving the
-    triangulate-before-decimate ordering ``preprocessAndDecimate`` enforces.
-    ``None`` when there is no vessel surface (honest degradation).
+    Maps each seed to its structure via ``SeedStructureMapping.nearest_structure``
+    over the per-segment closed surfaces, and returns ``(structureSurface,
+    points)`` pairs in first-seen structure order (revised ADR-0037 slice 5,
+    §B4) -- the surface is carried through so the caller need not re-map the
+    first seed.  With no resolvable structures the whole territory is treated as
+    one group (single-model input) so a model-node surface still extracts.
     """
-    if vascularSurface is None or vascularSurface.GetNumberOfPoints() == 0:
+    if not structures:
+      return [(None, points)]
+    from VascularTerritoriesLib.SeedStructureMapping import nearest_structure
+    surfaces = dict(structures)
+    grouped = {}
+    order = []
+    for point in points:
+      key = nearest_structure(structures, point)
+      if key not in grouped:
+        grouped[key] = []
+        order.append(key)
+      grouped[key].append(point)
+    return [(surfaces.get(key), grouped[key]) for key in order]
+
+  def _territorySurface(self, structureSurface, seed):
+    """The decimated single connected component of the structure's surface at ``seed``.
+
+    Narrows ``structureSurface`` to the connected component the seed lands on --
+    so a segment that accidentally carries two disjoint tubes still feeds VMTK
+    one coherent tree (revised ADR-0037 slice 5, §A3/Q2) -- then triangulates +
+    decimates THAT component, preserving the triangulate-before-decimate
+    ordering ``preprocessAndDecimate`` enforces.  ``None`` when there is no
+    structure surface (honest degradation).
+    """
+    if structureSurface is None or structureSurface.GetNumberOfPoints() == 0:
       return None
     try:
       from VascularTerritoriesLib.VesselConnectivity import connected_component_at
-      component = connected_component_at(vascularSurface, seed)
+      component = connected_component_at(structureSurface, seed)
       if not component or component.GetNumberOfPoints() == 0:
         return None
       return self.preprocessAndDecimate(component)
@@ -894,8 +943,8 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
 
     Kept as the whole-surface decimation seam pinned by the surface-resolution
     invariant (``test_territories_surface_resolution`` i1); the per-territory
-    extraction path resolves its own single-component surface via
-    ``_vascularSurface`` + ``_territorySurface`` (ADR-0037 slice 5).
+    extraction path resolves its own per-structure single-component surface via
+    ``_perSegmentClosedSurfaces`` + ``_territorySurface`` (ADR-0037 slice 5).
     """
     if surfaceNode is None:
       return None
@@ -972,22 +1021,15 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
     watershed scan resolves it.  A ``None`` result (the extractor stubbed to
     a no-op) wires nothing -- the transient-node lifecycle is unaffected.
 
-    Re-extraction is IDEMPOTENT (ADR-0037 §Decision 4 -- the territory map is
-    one centerline per territory): the territory's PRIOR centerline state is
-    cleared BEFORE the new output is wired, so any number of re-extractions
-    leaves exactly one ``CenterlineRefs`` entry, one ``TerritoryCenterline``
-    model, and a stable ``Groupings`` count for that territory.  The prior
-    model is removed from the scene, not orphaned.
+    APPEND-only: the territory's PRIOR centerline state is cleared ONCE by the
+    ``extractCenterlines`` caller before the per-structure loop, so this method
+    only appends.  A territory spanning two structures therefore accrues one
+    ref per >=2-seed structure, and re-extraction (which re-clears first)
+    replaces rather than accumulates (idempotency; §B4).
     """
     centerlinePolyData = self._centerlinePolyDataFromResult(result)
     if centerlinePolyData is None:
       return
-    # Clear this territory's prior centerline(s) before wiring the new one so
-    # re-extraction REPLACES rather than APPENDS (no duplicate refs, no orphan
-    # models, stable Groupings count).  The carrier's grouping map is keyed on
-    # the centerline node ID and exposes no per-key removal, so the map is
-    # rebuilt from the surviving references after the prior model is dropped.
-    self._clearTerritoryCenterlines(carrier, territoryId)
     modelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "TerritoryCenterline")
     modelNode.SetAndObserveMesh(centerlinePolyData)
     # ADR-0037 §Decision 4: tag the centerline with the DERIVED labelmap int
@@ -1190,9 +1232,10 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
         # (VesselHighlightWiring.closed_surface_polydata): every segment's
         # closed surface appended into one mesh, so placement-snap sees the
         # whole vessel surface.  The centerline EXTRACTION path no longer uses
-        # this merge -- it narrows to the per-territory single connected
-        # component via _vascularSurface + _territorySurface (ADR-0037 slice
-        # 5).  ``None`` when the segmentation carries no segment geometry.
+        # this merge -- it groups a territory's seeds by structure and narrows
+        # each per-structure surface to the seed's connected component via
+        # _perSegmentClosedSurfaces + _territorySurface (ADR-0037 slice 5).
+        # ``None`` when the segmentation carries no segment geometry.
         from VascularTerritoriesLib.VesselHighlightWiring import closed_surface_polydata
         return closed_surface_polydata(surfaceNode)
     else:
