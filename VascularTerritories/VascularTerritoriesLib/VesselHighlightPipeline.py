@@ -42,10 +42,10 @@ from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
 
 try:  # pragma: no cover - exercised once per import path
     from .VesselSurfacePick import VesselSurfacePick
-    from .VesselHighlightWiring import closed_surface_polydata
+    from .VesselHighlightWiring import vascular_surface_polydata
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from VesselSurfacePick import VesselSurfacePick  # type: ignore[no-redef]
-    from VesselHighlightWiring import closed_surface_polydata  # type: ignore[no-redef]
+    from VesselHighlightWiring import vascular_surface_polydata  # type: ignore[no-redef]
 
 _REGISTERED = False
 
@@ -286,8 +286,9 @@ class VesselHighlightPipeline(_PipelineBase):
             return None
         # Shared surface-resolution seam (VesselHighlightWiring): the hover
         # Pipeline and the snap-on-place path resolve the pick target the
-        # same way, so neither duplicates the representation-building logic.
-        polydata = closed_surface_polydata(segmentation)
+        # same way (vessels-only, so hover never lights up the parenchyma or a
+        # tumour), so neither duplicates the representation-building logic.
+        polydata = vascular_surface_polydata(segmentation)
         if polydata is None:
             return None
         self._pick = VesselSurfacePick(polydata)

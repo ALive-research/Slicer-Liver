@@ -47,12 +47,12 @@ from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
 
 try:  # pragma: no cover - exercised once per import path
     from .VesselSurfacePick import VesselSurfacePick
-    from .VesselHighlightWiring import closed_surface_polydata
+    from .VesselHighlightWiring import vascular_surface_polydata
     from . import TerritoryInteractionState as _state
     from . import TerritorySliceProjection as _proj
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from VesselSurfacePick import VesselSurfacePick  # type: ignore[no-redef]
-    from VesselHighlightWiring import closed_surface_polydata  # type: ignore[no-redef]
+    from VesselHighlightWiring import vascular_surface_polydata  # type: ignore[no-redef]
     import TerritoryInteractionState as _state  # type: ignore[no-redef]
     import TerritorySliceProjection as _proj  # type: ignore[no-redef]
 
@@ -214,7 +214,9 @@ class TerritorySlicePipeline(_PipelineBase):
         segmentation = display.GetPickSurfaceNode()
         if segmentation is None:
             return None
-        polydata = closed_surface_polydata(segmentation)
+        # Vessels-only: the cursor snaps to a vessel, never the liver
+        # parenchyma or a tumour (ADR-0037 slice 5).
+        polydata = vascular_surface_polydata(segmentation)
         if polydata is None:
             return None
         self._pick = VesselSurfacePick(polydata)

@@ -456,5 +456,39 @@ def test_vascular_resolver_keeps_vessels_excludes_liver_and_tumour():
     )
 
 
+def test_pick_surface_is_vessels_only_excluding_parenchyma():
+    """T1b: the pick surface (``vascular_surface_polydata``) drops the parenchyma.
+
+    ADR-0037 slice 5: the click-snap + hover surface is vessels-only, so the
+    cursor snaps to a vessel and never the liver parenchyma or a tumour.  For a
+    tagged multi-segment segmentation the vessels-only mesh is strictly smaller
+    than the whole-segmentation mesh (the parenchyma + tumour geometry is
+    absent).  Launched-only (segmentation infra); SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    try:
+        from VascularTerritoriesLib.VesselHighlightWiring import (
+            closed_surface_polydata,
+            vascular_surface_polydata,
+        )
+    except Exception as exc:  # pragma: no cover - import-environment dependent
+        pytest.skip(f"VesselHighlightWiring vessels-only seam absent ({exc!r}).")
+    segmentation, _ids = _multi_segment_segmentation(slicer)
+
+    whole = closed_surface_polydata(segmentation)
+    vessels = vascular_surface_polydata(segmentation)
+
+    assert whole is not None and whole.GetNumberOfPoints() > 0
+    assert vessels is not None and vessels.GetNumberOfPoints() > 0, (
+        "the vessels-only pick surface must be non-empty for a segmentation "
+        "carrying vessel segments (ADR-0037 slice 5)."
+    )
+    assert vessels.GetNumberOfPoints() < whole.GetNumberOfPoints(), (
+        "the vessels-only pick surface must be strictly smaller than the whole "
+        "segmentation -- the parenchyma + tumour geometry must be absent so the "
+        "cursor never snaps to the liver blob (ADR-0037 slice 5)."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
