@@ -230,6 +230,12 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # segmentation.
     self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.updateHighlightPickSurface)
 
+    # Input-structure show/hide (ADR-0037 slice 5): a stock segments table so
+    # the surgeon can hide the parenchyma / tumour / other vessel system and
+    # focus on the vessel tree being annotated.  Composed above the annotation
+    # table (pick what's visible, then annotate).
+    self._setupStructuresTable()
+
     # ADR-0037 Stage-2 table (§Decision 3): the annotation table is composed
     # into the panel here, over the annotation carrier + the placement
     # Pipeline (Python-widget composition, ADR-0004).
@@ -359,6 +365,41 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     segmentationId = segmentation.GetID() if segmentation is not None else None
     node.SetAndObservePickSurfaceNodeID(segmentationId)
 
+  def _setupStructuresTable(self):
+    """Compose a stock ``qMRMLSegmentsTableView`` for input-structure show/hide.
+
+    Visibility-focused: the surgeon hides the parenchyma / tumour / the other
+    vessel system to isolate the vessel tree being annotated.  The stock view
+    (the Segment Editor's own visibility widget) drives the input
+    segmentation's per-segment visibility (3D + 2D); its segmentation node
+    tracks the input selector via ``segmentationNodeSelected``.  A launch
+    without the widget library degrades gracefully (panel loads without it).
+    ADR-0004 (Python-composed panel).
+    """
+    self._structuresTable = None
+    try:
+      table = slicer.qMRMLSegmentsTableView()
+    except Exception as exc:  # noqa: BLE001 - widget lib unavailable in this launch
+      logging.warning(
+        "VascularTerritories: structures table unavailable (%s) -- input-"
+        "structure show/hide is disabled this session.", exc)
+      return
+    table.setMRMLScene(slicer.mrmlScene)
+    # Keep the name + eye toggle; drop the editing columns so it reads as a
+    # focus control, not a segment editor.
+    for setter, value in (
+        ("setVisibilityColumnVisible", True),
+        ("setColorColumnVisible", False),
+        ("setOpacityColumnVisible", False),
+        ("setStatusColumnVisible", False),
+    ):
+      fn = getattr(table, setter, None)
+      if fn is not None:
+        fn(value)
+    self._structuresTable = table
+    self.layout.addWidget(qt.QLabel("Anatomical structures (show / hide):"))
+    self.layout.addWidget(table)
+
   def _setupTerritoriesTable(self):
     """Compose the ADR-0037 Stage-2 annotation table into the panel.
 
@@ -422,6 +463,9 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     self.ui.SegmentationShow3DButton.setEnabled(True)
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
     self.ui.SegmentationShow3DButton.setSegmentationNode(segmentationNode)
+    structures = getattr(self, "_structuresTable", None)
+    if structures is not None:
+      structures.setSegmentationNode(segmentationNode)
     if segmentationNode is None:
       logging.warning('No segmentationNode')
       return
