@@ -296,17 +296,25 @@ in the row strip whose `editingFinished` routes through `setTerritoryLabel` to
 the carrier's display slot — the composite-row replacement for the retired
 in-item editable text (and its tree `itemChanged` label handler).
 
-## Amendment — connected-tree-constrained centerline seeding (slice 5)
+## Amendment — multi-system per-structure centerline seeding (slice 5)
 
 The compute-path amendment resolved the centerline **input surface** by
 merging every segment of the input segmentation (the fix that first made a
 real surface reach VMTK).  Real multi-structure liver data (liver parenchyma +
 portal + hepatic veins + tumour, one node) shows merge-all is wrong: VMTK
 extracts one centerline tree from a **connected** surface, but the venous
-systems are disjoint components (and a single segment may carry contributions
-from more than one system).  A territory's seed set must therefore lie on a
-single connected vessel tree — portal and hepatic never connect — or the
-extraction is meaningless (a medial path tunnelling through fused structures).
+systems are disjoint components.  A medial path tunnelling through fused
+structures is meaningless.
+
+An earlier revision of this amendment LOCKED each territory to one connected
+vessel tree: the first seed picked the system and later seeds snapped back onto
+it, with the component glowing.  That is clinically wrong.  A vascular territory
+may legitimately be defined by seeds in **multiple disjoint structures** — e.g.
+points on a hepatic vein plus points on the portal vein.  Portal and hepatic
+are disjoint components whose centerlines are derived **independently** and BOTH
+feed the one territory's map region.  The single-tree lock forbade exactly the
+case the surgeon needs, so it is removed in favour of the multi-system model
+below.
 
 ### Vessel surface by vascular SCT type (extends the compute amendment)
 
@@ -321,40 +329,60 @@ Real data tags vessels under category `SCT^85756007` (Tissue) with the generic
 Vein/Artery types rather than portal/hepatic-specific codes, so the match is
 on the broad vascular concepts.
 
-### First seed defines the active vessel tree
+### A territory owns seeds across possibly-multiple structures
 
-When a territory is armed and its **first** seed is placed, a connectivity
-filter seeded at that landing point selects the connected component of the
-vascular surface it lands on: that component is the territory's **active
-vessel tree**.  It is persisted per territory (a representative point / region
-identity on the carrier) so it survives the carrier-`Modified` rebuild and the
-later extraction runs over the same component.  `enter()` still auto-arms
-nothing; the active tree is established by the first seed, not by a
-pre-placement selection.
+A territory owns a set of seeds; each seed belongs to the **structure** — the
+input segment whose closed surface it is nearest.  A seed's structure is a
+DERIVED property (nearest closed surface), recomputed on demand from the carrier
+point + the current per-segment surfaces; no carrier slot and no node family are
+added ([ADR-0014](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0014-livermarkups-dissolution.md)).
+A point equidistant to two structures resolves to the **first** structure in
+segment-id order (deterministic).  There is no single-tree lock and no glow
+halo; a later seed is placed where the pick snaps it, with no snap-back.
 
-### Seeds constrained to the active tree
+### The visibility-gated pick is the only placement constraint
 
-Once a territory has an active tree, subsequent seeds are constrained to it: a
-click on a different connected component snaps to the nearest point on the
-active tree (or is rejected), so a territory's seeds are always one connected
-tree.  The per-extraction VMTK surface is that single component — **this
-supersedes the compute amendment's merge-all input surface.**
+The pick surface stays vessels-only and **visibility-gated**: hiding a system
+removes it from the pick, so hiding a system is how the surgeon avoids stray
+seeds on it.  This is the only placement constraint — a territory MAY straddle
+disjoint systems.  `enter()` still auto-arms nothing.
 
-### Active tree highlighted while placing
+### Extraction groups a territory's seeds by structure
 
-The active vessel tree is highlighted in the 3D and 2D views during placement
-(extending the vessel-adhering highlight of
-[ADR-0036](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0036-vessel-highlight-separate-instance.md)),
-so the surgeon sees which system a territory is bound to.  The exact visual
-treatment is deferred to implementation.
+Extraction MAPS each of a territory's seeds to its structure, GROUPS the seeds
+by structure, and runs VMTK **once per structure with ≥2 seeds**, over that
+structure's closed surface (narrowed to the seed's connected component so a
+segment that accidentally carries two disjoint tubes still feeds VMTK one
+coherent tree).  A structure with <2 seeds is **skipped** and flags the
+territory (glyph + text,
+[ADR-0010](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0010-accessibility-and-i18n.md)),
+because it cannot yield a centerline.  A territory spanning two structures
+therefore yields **N centerlines** — one per ≥2-seed structure — all grouped
+under the territory id, all marked with the territory's int, all feeding the one
+map region.  Each per-structure surface **supersedes the compute amendment's
+merge-all input surface.**
+
+### Seed rows coloured by structure
+
+In the annotation table each seed's child row carries a colour swatch tinted
+with its **structure's** segment display colour (the colour the surgeon sees in
+the 3D vessel render, not the territory palette), paired with the structure name
+(ADR-0010, colour never alone).
 
 ### Conformance (slice 5)
 
 - [test] The vessel-surface resolver keeps only vascular-SCT-type segments and
   excludes the liver-SCT and tumour segments.
-- [test] Two seeds on disjoint components resolve to different active trees;
-  the per-extraction surface is a single connected component, not the merge.
-- [test] A second seed on a different component snaps to / is rejected against
-  the territory's active tree (never straddles two trees).
-- [review] The active-tree identity persists across a carrier-`Modified`
-  rebuild; extraction runs over the persisted component.
+- [test] The seed→structure mapping is deterministic: a seed maps to the
+  nearest structure's surface; an equidistant boundary point tiebreaks to the
+  first structure in order.
+- [test] The ≥2-per-structure gate: a structure with <2 seeds is skipped; a
+  territory touching an under-seeded structure is flagged (glyph + text).
+- [test] A mixed-system territory (≥2 seeds on two structures) yields two
+  centerlines, both grouped under the territory id; the per-extraction surface
+  is a single connected component, not the merge.
+- [test] No straddle-snap: a later seed placed over a different visible
+  structure stays where it lands (never re-snapped onto an earlier structure).
+- [review] Re-extraction is idempotent: a territory's prior centerlines are
+  cleared once before its structure loop, so re-running replaces rather than
+  accrues.
