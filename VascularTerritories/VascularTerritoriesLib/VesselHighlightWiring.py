@@ -22,13 +22,30 @@ from typing import Any
 import vtk
 
 
-def closed_surface_polydata(segmentation: Any):
-    """The segmentation's whole closed-surface mesh as one ``vtkPolyData``.
+# Vascular segment SCT *type* codes -- mirror ``vtkSlicerVascularTerritoriesLogic``
+# ``VascularTypeTokens`` so the Python pick surface and the C++ extraction surface
+# agree on what a "vessel" is: Vein / Artery, the broad concepts the real data
+# uses (category Tissue) rather than portal/hepatic-specific codes (ADR-0011).
+VASCULAR_TYPE_TOKENS = ("SCT^29092000", "SCT^51114001")
 
-    Creates the closed-surface representation if absent and appends every
-    segment so the pick/snap sees the whole vessel tree.  Returns ``None``
-    on any failure or an empty segmentation (the caller treats ``None`` as
-    "no surface").
+
+def _segment_is_vascular(segment: Any) -> bool:
+    """True when the segment's ``TerminologyEntry`` type is a vascular concept."""
+    if segment is None:
+        return False
+    ref = vtk.reference("")
+    if not segment.GetTag("TerminologyEntry", ref):
+        return False
+    term = str(ref)
+    return any(token in term for token in VASCULAR_TYPE_TOKENS)
+
+
+def _append_closed_surfaces(segmentation: Any, predicate):
+    """Append the closed surfaces of the segments passing ``predicate``.
+
+    ``predicate=None`` appends every segment.  Returns ``None`` on any failure
+    or when no segment contributes geometry (the caller treats ``None`` as "no
+    surface").
     """
     if segmentation is None:
         return None
@@ -39,8 +56,11 @@ def closed_surface_polydata(segmentation: Any):
         seg.GetSegmentIDs(ids)
         append = vtk.vtkAppendPolyData()
         for i in range(ids.GetNumberOfValues()):
+            segment_id = ids.GetValue(i)
+            if predicate is not None and not predicate(seg.GetSegment(segment_id)):
+                continue
             mesh = vtk.vtkPolyData()
-            segmentation.GetClosedSurfaceRepresentation(ids.GetValue(i), mesh)
+            segmentation.GetClosedSurfaceRepresentation(segment_id, mesh)
             if mesh.GetNumberOfPoints() > 0:
                 append.AddInputData(mesh)
         if append.GetNumberOfInputConnections(0) == 0:
@@ -49,3 +69,25 @@ def closed_surface_polydata(segmentation: Any):
         return append.GetOutput()
     except Exception:  # pragma: no cover - defensive (unbuilt reps, C++ boundary)
         return None
+
+
+def closed_surface_polydata(segmentation: Any):
+    """The segmentation's whole closed-surface mesh as one ``vtkPolyData``.
+
+    Appends EVERY segment.  Retained for callers that legitimately need the
+    whole surface; the pick/snap path uses :func:`vascular_surface_polydata`
+    so the cursor never snaps to the liver parenchyma or a tumour (ADR-0037).
+    """
+    return _append_closed_surfaces(segmentation, None)
+
+
+def vascular_surface_polydata(segmentation: Any):
+    """The vessels-only closed-surface mesh (vascular-SCT-typed segments).
+
+    The pick/snap + hover-highlight surface: appends only segments whose
+    ``TerminologyEntry`` type is vascular (:data:`VASCULAR_TYPE_TOKENS`), so the
+    parenchyma (liver ``SCT^10200004``) and tumours are excluded and a click
+    snaps to a vessel, not the liver blob.  Same vessel set the C++ extraction
+    resolver uses (ADR-0037 slice 5).  ``None`` when no vessel contributes.
+    """
+    return _append_closed_surfaces(segmentation, _segment_is_vascular)
