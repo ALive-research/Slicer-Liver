@@ -56,8 +56,16 @@ import vtk
 
 try:  # pragma: no cover - exercised once per import path
     from . import TerritoryInteractionState as _state
+    from .SeedStructureMapping import (
+        nearest_structure as _nearest_structure,
+        territory_structure_seed_counts as _structure_seed_counts,
+    )
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     import TerritoryInteractionState as _state  # type: ignore[no-redef]
+    from SeedStructureMapping import (  # type: ignore[no-redef]
+        nearest_structure as _nearest_structure,
+        territory_structure_seed_counts as _structure_seed_counts,
+    )
 
 #: A small distinct palette so minted territories read apart in both the
 #: swatch and the 3D seed glyphs (RGB in 0..1).  Cycled by mint order.
@@ -117,6 +125,14 @@ class TerritoriesTableWidget(qt.QWidget):
 
         self._carrier = carrier
         self._displayNode = displayNode
+        # The input segmentation whose per-segment closed surfaces + display
+        # colours the seed rows read (bound by ``setInputSegmentation``); the
+        # per-segment cell locators are cached by the segmentation's MTime so a
+        # repaint does not re-map every seed from scratch (revised ADR-0037
+        # slice 5, §B3).
+        self._segmentation = None
+        self._structures_cache: list | None = None
+        self._structures_cache_key = None
         # Bind the carrier onto the shared display node so the LayerDM-driven
         # placement Pipeline (which the widget cannot reach directly) resolves
         # the same carrier the tree edits.
@@ -283,6 +299,120 @@ class TerritoriesTableWidget(qt.QWidget):
         """The on-surface status label text on the seed row."""
         status = self._seedControl(territoryId, pointIndex, "status")
         return status.text if status is not None else ""
+
+    # ------------------------------------------------------------------ #
+    # Input segmentation + seed -> structure resolution (revised slice 5)
+    # ------------------------------------------------------------------ #
+
+    def setInputSegmentation(self, segmentationNode: Any) -> None:
+        """Bind the input segmentation whose per-segment colours + surfaces the
+        seed rows read (revised ADR-0037 slice 5, §B3).
+
+        A seed's structure is DERIVED (nearest segment surface), so this binds
+        the source and rebuilds; no carrier slot is written (ADR-0014).
+        """
+        self._segmentation = segmentationNode
+        self._structures_cache = None
+        self._structures_cache_key = None
+        self._rebuild()
+
+    def _structures(self) -> list:
+        """The bound segmentation's vessel structures as ``[(segId, surface)]``.
+
+        Mirrors the extractor's ``_perSegmentClosedSurfaces`` split (each
+        vascular-SCT segment's closed-surface rep) so the table's seed->structure
+        mapping agrees with extraction (§B1).  Cached by the segmentation's
+        MTime.  Returns ``[]`` when nothing is bound / resolves.
+        """
+        segmentation = self._segmentation
+        if segmentation is None or not hasattr(segmentation, "GetSegmentation"):
+            return []
+        key = segmentation.GetMTime()
+        if self._structures_cache is not None and self._structures_cache_key == key:
+            return self._structures_cache
+        structures: list = []
+        try:
+            segmentation.CreateClosedSurfaceRepresentation()
+            core = segmentation.GetSegmentation()
+            for i in range(core.GetNumberOfSegments()):
+                segId = core.GetNthSegmentID(i)
+                mesh = vtk.vtkPolyData()
+                segmentation.GetClosedSurfaceRepresentation(segId, mesh)
+                if mesh.GetNumberOfPoints() > 0:
+                    structures.append((segId, mesh))
+        except Exception:  # noqa: BLE001 - degrade gracefully when resolution fails
+            structures = []
+        self._structures_cache = structures
+        self._structures_cache_key = key
+        return structures
+
+    def _seedPoint(self, territoryId: str, pointIndex: int):
+        if self._carrier is None:
+            return None
+        if int(pointIndex) >= self._carrier.GetNumberOfAnnotationPoints(territoryId):
+            return None
+        p = self._carrier.GetNthAnnotationPoint(territoryId, int(pointIndex))
+        return (p[0], p[1], p[2])
+
+    def seedStructureId(self, territoryId: str, pointIndex: int) -> str | None:
+        """The segment id the seed maps to (nearest structure), or ``None``."""
+        point = self._seedPoint(territoryId, pointIndex)
+        structures = self._structures()
+        if point is None or not structures:
+            return None
+        return _nearest_structure(structures, point)
+
+    def seedStructureColor(self, territoryId: str, pointIndex: int):
+        """The seed's structure's segment display colour ``(r, g, b)`` or ``None``."""
+        segId = self.seedStructureId(territoryId, pointIndex)
+        if segId is None:
+            return None
+        return self._segmentColor(segId)
+
+    def _segmentColor(self, segId: str):
+        segmentation = self._segmentation
+        if segmentation is None or not hasattr(segmentation, "GetSegmentation"):
+            return None
+        try:
+            segment = segmentation.GetSegmentation().GetSegment(segId)
+            if segment is None:
+                return None
+            rgb = segment.GetColor()
+            return (rgb[0], rgb[1], rgb[2])
+        except Exception:  # noqa: BLE001 - defensive across segment shapes
+            return None
+
+    def _segmentName(self, segId: str) -> str:
+        segmentation = self._segmentation
+        if segmentation is None or not hasattr(segmentation, "GetSegmentation"):
+            return ""
+        try:
+            segment = segmentation.GetSegmentation().GetSegment(segId)
+            return segment.GetName() if segment is not None else ""
+        except Exception:  # noqa: BLE001 - defensive across segment shapes
+            return ""
+
+    def _underSeededStructures(self, territoryId: str) -> list:
+        """The structures ``territoryId`` touches with <2 seeds (the warning set).
+
+        Groups the territory's seeds by structure (via the seed->structure
+        mapping) and returns the structure keys with a seed count below the
+        >=2 extraction gate -- the SAME gate the extractor uses so the warning
+        and the skip agree (revised ADR-0037 slice 5, §B4/§B6).  With no bound
+        segmentation the per-structure check cannot run, so returns ``[]`` (the
+        flat seed-count check still flags a <2-seed territory).
+        """
+        structures = self._structures()
+        if self._carrier is None or not structures:
+            return []
+        count = self._carrier.GetNumberOfAnnotationPoints(territoryId)
+        assignments = []
+        for i in range(count):
+            point = self._seedPoint(territoryId, i)
+            if point is not None:
+                assignments.append((point, _nearest_structure(structures, point)))
+        counts = _structure_seed_counts(assignments)
+        return [key for key, n in counts.items() if n < _MIN_SEEDS_FOR_COMPLETE]
 
     # ------------------------------------------------------------------ #
     # Territory lifecycle (arming)
@@ -602,8 +732,21 @@ class TerritoriesTableWidget(qt.QWidget):
         rowLayout.addWidget(labelEdit, 1)
 
         # Completeness indicator: GLYPH + TEXT (ADR-0010, never colour alone).
-        incomplete = seedCount < _MIN_SEEDS_FOR_COMPLETE
-        statusText = f"{_INCOMPLETE_GLYPH} {_INCOMPLETE_TEXT}" if incomplete else _COMPLETE_TEXT
+        # The check is PER STRUCTURE (revised ADR-0037 slice 5, §B6): a
+        # territory that touches any structure with <2 seeds is flagged, because
+        # that structure cannot yield a centerline -- even when the flat seed
+        # count reads complete (e.g. 2 on the vein + 1 on the artery).  The flat
+        # <2-seed check remains as the fallback when no segmentation is bound.
+        underSeeded = self._underSeededStructures(territoryId)
+        if underSeeded:
+            names = ", ".join(
+                self._segmentName(segId) or str(segId) for segId in underSeeded
+            )
+            statusText = f"{_INCOMPLETE_GLYPH} {names} needs at least two seeds"
+        elif seedCount < _MIN_SEEDS_FOR_COMPLETE:
+            statusText = f"{_INCOMPLETE_GLYPH} {_INCOMPLETE_TEXT}"
+        else:
+            statusText = _COMPLETE_TEXT
         statusLabel = qt.QLabel(statusText)
         rowLayout.addWidget(statusLabel)
 
@@ -633,8 +776,33 @@ class TerritoriesTableWidget(qt.QWidget):
         rowLayout.setContentsMargins(2, 1, 2, 1)
         rowLayout.setSpacing(4)
 
-        # On-surface status text (surface-snapped on placement).
-        statusLabel = qt.QLabel(f"Seed {pointIndex + 1} — on surface")
+        # Structure swatch + name (revised ADR-0037 slice 5, §B3): the seed row
+        # is tinted with its STRUCTURE's segment display colour (NOT the
+        # territory palette) and PAIRS the swatch with the structure NAME
+        # (ADR-0010, colour never alone).  Falls back to a plain on-surface
+        # label when no segmentation is bound / the seed maps to no structure.
+        structureId = self.seedStructureId(territoryId, pointIndex)
+        structureColour = self.seedStructureColor(territoryId, pointIndex)
+        swatch = qt.QLabel()
+        swatch.setFixedSize(12, 12)
+        if structureColour is not None:
+            pixmap = qt.QPixmap(12, 12)
+            pixmap.fill(
+                qt.QColor(
+                    int(structureColour[0] * 255),
+                    int(structureColour[1] * 255),
+                    int(structureColour[2] * 255),
+                )
+            )
+            swatch.setPixmap(pixmap)
+            rowLayout.addWidget(swatch)
+
+        if structureId is not None:
+            structureName = self._segmentName(structureId) or structureId
+            statusText = f"Seed {pointIndex + 1} — {structureName}"
+        else:
+            statusText = f"Seed {pointIndex + 1} — on surface"
+        statusLabel = qt.QLabel(statusText)
         rowLayout.addWidget(statusLabel, 1)
 
         deleteButton = qt.QToolButton()
@@ -649,6 +817,7 @@ class TerritoriesTableWidget(qt.QWidget):
 
         self._seed_rows[(territoryId, pointIndex)] = {
             "widget": rowWidget,
+            "swatch": swatch,
             "status": statusLabel,
             "delete": deleteButton,
         }
