@@ -317,6 +317,330 @@ def test_hiding_a_structure_omits_its_2d_projected_seeds():
 
 
 # =========================================================================== #
+# POST-REVIEW REFINEMENT — the seed-repaint TRIGGER fires via the pipeline's
+# OWN observer (not just the filter), and SetSegmentVisibility advances the
+# cache-invalidation MTime key.
+# =========================================================================== #
+#
+# The reviewer flagged that i1 above pins the seed-visibility FILTER but calls
+# ``_rebuild_seed_actor()`` DIRECTLY -- it never proves the pipeline REPAINTS on
+# its own when a structure is toggled.  A segment show/hide modifies the
+# SEGMENTATION display node (not the carrier), so the glyph rebuild needs its
+# own trigger: ``_ensure_pick_surface_observed`` observes that display node and
+# ``_on_node_modified`` rebuilds.  These pin the TRIGGER (green regression
+# guards, RUN launched now).
+
+
+def test_visibility_toggle_repaints_seeds_via_pipeline_observer(monkeypatch):
+    """Toggling a structure's visibility repaints seeds VIA THE PIPELINE OBSERVER.
+
+    Post-review refinement (ADR-0037 slice 5): a segment show/hide modifies the
+    SEGMENTATION display node, not the carrier, so the seed-glyph rebuild needs
+    its own trigger -- ``_ensure_pick_surface_observed`` observes the pickSurface
+    segmentation's display node and ``_on_node_modified`` rebuilds.  This does
+    NOT call ``_rebuild_seed_actor`` directly (unlike i1's filter test): it
+    toggles ``SetSegmentVisibility`` and asserts the glyph count changed on its
+    OWN, proving the observer fires the rebuild.  Launched-only; SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    Pipeline = _import_pipeline_or_skip(
+        "TerritoryPlacementPipeline", "TerritoryPlacementPipeline")
+    pipeline = Pipeline()
+    for seam in ("SetDisplayNode", "UpdatePipeline", "_ensure_pick_surface_observed"):
+        if not hasattr(pipeline, seam):
+            pytest.skip(
+                f"TerritoryPlacementPipeline has no {seam} -- the seed-repaint "
+                "trigger seam has not landed (ADR-0027)."
+            )
+
+    carrier = _make_carrier_or_skip(slicer)
+    display = _make_display_node_or_skip(slicer)
+    seg, segA, segB = _two_structure_segmentation(slicer)
+    segDisplay = seg.GetDisplayNode()
+
+    import TerritoryInteractionState as state
+
+    state.set_carrier(display, carrier)
+    display.SetAndObservePickSurfaceNodeID(seg.GetID())
+    pipeline.SetDisplayNode(display)
+
+    carrier.AddAnnotationPoint(TERRITORY, *_A_CENTER)
+    carrier.AddAnnotationPoint(TERRITORY, *_B_CENTER)
+
+    _require_two_mapped_structures(pipeline, segA, segB)
+
+    # Attach the segment-visibility observer through the documented re-sync hook
+    # (the production attach path), then seed the glyph set once.
+    pipeline.UpdatePipeline()
+    both = _seed_point_count(pipeline._seed_polydata)
+    assert both == 2, (
+        f"both seeds must render after the initial sync (got {both})."
+    )
+
+    # Toggle B hidden via the SEGMENTATION display node -- do NOT call
+    # _rebuild_seed_actor directly.  The pipeline's own observer must fire the
+    # rebuild, dropping B's seed.
+    segDisplay.SetSegmentVisibility(segB, False)
+    assert _seed_point_count(pipeline._seed_polydata) == 1, (
+        "hiding structure B must drop its seed VIA THE PIPELINE'S OWN OBSERVER "
+        "(the repaint trigger, ADR-0037 slice 5) -- not a direct rebuild call."
+    )
+
+    # Re-showing restores it, again via the observer.
+    segDisplay.SetSegmentVisibility(segB, True)
+    assert _seed_point_count(pipeline._seed_polydata) == 2, (
+        "showing structure B must restore its seed via the observer trigger."
+    )
+
+
+def test_set_segment_visibility_advances_visibility_mtime():
+    """``SetSegmentVisibility`` advances the display node MTime ``visibility_mtime`` reads.
+
+    Post-review refinement (ADR-0037 slice 5): the pick + structure caches
+    invalidate off ``VesselHighlightWiring.visibility_mtime(segmentation)`` --
+    the segmentation display node's MTime.  A segment show/hide MUST advance it,
+    else the cached vessels-only surface + per-structure locators never rebuild
+    and a hidden vessel stays live.  Pins the cache-invalidation KEY directly.
+    Launched-only; SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    try:
+        from VascularTerritoriesLib.VesselHighlightWiring import visibility_mtime
+    except Exception as exc:  # pragma: no cover - import-environment dependent
+        pytest.skip(f"visibility_mtime not importable ({exc!r}) (ADR-0027).")
+
+    seg, _segA, segB = _two_structure_segmentation(slicer)
+
+    before = visibility_mtime(seg)
+    seg.GetDisplayNode().SetSegmentVisibility(segB, False)
+    after = visibility_mtime(seg)
+
+    assert after > before, (
+        "SetSegmentVisibility must advance the segmentation display node's MTime "
+        "that visibility_mtime reads -- the cache-invalidation key (ADR-0037 "
+        f"slice 5); before={before}, after={after}."
+    )
+
+
+# =========================================================================== #
+# POST-REVIEW REFINEMENT — hover/grab hit-test excludes hidden-structure seeds
+# =========================================================================== #
+#
+# The nearest-point hit-test (``_nearest_point_in_display``, consulted by the
+# hover + grab paths in CanProcessInteractionEvent) must skip a seed whose
+# structure is hidden: a hidden seed is not drawn, so it must not be a
+# hover/grab target either (ADR-0037 slice 5).  The hit-test consults
+# ``self._structures.seed_visible`` before considering each seed.  A stub
+# renderer projects each seed's world point onto the SAME display pixel the
+# event carries, so the visible seed is a target and the hidden one is not.
+
+
+class _ProjectAllToEventPixelRenderer:
+    """A renderer stub projecting every world point onto the event's pixel.
+
+    ``_nearest_point_in_display`` calls ``SetWorldPoint`` / ``WorldToDisplay`` /
+    ``GetDisplayPoint`` per seed; returning the event pixel for every world
+    point makes the squared display distance 0 for whichever seeds the hit-test
+    DOES consider -- so a seed appears "under the cursor" iff the visibility
+    filter lets it through.  GL-free, mirroring the placement-pipeline suite's
+    stub-renderer idiom.
+    """
+
+    def __init__(self, event_pixel=(100, 100)):
+        self._event_pixel = event_pixel
+
+    def SetWorldPoint(self, x, y, z, w):  # noqa: N802 - VTK verb
+        pass
+
+    def WorldToDisplay(self):  # noqa: N802 - VTK verb
+        pass
+
+    def GetDisplayPoint(self):  # noqa: N802 - VTK verb
+        return (self._event_pixel[0], self._event_pixel[1], 0.0)
+
+
+class _Event:
+    """A minimal interaction event at a fixed display pixel."""
+
+    def __init__(self, display_position=(100, 100)):
+        self._pos = display_position
+
+    def GetDisplayPosition(self):  # noqa: N802 - VTK verb
+        return self._pos
+
+
+def test_hit_test_excludes_hidden_structure_seeds(monkeypatch):
+    """The hover/grab hit-test returns no target for a hidden-structure seed.
+
+    Post-review refinement (ADR-0037 slice 5): a hidden seed is not drawn, so
+    ``_nearest_point_in_display`` must not offer it as a hover/grab target even
+    when the cursor pixel is over it.  With one seed on structure B and the
+    stub renderer projecting it onto the event pixel, the hit-test returns B's
+    seed when B is shown and NO target when B is hidden.  Launched-only; SKIPS
+    bare.  If the display projection cannot resolve headless, pins the seam
+    level (the filter ``seed_visible`` consulted by the hit-test) instead.
+    """
+    slicer = _slicer_or_skip()
+    Pipeline = _import_pipeline_or_skip(
+        "TerritoryPlacementPipeline", "TerritoryPlacementPipeline")
+    pipeline = Pipeline()
+    if not hasattr(pipeline, "_nearest_point_in_display") or not hasattr(
+        pipeline, "SetDisplayNode"
+    ):
+        pytest.skip(
+            "TerritoryPlacementPipeline lacks _nearest_point_in_display / "
+            "SetDisplayNode -- the hit-test seam has not landed (ADR-0027)."
+        )
+
+    carrier = _make_carrier_or_skip(slicer)
+    display = _make_display_node_or_skip(slicer)
+    seg, segA, segB = _two_structure_segmentation(slicer)
+    segDisplay = seg.GetDisplayNode()
+
+    import TerritoryInteractionState as state
+
+    state.set_carrier(display, carrier)
+    # The hit-test scans the ACTIVE territory's points; make TERRITORY active so
+    # ``_placement_territory`` resolves it (else the scan has no territory).
+    state.set_active_territory(display, TERRITORY)
+    display.SetAndObservePickSurfaceNodeID(seg.GetID())
+    pipeline.SetDisplayNode(display)
+
+    # A single seed on structure B (so a hit is unambiguous).
+    carrier.AddAnnotationPoint(TERRITORY, *_B_CENTER)
+    _require_two_mapped_structures(pipeline, segA, segB)
+
+    renderer = _ProjectAllToEventPixelRenderer()
+    event = _Event()
+
+    # Shown: the seed IS a grab target (distance2 ~= 0 on the event pixel).
+    segDisplay.SetSegmentVisibility(segB, True)
+    territory, index, distance2 = pipeline._nearest_point_in_display(renderer, event)
+    if territory is None:
+        # The stub-renderer display projection did not resolve a target in this
+        # launch: fall back to pinning at the SEAM the hit-test consults --
+        # seed_visible gates the seed in/out -- so the invariant is still guarded
+        # (ADR-0037 slice 5), just below the display-projection level.
+        point = carrier.GetNthAnnotationPoint(TERRITORY, 0)
+        assert pipeline._structures.seed_visible(display, point) is True, (
+            "a visible-structure seed must pass the hit-test's seed_visible gate."
+        )
+        segDisplay.SetSegmentVisibility(segB, False)
+        assert pipeline._structures.seed_visible(display, point) is False, (
+            "a HIDDEN-structure seed must FAIL the hit-test's seed_visible gate, "
+            "so the hit-test excludes it (ADR-0037 slice 5)."
+        )
+        return
+    assert index == 0 and distance2 < 1.0, (
+        "a visible-structure seed under the cursor must be a hover/grab target."
+    )
+
+    # Hidden: the same seed is NOT a target -- the hit-test skips it.
+    segDisplay.SetSegmentVisibility(segB, False)
+    territory_hidden, index_hidden, distance2_hidden = pipeline._nearest_point_in_display(
+        renderer, event)
+    assert territory_hidden is None and index_hidden is None, (
+        "a HIDDEN-structure seed must NOT be a hover/grab target, even with the "
+        "cursor over it -- the hit-test consults seed_visible (ADR-0037 slice 5)."
+    )
+
+
+# =========================================================================== #
+# POST-REVIEW REFINEMENT — VisibleStructuresCache builds per-structure locators
+# ONCE and reuses them while the visibility MTime is unchanged (hover-perf fix).
+# =========================================================================== #
+#
+# The per-structure ``vtkCellLocator``s are expensive to build on ~100k-point
+# vessel surfaces, and the per-seed nearest-structure query runs on every seed
+# repaint (which the hover-reslice fires often).  The cache MUST build them once
+# per visibility MTime and reuse across ``seed_visible`` calls, rebuilding only
+# when the MTime advances (ADR-0037 slice 5 performance).
+
+
+class _FakeDisplayNodeWithPickSurface:
+    """A minimal display node exposing only ``GetPickSurfaceNode`` for the cache.
+
+    The ``VisibleStructuresCache`` resolves its structures from a display node's
+    ``GetPickSurfaceNode`` -- so a tiny fake carrying a real tagged segmentation
+    exercises the cache without the wrapped highlight display node.
+    """
+
+    def __init__(self, segmentation):
+        self._segmentation = segmentation
+
+    def GetPickSurfaceNode(self):  # noqa: N802 - VTK verb
+        return self._segmentation
+
+
+def test_structures_cache_builds_locators_once_and_reuses(monkeypatch):
+    """``VisibleStructuresCache`` builds per-structure locators once, reuses them.
+
+    Post-review refinement (ADR-0037 slice 5 performance): the cache prebuilds
+    one ``vtkCellLocator`` per structure keyed by the visibility MTime, so a
+    repaint does not rebuild a locator per seed.  Counts ``vtkCellLocator``
+    construction across many ``seed_visible`` calls at a fixed visibility MTime:
+    the locators are built exactly once (at first resolve), then reused.  A
+    ``SetSegmentVisibility`` (advancing the MTime) is what forces a rebuild.
+    Launched (resolves off a tagged segmentation); SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    try:
+        from VascularTerritoriesLib.VesselHighlightWiring import VisibleStructuresCache
+    except Exception as exc:  # pragma: no cover - import-environment dependent
+        pytest.skip(f"VisibleStructuresCache not importable ({exc!r}) (ADR-0027).")
+
+    seg, segA, segB = _two_structure_segmentation(slicer)
+    fake_display = _FakeDisplayNodeWithPickSurface(seg)
+    cache = VisibleStructuresCache()
+
+    # Precondition: the two structures must resolve, else there are no locators
+    # to count (skip on a fixture gap rather than fail).
+    structures = cache.resolve(fake_display)
+    keys = {segId for segId, _surface, _visible in structures}
+    if segA not in keys or segB not in keys:
+        pytest.skip(
+            "the two vessel structures did not resolve from the pickSurface "
+            f"(closed-surface reps unbuilt in this launch); resolved {keys!r}."
+        )
+
+    # Count vtkCellLocator construction from here on.  A fresh cache to observe
+    # the FIRST build cleanly.
+    cache = VisibleStructuresCache()
+    construction_count = {"n": 0}
+    real_locator = vtk.vtkCellLocator
+
+    def _counting_locator(*args, **kwargs):
+        construction_count["n"] += 1
+        return real_locator(*args, **kwargs)
+
+    monkeypatch.setattr(vtk, "vtkCellLocator", _counting_locator)
+
+    # Many seed_visible calls at a FIXED visibility MTime.
+    probe = (_B_CENTER[0], _B_CENTER[1], _B_CENTER[2])
+    for _ in range(10):
+        cache.seed_visible(fake_display, probe)
+
+    built_once = construction_count["n"]
+    assert built_once >= 1, (
+        "the cache must build at least one per-structure locator on first "
+        "resolve."
+    )
+    assert built_once <= len(structures), (
+        "the cache must build AT MOST one locator per structure -- not one per "
+        f"seed_visible call (built {built_once} for {len(structures)} "
+        "structures across 10 calls; ADR-0037 slice 5 performance)."
+    )
+
+    # A visibility change (MTime advance) is what forces a rebuild.
+    seg.GetDisplayNode().SetSegmentVisibility(segB, False)
+    cache.seed_visible(fake_display, probe)
+    assert construction_count["n"] > built_once, (
+        "advancing the visibility MTime (SetSegmentVisibility) must rebuild the "
+        "per-structure locators -- the cache is keyed on that MTime."
+    )
+
+
+# =========================================================================== #
 # i2 — CENTERLINE visibility follows the structure show/hide (widget observer)
 # =========================================================================== #
 
