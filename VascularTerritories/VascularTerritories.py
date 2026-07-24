@@ -481,6 +481,13 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
       return
     displayNode = segmentationNode.GetDisplayNode()
     displayNode.SetOpacity3D(0.3)
+    # Enable the workflow actions the moment an input surface is selected --
+    # directly off the selector, not only via the parameter-node round-trip in
+    # updateGUIFromParameterNode (which does not fire reliably when the panel is
+    # composed inside the Liver module), so the Compute-territory-map button is
+    # reachable once a segmentation is chosen (ADR-0037 §Decision 4 two-step
+    # flow).  The extraction action stays additionally gated on SlicerVMTK.
+    self.enableWidgetButtons(True)
 
   def createColorMap(self):
 #    colorTableNodes = slicer.util.getNodes("SlicerLiverColorMap*")
@@ -699,8 +706,18 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     centerlineModelPoints = centerlineModel.GetMesh()
     numberOfPoints = centerlineModelPoints.GetNumberOfPoints()
     refVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
-    if not (refVolumeNode) or (numberOfPoints<2):
-        raise ValueError("Missing inputs to calculate vascular segments")
+    if not refVolumeNode or numberOfPoints < 2:
+        # Reachable now that the button enables on input selection: give a
+        # legible reason instead of an uncaught error when the surgeon computes
+        # before extracting a centerline (or with no reference volume loaded).
+        reason = ("no reference volume is loaded" if not refVolumeNode
+                  else "no centerline has been extracted yet -- place >=2 seeds "
+                       "on a vessel and click 'Extract centerlines' first")
+        logging.warning("VascularTerritories: cannot compute the territory map -- %s.", reason)
+        slicer.util.warningDisplay(
+            f"Cannot compute the territory map: {reason}.",
+            windowTitle="Vascular Territories")
+        return
 
     vascularTerritorySegmentationNode = self.logic.ensureTerritoryMapOutput(carrier)
     # The C++ ``calculateVascularTerritoryMap`` reads + re-stamps the target's
