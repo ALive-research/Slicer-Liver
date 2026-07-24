@@ -355,8 +355,8 @@ class TerritoryPlacementPipeline(_PipelineBase):
             if renderer is not None:
                 renderer.AddActor(self._seed_actor)
                 renderer.AddActor(self._marker_actor)
-            # The active-tree highlight renders in the glow overlay (halo), not
-            # the view renderer -- added in _attach_halo_renderer.
+            # The edit-hover grab halo renders in a private glow overlay (its
+            # vtkOutlineGlowPass survives qMRMLThreeDView's SetPass reset).
             self._attach_halo_renderer(renderer)
             # Renderer churn cleared the display handle; re-derive it from the
             # base's retained display node (the ControlPolygonPipeline
