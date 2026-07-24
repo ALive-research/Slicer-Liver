@@ -115,6 +115,11 @@ class TerritorySlicePipeline(_PipelineBase):
         self._observer_tags: dict = {}
         self._observed_node_refs: list = []
         self._observed_carrier: Any | None = None
+        # The pickSurface segmentation's display node, observed so a
+        # structures-table show/hide reprojects the 2D seeds (a visibility
+        # change modifies the segmentation display node, not the carrier;
+        # ADR-0037 slice 5).
+        self._observed_pick_display: Any | None = None
 
         # Injectable pick core (bare unit layer feeds a known surface); in
         # production ``_ensure_pick`` builds it from the display node's
@@ -369,6 +374,7 @@ class TerritorySlicePipeline(_PipelineBase):
         """
         try:
             self._ensure_carrier_observed()
+            self._ensure_pick_surface_observed()
             self._reproject()
             self._reconcile_highlight()
         except Exception:  # pragma: no cover - C++ boundary must never raise
@@ -396,6 +402,7 @@ class TerritorySlicePipeline(_PipelineBase):
         self._display_node = None
         self._slice_node = None
         self._observed_carrier = None
+        self._observed_pick_display = None
         self._drag_target = None
         self._hover_target = None
         self._seed_actor.SetVisibility(False)
@@ -412,6 +419,27 @@ class TerritorySlicePipeline(_PipelineBase):
         self._observed_carrier = carrier
         if carrier is not None:
             self._attach_observer(carrier)
+
+    def _ensure_pick_surface_observed(self) -> None:
+        """Observe the pickSurface segmentation's display node for visibility.
+
+        A segment show/hide modifies the segmentation display node (not the
+        carrier); observe it so the 2D seeds reproject -- dropping/restoring a
+        hidden structure's seeds -- via ``_on_node_modified`` (which reprojects
+        for any non-display-node caller).  Idempotent; re-attaches on change.
+        """
+        display = self._display_node
+        segmentation = (display.GetPickSurfaceNode()
+                        if display is not None and hasattr(display, "GetPickSurfaceNode")
+                        else None)
+        seg_display = segmentation.GetDisplayNode() if segmentation is not None else None
+        if seg_display is self._observed_pick_display:
+            return
+        if self._observed_pick_display is not None:
+            self._detach_observer(self._observed_pick_display)
+        self._observed_pick_display = seg_display
+        if seg_display is not None:
+            self._attach_observer(seg_display)
 
     # ------------------------------------------------------------------ #
     # Rendering (viz) -- fading projection into the slice XY
