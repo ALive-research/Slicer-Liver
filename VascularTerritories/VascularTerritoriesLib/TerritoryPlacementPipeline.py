@@ -804,6 +804,10 @@ class TerritoryPlacementPipeline(_PipelineBase):
         best_d2 = sys.float_info.max
         for i in range(count):
             point = carrier.GetNthAnnotationPoint(territory, i)
+            # A hidden-structure seed is not drawn, so it must not be a
+            # hover/grab target either -- skip it (ADR-0037 slice 5).
+            if not self._structures.seed_visible(self._display_node, point):
+                continue
             renderer.SetWorldPoint(point[0], point[1], point[2], 1.0)
             renderer.WorldToDisplay()
             dx, dy, _dz = renderer.GetDisplayPoint()
