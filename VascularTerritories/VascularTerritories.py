@@ -835,7 +835,16 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # centerlines, and re-gate Compute now that a centerline exists (ADR-0037
     # §Decision 4 + slice 5).
     self._syncCenterlineVisibility()
+    # Extracting ends the placement gesture: toggle the Place button off so a
+    # stray click after extraction does not drop another seed (ADR-0037).
+    self._disarmPlacement()
     self._updateActionEnablement()
+
+  def _disarmPlacement(self):
+    """Toggle the active Place button off (disarm) via the table's shared body."""
+    table = getattr(self, "_territoriesTable", None)
+    if table is not None and hasattr(table, "disarm"):
+      table.disarm()
 
   def onCalculateVascularTerritoryMapButton(self):
     # ADR-0037 §Decision 4: resolve every input from the carrier +
@@ -882,6 +891,8 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
+    # Computing the map ends the placement gesture too: toggle Place off.
+    self._disarmPlacement()
     # Re-gate the actions post-compute (ADR-0037 §Decision 4).
     self._updateActionEnablement()
 
