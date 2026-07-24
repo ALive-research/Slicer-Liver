@@ -304,5 +304,170 @@ def test_compute_gated_on_centerline_and_reference_volume(qt_widgets):
     )
 
 
+# =========================================================================== #
+# POST-REVIEW REFINEMENT — Extract + Compute both DISARM placement
+# =========================================================================== #
+#
+# The reviewer's refinement (ADR-0037 §Decision 4): starting an Extract or a
+# Compute ENDS the placement gesture -- the widget toggles the active Place
+# button OFF via the table's shared ``disarm()`` body (which writes armed=0 onto
+# the shared display node) so a stray click after the action does not drop
+# another seed.  The extract path early-returns before VMTK is confirmed, so the
+# disarm rides the SUCCESS path (VMTK/extractor stubbed here); the compute path
+# disarms after the map run (also stubbed).  Green regression guards: RUN +
+# PASS launched now.
+
+
+def _import_interaction_state_or_skip():
+    try:
+        from VascularTerritoriesLib import TerritoryInteractionState as state
+    except Exception as exc:  # pragma: no cover - import-environment dependent
+        pytest.skip(
+            f"TerritoryInteractionState not importable ({exc!r}) (ADR-0027).")
+    return state
+
+
+def _arm_widget_placement_or_skip(widget, state):
+    """Arm placement on the widget's shared highlight display node, or skip.
+
+    Mirrors the table's ``_armInto``: writes armed=1 onto the shared display
+    node -- the handle the placement Pipeline and the table's ``disarm()`` both
+    read/write.
+    """
+    displayNode = getattr(widget, "_highlightDisplayNode", None)
+    if displayNode is None:
+        pytest.skip(
+            "widget has no _highlightDisplayNode -- the shared display node the "
+            "disarm writes to is unavailable (launched build; ADR-0027)."
+        )
+    if getattr(widget, "_territoriesTable", None) is None:
+        pytest.skip(
+            "widget has no _territoriesTable -- the disarm routes through the "
+            "table's shared done() body (ADR-0027)."
+        )
+    state.set_armed(displayNode, True)
+    assert state.is_armed(displayNode) is True, (
+        "precondition: placement must read armed before the action disarms it."
+    )
+    return displayNode
+
+
+def test_extract_centerlines_disarms_placement(qt_widgets, monkeypatch):
+    """A successful Extract ENDS the placement gesture (disarms via the table).
+
+    Post-review refinement (ADR-0037 §Decision 4): extracting toggles the active
+    Place button off so a stray click after extraction does not drop another
+    seed.  The disarm rides the SUCCESS path (the action early-returns when
+    SlicerVMTK is absent), so ``extractionActionEnabled`` + ``extractCenterlines``
+    + the centerline-visibility sync are stubbed -- no SlicerVMTK needed.  Pins
+    the display node reading dis-armed after ``onAddCenterlineSegment()``.
+    Launched (widget); SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    widget = _make_widget_or_skip(slicer)
+    qt_widgets.append(widget)
+    _detach_scene_observers(slicer, widget)
+
+    if not hasattr(widget, "onAddCenterlineSegment") or not hasattr(
+        widget, "_disarmPlacement"
+    ):
+        pytest.skip(
+            "widget has no onAddCenterlineSegment / _disarmPlacement -- the "
+            "ADR-0037 disarm-on-extract refinement has not landed (ADR-0027)."
+        )
+
+    state = _import_interaction_state_or_skip()
+    seg, _segId = _vessel_segmentation(slicer)
+    widget.ui.inputSurfaceSelector.setCurrentNode(seg)
+    displayNode = _arm_widget_placement_or_skip(widget, state)
+
+    # Stub the VMTK gate + the extraction + the visibility sync so the SUCCESS
+    # path runs (and reaches the disarm) without SlicerVMTK.
+    monkeypatch.setattr(widget.logic, "extractionActionEnabled", lambda: True)
+    monkeypatch.setattr(
+        widget.logic, "extractCenterlines", lambda carrier, surface, segId: None)
+    monkeypatch.setattr(widget, "_syncCenterlineVisibility", lambda: None)
+
+    widget.onAddCenterlineSegment()
+
+    assert state.is_armed(displayNode) is False, (
+        "a successful Extract must DISARM placement (toggle the Place button "
+        "off) so a stray click adds no seed (ADR-0037 §Decision 4)."
+    )
+
+
+def test_compute_territory_map_disarms_placement(qt_widgets, monkeypatch):
+    """A Compute ENDS the placement gesture (disarms via the table).
+
+    Post-review refinement (ADR-0037 §Decision 4): computing the map toggles the
+    active Place button off too.  ``build_centerline_model`` /
+    ``ensureTerritoryMapOutput`` / ``calculateVascularTerritoryMap`` /
+    ``_applyTerritoryNamesAndColors`` are stubbed so the wiring reaches the
+    disarm without the real C++ map run (which stays eyeball-gated); a reference
+    volume is provided so the button does not early-return.  Pins the display
+    node reading dis-armed after ``onCalculateVascularTerritoryMapButton()``.
+    Launched (widget); SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    widget = _make_widget_or_skip(slicer)
+    qt_widgets.append(widget)
+    _detach_scene_observers(slicer, widget)
+
+    for method in ("onCalculateVascularTerritoryMapButton", "_disarmPlacement",
+                   "build_centerline_model"):
+        target = widget if method != "build_centerline_model" else widget.logic
+        if not hasattr(target, method):
+            pytest.skip(
+                f"{method} absent -- the ADR-0037 disarm-on-compute refinement "
+                "has not landed (ADR-0027)."
+            )
+
+    state = _import_interaction_state_or_skip()
+    seg, _segId = _vessel_segmentation(slicer)
+    widget.ui.inputSurfaceSelector.setCurrentNode(seg)
+    displayNode = _arm_widget_placement_or_skip(widget, state)
+
+    # A reference volume so the button's refVolume guard passes.
+    ref_volume = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLScalarVolumeNode", "DisarmComputeRefVolume")
+    image = vtk.vtkImageData()
+    image.SetDimensions(4, 4, 4)
+    image.AllocateScalars(vtk.VTK_SHORT, 1)
+    ref_volume.SetAndObserveImageData(image)
+
+    # A centerline model with >= 2 points so the numberOfPoints guard passes.
+    def _stub_build(carrier, colormap):
+        points = vtk.vtkPoints()
+        points.InsertNextPoint(0.0, 0.0, 10.0)
+        points.InsertNextPoint(0.0, 0.0, -10.0)
+        poly = vtk.vtkPolyData()
+        poly.SetPoints(points)
+        model = slicer.mrmlScene.AddNewNodeByClass(
+            "vtkMRMLModelNode", "DisarmComputeCenterline")
+        model.SetAndObserveMesh(poly)
+        return model
+
+    monkeypatch.setattr(widget.logic, "build_centerline_model", _stub_build)
+    if hasattr(widget.logic, "ensureTerritoryMapOutput"):
+        target_seg = slicer.mrmlScene.AddNewNodeByClass(
+            SEGMENTATION_CLASS, "DisarmComputeTarget")
+        target_seg.SetAttribute("VascularTerritories.SegmentationId", "1")
+        monkeypatch.setattr(
+            widget.logic, "ensureTerritoryMapOutput", lambda carrier: target_seg)
+    monkeypatch.setattr(
+        widget.logic, "calculateVascularTerritoryMap",
+        lambda target, refVolume, inputSeg, centerline, colormap: None)
+    if hasattr(widget, "_applyTerritoryNamesAndColors"):
+        monkeypatch.setattr(
+            widget, "_applyTerritoryNamesAndColors", lambda carrier, mapSeg: None)
+
+    widget.onCalculateVascularTerritoryMapButton()
+
+    assert state.is_armed(displayNode) is False, (
+        "a Compute must DISARM placement (toggle the Place button off) so a "
+        "stray click adds no seed (ADR-0037 §Decision 4)."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

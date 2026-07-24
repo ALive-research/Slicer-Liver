@@ -879,6 +879,124 @@ def test_calculate_button_resolves_inputs_without_selector(qt_widgets, monkeypat
     )
 
 
+# =========================================================================== #
+# POST-REVIEW REFINEMENT — map segments named + coloured per TERRITORY
+# =========================================================================== #
+#
+# The map output segments come from the classified-labelmap import, so each
+# output segment's NAME + COLOUR initially come from the colormap, keyed by the
+# label VALUE (the territory's derived 1-based int).  The refinement re-labels +
+# re-colours each output segment to the TERRITORY it represents so the map reads
+# the same as the table (ADR-0037 §Decision 4 / §Decision 1 display slot).
+# ``_applyTerritoryNamesAndColors(carrier, mapSegmentationNode)`` does this,
+# keyed by ``TerritoryLabelMap.territory_label_ints``.  Pinned directly against
+# a hand-built map segmentation with known label values (the full C++ map run
+# stays eyeball-gated), so this RUNS + PASSES launched now (green regression
+# guard).
+
+
+def _make_map_segmentation_with_label_values(slicer, label_values):
+    """A segmentation with one empty segment per label value (map-output shape).
+
+    Each segment carries a distinct ``LabelValue`` and a deliberately WRONG
+    name + colour (the colormap-derived defaults ``_applyTerritoryNamesAndColors``
+    must overwrite), so the assertion proves the re-label/re-colour happened.
+    """
+    seg = slicer.mrmlScene.AddNewNodeByClass(SEGMENTATION_CLASS, "MapOutputTest")
+    if seg is None:
+        pytest.skip("vtkMRMLSegmentationNode not registered (launched build).")
+    core = seg.GetSegmentation()
+    for value in label_values:
+        # AddEmptySegment mints the segment with a deliberately WRONG name +
+        # colour (the colormap-derived defaults ``_applyTerritoryNamesAndColors``
+        # must overwrite); its LabelValue is set explicitly to the derived int.
+        segId = core.AddEmptySegment(
+            f"MapSeg{value}", f"colormap-default-{value}", [0.5, 0.5, 0.5])
+        core.GetSegment(segId).SetLabelValue(int(value))
+    return seg
+
+
+def test_map_segments_named_and_coloured_per_territory(qt_widgets):
+    """Each map segment gets its TERRITORY's label + colour, keyed by label value.
+
+    Post-review refinement (ADR-0037 §Decision 4 / §Decision 1): the map's
+    output segments carry the territory's derived 1-based int as their label
+    VALUE; ``_applyTerritoryNamesAndColors`` re-keys each segment to its
+    territory (via ``TerritoryLabelMap.territory_label_ints``) and stamps the
+    territory's ``GetTerritoryLabel`` + ``GetTerritoryColor`` so the map reads
+    the same as the table.  Driven directly against a hand-built map
+    segmentation with label values 1 + 2 (the full C++ map run stays
+    eyeball-gated).  Launched (widget + wrapped carrier); SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    widget = _make_widget_or_skip(slicer)
+    qt_widgets.append(widget)
+    _detach_scene_observers(slicer, widget)
+
+    if not hasattr(widget, "_applyTerritoryNamesAndColors"):
+        pytest.skip(
+            "VascularTerritoriesWidget has no _applyTerritoryNamesAndColors -- "
+            "the ADR-0037 map re-label/re-colour refinement has not landed "
+            "(ADR-0027)."
+        )
+    label_ints = _import_label_map_module_or_skip()
+    if getattr(label_ints, LABEL_MAP_PURE_FUNC, None) is None:
+        pytest.skip(
+            f"{LABEL_MAP_MODULE} has no {LABEL_MAP_PURE_FUNC} (ADR-0027)."
+        )
+
+    carrier = widget._ensureAnnotationCarrier()
+    if carrier is None:
+        pytest.skip("annotation carrier unavailable (launched build; ADR-0027).")
+    for method in ("SetTerritoryLabel", "SetTerritoryColor", "GetTerritoryLabel",
+                   "GetTerritoryColor"):
+        if not hasattr(carrier, method):
+            pytest.skip(
+                f"{CUSTOM_TERRITORIES_CLASS} has no {method} display slot "
+                "(ADR-0027)."
+            )
+
+    # Two territories, in a known order, each with a distinct label + colour.
+    _populate_two_territories(carrier)
+    ordered_ids = list(carrier.GetAnnotationTerritoryIds())
+    if len(ordered_ids) < 2:
+        pytest.skip("fewer than two territories resolved on the carrier.")
+    label_map = dict(getattr(label_ints, LABEL_MAP_PURE_FUNC)(ordered_ids))
+    expected = {}
+    palette = {ordered_ids[0]: (0.9, 0.1, 0.2), ordered_ids[1]: (0.1, 0.2, 0.9)}
+    for territoryId in ordered_ids[:2]:
+        friendly = f"Surgeon-{territoryId}"
+        carrier.SetTerritoryLabel(territoryId, friendly)
+        r, g, b = palette[territoryId]
+        carrier.SetTerritoryColor(territoryId, r, g, b)
+        expected[label_map[territoryId]] = (friendly, (r, g, b))
+
+    # A map segmentation whose segments carry the derived label values.
+    mapSeg = _make_map_segmentation_with_label_values(slicer, list(expected.keys()))
+
+    widget._applyTerritoryNamesAndColors(carrier, mapSeg)
+
+    core = mapSeg.GetSegmentation()
+    for i in range(core.GetNumberOfSegments()):
+        segment = core.GetNthSegment(i)
+        value = int(segment.GetLabelValue())
+        assert value in expected, (
+            f"the map segment's label value {value} must key to a territory."
+        )
+        friendly, rgb = expected[value]
+        assert segment.GetName() == friendly, (
+            f"map segment (label {value}) must be NAMED for its territory "
+            f"({friendly!r}); got {segment.GetName()!r} (ADR-0037 §Decision 4)."
+        )
+        colour = segment.GetColor()
+        assert (round(colour[0], 3), round(colour[1], 3), round(colour[2], 3)) == (
+            round(rgb[0], 3), round(rgb[1], 3), round(rgb[2], 3)
+        ), (
+            f"map segment (label {value}) must take its TERRITORY's colour "
+            f"{rgb}; got {tuple(colour)} (ADR-0037 §Decision 1 display slot)."
+        )
+
+
 # --------------------------------------------------------------------------- #
 # Liver-segment resolution — the map compute finds the liver region by its
 # SNOMED-CT tag (ADR-0011), and fails legibly when no such segment exists.

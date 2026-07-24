@@ -1130,6 +1130,67 @@ def test_under_seeded_structure_flags_the_territory(qt_widgets):
 
 
 # --------------------------------------------------------------------------- #
+# POST-REVIEW REFINEMENT — Add Territory does NOT auto-select the new row
+# --------------------------------------------------------------------------- #
+#
+# The reviewer's refinement (ADR-0037 §Decision 2 slice-4): "Add Territory"
+# mints + arms a territory but must NOT also SELECT its tree row.  Arming (the
+# Place toggle reading checked) is the sole active-state cue, so a row selection
+# on top of it is redundant and confuses which affordance drives placement.
+# ``addTerritory``'s docstring pins this ("The new row is NOT selected/
+# highlighted -- arming ... is the active-state cue").  Green regression guard:
+# these RUN + PASS launched now, guarding against a re-introduced setCurrentItem.
+
+
+def test_add_territory_does_not_auto_select_the_new_row(qt_widgets):
+    """Add Territory arms the new territory but leaves its tree row UNSELECTED.
+
+    Post-review refinement (ADR-0037 §Decision 2 slice-4): minting a territory
+    arms placement into it (its Place toggle reads checked) but must NOT select
+    its row -- arming is the active-state cue, a redundant selection is not.
+    Pins that after ``addTerritory()`` the tree's current item is not the new
+    row (and the selection is empty), while the Place toggle still reads checked.
+    Launched (Qt + carrier); SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
+    qt_widgets.append(table)
+    _require_tree_model(table)
+    _require_composite_rows_or_skip(table)
+    if not hasattr(table, "addTerritory") or not hasattr(table, "placeButton"):
+        pytest.skip(
+            "TerritoriesTableWidget has no addTerritory / placeButton seam "
+            "(ADR-0027)."
+        )
+
+    territory = table.addTerritory()
+
+    tree = table.tree()
+    newItem = table.territoryItem(territory)
+    assert newItem is not None, "the minted territory must have a top-level item."
+
+    # The new row is NOT the current item, and nothing is selected: arming, not
+    # selection, is the active-state cue (ADR-0037 §Decision 2 slice-4).
+    assert tree.currentItem() is not newItem, (
+        "Add Territory must NOT auto-select the new territory's row -- arming "
+        "(the checked Place toggle) is the active-state cue, not a selection."
+    )
+    assert len(tree.selectedItems()) == 0, (
+        "Add Territory must leave the tree selection empty (no auto-select)."
+    )
+
+    # Arming IS the cue: the new territory's Place toggle reads checked.
+    place = table.placeButton(territory)
+    assert place is not None and place.checked is True, (
+        "the minted territory's Place toggle must read checked (arming is the "
+        "active-state cue, ADR-0037 §Decision 2 slice-4)."
+    )
+
+
+# --------------------------------------------------------------------------- #
 # RETIREMENT — selector gone; highlight wiring survives; no persisted markups
 # --------------------------------------------------------------------------- #
 

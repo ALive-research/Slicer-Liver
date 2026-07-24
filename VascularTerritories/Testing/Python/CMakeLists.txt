@@ -94,7 +94,12 @@ set(_vascterr_pytest_files
   # surviving and no persisted fiducial.  Needs Qt + the wrapped carrier +
   # LayerDMLib; import-/hasattr-guarded on the not-yet-existing table widget
   # + carrier display slot + Pipeline arm seam, they SKIP-PENDING bare and
-  # RUN launched once the seam lands (ADR-0027).
+  # RUN launched once the seam lands (ADR-0027).  ALSO hosts the post-review
+  # refinement guard (green regression): Add Territory arms the new territory
+  # (its Place toggle reads checked) but must NOT auto-select its tree row --
+  # arming, not selection, is the active-state cue (ADR-0037 §Decision 2
+  # slice-4).  This RUNS + PASSES launched now, guarding a re-introduced
+  # setCurrentItem.
   test_territories_table.py
   # ADR-0037 §2D -- the slice-view territory placement + distance-faded viz
   # (mirrors SliceControlPolygonPipeline, ADR-0033): the projection / signed
@@ -146,7 +151,13 @@ set(_vascterr_pytest_files
   # The pure label-map core RUNS BARE; the carrier-sourcing / derived-output /
   # selector-retirement / button-wiring invariants need the wrapped carrier +
   # module widget + Logic so they SKIP-PENDING bare and RUN launched; the real
-  # C++ map run stays eyeball-gated (stubbed here) (ADR-0027).
+  # C++ map run stays eyeball-gated (stubbed here) (ADR-0027).  ALSO hosts the
+  # post-review refinement guard (green regression): each map-output segment is
+  # NAMED + COLOURED for its TERRITORY (GetTerritoryLabel / GetTerritoryColor),
+  # keyed by the segment's label value through TerritoryLabelMap
+  # (_applyTerritoryNamesAndColors), so the map reads the same as the table
+  # (ADR-0037 §Decision 4 / §Decision 1).  Driven against a hand-built map
+  # segmentation with known label values, so it RUNS + PASSES launched now.
   test_territories_map_compute.py
   # ADR-0037 §Decision 4 -- the centerline SURFACE-RESOLUTION invariant: a
   # segmentation input's closed surface must be resolved through the real
@@ -253,6 +264,12 @@ set(_vascterr_pytest_files
   # also Qt); the shared count query + the widget enablement invariants
   # SKIP-PENDING bare + until the seam lands and RUN launched, reusing the
   # stub-centerline CenterlineRefs idiom so no SlicerVMTK is required (ADR-0027).
+  # ALSO hosts the post-review refinement guards (green regression): a
+  # successful Extract AND a Compute both DISARM placement (toggle the active
+  # Place button off via the table's shared done() body, writing armed=0 onto
+  # the shared display node) so a stray click after the action drops no seed
+  # (ADR-0037 §Decision 4).  VMTK gate / extractor / C++ map run are stubbed, so
+  # these RUN + PASS launched now without SlicerVMTK.
   test_territories_action_enablement.py
   # ADR-0037 slice 5 -- centerlines + seeds FOLLOW the anatomical-structure
   # show/hide.  Hiding a structure (input segment) omits its seeds from the 3D
@@ -263,7 +280,15 @@ set(_vascterr_pytest_files
   # observer -- ADR-0013 §5, no displayable manager); showing restores them.
   # Needs the wrapped carrier + highlight display node + a live multi-segment
   # segmentation (i2 also Qt); SKIP-PENDING bare + until the seams land and RUN
-  # launched (ADR-0027).
+  # launched (ADR-0027).  ALSO hosts the post-review refinement guards (green
+  # regression): (a) the seed-repaint TRIGGER -- a SetSegmentVisibility toggle
+  # repaints the seed glyphs VIA THE PIPELINE'S OWN OBSERVER (not a direct
+  # rebuild call, unlike i1's filter test); (b) SetSegmentVisibility advances the
+  # visibility_mtime cache-invalidation key; (c) the hover/grab hit-test
+  # (_nearest_point_in_display) excludes a hidden-structure seed even under the
+  # cursor; (d) VisibleStructuresCache builds per-structure vtkCellLocators ONCE
+  # per visibility MTime and reuses them across seed_visible calls (the hover-
+  # perf fix).  All RUN + PASS launched now.
   test_territories_structure_visibility.py
 )
 
