@@ -109,6 +109,101 @@ def closed_surface_polydata(segmentation: Any):
     return _append_closed_surfaces(segmentation, None)
 
 
+def per_segment_vascular_surfaces(segmentation: Any) -> list:
+    """The vascular segments as ``[(segId, closed_surface, visible)]``.
+
+    Mirrors the extractor's ``_perSegmentClosedSurfaces`` split (each
+    vascular-SCT segment's closed-surface rep) plus each segment's live
+    VISIBILITY on the display node.  The seed pipelines use it to map each seed
+    to its nearest STRUCTURE and omit seeds whose structure is hidden -- so
+    hiding a vessel in the structures table hides its seeds live (ADR-0037
+    slice 5).  Returns ``[]`` when nothing resolves (a model node, an unbuilt
+    rep, or the C++ boundary raising).
+    """
+    if segmentation is None or not hasattr(segmentation, "GetSegmentation"):
+        return []
+    display_node = segmentation.GetDisplayNode()
+    try:
+        segmentation.CreateClosedSurfaceRepresentation()
+        seg = segmentation.GetSegmentation()
+        ids = vtk.vtkStringArray()
+        seg.GetSegmentIDs(ids)
+        surfaces = []
+        for i in range(ids.GetNumberOfValues()):
+            segment_id = ids.GetValue(i)
+            if not _segment_is_vascular(seg.GetSegment(segment_id)):
+                continue
+            mesh = vtk.vtkPolyData()
+            segmentation.GetClosedSurfaceRepresentation(segment_id, mesh)
+            if mesh.GetNumberOfPoints() == 0:
+                continue
+            surfaces.append(
+                (segment_id, mesh, _segment_is_visible(display_node, segment_id))
+            )
+        return surfaces
+    except Exception:  # pragma: no cover - defensive (unbuilt reps, C++ boundary)
+        return []
+
+
+class VisibleStructuresCache:
+    """Per-pipeline cache of a display node's per-segment vessel structures.
+
+    Resolves the ``[(segId, surface, visible)]`` structures from a highlight
+    display node's ``pickSurface`` and caches them by the segmentation's
+    visibility MTime, so a show/hide repaints seeds without re-running the
+    closed-surface split per event (ADR-0037 slice 5).  Shared by the 3D
+    ``TerritoryPlacementPipeline`` and 2D ``TerritorySlicePipeline`` seed
+    filters so neither duplicates the resolution + cache.  Returns ``[]`` when
+    no segmentation is wired (a test-injected pick) -> seeds are never hidden
+    bare.
+    """
+
+    def __init__(self) -> None:
+        self._surfaces: list | None = None
+        self._mtime: int | None = None
+
+    def resolve(self, display_node: Any) -> list:
+        if display_node is None or not hasattr(display_node, "GetPickSurfaceNode"):
+            return []
+        segmentation = display_node.GetPickSurfaceNode()
+        if segmentation is None:
+            return []
+        mtime = visibility_mtime(segmentation)
+        if self._surfaces is not None and mtime == self._mtime:
+            return self._surfaces
+        self._surfaces = per_segment_vascular_surfaces(segmentation)
+        self._mtime = mtime
+        return self._surfaces
+
+
+def seed_structure_visible(per_segment_surfaces: list, point: Any) -> bool:
+    """True when ``point``'s nearest structure is VISIBLE (or maps to none).
+
+    ``per_segment_surfaces`` is the ``[(segId, surface, visible)]`` list from
+    :func:`per_segment_vascular_surfaces`.  The point is mapped to its nearest
+    structure exactly as extraction groups it
+    (``SeedStructureMapping.nearest_structure``), and the seed is shown iff that
+    structure is visible.  With no resolvable structures (a model-node input, an
+    unbuilt rep) the seed is treated as visible -- the show/hide follow has
+    nothing to gate on, so placement is never silently swallowed (ADR-0037
+    slice 5).
+    """
+    if not per_segment_surfaces:
+        return True
+    keyed = [(segId, surface) for segId, surface, _visible in per_segment_surfaces]
+    visible_by_id = {segId: visible for segId, _surface, visible in per_segment_surfaces}
+    # nearest_structure lives in the pure SeedStructureMapping helper; import it
+    # lazily so this module stays dependency-light for its other callers.
+    try:
+        from .SeedStructureMapping import nearest_structure
+    except ImportError:  # top-level import path (the unit layer's sys.path setup)
+        from SeedStructureMapping import nearest_structure  # type: ignore[no-redef]
+    key = nearest_structure(keyed, point)
+    if key is None:
+        return True
+    return bool(visible_by_id.get(key, True))
+
+
 def vascular_surface_polydata(segmentation: Any):
     """The pick/snap surface: VISIBLE, vascular-SCT-typed segments only.
 
