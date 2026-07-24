@@ -49,7 +49,6 @@ try:  # pragma: no cover - exercised once per import path
     from .VesselSurfacePick import VesselSurfacePick
     from .VesselHighlightWiring import (
         vascular_surface_polydata,
-        seed_structure_visible as _seed_structure_visible,
         visibility_mtime as _visibility_mtime,
         VisibleStructuresCache as _VisibleStructuresCache,
     )
@@ -59,7 +58,6 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from VesselSurfacePick import VesselSurfacePick  # type: ignore[no-redef]
     from VesselHighlightWiring import (  # type: ignore[no-redef]
         vascular_surface_polydata,
-        seed_structure_visible as _seed_structure_visible,
         visibility_mtime as _visibility_mtime,
         VisibleStructuresCache as _VisibleStructuresCache,
     )
@@ -475,7 +473,6 @@ class TerritorySlicePipeline(_PipelineBase):
 
         hover_rgb = [int(c * 255) for c in HALO_HOVER_COLOR]
         grab_rgb = [int(c * 255) for c in HALO_GRAB_COLOR]
-        structures = self._visible_structures()
         points = vtk.vtkPoints()
         rgba = vtk.vtkUnsignedCharArray()
         rgba.SetNumberOfComponents(4)
@@ -488,8 +485,9 @@ class TerritorySlicePipeline(_PipelineBase):
                 count = carrier.GetNumberOfAnnotationPoints(territory)
                 for i in range(count):
                     point = carrier.GetNthAnnotationPoint(territory, i)
-                    # Omit a seed whose structure is hidden (ADR-0037 slice 5).
-                    if not _seed_structure_visible(structures, point):
+                    # Omit a seed whose structure is hidden (ADR-0037 slice 5);
+                    # cached per-structure locators keep this O(log n) per seed.
+                    if not self._structures.seed_visible(self._display_node, point):
                         continue
                     signed = _proj.signed_distance(origin, normal, point)
                     if not _proj.is_present(signed):

@@ -161,6 +161,14 @@ class VisibleStructuresCache:
     def __init__(self) -> None:
         self._surfaces: list | None = None
         self._mtime: int | None = None
+        # One prebuilt vtkCellLocator per structure, rebuilt only when the
+        # surfaces are (keyed by the same visibility MTime).  Building a locator
+        # on a ~100k-point vessel surface is expensive; the per-seed
+        # nearest-structure query runs on every seed repaint (which the
+        # hover-reslice fires often), so the locators MUST be cached, not rebuilt
+        # per call (ADR-0037 slice 5 performance).
+        self._locators: dict | None = None
+        self._visible_by_id: dict | None = None
 
     def resolve(self, display_node: Any) -> list:
         if display_node is None or not hasattr(display_node, "GetPickSurfaceNode"):
@@ -173,7 +181,48 @@ class VisibleStructuresCache:
             return self._surfaces
         self._surfaces = per_segment_vascular_surfaces(segmentation)
         self._mtime = mtime
+        self._locators = {}
+        self._visible_by_id = {}
+        for seg_id, surface, visible in self._surfaces:
+            self._visible_by_id[seg_id] = visible
+            if surface is not None and surface.GetNumberOfPoints() > 0:
+                locator = vtk.vtkCellLocator()
+                locator.SetDataSet(surface)
+                locator.BuildLocator()
+                self._locators[seg_id] = locator
         return self._surfaces
+
+    def seed_visible(self, display_node: Any, point: Any) -> bool:
+        """True iff ``point``'s nearest structure is visible (cached locators).
+
+        The hot-path replacement for :func:`seed_structure_visible`: maps the
+        seed to its nearest structure with the PREBUILT per-structure locators
+        (first-in-order tiebreak, matching ``nearest_structure``) instead of
+        rebuilding a locator per seed.  No resolvable structure -> visible (the
+        show/hide follow has nothing to gate on).
+        """
+        self.resolve(display_node)
+        if not self._locators:
+            return True
+        px, py, pz = float(point[0]), float(point[1]), float(point[2])
+        best_key = None
+        best_distance2 = None
+        for seg_id, _surface, _visible in self._surfaces:
+            locator = self._locators.get(seg_id)
+            if locator is None:
+                continue
+            closest = [0.0, 0.0, 0.0]
+            cell_id = vtk.reference(0)
+            sub_id = vtk.reference(0)
+            distance2 = vtk.reference(0.0)
+            locator.FindClosestPoint((px, py, pz), closest, cell_id, sub_id, distance2)
+            d2 = float(distance2)
+            if best_distance2 is None or d2 < best_distance2 * (1.0 - 1.0e-6):
+                best_distance2 = d2
+                best_key = seg_id
+        if best_key is None:
+            return True
+        return bool(self._visible_by_id.get(best_key, True))
 
 
 def seed_structure_visible(per_segment_surfaces: list, point: Any) -> bool:
