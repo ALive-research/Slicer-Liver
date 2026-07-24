@@ -243,6 +243,28 @@ set(_vascterr_pytest_files
   # resolution rides existing seams, pinned launched in
   # test_territories_surface_resolution (T1d) + test_territories_table.
   test_territories_seed_structure.py
+  # ADR-0037 slice 5 -- the Extract + Compute actions GATE ON REAL
+  # PRECONDITIONS (§Decision 4).  Extract enables iff an input is selected AND
+  # SlicerVMTK is present AND a territory has a STRUCTURE with >=2 seeds (the
+  # same per-structure grouping the extractor runs on, via the shared
+  # territoryStructureSeedCounts query); Compute enables iff an input is
+  # selected AND a reference volume exists AND a centerline has been extracted
+  # (CenterlineRefs non-empty).  Needs the wrapped carrier + a live scene (i1
+  # also Qt); the shared count query + the widget enablement invariants
+  # SKIP-PENDING bare + until the seam lands and RUN launched, reusing the
+  # stub-centerline CenterlineRefs idiom so no SlicerVMTK is required (ADR-0027).
+  test_territories_action_enablement.py
+  # ADR-0037 slice 5 -- centerlines + seeds FOLLOW the anatomical-structure
+  # show/hide.  Hiding a structure (input segment) omits its seeds from the 3D
+  # seed glyphs AND the 2D projection (each seed mapped to its nearest structure
+  # via SeedStructureMapping, gated on the segment's display visibility) and
+  # hides its extracted centerline (tagged with VascularTerritories.
+  # StructureSegmentId, synced by a widget-level segmentation-display-node
+  # observer -- ADR-0013 §5, no displayable manager); showing restores them.
+  # Needs the wrapped carrier + highlight display node + a live multi-segment
+  # segmentation (i2 also Qt); SKIP-PENDING bare + until the seams land and RUN
+  # launched (ADR-0027).
+  test_territories_structure_visibility.py
 )
 
 foreach(_pytest_file IN LISTS _vascterr_pytest_files)

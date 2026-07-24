@@ -160,6 +160,10 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # reference tracks the input segmentation and whose Visibility gates
     # the hover Pipeline's paint (live only during marker placement).
     self._highlightDisplayNode = None
+    # The input segmentation's display node the widget observes so hiding a
+    # structure hides its extracted centerline(s) (ADR-0037 slice 5).  Tracked
+    # so the observer can be re-aimed on an input change and removed in cleanup.
+    self._observedSegmentationDisplayNode = None
     ScriptedLoadableModuleWidget.__init__(self, parent)
     VTKObservationMixin.__init__(self)  # needed for parameter node observation
 
@@ -255,7 +259,11 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # + the table stay live (the legacy VMTK-hard-gate on placement is gone).
     self.updateExtractionActionEnablement()
 
-    #self.enableWidgetButtons(False)
+    # Gate the workflow actions on their real preconditions from the start
+    # (ADR-0037 §Decision 4): with no input / no extractable structure / no
+    # centerline, both actions read disabled (the extraction tooltip is set by
+    # updateExtractionActionEnablement above; _updateActionEnablement keeps it).
+    self._updateActionEnablement()
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
 
@@ -365,6 +373,65 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     segmentationId = segmentation.GetID() if segmentation is not None else None
     node.SetAndObservePickSurfaceNodeID(segmentationId)
 
+  def _observeInputSegmentationVisibility(self, segmentationNode):
+    """Observe the input segmentation's display node for structure show/hide.
+
+    ADR-0037 slice 5: hiding a structure (input segment) via the structures
+    table must hide its extracted centerline(s) too.  A widget-level Python
+    observer (ADR-0013 §5 -- no displayable manager) on the segmentation's
+    display-node ``ModifiedEvent`` re-syncs every ``CenterlineRefs`` model's
+    visibility to its structure's visibility.  Re-aimed on every input change;
+    the observer is removed in ``cleanup``.  (The seed glyphs follow the same
+    show/hide via the pipelines' own ``visibility_mtime`` rebuild.)
+    """
+    displayNode = segmentationNode.GetDisplayNode() if segmentationNode is not None else None
+    previous = self._observedSegmentationDisplayNode
+    if previous is displayNode:
+      self._syncCenterlineVisibility()
+      return
+    if previous is not None:
+      self.removeObserver(previous, vtk.vtkCommand.ModifiedEvent, self._onSegmentationVisibilityChanged)
+    self._observedSegmentationDisplayNode = displayNode
+    if displayNode is not None:
+      self.addObserver(displayNode, vtk.vtkCommand.ModifiedEvent, self._onSegmentationVisibilityChanged)
+    self._syncCenterlineVisibility()
+
+  def _onSegmentationVisibilityChanged(self, caller, event):
+    del caller, event
+    self._syncCenterlineVisibility()
+    # Poke the highlight display node so the LayerDM-driven seed pipelines
+    # (3D + slice) re-run UpdatePipeline and re-evaluate per-seed structure
+    # visibility -- otherwise the seed glyphs would only repaint on the next
+    # interaction / reslice (ADR-0037 slice 5).
+    highlight = getattr(self, "_highlightDisplayNode", None)
+    if highlight is not None and slicer.mrmlScene.IsNodePresent(highlight):
+      highlight.Modified()
+
+  def _syncCenterlineVisibility(self):
+    """Set each ``CenterlineRefs`` model's visibility to its structure's visibility.
+
+    Reads the input segmentation display node's per-segment visibility
+    (``GetSegmentVisibility``) and applies it to every extracted centerline
+    tagged with that segment id (``CENTERLINE_STRUCTURE_ATTRIBUTE``).  A
+    centerline with no structure tag (single-model input) is left alone
+    (ADR-0037 slice 5).
+    """
+    carrier = getattr(self, "_annotationCarrier", None)
+    displayNode = self._observedSegmentationDisplayNode
+    if carrier is None or displayNode is None:
+      return
+    attribute = self.logic.CENTERLINE_STRUCTURE_ATTRIBUTE
+    for centerlineId in self.logic.getCenterlineReferenceIDs(carrier):
+      model = slicer.mrmlScene.GetNodeByID(centerlineId)
+      if model is None:
+        continue
+      structureId = model.GetAttribute(attribute)
+      if not structureId:
+        continue
+      modelDisplay = model.GetDisplayNode()
+      if modelDisplay is not None:
+        modelDisplay.SetVisibility(bool(displayNode.GetSegmentVisibility(structureId)))
+
   def _setupStructuresTable(self):
     """Compose a stock ``qMRMLSegmentsTableView`` for input-structure show/hide.
 
@@ -419,6 +486,12 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     if TerritoriesTableWidget is None:
       return
     carrier = self._ensureAnnotationCarrier()
+    # Re-evaluate the Extract/Compute enablement whenever the carrier changes
+    # (a seed added/deleted, a centerline wired): the action gating reads live
+    # seed + centerline state (ADR-0037 §Decision 4).  Removed in cleanup.
+    if carrier is not None and not self.hasObserver(
+        carrier, vtk.vtkCommand.ModifiedEvent, self._onAnnotationCarrierModified):
+      self.addObserver(carrier, vtk.vtkCommand.ModifiedEvent, self._onAnnotationCarrierModified)
     # The highlight display node is the SHARED handle: the table writes the
     # arm state / active territory / carrier binding onto it, and the
     # LayerDM-driven placement Pipeline reads them back (the widget cannot
@@ -463,6 +536,67 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     self.ui.calculateVascularTerritoryMapButton.setEnabled(state)
     self.ui.inputSurfaceSelector.setEnabled(state)
 
+  def _updateActionEnablement(self):
+    """Gate Extract + Compute on their REAL preconditions (ADR-0037 §Decision 4).
+
+    Replaces the blanket enable-on-any-input: both actions read LIVE state so a
+    surgeon cannot click an action that cannot yet run.
+
+    * Extract centerlines: an input segmentation is selected AND SlicerVMTK is
+      present (``extractionActionEnabled``) AND at least one territory has a
+      STRUCTURE with >=2 seeds -- i.e. something is actually extractable (the
+      SAME per-structure grouping the extraction runs on,
+      ``territoryStructureSeedCounts``).  The VMTK tooltip survives when the
+      extractor is absent.
+    * Compute territory map: an input segmentation is selected AND a reference
+      volume exists AND at least one centerline has been extracted (the
+      carrier's ``CenterlineRefs`` is non-empty).
+
+    Re-evaluated on input-surface change, a carrier ``Modified`` (seeds
+    added/deleted), and the end of the extract / compute handlers.
+    """
+    segmentationNode = self.ui.inputSurfaceSelector.currentNode()
+    hasInput = segmentationNode is not None
+
+    vmtkPresent = self.logic.extractionActionEnabled()
+    extractEnabled = hasInput and vmtkPresent and self._hasExtractableStructure(segmentationNode)
+    self.ui.addCenterlineSegmentButton.setEnabled(extractEnabled)
+    # Keep the VMTK explanation tooltip when the extractor is absent.
+    self.ui.addCenterlineSegmentButton.setToolTip(
+      "" if vmtkPresent else (
+        "Centerline extraction needs the SlicerVMTK extension "
+        "(ExtractCenterline), which is not installed."))
+
+    carrier = getattr(self, "_annotationCarrier", None)
+    hasVolume = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode") is not None
+    hasCenterline = (
+      carrier is not None
+      and len(self.logic.getCenterlineReferenceIDs(carrier)) > 0
+    )
+    self.ui.calculateVascularTerritoryMapButton.setEnabled(
+      hasInput and hasVolume and hasCenterline)
+
+  def _hasExtractableStructure(self, segmentationNode):
+    """True iff some territory has a structure with >=2 seeds (extractable).
+
+    Uses ``territoryStructureSeedCounts`` -- the SAME per-structure grouping the
+    extraction path runs on -- so the enablement and the extractor agree on what
+    is extractable (ADR-0037 slice 5).
+    """
+    carrier = getattr(self, "_annotationCarrier", None)
+    if carrier is None or segmentationNode is None:
+      return False
+    for territoryId in carrier.GetAnnotationTerritoryIds():
+      counts = self.logic.territoryStructureSeedCounts(carrier, segmentationNode, territoryId)
+      if any(count >= 2 for count in counts.values()):
+        return True
+    return False
+
+  def _onAnnotationCarrierModified(self, caller, event):
+    """Re-evaluate the action enablement on a carrier edit (seeds add/delete)."""
+    del caller, event
+    self._updateActionEnablement()
+
   def segmentationNodeSelected(self):
     self.ui.SegmentationShow3DButton.setEnabled(True)
     segmentationNode = self.ui.inputSurfaceSelector.currentNode()
@@ -476,18 +610,21 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     territoriesTable = getattr(self, "_territoriesTable", None)
     if territoriesTable is not None and hasattr(territoriesTable, "setInputSegmentation"):
       territoriesTable.setInputSegmentation(segmentationNode)
+    # Track the input segmentation's display node so hiding a structure hides
+    # its extracted centerline(s) too (ADR-0037 slice 5, §concern anatomical
+    # show/hide).  Re-aim the observer on every input change.
+    self._observeInputSegmentationVisibility(segmentationNode)
     if segmentationNode is None:
       logging.warning('No segmentationNode')
+      self._updateActionEnablement()
       return
     displayNode = segmentationNode.GetDisplayNode()
     displayNode.SetOpacity3D(0.3)
-    # Enable the workflow actions the moment an input surface is selected --
-    # directly off the selector, not only via the parameter-node round-trip in
-    # updateGUIFromParameterNode (which does not fire reliably when the panel is
-    # composed inside the Liver module), so the Compute-territory-map button is
-    # reachable once a segmentation is chosen (ADR-0037 §Decision 4 two-step
-    # flow).  The extraction action stays additionally gated on SlicerVMTK.
-    self.enableWidgetButtons(True)
+    # Gate the workflow actions on their real preconditions (ADR-0037
+    # §Decision 4): a selected input alone no longer enables them -- Extract
+    # needs an extractable >=2-seed structure, Compute needs a centerline + a
+    # reference volume.
+    self._updateActionEnablement()
 
   def createColorMap(self):
 #    colorTableNodes = slicer.util.getNodes("SlicerLiverColorMap*")
@@ -628,7 +765,7 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # not on a retired output-segmentation selector.
     inputSurfaceNode = self._parameterNode.GetNodeReference("InputSurface")
     if inputSurfaceNode and inputSurfaceNode.IsA("vtkMRMLSegmentationNode"):
-        self.enableWidgetButtons(True)
+        self._updateActionEnablement()
 
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
@@ -694,6 +831,11 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     finally:
       slicer.app.resumeRender()
       qt.QApplication.restoreOverrideCursor()
+    # Apply the current structure visibility to the freshly-extracted
+    # centerlines, and re-gate Compute now that a centerline exists (ADR-0037
+    # §Decision 4 + slice 5).
+    self._syncCenterlineVisibility()
+    self._updateActionEnablement()
 
   def onCalculateVascularTerritoryMapButton(self):
     # ADR-0037 §Decision 4: resolve every input from the carrier +
@@ -736,6 +878,8 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     slicer.app.resumeRender()
     qt.QApplication.restoreOverrideCursor()
+    # Re-gate the actions post-compute (ADR-0037 §Decision 4).
+    self._updateActionEnablement()
 
 class _SeedsFirstCenterlineExtractor:
   """Adapt SlicerVMTK's surface-first extractor to a seeds-first call (ADR-0037 §Decision 4).
@@ -864,14 +1008,15 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
       # territory spanning two structures ends with two refs and re-extraction
       # replaces rather than accrues (idempotency; §B4).
       self._clearTerritoryCenterlines(carrier, territoryId)
-      for structureSurface, structurePoints in self._groupSeedsByStructure(points, structures):
+      for structureKey, structureSurface, structurePoints in self._groupSeedsByStructure(points, structures):
         # A centerline needs at least two endpoints (one inlet + one target);
         # a structure carrying fewer seeds is under-seeded (the same threshold
         # the table flags) and is SKIPPED (the per-structure >=2 gate, §B4).
         if len(structurePoints) < 2:
           continue
         surfacePolyData = self._territorySurface(structureSurface, structurePoints[0])
-        self._extractOneTerritory(carrier, extractor, surfacePolyData, territoryId, structurePoints)
+        self._extractOneTerritory(
+          carrier, extractor, surfacePolyData, territoryId, structurePoints, structureKey)
 
   def _perSegmentClosedSurfaces(self, surfaceNode):
     """The vessel structures as an ordered ``[(segmentId, surface), ...]`` list.
@@ -911,14 +1056,16 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
     """Group a territory's ordered seeds by their nearest structure.
 
     Maps each seed to its structure via ``SeedStructureMapping.nearest_structure``
-    over the per-segment closed surfaces, and returns ``(structureSurface,
-    points)`` pairs in first-seen structure order (revised ADR-0037 slice 5,
-    §B4) -- the surface is carried through so the caller need not re-map the
-    first seed.  With no resolvable structures the whole territory is treated as
-    one group (single-model input) so a model-node surface still extracts.
+    over the per-segment closed surfaces, and returns ``(structureKey,
+    structureSurface, points)`` triples in first-seen structure order (revised
+    ADR-0037 slice 5, §B4) -- the surface AND the structure key are carried
+    through so the caller need neither re-map the first seed nor re-derive the
+    key for the centerline structure-id tag.  With no resolvable structures the
+    whole territory is treated as one group (single-model input) so a model-node
+    surface still extracts.
     """
     if not structures:
-      return [(None, points)]
+      return [(None, None, points)]
     from VascularTerritoriesLib.SeedStructureMapping import nearest_structure
     surfaces = dict(structures)
     grouped = {}
@@ -929,7 +1076,34 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
         grouped[key] = []
         order.append(key)
       grouped[key].append(point)
-    return [(surfaces.get(key), grouped[key]) for key in order]
+    return [(key, surfaces.get(key), grouped[key]) for key in order]
+
+  def territoryStructureSeedCounts(self, carrier, surfaceNode, territoryId):
+    """The per-structure seed counts a territory groups on (revised ADR-0037 slice 5).
+
+    Resolves the input surface's per-segment closed surfaces once
+    (``_perSegmentClosedSurfaces``), maps each of ``territoryId``'s seeds to its
+    nearest structure, and returns ``{structureKey: count}`` -- the SAME
+    grouping the extraction path runs on (``_groupSeedsByStructure``).  Reused
+    by the extractor's >=2-per-structure gate, the table's under-seeded warning,
+    and the widget's Extract-action enablement, so the three cannot diverge on
+    which structures are extractable.  Returns ``{}`` when the carrier /
+    territory carries no seeds.
+    """
+    if carrier is None or territoryId is None:
+      return {}
+    count = carrier.GetNumberOfAnnotationPoints(territoryId)
+    if count == 0:
+      return {}
+    points = [
+      tuple(carrier.GetNthAnnotationPoint(territoryId, i)[:3])
+      for i in range(count)
+    ]
+    structures = self._perSegmentClosedSurfaces(surfaceNode)
+    counts = {}
+    for structureKey, _surface, groupPoints in self._groupSeedsByStructure(points, structures):
+      counts[structureKey] = counts.get(structureKey, 0) + len(groupPoints)
+    return counts
 
   def _territorySurface(self, structureSurface, seed):
     """The decimated single connected component of the structure's surface at ``seed``.
@@ -976,13 +1150,16 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
         "centerline extraction is skipped (no surface to run over).")
       return None
 
-  def _extractOneTerritory(self, carrier, extractor, surfacePolyData, territoryId, points):
+  def _extractOneTerritory(self, carrier, extractor, surfacePolyData, territoryId, points, structureKey=None):
     """Build a transient fiducial, extract, wire the output, tear the node down.
 
     A None/empty ``surfacePolyData`` is NOT fed to the extractor: the real
     SlicerVMTK extractor hard-fails on it, so the territory's extraction is
     skipped with a warning (honest degradation, not a silent no-op).  The
-    transient-fiducial lifecycle stays intact for the real path.
+    transient-fiducial lifecycle stays intact for the real path.  ``structureKey``
+    (the input segment id the seeds grouped on) is carried through to
+    ``_wireCenterlineOutput`` so the centerline model can be tagged with its
+    structure for the anatomical-structure show/hide follow (ADR-0037 slice 5).
     """
     if surfacePolyData is None or surfacePolyData.GetNumberOfPoints() == 0:
       logging.warning(
@@ -997,7 +1174,7 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
       # returned by getCenterlineLogic flips to SlicerVMTK's surface-first
       # signature for the real run.
       result = extractor.extractCenterline(seedsNode, surfacePolyData)
-      self._wireCenterlineOutput(carrier, territoryId, result)
+      self._wireCenterlineOutput(carrier, territoryId, result, structureKey)
     finally:
       slicer.mrmlScene.RemoveNode(seedsNode)
 
@@ -1028,7 +1205,12 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
     return [carrier.GetNthNodeReferenceID(role, i)
             for i in range(carrier.GetNumberOfNodeReferences(role))]
 
-  def _wireCenterlineOutput(self, carrier, territoryId, result):
+  #: The centerline model attribute carrying the input SEGMENT (structure) id
+  #: the seeds grouped on (ADR-0037 slice 5).  The widget reads it to hide the
+  #: centerline when its structure is hidden via the structures table.
+  CENTERLINE_STRUCTURE_ATTRIBUTE = "VascularTerritories.StructureSegmentId"
+
+  def _wireCenterlineOutput(self, carrier, territoryId, result, structureKey=None):
     """Wire an extracted centerline into ``CenterlineRefs`` + ``Groupings``.
 
     Preserves the Stage-4 territory-map contract: the centerline model is
@@ -1073,6 +1255,12 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
     derivedInt = territory_label_int(carrier, territoryId)
     if derivedInt is not None:
       modelNode.SetAttribute("VascularTerritories.VascTerrId", str(derivedInt))
+    # Tag with the input SEGMENT (structure) id the seeds grouped on so the
+    # widget can hide this centerline when its structure is hidden via the
+    # structures table (ADR-0037 slice 5).  A None/empty key (single-model
+    # input, no per-segment split) leaves the tag unset -- nothing to follow.
+    if structureKey:
+      modelNode.SetAttribute(self.CENTERLINE_STRUCTURE_ATTRIBUTE, str(structureKey))
     carrier.AddNodeReferenceID(self.CENTERLINE_REFERENCE_ROLE, modelNode.GetID())
     carrier.SetGrouping(modelNode.GetID(), territoryId)
     return modelNode

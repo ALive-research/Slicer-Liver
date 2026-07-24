@@ -47,12 +47,22 @@ from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
 
 try:  # pragma: no cover - exercised once per import path
     from .VesselSurfacePick import VesselSurfacePick
-    from .VesselHighlightWiring import vascular_surface_polydata, visibility_mtime as _visibility_mtime
+    from .VesselHighlightWiring import (
+        vascular_surface_polydata,
+        seed_structure_visible as _seed_structure_visible,
+        visibility_mtime as _visibility_mtime,
+        VisibleStructuresCache as _VisibleStructuresCache,
+    )
     from . import TerritoryInteractionState as _state
     from . import TerritorySliceProjection as _proj
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from VesselSurfacePick import VesselSurfacePick  # type: ignore[no-redef]
-    from VesselHighlightWiring import vascular_surface_polydata, visibility_mtime as _visibility_mtime  # type: ignore[no-redef]
+    from VesselHighlightWiring import (  # type: ignore[no-redef]
+        vascular_surface_polydata,
+        seed_structure_visible as _seed_structure_visible,
+        visibility_mtime as _visibility_mtime,
+        VisibleStructuresCache as _VisibleStructuresCache,
+    )
     import TerritoryInteractionState as _state  # type: ignore[no-redef]
     import TerritorySliceProjection as _proj  # type: ignore[no-redef]
 
@@ -113,6 +123,11 @@ class TerritorySlicePipeline(_PipelineBase):
         self._pick: VesselSurfacePick | None = None
         self._pick_injected: bool = False
         self._pick_surface_mtime: int | None = None
+
+        # Per-segment vessel structures (segId, surface, visible) for the
+        # projected-seed show/hide follow (ADR-0037 slice 5), cached by the
+        # display node's visibility MTime (the ``_ensure_pick`` pattern).
+        self._structures = _VisibleStructuresCache()
 
         # Module-active gate (ADR-0037 slice-5 concern #1).  The gate rides the
         # shared display node in production (read by ``IsModuleActive``), the
@@ -237,6 +252,15 @@ class TerritorySlicePipeline(_PipelineBase):
             return None
         self._pick = VesselSurfacePick(polydata)
         return self._pick
+
+    def _visible_structures(self) -> list:
+        """The per-segment vessel structures ``[(segId, surface, visible)]``.
+
+        Resolved + cached via the shared ``VisibleStructuresCache`` from the
+        display node's ``pickSurface`` (the ``TerritoryPlacementPipeline``
+        seam); ``[]`` under a test-injected pick -> seeds are never hidden bare.
+        """
+        return self._structures.resolve(self._display_node)
 
     def _get_carrier(self) -> Any | None:
         """The carrier the shared display node binds (the 3D-pipeline seam)."""
@@ -423,6 +447,7 @@ class TerritorySlicePipeline(_PipelineBase):
 
         hover_rgb = [int(c * 255) for c in HALO_HOVER_COLOR]
         grab_rgb = [int(c * 255) for c in HALO_GRAB_COLOR]
+        structures = self._visible_structures()
         points = vtk.vtkPoints()
         rgba = vtk.vtkUnsignedCharArray()
         rgba.SetNumberOfComponents(4)
@@ -435,6 +460,9 @@ class TerritorySlicePipeline(_PipelineBase):
                 count = carrier.GetNumberOfAnnotationPoints(territory)
                 for i in range(count):
                     point = carrier.GetNthAnnotationPoint(territory, i)
+                    # Omit a seed whose structure is hidden (ADR-0037 slice 5).
+                    if not _seed_structure_visible(structures, point):
+                        continue
                     signed = _proj.signed_distance(origin, normal, point)
                     if not _proj.is_present(signed):
                         continue  # HARD presence cutoff

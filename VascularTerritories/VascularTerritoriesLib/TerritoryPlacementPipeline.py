@@ -40,10 +40,20 @@ from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
 
 try:  # pragma: no cover - exercised once per import path
     from .VesselSurfacePick import VesselSurfacePick
-    from .VesselHighlightWiring import vascular_surface_polydata, visibility_mtime as _visibility_mtime
+    from .VesselHighlightWiring import (
+        vascular_surface_polydata,
+        seed_structure_visible as _seed_structure_visible,
+        visibility_mtime as _visibility_mtime,
+        VisibleStructuresCache as _VisibleStructuresCache,
+    )
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from VesselSurfacePick import VesselSurfacePick  # type: ignore[no-redef]
-    from VesselHighlightWiring import vascular_surface_polydata, visibility_mtime as _visibility_mtime  # type: ignore[no-redef]
+    from VesselHighlightWiring import (  # type: ignore[no-redef]
+        vascular_surface_polydata,
+        seed_structure_visible as _seed_structure_visible,
+        visibility_mtime as _visibility_mtime,
+        VisibleStructuresCache as _VisibleStructuresCache,
+    )
 
 #: Display-space pick radius for grabbing an existing point, in pixels
 #: (mirrors ``ControlPolygonPipeline.CONTROL_POINT_PICK_RADIUS_PX``).  A
@@ -125,6 +135,13 @@ class TerritoryPlacementPipeline(_PipelineBase):
         self._pick: VesselSurfacePick | None = None
         self._pick_injected: bool = False
         self._pick_surface_mtime: int | None = None
+
+        # Per-segment vessel structures (segId, surface, visible) for the
+        # seed-glyph show/hide follow (ADR-0037 slice 5), cached by the display
+        # node's visibility MTime so a show/hide repaints the seeds without
+        # re-running the closed-surface split per event (kept cheap, mirroring
+        # ``_ensure_pick``).
+        self._structures = _VisibleStructuresCache()
 
         # (territory id, in-territory index) of the point currently GRABBED
         # by a press/move/release drag -- None when no drag is in flight.
@@ -245,6 +262,15 @@ class TerritoryPlacementPipeline(_PipelineBase):
             return None
         self._pick = VesselSurfacePick(polydata)
         return self._pick
+
+    def _visible_structures(self) -> list:
+        """The per-segment vessel structures ``[(segId, surface, visible)]``.
+
+        Resolved + cached via the shared ``VisibleStructuresCache`` from the
+        display node's ``pickSurface`` (ADR-0037 slice 5); ``[]`` under a
+        test-injected pick (no segmentation) -> seeds are never hidden bare.
+        """
+        return self._structures.resolve(self._display_node)
 
     def SetCarrier(self, carrier: Any, territoryId: str) -> None:  # noqa: N802 - VTK verb
         """Bind the ``vtkMRMLCustomTerritoriesNode`` carrier + active territory.
@@ -891,14 +917,17 @@ class TerritoryPlacementPipeline(_PipelineBase):
 
         The carrier is the source of truth: read every visible territory's
         points, glyph each as a sphere tinted with the territory's display
-        colour (ADR-0037 §Decision 1 display slot).  A no-op-safe rebuild — an
-        empty carrier clears the glyphs.
+        colour (ADR-0037 §Decision 1 display slot).  A seed whose STRUCTURE
+        (nearest input segment) is hidden via the structures table is OMITTED,
+        so hiding a vessel hides its seeds live (ADR-0037 slice 5).  A
+        no-op-safe rebuild — an empty carrier clears the glyphs.
         """
         self._seed_points.Reset()
         self._seed_colors.Reset()
         self._seed_colors.SetNumberOfComponents(3)
         grab_rgb = tuple(int(c * 255) for c in HALO_GRAB_COLOR)
         hover_rgb = tuple(int(c * 255) for c in HALO_HOVER_COLOR)
+        structures = self._visible_structures()
         carrier = self._get_carrier()
         if carrier is not None:
             for territory in carrier.GetAnnotationTerritoryIds():
@@ -913,6 +942,9 @@ class TerritoryPlacementPipeline(_PipelineBase):
                 count = carrier.GetNumberOfAnnotationPoints(territory)
                 for i in range(count):
                     point = carrier.GetNthAnnotationPoint(territory, i)
+                    # Omit a seed whose structure is hidden (ADR-0037 slice 5).
+                    if not _seed_structure_visible(structures, point):
+                        continue
                     self._seed_points.InsertNextPoint(point[0], point[1], point[2])
                     key = (territory, i)
                     if key == self._drag_target:
