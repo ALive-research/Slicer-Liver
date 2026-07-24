@@ -873,6 +873,10 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
     try:
        self.logic.calculateVascularTerritoryMap(vascularTerritorySegmentationNode, refVolumeNode, segmentationNode, centerlineModel, self.colormap)
+       # The map output segments come from the labelmap import (named/coloured
+       # by the colormap's label values); re-label + re-colour each to the
+       # TERRITORY it represents so the map matches the table (ADR-0037).
+       self._applyTerritoryNamesAndColors(carrier, vascularTerritorySegmentationNode)
     except ValueError:
         logging.error("Error: Failing when calculating vascular segments")
 
@@ -880,6 +884,33 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     qt.QApplication.restoreOverrideCursor()
     # Re-gate the actions post-compute (ADR-0037 §Decision 4).
     self._updateActionEnablement()
+
+  def _applyTerritoryNamesAndColors(self, carrier, mapSegmentationNode):
+    """Name + colour the map's segments from their territory's display slot.
+
+    ``calculateVascularTerritoryMap`` imports the classified labelmap, so each
+    output segment's label VALUE is the territory's derived 1-based int
+    (``TerritoryLabelMap``); its name/colour come from the colormap, not the
+    surgeon's territory.  Re-key each segment to its territory and set the
+    territory's label + colour so the map reads the same as the table
+    (ADR-0037 §Decision 4 / §Decision 1 display slot).
+    """
+    if carrier is None or mapSegmentationNode is None:
+      return
+    from VascularTerritoriesLib.TerritoryLabelMap import territory_label_ints
+    territoryOrder = list(carrier.GetAnnotationTerritoryIds())
+    intToTerritory = {value: tid for tid, value in territory_label_ints(territoryOrder).items()}
+    segmentation = mapSegmentationNode.GetSegmentation()
+    for i in range(segmentation.GetNumberOfSegments()):
+      segment = segmentation.GetNthSegment(i)
+      territoryId = intToTerritory.get(int(segment.GetLabelValue()))
+      if territoryId is None:
+        continue
+      label = carrier.GetTerritoryLabel(territoryId) or territoryId
+      segment.SetName(label)
+      color = carrier.GetTerritoryColor(territoryId)
+      if color is not None:
+        segment.SetColor(color[0], color[1], color[2])
 
 class _SeedsFirstCenterlineExtractor:
   """Adapt SlicerVMTK's surface-first extractor to a seeds-first call (ADR-0037 §Decision 4).
