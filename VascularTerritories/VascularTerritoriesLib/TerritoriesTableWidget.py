@@ -419,10 +419,12 @@ class TerritoriesTableWidget(qt.QWidget):
     # ------------------------------------------------------------------ #
 
     def addTerritory(self, territoryId: str | None = None) -> str:
-        """Mint an empty territory, select its item, arm the pipeline.
+        """Mint an empty territory and arm the pipeline into it.
 
         Returns the (possibly auto-generated) territory id.  Auto-generated
-        ids avoid colliding with an existing territory.
+        ids avoid colliding with an existing territory.  The new row is NOT
+        selected/highlighted -- arming (the Place toggle) is the active-state
+        cue, so a row selection on top of it is redundant.
         """
         if territoryId is None:
             territoryId = self._mintTerritoryId()
@@ -445,7 +447,6 @@ class TerritoriesTableWidget(qt.QWidget):
         # previously-armed territory's toggle re-derives un-checked.
         self._armInto(territoryId)
         self._rebuild()
-        self.selectTerritoryRow(territoryId)
         return territoryId
 
     def armForSelectedTerritory(self) -> None:
