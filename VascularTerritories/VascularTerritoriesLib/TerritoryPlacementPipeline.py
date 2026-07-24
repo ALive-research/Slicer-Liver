@@ -152,6 +152,13 @@ class TerritoryPlacementPipeline(_PipelineBase):
         # not the only path); tracked to avoid double-observing.
         self._observed_carrier: Any | None = None
 
+        # The pickSurface segmentation's DISPLAY node, observed so a
+        # segment-visibility toggle in the structures table repaints the seed
+        # glyphs (the seed filter is visibility-aware, but a visibility change
+        # modifies the SEGMENTATION display node -- not the carrier -- so the
+        # glyph rebuild needs its own trigger; ADR-0037 slice 5).
+        self._observed_pick_display: Any | None = None
+
         # -- placed-seed rendering (ADR-0037 §Decision 2): the persistent
         # markers for the carrier's annotation points, glyphed as spheres and
         # coloured per territory from the carrier's display slot.  One actor
@@ -457,6 +464,7 @@ class TerritoryPlacementPipeline(_PipelineBase):
             self._detach_observer(node)
         self._carrier = None
         self._observed_carrier = None
+        self._observed_pick_display = None
         self._drag_target = None
         self._hover_target = None
         self._halo_actor.SetVisibility(False)
@@ -477,6 +485,27 @@ class TerritoryPlacementPipeline(_PipelineBase):
         if carrier is not None:
             self._attach_observer(carrier)
 
+    def _ensure_pick_surface_observed(self) -> None:
+        """Observe the pickSurface segmentation's display node for visibility.
+
+        A segment show/hide modifies the segmentation's DISPLAY node; observe
+        it so the seed glyphs repaint (dropping/restoring a hidden structure's
+        seeds) without a carrier edit.  Re-attaches when the resolved display
+        node changes; idempotent.
+        """
+        display = self._display_node
+        segmentation = (display.GetPickSurfaceNode()
+                        if display is not None and hasattr(display, "GetPickSurfaceNode")
+                        else None)
+        seg_display = segmentation.GetDisplayNode() if segmentation is not None else None
+        if seg_display is self._observed_pick_display:
+            return
+        if self._observed_pick_display is not None:
+            self._detach_observer(self._observed_pick_display)
+        self._observed_pick_display = seg_display
+        if seg_display is not None:
+            self._attach_observer(seg_display)
+
     def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
         """LayerDM's re-sync hook (display-node Modified).
 
@@ -488,6 +517,7 @@ class TerritoryPlacementPipeline(_PipelineBase):
         """
         try:
             self._ensure_carrier_observed()
+            self._ensure_pick_surface_observed()
             self._rebuild_seed_actor()
             self._reconcile_highlight()
         except Exception:  # pragma: no cover - C++ boundary must never raise
@@ -504,6 +534,9 @@ class TerritoryPlacementPipeline(_PipelineBase):
         if display is None or not hasattr(display, "GetAdhering"):
             self._marker_actor.SetVisibility(False)
             return
+        # Attach the segment-visibility observer once the pickSurface is wired
+        # (idempotent) so a later structures-table show/hide repaints the seeds.
+        self._ensure_pick_surface_observed()
         try:
             self._marker_sphere.SetRadius(float(display.GetRadius()))
         except Exception:  # pragma: no cover - defensive
