@@ -1032,6 +1032,21 @@ class VascularTerritoriesLogic(ScriptedLoadableModuleLogic):
       return
     modelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "TerritoryCenterline")
     modelNode.SetAndObserveMesh(centerlinePolyData)
+    # Show the extracted centerline so "Extract centerlines" gives immediate
+    # visual feedback (the model is otherwise a display-less data node -- the
+    # gesture appeared to do nothing).  Coloured by the territory's display
+    # slot when set, so a territory's per-structure centerlines read as one.
+    modelNode.CreateDefaultDisplayNodes()
+    displayNode = modelNode.GetDisplayNode()
+    if displayNode is not None:
+      displayNode.SetVisibility(True)
+      displayNode.SetLineWidth(3)
+      try:
+        color = carrier.GetTerritoryColor(territoryId)
+        if color is not None:
+          displayNode.SetColor(color[0], color[1], color[2])
+      except Exception:  # noqa: BLE001 - colour is best-effort feedback
+        pass
     # ADR-0037 §Decision 4: tag the centerline with the DERIVED labelmap int
     # (from the carrier's territory-id order), not the old string
     # ``VascularTerritories.VascTerrId``.  The scene-scan reader that parsed
