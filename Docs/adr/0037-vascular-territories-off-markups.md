@@ -323,7 +323,7 @@ The centerline surface candidates are the input segments whose
 / `SCT^51114001` (Artery) and the broader vessel set — not a per-segment
 selection (a segment can mix systems) and not merge-all.  The liver
 (`SCT^10200004`, resolved by
-[ADR-0011](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0011-terminology-standard-clinical-terms.md)'s
+[ADR-0011](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0011-sct-terminology-dispatch.md)'s
 tag match, which supplies the *map region*) and tumour segments are excluded.
 Real data tags vessels under category `SCT^85756007` (Tissue) with the generic
 Vein/Artery types rather than portal/hepatic-specific codes, so the match is
