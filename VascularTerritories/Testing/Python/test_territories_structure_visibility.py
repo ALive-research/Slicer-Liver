@@ -31,7 +31,7 @@ segmentation, so they SKIP cleanly bare and RUN launched (ADR-0027).
 
 See also:
   * Docs/adr/0037-vascular-territories-off-markups.md  (§Decision 4 + slice 5)
-  * Docs/adr/0013-layerdm-migration.md  (§5 — no custom displayable manager;
+  * Docs/adr/0013-layerdm-pipeline-pattern.md  (§5 — no custom displayable manager;
     the centerline follow is a widget-level Python observer)
   * VascularTerritories/Testing/Python/test_territories_placement_pipeline.py
     (the display-node + pickSurface routing this file reuses)
