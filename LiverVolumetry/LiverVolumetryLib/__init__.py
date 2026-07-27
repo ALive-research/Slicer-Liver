@@ -43,6 +43,20 @@ except ImportError:  # pragma: no cover - LayerDMLib unreachable bare
     registerVolumetrySeedPipeline3DCreator = None
     registerVolumetrySeedPipelineSliceCreator = None
 
+# The carrier-backed seeds table (ADR-0038 §Conformance) is a Python-composed
+# Qt widget (ADR-0004), so it imports ``qt`` / ``ctk`` at module load; those
+# resolve only inside a launched Slicer.  Guard the import so the bare unit
+# layer can still reach the pure cores above (the VolumetrySeedPipeline
+# precedent).
+try:
+    from .VolumetrySeedsTableWidget import VolumetrySeedsTableWidget
+except (ImportError, AttributeError):  # pragma: no cover - Qt/ctk unreachable bare
+    # Bare ``qt`` imports but lacks ``qt.QWidget`` (no qSlicerApplication), so
+    # the class body raises AttributeError, not ImportError -- catch both so
+    # the pure cores above stay importable bare (the VascularTerritoriesLib
+    # precedent).
+    VolumetrySeedsTableWidget = None
+
 __all__ = [
     "build_fiducial_payload",
     "build_transient_fiducial",
@@ -53,4 +67,5 @@ __all__ = [
     "VolumetrySeedPipelineSlice",
     "registerVolumetrySeedPipeline3DCreator",
     "registerVolumetrySeedPipelineSliceCreator",
+    "VolumetrySeedsTableWidget",
 ]

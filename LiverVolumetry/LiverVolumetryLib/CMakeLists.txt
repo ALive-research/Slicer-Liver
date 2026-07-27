@@ -24,6 +24,7 @@ set(LiverVolumetryLib_PYTHON_SCRIPTS
   VolumetrySeedProvider.py
   InVolumePick.py
   VolumetrySeedPipeline.py
+  VolumetrySeedsTableWidget.py
   )
 
 set(LiverVolumetryLib_PYTHON_RESOURCES
