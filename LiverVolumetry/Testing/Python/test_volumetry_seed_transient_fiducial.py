@@ -55,7 +55,7 @@ import sys
 
 import pytest
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 # The pure builder core lives in the module's Lib (proposed
 # ``LiverVolumetryLib`` following the VascularTerritoriesLib precedent); the
 # path-insert lets the bare layer import it before the Lib packaging lands.
