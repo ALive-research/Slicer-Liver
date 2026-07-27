@@ -38,8 +38,11 @@ except ImportError:  # bare unit layer: add the sibling Lib dir to sys.path
     from PointPlacementState import PointPlacementState  # type: ignore[no-redef]
 
 #: The territory namespace reproduces the original attribute keys exactly.
+#: The base's active-key suffix now defaults to the neutral ``Active``; the
+#: territory keeps its historical ``ActiveTerritory`` suffix via the param so
+#: its runtime keys are byte-for-byte unchanged.
 _NAMESPACE = "VascularTerritories"
-_STATE = PointPlacementState(_NAMESPACE)
+_STATE = PointPlacementState(_NAMESPACE, active_suffix="ActiveTerritory")
 
 #: Display-node attribute keys / reference role (kept for back-compat).
 ARMED_ATTR = f"{_NAMESPACE}.Armed"
