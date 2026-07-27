@@ -11,7 +11,8 @@ not shared"):
 * the add-on-click / drag-to-edit-nearest / delete / bare-move-decline
   arbitration (ADR-0033 hover discipline: a bare move returns
   ``(False, +inf)`` so the camera is untouched);
-* the display-space pick-radius grab (``_nearest_point_in_display``);
+* the display-space pick-radius grab (``_nearest_key_in_display``, which
+  defaults to the enumerate-keyed ``_nearest_point_in_display`` scan);
 * the cursor-ray unproject for a drag target (``_event_world``);
 * the point world for a CLICK comes from the injected **pick provider**
   (ADR-0038 §"Base extension" -- the base has NO surface-vs-volume branch);
@@ -186,7 +187,7 @@ class SurfacePointPlacementPipeline3D(_PipelineBase):
             if etype != vtk.vtkCommand.LeftButtonPressEvent:
                 return False, sys.float_info.max
 
-            key, distance2 = self._nearest_point_in_display(renderer, eventData)
+            key, distance2 = self._nearest_key_in_display(renderer, eventData)
             if key is not None and distance2 <= POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX:
                 return True, distance2
 
@@ -221,7 +222,7 @@ class SurfacePointPlacementPipeline3D(_PipelineBase):
             if self._drag_key is None:
                 if etype != vtk.vtkCommand.LeftButtonPressEvent:
                     return False
-                key, distance2 = self._nearest_point_in_display(renderer, eventData)
+                key, distance2 = self._nearest_key_in_display(renderer, eventData)
                 if key is not None and distance2 <= POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX:
                     self._drag_key = key  # grab for a drag (edit gesture)
                     self._on_grab(key, renderer, eventData)
@@ -320,6 +321,20 @@ class SurfacePointPlacementPipeline3D(_PipelineBase):
     # GL-touching seams (monkeypatched in the unit layer; overridden by the
     # concrete clients where their data model differs)
     # ------------------------------------------------------------------ #
+
+    def _nearest_key_in_display(self, renderer: Any, eventData: Any):
+        """``(key, distance2)`` of the point nearest the event pixel (grab seam).
+
+        The single seam the arbitration bodies consult for the grab hit-test:
+        it MUST return a 2-tuple ``(key, distance2)`` where ``key`` is the
+        drag key the write-backs expect (``None`` when nothing is near).  The
+        default delegates to ``_nearest_point_in_display`` (the enumerate-keyed
+        scan below); a client whose key is not a flat index -- vascular
+        territories' ``(territoryId, index)`` pair -- overrides THIS adapter
+        and repacks its own richer hit-test into the 2-tuple contract, without
+        touching the arbitration bodies (ADR-0038 §"What is not shared").
+        """
+        return self._nearest_point_in_display(renderer, eventData)
 
     def _nearest_point_in_display(self, renderer: Any, eventData: Any):
         """``(key, distance2)`` of the provider point nearest the event pixel.
