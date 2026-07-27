@@ -29,6 +29,7 @@ set(VascularTerritoriesLib_PYTHON_SCRIPTS
   SeedStructureMapping.py
   VesselHighlightPipeline.py
   TerritoryInteractionState.py
+  TerritoryPointProvider.py
   TerritoryPlacementPipeline.py
   TerritorySliceProjection.py
   TerritorySlicePipeline.py
