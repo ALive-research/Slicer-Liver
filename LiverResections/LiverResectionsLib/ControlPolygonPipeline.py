@@ -38,7 +38,6 @@ import vtk
 try:  # pragma: no cover - exercised once per import path
     from SlicerLiverInteractionLib.SurfacePointPlacementPipeline3D import (
         SurfacePointPlacementPipeline3D as _PipelineBase,
-        _event_type,  # noqa: F401 - re-exported for the sibling SliceControlPolygonPipeline
     )
 except ImportError:  # bare / top-level path: add the sibling Lib dir to sys.path
     import pathlib
@@ -49,7 +48,6 @@ except ImportError:  # bare / top-level path: add the sibling Lib dir to sys.pat
         _sys.path.insert(0, str(_shared_lib))
     from SurfacePointPlacementPipeline3D import (  # type: ignore[no-redef]
         SurfacePointPlacementPipeline3D as _PipelineBase,
-        _event_type,  # noqa: F401 - re-exported for the sibling SliceControlPolygonPipeline
     )
 
 # State constants + safe accessors shared with the sibling Pipeline (single
