@@ -151,11 +151,21 @@ class SurfacePointPlacementPipeline3D(_PipelineBase):
           pick radius squared (add-on-click);
         * a grabbed move/release is claimed unconditionally;
         * a bare move is DECLINED (``(False, +inf)``) so the camera is
-          untouched (ADR-0033).
+          untouched (ADR-0033); a client may raise a hover cue as a SIDE
+          EFFECT of the declined bare move via ``_on_bare_move_decline``.
+
+        The ``_admissible`` gate hook (default ``True``) lets a client veto
+        the whole arbitration on its own data-model state -- resection's
+        Init/Planning gate rides here (ADR-0038 §"What is not shared"), NOT
+        as a branch in this base.
         """
         try:
+            if not self._admissible():
+                self._drag_key = None  # a state flip mid-gesture drops the grab
+                return False, sys.float_info.max
             renderer = self._safe_get_renderer()
             if renderer is None:
+                self._drag_key = None
                 return False, sys.float_info.max
             etype = _event_type(eventData)
 
@@ -168,7 +178,9 @@ class SurfacePointPlacementPipeline3D(_PipelineBase):
                 return False, sys.float_info.max
 
             if etype == vtk.vtkCommand.MouseMoveEvent:
-                # Bare hover: DECLINE (camera untouched, ADR-0033).
+                # Bare hover: DECLINE (camera untouched, ADR-0033).  The
+                # client's hover cue is a side effect of this declined call.
+                self._on_bare_move_decline(renderer, eventData)
                 return False, sys.float_info.max
 
             if etype != vtk.vtkCommand.LeftButtonPressEvent:
@@ -187,10 +199,21 @@ class SurfacePointPlacementPipeline3D(_PipelineBase):
             return False, sys.float_info.max
 
     def ProcessInteractionEvent(self, eventData: Any) -> bool:  # noqa: N802 - VTK verb
-        """Drive add-on-click / drag-to-edit-nearest (ADR-0038 §Decision)."""
+        """Drive add-on-click / drag-to-edit-nearest (ADR-0038 §Decision).
+
+        The generic press-grab / move / release skeleton is here; each phase
+        calls a client hook (``_on_grab`` / ``_on_drag`` / ``_on_release``,
+        all no-ops by default) so a client contributes its data-model side
+        effects -- the resection state-machine commit, the grab-colour
+        scalars, the hover halo -- WITHOUT re-implementing the arbitration
+        (ADR-0038 §"What is not shared").
+        """
         try:
             renderer = self._safe_get_renderer()
             if renderer is None:
+                self._drag_key = None
+                return False
+            if not self._admissible():
                 self._drag_key = None
                 return False
             etype = _event_type(eventData)
@@ -201,6 +224,7 @@ class SurfacePointPlacementPipeline3D(_PipelineBase):
                 key, distance2 = self._nearest_point_in_display(renderer, eventData)
                 if key is not None and distance2 <= POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX:
                     self._drag_key = key  # grab for a drag (edit gesture)
+                    self._on_grab(key, renderer, eventData)
                     self.RequestRender()
                     return True
                 if not self.IsArmed():
@@ -216,6 +240,7 @@ class SurfacePointPlacementPipeline3D(_PipelineBase):
 
             if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
                 self._drag_key = None
+                self._on_release()
                 self.RequestRender()
                 return False  # gesture over -- release the focus
 
@@ -224,12 +249,41 @@ class SurfacePointPlacementPipeline3D(_PipelineBase):
                 if world is None:
                     return True  # keep the grab; this move just didn't resolve
                 self._move_point(self._drag_key, world)
+                self._on_drag(self._drag_key)
                 self.RequestRender()
                 return True
 
             return False
         except Exception:  # pragma: no cover - C++ boundary must never raise
             return False
+
+    # ------------------------------------------------------------------ #
+    # Client extension hooks (no data-model knowledge in the base;
+    # ADR-0038 §"What is not shared").  All no-ops / permissive by default;
+    # the flat clients (territories, volumetry) ignore them, resection
+    # fills them with the state-machine commit + hover/grab cues.
+    # ------------------------------------------------------------------ #
+
+    def _admissible(self) -> bool:
+        """Veto hook for a client's own gate (default: always admit).
+
+        A client whose data model gates interaction (resection's
+        Init/Planning state machine) overrides this; the base carries no
+        such gate.
+        """
+        return True
+
+    def _on_grab(self, key: Any, renderer: Any, eventData: Any) -> None:
+        """Called right after the base grabs ``key`` on a press (default no-op)."""
+
+    def _on_drag(self, key: Any) -> None:
+        """Called right after a drag move relocates ``key`` (default no-op)."""
+
+    def _on_release(self) -> None:
+        """Called right after the base clears the grab on release (default no-op)."""
+
+    def _on_bare_move_decline(self, renderer: Any, eventData: Any) -> None:
+        """Called on a DECLINED bare move (default no-op -- the hover cue seam)."""
 
     def DeletePoint(self, key: Any) -> bool:  # noqa: N802 - VTK verb
         """Remove EXACTLY ONE point via the provider (delete write-back)."""
