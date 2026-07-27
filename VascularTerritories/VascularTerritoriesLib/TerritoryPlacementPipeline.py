@@ -1,6 +1,6 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital.  All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
-"""LayerDM Pipeline for vessel-annotation placement + edit (ADR-0037).
+"""LayerDM Pipeline for vessel-annotation placement + edit (ADR-0037/0038).
 
 ADR-0037 §Decision 2 routes vessel-annotation placement and edit through
 the LayerDM scripted Pipeline's interaction seam (ADR-0032 / ADR-0033),
@@ -18,15 +18,26 @@ add-on-click / drag-to-edit / delete-from-table is the whole lifecycle:
 * DELETE removes EXACTLY ONE point;
 * an unrelated ``Modified`` causes no drift.
 
-The point storage lives on ``vtkMRMLCustomTerritoriesNode`` (the carrier
-pinned by ``test_territories_annotation_carrier.py``); this Pipeline
-WRITES to it via the interaction seam, mirroring ``ControlPolygonPipeline``
-/ ``LiverBezierSurfacePipeline`` (the resection interaction seams).
+ADR-0038 §Decision makes this a thin CLIENT of the shared
+``SurfacePointPlacementPipeline3D`` base: the base DRIVES the generic
+add-on-click / drag-to-edit-nearest / delete / bare-move-decline
+arbitration (``Can/ProcessInteractionEvent``), and this client contributes
+ONLY the territory-SPECIFIC concerns through the base's extension hooks
+(ADR-0038 §"What is not shared"):
 
-The pick geometry itself is pure-VTK and covered bare by
-``test_vessel_surface_pick.py``; here the invariants are the arbitration
-(claim click / claim grabbed drag / decline bare move), the exactly-one
-mutation per gesture, and the nearest-point edit selection.
+* per-territory grouping + active-territory routing (the ``add_point`` fan
+  into the active territory, on ``TerritoryPointProvider`` + this pipeline);
+* vessel-visibility gating -- a hidden vessel surface is not pickable and a
+  hidden seed is neither grabbable nor drawn -- via ``_ensure_pick`` over
+  the visibility-filtered ``vascular_surface_polydata`` and the
+  ``VisibleStructuresCache``-backed ``seed_visible`` filter in the hit-test
+  and the seed-glyph rebuild;
+* the vessel hover-adhering marker, the glow halo, the slice-jump, and the
+  per-segment seed show/hide -- none of which bleed into the base.
+
+The point storage lives on ``vtkMRMLCustomTerritoriesNode`` (the carrier
+pinned by ``test_territories_annotation_carrier.py``); this Pipeline WRITES
+to it via the provider seam.
 """
 
 from __future__ import annotations
@@ -36,7 +47,26 @@ from typing import Any
 
 import vtk
 
-from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
+# The shared 3D placement/edit base (ADR-0038 §Decision): territories is the
+# flat, vessel-gated client of ``SurfacePointPlacementPipeline3D`` over the
+# PointProvider + swappable-pick seam.  The base drives the generic
+# add/grab/drag/release arbitration; this pipeline keeps the per-territory
+# grouping, the vessel-visibility gating, and the hover/marker/halo cues as
+# overrides (ADR-0038 §"What is not shared").
+try:  # pragma: no cover - exercised once per import path
+    from SlicerLiverInteractionLib.SurfacePointPlacementPipeline3D import (
+        SurfacePointPlacementPipeline3D as _PipelineBase,
+    )
+except ImportError:  # bare / top-level path: add the sibling Lib dir to sys.path
+    import pathlib
+    import sys as _sys
+
+    _shared_lib = pathlib.Path(__file__).resolve().parents[2] / "SlicerLiverInteractionLib"
+    if str(_shared_lib) not in _sys.path:
+        _sys.path.insert(0, str(_shared_lib))
+    from SurfacePointPlacementPipeline3D import (  # type: ignore[no-redef]
+        SurfacePointPlacementPipeline3D as _PipelineBase,
+    )
 
 try:  # pragma: no cover - exercised once per import path
     from .VesselSurfacePick import VesselSurfacePick
@@ -45,6 +75,7 @@ try:  # pragma: no cover - exercised once per import path
         visibility_mtime as _visibility_mtime,
         VisibleStructuresCache as _VisibleStructuresCache,
     )
+    from .TerritoryPointProvider import TerritoryPointProvider
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from VesselSurfacePick import VesselSurfacePick  # type: ignore[no-redef]
     from VesselHighlightWiring import (  # type: ignore[no-redef]
@@ -52,11 +83,14 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
         visibility_mtime as _visibility_mtime,
         VisibleStructuresCache as _VisibleStructuresCache,
     )
+    from TerritoryPointProvider import (  # type: ignore[no-redef]
+        TerritoryPointProvider,
+    )
 
 #: Display-space pick radius for grabbing an existing point, in pixels
-#: (mirrors ``ControlPolygonPipeline.CONTROL_POINT_PICK_RADIUS_PX``).  A
-#: press within this radius of a placed point grabs it for a drag; a press
-#: outside it (but over the surface) adds a new point.
+#: (mirrors the base's ``POINT_PICK_RADIUS_PX``).  A press within this radius
+#: of a placed point grabs it for a drag; a press outside it (but over the
+#: surface) adds a new point.
 POINT_PICK_RADIUS_PX = 20.0
 
 #: Hover/grab cue colours + halo scale, shared with the resection surface
@@ -89,14 +123,16 @@ class TerritoryPlacementPipeline(_PipelineBase):
     ``registerTerritoryPlacementPipelineCreator()``; keyed on
     ``vtkMRMLTerritoriesHighlightDisplayNode`` (the annotation-interaction
     display node), reusing the adhering highlight's pick core.
+
+    A thin client of ``SurfacePointPlacementPipeline3D``: the base drives the
+    arbitration, this class supplies the territory data model + vessel gating.
     """
 
     def __init__(self) -> None:
-        super().__init__()
-        self.SetPythonObject(self)
+        # The base seeds ``_display_node`` / ``_renderer`` / ``_drag_key`` /
+        # ``_provider`` / ``_pick_provider`` and calls ``SetPythonObject``.
+        super().__init__(namespace="TerritoryPlacement")
 
-        self._display_node: Any | None = None
-        self._renderer: Any | None = None
         self._observer_tags: dict = {}
         self._observed_node_refs: list = []
 
@@ -104,26 +140,35 @@ class TerritoryPlacementPipeline(_PipelineBase):
         self._carrier: Any | None = None
         self._territory_id: str | None = None
 
+        # Wire the ADR-0038 seams:
+        #  * the data model -- the base reads/writes the carrier points via
+        #    this provider (flat, no edges -- territory seeds are unordered);
+        #  * the click->world pick -- delegated to ``_event_world_on_surface``
+        #    so the base's add-on-click routes through the vessel-visibility-
+        #    gated surface snap (and the unit layer's monkeypatch), NOT a
+        #    surface-vs-volume branch in the base (ADR-0038 §"Base extension").
+        self.SetProvider(
+            TerritoryPointProvider(
+                carrier_getter=self._get_carrier,
+                territory_getter=self._placement_territory,
+                # Re-read through the pipeline so a unit-layer monkeypatch of
+                # ``_seed_visible`` is honoured and the vessel-visibility gate
+                # stays a single source of truth (the hit-test + seed rebuild
+                # consult the same method).
+                visible_getter=lambda point: self._seed_visible(point),
+            )
+        )
+        self.SetPickProvider(_TerritorySurfacePick(self))
+
         # Stage-2 arming (ADR-0037 §Decision 3).  An armed click appends one
         # seed to the ACTIVE territory; a disarmed click adds nothing.  In
         # production the arm state + active territory + carrier all live on the
         # shared highlight DISPLAY NODE (read by ``GetActiveTerritory`` /
         # ``IsArmed`` / ``_get_carrier``) so the widget/table reach the
-        # manager-driven Pipeline; these instance fields are the BARE-unit
-        # fallback (no display node).  It is still pipeline-managed, not a
-        # Slicer interaction node / mouse mode.
+        # manager-driven Pipeline; the base's instance fields are the
+        # BARE-unit fallback (no display node).  It is still pipeline-managed,
+        # not a Slicer interaction node / mouse mode.
         self._active_territory: str | None = None
-        self._armed: bool = False
-
-        # Module-active gate (ADR-0037 slice-5 concern #1): a belt-and-
-        # suspenders decline BEYOND the armed flag -- an add-on-click places
-        # nothing while the owning module has EXPLICITLY closed the gate (its
-        # ``exit()``).  Rides the shared display node in production (read by
-        # ``IsModuleActive``); this instance field is the BARE-unit fallback
-        # (no display node).  Defaults OPEN -- the decline is opt-in, matching
-        # the display-node "unset reads active" rule -- so a Pipeline created
-        # before any ``enter()`` still lands a gesture.
-        self._module_active: bool = True
 
         # Injectable pick core (bare unit layer feeds a known surface); in
         # production ``_ensure_pick`` builds it from the display node's
@@ -140,10 +185,6 @@ class TerritoryPlacementPipeline(_PipelineBase):
         # re-running the closed-surface split per event (kept cheap, mirroring
         # ``_ensure_pick``).
         self._structures = _VisibleStructuresCache()
-
-        # (territory id, in-territory index) of the point currently GRABBED
-        # by a press/move/release drag -- None when no drag is in flight.
-        self._drag_target: tuple[str, int] | None = None
 
         # Carrier currently observed for the seed-glyph rebuild (production
         # resolves it from the display node, so the bare ``SetCarrier`` bind is
@@ -225,6 +266,21 @@ class TerritoryPlacementPipeline(_PipelineBase):
         self._halo_actor.SetVisibility(False)
 
     # ------------------------------------------------------------------ #
+    # Grab bookkeeping -- the base's ``_drag_key`` IS the grabbed
+    # ``(territoryId, index)`` (the key ``_nearest_key_in_display`` returns);
+    # the rendering reads it through this alias so there is one source of
+    # truth (the base's field), not a shadow copy.
+    # ------------------------------------------------------------------ #
+
+    @property
+    def _drag_target(self) -> tuple[str, int] | None:
+        return self._drag_key
+
+    @_drag_target.setter
+    def _drag_target(self, value: tuple[str, int] | None) -> None:
+        self._drag_key = value
+
+    # ------------------------------------------------------------------ #
     # Wiring seams (unit + production)
     # ------------------------------------------------------------------ #
 
@@ -277,6 +333,17 @@ class TerritoryPlacementPipeline(_PipelineBase):
         """
         return self._structures.resolve(self._display_node)
 
+    def _seed_visible(self, point: Any) -> bool:
+        """True iff ``point``'s nearest vessel structure is visible.
+
+        The vessel-visibility gate (ADR-0037 slice 5) the provider's
+        ``iter_points`` and this pipeline's hit-test + seed-glyph rebuild all
+        consult, so a hidden vessel's seeds are neither drawn nor grabbable.
+        This is the REAL #569 seed-visibility notion (vessel SEGMENT
+        visibility via ``VisibleStructuresCache``), NOT a territory-row toggle.
+        """
+        return self._structures.seed_visible(self._display_node, point)
+
     def SetCarrier(self, carrier: Any, territoryId: str) -> None:  # noqa: N802 - VTK verb
         """Bind the ``vtkMRMLCustomTerritoriesNode`` carrier + active territory.
 
@@ -312,6 +379,12 @@ class TerritoryPlacementPipeline(_PipelineBase):
 
     # ------------------------------------------------------------------ #
     # Active-territory + arm seam (Stage 2, ADR-0037 §Decision 3)
+    #
+    # These OVERRIDE the base's ``PointPlacementState``-backed arm gate: the
+    # territory client rides the shared highlight display node via
+    # ``TerritoryInteractionState`` (which also carries the active territory +
+    # the carrier reference), so the widget/table reach the manager-driven
+    # Pipeline through the display node all three hold (ADR-0037 §Decision 3).
     # ------------------------------------------------------------------ #
 
     def SetActiveTerritory(self, territoryId: str | None) -> None:  # noqa: N802 - VTK verb
@@ -364,9 +437,6 @@ class TerritoryPlacementPipeline(_PipelineBase):
         if active is not None:
             return active
         return self._territory_id
-
-    def _safe_get_renderer(self) -> Any | None:
-        return self._renderer
 
     # ------------------------------------------------------------------ #
     # LayerDM lifecycle
@@ -463,7 +533,7 @@ class TerritoryPlacementPipeline(_PipelineBase):
         self._carrier = None
         self._observed_carrier = None
         self._observed_pick_display = None
-        self._drag_target = None
+        self._drag_key = None  # the base's grab bookkeeping
         self._hover_target = None
         self._halo_actor.SetVisibility(False)
 
@@ -555,208 +625,108 @@ class TerritoryPlacementPipeline(_PipelineBase):
             self._jump_slices_to_world(point)
 
     # ------------------------------------------------------------------ #
-    # Interaction — placement / edit (ADR-0032 / ADR-0033)
+    # Interaction -- client extension hooks (ADR-0038 §"What is not shared")
+    #
+    # The generic add-on-click / drag-to-edit-nearest / delete / bare-move-
+    # decline arbitration is the base's; this pipeline contributes only the
+    # TERRITORY-specific parts through the base's hooks: the vessel-gated grab
+    # hit-test (``_nearest_key_in_display``), the surface-snap drag target
+    # (``_event_world``), the per-territory grouping click (``_add_point`` +
+    # the provider), the bare-move hover/adhering cue
+    # (``_on_bare_move_decline``), and the grab/drag/release halo + seed
+    # recolour (``_on_grab`` / ``_on_drag`` / ``_on_release``).
+    # ``Can/ProcessInteractionEvent`` themselves are NOT overridden -- the base
+    # drives them.
     # ------------------------------------------------------------------ #
 
-    def CanProcessInteractionEvent(self, eventData: Any):  # noqa: N802 - VTK verb
-        """Return ``(canProcess, distance2)`` for the LayerDM focus logic.
+    def _nearest_key_in_display(self, renderer: Any, eventData: Any):
+        """Repack the territory hit-test into the base's ``(key, distance2)``.
 
-        * A LEFT-BUTTON PRESS within ``POINT_PICK_RADIUS_PX`` of an existing
-          point is claimed with the REAL squared display distance (grab a
-          point for a drag).
-        * A LEFT-BUTTON PRESS over the surface but away from any point is
-          claimed (add-on-click); its arbitration value is the pick radius
-          squared so a nearer grabbable interaction still wins.
-        * While a point is GRABBED, moves and the release are claimed
-          unconditionally (the grab owns the gesture).
-        * A BARE MOVE is DECLINED (``(False, +inf)``) so the camera is
-          untouched (ADR-0033); it only raises the adhering highlight as a
-          side effect.
+        The base's grab seam expects a 2-tuple whose ``key`` round-trips through
+        the provider's ``move_point`` / ``delete_point``.  The territory key is
+        a ``(territoryId, index)`` PAIR, so this override consults the vessel-
+        gated ``_nearest_point_in_display`` (which stays a 3-tuple the unit
+        layer monkeypatches) and repacks it -- without touching the base's
+        arbitration bodies (ADR-0038 §"What is not shared").
         """
-        try:
-            renderer = self._safe_get_renderer()
-            if renderer is None:
-                return False, sys.float_info.max
-            etype = _event_type(eventData)
+        territory, index, distance2 = self._nearest_point_in_display(renderer, eventData)
+        if territory is None or index is None:
+            return None, sys.float_info.max
+        return (territory, index), distance2
 
-            if self._drag_target is not None:
-                if etype in (
-                    vtk.vtkCommand.MouseMoveEvent,
-                    vtk.vtkCommand.LeftButtonReleaseEvent,
-                ):
-                    return True, 0.0
-                return False, sys.float_info.max
+    def _event_world(self, renderer: Any, eventData: Any):
+        """The drag target: the vessel-visibility-gated surface snap.
 
-            if etype == vtk.vtkCommand.MouseMoveEvent:
-                # Bare hover (ADR-0033: side-effect repaint, DECLINE so the
-                # camera is untouched).  Over an existing seed -> glow halo on
-                # it (about-to-move cue) + suppress the placement preview; over
-                # empty surface -> raise the adhering placement preview.
-                territory, index, distance2 = self._nearest_point_in_display(renderer, eventData)
-                if (
-                    territory is not None
-                    and index is not None
-                    and distance2 <= POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX
-                ):
-                    self._set_hover((territory, index))
-                    self._clear_adhering()
-                else:
-                    self._set_hover(None)
-                    self._raise_highlight(renderer, eventData)
-                self._reconcile_highlight()
-                self.RequestRender()
-                return False, sys.float_info.max
-
-            if etype != vtk.vtkCommand.LeftButtonPressEvent:
-                return False, sys.float_info.max
-
-            _territory, _index, distance2 = self._nearest_point_in_display(renderer, eventData)
-            if distance2 <= POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX:
-                # Press near an existing point -> grab it for a drag (an edit
-                # gesture; independent of the arm state).
-                return True, distance2
-
-            # Add-on-click requires an armed pipeline (ADR-0037 §Decision 3):
-            # a disarmed press away from any point leaves the gesture to the
-            # camera.
-            if not self.IsArmed():
-                return False, sys.float_info.max
-
-            # Press away from any point: claim only when the ray hits the
-            # surface (add-on-click); otherwise leave the press to the camera.
-            if self._event_world_on_surface(renderer, eventData) is None:
-                return False, sys.float_info.max
-            return True, POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX
-        except Exception:  # pragma: no cover - C++ boundary must never raise
-            return False, sys.float_info.max
-
-    def ProcessInteractionEvent(self, eventData: Any) -> bool:  # noqa: N802 - VTK verb
-        """Drive add-on-click / drag-to-edit (ADR-0037 §Decision 2)."""
-        try:
-            renderer = self._safe_get_renderer()
-            if renderer is None:
-                self._drag_target = None
-                return False
-            etype = _event_type(eventData)
-
-            if self._drag_target is None:
-                if etype != vtk.vtkCommand.LeftButtonPressEvent:
-                    return False
-                territory, index, distance2 = self._nearest_point_in_display(renderer, eventData)
-                if territory is not None and index is not None and distance2 <= POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX:
-                    # Grab the existing point for a drag (edit gesture): swap the
-                    # glow halo + the seed to the grab colour (green).
-                    self._drag_target = (territory, index)
-                    self._position_halo()
-                    self._rebuild_seed_actor()
-                    self.RequestRender()
-                    return True
-                # Add-on-click requires an armed pipeline (ADR-0037
-                # §Decision 3): a disarmed click adds nothing.  Read the
-                # display-node-backed arm state (the table writes it there),
-                # NOT the instance flag.
-                if not self.IsArmed():
-                    return False
-                # Module-active gate (ADR-0037 slice-5 concern #1): belt-and-
-                # suspenders beyond the armed flag -- decline while the owning
-                # module is inactive so no view lands a seed off-module.
-                if not self.IsModuleActive():
-                    return False
-                # Snap to the surface and add exactly one point to the active
-                # territory.
-                world = self._event_world_on_surface(renderer, eventData)
-                if world is None:
-                    return False
-                # A later seed is placed WHERE THE PICK SNAPS IT -- on the
-                # visible vessel under the cursor -- with no snap-back.  A
-                # territory may straddle disjoint structures (portal + hepatic);
-                # the visibility-gated pick is the only placement constraint
-                # (revised ADR-0037 slice 5, no straddle-snap).
-                self._add_point(world)
-                # Repaint immediately: the carrier observer's RequestRender does
-                # not flush a frame mid-interaction (the slice-pipeline lesson).
-                self._rebuild_seed_actor()
-                self.RequestRender()
-                return True
-
-            if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
-                self._drag_target = None
-                # Gesture over: drop the grab colour (fall back to hover/none).
-                self._position_halo()
-                self._rebuild_seed_actor()
-                self.RequestRender()
-                return False  # release the focus
-
-            if etype == vtk.vtkCommand.MouseMoveEvent:
-                world = self._event_world_on_surface(renderer, eventData)
-                if world is None:
-                    return True  # keep the grab; this move just didn't resolve
-                self._relocate_grabbed_point(world)
-                # Track the grabbed seed under the drag + repaint immediately.
-                self._position_halo()
-                self._rebuild_seed_actor()
-                self.RequestRender()
-                return True
-
-            return False
-        except Exception:  # pragma: no cover - C++ boundary must never raise
-            return False
-
-    def DeleteAnnotationPoint(self, territoryId: str, index: int) -> bool:  # noqa: N802 - VTK verb
-        """Remove EXACTLY ONE annotation point (delete-from-table end).
-
-        ADR-0037 §Decision 2 "delete removes one point"; the tail shifts up
-        in order.  Returns True iff a point was removed.
+        Overrides the base's default (which would call the injected pick): the
+        territory drag follows the cursor on the picked vessel surface via
+        ``_event_world_on_surface`` (the seam the unit layer monkeypatches).
         """
-        carrier = self._get_carrier()
-        if carrier is None:
-            return False
-        return bool(carrier.RemoveNthAnnotationPoint(territoryId, int(index)))
-
-    # ------------------------------------------------------------------ #
-    # Carrier writes
-    # ------------------------------------------------------------------ #
+        return self._event_world_on_surface(renderer, eventData)
 
     def _add_point(self, world: Any) -> None:
-        carrier = self._get_carrier()
-        territory = self._placement_territory()
-        if carrier is None or territory is None:
-            return
-        carrier.AddAnnotationPoint(territory, float(world[0]), float(world[1]), float(world[2]))
+        """The add-on-click fan into the ACTIVE territory + the slice jump.
+
+        Overrides the base's plain provider ``add_point`` so a territory click
+        also reslices the 2D views onto the placed seed (ADR-0025 mirror) --
+        the per-territory grouping itself is the provider's concern (it appends
+        into ``_placement_territory``).
+        """
+        provider = self._provider
+        if provider is not None:
+            provider.add_point((world[0], world[1], world[2]))
         # A seed placed in a 3D view leaves the 2D slices on whatever plane
         # they were showing, so the projected slice marker floats off the
         # seed's anatomy; reslice every slice plane onto the seed (mirrors
         # LocatorReslicer, ADR-0025) so the 2D views show the slice through it.
         self._jump_slices_to_world(world)
+        # Repaint immediately: the carrier observer's RequestRender does not
+        # flush a frame mid-interaction (the slice-pipeline lesson).
+        self._rebuild_seed_actor()
 
-    def _jump_slices_to_world(self, world: Any) -> None:
-        """Offset every slice view's plane onto ``world`` (JumpSliceByOffsetting).
+    def _on_grab(self, key: Any, renderer: Any, eventData: Any) -> None:
+        """Grab an existing seed: swap the glow halo + seed to green."""
+        self._position_halo()
+        self._rebuild_seed_actor()
 
-        Translates each plane along its OWN normal (orientation preserved), so
-        the 2D views reslice to the placed seed.  A no-op (never raising) when
-        the scene or the jump API is unavailable.
+    def _on_drag(self, key: Any) -> None:
+        """Track the grabbed seed under the drag + repaint immediately."""
+        self._position_halo()
+        self._rebuild_seed_actor()
+
+    def _on_release(self) -> None:
+        """Gesture over: drop the grab colour (fall back to hover/none)."""
+        self._position_halo()
+        self._rebuild_seed_actor()
+
+    def _on_bare_move_decline(self, renderer: Any, eventData: Any) -> None:
+        """Raise the hover cue on a declined bare move (ADR-0033 side effect).
+
+        Over an existing seed -> glow halo on it (about-to-move cue) + suppress
+        the placement preview; over empty surface -> raise the adhering
+        placement preview.  A declined bare move, so the camera is untouched.
         """
-        if world is None:
-            return
-        scene = self._display_node.GetScene() if self._display_node is not None else None
-        if scene is None:
-            carrier = self._get_carrier()
-            scene = carrier.GetScene() if carrier is not None else None
-        if scene is None:
-            return
-        for i in range(scene.GetNumberOfNodesByClass("vtkMRMLSliceNode")):
-            slice_node = scene.GetNthNodeByClass(i, "vtkMRMLSliceNode")
-            jump = getattr(slice_node, "JumpSliceByOffsetting", None)
-            if jump is not None:
-                jump(float(world[0]), float(world[1]), float(world[2]))
+        territory, index, distance2 = self._nearest_point_in_display(renderer, eventData)
+        if (
+            territory is not None
+            and index is not None
+            and distance2 <= POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX
+        ):
+            self._set_hover((territory, index))
+            self._clear_adhering()
+        else:
+            self._set_hover(None)
+            self._raise_highlight(renderer, eventData)
+        self._reconcile_highlight()
 
-    def _relocate_grabbed_point(self, world: Any) -> None:
-        carrier = self._get_carrier()
-        target = self._drag_target
-        if carrier is None or target is None:
-            return
-        territory, index = target
-        carrier.SetNthAnnotationPoint(territory, int(index), float(world[0]), float(world[1]), float(world[2]))
+    def DeleteAnnotationPoint(self, territoryId: str, index: int) -> bool:  # noqa: N802 - VTK verb
+        """Remove EXACTLY ONE annotation point (delete-from-table end).
+
+        ADR-0037 §Decision 2 "delete removes one point"; the tail shifts up
+        in order.  Returns True iff a point was removed.  Routes through the
+        provider's delete write-back (the base's ``DeletePoint`` seam) so the
+        key contract matches the grab / drag path.
+        """
+        return bool(self.DeletePoint((territoryId, int(index))))
 
     # ------------------------------------------------------------------ #
     # Geometry seams (monkeypatched in the unit layer)
@@ -786,7 +756,9 @@ class TerritoryPlacementPipeline(_PipelineBase):
         Scans the carrier's active territory's points, projects each to
         display, and returns the nearest with its REAL squared display
         distance (LayerDM arbitration).  ``(None, None, +inf)`` when there
-        is no carrier / territory / point.
+        is no carrier / territory / point.  A hidden-structure seed is not
+        drawn, so it must not be a hover/grab target either -- skipped via the
+        ``seed_visible`` gate (ADR-0037 slice 5).
         """
         carrier = self._get_carrier()
         territory = self._placement_territory()
@@ -806,7 +778,7 @@ class TerritoryPlacementPipeline(_PipelineBase):
             point = carrier.GetNthAnnotationPoint(territory, i)
             # A hidden-structure seed is not drawn, so it must not be a
             # hover/grab target either -- skip it (ADR-0037 slice 5).
-            if not self._structures.seed_visible(self._display_node, point):
+            if not self._seed_visible(point):
                 continue
             renderer.SetWorldPoint(point[0], point[1], point[2], 1.0)
             renderer.WorldToDisplay()
@@ -902,9 +874,33 @@ class TerritoryPlacementPipeline(_PipelineBase):
                 show = True
         self._halo_actor.SetVisibility(show)
 
+    def _jump_slices_to_world(self, world: Any) -> None:
+        """Offset every slice view's plane onto ``world`` (JumpSliceByOffsetting).
+
+        Translates each plane along its OWN normal (orientation preserved), so
+        the 2D views reslice to the placed seed.  A no-op (never raising) when
+        the scene or the jump API is unavailable.
+        """
+        if world is None:
+            return
+        scene = self._display_node.GetScene() if self._display_node is not None else None
+        if scene is None:
+            carrier = self._get_carrier()
+            scene = carrier.GetScene() if carrier is not None else None
+        if scene is None:
+            return
+        for i in range(scene.GetNumberOfNodesByClass("vtkMRMLSliceNode")):
+            slice_node = scene.GetNthNodeByClass(i, "vtkMRMLSliceNode")
+            jump = getattr(slice_node, "JumpSliceByOffsetting", None)
+            if jump is not None:
+                jump(float(world[0]), float(world[1]), float(world[2]))
+
     # ------------------------------------------------------------------ #
     # Observers (reconcile) + plumbing
     # ------------------------------------------------------------------ #
+
+    def _safe_get_renderer(self) -> Any | None:
+        return self._renderer
 
     def _attach_observer(self, node: Any) -> None:
         if node is None or not hasattr(node, "AddObserver"):
@@ -978,7 +974,7 @@ class TerritoryPlacementPipeline(_PipelineBase):
                     point = carrier.GetNthAnnotationPoint(territory, i)
                     # Omit a seed whose structure is hidden (ADR-0037 slice 5);
                     # cached per-structure locators keep this O(log n) per seed.
-                    if not self._structures.seed_visible(self._display_node, point):
+                    if not self._seed_visible(point):
                         continue
                     self._seed_points.InsertNextPoint(point[0], point[1], point[2])
                     key = (territory, i)
@@ -993,9 +989,25 @@ class TerritoryPlacementPipeline(_PipelineBase):
         self._seed_polydata.Modified()
 
 
-def _event_type(eventData: Any) -> int:  # noqa: N803 - VTK arg name
-    """The VTK event-type id off ``eventData``."""
-    return int(eventData.GetType())
+class _TerritorySurfacePick:
+    """The base's pick provider, delegating to the pipeline's surface snap.
+
+    The base places a click at whatever world the injected pick returns
+    (ADR-0038 §"Base extension" -- no surface-vs-volume branch).  Territories'
+    pick is the vessel-visibility-gated surface snap, which also stays the
+    unit-layer monkeypatch seam (``_event_world_on_surface``): this adapter
+    forwards the base's ``pick_for_event`` to it so both the production pick
+    and the injected test double flow through one place.
+    """
+
+    def __init__(self, pipeline) -> None:
+        self._pipeline = pipeline
+
+    def pick_for_event(self, renderer: Any, eventData: Any):
+        # Re-read through the pipeline so a unit-layer monkeypatch of
+        # ``_event_world_on_surface`` is always honoured (the add + drag paths
+        # then share one surface-snap seam).
+        return self._pipeline._event_world_on_surface(renderer, eventData)
 
 
 def registerTerritoryPlacementPipelineCreator() -> None:  # noqa: N802 - project convention
