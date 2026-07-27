@@ -72,6 +72,7 @@ design/resection-plan-architecture/05-lrp-json-schema.md
 design/resection-plan-architecture/06-pattern-and-audit.md
 design/connected-tree-seeding-plan.md
 design/multi-system-territory-plan.md
+design/volumetry-seeds-layerdm-plan.md
 ```
 
 ```{toctree}
