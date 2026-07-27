@@ -49,7 +49,7 @@ import pytest
 
 vtk = pytest.importorskip("vtk")
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 for candidate in (
     REPO_ROOT / "SlicerLiverInteractionLib",
     REPO_ROOT / "LiverVolumetry" / "LiverVolumetryLib",
