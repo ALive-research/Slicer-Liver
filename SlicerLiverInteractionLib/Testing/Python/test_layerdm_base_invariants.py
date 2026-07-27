@@ -54,7 +54,7 @@ import pytest
 
 vtk = pytest.importorskip("vtk")
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 PY_DIR = REPO_ROOT / "SlicerLiverInteractionLib"
 if str(PY_DIR) not in sys.path:
     sys.path.insert(0, str(PY_DIR))
