@@ -14,6 +14,12 @@ set(MODULE_PYTHON_RESOURCES
   Resources/UI/${MODULE_NAME}Widget.ui
   )
 
+# v2.0.0 MRML kit -- the ADR-0038-amendment seeds-off-markups carrier /
+# storage / display node (volumetry-seeds-layerdm-plan.md §3a).  Library
+# name is ``vtkSlicerLiverVolumetryModuleMRML`` (matches MODULE_NAME).
+# Built first so downstream consumers can link + Python-wrap it (mirrors
+# VascularTerritories/CMakeLists.txt).
+add_subdirectory(MRML)
 add_subdirectory(Logic)
 #-----------------------------------------------------------------------------
 slicerMacroBuildScriptedModule(
