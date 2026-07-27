@@ -14,9 +14,9 @@ ADR-0038 §"Shared home + names" extracts these accessors out of
 ``VascularTerritoriesLib.TerritoryInteractionState`` and PARAMETERIZES the
 attribute-key namespace per consumer, so two consumers (vascular
 territories, volumetry, resection) get independent keys on their own
-display nodes and never read each other's flags.  Constructing with
-``PointPlacementState("VascularTerritories")`` reproduces the territory
-module's original keys exactly.
+display nodes and never read each other's flags.  The active-key suffix
+defaults to the neutral ``Active``; the vascular-territories shim passes
+``active_suffix="ActiveTerritory"`` to reproduce its historical keys exactly.
 
 The class imports nothing heavy (no LayerDMLib, no Qt) so a table can
 depend on it without dragging in the Pipeline's LayerDM dependency.
@@ -39,9 +39,9 @@ class PointPlacementState:
     node (ADR-0038 §"Shared home + names").
     """
 
-    def __init__(self, namespace: str) -> None:
+    def __init__(self, namespace: str, active_suffix: str = "Active") -> None:
         self._armed_attr = f"{namespace}.Armed"
-        self._active_attr = f"{namespace}.ActiveTerritory"
+        self._active_attr = f"{namespace}.{active_suffix}"
         self._module_active_attr = f"{namespace}.ModuleActive"
         self._carrier_role = f"{namespace}.carrier"
 
