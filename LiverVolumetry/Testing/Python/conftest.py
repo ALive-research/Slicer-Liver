@@ -58,3 +58,33 @@ def _launched_scene_cleanup():
 
     yield
     scene.Clear(0)
+
+
+@pytest.fixture
+def qt_widgets():
+    """Register launched-Slicer Qt widgets for disposal after the test.
+
+    A widget-building test appends each widget it constructs; teardown drops
+    the widget's VTK observers via ``cleanup()`` and disposes the Qt tree so
+    no widget survives to shutdown holding a MRML observer (mirrors the
+    VascularTerritories idiom; feedback_launched_widget_teardown_crash).
+    """
+    registered: list = []
+
+    yield registered
+
+    for widget in registered:
+        try:
+            cleanup = getattr(widget, "cleanup", None)
+            if callable(cleanup):
+                cleanup()
+            parent = getattr(widget, "parent", None)
+            target = parent if parent is not None else widget
+            if hasattr(target, "setParent"):
+                target.setParent(None)
+            if hasattr(target, "delete"):
+                target.delete()
+            elif hasattr(target, "deleteLater"):
+                target.deleteLater()
+        except Exception:  # noqa: BLE001 — teardown is best-effort across versions
+            pass
