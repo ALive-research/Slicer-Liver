@@ -150,6 +150,11 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # scene close.
     self._seedsCarrier = None
     self._seedsDisplayNode = None
+    # The carrier-backed seeds table (ADR-0038 §Conformance): one row per seed
+    # with an editable label (the generated segment name), a colour swatch, and
+    # a delete affordance.  Composed into the panel in ``setup`` and bound to
+    # the carrier once it exists; dropped on scene close.
+    self._seedsTable = None
     ScriptedLoadableModuleWidget.__init__(self, parent)
     VTKObservationMixin.__init__(self)  # needed for parameter node observation
 
@@ -208,6 +213,12 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # through the shared base pipeline.
     self.ui.AddSeedsButton.connect('toggled(bool)', self.onAddSeedsToggled)
 
+    # Compose the carrier-backed seeds table into the panel (ADR-0004: the
+    # panel is Python).  It is bound to the seed carrier lazily -- the carrier
+    # is created on first placement -- so it starts empty and repaints on the
+    # carrier's ModifiedEvent once bound.
+    self._composeSeedsTable(liverVolumetryWidget)
+
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
@@ -238,6 +249,40 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         "Loading the SlicerLayerDisplayableManager extension is required for "
         "the Pipeline path (ADR-0013/0038).", exc)
 
+  def _composeSeedsTable(self, panelWidget):
+    """Compose the carrier-backed seeds table into the panel grid (ADR-0004).
+
+    Placed on the free grid row between the Add-seeds toggle and the
+    Generate-segments button (the seed list belongs with the seed controls).
+    A missing widget class (a launch without the Lib on the path) degrades
+    gracefully -- the panel simply omits the table.
+    """
+    # The package guards the widget import (Qt/ctk unreachable bare), exposing
+    # ``None`` when the class could not be built -- degrade to no table.
+    from LiverVolumetryLib import VolumetrySeedsTableWidget
+    if VolumetrySeedsTableWidget is None:
+      logging.warning(
+        "LiverVolumetry: VolumetrySeedsTableWidget unavailable -- the seeds "
+        "table is omitted this session.")
+      return
+    self._seedsTable = VolumetrySeedsTableWidget(carrier=None)
+    grid = self.ui.ResectionVolumetryGroupWidget.layout()
+    if grid is not None and hasattr(grid, "addWidget"):
+      # Row 6, colspan 4: between AddSeedsButton (row 5) and
+      # GenerateSegmentsPushButton (row 7) in the .ui grid.
+      grid.addWidget(self._seedsTable, 6, 0, 1, 4)
+    else:
+      panelWidget.layout().addWidget(self._seedsTable)
+
+  def _bindSeedsTable(self, carrier):
+    """Rebind the seeds table over ``carrier`` (drops the prior observer).
+
+    Re-parents nothing -- only the carrier binding changes -- so the future
+    unified planning table can adopt the same rebind seam.
+    """
+    if self._seedsTable is not None:
+      self._seedsTable.setCarrier(carrier)
+
   # ------------------------------------------------------------------ #
   # Seed carrier + placement arming (ADR-0038-amendment)
   # ------------------------------------------------------------------ #
@@ -261,6 +306,9 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         "session.", SEEDS_NODE_CLASS)
       return None
     self._seedsCarrier = node
+    # Bind the freshly-created carrier into the panel's seeds table so labels /
+    # colours / deletes edit the same carrier the placement writes to.
+    self._bindSeedsTable(node)
     return node
 
   def _ensureSeedsDisplayNode(self):
@@ -461,6 +509,11 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Called when the application closes and the module widget is destroyed.
      """
+    # Tear down the seeds table's carrier observer so the parentless widget
+    # does not survive to app shutdown holding a MRML observer
+    # (feedback_launched_widget_teardown_crash).
+    if self._seedsTable is not None:
+      self._seedsTable.cleanup()
     self.removeObservers()
 
   def enter(self):
@@ -515,6 +568,9 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # stale handles so the next placement re-creates fresh ones.
     self._seedsCarrier = None
     self._seedsDisplayNode = None
+    # Unbind the table from the now-invalid carrier (drops its observer) so it
+    # empties and does not observe a scene-cleared node.
+    self._bindSeedsTable(None)
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
     self.initializeParameterNode()
 
