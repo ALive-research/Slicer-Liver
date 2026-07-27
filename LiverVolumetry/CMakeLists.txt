@@ -21,6 +21,12 @@ set(MODULE_PYTHON_RESOURCES
 # VascularTerritories/CMakeLists.txt).
 add_subdirectory(MRML)
 add_subdirectory(Logic)
+
+# ADR-0038 client Python Lib: the carrier->transient-fiducial adapter, the flat
+# PointProvider adapter, the in-volume slice-click pick, and the LayerDM
+# Pipeline creators (volumetry-seeds-layerdm-plan.md §3).  Mirrors
+# VascularTerritoriesLib.
+add_subdirectory(LiverVolumetryLib)
 #-----------------------------------------------------------------------------
 slicerMacroBuildScriptedModule(
   NAME ${MODULE_NAME}
