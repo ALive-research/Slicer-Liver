@@ -29,13 +29,13 @@ coordinates; assertions are geometry-real (the expected on-surface point
 is computed by construction — e.g. a ray down the +z axis through a unit
 sphere centred at the origin hits ``(0, 0, 1)``).
 
-The SUT does not exist yet.  Per the ADR-0027 red->skip lifecycle the
-import is guarded and every test SKIP-PENDINGs on ``ImportError``; the
-skips lift automatically when the implementer lands the module.  The
-proposed seam is a NEW ``VascularTerritoriesLib`` package (there is no
-Lib dir today — the module is the legacy single-file
-``VascularTerritories.py``); the pick core lives at
-``VascularTerritoriesLib/VesselSurfacePick.py``.
+The pick core has been extracted (ADR-0038 §"Shared home + names") out of
+``VascularTerritoriesLib`` into the shared ``SlicerLiverInteractionLib``
+package as ``SurfacePick`` (the ``Vessel`` prefix dropped, T2.7).  This
+characterization test now pins the extracted class in its new home; the
+geometry assertions are unchanged (behaviour-preserving — ADR-0038
+[review]).  The ADR-0027 red->skip guard remains so the test SKIP-PENDINGs
+cleanly wherever the shared Lib is not yet on the path.
 
 References
 ----------
@@ -66,28 +66,31 @@ vtk = pytest.importorskip(
 )
 
 # --------------------------------------------------------------------------- #
-# Repo geometry — the proposed pick-core seam lives in a NEW
-# ``VascularTerritoriesLib`` package alongside the legacy single-file
-# ``VascularTerritories.py``.  This mirrors the ``<Module>Lib`` install
-# convention already used by ``LiverResectionsLib``.  The path-insert
-# lets the bare unit layer import the module before the packaging
-# follow-up (Lib dir + PYTHON_SCRIPTS registration) lands.
+# Repo geometry — the extracted pick core lives in the shared
+# ``SlicerLiverInteractionLib`` package.  The path-insert lets the bare unit
+# layer import the module before its PYTHON_SCRIPTS registration is on the
+# runtime path (the ``<Module>Lib`` install convention).
 # --------------------------------------------------------------------------- #
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
-PY_DIR = REPO_ROOT / "VascularTerritories" / "VascularTerritoriesLib"
+# ADR-0038 §"Shared home + names" moved the pick core to the shared
+# SlicerLiverInteractionLib package as ``SurfacePick`` (the ``Vessel`` prefix
+# dropped, T2.7).  This characterization test now pins the extracted class in
+# its new home; the geometry assertions below are unchanged (behaviour-
+# preserving -- ADR-0038 [review]).
+PY_DIR = REPO_ROOT / "SlicerLiverInteractionLib"
 if str(PY_DIR) not in sys.path:
     sys.path.insert(0, str(PY_DIR))
 
-_PENDING = "VesselSurfacePick not yet implemented (ADR-0027 red->skip)"
+_PENDING = "SurfacePick not yet implemented (ADR-0027 red->skip)"
 
 
 def _import_pick():
     """Import the pick core or SKIP-PENDING when it does not exist yet.
 
-    The implementer must provide ``VesselSurfacePick`` with, at minimum:
+    The implementer must provide ``SurfacePick`` with, at minimum:
 
-        class VesselSurfacePick:
+        class SurfacePick:
             def __init__(self, polydata: vtk.vtkPolyData | None) -> None: ...
             def pick(
                 self,
@@ -100,10 +103,10 @@ def _import_pick():
     when there is no surface to adhere to.
     """
     try:
-        from VesselSurfacePick import VesselSurfacePick
+        from SurfacePick import SurfacePick
     except ImportError:
         pytest.skip(_PENDING)
-    return VesselSurfacePick
+    return SurfacePick
 
 
 # --------------------------------------------------------------------------- #
