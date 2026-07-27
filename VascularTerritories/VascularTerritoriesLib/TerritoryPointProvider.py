@@ -70,6 +70,20 @@ class TerritoryPointProvider:
         keys line up with what is drawn.  The per-point colour is the
         territory's display slot colour.
         """
+        for _key, payload in self.iter_keyed_points():
+            yield payload
+
+    def iter_keyed_points(self):
+        """Yield ``((territoryId, index), (world, base_rgb))`` per VISIBLE seed.
+
+        The KEYED companion to ``iter_points`` (the slice base's key seam,
+        ADR-0038): the same dual-gated traversal, but each payload carries its
+        ``(territoryId, index)`` carrier key so the slice base can store it in
+        ``_projected_keys`` (the ``(territoryId, index)`` grab / drag / delete
+        round-trips through ``move_point`` / ``delete_point``).  ``iter_points``
+        is the key-less projection of this, so BOTH enumerate identically --
+        the drawn seeds and their keys always line up.
+        """
         carrier = self._carrier()
         if carrier is None:
             return
@@ -83,7 +97,8 @@ class TerritoryPointProvider:
                 point = carrier.GetNthAnnotationPoint(territory, i)
                 if not self._seed_visible(point):
                     continue
-                yield (float(point[0]), float(point[1]), float(point[2])), base_rgb
+                world = (float(point[0]), float(point[1]), float(point[2]))
+                yield (territory, i), (world, base_rgb)
 
     def has_edges(self) -> bool:
         """Territory seeds are unordered per-territory points -- no edges."""
