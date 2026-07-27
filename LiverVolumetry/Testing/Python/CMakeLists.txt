@@ -66,6 +66,11 @@ set(_volumetry_pytest_files
   # node with NO custom displayable manager.  Node registration + LayerDM
   # factory -> SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_registration_smoke.py
+  # ADR-0038 §Conformance -- the carrier-backed seeds table: one row per seed,
+  # label edit -> SetNthSeedLabel (the generated segment name), colour edit ->
+  # SetNthSeedColor, delete -> RemoveNthSeed, observer rebuild + teardown.  Qt
+  # + wrapped carrier -> SKIPS bare, RUNS launched (ADR-0027).
+  test_volumetry_seeds_table.py
 )
 
 foreach(_pytest_file IN LISTS _volumetry_pytest_files)
