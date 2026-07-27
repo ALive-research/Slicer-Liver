@@ -4,13 +4,20 @@
 
 The markups-style slice half of the control polygon (ADR-0033): the
 ``Rows x Cols`` handles and their connecting edges are projected into the
-slice view's XY space (``inverse(XYToRAS)``, the SliceContourPipeline
-convention) with DISTANCE FADING -- per-point alpha falls off linearly
-with the point's distance to the slice plane, the above/below visual cue
-markups users expect -- and the Planning per-point drag is available FROM
-the slice views: press grabs the nearest projected handle, the drag moves
-it in-plane at the cursor while PRESERVING its out-of-plane offset (no
-snap-to-plane), release ends the gesture.
+slice view's XY space (``inverse(XYToRAS)``) with DISTANCE FADING -- the
+above/below visual cue markups users expect -- and the Planning per-point
+drag is available FROM the slice views: press grabs the nearest projected
+handle, the drag moves it in-plane at the cursor while PRESERVING its
+out-of-plane offset (no snap-to-plane), release ends the gesture.
+
+The generic slice affordance -- the projection/fade/side-tint/presence, the
+hollow-circle handles + hover ring, and the grab-seam arbitration -- is the
+shared ``SurfacePointPlacementPipelineSlice`` base's (ADR-0038 §Decision):
+resection is the extraction-source client over the ``PointProvider`` seam.
+This pipeline keeps the RESECTION-specific parts as narrow overrides
+(ADR-0038 §"What is not shared"): the dashed edge scaffold, the Init/Planning
+state gate, the control-point-depth-offset-preserving drag, and the
+cross-view highlight channel on the display node.
 
 Keyed on ``vtkMRMLControlPolygonDisplayNode`` for ``vtkMRMLSliceNode``
 views only (creators dispatch per view type; the 3D control-polygon
@@ -24,7 +31,34 @@ from typing import Any
 
 import vtk
 
-from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
+# The shared slice-view placement/edit base (ADR-0038 §Decision): resection
+# is the extraction-source client of ``SurfacePointPlacementPipelineSlice``
+# over the PointProvider seam.  The base drives the generic grab/drag/release
+# arbitration + the projection/fade/side/presence + the handles/ring; this
+# pipeline keeps the resection data model (the control grid + dashed edges),
+# the Init/Planning gate, and the offset-preserving drag as overrides.
+try:  # pragma: no cover - exercised once per import path
+    from SlicerLiverInteractionLib.SurfacePointPlacementPipelineSlice import (
+        SurfacePointPlacementPipelineSlice as _PipelineBase,
+        HALO_HOVER_COLOR,  # noqa: F401 - the projection hover-colour the char suite reads off this module
+        POINT_PICK_RADIUS_PX as CONTROL_POINT_PICK_RADIUS_PX,
+        _event_type,  # noqa: F401 - the slice event-type helper (imported from the base, ADR-0038)
+    )
+    from SlicerLiverInteractionLib import SlicePointProjection as _proj
+except ImportError:  # bare / top-level path: add the sibling Lib dir to sys.path
+    import pathlib
+    import sys as _sys
+
+    _shared_lib = pathlib.Path(__file__).resolve().parents[2] / "SlicerLiverInteractionLib"
+    if str(_shared_lib) not in _sys.path:
+        _sys.path.insert(0, str(_shared_lib))
+    from SurfacePointPlacementPipelineSlice import (  # type: ignore[no-redef]
+        SurfacePointPlacementPipelineSlice as _PipelineBase,
+        HALO_HOVER_COLOR,  # noqa: F401 - the projection hover-colour the char suite reads off this module
+        POINT_PICK_RADIUS_PX as CONTROL_POINT_PICK_RADIUS_PX,
+        _event_type,  # noqa: F401 - the slice event-type helper (imported from the base, ADR-0038)
+    )
+    import SlicePointProjection as _proj  # type: ignore[no-redef]
 
 try:  # pragma: no cover - exercised once per import path
     from .LiverBezierSurfacePipeline import (
@@ -32,36 +66,22 @@ try:  # pragma: no cover - exercised once per import path
         _safe_get_state,
     )
     from .ControlPolygonPipeline import (
-        CONTROL_POINT_PICK_RADIUS_PX,
-        HALO_GRAB_COLOR,
-        HALO_HOVER_COLOR,
         _control_points_digest,
-        _event_type,
     )
+    from .ResectionControlPolygonProvider import ResectionControlPolygonProvider
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from LiverBezierSurfacePipeline import (  # type: ignore[no-redef]
         STATE_PLANNING,
         _safe_get_state,
     )
     from ControlPolygonPipeline import (  # type: ignore[no-redef]
-        CONTROL_POINT_PICK_RADIUS_PX,
-        HALO_GRAB_COLOR,
-        HALO_HOVER_COLOR,
         _control_points_digest,
-        _event_type,
+    )
+    from ResectionControlPolygonProvider import (  # type: ignore[no-redef]
+        ResectionControlPolygonProvider,
     )
 
 _REGISTERED = False
-
-#: Distance (mm) over which the projection fades to fully transparent --
-#: the above/below-the-plane cue.  Short by design: only control points
-#: NEAR the plane (the manipulable ones) are present in a slice at all.
-FADE_DISTANCE_MM = 15.0
-
-#: Manipulable range == visible range (the markups rule: anything you can
-#: see, you can grab).  A point at exactly FADE_DISTANCE_MM has alpha 0 --
-#: invisible AND unpickable; there is no visible-but-dead band.
-PICK_RANGE_MM = FADE_DISTANCE_MM
 
 #: Dash pattern for the polygon edges (XY pixels): the SCAFFOLD reads
 #: dashed, the solid slice contour is the RESULT -- a structural
@@ -69,30 +89,8 @@ PICK_RANGE_MM = FADE_DISTANCE_MM
 DASH_LENGTH_PX = 8.0
 GAP_LENGTH_PX = 5.0
 
-#: Maximum lightness shift for the above/below-plane cue (the markups
-#: signed-distance convention): points ABOVE the plane tint toward white,
-#: points BELOW toward black, graded by distance.  Sign-neutral hue, so it
-#: composes with any display colour and stays colourblind-legible.
-SIDE_TINT_MAX = 0.55
-
-#: Mid-tone factor applied to the display HandleColor before tinting: the
-#: default handle colour is pure white, which leaves no headroom for the
-#: lighter-above tint -- pulling the base toward mid-tone makes BOTH tint
-#: directions visible.
-HANDLE_MIDTONE_FACTOR = 0.78
-
-#: Slice handle / hover-ring glyph diameters (XY pixels).  Larger than the
-#: default markups glyphs: the handles are grab targets, and the ring must
-#: read as a halo AROUND one.
-HANDLE_GLYPH_SCALE_PX = 13.0
-RING_GLYPH_SCALE_PX = 20.0
-
-
-def _side_tint(rgb: list, signed_distance: float) -> list:
-    """Blend ``rgb`` toward white (above) or black (below) by distance."""
-    fraction = min(1.0, abs(signed_distance) / FADE_DISTANCE_MM) * SIDE_TINT_MAX
-    target = 255 if signed_distance > 0 else 0
-    return [int(c + (target - c) * fraction) for c in rgb]
+#: The default edge colour when the display node offers none.
+DEFAULT_EDGE_RGB = (255, 0, 0)
 
 
 def _creator_accepts_view(viewNode: Any) -> bool:  # noqa: N803 - VTK arg name
@@ -108,65 +106,35 @@ def _creator_accepts_view(viewNode: Any) -> bool:  # noqa: N803 - VTK arg name
 
 
 class SliceControlPolygonPipeline(_PipelineBase):
-    """Projected, fading, slice-editable control polygon."""
+    """Projected, fading, slice-editable control polygon.
+
+    A thin client of ``SurfacePointPlacementPipelineSlice``: the base owns the
+    handle projection/fade/side/presence + the grab-seam arbitration + the
+    hover ring, this pipeline supplies the resection ``PointProvider`` and the
+    resection-specific edges / state gate / offset-preserving drag.
+    """
 
     def __init__(self) -> None:
+        # The base seeds the handle + ring actors, the projection bookkeeping
+        # (``_projected_keys`` / ``_projected_xy`` / ``_plane_distances``), the
+        # grab key (``_drag_key``), and calls ``SetPythonObject``.
         super().__init__()
-        self.SetPythonObject(self)
 
-        self._display_node: Any | None = None
         self._data_node: Any | None = None
-        self._slice_node: Any | None = None
-        self._renderer: Any | None = None
-        self._observer_tags: dict = {}
-        self._observed_node_refs: list = []
         self._last_update_key: tuple | None = None
         self._last_render_key: tuple | None = None
-        #: Flat row-major index of the grabbed handle (slice-side gesture).
-        self._drag_index: int | None = None
-        #: XY-space positions of the projected handles (pick arbitration).
-        self._projected_xy: list = []
-        #: Per-point |distance| to the slice plane (the pick-range gate).
-        self._plane_distances: list = []
 
-        # Handles: projected points as 2D cross glyphs with RGBA fading.
-        self._handles_polydata = vtk.vtkPolyData()
-        self._handles_polydata.SetPoints(vtk.vtkPoints())
-        self._handle_glyph_source = vtk.vtkGlyphSource2D()
-        self._handle_glyph_source.SetGlyphTypeToCircle()
-        self._handle_glyph_source.FilledOff()
-        self._handle_glyph_source.SetScale(HANDLE_GLYPH_SCALE_PX)
-        self._handles_glyph = vtk.vtkGlyph2D()
-        self._handles_glyph.SetInputData(self._handles_polydata)
-        self._handles_glyph.SetSourceConnection(
-            self._handle_glyph_source.GetOutputPort()
+        # Wire the ADR-0038 seam: the base reads the control grid via this
+        # provider (grid IS a connected polygon -> has_edges True).  The
+        # provider reads the carrier live through a getter so it always sees
+        # the current LayerDM back-reference; the handle colour is the display
+        # node's HandleColor when it offers one.
+        self.SetProvider(
+            ResectionControlPolygonProvider(
+                carrier_getter=lambda: self._data_node,
+                color_getter=self._current_handle_rgb,
+            )
         )
-        self._handles_glyph.SetColorModeToColorByScalar()
-        self._handles_glyph.ScalingOff()
-        self._handles_mapper = vtk.vtkPolyDataMapper2D()
-        self._handles_mapper.SetInputConnection(self._handles_glyph.GetOutputPort())
-        self._handles_actor = vtk.vtkActor2D()
-        self._handles_actor.SetMapper(self._handles_mapper)
-        self._handles_actor.SetVisibility(False)
-
-        # Hover ring: the 2D analogue of the 3D glow halo -- a larger
-        # circle on the hovered/grabbed projected handle.
-        self._ring_polydata = vtk.vtkPolyData()
-        self._ring_polydata.SetPoints(vtk.vtkPoints())
-        self._ring_glyph_source = vtk.vtkGlyphSource2D()
-        self._ring_glyph_source.SetGlyphTypeToCircle()
-        self._ring_glyph_source.FilledOff()
-        self._ring_glyph_source.SetScale(RING_GLYPH_SCALE_PX)
-        self._ring_glyph = vtk.vtkGlyph2D()
-        self._ring_glyph.SetInputData(self._ring_polydata)
-        self._ring_glyph.SetSourceConnection(self._ring_glyph_source.GetOutputPort())
-        self._ring_glyph.ScalingOff()
-        self._ring_mapper = vtk.vtkPolyDataMapper2D()
-        self._ring_mapper.SetInputConnection(self._ring_glyph.GetOutputPort())
-        self._ring_actor = vtk.vtkActor2D()
-        self._ring_actor.SetMapper(self._ring_mapper)
-        self._ring_actor.GetProperty().SetLineWidth(2.0)
-        self._ring_actor.SetVisibility(False)
 
         # Edges: projected polygon lines with per-vertex RGBA fading.
         self._edges_polydata = vtk.vtkPolyData()
@@ -179,32 +147,18 @@ class SliceControlPolygonPipeline(_PipelineBase):
         self._edges_actor.SetVisibility(False)
 
     # ------------------------------------------------------------------ #
-    # LayerDM lifecycle
+    # LayerDM lifecycle -- resection data-node observation (base hooks)
     # ------------------------------------------------------------------ #
 
-    def SetViewNode(self, viewNode: Any) -> None:  # noqa: N802 - VTK verb
-        super().SetViewNode(viewNode)
-        # Observe the slice node OURSELVES (the stale-trace lesson from the
-        # contour sibling): reslicing must re-project + re-fade.
-        if self._slice_node is not None:
-            self._detach_observer(self._slice_node)
-        self._slice_node = viewNode
-        if viewNode is not None:
-            self._attach_observer(viewNode)
-        self._last_update_key = None
-
-    def SetDisplayNode(self, displayNode: Any) -> None:  # noqa: N802 - VTK verb
-        if self._display_node is not None:
-            self._detach_observer(self._display_node)
+    def _before_display_node_change(self) -> None:
         if self._data_node is not None:
             self._detach_observer(self._data_node)
 
-        super().SetDisplayNode(displayNode)
-        self._display_node = displayNode
+    def _after_display_node_set(self) -> None:
+        display = self._display_node
         self._data_node = None
-        if displayNode is not None:
-            self._data_node = displayNode.GetDisplayableNode()
-            self._attach_observer(displayNode)
+        if display is not None:
+            self._data_node = display.GetDisplayableNode()
             if self._data_node is not None:
                 self._attach_observer(self._data_node)
         self._last_update_key = None
@@ -219,61 +173,29 @@ class SliceControlPolygonPipeline(_PipelineBase):
         except Exception:  # pragma: no cover - C++ boundary must never raise
             pass
 
-    def OnRendererAdded(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
-        try:
-            self._renderer = renderer
-            if renderer is not None:
-                renderer.AddActor2D(self._edges_actor)
-                renderer.AddActor2D(self._handles_actor)
-                renderer.AddActor2D(self._ring_actor)
-            if self._display_node is None:
-                display = self.GetDisplayNode()
-                if display is not None:
-                    self.SetDisplayNode(display)
-            # Re-attach the slice-node observer too: cleanup() detached it with
-            # the rest, and the view node is not re-set after churn -- without
-            # this, reslicing stops reprojecting (the stale-trace bug, round
-            # two; mirrors the contour pipeline).
-            if self._slice_node is not None:
-                self._attach_observer(self._slice_node)
-            self._last_update_key = None
-            self.UpdatePipeline()
-        except Exception:  # pragma: no cover - C++ boundary must never raise
-            pass
+    def _add_actors(self, renderer: Any) -> None:
+        renderer.AddActor2D(self._edges_actor)
+        super()._add_actors(renderer)
 
-    def OnRendererRemoved(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
-        try:
-            if renderer is not None:
-                renderer.RemoveActor2D(self._handles_actor)
-                renderer.RemoveActor2D(self._edges_actor)
-                renderer.RemoveActor2D(self._ring_actor)
-            self._renderer = None
-            self.cleanup()
-        except Exception:  # pragma: no cover - C++ boundary must never raise
-            pass
+    def _remove_actors(self, renderer: Any) -> None:
+        renderer.RemoveActor2D(self._edges_actor)
+        super()._remove_actors(renderer)
+
+    def OnRendererAdded(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
+        super().OnRendererAdded(renderer)
+        self._last_update_key = None
 
     def cleanup(self) -> None:
-        for node in list(self._observed_node_refs):
-            self._detach_observer(node)
-        self._display_node = None
+        super().cleanup()
         self._data_node = None
-        self._drag_index = None
-        self._handles_actor.SetVisibility(False)
         self._edges_actor.SetVisibility(False)
-        self._ring_actor.SetVisibility(False)
 
     # ------------------------------------------------------------------ #
-    # Reconciliation
+    # Reconciliation -- resection state gate + change-key memo
     # ------------------------------------------------------------------ #
-
-    def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
-        try:
-            self._reconcile()
-        except Exception:  # pragma: no cover - C++ boundary must never raise
-            pass
 
     def _reconcile(self) -> None:
-        """``UpdatePipeline``'s body — plain attribute access throughout."""
+        """Gate the base reproject on the Planning state + the change memo."""
         state = _safe_get_state(self._data_node)
         key = (
             state,
@@ -294,164 +216,6 @@ class SliceControlPolygonPipeline(_PipelineBase):
             # otherwise strand the ring over no handles.
             self._ring_actor.SetVisibility(False)
 
-    def _reproject(self) -> bool:
-        """Project handles + edges into XY with distance fading."""
-        carrier = self._data_node
-        slice_node = self._slice_node
-        if carrier is None or slice_node is None:
-            return False
-        try:
-            grid = carrier.GetControlGridVector()
-            rows, cols = int(carrier.GetRows()), int(carrier.GetCols())
-            if len(grid) < rows * cols * 3:
-                return False
-
-            to_ras = slice_node.GetSliceToRAS()
-            origin = [to_ras.GetElement(r, 3) for r in range(3)]
-            normal = [to_ras.GetElement(r, 2) for r in range(3)]
-            norm = sum(n * n for n in normal) ** 0.5 or 1.0
-            normal = [n / norm for n in normal]
-
-            ras_to_xy = vtk.vtkMatrix4x4()
-            ras_to_xy.DeepCopy(slice_node.GetXYToRAS())
-            ras_to_xy.Invert()
-
-            display = self._display_node
-            handle_rgb = [255, 255, 255]
-            edge_rgb = [255, 0, 0]
-            if display is not None:
-                try:
-                    handle_rgb = [int(c * 255) for c in display.GetHandleColor()]
-                    edge_rgb = [int(c * 255) for c in display.GetEdgeColor()]
-                except Exception:  # pragma: no cover - defensive
-                    pass
-            handle_rgb = [int(c * HANDLE_MIDTONE_FACTOR) for c in handle_rgb]
-
-            points = vtk.vtkPoints()
-            handle_rgba = vtk.vtkUnsignedCharArray()
-            handle_rgba.SetNumberOfComponents(4)
-            edge_rgba = vtk.vtkUnsignedCharArray()
-            edge_rgba.SetNumberOfComponents(4)
-            in_range = []  # HARD presence cutoff (2D alpha is unreliable)
-            hovered, grabbed = self._interaction_state()
-            hover_rgb = [int(c * 255) for c in HALO_HOVER_COLOR]
-            grab_rgb = [int(c * 255) for c in HALO_GRAB_COLOR]
-            self._projected_xy = []
-            self._plane_distances = []
-            for i in range(rows * cols):
-                x, y, z = grid[i * 3], grid[i * 3 + 1], grid[i * 3 + 2]
-                xy = ras_to_xy.MultiplyPoint((x, y, z, 1.0))
-                w = xy[3] or 1.0
-                px, py = xy[0] / w, xy[1] / w
-                points.InsertNextPoint(px, py, 0.0)
-                self._projected_xy.append((px, py))
-                signed = sum(
-                    n * (p - o) for n, p, o in zip(normal, (x, y, z), origin)
-                )
-                distance = abs(signed)
-                self._plane_distances.append(distance)
-                in_range.append(distance < PICK_RANGE_MM)
-                alpha = max(0.0, 1.0 - distance / FADE_DISTANCE_MM)
-                if i == grabbed:
-                    # Cross-view highlight: full alpha, grab colour.
-                    handle_rgba.InsertNextTuple4(*grab_rgb, 255)
-                elif i == hovered:
-                    handle_rgba.InsertNextTuple4(*hover_rgb, 255)
-                else:
-                    # The markups signed-distance cue: above-plane points
-                    # tint toward white, below-plane toward black.
-                    handle_rgba.InsertNextTuple4(
-                        *_side_tint(handle_rgb, signed), int(alpha * 255)
-                    )
-                edge_rgba.InsertNextTuple4(
-                    *_side_tint(edge_rgb, signed), int(alpha * 255)
-                )
-
-            visible_points = vtk.vtkPoints()
-            visible_rgba = vtk.vtkUnsignedCharArray()
-            visible_rgba.SetNumberOfComponents(4)
-            for i, ok in enumerate(in_range):
-                if not ok:
-                    continue  # beyond the manipulable range: NOT present
-                visible_points.InsertNextPoint(*points.GetPoint(i))
-                visible_rgba.InsertNextTuple4(*(int(v) for v in handle_rgba.GetTuple4(i)))
-            self._handles_polydata.SetPoints(visible_points)
-            self._handles_polydata.GetPointData().SetScalars(visible_rgba)
-            self._handles_polydata.Modified()
-
-            # DASHED edges (manual segmentation -- GL line stipple is not
-            # portable): each grid edge is emitted as alternating dash
-            # segments, so the scaffold reads structurally distinct from
-            # the solid resection contour.
-            dash_points = vtk.vtkPoints()
-            dash_rgba = vtk.vtkUnsignedCharArray()
-            dash_rgba.SetNumberOfComponents(4)
-            dash_lines = vtk.vtkCellArray()
-
-            def _edge_pairs():
-                for r in range(rows):
-                    for c in range(cols - 1):
-                        yield r * cols + c, r * cols + c + 1
-                for c in range(cols):
-                    for r in range(rows - 1):
-                        yield r * cols + c, (r + 1) * cols + c
-
-            for a, b in _edge_pairs():
-                if not (in_range[a] or in_range[b]):
-                    continue  # both endpoints absent: no scaffold here
-                # EITHER endpoint in range: draw the connecting dashes so a
-                # visible point never floats without its scaffold (the
-                # tint/fade along the run still shows the far end receding).
-                ax, ay = self._projected_xy[a]
-                bx, by = self._projected_xy[b]
-                ca = edge_rgba.GetTuple4(a)
-                cb = edge_rgba.GetTuple4(b)
-                length = ((bx - ax) ** 2 + (by - ay) ** 2) ** 0.5
-                if length <= 0.0:
-                    continue
-                period = DASH_LENGTH_PX + GAP_LENGTH_PX
-                t = 0.0
-                while t < length:
-                    t_end = min(t + DASH_LENGTH_PX, length)
-                    f0, f1 = t / length, t_end / length
-                    i0 = dash_points.InsertNextPoint(
-                        ax + (bx - ax) * f0, ay + (by - ay) * f0, 0.0
-                    )
-                    i1 = dash_points.InsertNextPoint(
-                        ax + (bx - ax) * f1, ay + (by - ay) * f1, 0.0
-                    )
-                    for f, _i in ((f0, i0), (f1, i1)):
-                        dash_rgba.InsertNextTuple4(*[
-                            int(ca[k] + (cb[k] - ca[k]) * f) for k in range(4)
-                        ])
-                    seg = vtk.vtkLine()
-                    seg.GetPointIds().SetId(0, i0)
-                    seg.GetPointIds().SetId(1, i1)
-                    dash_lines.InsertNextCell(seg)
-                    t += period
-            self._edges_polydata.SetPoints(dash_points)
-            self._edges_polydata.SetLines(dash_lines)
-            self._edges_polydata.GetPointData().SetScalars(dash_rgba)
-            self._edges_polydata.Modified()
-
-            # Hover ring: the 2D halo on the hovered/grabbed handle --
-            # only when that point is PRESENT in this slice (the highlight
-            # must not surface points the plane cannot reach).
-            target = grabbed if grabbed >= 0 else hovered
-            if 0 <= target < len(self._projected_xy) and in_range[target]:
-                ring_points = vtk.vtkPoints()
-                ring_points.InsertNextPoint(*self._projected_xy[target], 0.0)
-                self._ring_polydata.SetPoints(ring_points)
-                self._ring_polydata.Modified()
-                rgb = HALO_GRAB_COLOR if grabbed >= 0 else HALO_HOVER_COLOR
-                self._ring_actor.GetProperty().SetColor(*rgb)
-                self._ring_actor.SetVisibility(True)
-            else:
-                self._ring_actor.SetVisibility(False)
-            return True
-        except Exception:  # pragma: no cover - defensive
-            return False
-
     @staticmethod
     def _slice_matrix_digest(slice_node: Any) -> tuple:
         if slice_node is None:
@@ -469,166 +233,12 @@ class SliceControlPolygonPipeline(_PipelineBase):
             return ()
 
     # ------------------------------------------------------------------ #
-    # Interaction -- the slice-side per-point drag (ADR-0033)
+    # Base extension hooks -- the resection specifics (ADR-0038)
     # ------------------------------------------------------------------ #
 
-    def CanProcessInteractionEvent(self, eventData: Any):  # noqa: N802 - VTK verb
-        import sys
-
-        try:
-            if _safe_get_state(self._data_node) != STATE_PLANNING:
-                self._drag_index = None
-                return False, sys.float_info.max
-            etype = _event_type(eventData)
-            if self._drag_index is not None:
-                if etype in (
-                    vtk.vtkCommand.MouseMoveEvent,
-                    vtk.vtkCommand.LeftButtonReleaseEvent,
-                ):
-                    return True, 0.0
-                return False, sys.float_info.max
-            if etype == vtk.vtkCommand.MouseMoveEvent:
-                # Bare hover: publish the cross-view highlight and decline.
-                idx, distance2 = self._nearest_handle_in_display(eventData)
-                within = (
-                    idx is not None
-                    and distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
-                )
-                self._publish_interaction_state(hovered=(idx if within else -1))
-                return False, sys.float_info.max
-            if etype != vtk.vtkCommand.LeftButtonPressEvent:
-                return False, sys.float_info.max
-            _, distance2 = self._nearest_handle_in_display(eventData)
-            if distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX:
-                return True, distance2
-            return False, sys.float_info.max
-        except Exception:  # pragma: no cover - C++ boundary must never raise
-            return False, sys.float_info.max
-
-    def ProcessInteractionEvent(self, eventData: Any) -> bool:  # noqa: N802 - VTK verb
-        try:
-            if _safe_get_state(self._data_node) != STATE_PLANNING:
-                self._drag_index = None
-                return False
-            etype = _event_type(eventData)
-
-            if self._drag_index is None:
-                if etype != vtk.vtkCommand.LeftButtonPressEvent:
-                    return False
-                idx, distance2 = self._nearest_handle_in_display(eventData)
-                if (
-                    idx is None
-                    or distance2 > CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
-                ):
-                    return False
-                self._drag_index = idx
-                self._publish_interaction_state(grabbed=idx)
-                return True
-
-            if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
-                self._drag_index = None
-                self._publish_interaction_state(grabbed=-1)
-                return False
-
-            if etype == vtk.vtkCommand.MouseMoveEvent:
-                self._move_grabbed_to(eventData)
-                return True
-            return False
-        except Exception:  # pragma: no cover - C++ boundary must never raise
-            return False
-
-    def _nearest_handle_in_display(self, eventData: Any):
-        """``(flat_index, distance2)`` of the projected handle nearest the pixel.
-
-        Slice-view display coordinates coincide with the XY space the
-        projection lives in (the slice renderer's convention), so the
-        arbitration compares the event pixel against ``_projected_xy``.
-        """
-        import sys
-
-        ex, ey = eventData.GetDisplayPosition()
-        best_idx, best_d2 = None, sys.float_info.max
-        for i, (px, py) in enumerate(self._projected_xy):
-            # Markups rule: pickable iff visible -- a fully faded point
-            # (>= PICK_RANGE_MM == FADE_DISTANCE_MM) is not manipulable.
-            if i < len(self._plane_distances) and self._plane_distances[i] >= PICK_RANGE_MM:
-                continue
-            d2 = (px - ex) ** 2 + (py - ey) ** 2
-            if d2 < best_d2:
-                best_idx, best_d2 = i, d2
-        return best_idx, best_d2
-
-    def _move_grabbed_to(self, eventData: Any) -> None:
-        """Move the grabbed point to the cursor IN-PLANE, offset preserved."""
-        carrier = self._data_node
-        slice_node = self._slice_node
-        idx = self._drag_index
-        if carrier is None or slice_node is None or idx is None:
-            return
-        try:
-            ex, ey = eventData.GetDisplayPosition()
-            xy_to_ras = slice_node.GetXYToRAS()
-            ras = xy_to_ras.MultiplyPoint((float(ex), float(ey), 0.0, 1.0))
-            w = ras[3] or 1.0
-            in_plane = [ras[0] / w, ras[1] / w, ras[2] / w]
-
-            to_ras = slice_node.GetSliceToRAS()
-            origin = [to_ras.GetElement(r, 3) for r in range(3)]
-            normal = [to_ras.GetElement(r, 2) for r in range(3)]
-            norm = sum(n * n for n in normal) ** 0.5 or 1.0
-            normal = [n / norm for n in normal]
-
-            grid = carrier.GetControlGridVector()
-            current = (grid[idx * 3], grid[idx * 3 + 1], grid[idx * 3 + 2])
-            # Signed out-of-plane offset of the point BEFORE the move.
-            offset = sum(n * (p - o) for n, p, o in zip(normal, current, origin))
-            target = [ip + n * offset for ip, n in zip(in_plane, normal)]
-
-            cols = int(carrier.GetCols())
-            carrier.SetControlPoint(
-                idx // cols, idx % cols, target[0], target[1], target[2]
-            )
-        except Exception:  # pragma: no cover - defensive
-            return
-
-    # ------------------------------------------------------------------ #
-    # Introspection
-    # ------------------------------------------------------------------ #
-
-    def GetDataNode(self) -> Any | None:  # noqa: N802 - VTK verb
-        return self._data_node
-
-    def GetHandlesPolyData(self) -> Any:  # noqa: N802 - VTK verb
-        return self._handles_polydata
-
-    def GetHandlesActor(self) -> Any:  # noqa: N802 - VTK verb
-        return self._handles_actor
-
-    def GetEdgesActor(self) -> Any:  # noqa: N802 - VTK verb
-        return self._edges_actor
-
-    # ------------------------------------------------------------------ #
-    # Observers
-    # ------------------------------------------------------------------ #
-
-    def _attach_observer(self, node: Any) -> None:
-        if node is None or not hasattr(node, "AddObserver"):
-            return
-        tag = node.AddObserver("ModifiedEvent", self._on_node_modified)
-        self._observer_tags.setdefault(id(node), []).append(tag)
-        if node not in self._observed_node_refs:
-            self._observed_node_refs.append(node)
-
-    def _detach_observer(self, node: Any) -> None:
-        for tag in self._observer_tags.pop(id(node), []):
-            try:
-                node.RemoveObserver(tag)
-            except Exception:  # pragma: no cover - defensive
-                pass
-        try:
-            self._observed_node_refs.remove(node)
-        except ValueError:
-            pass
+    def _slice_admissible(self) -> bool:
+        """Gate the base's arbitration on the Planning state (ADR-0019)."""
+        return _safe_get_state(self._data_node) == STATE_PLANNING
 
     def _interaction_state(self) -> tuple:
         """(hovered, grabbed) read off the display node; (-1, -1) sans it."""
@@ -637,6 +247,129 @@ class SliceControlPolygonPipeline(_PipelineBase):
             display.GetHoveredControlPoint() if display is not None else -1,
             display.GetGrabbedControlPoint() if display is not None else -1,
         )
+
+    def _edge_base_rgb(self):
+        """The display node's EdgeColor (0..255) -- the dashed scaffold's hue."""
+        display = self._display_node
+        if display is not None:
+            try:
+                return [int(c * 255) for c in display.GetEdgeColor()]
+            except Exception:  # pragma: no cover - defensive
+                pass
+        return list(DEFAULT_EDGE_RGB)
+
+    def _reproject_edges(self, all_xy: list, all_present: list, edge_rgba: Any) -> None:
+        """Emit the grid edges as DASHED XY segments (structural scaffold).
+
+        Manual dash segmentation (GL line stipple is not portable): each grid
+        edge is emitted as alternating dash segments, so the scaffold reads
+        structurally distinct from the solid resection contour.  Runs are
+        gated on EITHER endpoint being present so a visible point never floats
+        without its scaffold (the tint/fade along the run shows the far end
+        receding).
+        """
+        carrier = self._data_node
+        if carrier is None:
+            return
+        try:
+            rows, cols = int(carrier.GetRows()), int(carrier.GetCols())
+        except Exception:  # pragma: no cover - defensive
+            return
+        if len(all_xy) < rows * cols:
+            return
+
+        dash_points = vtk.vtkPoints()
+        dash_rgba = vtk.vtkUnsignedCharArray()
+        dash_rgba.SetNumberOfComponents(4)
+        dash_lines = vtk.vtkCellArray()
+
+        def _edge_pairs():
+            for r in range(rows):
+                for c in range(cols - 1):
+                    yield r * cols + c, r * cols + c + 1
+            for c in range(cols):
+                for r in range(rows - 1):
+                    yield r * cols + c, (r + 1) * cols + c
+
+        for a, b in _edge_pairs():
+            if not (all_present[a] or all_present[b]):
+                continue  # both endpoints absent: no scaffold here
+            ax, ay = all_xy[a]
+            bx, by = all_xy[b]
+            ca = edge_rgba.GetTuple4(a)
+            cb = edge_rgba.GetTuple4(b)
+            length = ((bx - ax) ** 2 + (by - ay) ** 2) ** 0.5
+            if length <= 0.0:
+                continue
+            period = DASH_LENGTH_PX + GAP_LENGTH_PX
+            t = 0.0
+            while t < length:
+                t_end = min(t + DASH_LENGTH_PX, length)
+                f0, f1 = t / length, t_end / length
+                i0 = dash_points.InsertNextPoint(
+                    ax + (bx - ax) * f0, ay + (by - ay) * f0, 0.0
+                )
+                i1 = dash_points.InsertNextPoint(
+                    ax + (bx - ax) * f1, ay + (by - ay) * f1, 0.0
+                )
+                for f, _i in ((f0, i0), (f1, i1)):
+                    dash_rgba.InsertNextTuple4(*[
+                        int(ca[k] + (cb[k] - ca[k]) * f) for k in range(4)
+                    ])
+                seg = vtk.vtkLine()
+                seg.GetPointIds().SetId(0, i0)
+                seg.GetPointIds().SetId(1, i1)
+                dash_lines.InsertNextCell(seg)
+                t += period
+        self._edges_polydata.SetPoints(dash_points)
+        self._edges_polydata.SetLines(dash_lines)
+        self._edges_polydata.GetPointData().SetScalars(dash_rgba)
+        self._edges_polydata.Modified()
+
+    def _on_grab(self, key: Any) -> None:
+        """Publish the grab onto the cross-view highlight channel."""
+        self._publish_interaction_state(grabbed=key)
+
+    def _on_release(self) -> None:
+        """Drop the grab from the cross-view highlight channel."""
+        self._publish_interaction_state(grabbed=-1)
+
+    def _on_bare_move_decline(self, eventData: Any) -> None:
+        """Publish the cross-view hover highlight on a declined bare move."""
+        idx, distance2 = self._nearest_handle_in_display(eventData)
+        within = (
+            idx is not None
+            and distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
+        )
+        self._publish_interaction_state(hovered=(idx if within else -1))
+
+    def _move_grabbed_to(self, eventData: Any) -> None:
+        """Move the grabbed point to the cursor IN-PLANE, offset preserved."""
+        carrier = self._data_node
+        slice_node = self._slice_node
+        idx = self._drag_key
+        if carrier is None or slice_node is None or idx is None:
+            return
+        try:
+            ex, ey = eventData.GetDisplayPosition()
+            in_plane = _proj.xy_to_ras_on_plane(slice_node, ex, ey)
+            frame = _proj.slice_frame(slice_node)
+            if in_plane is None or frame is None:
+                return
+            origin, normal = frame
+
+            grid = carrier.GetControlGridVector()
+            current = (grid[idx * 3], grid[idx * 3 + 1], grid[idx * 3 + 2])
+            # Signed out-of-plane offset of the point BEFORE the move.
+            offset = _proj.signed_distance(origin, normal, current)
+            target = [ip + n * offset for ip, n in zip(in_plane, normal)]
+
+            cols = int(carrier.GetCols())
+            carrier.SetControlPoint(
+                idx // cols, idx % cols, target[0], target[1], target[2]
+            )
+        except Exception:  # pragma: no cover - defensive
+            return
 
     def _publish_interaction_state(self, hovered=None, grabbed=None) -> None:
         """Write hover/grab onto the display node (cross-view channel)."""
@@ -651,6 +384,36 @@ class SliceControlPolygonPipeline(_PipelineBase):
             value = -1 if grabbed == -1 else int(grabbed)
             if display.GetGrabbedControlPoint() != value:
                 display.SetGrabbedControlPoint(value)
+
+    def _current_handle_rgb(self):
+        """The display node's HandleColor (the provider's per-point base rgb).
+
+        ``None`` -> the provider falls back to its neutral white; a fake
+        display node without ``GetHandleColor`` degrades the same way.
+        """
+        display = self._display_node
+        getter = getattr(display, "GetHandleColor", None) if display else None
+        if getter is None:
+            return None
+        try:
+            c = getter()
+            return (float(c[0]), float(c[1]), float(c[2]))
+        except Exception:  # pragma: no cover - defensive (fake display nodes)
+            return None
+
+    # ------------------------------------------------------------------ #
+    # Introspection
+    # ------------------------------------------------------------------ #
+
+    def GetDataNode(self) -> Any | None:  # noqa: N802 - VTK verb
+        return self._data_node
+
+    def GetEdgesActor(self) -> Any:  # noqa: N802 - VTK verb
+        return self._edges_actor
+
+    # ------------------------------------------------------------------ #
+    # Observer render-loop guard (resection change memo)
+    # ------------------------------------------------------------------ #
 
     def _on_node_modified(self, caller: Any, event: str) -> None:
         del caller, event
