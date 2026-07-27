@@ -47,6 +47,15 @@ import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
+# The seed carrier / display node the placement writes to (ADR-0038-amendment
+# seeds-off-markups migration); the interaction state rides the display node via
+# the shared PointPlacementState namespaced ``LiverVolumetry.*``
+# (feedback_layerdm_state_on_display_node).
+SEEDS_NODE_CLASS = "vtkMRMLVolumetrySeedsNode"
+SEEDS_DISPLAY_NODE_CLASS = "vtkMRMLVolumetrySeedsDisplayNode"
+SEEDS_STORAGE_NODE_CLASS = "vtkMRMLVolumetrySeedsStorageNode"
+VOLUMETRY_NAMESPACE = "LiverVolumetry"
+
 
 #
 # LiverVolumetry
@@ -73,11 +82,50 @@ class LiverVolumetry(ScriptedLoadableModule):
     self.parent.acknowledgementText = """
     """  # TODO: replace with organization, grant and thanks.
 
-    # Additional initialization step after application startup is complete
-    #slicer.app.connect("startupCompleted()", registerSampleData)
+    # Register the seed-carrier MRML node classes at module-discovery time
+    # (ADR-0013 §5 call 1) so ``slicer.mrmlScene.AddNewNodeByClass(
+    # "vtkMRMLVolumetrySeedsNode", ...)`` works from any test, batch-mode
+    # script, or other module's setup callback -- not only after the widget is
+    # first opened.  The generic ``vtkLiverVolumetryLogic`` is a plain
+    # vtkObject with no scene observer (ADR-0015 keeps it unchanged), so the
+    # registration lives here in Python, not in a C++ RegisterNodes.
+    if not slicer.app.commandOptions().noMainWindow:
+      slicer.app.connect("startupCompleted()", self._registerSeedNodeClasses)
+    else:
+      # ``--no-main-window`` skips Slicer's normal startup sequence so the
+      # ``startupCompleted`` signal never fires; register immediately so
+      # headless / test invocations still have the classes available.
+      self._registerSeedNodeClasses()
 
     #Hide module, so that it only shows up in the Liver module, and not as a separate module
     parent.hidden = True
+
+  def _registerSeedNodeClasses(self):
+    """Register the seed carrier / display / storage node classes (ADR-0013 §5 call 1).
+
+    Instantiates each wrapped C++ prototype and hands it to
+    ``RegisterNodeClass`` so ``AddNewNodeByClass`` resolves it.  A launch
+    without the module's MRML library on the path (the class import fails)
+    degrades gracefully -- the placement feature is disabled that session.
+    """
+    try:
+      from slicer import (
+        vtkMRMLVolumetrySeedsNode,
+        vtkMRMLVolumetrySeedsDisplayNode,
+        vtkMRMLVolumetrySeedsStorageNode,
+      )
+    except ImportError as exc:
+      logging.warning(
+        "LiverVolumetry: seed MRML node classes unavailable (%s) -- seed "
+        "placement is disabled this session.  This usually means the module "
+        "MRML library failed to build or its Python wrapping is not on the "
+        "launcher's --additional-module-paths.", exc)
+      return
+    scene = slicer.mrmlScene
+    for cls in (vtkMRMLVolumetrySeedsNode,
+                vtkMRMLVolumetrySeedsDisplayNode,
+                vtkMRMLVolumetrySeedsStorageNode):
+      scene.RegisterNodeClass(cls())
 
 
 #
@@ -95,6 +143,13 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic = None
     self._parameterNode = None
     self._updatingGUIFromParameterNode = False
+    # The scene-resident seed carrier + its shared data-only display node
+    # (ADR-0038-amendment): the arm state / carrier binding / pick-surface ride
+    # the display node, and the LayerDM-driven placement Pipelines read them
+    # back (feedback_layerdm_state_on_display_node).  Created lazily; dropped on
+    # scene close.
+    self._seedsCarrier = None
+    self._seedsDisplayNode = None
     ScriptedLoadableModuleWidget.__init__(self, parent)
     VTKObservationMixin.__init__(self)  # needed for parameter node observation
 
@@ -103,6 +158,13 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Called when the user opens the module the first time and the widget is initialized.
     """
     ScriptedLoadableModuleWidget.setup(self)
+
+    # Register the LayerDM Pipeline creators (ADR-0013 §5 call 3): ONE 3D +
+    # ONE slice pipeline for the seed display-node type, each wired to the flat
+    # volumetry provider + the in-volume pick.  No custom displayable manager
+    # (ADR-0013 §5 / feedback_layerdm_no_custom_dm).  Idempotent; guarded
+    # against an unreachable LayerDMLib.
+    self._registerSeedPlacementPipelines()
 
     # Load widget from .ui file (created by Qt Designer)
     liverVolumetryWidget = slicer.util.loadUI(self.resourcePath('UI/LiverVolumetryWidget.ui'))
@@ -141,26 +203,142 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.ComputeVolumePushButton.connect('clicked(bool)', self.onComputeAdvancedVolumeButtonClicked)
     self.ui.GenerateSegmentsPushButton.connect('clicked(bool)', self.onGenerateSegmentsButtonClicked)
     self.ui.ResectionTargetNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onGenerateSegmentsParameterChanged)
-    self.ui.ROIMarkersListSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.onGenerateSegmentsParameterChanged)
+    # ADR-0038-amendment: the ROIMarkersList fiducial selector + place widget
+    # are RETIRED; placement is the arm toggle below, driving the seed carrier
+    # through the shared base pipeline.
+    self.ui.AddSeedsButton.connect('toggled(bool)', self.onAddSeedsToggled)
 
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
     self.initializeParameterNode()
 
+  def _registerSeedPlacementPipelines(self):
+    """Register the seed placement LayerDM Pipeline creators (ADR-0013 §5 call 3).
+
+    ONE 3D + ONE slice creator for ``vtkMRMLVolumetrySeedsDisplayNode``, each
+    returning the shared ``SurfacePointPlacementPipeline*`` base wired to the
+    flat volumetry provider + the in-volume pick.  Idempotent; a missing
+    LayerDMLib is a real configuration error under ADR-0002 so it logs at
+    ``critical``, but the rest of widget setup continues.
+    """
+    try:
+      from LiverVolumetryLib import (
+        registerVolumetrySeedPipeline3DCreator,
+        registerVolumetrySeedPipelineSliceCreator,
+      )
+      if registerVolumetrySeedPipeline3DCreator is None:
+        raise ImportError("volumetry seed Pipeline creators unavailable")
+      registerVolumetrySeedPipeline3DCreator()
+      registerVolumetrySeedPipelineSliceCreator()
+    except ImportError as exc:
+      logging.critical(
+        "LiverVolumetry: seed placement LayerDM Pipeline creators not "
+        "registered (%s) -- seed placement is disabled in this session.  "
+        "Loading the SlicerLayerDisplayableManager extension is required for "
+        "the Pipeline path (ADR-0013/0038).", exc)
+
+  # ------------------------------------------------------------------ #
+  # Seed carrier + placement arming (ADR-0038-amendment)
+  # ------------------------------------------------------------------ #
+
+  def _ensureSeedsCarrier(self):
+    """Return the scene-resident seed carrier, creating it once.
+
+    ``None`` when the C++ node class is unavailable (a launch without the
+    module's MRML library on the path) -- the caller degrades gracefully.
+    """
+    node = self._seedsCarrier
+    if node is not None and slicer.mrmlScene.IsNodePresent(node):
+      return node
+    try:
+      node = slicer.mrmlScene.AddNewNodeByClass(SEEDS_NODE_CLASS, "Volumetry Seeds")
+    except Exception:  # noqa: BLE001 - node class not registered in this launch
+      node = None
+    if node is None:
+      logging.warning(
+        "LiverVolumetry: %s unavailable -- seed placement disabled this "
+        "session.", SEEDS_NODE_CLASS)
+      return None
+    self._seedsCarrier = node
+    return node
+
+  def _ensureSeedsDisplayNode(self):
+    """Return the scene-resident seed display node, creating + binding it once.
+
+    Configures the carrier binding + the pick surface BEFORE AddNode: LayerDM
+    consults the Pipeline creators the moment the node enters the scene, and
+    each created Pipeline resolves the carrier + labelmap at creation -- so the
+    carrier reference (and the pickSurface) must already be on the node
+    (the configure-before-AddNode LayerDM discipline).
+    """
+    node = self._seedsDisplayNode
+    if node is not None and slicer.mrmlScene.IsNodePresent(node):
+      return node
+    try:
+      node = slicer.mrmlScene.CreateNodeByClass(SEEDS_DISPLAY_NODE_CLASS)
+    except Exception:  # noqa: BLE001 - node class not registered in this launch
+      node = None
+    if node is None:
+      logging.warning(
+        "LiverVolumetry: %s unavailable -- seed placement disabled this "
+        "session.", SEEDS_DISPLAY_NODE_CLASS)
+      return None
+    node.UnRegister(None)
+    node.SetName("Volumetry Seeds Display")
+    node.SetVisibility(True)
+    carrier = self._ensureSeedsCarrier()
+    if carrier is not None:
+      from SlicerLiverInteractionLib.PointPlacementState import PointPlacementState
+      PointPlacementState(VOLUMETRY_NAMESPACE).set_carrier(node, carrier)
+    self._aimPickSurface(node)
+    node = slicer.mrmlScene.AddNode(node)
+    self._seedsDisplayNode = node
+    return node
+
+  def _aimPickSurface(self, displayNode):
+    """Aim the seed display node's pickSurface at the target labelmap surface.
+
+    The in-volume pick resolves interior voxels against the target region's
+    labelmap.  The v2.0 target region is the currently selected input
+    segmentation; a segmentation node satisfies the pick's labelmap read via
+    its binary labelmap representation.  ``None`` clears the reference.
+    """
+    if displayNode is None or not hasattr(displayNode, "SetAndObservePickSurfaceNodeID"):
+      return
+    segmentation = self.ui.InputSegmentationSelector.currentNode()
+    displayNode.SetAndObservePickSurfaceNodeID(
+      segmentation.GetID() if segmentation is not None else None)
+
+  def onAddSeedsToggled(self, armed):
+    """Arm / disarm interior seed placement through the shared base pipeline.
+
+    Arming publishes the armed flag onto the shared display node so the
+    LayerDM-driven placement Pipelines add an interior seed on the next click;
+    disarming clears it.  The state rides the display node, not a Python
+    pipeline instance (feedback_layerdm_state_on_display_node).
+    """
+    node = self._ensureSeedsDisplayNode()
+    if node is None:
+      return
+    self._aimPickSurface(node)
+    from SlicerLiverInteractionLib.PointPlacementState import PointPlacementState
+    state = PointPlacementState(VOLUMETRY_NAMESPACE)
+    state.set_module_active(node, True)
+    state.set_armed(node, bool(armed))
 
   def onGenerateSegmentsParameterChanged(self):
-    node2 = self.ui.ROIMarkersListSelector.currentNode()
     node3 = self.ui.ReferenceVolumeSelector.currentNode()
     node4 = self.ui.InputSegmentationSelector.currentNode()
     node5 = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
     if len(self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()) == 0:
       node5 = None
-    self.ui.GenerateSegmentsPushButton.setEnabled(None not in [ node2, node3, node4, node5])
+    hasSeeds = self._seedsCarrier is not None and self._seedsCarrier.GetNumberOfSeeds() > 0
+    self.ui.GenerateSegmentsPushButton.setEnabled(hasSeeds and None not in [ node3, node4, node5])
 
   def onGenerateSegmentsButtonClicked(self):
     resectionNodes = self.getResectionNodes()
-    ROIMarkersList = self.ui.ROIMarkersListSelector.currentNode()
+    seedsCarrier = self._ensureSeedsCarrier()
     segmentsVolumeNode = slicer.mrmlScene.GetFirstNodeByName("segmentVolumeNode")
     if not segmentsVolumeNode:
       segmentsVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "segmentVolumeNode")
@@ -170,7 +348,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
                                                                         segmentsVolumeNode, refVolumeNode)
 
-    self.logic.generateSegments(resectionNodes, ROIMarkersList, segmentsVolumeNode)
+    self.logic.generateSegments(resectionNodes, seedsCarrier, segmentsVolumeNode)
     slicer.mrmlScene.RemoveNode(segmentsVolumeNode)
 
   def onVolumetryParameterChanged(self):
@@ -224,10 +402,10 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
                                                                         targetSegmentVolumeNode, refVolumeNode)
 
-    ROIMarkersList = self.ui.ROIMarkersListSelector.currentNode()
+    seedsCarrier = self._ensureSeedsCarrier()
     outputTable = self.ui.VolumeTableSelectorWidget.currentNode()
 
-    self.logic.computeVolume(segmentsVolumeNode, targetSegmentVolumeNode, self.ui.InputSegmentationSelector.currentNode(), outputTable, ROIMarkersList, resectionNodes)
+    self.logic.computeVolume(segmentsVolumeNode, targetSegmentVolumeNode, self.ui.InputSegmentationSelector.currentNode(), outputTable, seedsCarrier, resectionNodes)
 
     # The wait cursor (set above) is the in-progress feedback; the
     # populated volumetry table is the result, so no blocking completion
@@ -289,6 +467,11 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Called each time the user opens this module.
     """
+    # Open the module-active add-on-click gate (ADR-0038): the LayerDM-created
+    # placement Pipelines read this off the shared display node, so an armed
+    # click only lands while LiverVolumetry is active.  Entering auto-arms
+    # NOTHING -- placement is the explicit Add-seeds toggle.
+    self._setModuleActive(True)
     # Make sure parameter node exists and observed
     self.initializeParameterNode()
 
@@ -296,8 +479,26 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Called each time the user opens a different module.
     """
+    # Disarm placement + close the module-active gate on the way out so no view
+    # claims an add-on-click while LiverVolumetry is inactive (ADR-0038).
+    node = getattr(self, "_seedsDisplayNode", None)
+    if node is not None and slicer.mrmlScene.IsNodePresent(node):
+      from SlicerLiverInteractionLib.PointPlacementState import PointPlacementState
+      state = PointPlacementState(VOLUMETRY_NAMESPACE)
+      state.set_armed(node, False)
+      state.set_module_active(node, False)
+    if hasattr(self.ui, "AddSeedsButton"):
+      self.ui.AddSeedsButton.setChecked(False)
     # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
     self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
+
+  def _setModuleActive(self, active):
+    """Open/close the shared display node's module-active add-on-click gate."""
+    node = getattr(self, "_seedsDisplayNode", None)
+    if node is None or not slicer.mrmlScene.IsNodePresent(node):
+      return
+    from SlicerLiverInteractionLib.PointPlacementState import PointPlacementState
+    PointPlacementState(VOLUMETRY_NAMESPACE).set_module_active(node, bool(active))
 
   def onSceneStartClose(self, caller, event):
     """
@@ -310,6 +511,10 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Called just after the scene is closed.
     """
+    # The seed carrier + display node were cleared with the scene; drop the
+    # stale handles so the next placement re-creates fresh ones.
+    self._seedsCarrier = None
+    self._seedsDisplayNode = None
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
     self.initializeParameterNode()
 
@@ -441,7 +646,23 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
     Initialize parameter node with default settings.
     """
 
-  def computeVolume(self, segmentsVolumeNode, targetSegmentVolumeNode, segmentationNode, outputTable, ROIMarkersList, resectionNodes):
+  def transientFiducialFromSeeds(self, seedsNode):
+    """Build a TRANSIENT fiducial from the seed carrier (ADR-0038 §3c).
+
+    Keeps the C++ ``vtkLiverVolumetryLogic`` signatures unchanged (ADR-0015):
+    they take a ``vtkMRMLMarkupsFiducialNode*``, so the seeds-off-markups path
+    feeds them a transient fiducial built INSIDE the call from the seed carrier,
+    with the per-seed LABEL round-tripping into each control-point label so
+    ``GenerateSegmentsLabelMap`` still names generated segments correctly.  The
+    caller REMOVES the returned node -- no persistent markups survive
+    (ADR-0014 §"Fourth layer").  ``None`` when there is no carrier.
+    """
+    if seedsNode is None:
+      return None
+    from LiverVolumetryLib import build_transient_fiducial
+    return build_transient_fiducial(slicer.mrmlScene, seedsNode)
+
+  def computeVolume(self, segmentsVolumeNode, targetSegmentVolumeNode, segmentationNode, outputTable, seedsNode, resectionNodes):
     statistics = {}
     if outputTable is None:
       raise ValueError("Missing outputTable")
@@ -455,52 +676,66 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
       voxel_count = numpy.count_nonzero(scalars)
       targetSegmentVolume = voxel_count*spacing[0]*spacing[1]*spacing[2]*0.001
 
-    if resectionNodes is None:
-      if ROIMarkersList is None:
-        import SegmentStatistics
-        segStatLogic = SegmentStatistics.SegmentStatisticsLogic()
-        segStatLogic.getParameterNode().SetParameter("Segmentation", segmentationNode.GetID())
-        segStatLogic.computeStatistics()
-        stats = segStatLogic.getStatistics()
-        for segmentId in stats["SegmentIDs"]:
-          voxel_count = 0
-          volume_cm3 = 0
-          if stats[segmentId,"LabelmapSegmentStatisticsPlugin.voxel_count"]:
-            voxel_count = stats[segmentId,"LabelmapSegmentStatisticsPlugin.voxel_count"]
-            volume_cm3 = stats[segmentId,"LabelmapSegmentStatisticsPlugin.volume_cm3"]
-          elif stats[segmentId,"ScalarVolumeSegmentStatisticsPlugin.voxel_count"]:
-            voxel_count = stats[segmentId,"ScalarVolumeSegmentStatisticsPlugin.voxel_count"]
-            volume_cm3 = stats[segmentId,"ScalarVolumeSegmentStatisticsPlugin.volume_cm3"]
-          segmentName = segmentationNode.GetSegmentation().GetSegment(segmentId).GetName()
-          statistics[segmentId] = [segmentName, voxel_count, volume_cm3]
-          self.scl.VolumetryTable(segmentName, targetSegmentVolume, voxel_count, volume_cm3,outputTable)
+    # Build the transient fiducial from the seed carrier once and feed it to the
+    # unchanged C++ logic (ADR-0038 §3c); remove it afterwards.
+    hasSeeds = seedsNode is not None and seedsNode.GetNumberOfSeeds() > 0
+    ROIMarkersList = self.transientFiducialFromSeeds(seedsNode) if hasSeeds else None
+    try:
+      if resectionNodes is None:
+        if ROIMarkersList is None:
+          import SegmentStatistics
+          segStatLogic = SegmentStatistics.SegmentStatisticsLogic()
+          segStatLogic.getParameterNode().SetParameter("Segmentation", segmentationNode.GetID())
+          segStatLogic.computeStatistics()
+          stats = segStatLogic.getStatistics()
+          for segmentId in stats["SegmentIDs"]:
+            voxel_count = 0
+            volume_cm3 = 0
+            if stats[segmentId,"LabelmapSegmentStatisticsPlugin.voxel_count"]:
+              voxel_count = stats[segmentId,"LabelmapSegmentStatisticsPlugin.voxel_count"]
+              volume_cm3 = stats[segmentId,"LabelmapSegmentStatisticsPlugin.volume_cm3"]
+            elif stats[segmentId,"ScalarVolumeSegmentStatisticsPlugin.voxel_count"]:
+              voxel_count = stats[segmentId,"ScalarVolumeSegmentStatisticsPlugin.voxel_count"]
+              volume_cm3 = stats[segmentId,"ScalarVolumeSegmentStatisticsPlugin.volume_cm3"]
+            segmentName = segmentationNode.GetSegmentation().GetSegment(segmentId).GetName()
+            statistics[segmentId] = [segmentName, voxel_count, volume_cm3]
+            self.scl.VolumetryTable(segmentName, targetSegmentVolume, voxel_count, volume_cm3,outputTable)
+        else:
+          import vtk
+          import numpy
+          ROIvalues = self.scl.GetROIPointsLabelValue(segmentsVolumeNode, ROIMarkersList)
+          scalars = vtk.util.numpy_support.vtk_to_numpy(segmentsVolumeNode.GetImageData().GetPointData().GetScalars())
+          spacing = segmentsVolumeNode.GetSpacing()
+          for i, values in enumerate(ROIvalues):
+            voxel_count = numpy.count_nonzero(scalars == values)
+            volume_cm3 = voxel_count*spacing[0]*spacing[1]*spacing[2]*0.001
+            pointLabel = ROIMarkersList.GetNthControlPointLabel(i)
+            statistics[pointLabel] = [pointLabel, voxel_count, volume_cm3]
+            self.scl.VolumetryTable(pointLabel, targetSegmentVolume, voxel_count, volume_cm3, outputTable)
       else:
-        import vtk
-        import numpy
-        ROIvalues = self.scl.GetROIPointsLabelValue(segmentsVolumeNode, ROIMarkersList)
-        scalars = vtk.util.numpy_support.vtk_to_numpy(segmentsVolumeNode.GetImageData().GetPointData().GetScalars())
-        spacing = segmentsVolumeNode.GetSpacing()
-        for i, values in enumerate(ROIvalues):
-          voxel_count = numpy.count_nonzero(scalars == values)
-          volume_cm3 = voxel_count*spacing[0]*spacing[1]*spacing[2]*0.001
-          pointLabel = ROIMarkersList.GetNthControlPointLabel(i)
-          statistics[pointLabel] = [pointLabel, voxel_count, volume_cm3]
-          self.scl.VolumetryTable(pointLabel, targetSegmentVolume, voxel_count, volume_cm3, outputTable)
-    else:
-      self.scl.ComputeAdvancedPlanningVolumetry(segmentsVolumeNode, outputTable, ROIMarkersList, resectionNodes, targetSegmentVolume)
+        self.scl.ComputeAdvancedPlanningVolumetry(segmentsVolumeNode, outputTable, ROIMarkersList, resectionNodes, targetSegmentVolume)
+    finally:
+      if ROIMarkersList is not None:
+        slicer.mrmlScene.RemoveNode(ROIMarkersList)
 
-  def generateSegments(self, resectionNodes, ROIMarkersList, segmentsVolumeNode):
-    generatedSegmentsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
-    generatedSegmentsNode.CreateDefaultDisplayNodes()
+  def generateSegments(self, resectionNodes, seedsNode, segmentsVolumeNode):
+    ROIMarkersList = self.transientFiducialFromSeeds(seedsNode)
+    if ROIMarkersList is None:
+      return
+    try:
+      generatedSegmentsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
+      generatedSegmentsNode.CreateDefaultDisplayNodes()
 
-    self.scl.GenerateSegmentsLabelMap(segmentsVolumeNode, generatedSegmentsNode, resectionNodes, ROIMarkersList)
+      self.scl.GenerateSegmentsLabelMap(segmentsVolumeNode, generatedSegmentsNode, resectionNodes, ROIMarkersList)
 
-    seg = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
-    slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(generatedSegmentsNode, seg)
+      seg = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
+      slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(generatedSegmentsNode, seg)
 
-    ##set segments label
-    seg.GetSegmentation().GetNthSegment(0).SetName("Remnant")
-    for i in range(ROIMarkersList.GetNumberOfControlPoints()):
-      seg.GetSegmentation().GetNthSegment(i+1).SetName(ROIMarkersList.GetNthFiducialLabel(i))
+      ##set segments label
+      seg.GetSegmentation().GetNthSegment(0).SetName("Remnant")
+      for i in range(ROIMarkersList.GetNumberOfControlPoints()):
+        seg.GetSegmentation().GetNthSegment(i+1).SetName(ROIMarkersList.GetNthFiducialLabel(i))
 
-    slicer.mrmlScene.RemoveNode(generatedSegmentsNode)
+      slicer.mrmlScene.RemoveNode(generatedSegmentsNode)
+    finally:
+      slicer.mrmlScene.RemoveNode(ROIMarkersList)

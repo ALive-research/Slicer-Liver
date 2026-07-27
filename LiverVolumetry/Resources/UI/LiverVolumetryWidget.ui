@@ -63,19 +63,6 @@
         </property>
        </widget>
       </item>
-      <item row="5" column="3">
-       <widget class="qSlicerMarkupsPlaceWidget" name="ROIMarkersListPlaceWidget">
-        <property name="maximumSize">
-         <size>
-          <width>15000</width>
-          <height>40</height>
-         </size>
-        </property>
-        <property name="placeMultipleMarkups">
-         <enum>qSlicerMarkupsPlaceWidget::ForcePlaceMultipleMarkups</enum>
-        </property>
-       </widget>
-      </item>
       <item row="0" column="2">
        <widget class="qMRMLNodeComboBox" name="VolumeTableSelectorWidget">
         <property name="toolTip">
@@ -249,30 +236,16 @@
         </property>
        </widget>
       </item>
-      <item row="5" column="2">
-       <widget class="qMRMLNodeComboBox" name="ROIMarkersListSelector">
+      <item row="5" column="0" colspan="4">
+       <widget class="QPushButton" name="AddSeedsButton">
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
         <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;List of fiducial seeds that used for volume calculation&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Arm placement of region-growing seeds: click inside a target region in a slice view to drop an interior seed; click again to add more; toggle off when done.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
-        <property name="nodeTypes">
-         <stringlist>
-          <string>vtkMRMLMarkupsFiducialNode</string>
-         </stringlist>
-        </property>
-        <property name="showChildNodeTypes">
-         <bool>false</bool>
-        </property>
-        <property name="baseName">
-         <string>ROIMarkersList</string>
-        </property>
-        <property name="noneEnabled">
-         <bool>true</bool>
-        </property>
-        <property name="editEnabled">
-         <bool>true</bool>
-        </property>
-        <property name="renameEnabled">
-         <bool>true</bool>
+        <property name="text">
+         <string>Add region-growing seeds</string>
         </property>
        </widget>
       </item>
@@ -282,7 +255,7 @@
          <bool>false</bool>
         </property>
         <property name="text">
-         <string>Generate segments based on selected resections and ROI markers</string>
+         <string>Generate segments based on selected resections and region-growing seeds</string>
         </property>
        </widget>
       </item>
@@ -320,11 +293,6 @@
    <extends>QWidget</extends>
    <header>qSlicerWidget.h</header>
    <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>qSlicerMarkupsPlaceWidget</class>
-   <extends>qSlicerWidget</extends>
-   <header>qSlicerMarkupsPlaceWidget.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLSegmentSelectorWidget</class>
@@ -399,38 +367,6 @@
    </hints>
   </connection>
   <connection>
-   <sender>ROIMarkersListSelector</sender>
-   <signal>currentNodeChanged(vtkMRMLNode*)</signal>
-   <receiver>ROIMarkersListPlaceWidget</receiver>
-   <slot>setCurrentNode(vtkMRMLNode*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>422</x>
-     <y>686</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>762</x>
-     <y>686</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>LiverVolumetryWidget</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>ROIMarkersListSelector</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>428</x>
-     <y>490</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>422</x>
-     <y>686</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
    <sender>LiverVolumetryWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>InputSegmentSelectorWidget</receiver>
@@ -443,22 +379,6 @@
     <hint type="destinationlabel">
      <x>422</x>
      <y>631</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>LiverVolumetryWidget</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>ROIMarkersListPlaceWidget</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>428</x>
-     <y>490</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>762</x>
-     <y>686</y>
     </hint>
    </hints>
   </connection>
