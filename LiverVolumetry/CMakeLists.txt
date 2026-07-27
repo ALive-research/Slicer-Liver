@@ -23,13 +23,11 @@ slicerMacroBuildScriptedModule(
 #  WITH_GENERIC_TESTS
 )
 
-##-----------------------------------------------------------------------------
-#if(BUILD_TESTING)
-#
-#  # Register the unittest subclass in the main script as a ctest.
-#  # Note that the test will also be available at runtime.
-#  #slicer_add_python_unittest(SCRIPT ${MODULE_NAME}.py)
-#
-#  # Additional build-time testing
-#  add_subdirectory(Testing)
-#endif()
+#-----------------------------------------------------------------------------
+if(BUILD_TESTING)
+  # ADR-0038-amendment seeds-off-markups invariant-test scaffolding
+  # (SlicerLiverInteractionLib base tests live in that Lib's own Testing
+  # tree).  Registers the bare-pytest CTest rows; the wrapped-node /
+  # LayerDM-base tests SKIP bare and RUN launched (ADR-0027).
+  add_subdirectory(Testing)
+endif()

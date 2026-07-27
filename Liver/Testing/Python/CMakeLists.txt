@@ -188,6 +188,14 @@ set(_launched_test_roots
   "${CMAKE_SOURCE_DIR}/Testing/Python"
   "${CMAKE_SOURCE_DIR}/LiverResections/Testing/Python"
   "${CMAKE_SOURCE_DIR}/VascularTerritories/Testing/Python"
+  # ADR-0038 shared interaction base + the LiverVolumetry seeds-off-markups
+  # migration.  Ordered BEFORE the LiverSegmentation root: LiverSegmentation
+  # imports its conftest by name (23 sites), so its root must stay LAST or the
+  # session-start conftest-dir collision fakes ~34 failures (the launched-sweep
+  # root-order trap).  These two roots' tests import slicer_pytest_support (not
+  # a bare `import conftest`), so they are collision-safe here.
+  "${CMAKE_SOURCE_DIR}/SlicerLiverInteractionLib/Testing/Python"
+  "${CMAKE_SOURCE_DIR}/LiverVolumetry/Testing/Python"
   "${CMAKE_SOURCE_DIR}/LiverSegmentation/Testing/Python"
 )
 

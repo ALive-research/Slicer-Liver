@@ -117,6 +117,14 @@ include(${Slicer_USE_FILE})
 add_subdirectory(SubjectHierarchyFolders)
 
 #-----------------------------------------------------------------------------
+# ADR-0038 shared control-point interaction base (SlicerLiverInteractionLib).
+# A pure-Python Lib (no displayable manager, ADR-0013 §5) supplying the
+# Pipeline base classes each module's own creator instantiates.  Added
+# before the consuming modules so its (future) sources + its Testing tree
+# are configured ahead of the clients.
+add_subdirectory(SlicerLiverInteractionLib)
+
+#-----------------------------------------------------------------------------
 # Extension modules
 add_subdirectory(LiverResections)
 add_subdirectory(VascularTerritories)
