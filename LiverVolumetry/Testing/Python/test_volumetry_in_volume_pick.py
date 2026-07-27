@@ -154,7 +154,11 @@ def test_slice_click_inside_region_yields_a_labelled_interior_voxel():
     # strictly interior to the 6..14 block).  The slice node + display xy are
     # resolved by the harness against the labelmap centre; the invariant is
     # the RESULT (a labelled interior voxel), not the pixel arithmetic.
-    slice_node = slicer.app.layoutManager().sliceWidget("Red").mrmlSliceNode()
+    # Headless-safe slice node: --no-main-window has no layout manager, so
+    # create the slice node directly in the scene.  With display_xy=None the
+    # pick ignores the slice geometry and returns the interior centroid, so a
+    # scene-resident slice node is sufficient to pin the result invariant.
+    slice_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSliceNode", "Red")
     world = pick.pick_for_slice_event(slice_node, display_xy=None)
     if world is None:
         pytest.skip(
@@ -194,7 +198,11 @@ def test_in_volume_pick_is_not_surface_snapped():
     if not hasattr(pick, "pick_for_slice_event"):
         pytest.skip("InVolumePick has no pick_for_slice_event seam (ADR-0027).")
 
-    slice_node = slicer.app.layoutManager().sliceWidget("Red").mrmlSliceNode()
+    # Headless-safe slice node: --no-main-window has no layout manager, so
+    # create the slice node directly in the scene.  With display_xy=None the
+    # pick ignores the slice geometry and returns the interior centroid, so a
+    # scene-resident slice node is sufficient to pin the result invariant.
+    slice_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSliceNode", "Red")
     world = pick.pick_for_slice_event(slice_node, display_xy=None)
     if world is None:
         pytest.skip("the pick could not resolve a slice click in this harness (ADR-0027).")
