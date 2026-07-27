@@ -26,6 +26,8 @@ set(SlicerLiverInteractionLib_PYTHON_SCRIPTS
   SurfacePick.py
   PointPlacementState.py
   SlicePointProjection.py
+  PointProvider.py
+  SurfacePointPlacementPipeline3D.py
   )
 
 set(SlicerLiverInteractionLib_PYTHON_RESOURCES
