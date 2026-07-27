@@ -29,7 +29,26 @@ from typing import Any
 
 import vtk
 
-from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
+# The shared 3D placement/edit base (ADR-0038 §Decision): resection is the
+# extraction-source client of ``SurfacePointPlacementPipeline3D`` over the
+# PointProvider + swappable-pick seam.  The base drives the generic
+# add/grab/drag/release arbitration; this pipeline keeps the resection data
+# model (the control grid + edges), the Init/Planning gate, and the
+# control-point-depth drag as overrides (ADR-0038 §"What is not shared").
+try:  # pragma: no cover - exercised once per import path
+    from SlicerLiverInteractionLib.SurfacePointPlacementPipeline3D import (
+        SurfacePointPlacementPipeline3D as _PipelineBase,
+    )
+except ImportError:  # bare / top-level path: add the sibling Lib dir to sys.path
+    import pathlib
+    import sys as _sys
+
+    _shared_lib = pathlib.Path(__file__).resolve().parents[2] / "SlicerLiverInteractionLib"
+    if str(_shared_lib) not in _sys.path:
+        _sys.path.insert(0, str(_shared_lib))
+    from SurfacePointPlacementPipeline3D import (  # type: ignore[no-redef]
+        SurfacePointPlacementPipeline3D as _PipelineBase,
+    )
 
 # State constants + safe accessors shared with the sibling Pipeline (single
 # source within this package; the integers mirror the C++ enum on
@@ -42,6 +61,7 @@ try:  # pragma: no cover - exercised once per import path
         _safe_get_mtime,
         _safe_get_state,
     )
+    from .ResectionControlPolygonProvider import ResectionControlPolygonProvider
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     import ResectionStateMachine as _machine  # type: ignore[no-redef]
     from LiverBezierSurfacePipeline import (  # type: ignore[no-redef]
@@ -49,6 +69,9 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
         STATE_PLANNING,
         _safe_get_mtime,
         _safe_get_state,
+    )
+    from ResectionControlPolygonProvider import (  # type: ignore[no-redef]
+        ResectionControlPolygonProvider,
     )
 
 #: The Algorithm-library cells builder (reachable only via the
@@ -103,14 +126,30 @@ class ControlPolygonPipeline(_PipelineBase):
     """
 
     def __init__(self) -> None:
-        super().__init__()
-        self.SetPythonObject(self)
+        # The base seeds ``_display_node`` / ``_renderer`` / ``_drag_key`` /
+        # ``_provider`` / ``_pick_provider`` and calls ``SetPythonObject``.
+        super().__init__(namespace="ResectionControlPolygon")
 
-        self._display_node: Any | None = None
         self._data_node: Any | None = None
-        self._renderer: Any | None = None
         self._observer_tags: dict = {}
         self._observed_node_refs: list = []
+
+        # Wire the ADR-0038 seam: the base reads/writes the control grid via
+        # this provider (grid IS a connected polygon -> has_edges True).  The
+        # provider reads the carrier live through a getter so it always sees
+        # the current LayerDM back-reference; the handle colour is the display
+        # node's HandleColor when it offers one.
+        self.SetProvider(
+            ResectionControlPolygonProvider(
+                carrier_getter=lambda: self._data_node,
+                color_getter=self._current_handle_rgb,
+            )
+        )
+        # No pick provider: resection has no add-on-click (the grid is fixed,
+        # so the base's armed-add branch is dead here), and the drag target
+        # is the grabbed handle's depth via the ``_event_world`` override --
+        # never the surface pick.  Leaving the base's pick provider None makes
+        # the add branch decline, which is the intended resection behaviour.
 
         # Injectable Algorithm-builder seam (bare-VTK unit layer); resolved
         # lazily from the wrapping on first use in production.
@@ -127,9 +166,9 @@ class ControlPolygonPipeline(_PipelineBase):
         # observer callback's render-request gate (see ``_on_node_modified``).
         self._last_render_key: tuple | None = None
 
-        # Flat row-major index of the handle currently GRABBED by the
-        # press/move/release gesture — None when no drag is in flight.
-        self._drag_index: int | None = None
+        # The grabbed handle's flat index lives on the base's ``_drag_key``
+        # (seeded by the base's ``__init__``); this pipeline reads it in the
+        # ``_event_world`` drag override.
 
         # -- handles: control-point sphere glyphs ------------------------- #
         self._handles_polydata = vtk.vtkPolyData()
@@ -343,65 +382,115 @@ class ControlPolygonPipeline(_PipelineBase):
             self._detach_observer(node)
         self._display_node = None
         self._data_node = None
-        self._drag_index = None
+        self._drag_key = None  # the base's grab bookkeeping
         self._hover_index = None
         self._halo_actor.SetVisibility(False)
         self._detach_halo_renderer()
 
+    def _current_handle_rgb(self):
+        """The display node's HandleColor (the provider's per-point base rgb).
+
+        ``None`` -> the provider falls back to its neutral white; a fake
+        display node without ``GetHandleColor`` degrades the same way.
+        """
+        display = self._display_node
+        getter = getattr(display, "GetHandleColor", None) if display else None
+        if getter is None:
+            return None
+        try:
+            c = getter()
+            return (float(c[0]), float(c[1]), float(c[2]))
+        except Exception:  # pragma: no cover - defensive (fake display nodes)
+            return None
+
     # ------------------------------------------------------------------ #
     # Interaction -- the Planning per-point drag (ADR-0033, ex ADR-0032)
+    #
+    # The generic add/grab/drag/release arbitration is the shared base's
+    # (ADR-0038 §Decision).  This pipeline contributes only the
+    # RESECTION-specific parts through the base's extension hooks
+    # (ADR-0038 §"What is not shared"): the Init/Planning gate
+    # (``_admissible``), the control-point-depth drag target
+    # (``_event_world``), the display-distance scan over the grid
+    # (``_nearest_point_in_display``), and the Init->Planning commit + grab
+    # colour + hover halo (``_on_grab`` / ``_on_drag`` / ``_on_release`` /
+    # ``_on_bare_move_decline``).  ``CanProcessInteractionEvent`` /
+    # ``ProcessInteractionEvent`` themselves are NOT overridden here -- the
+    # base drives them.
     # ------------------------------------------------------------------ #
 
-    def CanProcessInteractionEvent(self, eventData: Any):  # noqa: N802 - VTK verb
-        """Return ``(canProcess, distance2)`` for the LayerDM focus logic.
+    def _admissible(self) -> bool:
+        """Gate the base's arbitration on the resection state machine.
 
-        The per-point edit is a press/move/release GRAB, not proximity
-        chasing: without a grab, only a LEFT-BUTTON PRESS within
-        ``CONTROL_POINT_PICK_RADIUS_PX`` of a handle is claimed (with the
-        real squared display distance as the arbitration value, ADR-0033);
-        while a handle is grabbed, mouse moves and the ending release are
-        claimed unconditionally (distance2 0 -- the grab owns the gesture).
-        A hover move never edits: claiming bare moves made a released mouse
-        keep deforming the surface on mere proximity.
+        Overrides the base's permissive default so the Init/Planning gate
+        (ADR-0019 / ADR-0035) lives in the client, not in the base
+        (ADR-0038 §"What is not shared").
         """
-        import sys
+        return self._interaction_admissible()
 
-        try:
-            if not self._interaction_admissible():
-                self._drag_index = None  # a state flip mid-gesture drops the grab
-                return False, sys.float_info.max
-            renderer = self._safe_get_renderer()
-            if renderer is None:
-                self._drag_index = None
-                return False, sys.float_info.max
+    def _nearest_point_in_display(self, renderer: Any, eventData: Any):
+        """Delegate the base's nearest-point scan to the grid scan.
 
-            etype = _event_type(eventData)
-            if self._drag_index is not None:
-                if etype in (
-                    vtk.vtkCommand.MouseMoveEvent,
-                    vtk.vtkCommand.LeftButtonReleaseEvent,
-                ):
-                    return True, 0.0
-                return False, sys.float_info.max
+        The base scans the provider's ``iter_points``; resection keeps the
+        control-grid scan as its own seam so the characterization suite can
+        pin it independently (``_nearest_control_point_in_display``).  Same
+        ``(index, distance2)`` contract.
+        """
+        return self._nearest_control_point_in_display(renderer, eventData)
 
-            if etype == vtk.vtkCommand.MouseMoveEvent:
-                # Bare hover: update the halo highlight as a SIDE EFFECT of the
-                # arbitration call and decline -- camera moves stay unclaimed.
-                idx, distance2 = self._nearest_control_point_in_display(renderer, eventData)
-                within = (
-                    idx is not None
-                    and distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
-                )
-                self._set_hover(idx if within else None)
-                return False, sys.float_info.max
-            if etype != vtk.vtkCommand.LeftButtonPressEvent:
-                return False, sys.float_info.max
-            _, distance2 = self._nearest_control_point_in_display(renderer, eventData)
-            if distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX:
-                return True, distance2
-            return False, sys.float_info.max
-        except Exception:  # pragma: no cover - C++ boundary must never raise
-            return False, sys.float_info.max
+    def _event_world(self, renderer: Any, eventData: Any):
+        """Back-project onto the GRABBED control point's depth (resection drag).
+
+        Overrides the base's surface-snap default: a control-point drag
+        follows the cursor on the grabbed handle's camera-facing plane, not
+        the picked surface (ADR-0033).  ``None`` (no grab / unresolved)
+        keeps the grab alive without moving anything.
+        """
+        idx = self._drag_key
+        if idx is None:
+            return None
+        return self._event_world_at_control_point(renderer, eventData, idx)
+
+    def _on_bare_move_decline(self, renderer: Any, eventData: Any) -> None:
+        """Raise/clear the hover halo on a declined bare move (side effect)."""
+        idx, distance2 = self._nearest_control_point_in_display(renderer, eventData)
+        within = (
+            idx is not None
+            and distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
+        )
+        self._set_hover(idx if within else None)
+
+    def _on_grab(self, key: Any, renderer: Any, eventData: Any) -> None:
+        """The resection grab: Init->Planning commit + grab colour + halo.
+
+        The FIRST grab of a candidate surface in Init advances the carrier
+        to Planning (the v1 first-surface-grab commit -- no button; raised
+        through the state machine's single-writer discipline, ADR-0035,
+        BEFORE the Planning-gated write so the very gesture is admitted).
+        """
+        if _safe_get_state(self._data_node) == STATE_INIT:
+            _machine.request(self._data_node, _machine.EVENT_SURFACE_GRABBED)
+        self._publish_interaction_state(grabbed=key)
+        self._apply_interaction_scalars()
+        self._hover_index = None
+        self._set_hover(key)  # halo jumps to the grabbed handle
+        # v1 parity: the press itself relocates the grabbed handle to the
+        # cursor (the base's move-only default would defer this to the first
+        # drag move).
+        world = self._event_world_at_control_point(renderer, eventData, key)
+        if world is not None:
+            self._apply_world_point_to_control_point(key, world)
+
+    def _on_drag(self, key: Any) -> None:
+        """The halo follows the grabbed handle during the drag."""
+        self._hover_index = None
+        self._set_hover(key)
+
+    def _on_release(self) -> None:
+        """Drop the grab colour + halo when the base clears the grab."""
+        self._publish_interaction_state(grabbed=-1)
+        self._apply_interaction_scalars()
+        self._set_hover(None)
 
     def _set_hover(self, index: int | None) -> None:
         """Show/move the halo on handle ``index`` (``None`` hides it).
@@ -505,77 +594,6 @@ class ControlPolygonPipeline(_PipelineBase):
 
     def GetHaloActor(self) -> Any:  # noqa: N802 - VTK verb
         return self._halo_actor
-
-    def ProcessInteractionEvent(self, eventData: Any) -> bool:  # noqa: N802 - VTK verb
-        """Drive the press/move/release grab (Planning edit).
-
-        Press within the pick radius grabs the nearest handle and returns
-        True (the interaction logic keeps focus on a pipeline that returns
-        True); moves while grabbed edit THE GRABBED handle -- not whichever
-        is momentarily nearest -- so the gesture cannot hop between points;
-        the release clears the grab and returns False, releasing the focus.
-        """
-        try:
-            renderer = self._safe_get_renderer()
-            if renderer is None:
-                self._drag_index = None
-                return False
-            if not self._interaction_admissible():
-                self._drag_index = None
-                return False
-
-            etype = _event_type(eventData)
-
-            if self._drag_index is None:
-                if etype != vtk.vtkCommand.LeftButtonPressEvent:
-                    return False
-                idx, distance2 = self._nearest_control_point_in_display(renderer, eventData)
-                if (
-                    idx is None
-                    or distance2 > CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
-                ):
-                    return False
-                # The v1 COMMIT: the first grab of the candidate surface
-                # in Init advances the carrier to Planning (no button;
-                # the state flip retires the init handles + contour).
-                # Raised through the state machine (ADR-0035 single-
-                # writer discipline) BEFORE the grab bookkeeping so the
-                # Planning-gated edit kernel admits this very gesture.
-                if _safe_get_state(self._data_node) == STATE_INIT:
-                    _machine.request(
-                        self._data_node, _machine.EVENT_SURFACE_GRABBED
-                    )
-                self._drag_index = idx
-                self._publish_interaction_state(grabbed=idx)
-                self._apply_interaction_scalars()
-                hover, self._hover_index = idx, None
-                self._set_hover(hover)  # halo jumps to the grabbed handle
-                world = self._event_world_at_control_point(renderer, eventData, idx)
-                if world is not None:
-                    self._apply_world_point_to_control_point(idx, world)
-                return True
-
-            if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
-                self._drag_index = None
-                self._publish_interaction_state(grabbed=-1)
-                self._apply_interaction_scalars()
-                self._set_hover(None)
-                return False  # grab over -- release the focus
-
-            if etype == vtk.vtkCommand.MouseMoveEvent:
-                world = self._event_world_at_control_point(
-                    renderer, eventData, self._drag_index
-                )
-                if world is None:
-                    return True  # keep the grab; this move just didn't resolve
-                self._apply_world_point_to_control_point(self._drag_index, world)
-                hover, self._hover_index = self._drag_index, None
-                self._set_hover(hover)  # halo follows the grabbed handle
-                return True
-
-            return False
-        except Exception:  # pragma: no cover - C++ boundary must never raise
-            return False
 
     def _apply_world_point_to_control_point(self, index: int, world: Any) -> bool:
         """Move the carrier's control point ``index`` to RAS ``world``.
@@ -898,15 +916,6 @@ class ControlPolygonPipeline(_PipelineBase):
             self.RequestRender()
         except Exception:  # pragma: no cover - C++ boundary must never raise
             pass
-
-
-def _event_type(eventData: Any) -> int:  # noqa: N803 - VTK arg name
-    """The VTK event-type id off ``eventData``.
-
-    Called only inside the never-raise interaction boundaries, so plain
-    attribute access is fine here.
-    """
-    return int(eventData.GetType())
 
 
 def _control_points_digest(node: Any) -> tuple:
