@@ -118,3 +118,95 @@ state-machine integration); territories become the second, simpler client.
   interaction (characterization tests green before + after).
 - [review] Each module keeps its own display-node type + creator (ADR-0013
   §1); the base carries no data-model knowledge.
+
+## Implementation amendment (2026-07-27)
+
+The extraction this ADR deferred is now triggered by a **third consumer**:
+LiverVolumetry moves its region-growing seed fiducials off Slicer markups
+onto the shared base (discharging its
+[ADR-0012](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0012-layerdm-migration-v2-scope.md)
+obligation via a real off-markups migration, rather than the earlier
+"compute-then-display, LayerDM marginal" reading). A third consumer is what
+justifies paying the extraction now, so the deferred implementation lands
+under this amendment.
+
+### Shared home + names
+
+The base lives in a new Python Lib package **`SlicerLiverInteractionLib`** —
+a sibling to `LayerDMLib`, importable by any module's Lib. It is Python
+(ADR-0004: interaction/widgets stay Python) and hosts **no** displayable
+manager (ADR-0013 §5): it supplies only the Pipeline **base classes** each
+module's own creator instantiates, plus the pure-VTK pick and the
+display-node state accessors. Each module keeps its own three registration
+calls and its own display-node type. New classes drop the `Liver` prefix
+(T2.7 convention).
+
+Concrete names (extracted **from resection**, per the Decision's direction):
+
+- **`SurfacePick`** — the pure-VTK ray→closed-surface intersect-nearest +
+  closest-point fallback with a lazy MTime-invalidated `vtkCellLocator`.
+- **`PointPlacementState`** — the arm/active/module-active/carrier accessors
+  on a display node, with the attribute-key namespace parameterized per
+  consumer.
+- **`SurfacePointPlacementPipeline3D`** / **`SurfacePointPlacementPipelineSlice`**
+  — the ADR-0038 3D + slice bases owning the glow halo, slice projection +
+  fade + side tint + presence cutoff, handles + hover ring, pick-radius
+  arbitration, the grab seam, and the four LayerDM integration invariants.
+- **`PointProvider`** — the seam: `iter_points()`, `has_edges()`,
+  `add/move/delete`, the display-node channel, **and a swappable pick
+  provider** (below).
+
+Resection (`ControlPolygonPipeline` / `SliceControlPolygonPipeline`) and
+VascularTerritories (`TerritoryPlacementPipeline` / `TerritorySlicePipeline`)
+become thin clients over the seam; both existing characterization suites stay
+green unchanged (the [review] conformance point above).
+
+### Base extension: the pick step is swappable (surface vs in-volume)
+
+VascularTerritories and resection place points **on a closed surface**, so
+they use `SurfacePick`. LiverVolumetry seeds are **region-growing seeds** —
+`vtkLiverVolumetryLogic` converts each seed to a **voxel index**
+(`TransformPhysicalPointToIndex`) and grows a `ConnectedThreshold` from it, so
+the seed must land **inside** the target region, not on its surface. Snapping
+a volumetry seed to a surface would place it on the region boundary and can
+mis-seed the grow.
+
+Therefore the pick step is a **provider on the seam**, not a fixed
+surface-snap. The base defines the point-placement/edit/delete affordance and
+the LayerDM invariants once; the *pick* (world position for a click) is
+supplied by the consumer:
+
+- surface consumers (resection, territories) inject `SurfacePick`;
+- LiverVolumetry injects an **in-volume / slice-click pick** — placement in a
+  slice view resolves the click to the RAS point at the slice plane (an
+  interior voxel), which is the natural region-growing-seed UX.
+
+This is the single place volumetry is not a plain client. It does not leak a
+volume concept into the base — the base sees only "the consumer's pick
+returned this world point"; the surface-vs-volume choice is entirely in the
+injected pick provider.
+
+### Consumers ledger
+
+- resection — client (extraction source), surface pick, edges = yes;
+- vascular territories — client, surface pick (vessel-visibility-gated),
+  edges = no;
+- **LiverVolumetry — client, in-volume/slice pick, edges = no** (this
+  amendment);
+- move-bezier-off-markups (`project_move_bezier_off_markups`) — the designed
+  fourth consumer once its own ADR lands (grouped `PointProvider`); the seam
+  is shaped to admit it.
+
+### Conformance (this amendment)
+
+- [future] `SlicerLiverInteractionLib` exists with the five names above; the
+  resection and territory pipelines are thin clients over the seam.
+- [future] The pick step is a seam-injected provider; LiverVolumetry supplies
+  an in-volume/slice pick, surface consumers supply `SurfacePick`; the base
+  contains no surface-vs-volume branch.
+- [review] The refactor is behaviour-preserving for resection **and**
+  vascular territories (both characterization suites green, unchanged, both
+  harnesses).
+- [review] LiverVolumetry's C++ region-grow logic is unchanged (ADR-0015); it
+  is fed a transient fiducial built from the seed carrier, and per-seed labels
+  round-trip so generated segments keep their names.
