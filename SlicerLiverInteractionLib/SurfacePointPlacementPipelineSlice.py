@@ -16,9 +16,17 @@ owns the GENERIC slice affordance and NOTHING data-model specific
 * hollow-circle HANDLE glyphs (grab targets) + a larger hover/grab RING
   glyph (the 2D analogue of the 3D glow halo);
 * the grab seam + ``Can/ProcessInteractionEvent`` arbitration: a press near
-  a projected handle grabs it for a drag, a bare move is DECLINED
-  (``(False, +inf)``) so the camera is untouched (ADR-0033 hover
-  discipline), a grabbed move/release is claimed unconditionally;
+  a projected handle grabs it for a drag, an ARMED press over a
+  pick-resolvable point adds one via the injected pick provider (default-off:
+  a client that injects no pick + never arms -- resection -- never reaches
+  the add branch), a bare move is DECLINED (``(False, +inf)``) so the camera
+  is untouched (ADR-0033 hover discipline), a grabbed move/release is claimed
+  unconditionally;
+* the key seam (``_iter_keyed_points``): the projection stores a client key
+  per point -- a flat ``enumerate`` index by default (resection), a
+  ``(territoryId, index)`` pair for vascular territories -- exposed via
+  ``GetProjectedKeys`` (the slice complement of the 3D base's
+  ``_nearest_key_in_display``);
 * the slice-node observation so reslicing re-projects, and the four LayerDM
   integration invariants (renderer churn re-attach etc.).
 
@@ -45,8 +53,10 @@ from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
 
 try:  # pragma: no cover - exercised once per import path
     from . import SlicePointProjection as _proj
+    from .PointPlacementState import PointPlacementState
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     import SlicePointProjection as _proj  # type: ignore[no-redef]
+    from PointPlacementState import PointPlacementState  # type: ignore[no-redef]
 
 #: Display-space pick radius (XY pixels) for grabbing an existing projected
 #: handle -- the shared value the resection + territory slice clients carried.
@@ -83,7 +93,7 @@ class SurfacePointPlacementPipelineSlice(_PipelineBase):
     hooks below.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, namespace: str = "SurfacePointPlacement") -> None:
         super().__init__()
         self.SetPythonObject(self)
 
@@ -93,12 +103,29 @@ class SurfacePointPlacementPipelineSlice(_PipelineBase):
         self._observer_tags: dict = {}
         self._observed_node_refs: list = []
 
-        # The consumer's data model (ADR-0038 seam).
+        # The consumer's data model (ADR-0038 seam) + the swappable click->world
+        # pick.  A client that supplies NO pick provider (resection) has the
+        # add-on-click branch dead by construction; the pick is the sole way
+        # the base resolves a click to a world point (no surface-vs-volume
+        # branch in the base, mirroring the 3D base -- ADR-0038 §"Base
+        # extension").
         self._provider: Any | None = None
+        self._pick_provider: Any | None = None
+
+        # Arm / module-active gate (rides the shared display node via
+        # ``PointPlacementState``).  Instance-field fallbacks drive the bare
+        # unit layer (no display node); production reads them off the display
+        # node.  A client that never arms + injects no pick leaves the
+        # add-on-click branch inert (resection, ADR-0038 default-off).
+        self._state = PointPlacementState(namespace)
+        self._armed: bool = False
+        self._module_active: bool = True
 
         #: Key of the projected handle currently GRABBED by a press/move/
         #: release drag; None when no drag is in flight.  The key is whatever
-        #: the provider's ``iter_points`` enumeration yields (flat index).
+        #: the key seam yields per projected point -- a flat ``enumerate``
+        #: index by default (resection), or a richer client key such as
+        #: vascular territories' ``(territoryId, index)`` pair.
         self._drag_key: Any | None = None
 
         #: XY-space positions of the PRESENT projected handles (pick
@@ -156,6 +183,48 @@ class SurfacePointPlacementPipelineSlice(_PipelineBase):
 
     def GetProvider(self) -> Any | None:  # noqa: N802 - VTK verb
         return self._provider
+
+    def SetPickProvider(self, pick: Any) -> None:  # noqa: N802 - VTK verb
+        """Inject the swappable click->world pick (ADR-0038 §"Base extension").
+
+        A client that leaves this unset (resection's slice control polygon)
+        has the base's armed add-on-click branch dead: ``_pick_world`` returns
+        ``None``, so nothing is ever placed on a click (only grab-drag +
+        bare-move-decline remain).
+        """
+        self._pick_provider = pick
+
+    # ------------------------------------------------------------------ #
+    # Arm / module-active gate (rides the shared display node)
+    # ------------------------------------------------------------------ #
+
+    def Arm(self) -> None:  # noqa: N802 - VTK verb
+        """Enable add-on-click (only meaningful with a pick provider wired)."""
+        if self._display_node is not None:
+            self._state.set_armed(self._display_node, True)
+        self._armed = True
+
+    def Disarm(self) -> None:  # noqa: N802 - VTK verb
+        """Disable add-on-click; a click then adds nothing."""
+        if self._display_node is not None:
+            self._state.set_armed(self._display_node, False)
+        self._armed = False
+
+    def IsArmed(self) -> bool:  # noqa: N802 - VTK verb
+        if self._display_node is not None:
+            return self._state.is_armed(self._display_node)
+        return self._armed
+
+    def SetModuleActive(self, active: bool) -> None:  # noqa: N802 - VTK verb
+        """Open/close the belt-and-suspenders add-on-click gate."""
+        if self._display_node is not None:
+            self._state.set_module_active(self._display_node, bool(active))
+        self._module_active = bool(active)
+
+    def IsModuleActive(self) -> bool:  # noqa: N802 - VTK verb
+        if self._display_node is not None:
+            return self._state.is_module_active(self._display_node)
+        return self._module_active
 
     def _safe_get_renderer(self) -> Any | None:
         return self._renderer
@@ -298,7 +367,7 @@ class SurfacePointPlacementPipelineSlice(_PipelineBase):
         handle_rgba.SetNumberOfComponents(4)
 
         try:
-            for key, (world, base_rgb) in enumerate(provider.iter_points()):
+            for key, world, base_rgb in self._iter_keyed_points():
                 xy = _proj.apply_matrix_xy(ras_to_xy, world)
                 signed = _proj.signed_distance(origin, normal, world)
                 present = _proj.is_present(signed)
@@ -336,6 +405,24 @@ class SurfacePointPlacementPipelineSlice(_PipelineBase):
         self._update_ring(hovered, grabbed)
         return True
 
+    def _iter_keyed_points(self):
+        """Yield ``(key, world, base_rgb)`` per provider point (the key seam).
+
+        The single seam the projection consults for a point's KEY: the default
+        pairs the provider's ``iter_points`` with a flat ``enumerate`` index
+        (resection's control-grid order), so ``_projected_keys`` are flat ints.
+        A client whose key is not a flat index -- vascular territories'
+        ``(territoryId, index)`` pair -- overrides THIS seam to supply its own
+        keys in ``iter_points`` order, without the base learning the topology
+        (mirrors the 3D base's ``_nearest_key_in_display`` intent; ADR-0038
+        §"What is not shared").
+        """
+        provider = self._provider
+        if provider is None:
+            return
+        for key, (world, base_rgb) in enumerate(provider.iter_points()):
+            yield key, world, base_rgb
+
     def _update_ring(self, hovered: Any, grabbed: Any) -> None:
         """Show the hover/grab ring on the grabbed (green) or hovered (yellow)
         handle -- only when that point is PRESENT in this slice.
@@ -344,14 +431,14 @@ class SurfacePointPlacementPipelineSlice(_PipelineBase):
         grab raised in the 3D view over an out-of-range handle), so the ring
         rides the PRESENT projection, not the raw channel index.
         """
-        target = grabbed if _index_ok(grabbed) else hovered
+        target = grabbed if _key_active(grabbed) else hovered
         pts = vtk.vtkPoints()
         show = False
-        if _index_ok(target) and target in self._projected_keys:
+        if _key_active(target) and target in self._projected_keys:
             idx = self._projected_keys.index(target)
             px, py = self._projected_xy[idx]
             pts.InsertNextPoint(px, py, 0.0)
-            colour = HALO_GRAB_COLOR if _index_ok(grabbed) else HALO_HOVER_COLOR
+            colour = HALO_GRAB_COLOR if _key_active(grabbed) else HALO_HOVER_COLOR
             self._ring_actor.GetProperty().SetColor(*colour)
             show = True
         self._ring_polydata.SetPoints(pts)
@@ -370,7 +457,12 @@ class SurfacePointPlacementPipelineSlice(_PipelineBase):
           untouched (ADR-0033); the hover cue is published as a SIDE EFFECT
           of the declined bare move via ``_on_bare_move_decline``;
         * a press within ``POINT_PICK_RADIUS_PX`` of a projected handle is
-          claimed with the REAL squared display distance (grab for a drag).
+          claimed with the REAL squared display distance (grab for a drag);
+        * an ARMED press over a pick-resolvable point is claimed with the pick
+          radius squared (add-on-click) -- default-off: a client that injects
+          no pick + never arms (resection) never reaches this branch, so its
+          arbitration is byte-for-byte the grab-drag + bare-move-decline it
+          had before (ADR-0038 default-off).
 
         The ``_slice_admissible`` gate hook (default ``True``) lets a client
         veto the whole arbitration on its own data-model state -- resection's
@@ -401,7 +493,13 @@ class SurfacePointPlacementPipelineSlice(_PipelineBase):
             key, distance2 = self._nearest_handle_in_display(eventData)
             if key is not None and distance2 <= POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX:
                 return True, distance2
-            return False, sys.float_info.max
+
+            # Armed add-on-click (default-off: no pick / not armed -> declined).
+            if not self.IsArmed():
+                return False, sys.float_info.max
+            if self._pick_world(eventData) is None:
+                return False, sys.float_info.max
+            return True, POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX
         except Exception:  # pragma: no cover - C++ boundary must never raise
             return False, sys.float_info.max
 
@@ -426,12 +524,23 @@ class SurfacePointPlacementPipelineSlice(_PipelineBase):
                     return False
                 key, distance2 = self._nearest_handle_in_display(eventData)
                 if (
-                    key is None
-                    or distance2 > POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX
+                    key is not None
+                    and distance2 <= POINT_PICK_RADIUS_PX * POINT_PICK_RADIUS_PX
                 ):
+                    self._drag_key = key  # grab for a drag (edit gesture)
+                    self._on_grab(key)
+                    return True
+                # Armed add-on-click (default-off: resection injects no pick +
+                # never arms, so this branch is inert and its behaviour is the
+                # grab-drag-only path it had before -- ADR-0038 default-off).
+                if not self.IsArmed():
                     return False
-                self._drag_key = key  # grab for a drag (edit gesture)
-                self._on_grab(key)
+                if not self.IsModuleActive():
+                    return False
+                world = self._pick_world(eventData)
+                if world is None:
+                    return False
+                self._add_point(world)
                 return True
 
             if etype == vtk.vtkCommand.LeftButtonReleaseEvent:
@@ -533,9 +642,48 @@ class SurfacePointPlacementPipelineSlice(_PipelineBase):
         (no snap-to-plane); a surface client snaps along the slice normal.
         """
 
+    def _pick_world(self, eventData: Any):
+        """The click's world point for an armed add-on-click, or ``None``.
+
+        The single place the base resolves a slice click to a world position
+        (the slice analogue of the 3D base's ``_pick_world``).  The default
+        delegates to the injected pick provider's ``pick_for_event`` (fed only
+        ``eventData`` -- slice picks are GL-free, unlike the 3D camera-ray
+        pick); a client whose snap is a pipeline method (territories'
+        ``_snap_event_to_surface``, the placemode-test monkeypatch seam)
+        overrides THIS to route through it.  With NO pick provider (resection)
+        it returns ``None``, so the add-on-click branch is dead (ADR-0038
+        §"Base extension" -- no surface-vs-volume branch in the base).
+        """
+        pick = self._pick_provider
+        if pick is None:
+            return None
+        return pick.pick_for_event(eventData)
+
+    def _add_point(self, world: Any) -> None:
+        """Append one point at ``world`` via the provider (add write-back).
+
+        Only reached from the armed add-on-click branch, so it is inert for a
+        client that never arms (resection); a client override adds its own
+        side effects (territories' active-territory fan + slice jump).
+        """
+        provider = self._provider
+        if provider is not None:
+            provider.add_point((world[0], world[1], world[2]))
+
     # ------------------------------------------------------------------ #
     # Introspection
     # ------------------------------------------------------------------ #
+
+    def GetProjectedKeys(self) -> list:  # noqa: N802 - VTK verb
+        """The keys of the PRESENT projected handles, in projection order.
+
+        Mirrors the 3D territory client's introspection: the keys the key seam
+        yielded for every point that survived the presence cutoff, so a client
+        suite can assert exactly which points project (e.g. a single present
+        seed keyed ``(territoryId, 0)``).
+        """
+        return list(self._projected_keys)
 
     def GetHandlesPolyData(self) -> Any:  # noqa: N802 - VTK verb
         return self._handles_polydata
@@ -590,3 +738,20 @@ class SurfacePointPlacementPipelineSlice(_PipelineBase):
 def _index_ok(value: Any) -> bool:
     """True iff ``value`` is a usable (non-negative) highlight index."""
     return isinstance(value, int) and value >= 0
+
+
+def _key_active(value: Any) -> bool:
+    """True iff ``value`` denotes a REAL highlight target (a projected key).
+
+    Generalises ``_index_ok`` so a non-int client key -- vascular territories'
+    ``(territoryId, index)`` pair -- is a valid ring target, while the
+    default-off sentinels stay inactive: ``None`` (no client channel) and the
+    resection ``-1`` (no hovered/grabbed control point).  Any other value --
+    an int >= 0 or a tuple key -- is an active target (ADR-0038 §"What is not
+    shared": the base carries no key topology).
+    """
+    if value is None:
+        return False
+    if isinstance(value, int):
+        return value >= 0
+    return True
