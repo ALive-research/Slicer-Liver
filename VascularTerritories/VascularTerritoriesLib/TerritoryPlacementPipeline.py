@@ -717,6 +717,13 @@ class TerritoryPlacementPipeline(_PipelineBase):
             self._set_hover(None)
             self._raise_highlight(renderer, eventData)
         self._reconcile_highlight()
+        # The base's bare-move arbitration DECLINES (returns without a render),
+        # and a bare hover mutates no observed node, so nothing else flushes a
+        # frame: request one HERE or the adhering marker / glow halo is computed
+        # but never painted (the mid-interaction RequestRender discipline the
+        # sibling ControlPolygonPipeline hover path also follows).  Without it
+        # the vessel highlight never appears on hover.
+        self.RequestRender()
 
     def DeleteAnnotationPoint(self, territoryId: str, index: int) -> bool:  # noqa: N802 - VTK verb
         """Remove EXACTLY ONE annotation point (delete-from-table end).

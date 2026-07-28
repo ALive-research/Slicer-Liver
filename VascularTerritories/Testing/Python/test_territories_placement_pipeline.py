@@ -332,6 +332,45 @@ def test_bare_move_is_declined_and_adds_nothing(monkeypatch):
     )
 
 
+def test_bare_move_decline_requests_a_render(monkeypatch):
+    """i3: a declined bare move REQUESTS A RENDER so the hover cue paints.
+
+    The bare hover is DECLINED (camera untouched, ADR-0033), and its whole
+    point is the adhering-highlight / glow-halo SIDE EFFECT.  The base's
+    arbitration returns without a render, and a bare hover mutates no observed
+    node, so the hover cue is computed onto the marker/halo actors but never
+    flushed to the screen unless the client's bare-move-decline hook requests
+    a render itself (the same mid-interaction RequestRender the sibling
+    ControlPolygonPipeline hover path follows).  This pins the render request
+    that the ADR-0038 base extraction dropped -- the regression where "the
+    highlight does not even come" -- and which the FakeRenderer-mocked
+    ``test_click_adds...`` path never exercised.
+    """
+    slicer = _slicer_or_skip()
+    TerritoryPlacementPipeline = _import_pipeline_or_skip()
+    pipeline = TerritoryPlacementPipeline()
+    carrier = _make_carrier_or_skip(slicer)
+    _wire_pipeline_or_skip(slicer, pipeline, carrier, monkeypatch)
+    if not hasattr(pipeline, "_on_bare_move_decline"):
+        pytest.skip(
+            "TerritoryPlacementPipeline has no _on_bare_move_decline hook -- "
+            "the ADR-0033 bare-move hover cue seam is unavailable (ADR-0027)."
+        )
+
+    renders = []
+    monkeypatch.setattr(pipeline, "RequestRender", lambda: renders.append(1))
+
+    move = _Event(vtk.vtkCommand.MouseMoveEvent)
+    can, _distance2 = pipeline.CanProcessInteractionEvent(move)
+
+    assert can is False, "a bare move must still be DECLINED (camera untouched)."
+    assert renders, (
+        "a declined bare move must REQUEST A RENDER so the adhering vessel "
+        "highlight / glow halo actually paints -- without it the hover cue is "
+        "computed but never flushed (ADR-0037 §Decision 2 hover side effect)."
+    )
+
+
 # --------------------------------------------------------------------------- #
 # i4 — edit (drag) + delete + no drift on unrelated Modified
 # --------------------------------------------------------------------------- #
