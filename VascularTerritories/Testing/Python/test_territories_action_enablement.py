@@ -305,6 +305,125 @@ def test_compute_gated_on_centerline_and_reference_volume(qt_widgets):
 
 
 # =========================================================================== #
+# REQUIREMENTS MESSAGE — the affirmative "what's missing" surface
+# =========================================================================== #
+#
+# ADR-0037 §Decision 4 affirmative requirements surface: when Extract / Compute
+# are disabled the panel enumerates the UNMET preconditions (a status line + the
+# button tooltips), so a disabled action always explains what to do next.  The
+# message reads the SAME live state as the enablement gates, so the two cannot
+# diverge (an empty unmet list == the action can run).
+
+
+def _require_requirements_seam_or_skip(widget):
+    if not hasattr(widget, "_actionRequirements"):
+        pytest.skip(
+            "widget has no _actionRequirements -- the ADR-0037 §Decision 4 "
+            "requirements-message surface has not landed (ADR-0027)."
+        )
+
+
+def test_requirements_message_lists_missing_items_with_no_input(qt_widgets):
+    """With NO input selected both actions list "Select an input segmentation".
+
+    ADR-0037 §Decision 4: the unmet-precondition list drives the messaging.  A
+    fresh widget with no input, no reference volume, and no centerline lists the
+    input requirement for BOTH actions and the volume + centerline for Compute.
+    Launched (widget); SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    widget = _make_widget_or_skip(slicer)
+    qt_widgets.append(widget)
+    _detach_scene_observers(slicer, widget)
+    _require_requirements_seam_or_skip(widget)
+
+    widget.ui.inputSurfaceSelector.setCurrentNode(None)
+    extractUnmet, computeUnmet = widget._actionRequirements()
+
+    assert "Select an input segmentation" in extractUnmet, (
+        "with no input, Extract must list the input requirement."
+    )
+    assert "Select an input segmentation" in computeUnmet, (
+        "with no input, Compute must list the input requirement."
+    )
+    assert "Load a reference volume" in computeUnmet, (
+        "with no reference volume, Compute must list the volume requirement."
+    )
+    assert "Extract centerlines first" in computeUnmet, (
+        "with no extracted centerline, Compute must list the centerline "
+        "requirement."
+    )
+
+
+def test_requirements_message_flags_vmtk_absence(qt_widgets):
+    """When SlicerVMTK is absent, Extract lists the VMTK install requirement.
+
+    ADR-0037 §Decision 4: the VMTK wording is preserved for the extractor-
+    absent case.  Off the VMTK image the requirement is present; on it, it is
+    not.  Launched (widget); SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    widget = _make_widget_or_skip(slicer)
+    qt_widgets.append(widget)
+    _detach_scene_observers(slicer, widget)
+    _require_requirements_seam_or_skip(widget)
+
+    seg, _segId = _vessel_segmentation(slicer)
+    widget.ui.inputSurfaceSelector.setCurrentNode(seg)
+    extractUnmet, _computeUnmet = widget._actionRequirements()
+
+    vmtk_msg = "SlicerVMTK (ExtractCenterline) is not installed"
+    if widget.logic.extractionActionEnabled():
+        assert vmtk_msg not in extractUnmet, (
+            "with SlicerVMTK present the VMTK requirement must not be listed."
+        )
+    else:
+        assert vmtk_msg in extractUnmet, (
+            "with SlicerVMTK absent the VMTK requirement must be listed."
+        )
+
+
+def test_requirements_message_empties_when_compute_ready(qt_widgets):
+    """Compute's unmet list EMPTIES once input + volume + centerline are present.
+
+    ADR-0037 §Decision 4: an empty unmet list is exactly the enablement gate --
+    the messaging cannot diverge from the button state.  Populated via the
+    stub-centerline idiom (no SlicerVMTK).  Launched (widget); SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    widget = _make_widget_or_skip(slicer)
+    qt_widgets.append(widget)
+    _detach_scene_observers(slicer, widget)
+    _require_requirements_seam_or_skip(widget)
+
+    seg, _segId = _vessel_segmentation(slicer)
+    widget.ui.inputSurfaceSelector.setCurrentNode(seg)
+    carrier = widget._ensureAnnotationCarrier()
+
+    ref_volume = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLScalarVolumeNode", "ReqMsgRefVolume")
+    image = vtk.vtkImageData()
+    image.SetDimensions(4, 4, 4)
+    image.AllocateScalars(vtk.VTK_SHORT, 1)
+    ref_volume.SetAndObserveImageData(image)
+
+    # No centerline yet: Compute lists the centerline requirement.
+    _extractUnmet, computeUnmet = widget._actionRequirements()
+    assert "Extract centerlines first" in computeUnmet
+
+    # A centerline in CenterlineRefs empties Compute's unmet list.
+    _attach_stub_centerline(slicer, widget.logic, carrier, "T1")
+    _extractUnmet2, computeUnmet2 = widget._actionRequirements()
+    assert computeUnmet2 == [], (
+        "with input + reference volume + an extracted centerline, Compute's "
+        "unmet list must be empty (mirrors the enabled button)."
+    )
+    assert widget.ui.calculateVascularTerritoryMapButton.enabled is True, (
+        "an empty Compute unmet list must coincide with an enabled button."
+    )
+
+
+# =========================================================================== #
 # POST-REVIEW REFINEMENT — Extract + Compute both DISARM placement
 # =========================================================================== #
 #

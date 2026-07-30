@@ -245,6 +245,12 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # Pipeline (Python-widget composition, ADR-0004).
     self._setupTerritoriesTable()
 
+    # ADR-0037 §Decision 4: an always-visible affirmative requirements surface
+    # under the Extract / Compute buttons (Python-composed, ADR-0004; legible
+    # a11y text, ADR-0010).  It enumerates the UNMET preconditions live so a
+    # disabled action always tells the surgeon what to do next.
+    self._setupRequirementsLabel()
+
     #TODO: Store all GUI settings
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
     # (in the selected parameter node).
@@ -527,6 +533,26 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     self._annotationCarrier = node
     return node
 
+  def _setupRequirementsLabel(self):
+    """Compose the always-visible action-requirements status line (ADR-0004).
+
+    A wrapping ``qt.QLabel`` under the Extract / Compute buttons that
+    ``_updateRequirementsMessage`` fills with the live unmet-precondition list.
+    Legible plain text (ADR-0010) -- never colour alone.  Degrades gracefully
+    (the panel loads without it) if label construction is unavailable.
+    """
+    self._requirementsLabel = None
+    try:
+      label = qt.QLabel()
+    except Exception as exc:  # noqa: BLE001 - Qt unavailable in this launch
+      logging.warning(
+        "VascularTerritories: requirements status line unavailable (%s).", exc)
+      return
+    label.setWordWrap(True)
+    label.setObjectName("VascularTerritoriesRequirementsLabel")
+    self._requirementsLabel = label
+    self.layout.addWidget(label)
+
   def enableWidgetButtons(self, state):
     # The extraction action additionally requires SlicerVMTK (ADR-0037
     # §Decision 4): never enable it when the extractor is absent, even if the
@@ -555,26 +581,16 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     Re-evaluated on input-surface change, a carrier ``Modified`` (seeds
     added/deleted), and the end of the extract / compute handlers.
     """
-    segmentationNode = self.ui.inputSurfaceSelector.currentNode()
-    hasInput = segmentationNode is not None
+    extractUnmet, computeUnmet = self._actionRequirements()
 
-    vmtkPresent = self.logic.extractionActionEnabled()
-    extractEnabled = hasInput and vmtkPresent and self._hasExtractableStructure(segmentationNode)
-    self.ui.addCenterlineSegmentButton.setEnabled(extractEnabled)
-    # Keep the VMTK explanation tooltip when the extractor is absent.
-    self.ui.addCenterlineSegmentButton.setToolTip(
-      "" if vmtkPresent else (
-        "Centerline extraction needs the SlicerVMTK extension "
-        "(ExtractCenterline), which is not installed."))
+    self.ui.addCenterlineSegmentButton.setEnabled(not extractUnmet)
+    self.ui.calculateVascularTerritoryMapButton.setEnabled(not computeUnmet)
 
-    carrier = getattr(self, "_annotationCarrier", None)
-    hasVolume = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode") is not None
-    hasCenterline = (
-      carrier is not None
-      and len(self.logic.getCenterlineReferenceIDs(carrier)) > 0
-    )
-    self.ui.calculateVascularTerritoryMapButton.setEnabled(
-      hasInput and hasVolume and hasCenterline)
+    # Affirmative "what's missing" surface (ADR-0037 §Decision 4, ADR-0010):
+    # a live status line under the buttons + a comprehensive tooltip on BOTH
+    # buttons enumerate the unmet preconditions, so a disabled action always
+    # explains itself rather than reading dead.
+    self._updateRequirementsMessage(extractUnmet, computeUnmet)
 
   def _hasExtractableStructure(self, segmentationNode):
     """True iff some territory has a structure with >=2 seeds (extractable).
@@ -591,6 +607,79 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
       if any(count >= 2 for count in counts.values()):
         return True
     return False
+
+  def _actionRequirements(self):
+    """The UNMET preconditions for Extract + Compute, as two message lists.
+
+    Reads the SAME live state the enablement gates read (ADR-0037 §Decision 4)
+    so the messaging and the enablement cannot diverge -- the enablement is
+    simply "the list is empty".  Each entry is a short, actionable,
+    platform-neutral instruction (ADR-0010 legible text).
+
+    Returns ``(extractUnmet, computeUnmet)`` -- lists of human-readable
+    strings; an empty list means the action can run.
+    """
+    segmentationNode = self.ui.inputSurfaceSelector.currentNode()
+    hasInput = segmentationNode is not None
+    vmtkPresent = self.logic.extractionActionEnabled()
+    carrier = getattr(self, "_annotationCarrier", None)
+    hasVolume = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode") is not None
+    hasCenterline = (
+      carrier is not None
+      and len(self.logic.getCenterlineReferenceIDs(carrier)) > 0
+    )
+
+    extractUnmet = []
+    if not hasInput:
+      extractUnmet.append("Select an input segmentation")
+    if not vmtkPresent:
+      # Keep the existing VMTK wording (the surgeon may need to install it).
+      extractUnmet.append(
+        "SlicerVMTK (ExtractCenterline) is not installed")
+    if hasInput and not self._hasExtractableStructure(segmentationNode):
+      extractUnmet.append("Place at least 2 seeds in a structure")
+
+    computeUnmet = []
+    if not hasInput:
+      computeUnmet.append("Select an input segmentation")
+    if not hasVolume:
+      computeUnmet.append("Load a reference volume")
+    if not hasCenterline:
+      computeUnmet.append("Extract centerlines first")
+
+    return extractUnmet, computeUnmet
+
+  def _updateRequirementsMessage(self, extractUnmet, computeUnmet):
+    """Surface the unmet preconditions on the status line + both button tooltips.
+
+    ADR-0037 §Decision 4 affirmative requirements surface (ADR-0004 Python-
+    composed, ADR-0010 legible a11y text): an always-visible label under the
+    two buttons enumerates what is missing for each action, and BOTH buttons
+    carry the same per-action unmet list as a tooltip.  Called on every
+    ``_updateActionEnablement`` so the message tracks input / carrier /
+    extract-compute changes live.
+    """
+    extractTip = (
+      "Extract centerlines is ready." if not extractUnmet
+      else "Extract centerlines needs:\n- " + "\n- ".join(extractUnmet))
+    computeTip = (
+      "Compute territory map is ready." if not computeUnmet
+      else "Compute territory map needs:\n- " + "\n- ".join(computeUnmet))
+    self.ui.addCenterlineSegmentButton.setToolTip(extractTip)
+    self.ui.calculateVascularTerritoryMapButton.setToolTip(computeTip)
+
+    label = getattr(self, "_requirementsLabel", None)
+    if label is None:
+      return
+    if not extractUnmet and not computeUnmet:
+      label.setText("All requirements met -- extract centerlines, then compute the map.")
+      return
+    lines = []
+    if extractUnmet:
+      lines.append("To extract centerlines: " + "; ".join(extractUnmet) + ".")
+    if computeUnmet:
+      lines.append("To compute the territory map: " + "; ".join(computeUnmet) + ".")
+    label.setText("\n".join(lines))
 
   def _onAnnotationCarrierModified(self, caller, event):
     """Re-evaluate the action enablement on a carrier edit (seeds add/delete)."""
