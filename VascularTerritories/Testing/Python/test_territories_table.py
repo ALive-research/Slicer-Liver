@@ -754,6 +754,134 @@ def test_delete_by_seed_and_by_pick_share_one_carrier_path(qt_widgets):
 
 
 # --------------------------------------------------------------------------- #
+# TERRITORY-LEVEL DELETE — remove a whole territory (incl. an EMPTY one)
+# --------------------------------------------------------------------------- #
+
+
+def test_territory_delete_button_removes_the_whole_territory(qt_widgets):
+    """The territory header row carries a delete button that removes it wholly.
+
+    ADR-0037 §Decision 3: a territory-HEADER delete affordance removes the
+    territory and all its seeds via the carrier's ``RemoveTerritory`` -- so a
+    populated territory drops from ``GetAnnotationTerritoryIds`` and its points
+    go, while a sibling is untouched.
+    """
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
+    qt_widgets.append(table)
+    _require_tree_model(table)
+    _require_composite_rows_or_skip(table)
+    if not hasattr(table, "territoryDeleteButton") or not hasattr(carrier, "RemoveTerritory"):
+        pytest.skip(
+            "TerritoriesTableWidget/carrier lack the territory-level delete seam "
+            "(territoryDeleteButton / RemoveTerritory) (ADR-0027)."
+        )
+
+    for x, y, z in [(1.0, 0.0, 0.0), (2.0, 0.0, 0.0)]:
+        carrier.AddAnnotationPoint(TERRITORY_A, x, y, z)
+    carrier.AddAnnotationPoint(TERRITORY_B, 0.0, 1.0, 0.0)
+    carrier.Modified()
+
+    delete = table.territoryDeleteButton(TERRITORY_A)
+    assert delete is not None, "the territory header row must carry a delete button."
+    delete.click()
+
+    assert TERRITORY_A not in list(carrier.GetAnnotationTerritoryIds()), (
+        "deleting a territory must drop it from GetAnnotationTerritoryIds."
+    )
+    assert carrier.GetNumberOfAnnotationPoints(TERRITORY_A) == 0, (
+        "deleting a territory must drop all its seeds."
+    )
+    assert carrier.GetNumberOfAnnotationPoints(TERRITORY_B) == 1, (
+        "deleting a territory must NOT touch a sibling."
+    )
+
+
+def test_empty_territory_is_deletable_via_the_header_button(qt_widgets):
+    """An EMPTY (zero-seed) minted territory is removable via its header button.
+
+    ADR-0037 §Decision 3: the failure mode this fixes -- a territory with no
+    seeds has no seed rows, so the per-seed delete never appears; the header
+    delete affordance must still remove it.  Mints an empty territory via
+    ``addTerritory`` and clicks its header delete.
+    """
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
+    qt_widgets.append(table)
+    _require_tree_model(table)
+    _require_composite_rows_or_skip(table)
+    if not hasattr(table, "territoryDeleteButton") or not hasattr(carrier, "RemoveTerritory"):
+        pytest.skip(
+            "TerritoriesTableWidget/carrier lack the territory-level delete seam "
+            "(ADR-0027)."
+        )
+
+    territoryId = table.addTerritory()
+    assert carrier.GetNumberOfAnnotationPoints(territoryId) == 0, (
+        "precondition: the minted territory has no seeds (the empty case)."
+    )
+    assert territoryId in table.territoryIds(), (
+        "precondition: the empty territory has a top-level (header) item."
+    )
+
+    delete = table.territoryDeleteButton(territoryId)
+    assert delete is not None, "an empty territory's header row must carry a delete button."
+    delete.click()
+
+    assert territoryId not in table.territoryIds(), (
+        "deleting an empty territory must drop its top-level item."
+    )
+    assert territoryId not in list(carrier.GetDisplayTerritoryIds()), (
+        "deleting an empty territory must clear its display slot too."
+    )
+
+
+def test_deleting_the_active_territory_clears_the_arm_state(qt_widgets):
+    """Deleting the ACTIVE (armed) territory disarms placement (hygiene).
+
+    ADR-0037 §Decision 3: if the deleted territory is the display node's active
+    territory, the arm state is cleared so a subsequent surface click does not
+    append to a territory that is gone.
+    """
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
+    qt_widgets.append(table)
+    _require_tree_model(table)
+    _require_composite_rows_or_skip(table)
+    if not hasattr(table, "deleteTerritory") or not hasattr(carrier, "RemoveTerritory"):
+        pytest.skip(
+            "TerritoriesTableWidget/carrier lack the territory-level delete seam "
+            "(ADR-0027)."
+        )
+    state = _import_interaction_state_or_skip()
+
+    # Mint + arm into a territory (addTerritory arms into the new territory).
+    territoryId = table.addTerritory()
+    assert state.is_armed(displayNode) is True, (
+        "precondition: minting a territory arms placement into it."
+    )
+    assert state.get_active_territory(displayNode) == territoryId, (
+        "precondition: the minted territory is the active one."
+    )
+
+    table.deleteTerritory(territoryId)
+
+    assert state.is_armed(displayNode) is False, (
+        "deleting the active territory must clear the arm state so placement "
+        "does not target a gone territory (ADR-0037 §Decision 3)."
+    )
+
+
+# --------------------------------------------------------------------------- #
 # DISPLAY EDITS — write the carrier display slot without touching geometry
 # --------------------------------------------------------------------------- #
 

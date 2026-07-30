@@ -287,6 +287,10 @@ class TerritoriesTableWidget(qt.QWidget):
         """The editable label ``qt.QLineEdit`` on the territory row."""
         return self._territoryControl(territoryId, "label")
 
+    def territoryDeleteButton(self, territoryId: str) -> Any:
+        """The delete ``qt.QToolButton`` on the territory HEADER row."""
+        return self._territoryControl(territoryId, "delete")
+
     def seedRowWidget(self, territoryId: str, pointIndex: int) -> Any:
         """The composite ``QWidget`` on the seed child item (col 0)."""
         return self._seedControl(territoryId, pointIndex, "widget")
@@ -572,6 +576,27 @@ class TerritoriesTableWidget(qt.QWidget):
         if self._carrier is not None:
             self._carrier.SetTerritoryLabel(territoryId, str(label))
 
+    def deleteTerritory(self, territoryId: str) -> None:
+        """Remove a whole territory (its seeds + display slot) via the carrier.
+
+        The territory-HEADER-row delete affordance: routes through the carrier's
+        ``RemoveTerritory`` so an EMPTY territory (no seed rows, hence no
+        per-seed delete button) is still removable (ADR-0037 §Decision 3).  If
+        the removed territory was the display node's ACTIVE (armed) territory,
+        the arm state is cleared first so placement does not target a gone
+        territory.  The carrier ``Modified`` observer refreshes the tree; the
+        local first-seen order list is pruned so a later ``addTerritory`` does
+        not resurrect it.
+        """
+        if not territoryId or self._carrier is None:
+            return
+        # Active-territory hygiene: disarm if the doomed territory is armed, so a
+        # subsequent surface click does not append to a territory that is gone.
+        if _state.get_active_territory(self._displayNode) == territoryId:
+            self.done()
+        self._territory_order = [t for t in self._territory_order if t != territoryId]
+        self._carrier.RemoveTerritory(territoryId)
+
     def deleteSeed(self, territoryId: str, pointIndex: int) -> None:
         """Delete-from-tree entry point — converges on the shared removal path.
 
@@ -751,6 +776,20 @@ class TerritoriesTableWidget(qt.QWidget):
         statusLabel = qt.QLabel(statusText)
         rowLayout.addWidget(statusLabel)
 
+        # Territory-level delete: removes the WHOLE territory (seeds + display
+        # slot) via the carrier's RemoveTerritory, so an EMPTY territory -- which
+        # has no seed rows and thus no per-seed delete button -- is still
+        # removable (ADR-0037 §Decision 3).  a11y: explicit text + tooltip.
+        deleteButton = qt.QToolButton()
+        deleteButton.setAutoRaise(True)
+        deleteButton.setText("Remove")
+        deleteButton.setToolTip("Remove this territory and its seeds")
+        deleteButton.connect(
+            "clicked(bool)",
+            lambda _checked, t=territoryId: self.deleteTerritory(t),
+        )
+        rowLayout.addWidget(deleteButton)
+
         self._territory_rows[territoryId] = {
             "widget": rowWidget,
             "place": placeButton,
@@ -758,6 +797,7 @@ class TerritoriesTableWidget(qt.QWidget):
             "colour": colourButton,
             "label": labelEdit,
             "status": statusLabel,
+            "delete": deleteButton,
         }
         return rowWidget
 
