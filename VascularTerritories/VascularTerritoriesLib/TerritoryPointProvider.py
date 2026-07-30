@@ -44,6 +44,12 @@ class TerritoryPointProvider:
     thin fan-out with no state of its own beyond those callables.
     """
 
+    #: The status ordinals the demote-on-edit rule reads.  Kept as module-scoped
+    #: constants mirroring ``vtkMRMLCustomTerritoriesNode``'s enum (Completed 2 /
+    #: InProgress 1) so the provider stays free of the wrapped-C++ import.
+    _STATUS_IN_PROGRESS = 1
+    _STATUS_COMPLETED = 2
+
     def __init__(self, carrier_getter, territory_getter, visible_getter=None) -> None:
         self._carrier_getter = carrier_getter
         self._territory_getter = territory_getter
@@ -104,12 +110,33 @@ class TerritoryPointProvider:
         """Territory seeds are unordered per-territory points -- no edges."""
         return False
 
+    def _demote_on_geometry_edit(self, carrier, territory) -> None:
+        """Demote a ``Completed`` territory to ``InProgress`` on a GEOMETRY edit.
+
+        The #574 demote-on-edit staleness rule (ADR-0034 Decision 2), locally
+        scoped to this territory: a seed add / move / delete on a Completed
+        (locked) territory is a geometry change, so its sign-off is stale --
+        drop it to InProgress, which also clears the derived edit-lock.  A
+        colour / label edit does NOT reach here (it goes through the carrier's
+        display setters), so cosmetic edits never demote (plan §9 default 5).
+        A no-op when the carrier has no status slot (pre-amendment carrier).
+        """
+        if territory is None or not hasattr(carrier, "GetTerritoryStatus"):
+            return
+        if int(carrier.GetTerritoryStatus(territory)) == self._STATUS_COMPLETED:
+            carrier.SetTerritoryStatus(territory, self._STATUS_IN_PROGRESS)
+
     def add_point(self, world) -> Any:
-        """Append one seed to the ACTIVE territory; return its key."""
+        """Append one seed to the ACTIVE territory; return its key.
+
+        Demotes the active territory on this geometry edit if it was Completed
+        (the demote-on-edit rule) before the append lands.
+        """
         carrier = self._carrier()
         territory = self._territory()
         if carrier is None or territory is None:
             return None
+        self._demote_on_geometry_edit(carrier, territory)
         carrier.AddAnnotationPoint(
             territory, float(world[0]), float(world[1]), float(world[2])
         )
@@ -117,19 +144,27 @@ class TerritoryPointProvider:
         return (territory, index)
 
     def move_point(self, key, world) -> None:
-        """Relocate the ``(territoryId, index)`` seed to ``world``."""
+        """Relocate the ``(territoryId, index)`` seed to ``world``.
+
+        Demotes the seed's territory on this geometry edit if it was Completed.
+        """
         carrier = self._carrier()
         if carrier is None or key is None:
             return
         territory, index = key
+        self._demote_on_geometry_edit(carrier, territory)
         carrier.SetNthAnnotationPoint(
             territory, int(index), float(world[0]), float(world[1]), float(world[2])
         )
 
     def delete_point(self, key) -> bool:
-        """Remove the ``(territoryId, index)`` seed; True iff one was removed."""
+        """Remove the ``(territoryId, index)`` seed; True iff one was removed.
+
+        Demotes the seed's territory on this geometry edit if it was Completed.
+        """
         carrier = self._carrier()
         if carrier is None or key is None:
             return False
         territory, index = key
+        self._demote_on_geometry_edit(carrier, territory)
         return bool(carrier.RemoveNthAnnotationPoint(territory, int(index)))

@@ -438,6 +438,22 @@ class TerritoryPlacementPipeline(_PipelineBase):
             return active
         return self._territory_id
 
+    def _territory_locked(self, territoryId: str | None) -> bool:
+        """Whether ``territoryId`` is edit-LOCKED (derived from Completed status).
+
+        The interaction guard reads the carrier's own derivation
+        (``GetTerritoryLocked``) so the pipeline, the table, and the carrier
+        agree on one source of truth (ADR-0037 Amendment "Per-territory status +
+        derived edit-lock").  A carrier without the status slot (pre-amendment)
+        is never locked.
+        """
+        if territoryId is None:
+            return False
+        carrier = self._get_carrier()
+        if carrier is None or not hasattr(carrier, "GetTerritoryLocked"):
+            return False
+        return bool(carrier.GetTerritoryLocked(territoryId))
+
     # ------------------------------------------------------------------ #
     # LayerDM lifecycle
     # ------------------------------------------------------------------ #
@@ -670,7 +686,15 @@ class TerritoryPlacementPipeline(_PipelineBase):
         also reslices the 2D views onto the placed seed (ADR-0025 mirror) --
         the per-territory grouping itself is the provider's concern (it appends
         into ``_placement_territory``).
+
+        A LOCKED active territory REFUSES the append (ADR-0037 Amendment
+        "Per-territory status + derived edit-lock" §5): the Place toggle cannot
+        arm into it, and this is the placement pipeline's defence-in-depth
+        status check before ``AddAnnotationPoint`` (the arm state lives on the
+        display node, so a stale armed flag could still route a click here).
         """
+        if self._territory_locked(self._placement_territory()):
+            return
         provider = self._provider
         if provider is not None:
             provider.add_point((world[0], world[1], world[2]))
@@ -751,7 +775,13 @@ class TerritoryPlacementPipeline(_PipelineBase):
         in order.  Returns True iff a point was removed.  Routes through the
         provider's delete write-back (the base's ``DeletePoint`` seam) so the
         key contract matches the grab / drag path.
+
+        A LOCKED territory REFUSES the delete (ADR-0037 Amendment
+        "Per-territory status + derived edit-lock" §5): a per-seed delete on a
+        validated territory is declined.
         """
+        if self._territory_locked(territoryId):
+            return False
         return bool(self.DeletePoint((territoryId, int(index))))
 
     # ------------------------------------------------------------------ #
@@ -789,6 +819,13 @@ class TerritoryPlacementPipeline(_PipelineBase):
         carrier = self._get_carrier()
         territory = self._placement_territory()
         if carrier is None or territory is None:
+            return None, None, sys.float_info.max
+        # A LOCKED territory declines drag-edit of its points (ADR-0037 Amendment
+        # "Per-territory status + derived edit-lock" §5): its seeds are not
+        # grab targets, so the base's grab arbitration finds nothing near and a
+        # press over a locked seed leaves the hover highlight (a declined bare
+        # move) instead of relocating the point.
+        if self._territory_locked(territory):
             return None, None, sys.float_info.max
         count = carrier.GetNumberOfAnnotationPoints(territory)
         if count == 0:
