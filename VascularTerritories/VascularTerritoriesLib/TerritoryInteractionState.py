@@ -48,6 +48,7 @@ _STATE = PointPlacementState(_NAMESPACE, active_suffix="ActiveTerritory")
 ARMED_ATTR = f"{_NAMESPACE}.Armed"
 ACTIVE_TERRITORY_ATTR = f"{_NAMESPACE}.ActiveTerritory"
 MODULE_ACTIVE_ATTR = f"{_NAMESPACE}.ModuleActive"
+GRABBING_ATTR = f"{_NAMESPACE}.Grabbing"
 CARRIER_REFERENCE_ROLE = f"{_NAMESPACE}.carrier"
 
 
@@ -68,6 +69,15 @@ def set_module_active(displayNode: Any, active: bool) -> None:
 def is_module_active(displayNode: Any) -> bool:
     """True unless the module has EXPLICITLY closed the gate."""
     return _STATE.is_module_active(displayNode)
+
+
+def set_grabbing(displayNode: Any, grabbing: bool) -> None:
+    """Publish that a seed-drag gesture is in flight on the display node."""
+    _STATE.set_grabbing(displayNode, grabbing)
+
+
+def is_grabbing(displayNode: Any) -> bool:
+    return _STATE.is_grabbing(displayNode)
 
 
 def set_active_territory(displayNode: Any, territoryId: str | None) -> None:

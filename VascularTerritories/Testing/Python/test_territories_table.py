@@ -502,6 +502,77 @@ def test_carrier_modified_event_rebuilds_the_tree(qt_widgets):
     )
 
 
+def test_seed_drag_defers_full_rebuild_until_release(qt_widgets):
+    """A seed drag does NOT rebuild the tree per move; ONE rebuild on release.
+
+    ADR-0037 §Decision 3 performance: a drag relocates the grabbed seed on
+    every mouse-move (``SetNthAnnotationPoint`` -> carrier ``Modified``), so a
+    naive observer rebuilds the whole tree (every composite row widget
+    destroyed + recreated) per frame -- the drag lag.  The placement Pipeline
+    publishes a drag-in-flight flag on the shared display node on grab and
+    clears it + fires ONE carrier ``Modified`` on release; the table observer
+    reads the flag and defers its full ``_rebuild`` until the drag ends.  This
+    pins: (1) carrier ``Modified``s WHILE grabbing trigger no full rebuild;
+    (2) the release rebuild runs once; (3) the final positions are consistent.
+    """
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    displayNode = _make_display_node_or_skip(slicer)
+    state = _import_interaction_state_or_skip()
+    if not hasattr(state, "set_grabbing"):
+        pytest.skip(
+            "TerritoryInteractionState has no set_grabbing -- the drag-defer "
+            "seam has not landed (ADR-0027)."
+        )
+    table = _make_table_or_skip(slicer, carrier, displayNode)
+    qt_widgets.append(table)
+    _require_tree_model(table)
+    _require_composite_rows_or_skip(table)
+
+    # A seed to drag.
+    carrier.AddAnnotationPoint(TERRITORY_A, 1.0, 0.0, 0.0)
+
+    # Spy on the full rebuild.
+    rebuild_calls = {"n": 0}
+    real_rebuild = table._rebuild
+
+    def _counting_rebuild():
+        rebuild_calls["n"] += 1
+        real_rebuild()
+
+    table._rebuild = _counting_rebuild
+
+    # Grab: the Pipeline sets the drag-in-flight flag on the display node.
+    state.set_grabbing(displayNode, True)
+
+    # Many drag moves relocate the grabbed seed -- each fires carrier Modified.
+    for step in range(1, 11):
+        carrier.SetNthAnnotationPoint(TERRITORY_A, 0, float(step), 0.0, 0.0)
+    assert rebuild_calls["n"] == 0, (
+        "a drag in flight must NOT trigger a full tree rebuild per move -- the "
+        f"drag lag (got {rebuild_calls['n']} rebuilds across 10 moves)."
+    )
+
+    # Release: the Pipeline clears the flag, then fires ONE carrier Modified.
+    state.set_grabbing(displayNode, False)
+    carrier.Modified()
+    assert rebuild_calls["n"] == 1, (
+        "the release must run EXACTLY ONE full rebuild reflecting the final "
+        f"positions (got {rebuild_calls['n']})."
+    )
+
+    # Final state consistent: the seed row exists at the dragged-to position.
+    final = carrier.GetNthAnnotationPoint(TERRITORY_A, 0)
+    assert (final[0], final[1], final[2]) == (10.0, 0.0, 0.0), (
+        "the carrier must hold the final dragged-to seed position after release."
+    )
+    assert len(table.seedItems(TERRITORY_A)) == 1, (
+        "the tree must show exactly the one seed after the release rebuild -- "
+        "no stale / duplicated rows."
+    )
+
+
 # --------------------------------------------------------------------------- #
 # ARMING — click appends to the ACTIVE territory
 # --------------------------------------------------------------------------- #

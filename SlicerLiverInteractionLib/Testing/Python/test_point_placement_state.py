@@ -211,6 +211,27 @@ def test_carrier_binds_as_node_ref_and_fires_modified():
     )
 
 
+def test_grabbing_flag_round_trips_and_defaults_off():
+    """The drag-in-flight (grabbing) flag round-trips; a fresh node reads OFF.
+
+    A point drag relocates the grabbed point on every mouse-move, each firing
+    the carrier's ``Modified``; a widget/table observing the carrier reads
+    this flag off the SHARED display node to defer its expensive full rebuild
+    until the drag ends (ADR-0037 §Decision 3 performance).  The Pipeline sets
+    it on grab and clears it on release, so like the arm flag it MUST live on
+    the display node, not the pipeline instance.
+    """
+    PointPlacementState = _import_state()
+    state = PointPlacementState("Volumetry")
+    node = _FakeDisplayNode()
+
+    assert state.is_grabbing(node) is False, "a fresh node must read NOT grabbing."
+    state.set_grabbing(node, True)
+    assert state.is_grabbing(node) is True
+    state.set_grabbing(node, False)
+    assert state.is_grabbing(node) is False
+
+
 # --------------------------------------------------------------------------- #
 # Namespace parameterization -- two consumers, independent keys/nodes
 # --------------------------------------------------------------------------- #
