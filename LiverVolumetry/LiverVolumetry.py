@@ -150,6 +150,11 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # scene close.
     self._seedsCarrier = None
     self._seedsDisplayNode = None
+    # The scene-resident labelmap the in-volume pick resolves interior voxels
+    # against (rasterized from the selected input segment(s); the pick needs an
+    # image-data node, not the segmentation).  Created lazily on arm; dropped on
+    # scene close.
+    self._pickLabelmap = None
     # The carrier-backed seeds table (ADR-0038 §Conformance): one row per seed
     # with an editable label (the generated segment name), a colour swatch, and
     # a delete affordance.  Composed into the panel in ``setup`` and bound to
@@ -345,18 +350,52 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return node
 
   def _aimPickSurface(self, displayNode):
-    """Aim the seed display node's pickSurface at the target labelmap surface.
+    """Aim the seed display node's pickSurface at the target region's labelmap.
 
-    The in-volume pick resolves interior voxels against the target region's
-    labelmap.  The v2.0 target region is the currently selected input
-    segmentation; a segmentation node satisfies the pick's labelmap read via
-    its binary labelmap representation.  ``None`` clears the reference.
+    The in-volume pick (``InVolumePick``) resolves interior voxels by reading
+    the pickSurface node's ``GetImageData`` / RAS<->IJK matrices, so the
+    pickSurface must be a ``vtkMRMLLabelMapVolumeNode`` -- NOT the input
+    ``vtkMRMLSegmentationNode``, which carries no image-data / IJK API (a
+    segmentation node makes the pick raise and decline every click).  So we
+    rasterize the selected input segment(s) into a scene-resident labelmap
+    (the same ``ExportSegmentsToLabelmapNode`` the compute path uses) and aim
+    the pick at that.  ``None`` clears the reference when there is no input.
     """
     if displayNode is None or not hasattr(displayNode, "SetAndObservePickSurfaceNodeID"):
       return
-    segmentation = self.ui.InputSegmentationSelector.currentNode()
+    labelmap = self._ensurePickLabelmap()
     displayNode.SetAndObservePickSurfaceNodeID(
-      segmentation.GetID() if segmentation is not None else None)
+      labelmap.GetID() if labelmap is not None else None)
+
+  def _ensurePickLabelmap(self):
+    """Rasterize the selected input segment(s) into the pick labelmap.
+
+    The in-volume pick needs a labelmap of the CURRENT target region, so this
+    re-exports on every arm (segment selection or reference volume may have
+    changed).  Reuses one owned ``vtkMRMLLabelMapVolumeNode`` so re-arming does
+    not litter the scene.  Returns ``None`` (and leaves no labelmap) when there
+    is no input segmentation, so the caller clears the pickSurface reference.
+    """
+    segmentation = self.ui.InputSegmentationSelector.currentNode()
+    if segmentation is None or not segmentation.IsA("vtkMRMLSegmentationNode"):
+      return None
+    labelmap = self._pickLabelmap
+    if labelmap is None or not slicer.mrmlScene.IsNodePresent(labelmap):
+      labelmap = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLLabelMapVolumeNode", "Volumetry Seed Pick Labelmap")
+      # Hidden from the subject hierarchy: an internal pick target, not a
+      # user-facing result (ADR-0009 -- no clutter in the node lists).
+      labelmap.SetHideFromEditors(True)
+      self._pickLabelmap = labelmap
+    segmentIDs = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
+    refVolume = self.ui.ReferenceVolumeSelector.currentNode()
+    # An empty selection means "all segments" for the export; a null reference
+    # volume lets the segmentation's own geometry drive the rasterization.
+    slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(
+      segmentation, segmentIDs, labelmap, refVolume)
+    if labelmap.GetImageData() is None:
+      return None
+    return labelmap
 
   def onAddSeedsToggled(self, armed):
     """Arm / disarm interior seed placement through the shared base pipeline.
@@ -568,6 +607,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # stale handles so the next placement re-creates fresh ones.
     self._seedsCarrier = None
     self._seedsDisplayNode = None
+    self._pickLabelmap = None
     # Unbind the table from the now-invalid carrier (drops its observer) so it
     # empties and does not observe a scene-cleared node.
     self._bindSeedsTable(None)
