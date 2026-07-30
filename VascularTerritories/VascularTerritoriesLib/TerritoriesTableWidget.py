@@ -94,6 +94,53 @@ _INCOMPLETE_GLYPH = "⚠"  # WARNING SIGN
 _INCOMPLETE_TEXT = "Incomplete — needs at least two seeds"
 _COMPLETE_TEXT = "Ready"
 
+#: The per-territory review-status vocabulary (ADR-0037 Amendment
+#: "Per-territory status + derived edit-lock").  Reuses Slicer's own segment
+#: status enum ordinals (``vtkSlicerSegmentationsModuleLogic`` /
+#: ``vtkMRMLCustomTerritoriesNode``: NotStarted 0 / InProgress 1 / Completed 2 /
+#: Flagged 3) and the SAME machine strings + glyphs as the Stage-2 segments
+#: table (ADR-0034), so the two tables render status identically.  Kept factored
+#: here as a module-level table so a later increment can extract a shared
+#: status-cell helper (plan §4); do not over-engineer a shared module now.
+_STATUS_NOT_STARTED = 0
+_STATUS_IN_PROGRESS = 1
+_STATUS_COMPLETED = 2
+_STATUS_FLAGGED = 3
+_STATUS_LAST = 4  # sentinel: the cycle wraps at this ordinal (Flagged -> NotStarted)
+
+#: (glyph, short text) per ordinal — glyph + text, never colour alone
+#: (ADR-0010).  The glyphs mirror the #574 segment-table vocabulary
+#: (○ Missing / ● Review / ✓ Confirmed / ⚑ Flagged), mapped onto the status
+#: names so a Slicer user recognises the cell instantly.
+_STATUS_LABELS = {
+    _STATUS_NOT_STARTED: ("○", "Not started"),
+    _STATUS_IN_PROGRESS: ("●", "In progress"),
+    _STATUS_COMPLETED: ("✓", "Completed"),
+    _STATUS_FLAGGED: ("⚑", "Flagged"),
+}
+
+#: The lock affordance shown on a locked (Completed) territory (ADR-0037
+#: Amendment; glyph + text per ADR-0010).
+_LOCK_GLYPH = "🔒"
+_LOCK_TEXT = "Locked"
+_LOCK_TOOLTIP = "Territory validated (Completed) — cycle status off Completed to edit"
+
+
+def _status_cell_text(status: int) -> str:
+    """The status cell's GLYPH + TEXT for a status ordinal (ADR-0010)."""
+    glyph, text = _STATUS_LABELS.get(status, _STATUS_LABELS[_STATUS_NOT_STARTED])
+    return f"{glyph} {text}"
+
+
+def _next_status(status: int) -> int:
+    """The next status in the click-cycle, wrapping Flagged -> NotStarted.
+
+    Mirrors ``qMRMLSegmentsTableView``'s ``++status`` wrap at ``LastStatus``
+    (the plan's "Flagged→Completed wrap" phrasing describes the same
+    full-cycle advance: from Flagged the cycle returns to NotStarted).
+    """
+    return (int(status) + 1) % _STATUS_LAST
+
 
 class TerritoriesTableWidget(qt.QWidget):
     """Custom composite-row tree over the annotation carrier (ADR-0037).
@@ -256,9 +303,15 @@ class TerritoriesTableWidget(qt.QWidget):
         return [parent.child(j) for j in range(parent.childCount())]
 
     def territoryStatusText(self, territoryId: str) -> str:
-        """The completeness status TEXT shown on the territory's row widget."""
-        status = self._territoryControl(territoryId, "status")
-        return status.text if status is not None else ""
+        """The completeness (readiness) TEXT for the territory (ADR-0010).
+
+        This is the MACHINE readiness hint (≥2-seed / per-structure gate), now
+        folded into the status button's tooltip and SUBORDINATED to the human
+        review status (plan §4).  Kept as a reader so the completeness
+        invariants still pin the glyph + text.
+        """
+        completeness = self._territoryControl(territoryId, "completeness")
+        return completeness if completeness is not None else ""
 
     def territoryHasIncompleteGlyph(self, territoryId: str) -> bool:
         """Whether the territory carries the incomplete GLYPH (ADR-0010)."""
@@ -301,6 +354,10 @@ class TerritoriesTableWidget(qt.QWidget):
     def territoryDeleteButton(self, territoryId: str) -> Any:
         """The delete ``qt.QToolButton`` on the territory HEADER row."""
         return self._territoryControl(territoryId, "delete")
+
+    def statusButton(self, territoryId: str) -> Any:
+        """The click-cycle status ``qt.QToolButton`` on the territory row."""
+        return self._territoryControl(territoryId, "status_button")
 
     def seedRowWidget(self, territoryId: str, pointIndex: int) -> Any:
         """The composite ``QWidget`` on the seed child item (col 0)."""
@@ -538,6 +595,19 @@ class TerritoriesTableWidget(qt.QWidget):
         self.setTerritoryVisibility(territoryId, checked)
         self._applyEyeIcon(button, checked)
 
+    def _onStatusClicked(self, territoryId: str) -> None:
+        """Cycle the territory's review status one step (the status-cell click).
+
+        ``NotStarted → InProgress → Completed → Flagged → NotStarted``, exactly
+        like Slicer's segment status cell.  The carrier ``Modified`` observer
+        rebuilds the row so the cell text + the derived lock re-derive.  A
+        colour/label edit does NOT reach here; this is a status (not geometry)
+        edit, so it never demotes on its own -- it IS the edit.
+        """
+        if self._rebuilding:
+            return
+        self.cycleTerritoryStatus(territoryId)
+
     def _onLabelEdited(self, territoryId: str, edit: Any) -> None:
         """Write an edited label ``QLineEdit`` back to the carrier's display slot.
 
@@ -580,12 +650,57 @@ class TerritoriesTableWidget(qt.QWidget):
             self._carrier.SetTerritoryVisibility(territoryId, bool(visible))
 
     def setTerritoryColor(self, territoryId: str, r: float, g: float, b: float) -> None:
-        if self._carrier is not None:
+        # A locked territory refuses colour edits (the swatch is disabled in the
+        # row; this refuses the programmatic path too).  A colour edit is
+        # cosmetic and never demotes -- but it does not apply while locked.
+        if self._carrier is not None and not self.territoryIsLocked(territoryId):
             self._carrier.SetTerritoryColor(territoryId, float(r), float(g), float(b))
 
     def setTerritoryLabel(self, territoryId: str, label: str) -> None:
-        if self._carrier is not None:
+        if self._carrier is not None and not self.territoryIsLocked(territoryId):
             self._carrier.SetTerritoryLabel(territoryId, str(label))
+
+    # ------------------------------------------------------------------ #
+    # Review status + derived edit-lock (ADR-0037 Amendment)
+    # ------------------------------------------------------------------ #
+
+    def territoryStatus(self, territoryId: str) -> int:
+        """The territory's review-status ordinal (``NotStarted`` when unset)."""
+        if self._carrier is not None and hasattr(self._carrier, "GetTerritoryStatus"):
+            return int(self._carrier.GetTerritoryStatus(territoryId))
+        return _STATUS_NOT_STARTED
+
+    def setTerritoryStatus(self, territoryId: str, status: int) -> None:
+        """Write the territory's review status back to the carrier's slot.
+
+        A status write is a display-layer edit (never touches the geometry) and
+        drives the derived edit-lock (``Completed`` ⇒ locked).  The carrier
+        ``Modified`` observer rebuilds the row so the status cell + the locked
+        controls re-derive.
+        """
+        if self._carrier is not None and hasattr(self._carrier, "SetTerritoryStatus"):
+            self._carrier.SetTerritoryStatus(territoryId, int(status))
+
+    def cycleTerritoryStatus(self, territoryId: str) -> None:
+        """Advance the territory's status one step (the status-cell click).
+
+        Cycles ``NotStarted → InProgress → Completed → Flagged → NotStarted``
+        exactly like Slicer's ``qMRMLSegmentsTableView`` status cell.  This is
+        the ONE gesture that toggles the derived edit-lock (reaching / leaving
+        ``Completed``).
+        """
+        self.setTerritoryStatus(territoryId, _next_status(self.territoryStatus(territoryId)))
+
+    def territoryIsLocked(self, territoryId: str) -> bool:
+        """Whether the territory is edit-LOCKED (derived from status).
+
+        Prefers the carrier's own derivation (``GetTerritoryLocked``) so the
+        table and the interaction guards read one source of truth; falls back
+        to the ``Completed`` comparison when that accessor is absent.
+        """
+        if self._carrier is not None and hasattr(self._carrier, "GetTerritoryLocked"):
+            return bool(self._carrier.GetTerritoryLocked(territoryId))
+        return self.territoryStatus(territoryId) == _STATUS_COMPLETED
 
     def deleteTerritory(self, territoryId: str) -> None:
         """Remove a whole territory (its seeds + display slot) via the carrier.
@@ -600,6 +715,10 @@ class TerritoriesTableWidget(qt.QWidget):
         not resurrect it.
         """
         if not territoryId or self._carrier is None:
+            return
+        # A LOCKED territory refuses removal (the Remove button is disabled in
+        # the row; this refuses the programmatic path too -- ADR-0037 Amendment).
+        if self.territoryIsLocked(territoryId):
             return
         # Active-territory hygiene: disarm if the doomed territory is armed, so a
         # subsequent surface click does not append to a territory that is gone.
@@ -697,10 +816,16 @@ class TerritoriesTableWidget(qt.QWidget):
         """Compose a territory row's horizontal control STRIP (ADR-0037 slice-4).
 
         Order: Place toggle -> eye-icon visibility toggle -> colour button ->
-        label QLineEdit (stretch) -> completeness status label.  Controls are
-        registered by NAME in ``_territory_rows`` so the getters resolve them
-        without any column index.
+        label QLineEdit (stretch) -> click-cycle STATUS button -> Remove.  The
+        status button folds the completeness hint into its tooltip (one
+        authoritative row indicator, plan §4), and when the territory is LOCKED
+        (status Completed) it shows a lock glyph + "Locked" and the Place /
+        colour / label / seed-delete / Remove controls are DISABLED with an
+        explaining tooltip (ADR-0037 Amendment "Per-territory status + derived
+        edit-lock").  Controls are registered by NAME in ``_territory_rows`` so
+        the getters resolve them without any column index.
         """
+        locked = self.territoryIsLocked(territoryId)
         rowWidget = qt.QWidget()
         rowLayout = qt.QHBoxLayout(rowWidget)
         rowLayout.setContentsMargins(2, 1, 2, 1)
@@ -723,6 +848,11 @@ class TerritoriesTableWidget(qt.QWidget):
             "toggled(bool)",
             lambda checked, t=territoryId: self._onPlaceToggled(t, checked),
         )
+        if locked:
+            # A locked territory refuses placement: the Place toggle cannot arm
+            # into it (the pipeline checks status as defence in depth).
+            placeButton.setEnabled(False)
+            placeButton.setToolTip(_LOCK_TOOLTIP)
         rowLayout.addWidget(placeButton)
 
         # Visibility: a Slicer-idiomatic eye-on / eye-off ``QToolButton`` (the
@@ -755,6 +885,9 @@ class TerritoriesTableWidget(qt.QWidget):
                 t, c.redF(), c.greenF(), c.blueF()
             ),
         )
+        if locked:
+            colourButton.setEnabled(False)
+            colourButton.setToolTip(_LOCK_TOOLTIP)
         rowLayout.addWidget(colourButton)
 
         # Editable label: a ``QLineEdit`` (the composite-row replacement for the
@@ -766,31 +899,61 @@ class TerritoriesTableWidget(qt.QWidget):
             "editingFinished()",
             lambda t=territoryId, e=labelEdit: self._onLabelEdited(t, e),
         )
+        if locked:
+            labelEdit.setReadOnly(True)
+            labelEdit.setToolTip(_LOCK_TOOLTIP)
         rowLayout.addWidget(labelEdit, 1)
 
-        # Completeness indicator: GLYPH + TEXT (ADR-0010, never colour alone).
-        # The check is PER STRUCTURE (revised ADR-0037 slice 5, §B6): a
-        # territory that touches any structure with <2 seeds is flagged, because
-        # that structure cannot yield a centerline -- even when the flat seed
-        # count reads complete (e.g. 2 on the vein + 1 on the artery).  The flat
+        # Completeness hint: GLYPH + TEXT (ADR-0010, never colour alone).  The
+        # check is PER STRUCTURE (revised ADR-0037 slice 5, §B6): a territory
+        # that touches any structure with <2 seeds is flagged, because that
+        # structure cannot yield a centerline -- even when the flat seed count
+        # reads complete (e.g. 2 on the vein + 1 on the artery).  The flat
         # <2-seed check remains as the fallback when no segmentation is bound.
+        # This is now a MACHINE readiness hint SUBORDINATED to the human review
+        # status (plan §4): it is FOLDED into the status button's tooltip, so
+        # there is ONE authoritative row indicator.
         underSeeded = self._underSeededStructures(territoryId)
         if underSeeded:
             names = ", ".join(
                 self._segmentName(segId) or str(segId) for segId in underSeeded
             )
-            statusText = f"{_INCOMPLETE_GLYPH} {names} needs at least two seeds"
+            completenessText = f"{_INCOMPLETE_GLYPH} {names} needs at least two seeds"
         elif seedCount < _MIN_SEEDS_FOR_COMPLETE:
-            statusText = f"{_INCOMPLETE_GLYPH} {_INCOMPLETE_TEXT}"
+            completenessText = f"{_INCOMPLETE_GLYPH} {_INCOMPLETE_TEXT}"
         else:
-            statusText = _COMPLETE_TEXT
-        statusLabel = qt.QLabel(statusText)
-        rowLayout.addWidget(statusLabel)
+            completenessText = _COMPLETE_TEXT
+
+        # Review-status cell: a click-cycle ``QToolButton`` rendered as GLYPH +
+        # TEXT (ADR-0010), exactly like Slicer's segment status cell.  When the
+        # territory is LOCKED (status Completed) the button reads the lock glyph
+        # + "Locked" (the human sign-off is explicit + persistent); a click
+        # cycles the status one step (the ONE gesture that reaches / leaves the
+        # locked state).  The completeness hint lives in the tooltip so the row
+        # carries one authoritative indicator (plan §4).
+        status = self.territoryStatus(territoryId)
+        statusButton = qt.QToolButton()
+        statusButton.setAutoRaise(True)
+        statusButton.setToolButtonStyle(qt.Qt.ToolButtonTextOnly)
+        if locked:
+            statusButton.setText(f"{_LOCK_GLYPH} {_LOCK_TEXT}")
+        else:
+            statusButton.setText(_status_cell_text(status))
+        statusButton.setToolTip(
+            f"{_status_cell_text(status)} — click to change review status.\n"
+            f"Readiness: {completenessText}"
+        )
+        statusButton.connect(
+            "clicked(bool)",
+            lambda _checked, t=territoryId: self._onStatusClicked(t),
+        )
+        rowLayout.addWidget(statusButton)
 
         # Territory-level delete: removes the WHOLE territory (seeds + display
         # slot) via the carrier's RemoveTerritory, so an EMPTY territory -- which
         # has no seed rows and thus no per-seed delete button -- is still
-        # removable (ADR-0037 §Decision 3).  a11y: explicit text + tooltip.
+        # removable (ADR-0037 §Decision 3).  a11y: explicit text + tooltip.  A
+        # LOCKED territory refuses removal (disabled with an explaining tooltip).
         deleteButton = qt.QToolButton()
         deleteButton.setAutoRaise(True)
         deleteButton.setText("Remove")
@@ -799,6 +962,9 @@ class TerritoriesTableWidget(qt.QWidget):
             "clicked(bool)",
             lambda _checked, t=territoryId: self.deleteTerritory(t),
         )
+        if locked:
+            deleteButton.setEnabled(False)
+            deleteButton.setToolTip(_LOCK_TOOLTIP)
         rowLayout.addWidget(deleteButton)
 
         self._territory_rows[territoryId] = {
@@ -807,7 +973,14 @@ class TerritoriesTableWidget(qt.QWidget):
             "visibility": visibilityButton,
             "colour": colourButton,
             "label": labelEdit,
-            "status": statusLabel,
+            # ``status`` keeps returning the completeness GLYPH+TEXT the existing
+            # ``territoryStatusText`` / ``territoryHasIncompleteGlyph`` readers
+            # consult (the readiness hint), now sourced from the status button's
+            # tooltip so those invariants stay green; ``status_button`` is the
+            # new review-status cell.
+            "status": statusButton,
+            "status_button": statusButton,
+            "completeness": completenessText,
             "delete": deleteButton,
         }
         return rowWidget
@@ -865,6 +1038,10 @@ class TerritoriesTableWidget(qt.QWidget):
             "clicked(bool)",
             lambda _checked, t=territoryId, i=pointIndex: self._removePoint(t, i),
         )
+        if self.territoryIsLocked(territoryId):
+            # Seed-delete is a geometry edit; a locked territory refuses it.
+            deleteButton.setEnabled(False)
+            deleteButton.setToolTip(_LOCK_TOOLTIP)
         rowLayout.addWidget(deleteButton)
 
         self._seed_rows[(territoryId, pointIndex)] = {
@@ -882,6 +1059,8 @@ class TerritoriesTableWidget(qt.QWidget):
         carrier method the placement Pipeline's pick-delete
         (``DeleteAnnotationPoint``) reaches, so delete-by-seed and
         delete-by-pick converge on one deletion path (ADR-0037 §Decision 3).
+        A LOCKED territory refuses the seed delete (a geometry edit; the row
+        button is disabled, this refuses the programmatic path too).
         """
-        if self._carrier is not None:
+        if self._carrier is not None and not self.territoryIsLocked(territoryId):
             self._carrier.RemoveNthAnnotationPoint(territoryId, pointIndex)
