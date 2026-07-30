@@ -249,6 +249,68 @@ public:
   std::vector<std::string> GetDisplayTerritoryIds() const;
 
   //--------------------------------------------------------------------------
+  // Per-territory review status + derived edit-lock (ADR-0037 Amendment
+  // "Per-territory status + derived edit-lock" / the territory-usability plan)
+  //--------------------------------------------------------------------------
+  //
+  // The surgeon signs a territory off through a per-territory review status
+  // mirroring Slicer's per-segment status (ADR-0034, the #574 segment
+  // structureStatus): the enum reuses ``vtkSlicerSegmentationsModuleLogic``'s
+  // vocabulary EXACTLY — same int values (NotStarted 0 / InProgress 1 /
+  // Completed 2 / Flagged 3) and the same machine-readable strings — so the
+  // territories table and the Stage-2 segments table speak one language.
+  // Stored as a ``std::map<std::string, int>`` keyed on the surgeon-named
+  // territory id, mirroring the ``TerritoryVisibilities`` idiom (own slot, one
+  // ModifiedEvent per write, XML + ``.vta.json`` round-trip).  The LOCK is
+  // DERIVED from the status (``Completed`` ⇒ locked) — no separate stored bool.
+  // The status is a DISPLAY-layer attribute: a status write never touches
+  // ``AnnotationPoints`` (ADR-0014 §"Fourth layer" display-vs-geometry
+  // independence), and it is INDEPENDENT of visibility (a hidden territory is
+  // not thereby locked; a locked one stays visibility-toggleable).
+
+  /// The per-territory review-status vocabulary.  Reuses Slicer's own segment
+  /// status enum values (``vtkSlicerSegmentationsModuleLogic``) so the ordinals
+  /// and the machine strings match ADR-0034 / the #574 segment table exactly.
+  enum TerritoryStatus
+  {
+    NotStarted = 0,
+    InProgress = 1,
+    Completed = 2,
+    Flagged = 3,
+    LastStatus = 4
+  };
+
+  /// Set territory ``territoryId``'s review status (one of the
+  /// ``TerritoryStatus`` ordinals).  An out-of-range value is a no-op (no
+  /// event).  Fires ONE ModifiedEvent.  Does NOT touch the annotation-point
+  /// geometry.
+  void SetTerritoryStatus(const std::string& territoryId, int status);
+
+  /// Territory ``territoryId``'s review status ordinal.  An unset territory
+  /// defaults to ``NotStarted``.
+  int GetTerritoryStatus(const std::string& territoryId) const;
+
+  /// The machine-readable string for a status ordinal
+  /// (``"NotStarted"`` / ``"InProgress"`` / ``"Completed"`` / ``"Flagged"``),
+  /// matching Slicer's segment-status strings.  An out-of-range ordinal maps
+  /// to ``"NotStarted"``.
+  static std::string GetStatusAsMachineString(int status);
+
+  /// The status ordinal for a machine-readable string (the inverse of
+  /// ``GetStatusAsMachineString``); an unknown string maps to ``NotStarted``.
+  static int GetStatusFromMachineString(const std::string& machineString);
+
+  /// Whether territory ``territoryId`` is edit-LOCKED.  The lock is DERIVED
+  /// from the status (``Completed`` ⇒ locked) — there is no separate stored
+  /// bool.  Independent of visibility.
+  bool GetTerritoryLocked(const std::string& territoryId) const;
+
+  /// The territory ids that currently carry a review status, in a
+  /// deterministic (sorted) order.  Used by the storage node to enumerate the
+  /// per-territory status slots.
+  std::vector<std::string> GetStatusTerritoryIds() const;
+
+  //--------------------------------------------------------------------------
   // Storage
   //--------------------------------------------------------------------------
 
@@ -285,6 +347,14 @@ protected:
   std::map<std::string, std::array<double, 3>> TerritoryColors;
   std::map<std::string, std::string> TerritoryLabels;
   std::map<std::string, bool> TerritoryVisibilities;
+
+  /// Per-territory review status (ADR-0037 Amendment "Per-territory status +
+  /// derived edit-lock").  Keyed on the same surgeon-named territory id as the
+  /// other display maps but kept SEPARATE so a status write cannot perturb the
+  /// geometry or the other display slots.  A territory with no entry defaults
+  /// to ``NotStarted``.  The edit-lock is derived (``Completed`` ⇒ locked), so
+  /// no lock bool is stored.
+  std::map<std::string, int> TerritoryStatuses;
 
   /// Scratch buffer backing the ``GetTerritoryColor`` size-hinted return
   /// (same idiom as ``AnnotationPointScratch``).
