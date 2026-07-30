@@ -684,7 +684,16 @@ class TerritoryPlacementPipeline(_PipelineBase):
         self._rebuild_seed_actor()
 
     def _on_grab(self, key: Any, renderer: Any, eventData: Any) -> None:
-        """Grab an existing seed: swap the glow halo + seed to green."""
+        """Grab an existing seed: swap the glow halo + seed to green.
+
+        Publish a "drag in flight" flag on the shared display node so the
+        table observer defers its expensive full rebuild until the drag ends
+        (each drag move relocates the seed via ``SetNthAnnotationPoint``, which
+        fires the carrier ``Modified`` -- without the flag the whole tree would
+        rebuild per frame; ADR-0037 §Decision 3).
+        """
+        if self._display_node is not None:
+            _state.set_grabbing(self._display_node, True)
         self._position_halo()
         self._rebuild_seed_actor()
 
@@ -694,9 +703,19 @@ class TerritoryPlacementPipeline(_PipelineBase):
         self._rebuild_seed_actor()
 
     def _on_release(self) -> None:
-        """Gesture over: drop the grab colour (fall back to hover/none)."""
+        """Gesture over: drop the grab colour (fall back to hover/none).
+
+        Clear the "drag in flight" flag FIRST, then fire ONE carrier
+        ``Modified`` so the table's deferred observer runs a single full
+        rebuild reflecting the final seed positions (ADR-0037 §Decision 3).
+        """
+        if self._display_node is not None:
+            _state.set_grabbing(self._display_node, False)
         self._position_halo()
         self._rebuild_seed_actor()
+        carrier = _state.get_carrier(self._display_node)
+        if carrier is not None:
+            carrier.Modified()
 
     def _on_bare_move_decline(self, renderer: Any, eventData: Any) -> None:
         """Raise the hover cue on a declined bare move (ADR-0033 side effect).

@@ -214,6 +214,17 @@ class TerritoriesTableWidget(qt.QWidget):
         del caller, event
         if self._rebuilding:
             return
+        # Defer the full tree rebuild while a seed drag is in flight: each
+        # drag move relocates the grabbed seed (``SetNthAnnotationPoint`` ->
+        # carrier ``Modified``), so a per-frame full rebuild (every row widget
+        # destroyed + recreated) is the drag lag.  The placement Pipeline
+        # publishes the drag-in-flight flag on the shared display node on grab
+        # and clears it + fires ONE carrier ``Modified`` on release, so exactly
+        # one rebuild lands at the end with the final positions (ADR-0037
+        # §Decision 3).  The row content is structural (Seed N + structure),
+        # not the live coordinate, so nothing visible drifts while deferred.
+        if _state.is_grabbing(self._displayNode):
+            return
         self._rebuild()
 
     # ------------------------------------------------------------------ #

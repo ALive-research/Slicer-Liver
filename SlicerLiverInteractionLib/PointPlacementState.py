@@ -43,6 +43,7 @@ class PointPlacementState:
         self._armed_attr = f"{namespace}.Armed"
         self._active_attr = f"{namespace}.{active_suffix}"
         self._module_active_attr = f"{namespace}.ModuleActive"
+        self._grabbing_attr = f"{namespace}.Grabbing"
         self._carrier_role = f"{namespace}.carrier"
 
     # ------------------------------------------------------------------ #
@@ -85,6 +86,29 @@ class PointPlacementState:
         return (
             displayNode is None
             or displayNode.GetAttribute(self._module_active_attr) != "0"
+        )
+
+    # ------------------------------------------------------------------ #
+    # Grab (drag-in-flight) flag
+    # ------------------------------------------------------------------ #
+    def set_grabbing(self, displayNode: Any, grabbing: bool) -> None:
+        """Publish that a point-drag gesture is IN FLIGHT on the display node.
+
+        The manager-driven Pipeline sets this on a grab and clears it on
+        release; a widget/table observing the CARRIER reads it to defer its
+        expensive full rebuild until the drag ends (a drag relocates one
+        point per mouse-move, each firing the carrier's ``Modified``, so a
+        naive observer would rebuild the whole view per frame).  Rides as a
+        cheap string attribute on the display node -- NOT the carrier -- so
+        setting/clearing it never itself fires the carrier observer.
+        """
+        if displayNode is not None:
+            displayNode.SetAttribute(self._grabbing_attr, "1" if grabbing else "0")
+
+    def is_grabbing(self, displayNode: Any) -> bool:
+        return (
+            displayNode is not None
+            and displayNode.GetAttribute(self._grabbing_attr) == "1"
         )
 
     # ------------------------------------------------------------------ #
