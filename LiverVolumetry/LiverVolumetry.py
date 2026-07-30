@@ -217,6 +217,11 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # are RETIRED; placement is the arm toggle below, driving the seed carrier
     # through the shared base pipeline.
     self.ui.AddSeedsButton.connect('toggled(bool)', self.onAddSeedsToggled)
+    # D3 (critique §2): whole-group "Clear all seeds", the flat-list analogue of
+    # the VascularTerritories per-territory Remove.  Clears the carrier through
+    # its existing removal so the table + pipeline refresh via the carrier
+    # ModifiedEvent observer.
+    self.ui.ClearAllSeedsButton.connect('clicked(bool)', self.onClearAllSeeds)
 
     # Compose the carrier-backed seeds table into the panel (ADR-0004: the
     # panel is Python).  It is bound to the seed carrier lazily -- the carrier
@@ -393,6 +398,8 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.AddSeedsButton.setEnabled(not placeUnmet)
     self.ui.ComputeVolumePushButton.setEnabled(not computeUnmet)
     self.ui.GenerateSegmentsPushButton.setEnabled(not generateUnmet)
+    # Clear-all is available only when there is something to clear (critique D3).
+    self.ui.ClearAllSeedsButton.setEnabled(self._seedCount() > 0)
 
     self._updateArmedCue()
     self._updateRequirementsMessage(placeUnmet, computeUnmet, generateUnmet)
@@ -449,6 +456,23 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if generateUnmet:
       lines.append("To generate segments: " + "; ".join(generateUnmet) + ".")
     label.setText("\n".join(lines))
+
+  def onClearAllSeeds(self):
+    """Remove every seed from the carrier (D3: whole-group clear).
+
+    The flat-list analogue of the VascularTerritories per-territory Remove.
+    Routes through the carrier's existing ``RemoveNthSeed`` (the same removal
+    the per-row Delete uses) from the top down, so the table + placement
+    pipeline refresh via the carrier ModifiedEvent observer.  No confirmation
+    modal (critique OQ3): re-placement is the recovery path.  Disabled when
+    there are no seeds, so this is a no-op on an empty carrier.
+    """
+    carrier = self._seedsCarrier
+    if carrier is None or not slicer.mrmlScene.IsNodePresent(carrier):
+      return
+    for index in range(carrier.GetNumberOfSeeds() - 1, -1, -1):
+      carrier.RemoveNthSeed(index)
+    self._updateActionEnablement()
 
   # ------------------------------------------------------------------ #
   # Seed carrier + placement arming (ADR-0038-amendment)
