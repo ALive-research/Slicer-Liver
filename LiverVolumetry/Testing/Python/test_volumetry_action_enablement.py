@@ -1,11 +1,11 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital.  All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 
-"""D1/D2 (volumetry-workflow-consistency critique) -- the action surface.
+"""D1/D2/D3 (volumetry-workflow-consistency critique) -- the action surface.
 
 The LiverVolumetry panel gains the VascularTerritories affirmative
-"what's missing" surface, so it feels like the sibling module and Slicer
-Segmentations (critique §4 "ship now" batch):
+"what's missing" surface + the flat-list Clear-all, so it feels like the
+sibling module and Slicer Segmentations (critique §4 "ship now" batch):
 
 * D1 REQUIREMENTS MESSAGE -- an always-visible status line + per-button
   tooltips enumerate the UNMET preconditions.  The list reads the SAME live
@@ -17,6 +17,8 @@ Segmentations (critique §4 "ship now" batch):
   segmentation is selected (the fix for the placement silent-decline: with no
   input the in-volume pick has no labelmap to resolve, so arming would accept
   clicks that never land a seed).
+* D3 CLEAR-ALL -- "Clear all seeds" empties the carrier (whole-group delete via
+  the carrier's ``RemoveNthSeed``) and is DISABLED when the carrier is empty.
 
 This file pins (mirroring
 ``VascularTerritories/Testing/Python/test_territories_action_enablement.py``):
@@ -24,6 +26,8 @@ This file pins (mirroring
 * i1 (launched, widget) -- with no input selected both Compute + Generate list
   the input requirement and the Place-seeds toggle is disabled; selecting an
   input enables the toggle; Generate still lists "Place at least one seed".
+* i2 (launched, widget) -- Clear-all empties the carrier and re-disables once it
+  is empty; the requirements line + Generate track the seed count.
 
 Both need the wrapped carrier + a live scene + Qt, so they SKIP cleanly bare
 and RUN launched (ADR-0027).
@@ -197,6 +201,61 @@ def test_requirements_message_lists_missing_seeds(qt_widgets):
     _place2, _compute2, generateUnmet2 = widget._actionRequirements()
     assert "Place at least one seed" not in generateUnmet2, (
         "once a seed lands the seed requirement must clear."
+    )
+
+
+# =========================================================================== #
+# D3 -- Clear all seeds
+# =========================================================================== #
+
+
+def test_clear_all_seeds_empties_carrier_and_disables(qt_widgets):
+    """D3: Clear-all empties the carrier and re-disables once empty.
+
+    ``onClearAllSeeds`` removes every seed through the carrier's ``RemoveNthSeed``
+    (the whole-group analogue of the territory Remove), so the table + pipeline
+    refresh via the carrier ModifiedEvent; the button is DISABLED with no seeds.
+    Launched (widget); SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    widget = _make_widget_or_skip(slicer)
+    qt_widgets.append(widget)
+    _detach_scene_observers(slicer, widget)
+
+    if not hasattr(widget, "onClearAllSeeds"):
+        pytest.skip(
+            "widget has no onClearAllSeeds -- the critique D3 clear-all has not "
+            "landed (ADR-0027)."
+        )
+
+    seg = _single_segment_segmentation(slicer)
+    widget.ui.InputSegmentationSelector.setCurrentNode(seg)
+    carrier = widget._ensureSeedsCarrier()
+    if carrier is None:
+        pytest.skip(
+            "seed carrier unavailable -- the ADR-0038 carrier has not landed "
+            "(launched build; ADR-0027)."
+        )
+
+    # Empty carrier: Clear-all is disabled.
+    widget._updateActionEnablement()
+    assert widget.ui.ClearAllSeedsButton.enabled is False, (
+        "Clear all seeds must be DISABLED with no seeds (critique D3)."
+    )
+
+    carrier.AddSeed(0.0, 0.0, 0.0)
+    carrier.AddSeed(1.0, 1.0, 1.0)
+    widget._updateActionEnablement()
+    assert widget.ui.ClearAllSeedsButton.enabled is True, (
+        "Clear all seeds must ENABLE once at least one seed is placed."
+    )
+
+    widget.onClearAllSeeds()
+    assert carrier.GetNumberOfSeeds() == 0, (
+        "Clear all seeds must remove every seed from the carrier (critique D3)."
+    )
+    assert widget.ui.ClearAllSeedsButton.enabled is False, (
+        "Clear all seeds must re-disable once the carrier is empty."
     )
 
 
