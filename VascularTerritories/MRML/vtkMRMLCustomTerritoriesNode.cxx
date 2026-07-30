@@ -545,6 +545,24 @@ void vtkMRMLCustomTerritoriesNode::ClearAnnotationPoints(const std::string& terr
 }
 
 //------------------------------------------------------------------------------
+bool vtkMRMLCustomTerritoriesNode::RemoveTerritory(const std::string& territoryId)
+{
+  // A territory is present if it carries geometry OR any display slot; an
+  // empty (zero-seed) territory lives only in the display maps, so the erase
+  // spans every per-territory map keyed on the surgeon-named id.
+  bool removed = false;
+  removed |= (this->AnnotationPoints.erase(territoryId) > 0);
+  removed |= (this->TerritoryColors.erase(territoryId) > 0);
+  removed |= (this->TerritoryLabels.erase(territoryId) > 0);
+  removed |= (this->TerritoryVisibilities.erase(territoryId) > 0);
+  if (removed)
+  {
+    this->Modified();
+  }
+  return removed;
+}
+
+//------------------------------------------------------------------------------
 std::vector<std::string> vtkMRMLCustomTerritoriesNode::GetAnnotationTerritoryIds() const
 {
   std::vector<std::string> ids;

@@ -286,6 +286,100 @@ def test_clear_fires_exactly_one_modified():
     )
 
 
+def _require_remove_territory_or_skip(node):
+    """Skip-pend unless the carrier exposes the territory-level delete seam."""
+    if not hasattr(node, "RemoveTerritory"):
+        pytest.skip(
+            f"{CUSTOM_TERRITORIES_CLASS} has no RemoveTerritory -- the "
+            "territory-level delete seam has not landed (ADR-0037 §Decision 3)."
+        )
+
+
+def test_remove_territory_drops_it_and_its_points():
+    """RemoveTerritory removes the territory + all its annotation points.
+
+    A territory-level delete (the affordance for removing a whole territory,
+    including an empty one) drops the territory from
+    ``GetAnnotationTerritoryIds`` and clears its point count, leaving siblings
+    intact (ADR-0037 §Decision 3).
+    """
+    slicer = _slicer_or_skip()
+    node = _make_custom_territories_or_skip(slicer)
+    _require_remove_territory_or_skip(node)
+
+    node.AddAnnotationPoint(TERRITORY_A, 1.0, 0.0, 0.0)
+    node.AddAnnotationPoint(TERRITORY_A, 2.0, 0.0, 0.0)
+    node.AddAnnotationPoint(TERRITORY_B, 0.0, 1.0, 0.0)
+
+    assert node.RemoveTerritory(TERRITORY_A) is True, (
+        "RemoveTerritory must report having removed a populated territory."
+    )
+    assert TERRITORY_A not in list(node.GetAnnotationTerritoryIds()), (
+        "the removed territory must be gone from GetAnnotationTerritoryIds."
+    )
+    assert node.GetNumberOfAnnotationPoints(TERRITORY_A) == 0, (
+        "RemoveTerritory must drop every one of the territory's points."
+    )
+    assert node.GetNumberOfAnnotationPoints(TERRITORY_B) == 1, (
+        "RemoveTerritory must NOT touch a sibling territory."
+    )
+
+
+def test_remove_empty_territory_is_removable():
+    """An EMPTY (zero-seed) territory is still removable via its display slot.
+
+    An empty territory has no seeds, so it lives only in the per-territory
+    display maps; RemoveTerritory must still remove it (the affordance an
+    empty territory needs, ADR-0037 §Decision 3).  A never-seen id removes
+    nothing.
+    """
+    slicer = _slicer_or_skip()
+    node = _make_custom_territories_or_skip(slicer)
+    _require_remove_territory_or_skip(node)
+    if not hasattr(node, "SetTerritoryColor"):
+        pytest.skip(
+            f"{CUSTOM_TERRITORIES_CLASS} has no display slot -- cannot mint an "
+            "empty (display-only) territory (ADR-0027)."
+        )
+
+    # Mint an empty territory the way the table does: a display slot, no seeds.
+    node.SetTerritoryColor(TERRITORY_A, 0.5, 0.5, 0.5)
+    node.SetTerritoryVisibility(TERRITORY_A, True)
+    assert node.GetNumberOfAnnotationPoints(TERRITORY_A) == 0
+
+    assert node.RemoveTerritory(TERRITORY_A) is True, (
+        "an empty territory (display slot, no seeds) must be removable."
+    )
+    assert TERRITORY_A not in list(node.GetDisplayTerritoryIds()), (
+        "RemoveTerritory must clear the empty territory's display slot too."
+    )
+    assert node.RemoveTerritory("NeverAdded") is False, (
+        "removing a never-seen territory must report False (removed nothing)."
+    )
+
+
+def test_remove_territory_fires_exactly_one_modified():
+    """RemoveTerritory fires exactly ONE ModifiedEvent when it removes one."""
+    import vtk
+
+    slicer = _slicer_or_skip()
+    node = _make_custom_territories_or_skip(slicer)
+    _require_remove_territory_or_skip(node)
+
+    node.AddAnnotationPoint(TERRITORY_A, 1.0, 2.0, 3.0)
+
+    events = []
+    tag = node.AddObserver(vtk.vtkCommand.ModifiedEvent, lambda c, e: events.append(1))
+    try:
+        node.RemoveTerritory(TERRITORY_A)
+    finally:
+        node.RemoveObserver(tag)
+
+    assert len(events) == 1, (
+        f"RemoveTerritory must fire exactly ONE ModifiedEvent; got {len(events)}."
+    )
+
+
 def test_no_markups_fiducial_reference_role_on_the_carrier():
     """i1: the annotation path adds NO markups-fiducial node reference.
 

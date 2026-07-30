@@ -193,6 +193,14 @@ public:
   /// ONE ModifiedEvent for a non-empty territory.
   void ClearAnnotationPoints(const std::string& territoryId);
 
+  /// Remove ``territoryId`` wholesale — its annotation points AND its
+  /// per-territory display slot (colour / label / visibility) — leaving
+  /// siblings intact.  Fires ONE ModifiedEvent iff something was removed.
+  /// Returns true iff the territory carried any geometry or display slot.
+  /// A territory with zero seeds is still removable (its display slot alone
+  /// makes it present), which is the affordance an empty territory needs.
+  bool RemoveTerritory(const std::string& territoryId);
+
   /// The surgeon-named territory ids that currently carry at least one
   /// annotation point, in a deterministic (sorted) order.  Used by the
   /// storage node to enumerate the per-territory point lists.
