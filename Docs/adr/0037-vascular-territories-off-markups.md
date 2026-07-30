@@ -386,3 +386,94 @@ the 3D vessel render, not the territory palette), paired with the structure name
 - [review] Re-extraction is idempotent: a territory's prior centerlines are
   cleared once before its structure loop, so re-running replaces rather than
   accrues.
+
+## Amendment — per-territory status + derived edit-lock
+
+- **Status:** Accepted
+- **Date:** 2026-07-30
+- **Cross-references:** [ADR-0034](0034-stage2-segments-table.md) (the shared
+  status vocabulary + demote-on-edit rule), [ADR-0010](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0010-accessibility-and-i18n.md)
+  (glyph + text, never colour alone).  Design study:
+  `Docs/design/territory-protection-validation-plan.md` (Option B).
+
+The maintainer's ask — *"editing seeds risks accidental changes; today the
+only protection is hiding the territory … a lock icon … the same logic as for
+segmentations, with validation of territories?"* — is answered by **Option B**
+of the design study: a per-territory **review status** mirroring Slicer's
+per-segment status, with the edit-lock **derived** from it.  The three states
+visibility / lock / validation are orthogonal; hiding a territory is no longer
+overloaded as "protect it" (and in this module hiding also removes the vessel
+from the pick surface — §slice 5 — so hide was doubly wrong as protection).
+
+### Decision
+
+1. **Carrier status slot.** `vtkMRMLCustomTerritoriesNode` carries a
+   per-territory `std::map<std::string, int> TerritoryStatuses` mirroring the
+   `TerritoryVisibilities` idiom: `SetTerritoryStatus` / `GetTerritoryStatus` /
+   `GetStatusTerritoryIds`, one `ModifiedEvent` per write, XML + `.vta.json`
+   round-trip (persisted as the machine string).  The enum reuses Slicer's
+   segment-status vocabulary **exactly** — the same ordinals (`NotStarted 0` /
+   `InProgress 1` / `Completed 2` / `Flagged 3`) and machine strings as
+   `vtkSlicerSegmentationsModuleLogic` / [ADR-0034](0034-stage2-segments-table.md)
+   / the #574 segment `structureStatus` — so the territories table and the
+   Stage-2 segments table speak one language.  The full 4-state enum ships;
+   the only load-bearing transition is reaching / leaving `Completed`.
+
+2. **Lock is DERIVED.** `GetTerritoryLocked(id)` returns
+   `GetTerritoryStatus(id) == Completed` — there is no separate stored bool
+   (the minimalism choice, byte-parallel to #574).  A status write never
+   touches `AnnotationPoints` (display-vs-geometry independence,
+   [ADR-0014](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0014-livermarkups-dissolution.md)
+   §"Fourth layer"), and the lock is **independent of visibility** (a hidden
+   territory is not thereby locked; a locked one stays visibility-toggleable).
+
+3. **Table status cell.** Each territory row carries a click-cycle status
+   `qt.QToolButton` (`NotStarted → InProgress → Completed → Flagged →
+   NotStarted`) rendered as glyph + text ([ADR-0010](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0010-accessibility-and-i18n.md)),
+   like `qMRMLSegmentsTableView`.  The derived completeness glyph folds into
+   the status cell's tooltip — one authoritative row indicator.  A locked
+   (`Completed`) territory shows a lock glyph + "Locked" and DISABLES the row's
+   Place-arm, colour, label, seed-delete, and Remove controls with an
+   explaining tooltip; the visibility toggle stays enabled.
+
+4. **Interaction guards.** A locked territory refuses geometry edits at the
+   existing seams: the Place toggle cannot arm into it and the placement
+   Pipeline checks status before `AddAnnotationPoint` (defence in depth since
+   the arm state lives on the display node); the drag hit-test excludes a
+   locked territory's seeds (a press leaves the hover highlight); per-seed
+   delete and territory Remove refuse.  **Demote-on-edit** (the #574 staleness
+   rule, locally scoped): a **geometry** edit reaching a `Completed` territory
+   through the provider (seed add / move / delete) demotes it to `InProgress`,
+   clearing the derived lock; colour / label edits are cosmetic and do **not**
+   demote.
+
+### Out of scope (explicitly deferred)
+
+Coupling validation to **compute-gating** (Extract keeps its existing ≥2-seed
+gate) and any **cross-stage invalidation cascade** are **#440 (v2.1,
+ADR-gated)** territory and must not be pulled into this amendment.
+
+### No conflict with the dissolution ADRs
+
+The guards live on the carrier status + the existing Pipeline seam, so there
+is no custom displayable manager ([ADR-0013](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0013-layerdm-pipeline-pattern.md)
+§5); the status is a display-layer attribute leaving the geometry untouched
+([ADR-0014](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0014-livermarkups-dissolution.md));
+the status cell is Python-widget composition ([ADR-0004](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0004-python-cpp-boundary.md)).
+
+### Conformance
+
+- [test] The status click-cycle wraps `NotStarted → InProgress → Completed →
+  Flagged → NotStarted`.
+- [test] A locked (`Completed`) territory refuses each edit path — placement,
+  drag-grab, seed-delete, territory-delete, colour, label.
+- [test] A geometry edit demotes `Completed → InProgress`; a colour / label
+  edit does not.
+- [test] The status survives the `.vta.json` storage round-trip; the derived
+  lock is back on read.
+- [test] The lock is independent of visibility: hiding a territory does not
+  lock it, and a locked territory stays visibility-toggleable.
+- [review] The enum ordinals + machine strings are byte-identical to Slicer's
+  segment-status vocabulary (ADR-0034), so the two tables render status the
+  same.
+- [future] Compute-gating and cross-stage invalidation — #440.

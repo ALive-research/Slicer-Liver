@@ -627,6 +627,205 @@ def test_display_attributes_round_trip_through_storage():
             os.remove(path)
 
 
+# --------------------------------------------------------------------------- #
+# i6 (Amendment) — per-territory review status + derived edit-lock (launched)
+#
+# ADR-0037 Amendment "Per-territory status + derived edit-lock": the carrier
+# carries a per-territory review status reusing Slicer's segment-status enum
+# (NotStarted 0 / InProgress 1 / Completed 2 / Flagged 3); the edit-lock is
+# DERIVED (Completed => locked), independent of geometry and of visibility;
+# the status round-trips through storage.
+# --------------------------------------------------------------------------- #
+
+_STATUS_METHODS = (
+    "SetTerritoryStatus",
+    "GetTerritoryStatus",
+    "GetTerritoryLocked",
+    "GetStatusTerritoryIds",
+)
+
+
+def _make_carrier_with_status_or_skip(slicer, name="StatusCarrierTest"):
+    """Mint a carrier exposing the status slot, or skip-pend (ADR-0027)."""
+    node = _make_custom_territories_or_skip(slicer, name)
+    for method in _STATUS_METHODS:
+        if not hasattr(node, method):
+            pytest.skip(
+                f"{CUSTOM_TERRITORIES_CLASS} has no {method} -- the ADR-0037 "
+                "per-territory status + derived edit-lock amendment has not "
+                "landed.  The skip lifts at the implementation commit (ADR-0027)."
+            )
+    return node
+
+
+def test_status_defaults_to_not_started_and_is_unlocked():
+    """i6: an unset territory reads NotStarted (0) and is NOT locked."""
+    slicer = _slicer_or_skip()
+    node = _make_carrier_with_status_or_skip(slicer)
+
+    assert node.GetTerritoryStatus(TERRITORY_A) == 0, (
+        "an unset territory must default to NotStarted (0)."
+    )
+    assert bool(node.GetTerritoryLocked(TERRITORY_A)) is False, (
+        "a NotStarted territory must not be locked."
+    )
+
+
+def test_lock_is_derived_from_completed_status():
+    """i6: the edit-lock is DERIVED from the status (Completed => locked).
+
+    Only ``Completed`` locks; NotStarted / InProgress / Flagged do not.  There
+    is no separate lock bool -- cycling off Completed unlocks.
+    """
+    slicer = _slicer_or_skip()
+    node = _make_carrier_with_status_or_skip(slicer)
+    cls = node.__class__
+
+    node.SetTerritoryStatus(TERRITORY_A, cls.Completed)
+    assert bool(node.GetTerritoryLocked(TERRITORY_A)) is True, (
+        "a Completed territory must be locked (the derived lock)."
+    )
+    for status in (cls.NotStarted, cls.InProgress, cls.Flagged):
+        node.SetTerritoryStatus(TERRITORY_A, status)
+        assert bool(node.GetTerritoryLocked(TERRITORY_A)) is False, (
+            f"status {status} must NOT lock the territory (only Completed does)."
+        )
+
+
+def test_status_write_leaves_geometry_untouched():
+    """i6: a status write is a display-layer edit -- geometry is byte-identical."""
+    slicer = _slicer_or_skip()
+    node = _make_carrier_with_status_or_skip(slicer)
+
+    pts = [(1.0, 2.0, 3.0), (4.0, 5.0, 6.0)]
+    for x, y, z in pts:
+        node.AddAnnotationPoint(TERRITORY_A, x, y, z)
+    before = [_nth(node, TERRITORY_A, i) for i in range(len(pts))]
+
+    node.SetTerritoryStatus(TERRITORY_A, node.__class__.Completed)
+
+    assert node.GetNumberOfAnnotationPoints(TERRITORY_A) == len(pts), (
+        "a status write must not change the annotation-point count."
+    )
+    for i, expected in enumerate(before):
+        assert _nth(node, TERRITORY_A, i) == pytest.approx(expected, abs=1e-9), (
+            f"point {i} must not move on a status write."
+        )
+
+
+def test_lock_is_independent_of_visibility():
+    """i6: the lock and visibility are ORTHOGONAL (the anti-overload pin).
+
+    A hidden territory is NOT thereby locked, and a locked territory stays
+    visibility-toggleable (ADR-0037 Amendment §2 the three orthogonal states).
+    """
+    slicer = _slicer_or_skip()
+    node = _make_carrier_with_status_or_skip(slicer)
+
+    # Hiding a territory must not lock it.
+    node.SetTerritoryVisibility(TERRITORY_A, False)
+    assert bool(node.GetTerritoryLocked(TERRITORY_A)) is False, (
+        "hiding a territory must NOT lock it (visibility != lock)."
+    )
+
+    # A locked territory stays visibility-toggleable in BOTH directions.
+    node.SetTerritoryStatus(TERRITORY_A, node.__class__.Completed)
+    assert bool(node.GetTerritoryLocked(TERRITORY_A)) is True
+    node.SetTerritoryVisibility(TERRITORY_A, True)
+    assert bool(node.GetTerritoryVisibility(TERRITORY_A)) is True, (
+        "a locked territory must remain visibility-toggleable (to visible)."
+    )
+    node.SetTerritoryVisibility(TERRITORY_A, False)
+    assert bool(node.GetTerritoryVisibility(TERRITORY_A)) is False, (
+        "a locked territory must remain visibility-toggleable (to hidden)."
+    )
+    assert bool(node.GetTerritoryLocked(TERRITORY_A)) is True, (
+        "toggling visibility must not change the lock."
+    )
+
+
+def test_status_fires_exactly_one_modified():
+    """i6: a status write fires exactly ONE ModifiedEvent."""
+    import vtk
+
+    slicer = _slicer_or_skip()
+    node = _make_carrier_with_status_or_skip(slicer)
+
+    events = []
+    tag = node.AddObserver(vtk.vtkCommand.ModifiedEvent, lambda c, e: events.append(1))
+    try:
+        node.SetTerritoryStatus(TERRITORY_A, node.__class__.Completed)
+    finally:
+        node.RemoveObserver(tag)
+
+    assert len(events) == 1, (
+        f"SetTerritoryStatus must fire exactly ONE ModifiedEvent; got {len(events)}."
+    )
+
+
+def test_status_round_trips_through_storage():
+    """i6: the review status survives a .vta.json write + read.
+
+    A Completed territory read back on a fresh sink carrier is Completed (and
+    hence locked); the status is persisted as its machine string alongside the
+    display slot (ADR-0037 Amendment).
+    """
+    import os
+
+    slicer = _slicer_or_skip()
+    source = _make_carrier_with_status_or_skip(slicer, "StatusSource")
+    storage = _make_storage_or_skip(slicer)
+
+    source.AddAnnotationPoint(TERRITORY_A, 1.0, 0.0, 0.0)
+    source.SetTerritoryStatus(TERRITORY_A, source.__class__.Completed)
+    source.AddAnnotationPoint(TERRITORY_B, 0.0, 1.0, 0.0)
+    source.SetTerritoryStatus(TERRITORY_B, source.__class__.Flagged)
+
+    path = _temp_path(slicer, "json")
+    storage.SetFileName(path)
+    assert storage.WriteData(source) == 1, "storage WriteData must succeed."
+
+    try:
+        sink = _make_carrier_with_status_or_skip(slicer, "StatusSink")
+        read_storage = _make_storage_or_skip(slicer)
+        read_storage.SetFileName(path)
+        assert read_storage.ReadData(sink) == 1, "storage ReadData must succeed."
+
+        assert sink.GetTerritoryStatus(TERRITORY_A) == sink.__class__.Completed, (
+            "a Completed status must round-trip through storage."
+        )
+        assert bool(sink.GetTerritoryLocked(TERRITORY_A)) is True, (
+            "the derived lock must be back after the round-trip."
+        )
+        assert sink.GetTerritoryStatus(TERRITORY_B) == sink.__class__.Flagged, (
+            "a Flagged status must round-trip through storage."
+        )
+    finally:
+        if os.path.exists(path):
+            os.remove(path)
+
+
+def test_status_machine_strings_match_slicer_segment_vocabulary():
+    """i6: the status machine strings match Slicer's segment-status strings.
+
+    ADR-0034 shares the vocabulary with the #574 segment table; the carrier's
+    machine strings must be byte-identical so the two tables speak one language.
+    """
+    slicer = _slicer_or_skip()
+    node = _make_carrier_with_status_or_skip(slicer)
+    cls = node.__class__
+
+    expected = {
+        cls.NotStarted: "NotStarted",
+        cls.InProgress: "InProgress",
+        cls.Completed: "Completed",
+        cls.Flagged: "Flagged",
+    }
+    for ordinal, machine in expected.items():
+        assert cls.GetStatusAsMachineString(ordinal) == machine
+        assert cls.GetStatusFromMachineString(machine) == ordinal
+
+
 def test_storage_can_write_custom_territories_only():
     """i2: the storage node accepts the custom-territories carrier; rejects others.
 

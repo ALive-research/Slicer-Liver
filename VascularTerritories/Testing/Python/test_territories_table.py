@@ -1500,5 +1500,287 @@ def test_no_endpoints_selector_and_no_persisted_fiducial(qt_widgets):
     widget.cleanup()
 
 
+# --------------------------------------------------------------------------- #
+# REVIEW STATUS + DERIVED EDIT-LOCK (ADR-0037 Amendment)
+#
+# The territory-usability plan §3-§5 / §8: a per-territory click-cycle status
+# cell (NotStarted -> InProgress -> Completed -> Flagged -> NotStarted); a
+# LOCKED (Completed) territory refuses each edit path (place / drag / seed-
+# delete / territory-delete); a GEOMETRY edit demotes a Completed territory to
+# InProgress, but a colour / label edit does NOT.
+# --------------------------------------------------------------------------- #
+
+_STATUS_NOT_STARTED = 0
+_STATUS_IN_PROGRESS = 1
+_STATUS_COMPLETED = 2
+_STATUS_FLAGGED = 3
+
+
+def _require_status_seam(table):
+    """Skip-pend unless the table exposes the review-status seam (ADR-0027)."""
+    for method in (
+        "territoryStatus",
+        "setTerritoryStatus",
+        "cycleTerritoryStatus",
+        "territoryIsLocked",
+    ):
+        if not hasattr(table, method):
+            pytest.skip(
+                f"TerritoriesTableWidget has no {method} -- the ADR-0037 "
+                "per-territory status + derived edit-lock has not landed (ADR-0027)."
+            )
+
+
+def _require_carrier_status_or_skip(carrier):
+    if not hasattr(carrier, "SetTerritoryStatus") or not hasattr(carrier, "GetTerritoryLocked"):
+        pytest.skip(
+            "vtkMRMLCustomTerritoriesNode has no status slot -- the ADR-0037 "
+            "status amendment carrier has not landed (ADR-0027)."
+        )
+
+
+def test_status_cell_click_cycles_through_the_four_states(qt_widgets):
+    """The status cell click-cycles NotStarted -> InProgress -> Completed -> Flagged -> NotStarted."""
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    _require_carrier_status_or_skip(carrier)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
+    qt_widgets.append(table)
+    _require_tree_model(table)
+    _require_composite_rows_or_skip(table)
+    _require_status_seam(table)
+
+    territory = table.addTerritory()  # NotStarted by default
+    assert table.territoryStatus(territory) == _STATUS_NOT_STARTED
+
+    expected = [_STATUS_IN_PROGRESS, _STATUS_COMPLETED, _STATUS_FLAGGED, _STATUS_NOT_STARTED]
+    for want in expected:
+        table.cycleTerritoryStatus(territory)
+        assert table.territoryStatus(territory) == want, (
+            f"the status cell must cycle to {want}; got {table.territoryStatus(territory)}."
+        )
+
+
+def test_status_button_click_advances_the_status(qt_widgets):
+    """Clicking the status QToolButton advances the review status one step."""
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    _require_carrier_status_or_skip(carrier)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
+    qt_widgets.append(table)
+    _require_tree_model(table)
+    _require_composite_rows_or_skip(table)
+    _require_status_seam(table)
+    if not hasattr(table, "statusButton"):
+        pytest.skip("TerritoriesTableWidget has no statusButton getter (ADR-0027).")
+
+    territory = table.addTerritory()
+    button = table.statusButton(territory)
+    assert button is not None, "the territory row must carry a status button."
+
+    button.click()
+    assert table.territoryStatus(territory) == _STATUS_IN_PROGRESS, (
+        "a status-button click must advance the review status one step."
+    )
+
+
+def test_locked_territory_disables_the_row_edit_controls(qt_widgets):
+    """A locked (Completed) territory disables place / colour / label / Remove.
+
+    The visibility toggle stays ENABLED (lock is independent of visibility).
+    """
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    _require_carrier_status_or_skip(carrier)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
+    qt_widgets.append(table)
+    _require_tree_model(table)
+    _require_composite_rows_or_skip(table)
+    _require_status_seam(table)
+
+    territory = table.addTerritory()
+    table.setTerritoryStatus(territory, _STATUS_COMPLETED)  # -> rebuild, locked
+
+    assert table.territoryIsLocked(territory) is True
+    assert table.placeButton(territory).enabled is False, "Place must be disabled when locked."
+    assert table.colourButton(territory).enabled is False, "colour must be disabled when locked."
+    assert table.territoryDeleteButton(territory).enabled is False, "Remove must be disabled when locked."
+    # Visibility stays usable -- lock is orthogonal to visibility.
+    assert table.visibilityButton(territory).enabled is True, (
+        "visibility must stay enabled on a locked territory (lock != visibility)."
+    )
+
+
+def test_locked_territory_refuses_seed_and_territory_delete(qt_widgets):
+    """A locked territory refuses delete-by-seed AND territory-delete (§5)."""
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    _require_carrier_status_or_skip(carrier)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
+    qt_widgets.append(table)
+    _require_tree_model(table)
+    _require_status_seam(table)
+    if not hasattr(table, "deleteSeed") or not hasattr(table, "deleteTerritory"):
+        pytest.skip("TerritoriesTableWidget lacks deleteSeed / deleteTerritory (ADR-0027).")
+
+    for x, y, z in [(1.0, 0.0, 0.0), (2.0, 0.0, 0.0)]:
+        carrier.AddAnnotationPoint(TERRITORY_A, x, y, z)
+    carrier.Modified()
+    table.setTerritoryStatus(TERRITORY_A, _STATUS_COMPLETED)
+    assert table.territoryIsLocked(TERRITORY_A) is True
+
+    before = carrier.GetNumberOfAnnotationPoints(TERRITORY_A)
+    table.deleteSeed(TERRITORY_A, 0)
+    assert carrier.GetNumberOfAnnotationPoints(TERRITORY_A) == before, (
+        "a locked territory must refuse delete-by-seed (§5)."
+    )
+
+    table.deleteTerritory(TERRITORY_A)
+    assert TERRITORY_A in list(carrier.GetAnnotationTerritoryIds()), (
+        "a locked territory must refuse territory-delete (§5)."
+    )
+
+
+def test_locked_territory_refuses_colour_and_label_edits(qt_widgets):
+    """A locked territory refuses colour + label edits through the table (§2/§4)."""
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    _require_carrier_status_or_skip(carrier)
+    displayNode = _make_display_node_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier, displayNode)
+    qt_widgets.append(table)
+    _require_tree_model(table)
+    _require_status_seam(table)
+
+    carrier.SetTerritoryColor(TERRITORY_A, 0.1, 0.2, 0.3)
+    carrier.SetTerritoryLabel(TERRITORY_A, "Before")
+    table.setTerritoryStatus(TERRITORY_A, _STATUS_COMPLETED)
+
+    table.setTerritoryColor(TERRITORY_A, 0.9, 0.9, 0.9)
+    table.setTerritoryLabel(TERRITORY_A, "After")
+
+    colour = carrier.GetTerritoryColor(TERRITORY_A)
+    assert (colour[0], colour[1], colour[2]) == pytest.approx((0.1, 0.2, 0.3), abs=1e-6), (
+        "a locked territory must refuse a colour edit through the table."
+    )
+    assert carrier.GetTerritoryLabel(TERRITORY_A) == "Before", (
+        "a locked territory must refuse a label edit through the table."
+    )
+
+
+def test_locked_active_territory_refuses_placement(qt_widgets, monkeypatch):
+    """An armed click into a locked active territory appends NO seed (§5).
+
+    The Pipeline's defence-in-depth status check refuses the AddAnnotationPoint
+    even when the shared display node still carries an armed flag.
+    """
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    _require_carrier_status_or_skip(carrier)
+    displayNode = _make_display_node_or_skip(slicer)
+    pipeline = _import_pipeline_or_skip()()
+    _wire_pipeline_through_display_or_skip(pipeline, displayNode, carrier, monkeypatch)
+    _require_arm_seam(pipeline)
+
+    # Arm into a territory, then lock it (Completed) and fire a click.
+    pipeline.SetActiveTerritory(TERRITORY_A)
+    pipeline.Arm()
+    carrier.SetTerritoryStatus(TERRITORY_A, _STATUS_COMPLETED)
+
+    before = carrier.GetNumberOfAnnotationPoints(TERRITORY_A)
+    pipeline.ProcessInteractionEvent(_Event(vtk.vtkCommand.LeftButtonPressEvent))
+    assert carrier.GetNumberOfAnnotationPoints(TERRITORY_A) == before, (
+        "a locked active territory must refuse the placement append (§5)."
+    )
+
+
+def test_locked_territory_declines_the_drag_grab(qt_widgets, monkeypatch):
+    """A press over a locked territory's seed does NOT grab it for a drag (§5)."""
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    _require_carrier_status_or_skip(carrier)
+    displayNode = _make_display_node_or_skip(slicer)
+    pipeline = _import_pipeline_or_skip()()
+    _wire_pipeline_through_display_or_skip(pipeline, displayNode, carrier, monkeypatch)
+    _require_arm_seam(pipeline)
+    if not hasattr(pipeline, "_nearest_key_in_display"):
+        pytest.skip("TerritoryPlacementPipeline lacks the grab hit-test seam (ADR-0027).")
+
+    pipeline.SetActiveTerritory(TERRITORY_A)
+    # A seed on the pick surface (the unit sphere the wiring injected snaps to).
+    carrier.AddAnnotationPoint(TERRITORY_A, 0.0, 0.0, 1.0)
+    carrier.SetTerritoryStatus(TERRITORY_A, _STATUS_COMPLETED)
+
+    key, _distance2 = pipeline._nearest_key_in_display(
+        pipeline._safe_get_renderer(), _Event(vtk.vtkCommand.LeftButtonPressEvent)
+    )
+    assert key is None, (
+        "a locked territory's seeds must not be drag-grab targets (§5)."
+    )
+
+
+def test_geometry_edit_demotes_completed_but_colour_label_does_not(qt_widgets):
+    """A GEOMETRY edit demotes Completed -> InProgress; colour/label does NOT.
+
+    The demote-on-edit rule (plan §9 default 5): a seed add / move / delete on
+    a Completed territory (reaching the carrier directly, e.g. via the provider)
+    demotes it to InProgress; a colour / label edit is cosmetic and never
+    demotes.
+    """
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    _require_carrier_status_or_skip(carrier)
+    try:
+        from VascularTerritoriesLib.TerritoryPointProvider import TerritoryPointProvider
+    except Exception as exc:  # pragma: no cover - import-environment dependent
+        pytest.skip(f"TerritoryPointProvider not importable ({exc!r}) (ADR-0027).")
+    if not hasattr(carrier, "SetTerritoryStatus"):
+        pytest.skip("carrier has no status slot (ADR-0027).")
+
+    provider = TerritoryPointProvider(
+        carrier_getter=lambda: carrier,
+        territory_getter=lambda: TERRITORY_A,
+    )
+
+    # A colour / label edit does NOT demote.
+    carrier.AddAnnotationPoint(TERRITORY_A, 1.0, 0.0, 0.0)
+    carrier.SetTerritoryStatus(TERRITORY_A, _STATUS_COMPLETED)
+    carrier.SetTerritoryColor(TERRITORY_A, 0.4, 0.4, 0.4)
+    carrier.SetTerritoryLabel(TERRITORY_A, "Cosmetic")
+    assert carrier.GetTerritoryStatus(TERRITORY_A) == _STATUS_COMPLETED, (
+        "a colour / label edit must NOT demote a Completed territory."
+    )
+
+    # A GEOMETRY edit (provider add) demotes to InProgress.
+    provider.add_point((2.0, 0.0, 0.0))
+    assert carrier.GetTerritoryStatus(TERRITORY_A) == _STATUS_IN_PROGRESS, (
+        "a geometry edit (seed add) must demote Completed -> InProgress."
+    )
+
+    # And move / delete demote too (re-lock, then edit).
+    carrier.SetTerritoryStatus(TERRITORY_A, _STATUS_COMPLETED)
+    provider.move_point((TERRITORY_A, 0), (3.0, 0.0, 0.0))
+    assert carrier.GetTerritoryStatus(TERRITORY_A) == _STATUS_IN_PROGRESS, (
+        "a geometry edit (seed move) must demote Completed -> InProgress."
+    )
+    carrier.SetTerritoryStatus(TERRITORY_A, _STATUS_COMPLETED)
+    provider.delete_point((TERRITORY_A, 0))
+    assert carrier.GetTerritoryStatus(TERRITORY_A) == _STATUS_IN_PROGRESS, (
+        "a geometry edit (seed delete) must demote Completed -> InProgress."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
