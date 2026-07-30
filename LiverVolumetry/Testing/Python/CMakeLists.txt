@@ -71,6 +71,11 @@ set(_volumetry_pytest_files
   # SetNthSeedColor, delete -> RemoveNthSeed, observer rebuild + teardown.  Qt
   # + wrapped carrier -> SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_seeds_table.py
+  # Volumetry-workflow-consistency critique D1/D2/D3 -- the affirmative
+  # requirements surface, the Place-seeds input-segmentation gate, and the
+  # whole-group Clear-all.  Qt widget + wrapped carrier -> SKIPS bare, RUNS
+  # launched (ADR-0027).
+  test_volumetry_action_enablement.py
 )
 
 foreach(_pytest_file IN LISTS _volumetry_pytest_files)
