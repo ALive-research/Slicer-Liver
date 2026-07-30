@@ -224,8 +224,26 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # carrier's ModifiedEvent once bound.
     self._composeSeedsTable(liverVolumetryWidget)
 
+    # D1 (critique §2): an always-visible affirmative requirements surface under
+    # the action buttons (Python-composed, ADR-0004; legible a11y text,
+    # ADR-0010), enumerating the UNMET preconditions live so a disabled action
+    # always tells the surgeon what to do next.  Mirrors the VascularTerritories
+    # ``_setupRequirementsLabel`` / ``_actionRequirements`` /
+    # ``_updateRequirementsMessage`` idiom.
+    #
+    # SHARED-EXTRACTION SEAM: this helper trio is a verbatim structural copy of
+    # the VascularTerritories requirements surface; a follow-up will hoist a
+    # single shared requirements helper both modules (and the future unified
+    # planning table) consume.  Do NOT couple to that shared module yet.
+    self._setupRequirementsLabel()
+
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
+
+    # Gate the workflow actions on their real preconditions from the start
+    # (D1/D2): with no input segmentation the Place-seeds toggle is disabled and
+    # every action reads its unmet list, so the panel self-explains on open.
+    self._updateActionEnablement()
 
     self.initializeParameterNode()
 
@@ -288,6 +306,150 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if self._seedsTable is not None:
       self._seedsTable.setCarrier(carrier)
 
+  def _setupRequirementsLabel(self):
+    """Tag the always-visible action-requirements status line (ADR-0004).
+
+    The wrapping ``qt.QLabel`` lives in the ``.ui`` (``VolumetryRequirementsLabel``)
+    under the action buttons; ``_updateRequirementsMessage`` fills it with the
+    live unmet-precondition list.  Legible plain text (ADR-0010) -- never colour
+    alone.  Degrades gracefully (no label) if the panel omitted it.
+
+    SHARED-EXTRACTION SEAM: a verbatim structural copy of
+    ``VascularTerritoriesWidget._setupRequirementsLabel``; a follow-up hoists a
+    shared helper both modules consume.
+    """
+    label = getattr(self.ui, "VolumetryRequirementsLabel", None)
+    if label is not None and hasattr(label, "setWordWrap"):
+      label.setWordWrap(True)
+    self._requirementsLabel = label
+
+  def _hasSegmentSelection(self):
+    """True iff at least one input segment is selected (empty == none)."""
+    return len(self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()) > 0
+
+  def _seedCount(self):
+    """The number of placed seeds on the carrier (0 when no carrier yet)."""
+    carrier = self._seedsCarrier
+    if carrier is None or not slicer.mrmlScene.IsNodePresent(carrier):
+      return 0
+    return carrier.GetNumberOfSeeds()
+
+  def _actionRequirements(self):
+    """The UNMET preconditions for Place / Compute / Generate, as message lists.
+
+    Reads the SAME live state the enablement gates read (D1) so the messaging
+    and the enablement cannot diverge -- the enablement is simply "the list is
+    empty".  Each entry is a short, actionable, platform-neutral instruction
+    (ADR-0010 legible text).
+
+    Returns ``(placeUnmet, computeUnmet, generateUnmet)`` -- lists of
+    human-readable strings; an empty list means the action can run.
+
+    SHARED-EXTRACTION SEAM: mirrors ``VascularTerritoriesWidget._actionRequirements``.
+    """
+    hasSegmentation = self.ui.InputSegmentationSelector.currentNode() is not None
+    hasVolume = self.ui.ReferenceVolumeSelector.currentNode() is not None
+    hasSegment = self._hasSegmentSelection()
+    hasSeeds = self._seedCount() > 0
+
+    # Place seeds: the arm toggle needs a target region to drop interior seeds
+    # into.  Gating placement on an input segmentation fixes the silent-decline
+    # -- with no input the in-volume pick has no labelmap to resolve against, so
+    # arming would accept clicks that never land a seed (critique D1/D2).
+    placeUnmet = []
+    if not hasSegmentation:
+      placeUnmet.append("Select an input segmentation")
+
+    computeUnmet = []
+    if not hasVolume:
+      computeUnmet.append("Select a reference volume")
+    if not hasSegmentation:
+      computeUnmet.append("Select an input segmentation")
+    if not hasSegment:
+      computeUnmet.append("Select at least one segment")
+
+    # Generate has the SAME input preconditions as Compute plus a placed seed
+    # (it grows region-grown segments around the seeds), so its unmet list is
+    # Compute's list with the seed requirement appended -- one source of truth
+    # for the shared checks.
+    generateUnmet = list(computeUnmet)
+    if not hasSeeds:
+      generateUnmet.append("Place at least one seed")
+
+    return placeUnmet, computeUnmet, generateUnmet
+
+  def _updateActionEnablement(self):
+    """Gate Place / Compute / Generate / Clear on their REAL preconditions (D1/D2).
+
+    Both actions read LIVE state through ``_actionRequirements`` so a surgeon
+    cannot arm placement or click an action that cannot yet run, and the
+    always-visible requirements line + the button tooltips enumerate what is
+    missing (an empty unmet list == the action can run).  Re-evaluated on every
+    parameter change, on the carrier ModifiedEvent (seeds add/delete), and after
+    clear-all.
+    """
+    placeUnmet, computeUnmet, generateUnmet = self._actionRequirements()
+
+    self.ui.AddSeedsButton.setEnabled(not placeUnmet)
+    self.ui.ComputeVolumePushButton.setEnabled(not computeUnmet)
+    self.ui.GenerateSegmentsPushButton.setEnabled(not generateUnmet)
+
+    self._updateArmedCue()
+    self._updateRequirementsMessage(placeUnmet, computeUnmet, generateUnmet)
+
+  def _updateArmedCue(self):
+    """Reflect the Place-seeds toggle's ARMED state in its label + tooltip (D2).
+
+    The single toggle is the correct model for a flat seed list (critique D2 /
+    OQ2), so it matches the VascularTerritories Place button in WORDING and
+    ARMED-STATE CUE, not in structure: when checked the button reads "Placing
+    seeds..." so the surgeon can tell placement is live (the checked state is
+    the primary cue; the text is the colour-never-alone companion, ADR-0010).
+    """
+    button = self.ui.AddSeedsButton
+    if button.checked:
+      button.setText("Placing seeds...")
+    else:
+      button.setText("Place seeds")
+
+  def _updateRequirementsMessage(self, placeUnmet, computeUnmet, generateUnmet):
+    """Surface the unmet preconditions on the status line + the button tooltips.
+
+    An always-visible label under the buttons enumerates what is missing for
+    each action, and each button carries its own per-action unmet list as a
+    tooltip (D1; ADR-0004 Python-composed, ADR-0010 legible a11y text).
+
+    SHARED-EXTRACTION SEAM: mirrors ``VascularTerritoriesWidget._updateRequirementsMessage``.
+    """
+    placeTip = (
+      "Place seeds is ready: click inside a target region to drop an interior "
+      "region-growing seed." if not placeUnmet
+      else "Place seeds needs:\n- " + "\n- ".join(placeUnmet))
+    computeTip = (
+      "Compute volumes is ready." if not computeUnmet
+      else "Compute volumes needs:\n- " + "\n- ".join(computeUnmet))
+    generateTip = (
+      "Generate segments is ready." if not generateUnmet
+      else "Generate segments needs:\n- " + "\n- ".join(generateUnmet))
+    self.ui.AddSeedsButton.setToolTip(placeTip)
+    self.ui.ComputeVolumePushButton.setToolTip(computeTip)
+    self.ui.GenerateSegmentsPushButton.setToolTip(generateTip)
+
+    label = getattr(self, "_requirementsLabel", None)
+    if label is None:
+      return
+    if not placeUnmet and not computeUnmet and not generateUnmet:
+      label.setText("All requirements met -- place seeds, then compute volumes.")
+      return
+    lines = []
+    if placeUnmet:
+      lines.append("To place seeds: " + "; ".join(placeUnmet) + ".")
+    if computeUnmet:
+      lines.append("To compute volumes: " + "; ".join(computeUnmet) + ".")
+    if generateUnmet:
+      lines.append("To generate segments: " + "; ".join(generateUnmet) + ".")
+    label.setText("\n".join(lines))
+
   # ------------------------------------------------------------------ #
   # Seed carrier + placement arming (ADR-0038-amendment)
   # ------------------------------------------------------------------ #
@@ -314,7 +476,18 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Bind the freshly-created carrier into the panel's seeds table so labels /
     # colours / deletes edit the same carrier the placement writes to.
     self._bindSeedsTable(node)
+    # Re-gate the actions whenever the carrier changes (a seed placed via the
+    # pipeline, deleted per-row, or cleared): Generate + Clear-all read the live
+    # seed count, and the requirements surface must track it (D1/D3).  Removed in
+    # cleanup / on scene close.
+    if not self.hasObserver(node, vtk.vtkCommand.ModifiedEvent, self._onSeedsCarrierModified):
+      self.addObserver(node, vtk.vtkCommand.ModifiedEvent, self._onSeedsCarrierModified)
     return node
+
+  def _onSeedsCarrierModified(self, caller, event):
+    """Re-gate actions on a carrier edit (seed placed / deleted / cleared)."""
+    del caller, event
+    self._updateActionEnablement()
 
   def _ensureSeedsDisplayNode(self):
     """Return the scene-resident seed display node, creating + binding it once.
@@ -413,15 +586,14 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     state = PointPlacementState(VOLUMETRY_NAMESPACE)
     state.set_module_active(node, True)
     state.set_armed(node, bool(armed))
+    # Reflect the armed state in the toggle's label (D2 armed-state cue).
+    self._updateArmedCue()
 
   def onGenerateSegmentsParameterChanged(self):
-    node3 = self.ui.ReferenceVolumeSelector.currentNode()
-    node4 = self.ui.InputSegmentationSelector.currentNode()
-    node5 = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
-    if len(self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()) == 0:
-      node5 = None
-    hasSeeds = self._seedsCarrier is not None and self._seedsCarrier.GetNumberOfSeeds() > 0
-    self.ui.GenerateSegmentsPushButton.setEnabled(hasSeeds and None not in [ node3, node4, node5])
+    # Re-gate all actions on their live preconditions + refresh the requirements
+    # surface (D1): Generate needs a reference volume, an input segmentation, a
+    # segment selection, and >= 1 seed.
+    self._updateActionEnablement()
 
   def onGenerateSegmentsButtonClicked(self):
     resectionNodes = self.getResectionNodes()
@@ -439,12 +611,10 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     slicer.mrmlScene.RemoveNode(segmentsVolumeNode)
 
   def onVolumetryParameterChanged(self):
-    node2 = self.ui.ReferenceVolumeSelector.currentNode()
-    node3 = self.ui.InputSegmentationSelector.currentNode()
-    node4 = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
-    if len(self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()) == 0:
-      node4 = None
-    self.ui.ComputeVolumePushButton.setEnabled(None not in [ node2, node3, node4])
+    # Re-gate all actions on their live preconditions + refresh the requirements
+    # surface (D1): Compute needs a reference volume, an input segmentation, and
+    # a segment selection.
+    self._updateActionEnablement()
 
   def getResectionNodes(self):
     resectionNodes = vtk.vtkCollection()
@@ -604,7 +774,11 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Called just after the scene is closed.
     """
     # The seed carrier + display node were cleared with the scene; drop the
-    # stale handles so the next placement re-creates fresh ones.
+    # stale handles so the next placement re-creates fresh ones.  Detach the
+    # carrier observer first so it does not reference a scene-cleared node.
+    if self._seedsCarrier is not None and self.hasObserver(
+        self._seedsCarrier, vtk.vtkCommand.ModifiedEvent, self._onSeedsCarrierModified):
+      self.removeObserver(self._seedsCarrier, vtk.vtkCommand.ModifiedEvent, self._onSeedsCarrierModified)
     self._seedsCarrier = None
     self._seedsDisplayNode = None
     self._pickLabelmap = None
