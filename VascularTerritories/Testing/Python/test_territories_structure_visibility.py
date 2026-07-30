@@ -746,5 +746,81 @@ def test_centerline_hides_when_its_structure_is_hidden(qt_widgets):
     )
 
 
+def test_centerline_hides_when_its_territory_is_hidden(qt_widgets):
+    """i3: a centerline hides when its TERRITORY is hidden, reappears on show.
+
+    ADR-0037 slice 5: hiding a TERRITORY (the carrier's per-territory
+    visibility) hides not only its seeds but also its centerline(s).  The
+    centerline->territory association is the carrier's ``Groupings`` map
+    (centerline node ID -> territory id) the extraction wired via
+    ``SetGrouping``; ``_syncCenterlineVisibility`` gates each centerline on
+    BOTH its territory visibility AND its structure visibility, re-firing on
+    the annotation-carrier ``Modified`` a territory-visibility toggle emits.
+    A widget-level Python observer (ADR-0013 §5 -- no displayable manager).
+    Launched-only; SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    widget = _make_widget_or_skip(slicer)
+    qt_widgets.append(widget)
+    _detach_scene_observers(slicer, widget)
+
+    if not hasattr(widget, "_syncCenterlineVisibility"):
+        pytest.skip(
+            "the ADR-0037 slice-5 centerline-visibility follow "
+            "(_syncCenterlineVisibility) has not landed (ADR-0027)."
+        )
+
+    seg, segA, segB = _two_structure_segmentation(slicer)
+    widget.ui.inputSurfaceSelector.setCurrentNode(seg)
+    carrier = widget._ensureAnnotationCarrier()
+    if not hasattr(carrier, "GetGrouping") or not hasattr(carrier, "SetTerritoryVisibility"):
+        pytest.skip(
+            "vtkMRMLCustomTerritoriesNode lacks GetGrouping / "
+            "SetTerritoryVisibility -- the territory-gate seam has not landed "
+            "(ADR-0027)."
+        )
+
+    # A centerline on structure B, grouped under TERRITORY (SetGrouping in the
+    # helper wires the Groupings map the territory gate reads).
+    model = _attach_stub_centerline(
+        slicer, widget.logic, carrier, TERRITORY, segB, "TerritoryGateCenterline")
+    modelDisplay = model.GetDisplayNode()
+    assert modelDisplay is not None
+
+    # Both structure B and TERRITORY start visible -> the centerline shows.
+    seg.GetDisplayNode().SetSegmentVisibility(segB, True)
+    carrier.SetTerritoryVisibility(TERRITORY, True)
+    widget._syncCenterlineVisibility()
+    assert bool(modelDisplay.GetVisibility()) is True, (
+        "a centerline shows when both its territory and its structure are "
+        "visible."
+    )
+
+    # Hiding the TERRITORY hides the centerline (even though its structure is
+    # still shown) -- via the carrier Modified the visibility toggle emits.
+    carrier.SetTerritoryVisibility(TERRITORY, False)
+    carrier.Modified()
+    assert bool(modelDisplay.GetVisibility()) is False, (
+        "hiding the TERRITORY must hide its centerline, not just its seeds "
+        "(ADR-0037 slice 5)."
+    )
+
+    # Showing the territory again restores it (its structure is still visible).
+    carrier.SetTerritoryVisibility(TERRITORY, True)
+    carrier.Modified()
+    assert bool(modelDisplay.GetVisibility()) is True, (
+        "showing the territory must restore its centerline (structure still "
+        "visible)."
+    )
+
+    # And the structure gate still composes: with the territory visible, hiding
+    # the STRUCTURE hides the centerline (both gates must pass to show).
+    seg.GetDisplayNode().SetSegmentVisibility(segB, False)
+    assert bool(modelDisplay.GetVisibility()) is False, (
+        "with the territory visible, hiding the structure must still hide the "
+        "centerline -- the two gates compose (ADR-0037 slice 5)."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

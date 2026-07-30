@@ -414,29 +414,50 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
       highlight.Modified()
 
   def _syncCenterlineVisibility(self):
-    """Set each ``CenterlineRefs`` model's visibility to its structure's visibility.
+    """Gate each ``CenterlineRefs`` model on its TERRITORY and STRUCTURE visibility.
 
-    Reads the input segmentation display node's per-segment visibility
-    (``GetSegmentVisibility``) and applies it to every extracted centerline
-    tagged with that segment id (``CENTERLINE_STRUCTURE_ATTRIBUTE``).  A
-    centerline with no structure tag (single-model input) is left alone
-    (ADR-0037 slice 5).
+    A centerline shows only if BOTH its owning TERRITORY is visible AND its
+    STRUCTURE (input segment) is visible -- hiding either hides the centerline
+    (ADR-0037 slice 5):
+
+    * TERRITORY -- the carrier's per-territory ``GetTerritoryVisibility``,
+      resolved from the ``Groupings`` map (centerline node ID -> territory id)
+      the extraction wired via ``SetGrouping``.  A hidden territory hides all
+      of its centerlines (a territory can span structures, so this is keyed on
+      the centerline's owning territory, not the structure).
+    * STRUCTURE -- the input segmentation display node's per-segment
+      visibility (``GetSegmentVisibility``), read off the centerline's
+      ``CENTERLINE_STRUCTURE_ATTRIBUTE`` tag.  A centerline with no structure
+      tag (single-model input) is not gated on a segment.
+
+    Fires on the segmentation-display-node observer (structure show/hide) and
+    the annotation-carrier ``Modified`` (territory show/hide + extraction).
     """
     carrier = getattr(self, "_annotationCarrier", None)
-    displayNode = self._observedSegmentationDisplayNode
-    if carrier is None or displayNode is None:
+    if carrier is None:
       return
+    displayNode = self._observedSegmentationDisplayNode
     attribute = self.logic.CENTERLINE_STRUCTURE_ATTRIBUTE
     for centerlineId in self.logic.getCenterlineReferenceIDs(carrier):
       model = slicer.mrmlScene.GetNodeByID(centerlineId)
       if model is None:
         continue
-      structureId = model.GetAttribute(attribute)
-      if not structureId:
-        continue
       modelDisplay = model.GetDisplayNode()
-      if modelDisplay is not None:
-        modelDisplay.SetVisibility(bool(displayNode.GetSegmentVisibility(structureId)))
+      if modelDisplay is None:
+        continue
+      # Territory gate: hide the centerline when its owning territory is hidden.
+      territoryId = carrier.GetGrouping(centerlineId)
+      territoryVisible = (
+        bool(carrier.GetTerritoryVisibility(territoryId)) if territoryId else True
+      )
+      # Structure gate: hide the centerline when its input segment is hidden.
+      structureId = model.GetAttribute(attribute)
+      structureVisible = (
+        bool(displayNode.GetSegmentVisibility(structureId))
+        if (displayNode is not None and structureId)
+        else True
+      )
+      modelDisplay.SetVisibility(territoryVisible and structureVisible)
 
   def _setupStructuresTable(self):
     """Compose a stock ``qMRMLSegmentsTableView`` for input-structure show/hide.
@@ -682,9 +703,24 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     label.setText("\n".join(lines))
 
   def _onAnnotationCarrierModified(self, caller, event):
-    """Re-evaluate the action enablement on a carrier edit (seeds add/delete)."""
+    """React to a carrier edit (seeds add/delete, territory show/hide).
+
+    Re-evaluates the Extract/Compute enablement (seed state) AND re-syncs the
+    centerline visibility -- a per-territory visibility toggle writes the
+    carrier's display slot, so a hidden TERRITORY must hide its centerline(s)
+    too (ADR-0037 slice 5).  Deferred while a seed drag is in flight (the same
+    grabbing flag the table reads): a drag relocates the grabbed seed per
+    mouse-move, and none of this reacts to a coordinate change, so it runs once
+    on release -- keeping the drag frame free of scan work (ADR-0037 §Decision 3).
+    """
     del caller, event
+    node = getattr(self, "_highlightDisplayNode", None)
+    if node is not None:
+      from VascularTerritoriesLib import TerritoryInteractionState as _territoryState
+      if _territoryState.is_grabbing(node):
+        return
     self._updateActionEnablement()
+    self._syncCenterlineVisibility()
 
   def segmentationNodeSelected(self):
     self.ui.SegmentationShow3DButton.setEnabled(True)
