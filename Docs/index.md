@@ -73,6 +73,7 @@ design/resection-plan-architecture/06-pattern-and-audit.md
 design/connected-tree-seeding-plan.md
 design/multi-system-territory-plan.md
 design/volumetry-seeds-layerdm-plan.md
+design/territory-protection-validation-plan.md
 ```
 
 ```{toctree}
