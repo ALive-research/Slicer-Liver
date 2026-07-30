@@ -973,12 +973,10 @@ class TerritoriesTableWidget(qt.QWidget):
             "visibility": visibilityButton,
             "colour": colourButton,
             "label": labelEdit,
-            # ``status`` keeps returning the completeness GLYPH+TEXT the existing
-            # ``territoryStatusText`` / ``territoryHasIncompleteGlyph`` readers
-            # consult (the readiness hint), now sourced from the status button's
-            # tooltip so those invariants stay green; ``status_button`` is the
-            # new review-status cell.
-            "status": statusButton,
+            # ``status_button`` is the review-status cell; ``completeness`` is the
+            # readiness GLYPH+TEXT the ``territoryStatusText`` /
+            # ``territoryHasIncompleteGlyph`` readers consult (folded into the
+            # status button's tooltip, plan §4).
             "status_button": statusButton,
             "completeness": completenessText,
             "delete": deleteButton,
