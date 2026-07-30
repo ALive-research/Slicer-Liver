@@ -249,6 +249,19 @@
         </property>
        </widget>
       </item>
+      <item row="8" column="0" colspan="4">
+       <widget class="QPushButton" name="ClearAllSeedsButton">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="toolTip">
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Remove every placed seed. Re-place seeds to start over.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        </property>
+        <property name="text">
+         <string>Clear all seeds</string>
+        </property>
+       </widget>
+      </item>
       <item row="7" column="0" colspan="4">
        <widget class="QPushButton" name="GenerateSegmentsPushButton">
         <property name="enabled">
