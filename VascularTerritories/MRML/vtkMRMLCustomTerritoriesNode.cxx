@@ -236,6 +236,7 @@ void vtkMRMLCustomTerritoriesNode::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "TerritoryColors: " << this->TerritoryColors.size() << " entries\n";
   os << indent << "TerritoryLabels: " << this->TerritoryLabels.size() << " entries\n";
   os << indent << "TerritoryVisibilities: " << this->TerritoryVisibilities.size() << " entries\n";
+  os << indent << "TerritoryStatuses: " << this->TerritoryStatuses.size() << " entries\n";
 }
 
 //------------------------------------------------------------------------------
@@ -288,6 +289,15 @@ void vtkMRMLCustomTerritoriesNode::ReadXMLAttributes(const char** atts)
     {
       this->TerritoryVisibilities.clear();
       walkEncodedMap(attValue, [this](const std::string& key, const std::string& value) { this->TerritoryVisibilities[key] = (value != "0"); });
+    }
+    else if (!std::strcmp(attName, "territoryStatuses"))
+    {
+      this->TerritoryStatuses.clear();
+      // The XML value stores the machine-readable status STRING (matching
+      // Slicer's segment-status strings, ADR-0034), decoded back to the enum
+      // ordinal, so a hand-inspected scene reads the surgeon-facing state.
+      walkEncodedMap(attValue,
+                     [this](const std::string& key, const std::string& value) { this->TerritoryStatuses[key] = vtkMRMLCustomTerritoriesNode::GetStatusFromMachineString(value); });
     }
     else if (!std::strcmp(attName, "segmentNames"))
     {
@@ -348,6 +358,18 @@ void vtkMRMLCustomTerritoriesNode::WriteXML(ostream& of, int nIndent)
     }
     of << " territoryVisibilities=\"" << this->XMLAttributeEncodeString(encodeMap(encodedVis).c_str()) << "\"";
   }
+  if (!this->TerritoryStatuses.empty())
+  {
+    // Persist the machine-readable status STRING (not the raw ordinal) so the
+    // scene XML reads the surgeon-facing state and stays byte-parallel to
+    // Slicer's segment-status strings (ADR-0034).
+    std::map<std::string, std::string> encodedStatuses;
+    for (const auto& kv : this->TerritoryStatuses)
+    {
+      encodedStatuses[kv.first] = vtkMRMLCustomTerritoriesNode::GetStatusAsMachineString(kv.second);
+    }
+    of << " territoryStatuses=\"" << this->XMLAttributeEncodeString(encodeMap(encodedStatuses).c_str()) << "\"";
+  }
   if (this->SegmentNames && this->SegmentNames->GetNumberOfValues() > 0)
   {
     std::ostringstream names;
@@ -381,6 +403,7 @@ void vtkMRMLCustomTerritoriesNode::CopyContent(vtkMRMLNode* anode, bool deepCopy
   this->TerritoryColors = other->TerritoryColors;
   this->TerritoryLabels = other->TerritoryLabels;
   this->TerritoryVisibilities = other->TerritoryVisibilities;
+  this->TerritoryStatuses = other->TerritoryStatuses;
   if (other->SegmentNames)
   {
     this->SegmentNames->DeepCopy(other->SegmentNames);
@@ -555,6 +578,7 @@ bool vtkMRMLCustomTerritoriesNode::RemoveTerritory(const std::string& territoryI
   removed |= (this->TerritoryColors.erase(territoryId) > 0);
   removed |= (this->TerritoryLabels.erase(territoryId) > 0);
   removed |= (this->TerritoryVisibilities.erase(territoryId) > 0);
+  removed |= (this->TerritoryStatuses.erase(territoryId) > 0);
   if (removed)
   {
     this->Modified();
@@ -656,7 +680,86 @@ std::vector<std::string> vtkMRMLCustomTerritoriesNode::GetDisplayTerritoryIds() 
   {
     ids.insert(kv.first);
   }
+  for (const auto& kv : this->TerritoryStatuses)
+  {
+    ids.insert(kv.first);
+  }
   return std::vector<std::string>(ids.begin(), ids.end());
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLCustomTerritoriesNode::SetTerritoryStatus(const std::string& territoryId, int status)
+{
+  if (status < NotStarted || status >= LastStatus)
+  {
+    // Out-of-range ordinal: refuse the write (no event) so a bad value never
+    // lands and the derived lock stays well-defined.
+    return;
+  }
+  this->TerritoryStatuses[territoryId] = status;
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+int vtkMRMLCustomTerritoriesNode::GetTerritoryStatus(const std::string& territoryId) const
+{
+  auto it = this->TerritoryStatuses.find(territoryId);
+  if (it == this->TerritoryStatuses.end())
+  {
+    return NotStarted;
+  }
+  return it->second;
+}
+
+//------------------------------------------------------------------------------
+std::string vtkMRMLCustomTerritoriesNode::GetStatusAsMachineString(int status)
+{
+  switch (status)
+  {
+    case InProgress: return "InProgress";
+    case Completed: return "Completed";
+    case Flagged: return "Flagged";
+    case NotStarted:
+    default: return "NotStarted";
+  }
+}
+
+//------------------------------------------------------------------------------
+int vtkMRMLCustomTerritoriesNode::GetStatusFromMachineString(const std::string& machineString)
+{
+  if (machineString == "InProgress")
+  {
+    return InProgress;
+  }
+  if (machineString == "Completed")
+  {
+    return Completed;
+  }
+  if (machineString == "Flagged")
+  {
+    return Flagged;
+  }
+  return NotStarted;
+}
+
+//------------------------------------------------------------------------------
+bool vtkMRMLCustomTerritoriesNode::GetTerritoryLocked(const std::string& territoryId) const
+{
+  // The lock is DERIVED from the status — a Completed territory is locked; no
+  // separate stored bool (ADR-0037 Amendment "Per-territory status + derived
+  // edit-lock").  Independent of visibility.
+  return this->GetTerritoryStatus(territoryId) == Completed;
+}
+
+//------------------------------------------------------------------------------
+std::vector<std::string> vtkMRMLCustomTerritoriesNode::GetStatusTerritoryIds() const
+{
+  std::vector<std::string> ids;
+  for (const auto& kv : this->TerritoryStatuses)
+  {
+    ids.push_back(kv.first);
+  }
+  return ids;
 }
 
 //------------------------------------------------------------------------------

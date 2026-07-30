@@ -211,6 +211,11 @@ int vtkMRMLCustomTerritoriesStorageNode::WriteJson(const std::string& filePath, 
       writer->WriteVectorProperty("color", rgb, 3);
       writer->WriteStringProperty("label", carrier->GetTerritoryLabel(territoryId));
       writer->WriteBoolProperty("visibility", carrier->GetTerritoryVisibility(territoryId));
+      // Per-territory review status (ADR-0037 Amendment "Per-territory status +
+      // derived edit-lock"): the machine-readable status STRING, matching
+      // Slicer's segment-status strings (ADR-0034).  The lock is derived from
+      // it on read, so no separate lock field is persisted.
+      writer->WriteStringProperty("status", vtkMRMLCustomTerritoriesNode::GetStatusAsMachineString(carrier->GetTerritoryStatus(territoryId)));
       writer->WriteObjectPropertyEnd();
     }
   }
@@ -346,6 +351,14 @@ void vtkMRMLCustomTerritoriesStorageNode::ReadDisplay(vtkMRMLJsonElement* root, 
     if (entry->HasMember("visibility"))
     {
       carrier->SetTerritoryVisibility(territoryId, entry->GetBoolProperty("visibility"));
+    }
+    if (entry->HasMember("status"))
+    {
+      // Decode the machine-readable status STRING back to the enum ordinal
+      // (ADR-0037 Amendment "Per-territory status + derived edit-lock").  A
+      // document without a status field reads back the carrier default
+      // (NotStarted), which is additive to the pre-status schema.
+      carrier->SetTerritoryStatus(territoryId, vtkMRMLCustomTerritoriesNode::GetStatusFromMachineString(entry->GetStringProperty("status")));
     }
   }
 }

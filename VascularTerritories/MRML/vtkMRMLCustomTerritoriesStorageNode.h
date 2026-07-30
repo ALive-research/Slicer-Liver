@@ -74,15 +74,19 @@ class vtkMRMLJsonElement;
  *     "SegmentVIII": [ { "xyz": [x, y, z] }, ... ]
  *   },
  *   "territoryDisplay": {
- *     "SegmentVII": { "color": [r, g, b], "label": "…", "visibility": true }
+ *     "SegmentVII": { "color": [r, g, b], "label": "…", "visibility": true,
+ *                     "status": "Completed" }
  *   }
  * }
  * \endcode
  *
  * The ``territoryDisplay`` object carries the per-territory display slot
- * (colour / label / visibility) ADR-0037 §Decision 3 adds; it is optional
+ * (colour / label / visibility / status) ADR-0037 §Decision 3 + the
+ * "Per-territory status + derived edit-lock" amendment add; it is optional
  * and additive to the v1 schema (a document without it reads back with the
- * carrier's display defaults).
+ * carrier's display defaults, and a document without the ``status`` field
+ * reads back ``NotStarted``).  The edit-lock is DERIVED from the status on
+ * read, so no lock field is persisted.
  *
  * The per-territory arrays are ORDERED — placement order round-trips
  * identically (ADR-0037 §Conformance [test]).  The storage node is typed
