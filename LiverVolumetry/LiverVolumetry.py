@@ -186,8 +186,14 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.ui = slicer.util.childWidgetVariables(liverVolumetryWidget)
 
+    # The single input control: the segment selector widget owns BOTH the
+    # segmentation-node choice (segmentationNodeSelectorVisible) and the
+    # segment picker, matching Slicer's Segment-Editor input pattern.  The
+    # standalone segmentation combo was removed to end the "which selector?"
+    # ambiguity -- everything reads the segmentation off this one widget via
+    # ``_inputSegmentationNode``.
     self.nodeSelectors = [
-      (self.ui.InputSegmentationSelector, "inputSegmentation")
+      (self.ui.InputSegmentSelectorWidget, "inputSegmentation")
     ]
 
     # Set scene in MRML widgets. Make sure that in Qt designer
@@ -203,9 +209,12 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Connections
     self.ui.VolumeTableSelectorWidget.connect('currentNodeChanged(vtkMRMLNode*)', self.onVolumetryParameterChanged)
     self.ui.ReferenceVolumeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.onVolumetryParameterChanged)
-    self.ui.InputSegmentationSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.onVolumetryParameterChanged)
-    self.ui.InputSegmentationSelector.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
-    self.ui.InputSegmentationSelector.connect('currentNodeChanged(bool)', self.segmentationNodeSelected)
+    # The consolidated input control drives the segmentation-node handlers the
+    # standalone InputSegmentationSelector used to: parameter sync, the
+    # requirements re-gate, and the Show-3D binding.
+    self.ui.InputSegmentSelectorWidget.connect('currentNodeChanged(vtkMRMLNode*)', self.onVolumetryParameterChanged)
+    self.ui.InputSegmentSelectorWidget.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
+    self.ui.InputSegmentSelectorWidget.connect('currentNodeChanged(bool)', self.segmentationNodeSelected)
     self.ui.InputSegmentSelectorWidget.connect('segmentSelectionChanged(QStringList)', self.updateParameterNodeFromGUI)
     self.ui.InputSegmentSelectorWidget.connect('segmentSelectionChanged(QStringList)', self.onSegmentChanged)
     self.ui.InputSegmentSelectorWidget.connect('segmentSelectionChanged(QStringList)', self.onVolumetryParameterChanged)
@@ -278,12 +287,12 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         "the Pipeline path (ADR-0013/0038).", exc)
 
   def _composeSeedsTable(self, panelWidget):
-    """Compose the carrier-backed seeds table into the panel grid (ADR-0004).
+    """Compose the carrier-backed seeds table into the Seeds group (ADR-0004).
 
-    Placed on the free grid row between the Add-seeds toggle and the
-    Generate-segments button (the seed list belongs with the seed controls).
-    A missing widget class (a launch without the Lib on the path) degrades
-    gracefully -- the panel simply omits the table.
+    Placed in the ``Seeds`` group box above the Clear-all button (the seed list
+    belongs with the seed controls).  A missing widget class (a launch without
+    the Lib on the path) degrades gracefully -- the panel simply omits the
+    table.
     """
     # The package guards the widget import (Qt/ctk unreachable bare), exposing
     # ``None`` when the class could not be built -- degrade to no table.
@@ -294,11 +303,10 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         "table is omitted this session.")
       return
     self._seedsTable = VolumetrySeedsTableWidget(carrier=None)
-    grid = self.ui.ResectionVolumetryGroupWidget.layout()
+    grid = self.ui.SeedsGroupWidget.layout()
     if grid is not None and hasattr(grid, "addWidget"):
-      # Row 6, colspan 4: between AddSeedsButton (row 5) and
-      # GenerateSegmentsPushButton (row 7) in the .ui grid.
-      grid.addWidget(self._seedsTable, 6, 0, 1, 4)
+      # Row 0: above the ClearAllSeedsButton (row 1) in the Seeds group grid.
+      grid.addWidget(self._seedsTable, 0, 0)
     else:
       panelWidget.layout().addWidget(self._seedsTable)
 
@@ -328,6 +336,15 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       label.setWordWrap(True)
     self._requirementsLabel = label
 
+  def _inputSegmentationNode(self):
+    """The selected input segmentation, read off the single input control.
+
+    The consolidated ``InputSegmentSelectorWidget`` owns the segmentation-node
+    choice (segmentationNodeSelectorVisible); returns a
+    ``vtkMRMLSegmentationNode`` or ``None``.
+    """
+    return self.ui.InputSegmentSelectorWidget.currentNode()
+
   def _hasSegmentSelection(self):
     """True iff at least one input segment is selected (empty == none)."""
     return len(self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()) > 0
@@ -352,7 +369,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     SHARED-EXTRACTION SEAM: mirrors ``VascularTerritoriesWidget._actionRequirements``.
     """
-    hasSegmentation = self.ui.InputSegmentationSelector.currentNode() is not None
+    hasSegmentation = self._inputSegmentationNode() is not None
     hasVolume = self.ui.ReferenceVolumeSelector.currentNode() is not None
     hasSegment = self._hasSegmentSelection()
     hasSeeds = self._seedCount() > 0
@@ -573,7 +590,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     not litter the scene.  Returns ``None`` (and leaves no labelmap) when there
     is no input segmentation, so the caller clears the pickSurface reference.
     """
-    segmentation = self.ui.InputSegmentationSelector.currentNode()
+    segmentation = self._inputSegmentationNode()
     if segmentation is None or not segmentation.IsA("vtkMRMLSegmentationNode"):
       return None
     labelmap = self._pickLabelmap
@@ -625,7 +642,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     segmentsVolumeNode = slicer.mrmlScene.GetFirstNodeByName("segmentVolumeNode")
     if not segmentsVolumeNode:
       segmentsVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "segmentVolumeNode")
-      segmentationNode = self.ui.InputSegmentationSelector.currentNode()
+      segmentationNode = self._inputSegmentationNode()
       refVolumeNode = self.ui.ReferenceVolumeSelector.currentNode()
       segmentationIds = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
       slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
@@ -668,7 +685,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     segmentsVolumeNode = slicer.mrmlScene.GetFirstNodeByName("segmentVolumeNode")
     if not segmentsVolumeNode:
       segmentsVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "segmentVolumeNode")
-      segmentationNode = self.ui.InputSegmentationSelector.currentNode()
+      segmentationNode = self._inputSegmentationNode()
       refVolumeNode = self.ui.ReferenceVolumeSelector.currentNode()
       segmentationIds = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
       slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
@@ -677,7 +694,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     targetSegmentVolumeNode = slicer.mrmlScene.GetFirstNodeByName("targetSegmentVolumeNode")
     if not targetSegmentVolumeNode:
       targetSegmentVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "targetSegmentVolumeNode")
-      segmentationNode = self.ui.InputSegmentationSelector.currentNode()
+      segmentationNode = self._inputSegmentationNode()
       refVolumeNode = self.ui.ReferenceVolumeSelector.currentNode()
       segmentationIds = self.ui.TargetSegmentationSelectorWidget.selectedSegmentIDs()
       slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
@@ -686,7 +703,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     seedsCarrier = self._ensureSeedsCarrier()
     outputTable = self.ui.VolumeTableSelectorWidget.currentNode()
 
-    self.logic.computeVolume(segmentsVolumeNode, targetSegmentVolumeNode, self.ui.InputSegmentationSelector.currentNode(), outputTable, seedsCarrier, resectionNodes)
+    self.logic.computeVolume(segmentsVolumeNode, targetSegmentVolumeNode, self._inputSegmentationNode(), outputTable, seedsCarrier, resectionNodes)
 
     # The wait cursor (set above) is the in-progress feedback; the
     # populated volumetry table is the result, so no blocking completion
@@ -708,35 +725,50 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     slicer.app.applicationLogic().PropagateTableSelection()
 
   def segmentationNodeSelected(self):
+    """Bind Show-3D to the selected segmentation and make the input visible.
+
+    Show-3D (``qMRMLSegmentationShow3DButton``) builds the closed-surface
+    representation of the segmentation's VISIBLE segments -- so if we hid every
+    segment on selection (the prior behaviour), Show-3D created the surface but
+    nothing rendered ("Show 3D shows nothing").  Instead we make the SELECTED
+    segment(s) visible (falling back to ALL segments when none is specifically
+    picked), matching Slicer's own Show-3D behaviour: the button always has
+    something to render.
+    """
     self.ui.SegmentationShow3DButton.setEnabled(True)
-    segmentationNode = self.ui.InputSegmentationSelector.currentNode()
+    segmentationNode = self._inputSegmentationNode()
 
     if segmentationNode is None:
       logging.warning('No segmentationNode')
       return
 
     self.ui.SegmentationShow3DButton.setSegmentationNode(segmentationNode)
-    displayNode = segmentationNode.GetDisplayNode()
-    visibleSegmentIds = vtk.vtkStringArray()
-    displayNode.GetVisibleSegmentIDs(visibleSegmentIds)
-    for segmentIdIndex in range(visibleSegmentIds.GetNumberOfValues()):
-      segmentId = visibleSegmentIds.GetValue(segmentIdIndex)
-      displayNode.SetSegmentVisibility(segmentId, False)
+    self._applyInputSegmentVisibility(segmentationNode)
 
   def onSegmentChanged(self):
-    if self.ui.InputSegmentationSelector.currentNode() is None:
+    segmentationNode = self._inputSegmentationNode()
+    if segmentationNode is None:
       return
-    if not self.ui.InputSegmentSelectorWidget.selectedSegmentIDs():
-      return
-    segmentationNode = self.ui.InputSegmentationSelector.currentNode()
+    self._applyInputSegmentVisibility(segmentationNode)
+
+  def _applyInputSegmentVisibility(self, segmentationNode):
+    """Show the selected input segment(s); fall back to ALL when none picked.
+
+    The Show-3D precondition: at least one segment must be visible or the
+    closed-surface build renders nothing.  Selected segments are shown and the
+    rest hidden; an empty selection shows every segment so the user always sees
+    the input region.
+    """
     displayNode = segmentationNode.GetDisplayNode()
+    if displayNode is None:
+      return
     segmentIDs = self.ui.InputSegmentSelectorWidget.segmentIDs()
     selectedIDs = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
-    unselectedIDs = list(set(segmentIDs)-set(selectedIDs))
-    for id in selectedIDs:
-      displayNode.SetSegmentVisibility(id, True)
-    for id in unselectedIDs:
-      displayNode.SetSegmentVisibility(id, False)
+    # No specific selection == show the whole segmentation (Show-3D needs a
+    # visible surface to build).
+    visibleIDs = set(selectedIDs) if selectedIDs else set(segmentIDs)
+    for id in segmentIDs:
+      displayNode.SetSegmentVisibility(id, id in visibleIDs)
 
   def cleanup(self):
     """
@@ -887,10 +919,18 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return
 
     for nodeSelector, roleName in self.nodeSelectors:
-      self._parameterNode.SetNodeReferenceID(roleName, nodeSelector.currentNodeID)
+      # ``currentNodeID`` is a Q_INVOKABLE method on the segment selector (a
+      # bare property on the old node combo), so read the node's ID off the
+      # returned node -- robust across both widget shapes.
+      currentNode = nodeSelector.currentNode()
+      self._parameterNode.SetNodeReferenceID(
+        roleName, currentNode.GetID() if currentNode is not None else None)
 
     inputSegmentation = self._parameterNode.GetNodeReference("inputSegmentation")
-    self.ui.InputSegmentSelectorWidget.setVisible(inputSegmentation and inputSegmentation.IsA("vtkMRMLSegmentationNode"))
+    # The consolidated InputSegmentSelectorWidget owns the segmentation-node
+    # choice, so it must stay visible even with no segmentation yet (hiding it
+    # would leave no way to pick an input).  Only the total-volume segment
+    # picker -- which has no node selector of its own -- follows the input.
     self.ui.TargetSegmentationSelectorWidget.setVisible(inputSegmentation and inputSegmentation.IsA("vtkMRMLSegmentationNode"))
 
 
