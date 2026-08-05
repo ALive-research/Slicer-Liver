@@ -76,6 +76,11 @@ set(_volumetry_pytest_files
   # whole-group Clear-all.  Qt widget + wrapped carrier -> SKIPS bare, RUNS
   # launched (ADR-0027).
   test_volumetry_action_enablement.py
+  # Volumetry-workflow-consistency critique -- selecting an input segmentation
+  # keeps its selected segment(s) VISIBLE so Show-3D has a surface to build
+  # (the reported "Show 3D shows nothing" was the prior hide-all).  Qt widget
+  # + wrapped node -> SKIPS bare, RUNS launched (ADR-0027).
+  test_volumetry_show3d_visibility.py
 )
 
 foreach(_pytest_file IN LISTS _volumetry_pytest_files)
