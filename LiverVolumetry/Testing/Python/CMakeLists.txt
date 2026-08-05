@@ -52,6 +52,11 @@ set(_volumetry_pytest_files
   # INTERIOR labelled voxel, NOT a surface snap.  Needs a labelmap volume ->
   # SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_in_volume_pick.py
+  # ADR-0038 §"Base extension" -- the pick resolves against the CLICKED
+  # voxel's neighbourhood (numpy-vectorized local search; a whole-volume
+  # Python scan froze the GUI on clinical-size CTs).  Pure vtkImageData +
+  # numpy stub -> RUNS bare (ADR-0027).
+  test_volumetry_pick_locality.py
   # ADR-0038 §Conformance / ADR-0015 -- the port PRESERVES compute: the
   # carrier-fed transient fiducial yields the SAME label values + segment
   # names as the ROIMarkersList path.  Wrapped C++ logic -> SKIPS bare, RUNS

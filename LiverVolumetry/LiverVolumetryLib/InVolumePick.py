@@ -18,12 +18,22 @@ slice-view click to the interior RAS point of a labelmap volume:
 * the pixel is projected to RAS on the slice plane (``XYToRAS``);
 * that RAS is mapped to the labelmap's voxel index (``RASToIJK``);
 * the index is snapped to the nearest STRICTLY-INTERIOR labelled voxel (a
-  labelled voxel whose six axis neighbours are all labelled), so the returned
-  RAS lands on a voxel the region-grow can seed.
+  labelled voxel whose six axis neighbours are all labelled) WITHIN A LOCAL
+  NEIGHBOURHOOD of the clicked voxel, so the returned RAS lands on a voxel the
+  region-grow can seed.
+
+PERFORMANCE CONTRACT (the interaction runs on the GUI thread): every
+resolution is numpy-vectorized over the labelmap scalars -- there is NO
+per-voxel Python/VTK-call scan.  A clicked pixel resolves against a bounded
+local window (``LOCAL_SEARCH_RADIUS_VOXELS``) around the clicked voxel; only
+the no-click centroid path (the 3D generic seam) touches the whole array, and
+only through vectorized numpy operations.  A clinical-size CT labelmap
+(hundreds of megavoxels) must resolve a click without a perceptible stall.
 
 The base carries NO surface-vs-volume branch (ADR-0038 §"Base extension") -- it
 places at whatever world point this provider returns; ``None`` declines the
-placement (the click was outside any labelled region).
+placement (the click was outside any labelled region, or farther than the
+local search radius from any strictly-interior voxel).
 
 References
 ----------
@@ -37,6 +47,15 @@ References
 from __future__ import annotations
 
 from typing import Any
+
+import numpy as np
+
+#: How far (in voxels, per axis) around the clicked voxel the pick searches
+#: for the nearest strictly-interior labelled voxel.  A click farther than
+#: this from any interior voxel DECLINES (returns ``None``): snapping to a
+#: distant interior voxel would silently seed a region the surgeon did not
+#: click, and an unbounded search is what froze the GUI on clinical-size CTs.
+LOCAL_SEARCH_RADIUS_VOXELS = 16
 
 
 class InVolumePick:
@@ -75,9 +94,10 @@ class InVolumePick:
         """Resolve a slice-view click to a strictly-interior labelled voxel's RAS.
 
         With ``display_xy`` set, projects the pixel to RAS on the slice plane
-        and snaps to the nearest strictly-interior labelled voxel; with
-        ``display_xy`` None (or no slice geometry), returns the region's
-        interior centroid.  ``None`` when there is no labelled region.
+        and snaps to the nearest strictly-interior labelled voxel within the
+        local search radius of the clicked voxel; with ``display_xy`` None (or
+        no slice geometry), returns the region's interior centroid.  ``None``
+        when there is no reachable labelled interior.
         """
         seed_ras = None
         if display_xy is not None and slice_node is not None:
@@ -85,18 +105,20 @@ class InVolumePick:
         return self._interior_ras(near_ras=seed_ras)
 
     # ------------------------------------------------------------------ #
-    # Interior-voxel resolution
+    # Interior-voxel resolution (numpy-vectorized -- see the module
+    # docstring's performance contract)
     # ------------------------------------------------------------------ #
 
     def _interior_ras(self, near_ras=None):
-        """The RAS of a strictly-interior labelled voxel, nearest ``near_ras``.
+        """The RAS of a strictly-interior labelled voxel near ``near_ras``.
 
-        Scans the labelmap for labelled voxels whose six axis neighbours are
-        ALSO labelled (strictly inside, not a boundary face -- ADR-0038
-        §"Base extension"), and returns the one whose IJK index is nearest the
-        seed index derived from ``near_ras`` (or nearest the labelled bounding-
-        box centre when no seed is given).  ``None`` when the region has no
-        strictly-interior voxel.
+        A strictly-interior voxel is a labelled voxel whose six axis
+        neighbours are ALSO labelled (strictly inside, not a boundary face --
+        ADR-0038 §"Base extension").  With ``near_ras`` given, the search is a
+        LOCAL neighbourhood test around the clicked voxel (the clicked voxel
+        itself when it qualifies, else the nearest interior voxel within
+        ``LOCAL_SEARCH_RADIUS_VOXELS``); without it, the interior voxel
+        nearest the interior centroid.  ``None`` when nothing qualifies.
         """
         import vtk
 
@@ -106,60 +128,20 @@ class InVolumePick:
         image = labelmap.GetImageData()
         if image is None:
             return None
-        dims = image.GetDimensions()
+        labelled = self._labelled_array(image)
+        if labelled is None:
+            return None
 
-        # The target seed index: the clicked pixel's voxel, or the labelled
-        # bounding-box centre when no pixel is supplied.
-        target = None
         if near_ras is not None:
             ras_to_ijk = vtk.vtkMatrix4x4()
             labelmap.GetRASToIJKMatrix(ras_to_ijk)
             ijk = ras_to_ijk.MultiplyPoint([near_ras[0], near_ras[1], near_ras[2], 1.0])
             target = (int(round(ijk[0])), int(round(ijk[1])), int(round(ijk[2])))
-
-        best_index = None
-        best_d2 = None
-        centre_accum = [0, 0, 0]
-        interior_count = 0
-        for k in range(1, dims[2] - 1):
-            for j in range(1, dims[1] - 1):
-                for i in range(1, dims[0] - 1):
-                    if image.GetScalarComponentAsDouble(i, j, k, 0) == 0:
-                        continue
-                    if not self._is_strict_interior(image, i, j, k):
-                        continue
-                    centre_accum[0] += i
-                    centre_accum[1] += j
-                    centre_accum[2] += k
-                    interior_count += 1
-                    if target is not None:
-                        d2 = (
-                            (i - target[0]) ** 2
-                            + (j - target[1]) ** 2
-                            + (k - target[2]) ** 2
-                        )
-                        if best_d2 is None or d2 < best_d2:
-                            best_d2 = d2
-                            best_index = (i, j, k)
-        if interior_count == 0:
-            return None
-
+            best_index = self._nearest_interior_near(labelled, target)
+        else:
+            best_index = self._interior_centroid(labelled)
         if best_index is None:
-            # No click supplied: use the interior centroid, snapped back to a
-            # labelled strictly-interior voxel if the raw centroid missed one.
-            centroid = (
-                centre_accum[0] // interior_count,
-                centre_accum[1] // interior_count,
-                centre_accum[2] // interior_count,
-            )
-            best_index = centroid
-            if (
-                image.GetScalarComponentAsDouble(*centroid, 0) == 0
-                or not self._is_strict_interior(image, *centroid)
-            ):
-                best_index = self._nearest_interior(image, dims, centroid)
-                if best_index is None:
-                    return None
+            return None
 
         ijk_to_ras = vtk.vtkMatrix4x4()
         labelmap.GetIJKToRASMatrix(ijk_to_ras)
@@ -169,40 +151,102 @@ class InVolumePick:
         return (ras[0], ras[1], ras[2])
 
     @staticmethod
-    def _is_strict_interior(image, i, j, k) -> bool:
-        """True iff voxel ``(i, j, k)`` is labelled with all six neighbours labelled."""
-        if image.GetScalarComponentAsDouble(i, j, k, 0) == 0:
-            return False
-        for di, dj, dk in (
-            (1, 0, 0),
-            (-1, 0, 0),
-            (0, 1, 0),
-            (0, -1, 0),
-            (0, 0, 1),
-            (0, 0, -1),
-        ):
-            if image.GetScalarComponentAsDouble(i + di, j + dj, k + dk, 0) == 0:
-                return False
-        return True
+    def _labelled_array(image):
+        """The image scalars as a boolean labelled mask, indexed ``[k, j, i]``.
 
-    def _nearest_interior(self, image, dims, target):
-        """The strictly-interior labelled voxel nearest ``target`` (or ``None``)."""
-        best_index = None
-        best_d2 = None
-        for k in range(1, dims[2] - 1):
-            for j in range(1, dims[1] - 1):
-                for i in range(1, dims[0] - 1):
-                    if not self._is_strict_interior(image, i, j, k):
-                        continue
-                    d2 = (
-                        (i - target[0]) ** 2
-                        + (j - target[1]) ** 2
-                        + (k - target[2]) ** 2
-                    )
-                    if best_d2 is None or d2 < best_d2:
-                        best_d2 = d2
-                        best_index = (i, j, k)
-        return best_index
+        A zero-copy numpy view over the VTK scalars (VTK stores i fastest),
+        thresholded to labelled/unlabelled.  ``None`` when the image carries
+        no scalars.
+        """
+        from vtk.util import numpy_support
+
+        scalars = image.GetPointData().GetScalars()
+        if scalars is None:
+            return None
+        dims = image.GetDimensions()
+        flat = numpy_support.vtk_to_numpy(scalars)
+        if flat.ndim == 2:  # multi-component: the label rides component 0
+            flat = flat[:, 0]
+        if flat.size != dims[0] * dims[1] * dims[2]:
+            return None
+        return flat.reshape(dims[2], dims[1], dims[0]) != 0
+
+    @staticmethod
+    def _interior_mask(labelled):
+        """The strictly-interior mask of ``labelled`` (vectorized 6-neighbour AND).
+
+        Volume-boundary voxels are never strictly interior (no sixth
+        neighbour), matching the region-grow's need for a labelled voxel with
+        labelled neighbours on all six sides.
+        """
+        interior = np.zeros_like(labelled)
+        interior[1:-1, 1:-1, 1:-1] = (
+            labelled[1:-1, 1:-1, 1:-1]
+            & labelled[2:, 1:-1, 1:-1]
+            & labelled[:-2, 1:-1, 1:-1]
+            & labelled[1:-1, 2:, 1:-1]
+            & labelled[1:-1, :-2, 1:-1]
+            & labelled[1:-1, 1:-1, 2:]
+            & labelled[1:-1, 1:-1, :-2]
+        )
+        return interior
+
+    @classmethod
+    def _nearest_interior_near(cls, labelled, target):
+        """The strictly-interior voxel ``(i, j, k)`` nearest the clicked ``target``.
+
+        O(1) fast path: the clicked voxel itself when it is strictly interior.
+        Otherwise a bounded local window (``LOCAL_SEARCH_RADIUS_VOXELS`` plus a
+        one-voxel halo so the neighbour test is exact inside the radius) is
+        interior-masked in one vectorized pass and the nearest hit returned.
+        ``None`` when no interior voxel lies within the window -- the click is
+        declined rather than snapped to a distant region.
+        """
+        k_dim, j_dim, i_dim = labelled.shape
+        i0, j0, k0 = target
+
+        if (
+            1 <= i0 < i_dim - 1
+            and 1 <= j0 < j_dim - 1
+            and 1 <= k0 < k_dim - 1
+            and cls._interior_mask(
+                labelled[k0 - 1 : k0 + 2, j0 - 1 : j0 + 2, i0 - 1 : i0 + 2]
+            )[1, 1, 1]
+        ):
+            return (i0, j0, k0)
+
+        r = LOCAL_SEARCH_RADIUS_VOXELS + 1  # +1 halo for the neighbour test
+        i_lo, i_hi = max(i0 - r, 0), min(i0 + r + 1, i_dim)
+        j_lo, j_hi = max(j0 - r, 0), min(j0 + r + 1, j_dim)
+        k_lo, k_hi = max(k0 - r, 0), min(k0 + r + 1, k_dim)
+        if i_lo >= i_hi or j_lo >= j_hi or k_lo >= k_hi:
+            return None  # the click maps entirely outside the volume
+
+        window = labelled[k_lo:k_hi, j_lo:j_hi, i_lo:i_hi]
+        hits = np.argwhere(cls._interior_mask(window))  # window-relative (k, j, i)
+        if hits.size == 0:
+            return None
+        absolute = hits + np.array([k_lo, j_lo, i_lo])
+        d2 = ((absolute - np.array([k0, j0, i0])) ** 2).sum(axis=1)
+        best = absolute[int(np.argmin(d2))]
+        return (int(best[2]), int(best[1]), int(best[0]))
+
+    @classmethod
+    def _interior_centroid(cls, labelled):
+        """The strictly-interior voxel ``(i, j, k)`` nearest the interior centroid.
+
+        The no-click path (the base's generic 3D seam supplies no slice
+        pixel): one vectorized interior mask over the whole array, then the
+        interior voxel nearest the interior centre of mass.  ``None`` when the
+        region has no strictly-interior voxel.
+        """
+        hits = np.argwhere(cls._interior_mask(labelled))  # (k, j, i)
+        if hits.size == 0:
+            return None
+        centroid = hits.mean(axis=0)
+        d2 = ((hits - centroid) ** 2).sum(axis=1)
+        best = hits[int(np.argmin(d2))]
+        return (int(best[2]), int(best[1]), int(best[0]))
 
     @staticmethod
     def _xy_to_ras_on_plane(slice_node, display_xy):
