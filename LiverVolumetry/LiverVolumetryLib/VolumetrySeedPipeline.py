@@ -132,16 +132,36 @@ def _wire_provider_and_pick(pipeline: Any, displayNode: Any) -> None:
 
 
 class VolumetrySeedPipeline3D(_Pipeline3DBase):
-    """The 3D volumetry seed placement pipeline (a thin base client).
+    """The 3D volumetry seed RENDERING pipeline (a thin base client).
 
     Created by LayerDM's manager for ``(vtkMRMLViewNode,
     vtkMRMLVolumetrySeedsDisplayNode)``.  Wires the flat volumetry provider +
-    the in-volume pick from the shared display node; the base drives the
-    add/grab/drag/delete arbitration.
+    the in-volume pick from the shared display node.
+
+    Volumetry seeds are IN-VOLUME (interior-voxel) points, so PLACING one on a
+    surface in a 3D view is not a valid gesture: the 3D pipeline renders the
+    placed-seed glyphs but NEVER places -- placement is the slice pipeline's
+    job (the in-volume pick resolves a slice click to an interior voxel).  The
+    3D view declines add-on-click by reporting ITSELF disarmed
+    (``IsArmed`` -> False), which drops the base's add branch in both
+    ``Can/ProcessInteractionEvent`` while leaving grab-drag editing + rendering
+    intact; the shared armed flag (read by the slice pipeline) is untouched.
     """
 
     def __init__(self) -> None:
         super().__init__(namespace=VOLUMETRY_NAMESPACE)
+
+    def IsArmed(self) -> bool:  # noqa: N802 - VTK verb
+        """A 3D view never arms for placement (in-volume seeds are slice-placed).
+
+        Overrides the shared-display-node arm gate for THIS view only: placing
+        a seed on a surface in 3D is invalid (the seed must land on an interior
+        labelled voxel), so the 3D pipeline's add-on-click branch is dead by
+        construction.  The slice pipeline reads the real armed flag off the
+        shared display node and still places.  Grab-drag of an existing seed is
+        gated BEFORE the arm check in the base, so 3D editing is unaffected.
+        """
+        return False
 
     def SetDisplayNode(self, displayNode: Any) -> None:  # noqa: N802 - VTK verb
         super().SetDisplayNode(displayNode)
