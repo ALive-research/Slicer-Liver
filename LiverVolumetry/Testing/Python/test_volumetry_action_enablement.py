@@ -1,42 +1,46 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital.  All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 
-"""D1/D2/D3 (volumetry-workflow-consistency critique) -- the action surface.
+"""Gating truth-table for the data-first volumetry panel.
 
-The LiverVolumetry panel gains the VascularTerritories affirmative
-"what's missing" surface + the flat-list Clear-all, so it feels like the
-sibling module and Slicer Segmentations (critique §4 "ship now" batch):
+The data-first redesign (``Docs/design/volumetry-data-first-redesign.md``
+§3.4) replaces the panel's false preconditions with the gates the logic
+actually needs:
 
-* D1 REQUIREMENTS MESSAGE -- an always-visible status line + per-button
-  tooltips enumerate the UNMET preconditions.  The list reads the SAME live
-  state the enablement gates read, so the messaging and the button state cannot
-  diverge (an empty unmet list == the action can run).  With no input the list
-  names "Select an input segmentation"; with no seeds Generate names
-  "Place at least one seed".
-* D2 PLACE-SEEDS GATE -- the Place-seeds arm toggle is DISABLED until an input
-  segmentation is selected (the fix for the placement silent-decline: with no
-  input the in-volume pick has no labelmap to resolve, so arming would accept
-  clicks that never land a seed).
-* D3 CLEAR-ALL -- "Clear all seeds" empties the carrier (whole-group delete via
-  the carrier's ``RemoveNthSeed``) and is DISABLED when the carrier is empty.
+* COMPUTE VOLUMES is enabled iff a segmentation is selected (an empty
+  segment selection means "all segments", matching the export semantics);
+  the requirements line otherwise reads "Select a segmentation."  The old
+  reference-volume + "select at least one segment" preconditions are gone
+  (§3.3 -- the data never needed them).
+* PARTITION contributes rows to Compute iff >= 1 resection is checked AND
+  >= 1 seed is placed; otherwise the requirements line reads "Check a
+  resection and place at least one seed (e.g. in the remnant)." -- this
+  closes the B4 silent no-op (resections-without-seeds was a runnable-but-
+  empty state).
+* PLACE SEEDS is enabled iff a segmentation is selected (the in-volume pick
+  needs a target region's labelmap).
+* GENERATE SEGMENTS is enabled iff the partition gate is met.
 
-This file pins (mirroring
-``VascularTerritories/Testing/Python/test_territories_action_enablement.py``):
+The existing ``_actionRequirements`` / ``_updateActionEnablement`` /
+``_updateRequirementsMessage`` trio stays the single source of truth; only
+the predicate set changes.
 
-* i1 (launched, widget) -- with no input selected both Compute + Generate list
-  the input requirement and the Place-seeds toggle is disabled; selecting an
-  input enables the toggle; Generate still lists "Place at least one seed".
-* i2 (launched, widget) -- Clear-all empties the carrier and re-disables once it
-  is empty; the requirements line + Generate track the seed count.
+This file pins (mirroring the VascularTerritories requirements-surface
+idiom):
 
-Both need the wrapped carrier + a live scene + Qt, so they SKIP cleanly bare
-and RUN launched (ADR-0027).
+* i1 (launched, widget) -- with no segmentation Compute + Place are
+  disabled and the requirements line names the segmentation; selecting a
+  segmentation (no segment selection) ENABLES Compute + Place.
+* i2 (launched, widget) -- the partition gate: a checked resection alone or
+  a seed alone does not arm Generate / the partition contribution; both
+  together do, and the requirements line names the partition requirement.
+* i3 (launched, widget) -- Clear-all empties the carrier and re-disables.
+
+Both need the wrapped carrier + a live scene + Qt, so they SKIP cleanly
+bare and RUN launched (ADR-0027).
 
 See also:
-  * Docs/design/volumetry-workflow-consistency-critique.md  (D1/D2/D3)
-  * VascularTerritories/Testing/Python/test_territories_action_enablement.py
-    (the requirements-surface idiom this mirrors)
-  * Docs/adr/0038-*.md  (the seeds-off-markups migration + carrier)
+  * Docs/design/volumetry-data-first-redesign.md  (§3.4 gating truth table)
   * Docs/adr/0027-invariant-test-first.md  (RED / skip-pending discipline)
 """
 
@@ -47,6 +51,10 @@ import pytest
 vtk = pytest.importorskip("vtk")
 
 SEGMENTATION_CLASS = "vtkMRMLSegmentationNode"
+
+_NEEDS_SEGMENTATION = "Select a segmentation."
+_NEEDS_PARTITION = (
+    "Check a resection and place at least one seed (e.g. in the remnant).")
 
 
 # --------------------------------------------------------------------------- #
@@ -86,8 +94,8 @@ def _detach_scene_observers(slicer, widget):
 def _require_requirements_seam_or_skip(widget):
     if not hasattr(widget, "_actionRequirements"):
         pytest.skip(
-            "widget has no _actionRequirements -- the critique D1 requirements-"
-            "message surface has not landed (ADR-0027)."
+            "widget has no _actionRequirements -- the requirements-message "
+            "surface has not landed (ADR-0027)."
         )
 
 
@@ -108,16 +116,17 @@ def _single_segment_segmentation(slicer, name="EnablementLiver"):
 
 
 # =========================================================================== #
-# D1/D2 -- the requirements message + the Place-seeds input gate
+# i1 -- Compute + Place gate ONLY on a segmentation (§3.4)
 # =========================================================================== #
 
 
-def test_place_seeds_disabled_until_input_segmentation(qt_widgets):
-    """D2: the Place-seeds toggle is DISABLED until an input segmentation.
+def test_compute_and_place_gate_on_segmentation_only(qt_widgets):
+    """§3.4: Compute + Place enabled iff a segmentation is selected.
 
-    With no input the in-volume pick has no target region, so arming would
-    silently decline every click; the toggle stays disabled and the
-    requirements line names the input.  Selecting an input enables the toggle.
+    With no segmentation both are disabled and every action lists
+    "Select a segmentation."  Selecting a segmentation (with NO segment
+    selection -- "all segments") ENABLES Compute + Place, and the reference-
+    volume + "select at least one segment" preconditions are gone.
     Launched (widget); SKIPS bare.
     """
     slicer = _slicer_or_skip()
@@ -128,54 +137,47 @@ def test_place_seeds_disabled_until_input_segmentation(qt_widgets):
 
     widget.ui.InputSegmentSelectorWidget.setCurrentNode(None)
     widget._updateActionEnablement()
-    assert widget.ui.AddSeedsButton.enabled is False, (
-        "Place seeds must be DISABLED with no input segmentation (critique D2)."
+    assert widget.ui.ComputeVolumePushButton.enabled is False, (
+        "Compute must be DISABLED with no segmentation (§3.4)."
     )
+    assert widget.ui.AddSeedsButton.enabled is False, (
+        "Place seeds must be DISABLED with no segmentation (§3.4)."
+    )
+    placeUnmet, computeUnmet, _generateUnmet = widget._actionRequirements()
+    assert computeUnmet == [_NEEDS_SEGMENTATION], (
+        "with no segmentation Compute must list ONLY the segmentation "
+        "requirement (the reference-volume + segment preconditions are gone)."
+    )
+    assert placeUnmet == [_NEEDS_SEGMENTATION]
 
     seg = _single_segment_segmentation(slicer)
     widget.ui.InputSegmentSelectorWidget.setCurrentNode(seg)
     widget._updateActionEnablement()
+    assert widget.ui.ComputeVolumePushButton.enabled is True, (
+        "Compute must ENABLE once a segmentation is selected -- an empty "
+        "segment selection means 'all segments' (§3.4)."
+    )
     assert widget.ui.AddSeedsButton.enabled is True, (
-        "Place seeds must ENABLE once an input segmentation is selected."
+        "Place seeds must ENABLE once a segmentation is selected."
+    )
+    _place2, computeUnmet2, _gen2 = widget._actionRequirements()
+    assert computeUnmet2 == [], (
+        "with a segmentation selected Compute has no unmet preconditions."
     )
 
 
-def test_requirements_message_lists_missing_input(qt_widgets):
-    """D1: with NO input, every action lists "Select an input segmentation".
-
-    The unmet-precondition list drives the messaging: a fresh widget with no
-    input, no reference volume, no segment, and no seeds lists the input
-    requirement for Place / Compute / Generate.  Launched (widget); SKIPS bare.
-    """
-    slicer = _slicer_or_skip()
-    widget = _make_widget_or_skip(slicer)
-    qt_widgets.append(widget)
-    _detach_scene_observers(slicer, widget)
-    _require_requirements_seam_or_skip(widget)
-
-    widget.ui.InputSegmentSelectorWidget.setCurrentNode(None)
-    placeUnmet, computeUnmet, generateUnmet = widget._actionRequirements()
-
-    assert "Select an input segmentation" in placeUnmet, (
-        "with no input, Place seeds must list the input requirement."
-    )
-    assert "Select an input segmentation" in computeUnmet, (
-        "with no input, Compute must list the input requirement."
-    )
-    assert "Select an input segmentation" in generateUnmet, (
-        "with no input, Generate must list the input requirement."
-    )
-    assert "Select a reference volume" in computeUnmet, (
-        "with no reference volume, Compute must list the volume requirement."
-    )
+# =========================================================================== #
+# i2 -- the partition gate: resection AND seed (§3.4, closes B4)
+# =========================================================================== #
 
 
-def test_requirements_message_lists_missing_seeds(qt_widgets):
-    """D1: with an input but no seeds, Generate lists "Place at least one seed".
+def test_partition_gate_needs_both_resection_and_seed(qt_widgets):
+    """§3.4: the partition contributes iff a resection is checked AND a seed.
 
-    Generate needs a reference volume + input + segment + >= 1 seed; with a
-    carrier holding zero seeds the seed requirement is present and clears once a
-    seed lands.  Launched (widget); SKIPS bare.
+    A checked resection with no seed (the old B4 silent no-op) does NOT arm
+    Generate; a seed with no checked resection does not either; both
+    together do.  The requirements line names the partition requirement when
+    unmet.  Launched (widget); SKIPS bare.
     """
     slicer = _slicer_or_skip()
     widget = _make_widget_or_skip(slicer)
@@ -192,30 +194,36 @@ def test_requirements_message_lists_missing_seeds(qt_widgets):
             "(launched build; ADR-0027)."
         )
 
+    # Neither resection nor seed -> partition gate unmet, Generate disabled.
+    widget._updateActionEnablement()
+    assert widget.ui.GenerateSegmentsPushButton.enabled is False, (
+        "Generate must be DISABLED with no resection and no seed (§3.4)."
+    )
     _place, _compute, generateUnmet = widget._actionRequirements()
-    assert "Place at least one seed" in generateUnmet, (
-        "with no seeds, Generate must list the seed requirement (critique D1)."
+    assert generateUnmet == [_NEEDS_PARTITION], (
+        "the partition requirement message must name both a resection and a "
+        "seed (§3.4)."
     )
 
+    # A seed alone (no checked resection) -> still unmet.
     carrier.AddSeed(0.0, 0.0, 0.0)
-    _place2, _compute2, generateUnmet2 = widget._actionRequirements()
-    assert "Place at least one seed" not in generateUnmet2, (
-        "once a seed lands the seed requirement must clear."
+    widget._updateActionEnablement()
+    assert widget.ui.GenerateSegmentsPushButton.enabled is False, (
+        "a seed without a checked resection must NOT arm Generate (§3.4)."
     )
 
 
 # =========================================================================== #
-# D3 -- Clear all seeds
+# i3 -- Clear all seeds
 # =========================================================================== #
 
 
 def test_clear_all_seeds_empties_carrier_and_disables(qt_widgets):
-    """D3: Clear-all empties the carrier and re-disables once empty.
+    """Clear-all empties the carrier and re-disables once empty (kept D3).
 
-    ``onClearAllSeeds`` removes every seed through the carrier's ``RemoveNthSeed``
-    (the whole-group analogue of the territory Remove), so the table + pipeline
-    refresh via the carrier ModifiedEvent; the button is DISABLED with no seeds.
-    Launched (widget); SKIPS bare.
+    ``onClearAllSeeds`` removes every seed through the carrier's
+    ``RemoveNthSeed``; the button is DISABLED with no seeds.  Launched
+    (widget); SKIPS bare.
     """
     slicer = _slicer_or_skip()
     widget = _make_widget_or_skip(slicer)
@@ -224,8 +232,8 @@ def test_clear_all_seeds_empties_carrier_and_disables(qt_widgets):
 
     if not hasattr(widget, "onClearAllSeeds"):
         pytest.skip(
-            "widget has no onClearAllSeeds -- the critique D3 clear-all has not "
-            "landed (ADR-0027)."
+            "widget has no onClearAllSeeds -- the clear-all has not landed "
+            "(ADR-0027)."
         )
 
     seg = _single_segment_segmentation(slicer)
@@ -240,7 +248,7 @@ def test_clear_all_seeds_empties_carrier_and_disables(qt_widgets):
     # Empty carrier: Clear-all is disabled.
     widget._updateActionEnablement()
     assert widget.ui.ClearAllSeedsButton.enabled is False, (
-        "Clear all seeds must be DISABLED with no seeds (critique D3)."
+        "Clear all seeds must be DISABLED with no seeds."
     )
 
     carrier.AddSeed(0.0, 0.0, 0.0)
@@ -252,7 +260,7 @@ def test_clear_all_seeds_empties_carrier_and_disables(qt_widgets):
 
     widget.onClearAllSeeds()
     assert carrier.GetNumberOfSeeds() == 0, (
-        "Clear all seeds must remove every seed from the carrier (critique D3)."
+        "Clear all seeds must remove every seed from the carrier."
     )
     assert widget.ui.ClearAllSeedsButton.enabled is False, (
         "Clear all seeds must re-disable once the carrier is empty."
