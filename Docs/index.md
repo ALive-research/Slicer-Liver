@@ -73,6 +73,8 @@ design/resection-plan-architecture/06-pattern-and-audit.md
 design/connected-tree-seeding-plan.md
 design/multi-system-territory-plan.md
 design/volumetry-seeds-layerdm-plan.md
+design/volumetry-workflow-consistency-critique.md
+design/volumetry-data-first-redesign.md
 design/territory-protection-validation-plan.md
 ```
 
