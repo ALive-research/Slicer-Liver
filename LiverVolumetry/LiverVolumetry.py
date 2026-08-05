@@ -58,6 +58,14 @@ SEEDS_DISPLAY_NODE_CLASS = "vtkMRMLVolumetrySeedsDisplayNode"
 SEEDS_STORAGE_NODE_CLASS = "vtkMRMLVolumetrySeedsStorageNode"
 VOLUMETRY_NAMESPACE = "LiverVolumetry"
 
+# The module-owned results table (data-first redesign §3.3): auto-created on
+# first Compute, shown via the ``showTable`` layout switch, and cleared +
+# recomputed each run (no cross-run append).
+RESULTS_TABLE_NAME = "Volumetry"
+# The per-run partition total row's label (data-first redesign §3.5): a stable
+# surgeon term, never the transient fiducial node's name.
+PARTITION_TOTAL_LABEL = "All pieces"
+
 
 #
 # LiverVolumetry
@@ -186,6 +194,10 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Load widget from .ui file (created by Qt Designer)
     liverVolumetryWidget = slicer.util.loadUI(self.resourcePath('UI/LiverVolumetryWidget.ui'))
     self.layout.addWidget(liverVolumetryWidget)
+    # With the outer "Resection Volumetry" collapsible removed (data-first
+    # §3.2 -- the Liver shell already headers the stage), the no-parameter-node
+    # enable-gate moves onto the loaded panel root.
+    self._panelWidget = liverVolumetryWidget
 
     # Add a spacer at the botton to keep the UI flowing from top to bottom
     spacerItem = qt.QSpacerItem(0,0, qt.QSizePolicy.Minimum, qt.QSizePolicy.MinimumExpanding)
@@ -214,21 +226,22 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.setParameterNode(self.logic.getParameterNode())
 
     # Connections
-    self.ui.VolumeTableSelectorWidget.connect('currentNodeChanged(vtkMRMLNode*)', self.onVolumetryParameterChanged)
-    self.ui.ReferenceVolumeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.onVolumetryParameterChanged)
-    # The consolidated input control drives the segmentation-node handlers the
-    # standalone InputSegmentationSelector used to: parameter sync, the
-    # requirements re-gate, and the Show-3D binding.
+    # The single input control drives the segmentation-node handlers: parameter
+    # sync, the requirements re-gate, and the Show-3D binding.  The reference-
+    # volume, total-volume, and output-table selectors were removed (data-first
+    # redesign §3.3); their data now comes from the segmentation selection.
     self.ui.InputSegmentSelectorWidget.connect('currentNodeChanged(vtkMRMLNode*)', self.onVolumetryParameterChanged)
     self.ui.InputSegmentSelectorWidget.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
     self.ui.InputSegmentSelectorWidget.connect('currentNodeChanged(bool)', self.segmentationNodeSelected)
     self.ui.InputSegmentSelectorWidget.connect('segmentSelectionChanged(QStringList)', self.updateParameterNodeFromGUI)
     self.ui.InputSegmentSelectorWidget.connect('segmentSelectionChanged(QStringList)', self.onSegmentChanged)
     self.ui.InputSegmentSelectorWidget.connect('segmentSelectionChanged(QStringList)', self.onVolumetryParameterChanged)
-    self.ui.TargetSegmentationSelectorWidget.connect('segmentSelectionChanged(QStringList)', self.updateParameterNodeFromGUI)
     self.ui.ComputeVolumePushButton.connect('clicked(bool)', self.onComputeAdvancedVolumeButtonClicked)
     self.ui.GenerateSegmentsPushButton.connect('clicked(bool)', self.onGenerateSegmentsButtonClicked)
     self.ui.ResectionTargetNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onGenerateSegmentsParameterChanged)
+    # The partition gate reads the CHECKED resections (data-first redesign
+    # §3.4), so re-gate when the check state changes, not only the current node.
+    self.ui.ResectionTargetNodeComboBox.connect('checkedNodesChanged()', self.onGenerateSegmentsParameterChanged)
     # ADR-0038-amendment: the ROIMarkersList fiducial selector + place widget
     # are RETIRED; placement is the arm toggle below, driving the seed carrier
     # through the shared base pipeline.
@@ -294,12 +307,13 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         "the Pipeline path (ADR-0013/0038).", exc)
 
   def _composeSeedsTable(self, panelWidget):
-    """Compose the carrier-backed seeds table into the Seeds group (ADR-0004).
+    """Compose the carrier-backed seeds table into the partition group (ADR-0004).
 
-    Placed in the ``Seeds`` group box above the Clear-all button (the seed list
-    belongs with the seed controls).  A missing widget class (a launch without
-    the Lib on the path) degrades gracefully -- the panel simply omits the
-    table.
+    Placed in the ``SeedsGroupWidget`` container inside the partition group,
+    between the Place/Clear row and the hint -- the seed list belongs with the
+    seed controls (data-first redesign §3.2).  A missing widget class (a launch
+    without the Lib on the path) degrades gracefully -- the panel simply omits
+    the table.
     """
     # The package guards the widget import (Qt/ctk unreachable bare), exposing
     # ``None`` when the class could not be built -- degrade to no table.
@@ -312,7 +326,6 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._seedsTable = VolumetrySeedsTableWidget(carrier=None)
     grid = self.ui.SeedsGroupWidget.layout()
     if grid is not None and hasattr(grid, "addWidget"):
-      # Row 0: above the ClearAllSeedsButton (row 1) in the Seeds group grid.
       grid.addWidget(self._seedsTable, 0, 0)
     else:
       panelWidget.layout().addWidget(self._seedsTable)
@@ -352,16 +365,16 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     return self.ui.InputSegmentSelectorWidget.currentNode()
 
-  def _hasSegmentSelection(self):
-    """True iff at least one input segment is selected (empty == none)."""
-    return len(self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()) > 0
-
   def _seedCount(self):
     """The number of placed seeds on the carrier (0 when no carrier yet)."""
     carrier = self._seedsCarrier
     if carrier is None or not slicer.mrmlScene.IsNodePresent(carrier):
       return 0
     return carrier.GetNumberOfSeeds()
+
+  def _hasCheckedResection(self):
+    """True iff at least one resection is checked in the partition combo."""
+    return not self.ui.ResectionTargetNodeComboBox.noneChecked()
 
   def _actionRequirements(self):
     """The UNMET preconditions for Place / Compute / Generate, as message lists.
@@ -377,33 +390,32 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     SHARED-EXTRACTION SEAM: mirrors ``VascularTerritoriesWidget._actionRequirements``.
     """
     hasSegmentation = self._inputSegmentationNode() is not None
-    hasVolume = self.ui.ReferenceVolumeSelector.currentNode() is not None
-    hasSegment = self._hasSegmentSelection()
+    hasResection = self._hasCheckedResection()
     hasSeeds = self._seedCount() > 0
 
     # Place seeds: the arm toggle needs a target region to drop interior seeds
-    # into.  Gating placement on an input segmentation fixes the silent-decline
-    # -- with no input the in-volume pick has no labelmap to resolve against, so
-    # arming would accept clicks that never land a seed (critique D1/D2).
+    # into.  Gating placement on a segmentation fixes the silent-decline -- with
+    # no segmentation the in-volume pick has no labelmap to resolve against, so
+    # arming would accept clicks that never land a seed (data-first §3.4).
     placeUnmet = []
     if not hasSegmentation:
-      placeUnmet.append("Select an input segmentation")
+      placeUnmet.append("Select a segmentation.")
 
+    # Compute volumes gates ONLY on a segmentation (data-first §3.4): an empty
+    # segment selection means "all segments", and the reference-volume + total-
+    # volume preconditions were removed (§3.3 -- the data never needed them).
     computeUnmet = []
-    if not hasVolume:
-      computeUnmet.append("Select a reference volume")
     if not hasSegmentation:
-      computeUnmet.append("Select an input segmentation")
-    if not hasSegment:
-      computeUnmet.append("Select at least one segment")
+      computeUnmet.append("Select a segmentation.")
 
-    # Generate has the SAME input preconditions as Compute plus a placed seed
-    # (it grows region-grown segments around the seeds), so its unmet list is
-    # Compute's list with the seed requirement appended -- one source of truth
-    # for the shared checks.
-    generateUnmet = list(computeUnmet)
-    if not hasSeeds:
-      generateUnmet.append("Place at least one seed")
+    # The partition contributes rows / arms Generate iff a resection is checked
+    # AND a seed is placed (data-first §3.4): this closes the B4 silent no-op
+    # (resections-without-seeds computed nothing).  A single combined message
+    # names both halves so a half-met partition self-explains.
+    generateUnmet = []
+    if not (hasResection and hasSeeds):
+      generateUnmet.append(
+        "Check a resection and place at least one seed (e.g. in the remnant).")
 
     return placeUnmet, computeUnmet, generateUnmet
 
@@ -452,8 +464,11 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     SHARED-EXTRACTION SEAM: mirrors ``VascularTerritoriesWidget._updateRequirementsMessage``.
     """
+    # Each unmet entry is already a full, punctuated instruction (data-first
+    # §3.4), so the tips + status line present them verbatim -- no extra prefix
+    # or trailing period.
     placeTip = (
-      "Place seeds is ready: click inside a target region to drop an interior "
+      "Place seeds is ready: click inside a piece to drop an interior "
       "region-growing seed." if not placeUnmet
       else "Place seeds needs:\n- " + "\n- ".join(placeUnmet))
     computeTip = (
@@ -470,15 +485,15 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if label is None:
       return
     if not placeUnmet and not computeUnmet and not generateUnmet:
-      label.setText("All requirements met -- place seeds, then compute volumes.")
+      label.setText("All requirements met -- compute volumes.")
       return
+    # The compute (basic-path) requirement leads; the partition requirement is
+    # only shown when the partition group is being used but is half-met.
     lines = []
-    if placeUnmet:
-      lines.append("To place seeds: " + "; ".join(placeUnmet) + ".")
     if computeUnmet:
-      lines.append("To compute volumes: " + "; ".join(computeUnmet) + ".")
-    if generateUnmet:
-      lines.append("To generate segments: " + "; ".join(generateUnmet) + ".")
+      lines.extend(computeUnmet)
+    if generateUnmet and not computeUnmet:
+      lines.extend(generateUnmet)
     label.setText("\n".join(lines))
 
   def onClearAllSeeds(self):
@@ -595,23 +610,20 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     export (``ExportSegmentsToLabelmapNode``) rasterizes the whole segmentation
     synchronously on the GUI thread -- on clinical-size data that reads as a
     frozen application.  So the export runs ONLY when its inputs changed: the
-    result is cached keyed on (segmentation ID, segment selection, reference
-    volume ID, segmentation MTime), and re-arming with unchanged inputs reuses
-    it (arm must be instant).  Reuses one owned ``vtkMRMLLabelMapVolumeNode``
-    so re-arming does not litter the scene.  Returns ``None`` (and leaves no
-    labelmap) when there is no input segmentation, so the caller clears the
-    pickSurface reference.
+    result is cached keyed on (segmentation ID, segment selection, segmentation
+    MTime), and re-arming with unchanged inputs reuses it (arm must be
+    instant).  Reuses one owned ``vtkMRMLLabelMapVolumeNode`` so re-arming does
+    not litter the scene.  Returns ``None`` (and leaves no labelmap) when there
+    is no input segmentation, so the caller clears the pickSurface reference.
     """
     segmentation = self._inputSegmentationNode()
     if segmentation is None or not segmentation.IsA("vtkMRMLSegmentationNode"):
       self._pickLabelmapKey = None
       return None
     segmentIDs = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
-    refVolume = self.ui.ReferenceVolumeSelector.currentNode()
     inputsKey = (
       segmentation.GetID(),
       tuple(segmentIDs),
-      refVolume.GetID() if refVolume is not None else None,
     )
 
     labelmap = self._pickLabelmap
@@ -630,10 +642,11 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       labelmap.SetHideFromEditors(True)
       self._pickLabelmap = labelmap
     # An empty selection means "all segments" for the export; a null reference
-    # volume lets the segmentation's own geometry drive the rasterization.
+    # volume lets the segmentation's own geometry drive the rasterization
+    # (data-first §3.3 -- the reference-volume input was removed).
     started = time.monotonic()
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(
-      segmentation, segmentIDs, labelmap, refVolume)
+      segmentation, segmentIDs, labelmap, None)
     logging.debug(
       "LiverVolumetry: pick labelmap export took %.2f s", time.monotonic() - started)
     if labelmap.GetImageData() is None:
@@ -671,29 +684,37 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onGenerateSegmentsParameterChanged(self):
     # Re-gate all actions on their live preconditions + refresh the requirements
-    # surface (D1): Generate needs a reference volume, an input segmentation, a
-    # segment selection, and >= 1 seed.
+    # surface: Generate needs the partition gate (a checked resection + a seed).
     self._updateActionEnablement()
+
+  def _exportSelectedSegments(self, name):
+    """Rasterize the selected input segment(s) into a scratch labelmap.
+
+    The segmentation's own geometry drives the rasterization (a null reference
+    volume is legal everywhere -- data-first §3.3); an empty selection means
+    "all segments".  Returns the scene-resident scratch node the caller
+    removes.
+    """
+    segmentsVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", name)
+    segmentationNode = self._inputSegmentationNode()
+    segmentationIds = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
+    slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(
+      segmentationNode, segmentationIds, segmentsVolumeNode, None)
+    return segmentsVolumeNode
 
   def onGenerateSegmentsButtonClicked(self):
     resectionNodes = self.getResectionNodes()
     seedsCarrier = self._ensureSeedsCarrier()
-    segmentsVolumeNode = slicer.mrmlScene.GetFirstNodeByName("segmentVolumeNode")
-    if not segmentsVolumeNode:
-      segmentsVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "segmentVolumeNode")
-      segmentationNode = self._inputSegmentationNode()
-      refVolumeNode = self.ui.ReferenceVolumeSelector.currentNode()
-      segmentationIds = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
-      slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
-                                                                        segmentsVolumeNode, refVolumeNode)
-
-    self.logic.generateSegments(resectionNodes, seedsCarrier, segmentsVolumeNode)
-    slicer.mrmlScene.RemoveNode(segmentsVolumeNode)
+    segmentsVolumeNode = self._exportSelectedSegments("segmentVolumeNode")
+    try:
+      self.logic.generateSegments(resectionNodes, seedsCarrier, segmentsVolumeNode)
+    finally:
+      slicer.mrmlScene.RemoveNode(segmentsVolumeNode)
 
   def onVolumetryParameterChanged(self):
     # Re-gate all actions on their live preconditions + refresh the requirements
-    # surface (D1): Compute needs a reference volume, an input segmentation, and
-    # a segment selection.
+    # surface: Compute needs a segmentation (an empty segment selection means
+    # all segments).
     self._updateActionEnablement()
 
   def getResectionNodes(self):
@@ -717,46 +738,60 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     This function is for compute volume
     """
+    # The wait cursor is wrapped in try/finally so no failure path (a missing
+    # image, an empty selection) leaves the cursor stuck (data-first §3.4).
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
 
-    resectionNodes = self.getResectionNodes()
+    segmentsVolumeNode = None
+    try:
+      resectionNodes = self.getResectionNodes()
+      # Rasterize the selected input segment(s) once; it feeds both the region
+      # measurement AND -- as its own denominator -- the "% of total" column
+      # (the % is measured against the selection, data-first §3.3 OQ3).
+      segmentsVolumeNode = self._exportSelectedSegments("segmentVolumeNode")
+      seedsCarrier = self._ensureSeedsCarrier()
+      # The module owns the results table (data-first §3.3): auto-created on
+      # first Compute and CLEARED each run so denominators never mix across
+      # runs (S8).  A guarded compute path (below) never throws on an
+      # empty/missing table -- the old un-gated None raised ValueError.
+      outputTable = self._ensureResultsTable()
 
-    segmentsVolumeNode = slicer.mrmlScene.GetFirstNodeByName("segmentVolumeNode")
-    if not segmentsVolumeNode:
-      segmentsVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "segmentVolumeNode")
-      segmentationNode = self._inputSegmentationNode()
-      refVolumeNode = self.ui.ReferenceVolumeSelector.currentNode()
-      segmentationIds = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
-      slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
-                                                                        segmentsVolumeNode, refVolumeNode)
-    #target segments volume node for percentage calculation
-    targetSegmentVolumeNode = slicer.mrmlScene.GetFirstNodeByName("targetSegmentVolumeNode")
-    if not targetSegmentVolumeNode:
-      targetSegmentVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "targetSegmentVolumeNode")
-      segmentationNode = self._inputSegmentationNode()
-      refVolumeNode = self.ui.ReferenceVolumeSelector.currentNode()
-      segmentationIds = self.ui.TargetSegmentationSelectorWidget.selectedSegmentIDs()
-      slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(segmentationNode, segmentationIds,
-                                                                        targetSegmentVolumeNode, refVolumeNode)
+      self.logic.computeVolume(
+        segmentsVolumeNode, segmentsVolumeNode, self._inputSegmentationNode(),
+        outputTable, seedsCarrier, resectionNodes)
 
-    seedsCarrier = self._ensureSeedsCarrier()
-    outputTable = self.ui.VolumeTableSelectorWidget.currentNode()
+      # The wait cursor is the in-progress feedback; the populated volumetry
+      # table is the result, so no blocking completion dialog is shown
+      # (non-blocking feedback, ADR-0009 UX discipline).
+      self.showTable(outputTable)
+    finally:
+      if segmentsVolumeNode is not None:
+        slicer.mrmlScene.RemoveNode(segmentsVolumeNode)
+      qt.QApplication.restoreOverrideCursor()
 
-    self.logic.computeVolume(segmentsVolumeNode, targetSegmentVolumeNode, self._inputSegmentationNode(), outputTable, seedsCarrier, resectionNodes)
+  def _ensureResultsTable(self):
+    """Return the module-owned results table, cleared for a fresh run (§3.3).
 
-    # The wait cursor (set above) is the in-progress feedback; the
-    # populated volumetry table is the result, so no blocking completion
-    # dialog is shown (non-blocking feedback, ADR-0009 UX discipline).
-    qt.QApplication.restoreOverrideCursor()
-
-    self.showTable(outputTable)
-    slicer.mrmlScene.RemoveNode(segmentsVolumeNode)
-    slicer.mrmlScene.RemoveNode(targetSegmentVolumeNode)
+    Auto-created on first Compute and named ``Volumetry``; each run REMOVES the
+    prior columns so a recompute replaces, never appends across runs (S8 --
+    mixed denominators).  Reuses the one owned node so recomputing does not
+    litter the scene.
+    """
+    table = slicer.mrmlScene.GetFirstNodeByName(RESULTS_TABLE_NAME)
+    if table is None or not table.IsA("vtkMRMLTableNode"):
+      table = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTableNode", RESULTS_TABLE_NAME)
+    else:
+      table.RemoveAllColumns()
+    return table
 
   def showTable(self, table):
     """
     Switch to a layout where tables are visible and show the selected table
     """
+    # Guard a missing table so the compute path never throws on an empty
+    # result (data-first §3.4 -- the old un-gated None raised).
+    if table is None or not slicer.mrmlScene.IsNodePresent(table):
+      return
     currentLayout = slicer.app.layoutManager().layout
     layoutWithTable = slicer.modules.tables.logic().GetLayoutWithTable(currentLayout)
     slicer.app.layoutManager().setLayout(layoutWithTable)
@@ -924,11 +959,14 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     The module GUI is updated to show the current state of the parameter node.
     """
 
-    # Disable all sections if no parameternode is selected
+    # Disable the whole panel if no parameter node is selected (the enable-gate
+    # moved to the panel root now the outer collapsible is gone, §3.2).
     parameterNode = self._parameterNode
     if not slicer.mrmlScene.IsNodePresent(parameterNode):
       parameterNode = None
-    self.ui.ResectionVolumetryGroupWidget.enabled = parameterNode is not None
+    panel = getattr(self, "_panelWidget", None)
+    if panel is not None:
+      panel.enabled = parameterNode is not None
     if parameterNode is None:
       return
 
@@ -944,7 +982,6 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     inputSegmentationNode = self._parameterNode.GetNodeReference("inputSegmentation")
     if inputSegmentationNode and inputSegmentationNode.IsA("vtkMRMLSegmentationNode"):
       self.ui.InputSegmentSelectorWidget.setCurrentSegmentIDs(self._parameterNode.GetParameter("InputSegmentID"))
-      self.ui.TargetSegmentationSelectorWidget.setCurrentSegmentIDs(self._parameterNode.GetParameter("InputSegmentID"))
 
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
@@ -966,12 +1003,10 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self._parameterNode.SetNodeReferenceID(
         roleName, currentNode.GetID() if currentNode is not None else None)
 
-    inputSegmentation = self._parameterNode.GetNodeReference("inputSegmentation")
-    # The consolidated InputSegmentSelectorWidget owns the segmentation-node
-    # choice, so it must stay visible even with no segmentation yet (hiding it
-    # would leave no way to pick an input).  Only the total-volume segment
-    # picker -- which has no node selector of its own -- follows the input.
-    self.ui.TargetSegmentationSelectorWidget.setVisible(inputSegmentation and inputSegmentation.IsA("vtkMRMLSegmentationNode"))
+    # The single InputSegmentSelectorWidget owns the segmentation-node choice
+    # and stays visible always (hiding it would leave no way to pick an input);
+    # the total-volume picker that used to follow the input was removed
+    # (data-first §3.3 -- the % denominator is the input selection itself).
 
 
 # LiverVolumetryLogic
@@ -1087,6 +1122,12 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
             statistics[pointLabel] = [pointLabel, voxel_count, volume_cm3]
             self.scl.VolumetryTable(pointLabel, targetSegmentVolume, voxel_count, volume_cm3, outputTable)
       else:
+        # The C++ partition path (B3) labels the per-run total row from the
+        # fed fiducial's node NAME; name it with the stable surgeon term so the
+        # total row reads "All pieces", never the transient node's default name
+        # (data-first §3.5).  The C++ side emits the name verbatim.
+        if ROIMarkersList is not None:
+          ROIMarkersList.SetName(PARTITION_TOTAL_LABEL)
         self.scl.ComputeAdvancedPlanningVolumetry(segmentsVolumeNode, outputTable, ROIMarkersList, resectionNodes, targetSegmentVolume)
     finally:
       if ROIMarkersList is not None:
