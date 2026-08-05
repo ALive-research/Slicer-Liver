@@ -149,7 +149,12 @@ void vtkLiverVolumetryLogic::ComputeAdvancedPlanningVolumetry(vtkMRMLLabelMapVol
         }
       }
       auto TotalROIVolume = TotalCount * spacing[0] * spacing[1] * spacing[2] * 0.001;
-      VolumetryTable("TotalVolume of List " + std::string(ROIMarkersList->GetName()), TargetSegmentationVolume, TotalCount, TotalROIVolume, OutputTableNode);
+      // The per-run total row's label is the fed fiducial's name verbatim; the
+      // Python compute path names it with the stable surgeon term "All pieces"
+      // so the row never leaks the transient node's default name (data-first
+      // redesign section 3.5).  Presentation only -- the signatures are
+      // unchanged (ADR-0015).
+      VolumetryTable(std::string(ROIMarkersList->GetName()), TargetSegmentationVolume, TotalCount, TotalROIVolume, OutputTableNode);
     }
   }
 }
@@ -196,42 +201,44 @@ itk::Index<3> vtkLiverVolumetryLogic::GetITKRGSeedIndex(double ROISeedPoint[3], 
 void vtkLiverVolumetryLogic::VolumetryTable(std::string Properties, double TargetSegmentationVolume, int ROIVoxels, double ROIVolume, vtkMRMLTableNode* OutputTableNode)
 {
 
+  // The results table speaks surgeon terms (data-first redesign section 3.5):
+  // Region | Volume (mL) | % of total.  The engineer-unit "ROI Voxels" and the
+  // "Target Segmentation Volume" columns are dropped; the volume is reported in
+  // mL (identical value to the former cm3).  The percentage guards a zero
+  // denominator so the cell never reads inf / nan.  ROIVoxels stays in the
+  // signature (unused here) so the C++ interface is unchanged (ADR-0015).
+  (void)ROIVoxels;
+  std::string percentText = "n/a";
+  if (TargetSegmentationVolume != 0.0)
+  {
+    percentText = std::to_string(ROIVolume / TargetSegmentationVolume * 100) + "%";
+  }
+
   auto VolumeTable = OutputTableNode->GetTable();
   if (OutputTableNode->GetNumberOfColumns() == 0)
   {
-    auto LabelCol = vtkSmartPointer<vtkStringArray>::New();
-    LabelCol->SetName("Properties");
-    auto TargetSegmentationVolumeCol = vtkSmartPointer<vtkDoubleArray>::New();
-    TargetSegmentationVolumeCol->SetName("Target Segmentation Volume");
-    auto ROIVoxelsCol = vtkSmartPointer<vtkDoubleArray>::New();
-    ROIVoxelsCol->SetName("ROI Voxels");
-    auto ROIVolumeCol = vtkSmartPointer<vtkDoubleArray>::New();
-    ROIVolumeCol->SetName("ROI Volume (cm3)");
-    auto RemnantPercentageCol = vtkSmartPointer<vtkStringArray>::New();
-    RemnantPercentageCol->SetName("ROI Percentage");
+    auto RegionCol = vtkSmartPointer<vtkStringArray>::New();
+    RegionCol->SetName("Region");
+    auto VolumeCol = vtkSmartPointer<vtkDoubleArray>::New();
+    VolumeCol->SetName("Volume (mL)");
+    auto PercentageCol = vtkSmartPointer<vtkStringArray>::New();
+    PercentageCol->SetName("% of total");
 
-    LabelCol->InsertNextValue(Properties);
-    TargetSegmentationVolumeCol->InsertNextValue(TargetSegmentationVolume);
-    ROIVoxelsCol->InsertNextValue(ROIVoxels);
-    ROIVolumeCol->InsertNextValue(ROIVolume);
-    RemnantPercentageCol->InsertNextValue(std::to_string(ROIVolume / TargetSegmentationVolume * 100) + "%");
+    RegionCol->InsertNextValue(Properties);
+    VolumeCol->InsertNextValue(ROIVolume);
+    PercentageCol->InsertNextValue(percentText);
 
-    auto VolumeTable = OutputTableNode->GetTable();
-    VolumeTable->AddColumn(LabelCol);
-    VolumeTable->AddColumn(TargetSegmentationVolumeCol);
-    VolumeTable->AddColumn(ROIVoxelsCol);
-    VolumeTable->AddColumn(ROIVolumeCol);
-    VolumeTable->AddColumn(RemnantPercentageCol);
+    VolumeTable->AddColumn(RegionCol);
+    VolumeTable->AddColumn(VolumeCol);
+    VolumeTable->AddColumn(PercentageCol);
   }
   else
   {
     int line = OutputTableNode->GetNumberOfRows();
     VolumeTable->InsertRow(line);
     VolumeTable->GetColumn(0)->SetVariantValue(line, static_cast<vtkStdString>(Properties));
-    VolumeTable->GetColumn(1)->SetVariantValue(line, TargetSegmentationVolume);
-    VolumeTable->GetColumn(2)->SetVariantValue(line, ROIVoxels);
-    VolumeTable->GetColumn(3)->SetVariantValue(line, ROIVolume);
-    VolumeTable->GetColumn(4)->SetVariantValue(line, static_cast<vtkStdString>(std::to_string(ROIVolume / TargetSegmentationVolume * 100) + "%"));
+    VolumeTable->GetColumn(1)->SetVariantValue(line, ROIVolume);
+    VolumeTable->GetColumn(2)->SetVariantValue(line, static_cast<vtkStdString>(percentText));
     OutputTableNode->Modified();
   }
 }
