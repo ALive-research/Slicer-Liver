@@ -76,11 +76,17 @@ set(_volumetry_pytest_files
   # SetNthSeedColor, delete -> RemoveNthSeed, observer rebuild + teardown.  Qt
   # + wrapped carrier -> SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_seeds_table.py
-  # Volumetry-workflow-consistency critique D1/D2/D3 -- the affirmative
-  # requirements surface, the Place-seeds input-segmentation gate, and the
-  # whole-group Clear-all.  Qt widget + wrapped carrier -> SKIPS bare, RUNS
-  # launched (ADR-0027).
+  # Data-first redesign §3.4 -- the gating truth table: Compute + Place gate
+  # on a segmentation only; the partition contributes iff a resection is
+  # checked AND a seed is placed (closing the B4 silent no-op); whole-group
+  # Clear-all.  Qt widget + wrapped carrier -> SKIPS bare, RUNS launched
+  # (ADR-0027).
   test_volumetry_action_enablement.py
+  # Data-first redesign §3.5 -- results-table presentation: columns
+  # Region | Volume (mL) | % of total (no ROI Voxels; divide-by-zero guard);
+  # the partition total row labeled "All pieces".  Wrapped C++ VolumetryTable
+  # -> SKIPS bare, RUNS launched (ADR-0027).
+  test_volumetry_results_presentation.py
   # Volumetry-workflow-consistency critique -- selecting an input segmentation
   # keeps its selected segment(s) VISIBLE so Show-3D has a surface to build
   # (the reported "Show 3D shows nothing" was the prior hide-all).  Qt widget
