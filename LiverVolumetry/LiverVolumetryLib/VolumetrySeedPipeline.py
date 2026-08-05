@@ -43,6 +43,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import vtk
+
 # The shared 3D + slice placement/edit bases (ADR-0038 §Decision): volumetry is
 # the flat, ungated client over the PointProvider + swappable-pick seam.
 try:  # pragma: no cover - exercised once per import path
@@ -68,6 +70,14 @@ except ImportError:  # bare / top-level path: add the sibling Lib dir to sys.pat
     )
     from PointPlacementState import PointPlacementState  # type: ignore[no-redef]
 
+# The shared slice-projection math (RAS interior point -> slice XY): the
+# placement-preview cursor rides the SAME projection the base's handles do,
+# so the preview glyph sits exactly where a placed seed's handle would.
+try:  # pragma: no cover - exercised once per import path
+    from SlicerLiverInteractionLib import SlicePointProjection as _proj
+except ImportError:  # bare / top-level path: the sibling Lib is already on sys.path
+    import SlicePointProjection as _proj  # type: ignore[no-redef]
+
 try:  # pragma: no cover - exercised once per import path
     from .VolumetrySeedProvider import VolumetrySeedProvider
     from .InVolumePick import InVolumePick
@@ -79,6 +89,15 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
 #: display node (matches the display node's ``LiverVolumetry.*`` attribute
 #: channel; vtkMRMLVolumetrySeedsDisplayNode header §"Field roster").
 VOLUMETRY_NAMESPACE = "LiverVolumetry"
+
+#: The placement-preview cursor colour (yellow, the shared hover hue): a
+#: hollow ring that tracks the cursor over a seedable interior voxel BEFORE
+#: the click, the slice analogue of the territory adhering marker.
+PREVIEW_CURSOR_COLOR = (1.0, 0.9, 0.2)
+
+#: The preview cursor glyph diameter (XY pixels): a touch smaller than a
+#: placed handle so the "about to place" cue reads as a cursor, not a handle.
+PREVIEW_GLYPH_SCALE_PX = 11.0
 
 _REGISTERED_3D = False
 _REGISTERED_SLICE = False
@@ -165,8 +184,83 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
     def __init__(self) -> None:
         super().__init__(namespace=VOLUMETRY_NAMESPACE)
 
+        # Placement-preview cursor: a hollow ring that tracks the cursor over a
+        # seedable interior voxel BEFORE the click, so the surgeon sees where a
+        # seed would land (the slice analogue of the territory adhering marker;
+        # the base's hover ring only highlights EXISTING handles, so an empty
+        # slice showed no placement cue at all -- the reported "no cursor").
+        self._preview_polydata = vtk.vtkPolyData()
+        self._preview_polydata.SetPoints(vtk.vtkPoints())
+        self._preview_glyph_source = vtk.vtkGlyphSource2D()
+        self._preview_glyph_source.SetGlyphTypeToCircle()
+        self._preview_glyph_source.FilledOff()
+        self._preview_glyph_source.SetScale(PREVIEW_GLYPH_SCALE_PX)
+        self._preview_glyph = vtk.vtkGlyph2D()
+        self._preview_glyph.SetInputData(self._preview_polydata)
+        self._preview_glyph.SetSourceConnection(
+            self._preview_glyph_source.GetOutputPort()
+        )
+        self._preview_glyph.ScalingOff()
+        self._preview_mapper = vtk.vtkPolyDataMapper2D()
+        self._preview_mapper.SetInputConnection(self._preview_glyph.GetOutputPort())
+        self._preview_actor = vtk.vtkActor2D()
+        self._preview_actor.SetMapper(self._preview_mapper)
+        self._preview_actor.GetProperty().SetColor(*PREVIEW_CURSOR_COLOR)
+        self._preview_actor.GetProperty().SetLineWidth(2.0)
+        self._preview_actor.SetVisibility(False)
+
     def _after_display_node_set(self) -> None:
         _wire_provider_and_pick(self, self._display_node)
+
+    def _add_actors(self, renderer: Any) -> None:
+        super()._add_actors(renderer)
+        renderer.AddActor2D(self._preview_actor)
+
+    def _remove_actors(self, renderer: Any) -> None:
+        super()._remove_actors(renderer)
+        renderer.RemoveActor2D(self._preview_actor)
+
+    def _on_bare_move_decline(self, eventData: Any) -> None:
+        """Raise the placement-preview cursor on a declined bare move (ADR-0033).
+
+        The base DECLINES a bare move (camera untouched) and returns WITHOUT a
+        render, and a bare hover mutates no observed node -- so a placement cue
+        is computed but never flushed unless this hook requests a render itself
+        (the same mid-interaction ``RequestRender`` the territory
+        ``_on_bare_move_decline`` follows).  Without it the surgeon gets no
+        cursor/marker while placing seeds -- the reported regression.
+
+        The preview only shows while ARMED (the add-on-click mode): a disarmed
+        slice hover is edit-only, and the base's hover ring already cues the
+        grab target, so a placement preview would be misleading there.
+        """
+        try:
+            self._update_preview_cursor(eventData)
+        finally:
+            self.RequestRender()
+
+    def _update_preview_cursor(self, eventData: Any) -> None:
+        """Position the preview ring at the cursor's seedable interior voxel.
+
+        Resolves the cursor through the SAME in-volume slice pick a click uses,
+        then projects that interior RAS to the slice XY so the ring sits where
+        the placed seed's handle would.  Hidden when disarmed, off any region,
+        or beyond the local search radius (the pick declines) -- so the cursor
+        cue truthfully tracks where a click WOULD place a seed.
+        """
+        show = False
+        points = vtk.vtkPoints()
+        if self.IsArmed() and self.IsModuleActive():
+            world = self._pick_world(eventData)
+            slice_node = self._slice_node
+            if world is not None and slice_node is not None:
+                xy = _proj.project_ras_to_xy(slice_node, world)
+                if xy is not None:
+                    points.InsertNextPoint(xy[0], xy[1], 0.0)
+                    show = True
+        self._preview_polydata.SetPoints(points)
+        self._preview_polydata.Modified()
+        self._preview_actor.SetVisibility(show)
 
     def _pick_world(self, eventData: Any):
         """Route the armed slice click through the in-volume slice-click pick.
