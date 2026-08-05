@@ -211,5 +211,49 @@ def test_pick_against_wired_surface_lands_on_a_labelled_interior_voxel():
     )
 
 
+def test_rearm_with_unchanged_inputs_reuses_the_cached_pick_labelmap():
+    """Re-arming with unchanged inputs must NOT re-export the segmentation.
+
+    ``ExportSegmentsToLabelmapNode`` rasterizes the whole segmentation
+    synchronously on the GUI thread; on clinical-size data an export on every
+    arm reads as a frozen application.  ``_ensurePickLabelmap`` caches the
+    export keyed on (segmentation, segment selection, reference volume,
+    segmentation MTime): a second arm with unchanged inputs must leave the
+    exported image untouched, and an input edit must invalidate the cache.
+    """
+    slicer = _slicer_or_skip()
+    widget = _widget_or_skip(slicer)
+    segmentation = _segmentation_with_solid_block_or_skip(slicer)
+
+    pickSurface = _wired_pick_surface(slicer, widget, segmentation)
+    if pickSurface is None or pickSurface.GetImageData() is None:
+        pytest.skip("no readable pickSurface wired in this harness (ADR-0027).")
+    if getattr(widget, "_pickLabelmapKey", None) is None:
+        pytest.skip("the pick-labelmap export cache has not landed (ADR-0027).")
+
+    mtime_before = pickSurface.GetImageData().GetMTime()
+
+    # Re-arm with UNCHANGED inputs: cache hit -- no re-export, image untouched.
+    displayNode = widget._ensureSeedsDisplayNode()
+    widget._aimPickSurface(displayNode)
+    cached = displayNode.GetPickSurfaceNode()
+    assert cached is not None and cached.GetImageData() is not None
+    assert cached.GetImageData().GetMTime() == mtime_before, (
+        "re-arming with unchanged inputs must reuse the cached pick labelmap "
+        "-- a re-export on every arm froze the GUI on clinical-size data."
+    )
+
+    # An input edit (segmentation MTime bump) invalidates the cache: the next
+    # arm re-exports so the pick sees the CURRENT target region.
+    segmentation.Modified()
+    widget._aimPickSurface(displayNode)
+    refreshed = displayNode.GetPickSurfaceNode()
+    assert refreshed is not None and refreshed.GetImageData() is not None
+    assert refreshed.GetImageData().GetMTime() > mtime_before, (
+        "an input segmentation edit must invalidate the pick-labelmap cache "
+        "so the next arm re-exports the CURRENT target region."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

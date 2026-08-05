@@ -41,6 +41,8 @@
 
 
 import logging
+import time
+
 import vtk
 import qt
 import slicer
@@ -153,8 +155,13 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # The scene-resident labelmap the in-volume pick resolves interior voxels
     # against (rasterized from the selected input segment(s); the pick needs an
     # image-data node, not the segmentation).  Created lazily on arm; dropped on
-    # scene close.
+    # scene close.  The key records which inputs the labelmap was exported
+    # from -- (segmentation ID, segment selection, reference volume ID,
+    # segmentation MTime) -- so re-arming with unchanged inputs reuses the
+    # cached export instead of re-rasterizing the whole segmentation on the
+    # GUI thread (arm must be instant on clinical-size data).
     self._pickLabelmap = None
+    self._pickLabelmapKey = None
     # The carrier-backed seeds table (ADR-0038 §Conformance): one row per seed
     # with an editable label (the generated segment name), a colour swatch, and
     # a delete affordance.  Composed into the panel in ``setup`` and bound to
@@ -582,18 +589,39 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       labelmap.GetID() if labelmap is not None else None)
 
   def _ensurePickLabelmap(self):
-    """Rasterize the selected input segment(s) into the pick labelmap.
+    """Rasterize the selected input segment(s) into the pick labelmap, cached.
 
-    The in-volume pick needs a labelmap of the CURRENT target region, so this
-    re-exports on every arm (segment selection or reference volume may have
-    changed).  Reuses one owned ``vtkMRMLLabelMapVolumeNode`` so re-arming does
-    not litter the scene.  Returns ``None`` (and leaves no labelmap) when there
-    is no input segmentation, so the caller clears the pickSurface reference.
+    The in-volume pick needs a labelmap of the CURRENT target region, but the
+    export (``ExportSegmentsToLabelmapNode``) rasterizes the whole segmentation
+    synchronously on the GUI thread -- on clinical-size data that reads as a
+    frozen application.  So the export runs ONLY when its inputs changed: the
+    result is cached keyed on (segmentation ID, segment selection, reference
+    volume ID, segmentation MTime), and re-arming with unchanged inputs reuses
+    it (arm must be instant).  Reuses one owned ``vtkMRMLLabelMapVolumeNode``
+    so re-arming does not litter the scene.  Returns ``None`` (and leaves no
+    labelmap) when there is no input segmentation, so the caller clears the
+    pickSurface reference.
     """
     segmentation = self._inputSegmentationNode()
     if segmentation is None or not segmentation.IsA("vtkMRMLSegmentationNode"):
+      self._pickLabelmapKey = None
       return None
+    segmentIDs = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
+    refVolume = self.ui.ReferenceVolumeSelector.currentNode()
+    inputsKey = (
+      segmentation.GetID(),
+      tuple(segmentIDs),
+      refVolume.GetID() if refVolume is not None else None,
+    )
+
     labelmap = self._pickLabelmap
+    labelmapValid = (
+      labelmap is not None
+      and slicer.mrmlScene.IsNodePresent(labelmap)
+      and labelmap.GetImageData() is not None)
+    if labelmapValid and self._pickLabelmapKey == inputsKey + (segmentation.GetMTime(),):
+      return labelmap
+
     if labelmap is None or not slicer.mrmlScene.IsNodePresent(labelmap):
       labelmap = slicer.mrmlScene.AddNewNodeByClass(
         "vtkMRMLLabelMapVolumeNode", "Volumetry Seed Pick Labelmap")
@@ -601,14 +629,20 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       # user-facing result (ADR-0009 -- no clutter in the node lists).
       labelmap.SetHideFromEditors(True)
       self._pickLabelmap = labelmap
-    segmentIDs = self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()
-    refVolume = self.ui.ReferenceVolumeSelector.currentNode()
     # An empty selection means "all segments" for the export; a null reference
     # volume lets the segmentation's own geometry drive the rasterization.
+    started = time.monotonic()
     slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(
       segmentation, segmentIDs, labelmap, refVolume)
+    logging.debug(
+      "LiverVolumetry: pick labelmap export took %.2f s", time.monotonic() - started)
     if labelmap.GetImageData() is None:
+      self._pickLabelmapKey = None
       return None
+    # Key the cache on the POST-export segmentation MTime: the export itself
+    # may create the binary-labelmap representation (bumping the MTime), and
+    # that conversion must not read as "inputs changed" on the next arm.
+    self._pickLabelmapKey = inputsKey + (segmentation.GetMTime(),)
     return labelmap
 
   def onAddSeedsToggled(self, armed):
@@ -622,7 +656,12 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     node = self._ensureSeedsDisplayNode()
     if node is None:
       return
-    self._aimPickSurface(node)
+    if armed:
+      # (Re)aim the pick surface only when ARMING: disarming never needs a
+      # fresh export, and ``_ensureSeedsDisplayNode`` already aimed once at
+      # node creation.  With unchanged inputs this is a cache hit
+      # (``_ensurePickLabelmap``), so arming stays instant.
+      self._aimPickSurface(node)
     from SlicerLiverInteractionLib.PointPlacementState import PointPlacementState
     state = PointPlacementState(VOLUMETRY_NAMESPACE)
     state.set_module_active(node, True)
@@ -838,6 +877,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._seedsCarrier = None
     self._seedsDisplayNode = None
     self._pickLabelmap = None
+    self._pickLabelmapKey = None
     # Unbind the table from the now-invalid carrier (drops its observer) so it
     # empties and does not observe a scene-cleared node.
     self._bindSeedsTable(None)
