@@ -70,6 +70,15 @@ class InVolumePick:
 
     def __init__(self, labelmap) -> None:
         self._labelmap = labelmap
+        # Memo of the thresholded labelled mask, keyed by the image's MTime:
+        # the placement-preview cursor resolves a pick on EVERY bare mouse move,
+        # and re-thresholding a clinical-size labelmap (a full-array ``!= 0``
+        # allocation) per hover would stall the GUI.  The interior SEARCH is
+        # already bounded to a local window; this caches the one whole-array
+        # step so the per-hover cost is just that window.  Invalidated when the
+        # image changes (a re-aimed labelmap is a fresh InVolumePick anyway).
+        self._labelled_cache = None
+        self._labelled_cache_mtime = None
 
     # ------------------------------------------------------------------ #
     # The base's generic pick seam (ADR-0038 PickProvider)
@@ -128,7 +137,7 @@ class InVolumePick:
         image = labelmap.GetImageData()
         if image is None:
             return None
-        labelled = self._labelled_array(image)
+        labelled = self._labelled_array_cached(image)
         if labelled is None:
             return None
 
@@ -149,6 +158,22 @@ class InVolumePick:
             [float(best_index[0]), float(best_index[1]), float(best_index[2]), 1.0]
         )
         return (ras[0], ras[1], ras[2])
+
+    def _labelled_array_cached(self, image):
+        """The labelled mask for ``image``, memoized by its MTime (per-hover reuse).
+
+        The placement-preview cursor picks on every bare mouse move; without
+        this memo each hover re-thresholds the whole labelmap.  The cache is
+        keyed by the image MTime so a labelmap edit still re-thresholds, but a
+        stream of hovers over an unchanged labelmap reuses the one mask.
+        """
+        mtime = image.GetMTime()
+        if self._labelled_cache is not None and mtime == self._labelled_cache_mtime:
+            return self._labelled_cache
+        labelled = self._labelled_array(image)
+        self._labelled_cache = labelled
+        self._labelled_cache_mtime = mtime
+        return labelled
 
     @staticmethod
     def _labelled_array(image):
