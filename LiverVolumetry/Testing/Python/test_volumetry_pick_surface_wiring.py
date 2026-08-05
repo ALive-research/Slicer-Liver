@@ -136,7 +136,7 @@ def _wired_pick_surface(slicer, widget, segmentation):
     display node, and let ``_aimPickSurface`` bind whatever pickSurface the
     module aims the in-volume pick at.
     """
-    widget.ui.InputSegmentationSelector.setCurrentNode(segmentation)
+    widget.ui.InputSegmentSelectorWidget.setCurrentNode(segmentation)
     displayNode = widget._ensureSeedsDisplayNode()
     if displayNode is None or not hasattr(displayNode, "GetPickSurfaceNode"):
         pytest.skip("seed display node / GetPickSurfaceNode unavailable (ADR-0027).")

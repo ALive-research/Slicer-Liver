@@ -126,14 +126,14 @@ def test_place_seeds_disabled_until_input_segmentation(qt_widgets):
     _detach_scene_observers(slicer, widget)
     _require_requirements_seam_or_skip(widget)
 
-    widget.ui.InputSegmentationSelector.setCurrentNode(None)
+    widget.ui.InputSegmentSelectorWidget.setCurrentNode(None)
     widget._updateActionEnablement()
     assert widget.ui.AddSeedsButton.enabled is False, (
         "Place seeds must be DISABLED with no input segmentation (critique D2)."
     )
 
     seg = _single_segment_segmentation(slicer)
-    widget.ui.InputSegmentationSelector.setCurrentNode(seg)
+    widget.ui.InputSegmentSelectorWidget.setCurrentNode(seg)
     widget._updateActionEnablement()
     assert widget.ui.AddSeedsButton.enabled is True, (
         "Place seeds must ENABLE once an input segmentation is selected."
@@ -153,7 +153,7 @@ def test_requirements_message_lists_missing_input(qt_widgets):
     _detach_scene_observers(slicer, widget)
     _require_requirements_seam_or_skip(widget)
 
-    widget.ui.InputSegmentationSelector.setCurrentNode(None)
+    widget.ui.InputSegmentSelectorWidget.setCurrentNode(None)
     placeUnmet, computeUnmet, generateUnmet = widget._actionRequirements()
 
     assert "Select an input segmentation" in placeUnmet, (
@@ -184,7 +184,7 @@ def test_requirements_message_lists_missing_seeds(qt_widgets):
     _require_requirements_seam_or_skip(widget)
 
     seg = _single_segment_segmentation(slicer)
-    widget.ui.InputSegmentationSelector.setCurrentNode(seg)
+    widget.ui.InputSegmentSelectorWidget.setCurrentNode(seg)
     carrier = widget._ensureSeedsCarrier()
     if carrier is None:
         pytest.skip(
@@ -229,7 +229,7 @@ def test_clear_all_seeds_empties_carrier_and_disables(qt_widgets):
         )
 
     seg = _single_segment_segmentation(slicer)
-    widget.ui.InputSegmentationSelector.setCurrentNode(seg)
+    widget.ui.InputSegmentSelectorWidget.setCurrentNode(seg)
     carrier = widget._ensureSeedsCarrier()
     if carrier is None:
         pytest.skip(

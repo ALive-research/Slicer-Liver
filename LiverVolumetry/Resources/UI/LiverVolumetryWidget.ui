@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>622</width>
-    <height>354</height>
+    <height>460</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -22,264 +22,292 @@
      <property name="text">
       <string>Resection Volumetry</string>
      </property>
-     <layout class="QGridLayout" name="gridLayout">
-      <item row="5" column="0">
-       <widget class="QLabel" name="label_3">
-        <property name="text">
-         <string>ROI Markers List:</string>
+     <layout class="QVBoxLayout" name="panelLayout">
+      <item>
+       <widget class="ctkCollapsibleGroupBox" name="InputGroupBox">
+        <property name="title">
+         <string>Input segmentation / segments</string>
         </property>
+        <layout class="QGridLayout" name="inputLayout">
+         <item row="0" column="0" colspan="3">
+          <widget class="qMRMLSegmentSelectorWidget" name="InputSegmentSelectorWidget">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Choose the input segmentation and the segment(s) to account for the volume calculation.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
+           <property name="segmentationNodeSelectorVisible">
+            <bool>true</bool>
+           </property>
+           <property name="multiSelection">
+            <bool>true</bool>
+           </property>
+           <property name="selectNodeUponCreation">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="3">
+          <widget class="qMRMLSegmentationShow3DButton" name="SegmentationShow3DButton"/>
+         </item>
+        </layout>
        </widget>
       </item>
-      <item row="4" column="0" colspan="2">
-       <widget class="QLabel" name="label_4">
-        <property name="text">
-         <string>Total Volume:</string>
+      <item>
+       <widget class="ctkCollapsibleGroupBox" name="ReferenceVolumeGroupBox">
+        <property name="title">
+         <string>Reference volume</string>
         </property>
+        <layout class="QGridLayout" name="referenceVolumeLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="label_1">
+           <property name="text">
+            <string>Reference volume (CT/MR):</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="qMRMLNodeComboBox" name="ReferenceVolumeSelector">
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Sets the reference volume (CT/MR) which the segmentation was based on&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
+           <property name="nodeTypes">
+            <stringlist>
+             <string>vtkMRMLScalarVolumeNode</string>
+            </stringlist>
+           </property>
+           <property name="addEnabled">
+            <bool>false</bool>
+           </property>
+           <property name="removeEnabled">
+            <bool>false</bool>
+           </property>
+           <property name="editEnabled">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
-      <item row="9" column="0" colspan="4">
-       <widget class="QPushButton" name="ComputeVolumePushButton">
-        <property name="enabled">
-         <bool>false</bool>
+      <item>
+       <widget class="ctkCollapsibleGroupBox" name="TotalVolumeGroupBox">
+        <property name="title">
+         <string>Total volume segments</string>
         </property>
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="text">
-         <string>Compute volumes</string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="3">
-       <widget class="qMRMLSegmentationShow3DButton" name="SegmentationShow3DButton"/>
-      </item>
-      <item row="6" column="0">
-       <widget class="QLabel" name="ResectionLabel">
-        <property name="text">
-         <string>Resection:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="2">
-       <widget class="qMRMLNodeComboBox" name="VolumeTableSelectorWidget">
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Sets the output table node where the volume calculation will be added&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-        </property>
-        <property name="nodeTypes">
-         <stringlist>
-          <string>vtkMRMLTableNode</string>
-         </stringlist>
-        </property>
-        <property name="showChildNodeTypes">
-         <bool>false</bool>
-        </property>
-        <property name="baseName">
-         <string>LiverResectionVolumetry</string>
-        </property>
-        <property name="noneEnabled">
+        <property name="collapsed">
          <bool>true</bool>
         </property>
-        <property name="editEnabled">
+        <layout class="QGridLayout" name="totalVolumeLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="label_4">
+           <property name="text">
+            <string>Total Volume:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="qMRMLSegmentSelectorWidget" name="TargetSegmentationSelectorWidget">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The volume of these segments will account as total volume for the volumetry calculation. If no segments are selected, all segments will be considered for the total volume calculation&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
+           <property name="noneEnabled">
+            <bool>false</bool>
+           </property>
+           <property name="segmentationNodeSelectorVisible">
+            <bool>false</bool>
+           </property>
+           <property name="multiSelection">
+            <bool>true</bool>
+           </property>
+           <property name="selectNodeUponCreation">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="ctkCollapsibleGroupBox" name="ResectionTargetsGroupBox">
+        <property name="title">
+         <string>Resection targets</string>
+        </property>
+        <property name="collapsed">
          <bool>true</bool>
         </property>
-        <property name="renameEnabled">
-         <bool>true</bool>
-        </property>
+        <layout class="QGridLayout" name="resectionTargetsLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="ResectionLabel">
+           <property name="text">
+            <string>Resection:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="qMRMLCheckableNodeComboBox" name="ResectionTargetNodeComboBox">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;If selected ,the resection(s) will be used as boundary for volume calculation&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
+           <property name="nodeTypes">
+            <stringlist>
+             <string>vtkMRMLResectionPlanNode</string>
+            </stringlist>
+           </property>
+           <property name="addEnabled">
+            <bool>false</bool>
+           </property>
+           <property name="removeEnabled">
+            <bool>false</bool>
+           </property>
+           <property name="editEnabled">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
-      <item row="3" column="2">
-       <widget class="qMRMLSegmentSelectorWidget" name="InputSegmentSelectorWidget">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
+      <item>
+       <widget class="ctkCollapsibleGroupBox" name="ActionsGroupBox">
+        <property name="title">
+         <string>Actions</string>
         </property>
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Segment to account for volume calculation&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-        </property>
-        <property name="segmentationNodeSelectorVisible">
-         <bool>false</bool>
-        </property>
-        <property name="multiSelection">
-         <bool>true</bool>
-        </property>
-        <property name="selectNodeUponCreation">
-         <bool>false</bool>
-        </property>
+        <layout class="QGridLayout" name="actionsLayout">
+         <item row="0" column="0">
+          <widget class="QPushButton" name="AddSeedsButton">
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Arm placement of region-growing seeds: click inside a target region in a slice view to drop an interior seed; click again to add more; toggle off when done.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
+           <property name="text">
+            <string>Place seeds</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QPushButton" name="ComputeVolumePushButton">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>Compute volumes</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QPushButton" name="GenerateSegmentsPushButton">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="text">
+            <string>Generate segments</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="VolumetryRequirementsLabel">
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
-      <item row="1" column="0" colspan="2">
-       <widget class="QLabel" name="label_1">
-        <property name="text">
-         <string>Reference Volume:</string>
+      <item>
+       <widget class="ctkCollapsibleGroupBox" name="SeedsGroupWidget">
+        <property name="title">
+         <string>Seeds</string>
         </property>
+        <layout class="QGridLayout" name="seedsLayout">
+         <item row="1" column="0">
+          <widget class="QPushButton" name="ClearAllSeedsButton">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Remove every placed seed. Re-place seeds to start over.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
+           <property name="text">
+            <string>Clear all seeds</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
-      <item row="2" column="2">
-       <widget class="qMRMLNodeComboBox" name="InputSegmentationSelector">
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Segmentation for volume calculation&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      <item>
+       <widget class="ctkCollapsibleGroupBox" name="ResultsGroupBox">
+        <property name="title">
+         <string>Results</string>
         </property>
-        <property name="nodeTypes">
-         <stringlist>
-          <string>vtkMRMLSegmentationNode</string>
-         </stringlist>
-        </property>
-        <property name="showChildNodeTypes">
-         <bool>false</bool>
-        </property>
-        <property name="noneEnabled">
-         <bool>true</bool>
-        </property>
-        <property name="addEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="removeEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="editEnabled">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="6" column="2" colspan="2">
-       <widget class="qMRMLCheckableNodeComboBox" name="ResectionTargetNodeComboBox">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;If selected ,the resection(s) will be used as boundary for volume calculation&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-        </property>
-        <property name="nodeTypes">
-         <stringlist>
-          <string>vtkMRMLResectionPlanNode</string>
-         </stringlist>
-        </property>
-        <property name="addEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="removeEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="editEnabled">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="0" colspan="2">
-       <widget class="QLabel" name="label_6">
-        <property name="maximumSize">
-         <size>
-          <width>16777215</width>
-          <height>16777215</height>
-         </size>
-        </property>
-        <property name="text">
-         <string>Volumetry Output Table:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="2">
-       <widget class="qMRMLNodeComboBox" name="ReferenceVolumeSelector">
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Sets the reference volume which the segmentation was based on&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-        </property>
-        <property name="nodeTypes">
-         <stringlist>
-          <string>vtkMRMLScalarVolumeNode</string>
-         </stringlist>
-        </property>
-        <property name="addEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="removeEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="editEnabled">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="0">
-       <widget class="QLabel" name="label_2">
-        <property name="text">
-         <string>Segmentation:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="2">
-       <widget class="qMRMLSegmentSelectorWidget" name="TargetSegmentationSelectorWidget">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The volume of these segments will account as total volume for the volumetry calculation. If no segments are selected, all segments will be considered for the total volume calculation&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-        </property>
-        <property name="noneEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="segmentationNodeSelectorVisible">
-         <bool>false</bool>
-        </property>
-        <property name="multiSelection">
-         <bool>true</bool>
-        </property>
-        <property name="selectNodeUponCreation">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="0" colspan="4">
-       <widget class="QPushButton" name="AddSeedsButton">
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Arm placement of region-growing seeds: click inside a target region in a slice view to drop an interior seed; click again to add more; toggle off when done.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-        </property>
-        <property name="text">
-         <string>Place seeds</string>
-        </property>
-       </widget>
-      </item>
-      <item row="8" column="0" colspan="4">
-       <widget class="QPushButton" name="ClearAllSeedsButton">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Remove every placed seed. Re-place seeds to start over.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-        </property>
-        <property name="text">
-         <string>Clear all seeds</string>
-        </property>
-       </widget>
-      </item>
-      <item row="7" column="0" colspan="4">
-       <widget class="QPushButton" name="GenerateSegmentsPushButton">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-        <property name="text">
-         <string>Generate segments</string>
-        </property>
-       </widget>
-      </item>
-      <item row="10" column="0" colspan="4">
-       <widget class="QLabel" name="VolumetryRequirementsLabel">
-        <property name="wordWrap">
-         <bool>true</bool>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
+        <layout class="QGridLayout" name="resultsLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="label_6">
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>16777215</height>
+            </size>
+           </property>
+           <property name="text">
+            <string>Results table:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="qMRMLNodeComboBox" name="VolumeTableSelectorWidget">
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Sets the output results table node where the volume calculation will be added&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
+           <property name="nodeTypes">
+            <stringlist>
+             <string>vtkMRMLTableNode</string>
+            </stringlist>
+           </property>
+           <property name="showChildNodeTypes">
+            <bool>false</bool>
+           </property>
+           <property name="baseName">
+            <string>LiverResectionVolumetry</string>
+           </property>
+           <property name="noneEnabled">
+            <bool>true</bool>
+           </property>
+           <property name="editEnabled">
+            <bool>true</bool>
+           </property>
+           <property name="renameEnabled">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
      </layout>
@@ -334,6 +362,12 @@
    <container>1</container>
   </customwidget>
   <customwidget>
+   <class>ctkCollapsibleGroupBox</class>
+   <extends>QGroupBox</extends>
+   <header>ctkCollapsibleGroupBox.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
    <class>ctkMenuButton</class>
    <extends>QPushButton</extends>
    <header>ctkMenuButton.h</header>
@@ -374,22 +408,6 @@
    </hints>
   </connection>
   <connection>
-   <sender>InputSegmentationSelector</sender>
-   <signal>currentNodeChanged(vtkMRMLNode*)</signal>
-   <receiver>InputSegmentSelectorWidget</receiver>
-   <slot>setCurrentNode(vtkMRMLNode*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>422</x>
-     <y>576</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>422</x>
-     <y>631</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
    <sender>LiverVolumetryWidget</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>InputSegmentSelectorWidget</receiver>
@@ -402,22 +420,6 @@
     <hint type="destinationlabel">
      <x>422</x>
      <y>631</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>LiverVolumetryWidget</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>InputSegmentationSelector</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>428</x>
-     <y>490</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>422</x>
-     <y>576</y>
     </hint>
    </hints>
   </connection>
@@ -438,7 +440,7 @@
    </hints>
   </connection>
   <connection>
-   <sender>InputSegmentationSelector</sender>
+   <sender>InputSegmentSelectorWidget</sender>
    <signal>currentNodeChanged(vtkMRMLNode*)</signal>
    <receiver>TargetSegmentationSelectorWidget</receiver>
    <slot>setCurrentNode(vtkMRMLNode*)</slot>
