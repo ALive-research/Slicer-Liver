@@ -103,6 +103,18 @@ vtkMRMLNode* vtkMRMLVolumetrySeedsDisplayNode::GetPickSurfaceNode()
 }
 
 //------------------------------------------------------------------------------
+void vtkMRMLVolumetrySeedsDisplayNode::SetAndObserveStructureSourceNodeID(const char* segmentationNodeID)
+{
+  this->SetAndObserveNodeReferenceID(this->GetStructureSourceReferenceRole(), segmentationNodeID);
+}
+
+//------------------------------------------------------------------------------
+vtkMRMLNode* vtkMRMLVolumetrySeedsDisplayNode::GetStructureSourceNode()
+{
+  return this->GetNodeReference(this->GetStructureSourceReferenceRole());
+}
+
+//------------------------------------------------------------------------------
 void vtkMRMLVolumetrySeedsDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);

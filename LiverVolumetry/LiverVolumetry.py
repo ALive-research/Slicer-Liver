@@ -619,9 +619,25 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       from SlicerLiverInteractionLib.PointPlacementState import PointPlacementState
       PointPlacementState(VOLUMETRY_NAMESPACE).set_carrier(node, carrier)
     self._aimPickSurface(node)
+    self._aimStructureSource(node)
     node = slicer.mrmlScene.AddNode(node)
     self._seedsDisplayNode = node
     return node
+
+  def _aimStructureSource(self, displayNode):
+    """Reference the input segmentation as the seed→label capture source.
+
+    The seed→label capture (``territory-usability`` §"Seed→label capture")
+    resolves the touched candidates by reading each visible segment's binary
+    labelmap + layer index at the clicked voxel, so it needs the SEGMENTATION
+    node -- not the rasterized pick labelmap.  ``None`` clears the reference
+    when there is no input.
+    """
+    if displayNode is None or not hasattr(displayNode, "SetAndObserveStructureSourceNodeID"):
+      return
+    segmentation = self._inputSegmentationNode()
+    displayNode.SetAndObserveStructureSourceNodeID(
+      segmentation.GetID() if segmentation is not None else None)
 
   def _aimPickSurface(self, displayNode):
     """Aim the seed display node's pickSurface at the target region's labelmap.
@@ -713,6 +729,9 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       # node creation.  With unchanged inputs this is a cache hit
       # (``_ensurePickLabelmap``), so arming stays instant.
       self._aimPickSurface(node)
+      # Re-point the seed→label capture at the current input segmentation so a
+      # re-arm after switching inputs binds new seeds to the right structures.
+      self._aimStructureSource(node)
     from SlicerLiverInteractionLib.PointPlacementState import PointPlacementState
     state = PointPlacementState(VOLUMETRY_NAMESPACE)
     state.set_module_active(node, True)

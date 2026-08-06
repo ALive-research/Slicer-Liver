@@ -81,9 +81,17 @@ except ImportError:  # bare / top-level path: the sibling Lib is already on sys.
 try:  # pragma: no cover - exercised once per import path
     from .VolumetrySeedProvider import VolumetrySeedProvider
     from .InVolumePick import InVolumePick
+    from .SeedTargetResolution import (
+        gather_touched_candidates,
+        resolve_touched_candidates,
+    )
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from VolumetrySeedProvider import VolumetrySeedProvider  # type: ignore[no-redef]
     from InVolumePick import InVolumePick  # type: ignore[no-redef]
+    from SeedTargetResolution import (  # type: ignore[no-redef]
+        gather_touched_candidates,
+        resolve_touched_candidates,
+    )
 
 #: The base namespace for the volumetry arm/carrier/pick state on the shared
 #: display node (matches the display node's ``LiverVolumetry.*`` attribute
@@ -533,6 +541,56 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         except Exception:  # pragma: no cover - defensive (fake events)
             display_xy = None
         return pick.pick_for_slice_event(self._slice_node, display_xy)
+
+    def _add_point(self, world: Any) -> None:
+        """Add the seed, then capture its structure binding (seed→label capture).
+
+        Overrides the base's add write-back: after the flat provider appends
+        the seed at ``world`` (the interior RAS the in-volume pick resolved),
+        resolve the touched-candidate set at that RAS against the structure-
+        source segmentation and bind the new seed to the TOP layer's segment
+        (``territory-usability`` §"Seed→label capture").  A seed placed with no
+        structure source, or off every visible segment, stays unbound -- the
+        placement still succeeds.
+        """
+        super()._add_point(world)
+        self._capture_binding(world)
+
+    def _capture_binding(self, world: Any) -> None:
+        """Bind the LAST-placed seed to the top touched segment at ``world`` RAS.
+
+        Reads the touched candidates from the structure-source segmentation
+        (one voxel per visible segment) and stores ``(segmentationNodeID,
+        topSegmentID)`` on the carrier's last seed, plus the segment's name as
+        the seed LABEL so the a11y text names the caught structure (never
+        colour/animation alone, ADR-0010).  Best-effort: any resolution miss
+        leaves the seed unbound.
+        """
+        carrier = self._provider.carrier() if self._provider is not None else None
+        if carrier is None:
+            return
+        index = carrier.GetNumberOfSeeds() - 1
+        if index < 0:
+            return
+        segmentationNode = self._structure_source_from_display()
+        if segmentationNode is None:
+            return
+        displayNode = segmentationNode.GetDisplayNode()
+        touched = gather_touched_candidates(segmentationNode, displayNode, world)
+        _ordered, top = resolve_touched_candidates(touched)
+        if top is None:
+            return
+        carrier.SetNthSeedBinding(index, segmentationNode.GetID(), top)
+        segment = segmentationNode.GetSegmentation().GetSegment(top)
+        if segment is not None and not carrier.GetNthSeedLabel(index):
+            carrier.SetNthSeedLabel(index, segment.GetName())
+
+    def _structure_source_from_display(self):
+        """The structure-source segmentation the seed→label capture scans."""
+        display = self._display_node
+        if display is None or not hasattr(display, "GetStructureSourceNode"):
+            return None
+        return display.GetStructureSourceNode()
 
 
 def registerVolumetrySeedPipeline3DCreator() -> None:  # noqa: N802 - project convention
