@@ -343,6 +343,18 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     if self._seedsTable is not None:
       self._seedsTable.setCarrier(carrier)
+      self._bindSeedsTableStructureSource()
+
+  def _bindSeedsTableStructureSource(self):
+    """Point the seeds table's retarget menu at the input segmentation.
+
+    The table's Target column recomputes the touched candidates against this
+    segmentation (the seed→label capture source), so keep it in step with the
+    input selection.  A missing table / seam degrades gracefully.
+    """
+    if self._seedsTable is None or not hasattr(self._seedsTable, "setStructureSource"):
+      return
+    self._seedsTable.setStructureSource(self._inputSegmentationNode())
 
   def _setupRequirementsLabel(self):
     """Tag the always-visible action-requirements status line (ADR-0004).
@@ -898,6 +910,8 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.ui.SegmentationShow3DButton.setSegmentationNode(segmentationNode)
     self._applyInputSegmentVisibility(segmentationNode)
+    # Keep the seeds-table retarget menu pointed at the current input.
+    self._bindSeedsTableStructureSource()
 
   def onSegmentChanged(self):
     segmentationNode = self._inputSegmentationNode()
