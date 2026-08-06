@@ -1291,16 +1291,20 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
         slicer.mrmlScene.RemoveNode(ROIMarkersList)
 
   def computeVolumePerVolume(self, segmentationNode, seedsNode, outputTable):
-    """Emit ONE results row per VOLUME = the union of its bound segments' regions.
+    """Emit ONE results row per VOLUME = the union of its seeds' CARVED regions.
 
-    territory-usability compute-per-volume: for each volume, gather the DISTINCT
-    segments its seeds are bound to (``distinct_bound_segments_per_volume``),
-    rasterize that segment set into ONE labelmap (the export merges the segments,
-    so a nonzero-voxel count is the UNION region ``|seg2 ∪ seg3|``), and emit a
-    row named for the volume, in surgeon terms (mL + % of total).  The total is
-    the whole segmentation's volume so the % reads against the organ.  A volume
-    with no bound seed yields no row (there is nothing to measure).  The module
-    owns + clears the table (``_ensureResultsTable``), so this only appends rows.
+    territory-usability compute-on-carved: each seed's effective region is its
+    owning segment MINUS the snapshot segments stacked above it (the
+    visibility-composed carve rule, ``VisibilityCarve``), re-derived from the
+    seed's placement-time visibility context -- so with Parenchyma + Segment_1
+    visible, a seed in Parenchyma outside Segment_1 measures
+    ``|Parenchyma \\ Segment_1|`` (the 216-54=162 mL phantom case), never the
+    whole parenchyma.  A volume's row is the UNION of its seeds' carved
+    regions; a seed with no snapshot contributes its whole bound segment
+    (legacy semantics).  Rows are in surgeon terms (mL + % of total); the
+    total is the whole segmentation's region so the % reads against the
+    organ.  A volume with no bound seed yields no row.  The module owns +
+    clears the table (``_ensureResultsTable``), so this only appends rows.
     """
     if outputTable is None:
       raise ValueError("Missing outputTable")
@@ -1310,52 +1314,76 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
     import numpy
     import vtk
 
-    from LiverVolumetryLib import distinct_bound_segments_per_volume
-    perVolume = distinct_bound_segments_per_volume(seedsNode)
+    from LiverVolumetryLib import (
+      carve_effective_mask,
+      effective_regions_per_volume,
+      segments_above,
+    )
+    perVolume = effective_regions_per_volume(seedsNode)
     if not perVolume:
       return
 
-    def _labelmap_volume_ml(segmentIDs):
-      """The union-region volume (mL) of ``segmentIDs`` on the segmentation.
-
-      Exporting several segments to one labelmap merges them, so the nonzero
-      voxel count IS the union region.  Returns ``(voxelCount, volumeMl)``.
-      """
-      labelmap = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "volumeUnion")
-      try:
-        ids = vtk.vtkStringArray()
-        for segmentID in segmentIDs:
-          ids.InsertNextValue(segmentID)
-        slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(
-          segmentationNode, ids, labelmap, None)
-        image = labelmap.GetImageData()
-        if image is None:
-          return 0, 0.0
-        scalars = vtk.util.numpy_support.vtk_to_numpy(image.GetPointData().GetScalars())
-        spacing = labelmap.GetSpacing()
-        voxelCount = int(numpy.count_nonzero(scalars))
-        volumeMl = voxelCount * spacing[0] * spacing[1] * spacing[2] * 0.001
-        return voxelCount, volumeMl
-      finally:
-        slicer.mrmlScene.RemoveNode(labelmap)
-
-    # The % denominator: the whole segmentation's region (every segment), so a
-    # per-volume row reads as a fraction of the organ.
-    allIDs = vtk.vtkStringArray()
+    # ONE reference rasterization: the whole segmentation exported to a
+    # labelmap fixes the common grid every per-segment mask is resampled onto
+    # (the carve is same-grid boolean algebra) AND is the % denominator (the
+    # organ's own region).
     segmentation = segmentationNode.GetSegmentation()
+    allIDs = vtk.vtkStringArray()
     for i in range(segmentation.GetNumberOfSegments()):
       allIDs.InsertNextValue(segmentation.GetNthSegmentID(i))
-    _totalVoxels, totalVolumeMl = _labelmap_volume_ml(
-      [segmentation.GetNthSegmentID(i) for i in range(segmentation.GetNumberOfSegments())])
+    reference = slicer.mrmlScene.AddNewNodeByClass(
+      "vtkMRMLLabelMapVolumeNode", "volumetryCarveReference")
+    try:
+      slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(
+        segmentationNode, allIDs, reference, None)
+      image = reference.GetImageData()
+      if image is None:
+        return
+      scalars = vtk.util.numpy_support.vtk_to_numpy(image.GetPointData().GetScalars())
+      spacing = reference.GetSpacing()
+      voxelMl = spacing[0] * spacing[1] * spacing[2] * 0.001
+      totalVolumeMl = int(numpy.count_nonzero(scalars)) * voxelMl
 
-    # One row per volume, in first-seen volume order on the carrier.
-    for volumeId in seedsNode.GetVolumeIds():
-      segmentIDs = perVolume.get(volumeId)
-      if not segmentIDs:
-        continue
-      voxelCount, volumeMl = _labelmap_volume_ml(segmentIDs)
-      rowName = seedsNode.GetVolumeLabel(volumeId) or volumeId
-      self.scl.VolumetryTable(rowName, totalVolumeMl, voxelCount, volumeMl, outputTable)
+      maskCache = {}
+      def _segment_mask(segmentID):
+        """The segment's binary mask on the reference grid (cached), or None."""
+        if segmentID in maskCache:
+          return maskCache[segmentID]
+        try:
+          mask = slicer.util.arrayFromSegmentBinaryLabelmap(
+            segmentationNode, segmentID, reference)
+        except Exception:  # noqa: BLE001 - a segment without a labelmap measures nothing
+          mask = None
+        maskCache[segmentID] = mask
+        return mask
+
+      dims = image.GetDimensions()
+      shape = (dims[2], dims[1], dims[0])
+
+      # One row per volume, in first-seen volume order on the carrier: the
+      # union of the volume's distinct (owner, snapshot) carved regions.
+      for volumeId in seedsNode.GetVolumeIds():
+        entries = perVolume.get(volumeId)
+        if not entries:
+          continue
+        union = numpy.zeros(shape, dtype=bool)
+        for ownerSegmentID, context in entries:
+          ownerMask = _segment_mask(ownerSegmentID)
+          if ownerMask is None:
+            continue
+          aboveMasks = [
+            mask
+            for segmentID in segments_above(list(context), ownerSegmentID)
+            for mask in [_segment_mask(segmentID)]
+            if mask is not None
+          ]
+          union |= carve_effective_mask(ownerMask, aboveMasks)
+        voxelCount = int(union.sum())
+        volumeMl = voxelCount * voxelMl
+        rowName = seedsNode.GetVolumeLabel(volumeId) or volumeId
+        self.scl.VolumetryTable(rowName, totalVolumeMl, voxelCount, volumeMl, outputTable)
+    finally:
+      slicer.mrmlScene.RemoveNode(reference)
 
   def generateSegments(self, resectionNodes, seedsNode, segmentsVolumeNode):
     ROIMarkersList = self.transientFiducialFromSeeds(seedsNode)
