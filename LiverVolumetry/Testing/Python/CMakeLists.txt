@@ -93,6 +93,11 @@ set(_volumetry_pytest_files
   # (the reported "Show 3D shows nothing" was the prior hide-all).  Qt widget
   # + wrapped node -> SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_show3d_visibility.py
+  # ADR-0038 §"Consumers ledger" -- the 3D volumetry pipeline RENDERS a glyph
+  # per carrier seed (the base only hit-tests; the client draws the spheres),
+  # coloured per seed, rebuilt on the carrier Modified.  LayerDM base + wrapped
+  # carrier -> SKIPS bare, RUNS launched (ADR-0027).
+  test_volumetry_seed_glyph_3d.py
   # ADR-0038 §Decision -- a seed placed in a slice reprojects into the clicked
   # plane at once (the client observes the carrier so the base's reproject
   # fires without a reslice).  LayerDM base + wrapped carrier + slice node ->
