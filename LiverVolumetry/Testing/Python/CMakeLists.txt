@@ -76,11 +76,12 @@ set(_volumetry_pytest_files
   # SetNthSeedColor, delete -> RemoveNthSeed, observer rebuild + teardown.  Qt
   # + wrapped carrier -> SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_seeds_table.py
-  # Data-first redesign §3.4 -- the gating truth table: Compute + Place gate
-  # on a segmentation only; the partition contributes iff a resection is
-  # checked AND a seed is placed (closing the B4 silent no-op); whole-group
-  # Clear-all.  Qt widget + wrapped carrier -> SKIPS bare, RUNS launched
-  # (ADR-0027).
+  # Data-first redesign §3.4 -- the gating truth table (seeds-first-class):
+  # Compute gates on a segmentation AND (a ticked segment OR a seed); Place
+  # gates on a segmentation only; a seed alone (no resection) is a valid B2
+  # path enabling Compute + Generate; Refine-by-resection is optional and
+  # never blocks Compute; whole-group Clear-all.  Qt widget + wrapped carrier
+  # -> SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_action_enablement.py
   # Data-first redesign §3.5 -- results-table presentation: columns
   # Region | Volume (mL) | % of total (no ROI Voxels; divide-by-zero guard);
