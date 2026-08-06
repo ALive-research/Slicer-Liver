@@ -66,6 +66,7 @@ void vtkMRMLVolumetrySeedsNode::CopyContent(vtkMRMLNode* anode, bool deepCopy /*
   this->Seeds = other->Seeds;
   this->SeedLabels = other->SeedLabels;
   this->SeedColors = other->SeedColors;
+  this->SeedBindings = other->SeedBindings;
   this->Modified();
 }
 
@@ -82,6 +83,8 @@ int vtkMRMLVolumetrySeedsNode::AddSeed(double x, double y, double z)
   this->SeedLabels.emplace_back();
   // Module default swatch: opaque white until the caller picks a colour.
   this->SeedColors.push_back({ 1.0, 1.0, 1.0 });
+  // Unbound until the placement path resolves a touched candidate.
+  this->SeedBindings.emplace_back();
   const int index = static_cast<int>(this->Seeds.size()) - 1;
   this->Modified();
   return index;
@@ -133,6 +136,7 @@ bool vtkMRMLVolumetrySeedsNode::RemoveNthSeed(int i)
   this->Seeds.erase(this->Seeds.begin() + idx);
   this->SeedLabels.erase(this->SeedLabels.begin() + idx);
   this->SeedColors.erase(this->SeedColors.begin() + idx);
+  this->SeedBindings.erase(this->SeedBindings.begin() + idx);
   this->Modified();
   return true;
 }
@@ -183,6 +187,37 @@ const double* vtkMRMLVolumetrySeedsNode::GetNthSeedColor(int i)
     this->SeedColorScratch[2] = c[2];
   }
   return this->SeedColorScratch;
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLVolumetrySeedsNode::SetNthSeedBinding(int i, const std::string& segmentationNodeID, const std::string& segmentID)
+{
+  if (!this->IsValidIndex(i))
+  {
+    return;
+  }
+  this->SeedBindings[static_cast<std::size_t>(i)] = { segmentationNodeID, segmentID };
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+std::string vtkMRMLVolumetrySeedsNode::GetNthSeedBindingSegmentationNodeID(int i)
+{
+  if (!this->IsValidIndex(i))
+  {
+    return std::string();
+  }
+  return this->SeedBindings[static_cast<std::size_t>(i)].first;
+}
+
+//------------------------------------------------------------------------------
+std::string vtkMRMLVolumetrySeedsNode::GetNthSeedBindingSegmentID(int i)
+{
+  if (!this->IsValidIndex(i))
+  {
+    return std::string();
+  }
+  return this->SeedBindings[static_cast<std::size_t>(i)].second;
 }
 
 //------------------------------------------------------------------------------

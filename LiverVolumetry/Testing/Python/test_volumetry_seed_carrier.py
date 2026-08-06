@@ -68,6 +68,9 @@ SET_LABEL_METHOD = "SetNthSeedLabel"
 GET_LABEL_METHOD = "GetNthSeedLabel"
 SET_COLOR_METHOD = "SetNthSeedColor"
 GET_COLOR_METHOD = "GetNthSeedColor"
+SET_BINDING_METHOD = "SetNthSeedBinding"           # SetNthSeedBinding(i, segNodeID, segID)
+GET_BINDING_SEG_NODE_METHOD = "GetNthSeedBindingSegmentationNodeID"
+GET_BINDING_SEG_METHOD = "GetNthSeedBindingSegmentID"
 
 
 def _slicer_or_skip():
@@ -207,6 +210,59 @@ def test_per_seed_colour_round_trips():
 
 
 # --------------------------------------------------------------------------- #
+# Per-seed structure binding (the seed→label capture)
+# --------------------------------------------------------------------------- #
+
+
+def test_per_seed_binding_is_independent_of_coordinate():
+    """Each seed carries a ``(segmentationNodeID, segmentID)`` binding.
+
+    ``territory-usability`` §"Seed→label capture": the seed records which
+    structure it was dropped into.  Setting the binding must not move the
+    point (the binding rides its own parallel slot).
+    """
+    slicer = _slicer_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    for method in (SET_BINDING_METHOD, GET_BINDING_SEG_NODE_METHOD, GET_BINDING_SEG_METHOD):
+        if not hasattr(carrier, method):
+            pytest.skip(f"{SEEDS_NODE_CLASS} has no {method} (ADR-0027).")
+
+    carrier.AddSeed(1.0, 2.0, 3.0)
+    carrier.AddSeed(4.0, 5.0, 6.0)
+    carrier.SetNthSeedBinding(0, "vtkMRMLSegmentationNode1", "Segment_3")
+    carrier.SetNthSeedBinding(1, "vtkMRMLSegmentationNode1", "Tumor")
+
+    assert carrier.GetNthSeedBindingSegmentationNodeID(0) == "vtkMRMLSegmentationNode1"
+    assert carrier.GetNthSeedBindingSegmentID(0) == "Segment_3"
+    assert carrier.GetNthSeedBindingSegmentID(1) == "Tumor"
+    # Setting the binding must not disturb the coordinate.
+    assert tuple(carrier.GetNthSeed(0)) == pytest.approx((1.0, 2.0, 3.0), abs=1e-9)
+
+
+def test_seed_binding_defaults_empty_and_deletes_in_lockstep():
+    """A freshly-added seed is unbound; a delete shifts bindings with the tail."""
+    slicer = _slicer_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    for method in (SET_BINDING_METHOD, GET_BINDING_SEG_METHOD, DELETE_METHOD):
+        if not hasattr(carrier, method):
+            pytest.skip(f"{SEEDS_NODE_CLASS} has no {method} (ADR-0027).")
+
+    carrier.AddSeed(0.0, 0.0, 0.0)
+    assert carrier.GetNthSeedBindingSegmentID(0) == "", "a new seed starts unbound."
+
+    carrier.AddSeed(1.0, 1.0, 1.0)
+    carrier.AddSeed(2.0, 2.0, 2.0)
+    carrier.SetNthSeedBinding(0, "segNode", "A")
+    carrier.SetNthSeedBinding(1, "segNode", "B")
+    carrier.SetNthSeedBinding(2, "segNode", "C")
+
+    carrier.RemoveNthSeed(1)
+    # The tail's binding shifts up in lockstep with its coordinate.
+    assert carrier.GetNthSeedBindingSegmentID(0) == "A"
+    assert carrier.GetNthSeedBindingSegmentID(1) == "C"
+
+
+# --------------------------------------------------------------------------- #
 # Storage round-trip
 # --------------------------------------------------------------------------- #
 
@@ -232,9 +288,13 @@ def test_storage_round_trips_points_labels_and_colours(tmp_path):
 
     pts = [(0.0, 0.0, 1.0), (1.0, 0.0, 0.0)]
     labels = ["SegmentV", "SegmentVI"]
-    for (x, y, z), label in zip(pts, labels):
+    bindings = [("segNode", "Segment_3"), ("segNode", "Tumor")]
+    hasBinding = hasattr(carrier, SET_BINDING_METHOD)
+    for (x, y, z), label, binding in zip(pts, labels, bindings):
         idx = carrier.AddSeed(x, y, z)
         carrier.SetNthSeedLabel(idx, label)
+        if hasBinding:
+            carrier.SetNthSeedBinding(idx, binding[0], binding[1])
 
     path = str(tmp_path / "seeds.vsd.json")
     storage.SetFileName(path)
@@ -244,12 +304,17 @@ def test_storage_round_trips_points_labels_and_colours(tmp_path):
     storage.ReadData(reloaded)
 
     assert reloaded.GetNumberOfSeeds() == len(pts)
-    for i, (expected, label) in enumerate(zip(pts, labels)):
+    for i, (expected, label, binding) in enumerate(zip(pts, labels, bindings)):
         assert tuple(reloaded.GetNthSeed(i)) == pytest.approx(expected, abs=1e-9)
         assert reloaded.GetNthSeedLabel(i) == label, (
             "the per-seed label must round-trip through storage (segment-name "
             "fidelity, ADR-0038 §Conformance)."
         )
+        if hasBinding:
+            assert reloaded.GetNthSeedBindingSegmentID(i) == binding[1], (
+                "the per-seed structure binding must round-trip through storage "
+                "(``territory-usability`` §'Seed→label capture')."
+            )
 
 
 if __name__ == "__main__":
