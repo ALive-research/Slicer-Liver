@@ -185,6 +185,7 @@ int vtkMRMLVolumetrySeedsStorageNode::WriteJson(const std::string& filePath, vtk
     double color[3] = { colorSrc[0], colorSrc[1], colorSrc[2] };
     const std::string bindingSegmentationNodeID = carrier->GetNthSeedBindingSegmentationNodeID(i);
     const std::string bindingSegmentID = carrier->GetNthSeedBindingSegmentID(i);
+    const std::string volume = carrier->GetNthSeedVolume(i);
 
     writer->WriteObjectStart();
     writer->WriteVectorProperty("xyz", xyz, 3);
@@ -198,6 +199,29 @@ int vtkMRMLVolumetrySeedsStorageNode::WriteJson(const std::string& filePath, vtk
       writer->WriteStringProperty("bindingSegmentationNodeID", bindingSegmentationNodeID);
       writer->WriteStringProperty("bindingSegmentID", bindingSegmentID);
     }
+    // The VOLUME group the seed belongs to (``territory-usability``
+    // grouped-volumes); empty == ungrouped and only written when present.
+    if (!volume.empty())
+    {
+      writer->WriteStringProperty("volume", volume);
+    }
+    writer->WriteObjectEnd();
+  }
+  writer->WriteArrayPropertyEnd();
+
+  // volumes -- the per-volume DISPLAY slots (colour + label) keyed on the
+  // volume id, mirroring the territory carrier's per-territory display slots.
+  // Enumerated deterministically so the document is stable; an empty (zero-seed)
+  // volume rides here alone so its table row survives a round-trip.
+  writer->WriteArrayPropertyStart("volumes");
+  for (const std::string& volumeId : carrier->GetVolumeIds())
+  {
+    const double* colorSrc = carrier->GetVolumeColor(volumeId);
+    double color[3] = { colorSrc[0], colorSrc[1], colorSrc[2] };
+    writer->WriteObjectStart();
+    writer->WriteStringProperty("id", volumeId);
+    writer->WriteStringProperty("label", carrier->GetVolumeLabel(volumeId));
+    writer->WriteVectorProperty("color", color, 3);
     writer->WriteObjectEnd();
   }
   writer->WriteArrayPropertyEnd();
@@ -239,11 +263,48 @@ int vtkMRMLVolumetrySeedsStorageNode::ReadJson(const std::string& filePath, vtkM
 
   // The read REPLACES the carrier's seed state under a single ModifyBlocker:
   // drop every existing seed so a re-read into a reused sink does not
-  // accumulate, then repopulate in document order.
+  // accumulate, then repopulate in document order.  RemoveVolume also clears
+  // the per-volume display slots so a reused sink does not retain stale ones.
   MRMLNodeModifyBlocker blocker(carrier);
   for (int i = carrier->GetNumberOfSeeds() - 1; i >= 0; --i)
   {
     carrier->RemoveNthSeed(i);
+  }
+  for (const std::string& volumeId : carrier->GetVolumeIds())
+  {
+    carrier->RemoveVolume(volumeId);
+  }
+
+  if (root->HasMember("volumes"))
+  {
+    vtkSmartPointer<vtkMRMLJsonElement> volumes = vtkSmartPointer<vtkMRMLJsonElement>::Take(root->GetArrayProperty("volumes"));
+    if (volumes != nullptr)
+    {
+      const int nVolumes = volumes->GetArraySize();
+      for (int i = 0; i < nVolumes; ++i)
+      {
+        vtkSmartPointer<vtkMRMLJsonElement> item = vtkSmartPointer<vtkMRMLJsonElement>::Take(volumes->GetArrayItem(i));
+        if (item == nullptr || !item->HasMember("id"))
+        {
+          continue;
+        }
+        const std::string volumeId = item->GetStringProperty("id");
+        if (volumeId.empty())
+        {
+          continue;
+        }
+        carrier->AddVolume(volumeId);
+        if (item->HasMember("label"))
+        {
+          carrier->SetVolumeLabel(volumeId, item->GetStringProperty("label"));
+        }
+        double color[3] = { 1.0, 1.0, 1.0 };
+        if (item->GetVectorProperty("color", color, 3))
+        {
+          carrier->SetVolumeColor(volumeId, color[0], color[1], color[2]);
+        }
+      }
+    }
   }
 
   if (!root->HasMember("seeds"))
@@ -285,6 +346,10 @@ int vtkMRMLVolumetrySeedsStorageNode::ReadJson(const std::string& filePath, vtkM
       const std::string bindingSegmentationNodeID = item->HasMember("bindingSegmentationNodeID") ? item->GetStringProperty("bindingSegmentationNodeID") : std::string();
       const std::string bindingSegmentID = item->HasMember("bindingSegmentID") ? item->GetStringProperty("bindingSegmentID") : std::string();
       carrier->SetNthSeedBinding(index, bindingSegmentationNodeID, bindingSegmentID);
+    }
+    if (item->HasMember("volume"))
+    {
+      carrier->SetNthSeedVolume(index, item->GetStringProperty("volume"));
     }
   }
   return 1;
