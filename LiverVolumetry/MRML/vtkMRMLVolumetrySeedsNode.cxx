@@ -17,6 +17,7 @@
 
 // VTK includes
 #include <vtkObjectFactory.h>
+#include <vtkStringArray.h>
 
 // STD includes
 #include <set>
@@ -70,6 +71,7 @@ void vtkMRMLVolumetrySeedsNode::CopyContent(vtkMRMLNode* anode, bool deepCopy /*
   this->SeedLabels = other->SeedLabels;
   this->SeedColors = other->SeedColors;
   this->SeedBindings = other->SeedBindings;
+  this->SeedContexts = other->SeedContexts;
   this->SeedVolumes = other->SeedVolumes;
   this->VolumeColors = other->VolumeColors;
   this->VolumeLabels = other->VolumeLabels;
@@ -91,6 +93,8 @@ int vtkMRMLVolumetrySeedsNode::AddSeed(double x, double y, double z)
   this->SeedColors.push_back({ 1.0, 1.0, 1.0 });
   // Unbound until the placement path resolves a touched candidate.
   this->SeedBindings.emplace_back();
+  // No visibility snapshot until the placement path captures one.
+  this->SeedContexts.emplace_back();
   // Ungrouped until the active-volume placement path assigns a volume.
   this->SeedVolumes.emplace_back();
   const int index = static_cast<int>(this->Seeds.size()) - 1;
@@ -139,12 +143,13 @@ bool vtkMRMLVolumetrySeedsNode::RemoveNthSeed(int i)
     return false;
   }
   const std::size_t idx = static_cast<std::size_t>(i);
-  // The three parallel vectors shift in lockstep so a seed's label + colour
-  // stay bound to its coordinate.
+  // The parallel vectors shift in lockstep so a seed's label + colour +
+  // binding + context stay bound to its coordinate.
   this->Seeds.erase(this->Seeds.begin() + idx);
   this->SeedLabels.erase(this->SeedLabels.begin() + idx);
   this->SeedColors.erase(this->SeedColors.begin() + idx);
   this->SeedBindings.erase(this->SeedBindings.begin() + idx);
+  this->SeedContexts.erase(this->SeedContexts.begin() + idx);
   this->SeedVolumes.erase(this->SeedVolumes.begin() + idx);
   this->Modified();
   return true;
@@ -227,6 +232,45 @@ std::string vtkMRMLVolumetrySeedsNode::GetNthSeedBindingSegmentID(int i)
     return std::string();
   }
   return this->SeedBindings[static_cast<std::size_t>(i)].second;
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLVolumetrySeedsNode::SetNthSeedVisibilityContext(int i, vtkStringArray* segmentIDs)
+{
+  if (!this->IsValidIndex(i))
+  {
+    return;
+  }
+  std::vector<std::string> context;
+  if (segmentIDs != nullptr)
+  {
+    const vtkIdType n = segmentIDs->GetNumberOfValues();
+    context.reserve(static_cast<std::size_t>(n));
+    for (vtkIdType v = 0; v < n; ++v)
+    {
+      context.push_back(segmentIDs->GetValue(v));
+    }
+  }
+  this->SeedContexts[static_cast<std::size_t>(i)] = std::move(context);
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLVolumetrySeedsNode::GetNthSeedVisibilityContext(int i, vtkStringArray* segmentIDs)
+{
+  if (segmentIDs == nullptr)
+  {
+    return;
+  }
+  segmentIDs->Reset();
+  if (!this->IsValidIndex(i))
+  {
+    return;
+  }
+  for (const std::string& segmentID : this->SeedContexts[static_cast<std::size_t>(i)])
+  {
+    segmentIDs->InsertNextValue(segmentID);
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -323,6 +367,7 @@ bool vtkMRMLVolumetrySeedsNode::RemoveVolume(const std::string& volumeId)
       this->SeedLabels.erase(this->SeedLabels.begin() + i);
       this->SeedColors.erase(this->SeedColors.begin() + i);
       this->SeedBindings.erase(this->SeedBindings.begin() + i);
+      this->SeedContexts.erase(this->SeedContexts.begin() + i);
       this->SeedVolumes.erase(this->SeedVolumes.begin() + i);
       removed = true;
     }
