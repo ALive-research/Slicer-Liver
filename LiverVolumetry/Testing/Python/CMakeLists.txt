@@ -103,6 +103,11 @@ set(_volumetry_pytest_files
   # fires without a reslice).  LayerDM base + wrapped carrier + slice node ->
   # SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_slice_reproject.py
+  # ``territory-usability`` §"Seed→label capture" -- the pure candidate-
+  # resolution rule: touched segments order top-first by layer index and the
+  # default binding is the top layer's segment.  Pure Python -> RUNS bare
+  # (ADR-0027).
+  test_volumetry_seed_target_resolution.py
 )
 
 foreach(_pytest_file IN LISTS _volumetry_pytest_files)

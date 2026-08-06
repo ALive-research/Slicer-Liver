@@ -26,6 +26,15 @@ from .TransientVolumetrySeeds import (
 from .VolumetrySeedProvider import VolumetrySeedProvider
 from .InVolumePick import InVolumePick
 
+# The seed->label capture resolution rule (``territory-usability``): the pure
+# ordering function is dependency-free and the scene-side gatherer imports
+# slicer/vtk lazily, so this imports unconditionally (the bare unit layer
+# reaches ``resolve_touched_candidates``).
+from .SeedTargetResolution import (
+    gather_touched_candidates,
+    resolve_touched_candidates,
+)
+
 # The LayerDM Pipeline creators depend on the shared base (LayerDMLib, reachable
 # only from a launched Slicer with the SlicerLayerDisplayableManager extension on
 # the path); guard them so the bare unit layer can still import the package for
@@ -63,6 +72,8 @@ __all__ = [
     "seeds_from_carrier",
     "VolumetrySeedProvider",
     "InVolumePick",
+    "gather_touched_candidates",
+    "resolve_touched_candidates",
     "VolumetrySeedPipeline3D",
     "VolumetrySeedPipelineSlice",
     "registerVolumetrySeedPipeline3DCreator",
