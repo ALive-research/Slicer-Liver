@@ -44,16 +44,23 @@ from __future__ import annotations
 
 from typing import Any
 
+try:  # pragma: no cover - exercised once per import path
+    from .SeedTargetResolution import resolve_touched_candidates
+except ImportError:  # top-level import path (the unit layer's sys.path setup)
+    from SeedTargetResolution import resolve_touched_candidates  # type: ignore[no-redef]
+
 
 def order_visible_top_first(visible: list[tuple[str, int]]) -> list[str]:
     """Order ``(segmentID, layerIndex)`` pairs top-first (the snapshot order).
 
     Highest layer index leads (drawn on top == carves everything below);
-    ties keep input order so the snapshot is deterministic.  The SAME
-    comparator ``resolve_touched_candidates`` applies to the touched set, so
-    the owner's position in the context is consistent with the owner pick.
+    ties keep input order so the snapshot is deterministic.  Delegates to
+    ``resolve_touched_candidates`` -- the LITERAL same comparator as the
+    owner pick, so the owner's position in the context is consistent with it
+    by construction.
     """
-    return [seg for seg, _layer in sorted(visible, key=lambda sl: -sl[1])]
+    ordered, _top = resolve_touched_candidates(visible)
+    return ordered
 
 
 def segments_above(context: list[str], ownerSegmentID: str) -> list[str]:
@@ -99,6 +106,40 @@ def apply_visibility_context(displayNode: Any, allSegmentIDs: list[str], context
     wanted = set(context)
     for segmentID in allSegmentIDs:
         displayNode.SetSegmentVisibility(segmentID, segmentID in wanted)
+
+
+def read_seed_context(carrier: Any, index: int) -> list[str]:
+    """The seed's ordered visibility snapshot off the carrier.
+
+    The one place the ``vtkStringArray`` accessor plumbing lives: returns the
+    plain ordered id list every consumer (table, pipelines, compute fold)
+    works with.  Empty for a missing carrier, a carrier predating the slot,
+    an out-of-range index, or a snapshotless seed.
+    """
+    if carrier is None or not hasattr(carrier, "GetNthSeedVisibilityContext"):
+        return []
+    import vtk
+
+    ids = vtk.vtkStringArray()
+    carrier.GetNthSeedVisibilityContext(int(index), ids)
+    return [ids.GetValue(i) for i in range(ids.GetNumberOfValues())]
+
+
+def write_seed_context(carrier: Any, index: int, context: list[str]) -> None:
+    """Store the seed's ordered visibility snapshot on the carrier.
+
+    A no-op for a missing carrier or a carrier predating the slot (an older
+    build): the caller's placement still succeeds, the seed just stays
+    snapshotless (legacy no-carve semantics).
+    """
+    if carrier is None or not hasattr(carrier, "SetNthSeedVisibilityContext"):
+        return
+    import vtk
+
+    ids = vtk.vtkStringArray()
+    for segmentID in context:
+        ids.InsertNextValue(segmentID)
+    carrier.SetNthSeedVisibilityContext(int(index), ids)
 
 
 def visible_context(segmentationNode: Any, displayNode: Any) -> list[str]:

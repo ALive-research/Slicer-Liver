@@ -1431,8 +1431,9 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
             continue
           aboveMasks = [
             mask
-            for segmentID in segments_above(list(context), ownerSegmentID)
-            for mask in [_segment_mask(segmentID)]
+            for mask in (
+              _segment_mask(segmentID)
+              for segmentID in segments_above(list(context), ownerSegmentID))
             if mask is not None
           ]
           union |= carve_effective_mask(ownerMask, aboveMasks)

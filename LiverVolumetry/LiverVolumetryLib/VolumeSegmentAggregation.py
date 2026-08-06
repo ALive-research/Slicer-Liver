@@ -34,6 +34,11 @@ from __future__ import annotations
 
 from typing import Any
 
+try:  # pragma: no cover - exercised once per import path
+    from .VisibilityCarve import read_seed_context
+except ImportError:  # top-level import path (the unit layer's sys.path setup)
+    from VisibilityCarve import read_seed_context  # type: ignore[no-redef]
+
 
 def distinct_bound_segments_per_volume(carrier: Any) -> dict[str, list[str]]:
     """Fold the carrier's seeds into ``{volumeId: [distinct bound segmentIDs]}``.
@@ -63,17 +68,6 @@ def distinct_bound_segments_per_volume(carrier: Any) -> dict[str, list[str]]:
     return per_volume
 
 
-def _seed_visibility_context(carrier: Any, i: int) -> tuple:
-    """The i-th seed's snapshot as a tuple (empty for a legacy carrier/seed)."""
-    if not hasattr(carrier, "GetNthSeedVisibilityContext"):
-        return ()
-    import vtk
-
-    ids = vtk.vtkStringArray()
-    carrier.GetNthSeedVisibilityContext(i, ids)
-    return tuple(ids.GetValue(v) for v in range(ids.GetNumberOfValues()))
-
-
 def effective_regions_per_volume(carrier: Any) -> dict[str, list[tuple[str, tuple]]]:
     """Fold the seeds into ``{volumeId: [(ownerSegmentID, contextTuple), ...]}``.
 
@@ -95,7 +89,7 @@ def effective_regions_per_volume(carrier: Any) -> dict[str, list[tuple[str, tupl
         segmentID = carrier.GetNthSeedBindingSegmentID(i)
         if not volumeId or not segmentID:
             continue
-        entry = (segmentID, _seed_visibility_context(carrier, i))
+        entry = (segmentID, tuple(read_seed_context(carrier, i)))
         entries = per_volume.setdefault(volumeId, [])
         if entry not in entries:
             entries.append(entry)
