@@ -69,19 +69,6 @@
    <item>
     <layout class="QGridLayout" name="seedsActionLayout">
      <item row="0" column="0">
-      <widget class="QPushButton" name="AddSeedsButton">
-       <property name="checkable">
-        <bool>true</bool>
-       </property>
-       <property name="toolTip">
-        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Arm placement of region-growing seeds: click inside a region in a slice view to drop an interior seed; click again to add more; toggle off when done.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-       </property>
-       <property name="text">
-        <string>Place seeds</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="1">
       <widget class="QPushButton" name="ClearAllSeedsButton">
        <property name="enabled">
         <bool>false</bool>
@@ -118,7 +105,7 @@
         <bool>true</bool>
        </property>
        <property name="text">
-        <string>Place a seed in each region you want measured.</string>
+        <string>Add a volume, then use its Place toggle to drop a seed in each region you want measured.</string>
        </property>
       </widget>
      </item>

@@ -14,8 +14,11 @@ The gates the panel enforces:
 * COMPUTE VOLUMES is enabled iff a segmentation is selected AND (>= 1 segment
   is ticked OR >= 1 seed is placed).  The requirements line otherwise reads
   "Select a segmentation, then tick segments or place seeds."
-* PLACE SEEDS is enabled iff a segmentation is selected (the in-volume pick
-  needs a target region's labelmap).
+* PLACE SEEDS has NO standalone button (territory-usability): placement is the
+  per-volume Place toggle on a volume row.  ``placeUnmet`` still reports what
+  placement needs -- a segmentation (the in-volume pick's target labelmap) and
+  a volume to place into ("Add a volume to place seeds") -- feeding the
+  requirements line + the tooltips, not a global button.
 * REFINE BY RESECTION is purely optional: when ON it wants >= 1 resection
   checked to have effect ("Check a resection to bound the seed regions"), but
   it NEVER blocks the plain seed path.  There is NO gate that requires a
@@ -28,10 +31,11 @@ predicate set changes.
 
 This file pins (mirroring the VascularTerritories requirements-surface idiom):
 
-* i1 (launched, widget) -- with no segmentation Compute + Place are disabled
-  and the requirements line names the segmentation; selecting a segmentation
-  and TICKING a segment ENABLES Compute; selecting a segmentation alone
-  (nothing ticked, no seed) does NOT enable Compute but DOES enable Place.
+* i1 (launched, widget) -- with no segmentation Compute is disabled and the
+  requirements line names the segmentation, and ``placeUnmet`` names the
+  segmentation too; selecting a segmentation and TICKING a segment ENABLES
+  Compute; selecting a segmentation alone (nothing ticked, no seed) does NOT
+  enable Compute, and ``placeUnmet`` then asks for a volume to place into.
 * i2 (launched, widget) -- the seeds-only (B2) path: a placed seed with NO
   resection enables Compute AND Generate.  Resections are not required.
 * i3 (launched, widget) -- Refine-by-resection is optional: turning it ON with
@@ -57,6 +61,7 @@ SEGMENTATION_CLASS = "vtkMRMLSegmentationNode"
 
 _NEEDS_INPUT = "Select a segmentation, then tick segments or place seeds."
 _NEEDS_SEGMENTATION = "Select a segmentation."
+_NEEDS_VOLUME = "Add a volume to place seeds."
 _NEEDS_RESECTION = "Check a resection to bound the seed regions."
 
 
@@ -135,10 +140,13 @@ def _tick_all_segments(widget, seg):
 def test_compute_gates_on_segmentation_plus_ticked_or_seed(qt_widgets):
     """§3.4: Compute needs a segmentation AND (a ticked segment OR a seed).
 
-    With no segmentation Compute + Place are disabled and every action lists
-    "Select a segmentation...".  Selecting a segmentation ENABLES Place but
-    NOT Compute (nothing ticked, no seed yet); ticking a segment then enables
-    Compute.  Launched (widget); SKIPS bare.
+    With no segmentation Compute is disabled and every action lists
+    "Select a segmentation...".  There is NO standalone Place button
+    (territory-usability): placement is a per-volume row control, so
+    ``placeUnmet`` (feeding the requirements line, not a global button) asks
+    for a segmentation first, then a volume.  Selecting a segmentation does NOT
+    enable Compute (nothing ticked, no seed yet); ticking a segment then
+    enables Compute.  Launched (widget); SKIPS bare.
     """
     slicer = _slicer_or_skip()
     widget = _make_widget_or_skip(slicer)
@@ -146,27 +154,34 @@ def test_compute_gates_on_segmentation_plus_ticked_or_seed(qt_widgets):
     _detach_scene_observers(slicer, widget)
     _require_requirements_seam_or_skip(widget)
 
+    # The standalone Place-seeds button is retired (territory-usability):
+    # placement arms per-volume from a table row, never a global toggle.
+    assert not hasattr(widget.ui, "AddSeedsButton"), (
+        "the standalone Place-seeds button must be removed (territory-usability)."
+    )
+
     widget.ui.InputSegmentSelectorWidget.setCurrentNode(None)
     widget._updateActionEnablement()
     assert widget.ui.ComputeVolumePushButton.enabled is False, (
         "Compute must be DISABLED with no segmentation (§3.4)."
-    )
-    assert widget.ui.AddSeedsButton.enabled is False, (
-        "Place seeds must be DISABLED with no segmentation (§3.4)."
     )
     placeUnmet, computeUnmet, _generateUnmet, _refineUnmet = widget._actionRequirements()
     assert computeUnmet == [_NEEDS_INPUT], (
         "with no segmentation Compute must list ONLY the combined input "
         "requirement (tick segments or place seeds)."
     )
-    assert placeUnmet == [_NEEDS_SEGMENTATION]
+    assert placeUnmet == [_NEEDS_SEGMENTATION], (
+        "with no segmentation placement asks for a segmentation first."
+    )
 
     seg = _single_segment_segmentation(slicer)
     widget.ui.InputSegmentSelectorWidget.setCurrentNode(seg)
     widget.ui.InputSegmentSelectorWidget.setSelectedSegmentIDs([])
     widget._updateActionEnablement()
-    assert widget.ui.AddSeedsButton.enabled is True, (
-        "Place seeds must ENABLE once a segmentation is selected."
+    placeUnmet2, _c, _g, _r = widget._actionRequirements()
+    assert placeUnmet2 == [_NEEDS_VOLUME], (
+        "with a segmentation but no volume, placement asks to add a volume "
+        "(no global Place button; territory-usability)."
     )
     assert widget.ui.ComputeVolumePushButton.enabled is False, (
         "Compute must stay DISABLED with a segmentation but nothing ticked "

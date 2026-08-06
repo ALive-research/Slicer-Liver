@@ -66,6 +66,12 @@ RESULTS_TABLE_NAME = "Volumetry"
 # surgeon term, never the transient fiducial node's name.
 PARTITION_TOTAL_LABEL = "All pieces"
 
+# The placement requirements messages (territory-usability): placement is a
+# per-volume row control, so the requirements line -- not a standalone Place
+# button -- guides the surgeon to select a segmentation and add a volume first.
+_NEEDS_SEGMENTATION_MESSAGE = "Select a segmentation."
+_NEEDS_VOLUME_MESSAGE = "Add a volume to place seeds."
+
 
 #
 # LiverVolumetry
@@ -248,9 +254,10 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # message appears/clears, but it NEVER blocks the plain seed path.
     self.ui.RefineByResectionCheckBox.connect('toggled(bool)', self.onRefineByResectionToggled)
     # ADR-0038-amendment: the ROIMarkersList fiducial selector + place widget
-    # are RETIRED; placement is the arm toggle below, driving the seed carrier
-    # through the shared base pipeline.
-    self.ui.AddSeedsButton.connect('toggled(bool)', self.onAddSeedsToggled)
+    # are RETIRED.  There is NO standalone Place-seeds toggle either
+    # (territory-usability): placement arms from a VOLUME row's per-volume Place
+    # toggle in the seeds table (mirroring VascularTerritories), driving the seed
+    # carrier through the shared base pipeline into the ACTIVE volume.
     # D3 (critique §2): whole-group "Clear all seeds", the flat-list analogue of
     # the VascularTerritories per-territory Remove.  Clears the carrier through
     # its existing removal so the table + pipeline refresh via the carrier
@@ -404,6 +411,25 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     from LiverVolumetryLib import distinct_bound_segments_per_volume
     return bool(distinct_bound_segments_per_volume(carrier))
 
+  def _hasVolume(self):
+    """True iff at least one named volume exists on the carrier (or its table).
+
+    Placement arms into a volume (territory-usability), so "no volume" means
+    there is nowhere to place: the requirements line asks the surgeon to add
+    one.  Reads the table's live volume order (which includes an empty minted
+    volume before any seed lands) with a fall-back to the carrier's enumerated
+    volume ids, so a volume added outside the table still counts.
+    """
+    table = self._seedsTable
+    if table is not None and hasattr(table, "volumeIds") and table.volumeIds():
+      return True
+    carrier = self._seedsCarrier
+    if carrier is None or not slicer.mrmlScene.IsNodePresent(carrier):
+      return False
+    if not hasattr(carrier, "GetVolumeIds"):
+      return False
+    return bool(list(carrier.GetVolumeIds()))
+
   def _hasCheckedResection(self):
     """True iff at least one resection is checked in the resection combo."""
     return not self.ui.ResectionTargetNodeComboBox.noneChecked()
@@ -444,14 +470,20 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     hasResection = self._hasCheckedResection()
     hasSeeds = self._seedCount() > 0
     hasTicked = self._hasTickedSegment()
+    hasVolume = self._hasVolume()
 
-    # Place seeds: the arm toggle needs a target region to drop interior seeds
-    # into.  Gating placement on a segmentation fixes the silent-decline -- with
-    # no segmentation the in-volume pick has no labelmap to resolve against, so
-    # arming would accept clicks that never land a seed (data-first §3.4).
+    # Place seeds: placement is a per-volume row control (no standalone Place
+    # toggle, territory-usability), so the requirements are (1) a segmentation
+    # -- the in-volume pick needs a target region's labelmap, else arming would
+    # accept clicks that never land a seed (data-first §3.4) -- and (2) a volume
+    # to place into (the Place toggle lives on a volume row; with no volume
+    # there is nowhere to arm).  Feeds the requirements line + the volume
+    # table's own affordance, not a global button.
     placeUnmet = []
     if not hasSegmentation:
-      placeUnmet.append("Select a segmentation.")
+      placeUnmet.append(_NEEDS_SEGMENTATION_MESSAGE)
+    elif not hasVolume:
+      placeUnmet.append(_NEEDS_VOLUME_MESSAGE)
 
     # Compute volumes: a segmentation is selected AND the user has said WHAT to
     # measure -- either ticked >=1 segment (B1) OR placed >=1 seed (B2).  The
@@ -489,7 +521,9 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     placeUnmet, computeUnmet, generateUnmet, refineUnmet = self._actionRequirements()
 
-    self.ui.AddSeedsButton.setEnabled(not placeUnmet)
+    # No standalone Place button (territory-usability): placement is a
+    # per-volume row control, so ``placeUnmet`` feeds only the requirements line
+    # + tooltips, not a global button gate.
     self.ui.ComputeVolumePushButton.setEnabled(not computeUnmet)
     self.ui.GenerateSegmentsPushButton.setEnabled(not generateUnmet)
     # Generate segments is shown only once seeds exist (§3.2): materialising a
@@ -500,23 +534,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.GenerateSegmentsPushButton.setVisible(hasSeeds)
     self.ui.ClearAllSeedsButton.setEnabled(hasSeeds)
 
-    self._updateArmedCue()
     self._updateRequirementsMessage(placeUnmet, computeUnmet, generateUnmet, refineUnmet)
-
-  def _updateArmedCue(self):
-    """Reflect the Place-seeds toggle's ARMED state in its label + tooltip (D2).
-
-    The single toggle is the correct model for a flat seed list (critique D2 /
-    OQ2), so it matches the VascularTerritories Place button in WORDING and
-    ARMED-STATE CUE, not in structure: when checked the button reads "Placing
-    seeds..." so the surgeon can tell placement is live (the checked state is
-    the primary cue; the text is the colour-never-alone companion, ADR-0010).
-    """
-    button = self.ui.AddSeedsButton
-    if button.checked:
-      button.setText("Placing seeds...")
-    else:
-      button.setText("Place seeds")
 
   def _updateRequirementsMessage(self, placeUnmet, computeUnmet, generateUnmet, refineUnmet):
     """Surface the unmet preconditions on the status line + the button tooltips.
@@ -529,18 +547,14 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     # Each unmet entry is already a full, punctuated instruction (data-first
     # §3.4), so the tips + status line present them verbatim -- no extra prefix
-    # or trailing period.
-    placeTip = (
-      "Place seeds is ready: click inside a region to drop an interior "
-      "region-growing seed." if not placeUnmet
-      else "Place seeds needs:\n- " + "\n- ".join(placeUnmet))
+    # or trailing period.  There is no standalone Place button, so ``placeUnmet``
+    # surfaces only on the status line (below), not a button tooltip.
     computeTip = (
       "Compute volumes is ready." if not computeUnmet
       else "Compute volumes needs:\n- " + "\n- ".join(computeUnmet))
     generateTip = (
       "Generate segments is ready." if not generateUnmet
       else "Generate segments needs:\n- " + "\n- ".join(generateUnmet))
-    self.ui.AddSeedsButton.setToolTip(placeTip)
     self.ui.ComputeVolumePushButton.setToolTip(computeTip)
     self.ui.GenerateSegmentsPushButton.setToolTip(generateTip)
 
@@ -550,13 +564,21 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if not computeUnmet and not refineUnmet:
       label.setText("All requirements met -- compute volumes.")
       return
-    # The Compute input requirement leads; the optional refine requirement is
-    # only shown when Refine-by-resection is on but no resection is checked
-    # (it never blocks Compute -- it only tells the surgeon the refinement has
-    # no effect yet).
+    # The Compute input requirement leads; the placement requirement (no
+    # standalone Place button -- placement is a per-volume row control) guides
+    # the surgeon to add a volume when a segmentation is selected but no volume
+    # exists yet; the optional refine requirement is only shown when
+    # Refine-by-resection is on but no resection is checked (it never blocks
+    # Compute -- it only tells the surgeon the refinement has no effect yet).
     lines = []
     if computeUnmet:
       lines.extend(computeUnmet)
+    # Surface the "Add a volume to place seeds" guidance only once the
+    # segmentation precondition is met (otherwise "Select a segmentation" from
+    # Compute already leads, and placement's own "Select a segmentation" would
+    # duplicate it).
+    if placeUnmet and placeUnmet != [_NEEDS_SEGMENTATION_MESSAGE]:
+      lines.extend(placeUnmet)
     if refineUnmet:
       lines.extend(refineUnmet)
     label.setText("\n".join(lines))
@@ -744,32 +766,27 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._pickLabelmapKey = inputsKey + (segmentation.GetMTime(),)
     return labelmap
 
-  def onAddSeedsToggled(self, armed):
-    """Arm / disarm interior seed placement through the shared base pipeline.
+  def _prepareSeedPlacement(self):
+    """Ensure the shared display node exists + is aimed for per-volume placement.
 
-    Arming publishes the armed flag onto the shared display node so the
-    LayerDM-driven placement Pipelines add an interior seed on the next click;
-    disarming clears it.  The state rides the display node, not a Python
-    pipeline instance (feedback_layerdm_state_on_display_node).
+    Placement is armed from a VOLUME row's Place toggle (territory-usability),
+    which publishes the active volume + armed flag onto the shared display node
+    via the base ``PointPlacementState``.  So the display node must exist and
+    carry an aimed pick surface / structure source BEFORE a volume row can arm.
+    Called when a segmentation is selected (the placement precondition) and
+    opens the module-active add-on-click gate so an armed click lands only while
+    LiverVolumetry is active.
     """
     node = self._ensureSeedsDisplayNode()
     if node is None:
       return
-    if armed:
-      # (Re)aim the pick surface only when ARMING: disarming never needs a
-      # fresh export, and ``_ensureSeedsDisplayNode`` already aimed once at
-      # node creation.  With unchanged inputs this is a cache hit
-      # (``_ensurePickLabelmap``), so arming stays instant.
-      self._aimPickSurface(node)
-      # Re-point the seed→label capture at the current input segmentation so a
-      # re-arm after switching inputs binds new seeds to the right structures.
-      self._aimStructureSource(node)
+    # Re-aim at the current input (a cache hit when unchanged, so this stays
+    # instant); ``_ensureSeedsDisplayNode`` aimed once at creation, but a
+    # re-selection changes the target region.
+    self._aimPickSurface(node)
+    self._aimStructureSource(node)
     from SlicerLiverInteractionLib.PointPlacementState import PointPlacementState
-    state = PointPlacementState(VOLUMETRY_NAMESPACE)
-    state.set_module_active(node, True)
-    state.set_armed(node, bool(armed))
-    # Reflect the armed state in the toggle's label (D2 armed-state cue).
-    self._updateArmedCue()
+    PointPlacementState(VOLUMETRY_NAMESPACE).set_module_active(node, True)
 
   def onGenerateSegmentsParameterChanged(self):
     # Re-gate all actions on their live preconditions + refresh the requirements
@@ -941,12 +958,25 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._applyInputSegmentVisibility(segmentationNode)
     # Keep the seeds-table retarget menu pointed at the current input.
     self._bindSeedsTableStructureSource()
+    # Placement is per-volume now (no standalone Place toggle): a segmentation
+    # is the placement precondition, so ensure the shared display node exists +
+    # its pick surface / structure source are aimed at the current input the
+    # moment a segmentation is selected.  This also hands the display node to
+    # the seeds table so a volume row's Place toggle can arm.
+    self._prepareSeedPlacement()
 
   def onSegmentChanged(self):
     segmentationNode = self._inputSegmentationNode()
     if segmentationNode is None:
       return
     self._applyInputSegmentVisibility(segmentationNode)
+    # Re-aim the pick surface + seed→label capture at the new segment selection
+    # so a per-volume Place arms against the current input (the standalone
+    # toggle used to re-aim on arm; there is no such toggle now).
+    node = getattr(self, "_seedsDisplayNode", None)
+    if node is not None and slicer.mrmlScene.IsNodePresent(node):
+      self._aimPickSurface(node)
+      self._aimStructureSource(node)
 
   def _applyInputSegmentVisibility(self, segmentationNode):
     """Show the selected input segment(s); fall back to ALL when none picked.
@@ -995,15 +1025,16 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Called each time the user opens a different module.
     """
     # Disarm placement + close the module-active gate on the way out so no view
-    # claims an add-on-click while LiverVolumetry is inactive (ADR-0038).
+    # claims an add-on-click while LiverVolumetry is inactive (ADR-0038).  The
+    # per-volume Place toggles read the armed flag off this display node, so
+    # clearing it disarms them; the table repaints from the shared state (no
+    # standalone Place button to un-check anymore, territory-usability).
     node = getattr(self, "_seedsDisplayNode", None)
     if node is not None and slicer.mrmlScene.IsNodePresent(node):
       from SlicerLiverInteractionLib.PointPlacementState import PointPlacementState
       state = PointPlacementState(VOLUMETRY_NAMESPACE)
       state.set_armed(node, False)
       state.set_module_active(node, False)
-    if hasattr(self.ui, "AddSeedsButton"):
-      self.ui.AddSeedsButton.setChecked(False)
     # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
     self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
 
