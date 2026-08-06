@@ -56,6 +56,14 @@ class VolumetrySeedProvider:
         The enumeration order IS the carrier's placement order, so the base's
         enumerate-keyed grab hit-test + slice projection key each seed by its
         placement index -- the key the add / move / delete write-backs expect.
+
+        A seed grouped into a named VOLUME takes that volume's colour
+        (``GetVolumeColor``) so the 2D handles and 3D sphere glyphs read at the
+        SAME colour shown on the volume's table row -- differently-coloured
+        volumes read apart (territory-usability; mirrors
+        ``TerritoryPointProvider``'s per-group colour lookup).  An UNGROUPED
+        seed falls back to its own per-seed colour (``GetNthSeedColor``), so a
+        legacy / pre-volume seed still renders.
         """
         carrier = self._carrier
         if carrier is None:
@@ -63,9 +71,26 @@ class VolumetrySeedProvider:
         for i in range(carrier.GetNumberOfSeeds()):
             coord = carrier.GetNthSeed(i)
             world = (float(coord[0]), float(coord[1]), float(coord[2]))
+            rgb = self._seed_base_rgb(i)
+            yield world, rgb
+
+    def _seed_base_rgb(self, i: int) -> tuple[float, float, float]:
+        """The seed's base colour: its VOLUME colour when grouped, else per-seed.
+
+        The volume colour wins for a grouped seed (one source of truth per
+        volume, mirroring the territory per-group lookup); an ungrouped seed
+        keeps its own per-seed colour.  A carrier without the grouping API
+        (a pre-territory-usability carrier) degrades to the per-seed colour.
+        """
+        carrier = self._carrier
+        volumeId = ""
+        if hasattr(carrier, "GetNthSeedVolume"):
+            volumeId = carrier.GetNthSeedVolume(i)
+        if volumeId and hasattr(carrier, "GetVolumeColor"):
+            rgb = carrier.GetVolumeColor(volumeId)
+        else:
             rgb = carrier.GetNthSeedColor(i)
-            base_rgb = (float(rgb[0]), float(rgb[1]), float(rgb[2]))
-            yield world, base_rgb
+        return (float(rgb[0]), float(rgb[1]), float(rgb[2]))
 
     def has_edges(self) -> bool:
         """Volumetry seeds are unordered region-grow seeds -- no edges."""
