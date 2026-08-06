@@ -204,6 +204,15 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
     def __init__(self) -> None:
         super().__init__(namespace=VOLUMETRY_NAMESPACE)
 
+        # Carrier currently observed for the reproject-on-edit trigger.  The
+        # shared slice base observes only the SLICE node + the display node
+        # (reslice re-projection), NOT the carrier -- so a seed placed in the
+        # slice fires the carrier's Modified with nobody listening, and the
+        # handle does not project onto the clicked plane until a reslice.  This
+        # client observes the carrier itself (the TerritorySlicePipeline
+        # precedent) so a just-placed seed reprojects immediately.
+        self._observed_carrier: Any | None = None
+
         # Placement-preview cursor: a hollow ring that tracks the cursor over a
         # seedable interior voxel BEFORE the click, so the surgeon sees where a
         # seed would land (the slice analogue of the territory adhering marker;
@@ -231,6 +240,54 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
 
     def _after_display_node_set(self) -> None:
         _wire_provider_and_pick(self, self._display_node)
+        self._ensure_carrier_observed()
+
+    def OnRendererAdded(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
+        # The base re-attaches the slice-node observer after renderer churn but
+        # not the carrier (it does not know this client observes one), so
+        # re-observe here too or a post-churn placement stops reprojecting.
+        super().OnRendererAdded(renderer)
+        try:
+            self._ensure_carrier_observed()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
+
+    def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
+        # LayerDM fires this when the carrier reference is finally set on the
+        # display node (added to the scene before the widget binds it), so the
+        # reproject observer attaches here as well as in ``_after_display_node_set``.
+        try:
+            self._ensure_carrier_observed()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
+        super().UpdatePipeline()
+
+    def cleanup(self) -> None:
+        # The base detaches every observed node here (renderer churn); drop the
+        # carrier dedupe key too so ``_ensure_carrier_observed`` re-attaches on
+        # the next renderer add rather than believing it is still observed.
+        super().cleanup()
+        self._observed_carrier = None
+
+    def _ensure_carrier_observed(self) -> None:
+        """Observe the in-effect carrier so a placed seed reprojects at once.
+
+        The provider resolves the carrier from the display node, so the
+        reproject needs its own ModifiedEvent observer; (re)attaches when the
+        resolved carrier changes, idempotent otherwise.  The base's shared
+        ``_on_node_modified`` handles the ModifiedEvent -- it reprojects (via
+        ``UpdatePipeline`` -> ``_reconcile`` -> ``_reproject``), sets the
+        handles-actor visibility, and requests a render -- so a seed placed in
+        the clicked plane shows WITHOUT a reslice.
+        """
+        carrier = _carrier_from_display(self._display_node)
+        if carrier is self._observed_carrier:
+            return
+        if self._observed_carrier is not None:
+            self._detach_observer(self._observed_carrier)
+        self._observed_carrier = carrier
+        if carrier is not None:
+            self._attach_observer(carrier)
 
     def _add_actors(self, renderer: Any) -> None:
         super()._add_actors(renderer)
