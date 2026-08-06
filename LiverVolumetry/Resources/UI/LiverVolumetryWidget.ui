@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>440</width>
-    <height>420</height>
+    <height>460</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -38,7 +38,7 @@
         </sizepolicy>
        </property>
        <property name="toolTip">
-        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Choose the segmentation and the segment(s) to measure. With no segment selected, all segments are measured; the percentage column is measured against this same selection.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Choose the segmentation and tick the segment(s) to measure. With no segment ticked, all segments are measured; the percentage column is measured against this same selection.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
        </property>
        <property name="segmentationNodeSelectorVisible">
         <bool>true</bool>
@@ -57,107 +57,135 @@
     </layout>
    </item>
    <item>
-    <widget class="ctkCollapsibleGroupBox" name="PartitionGroupBox">
-     <property name="title">
-      <string>Partition by resection</string>
+    <widget class="QLabel" name="SeedsSectionLabel">
+     <property name="text">
+      <string>Seeds</string>
      </property>
-     <property name="collapsed">
-      <bool>true</bool>
+     <property name="styleSheet">
+      <string notr="true">font-weight: bold;</string>
      </property>
-     <layout class="QGridLayout" name="partitionLayout">
-      <item row="0" column="0">
-       <widget class="QLabel" name="ResectionLabel">
-        <property name="text">
-         <string>Resections:</string>
+    </widget>
+   </item>
+   <item>
+    <layout class="QGridLayout" name="seedsActionLayout">
+     <item row="0" column="0">
+      <widget class="QPushButton" name="AddSeedsButton">
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+       <property name="toolTip">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Arm placement of region-growing seeds: click inside a region in a slice view to drop an interior seed; click again to add more; toggle off when done.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+       <property name="text">
+        <string>Place seeds</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QPushButton" name="ClearAllSeedsButton">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="toolTip">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Remove every placed seed. Re-place seeds to start over.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+       <property name="text">
+        <string>Clear all</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="0" colspan="2">
+      <widget class="QWidget" name="SeedsGroupWidget" native="true">
+       <layout class="QGridLayout" name="seedsLayout">
+        <property name="leftMargin">
+         <number>0</number>
         </property>
-       </widget>
-      </item>
-      <item row="0" column="1">
-       <widget class="qMRMLCheckableNodeComboBox" name="ResectionTargetNodeComboBox">
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Check the resection(s) whose Bezier surfaces bound the pieces to measure.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        <property name="topMargin">
+         <number>0</number>
         </property>
-        <property name="nodeTypes">
-         <stringlist>
-          <string>vtkMRMLResectionPlanNode</string>
-         </stringlist>
+        <property name="rightMargin">
+         <number>0</number>
         </property>
-        <property name="addEnabled">
-         <bool>false</bool>
+        <property name="bottomMargin">
+         <number>0</number>
         </property>
-        <property name="removeEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="editEnabled">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="0">
-       <widget class="QPushButton" name="AddSeedsButton">
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Arm placement of region-growing seeds: click inside a piece in a slice view to drop an interior seed; click again to add more; toggle off when done.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-        </property>
-        <property name="text">
-         <string>Place seeds</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="1">
-       <widget class="QPushButton" name="ClearAllSeedsButton">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Remove every placed seed. Re-place seeds to start over.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-        </property>
-        <property name="text">
-         <string>Clear all</string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="0" colspan="2">
-       <widget class="QWidget" name="SeedsGroupWidget" native="true">
-        <layout class="QGridLayout" name="seedsLayout">
-         <property name="leftMargin">
-          <number>0</number>
-         </property>
-         <property name="topMargin">
-          <number>0</number>
-         </property>
-         <property name="rightMargin">
-          <number>0</number>
-         </property>
-         <property name="bottomMargin">
-          <number>0</number>
-         </property>
-        </layout>
-       </widget>
-      </item>
-      <item row="3" column="0" colspan="2">
-       <widget class="QLabel" name="PartitionHintLabel">
-        <property name="wordWrap">
-         <bool>true</bool>
-        </property>
-        <property name="text">
-         <string>Place one seed in each piece to measure — e.g. one inside the intended remnant.</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="0" colspan="2">
-       <widget class="QPushButton" name="GenerateSegmentsPushButton">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-        <property name="text">
-         <string>Generate segments</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
+       </layout>
+      </widget>
+     </item>
+     <item row="2" column="0" colspan="2">
+      <widget class="QLabel" name="SeedsHintLabel">
+       <property name="wordWrap">
+        <bool>true</bool>
+       </property>
+       <property name="text">
+        <string>Place a seed in each region you want measured.</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QGridLayout" name="refineLayout">
+     <item row="0" column="0" colspan="2">
+      <widget class="QCheckBox" name="RefineByResectionCheckBox">
+       <property name="toolTip">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Optional. When on, each seed measures the piece bounded by the checked resection(s) instead of the whole region it sits in.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+       <property name="text">
+        <string>Refine by resection</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="0">
+      <widget class="QLabel" name="ResectionLabel">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="text">
+        <string>Resections:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="qMRMLCheckableNodeComboBox" name="ResectionTargetNodeComboBox">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="toolTip">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Check the resection(s) whose Bezier surfaces bound the pieces to measure.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+       <property name="nodeTypes">
+        <stringlist>
+         <string>vtkMRMLResectionPlanNode</string>
+        </stringlist>
+       </property>
+       <property name="addEnabled">
+        <bool>false</bool>
+       </property>
+       <property name="removeEnabled">
+        <bool>false</bool>
+       </property>
+       <property name="editEnabled">
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QPushButton" name="GenerateSegmentsPushButton">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
+     <property name="visible">
+      <bool>false</bool>
+     </property>
+     <property name="toolTip">
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Materialise the seeded regions as a new Segmentation: one segment per seed, plus a Remnant for the unseeded rest.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+     </property>
+     <property name="text">
+      <string>Generate segments</string>
+     </property>
     </widget>
    </item>
    <item>
@@ -215,12 +243,6 @@
    <class>qMRMLSegmentationShow3DButton</class>
    <extends>ctkMenuButton</extends>
    <header>qMRMLSegmentationShow3DButton.h</header>
-  </customwidget>
-  <customwidget>
-   <class>ctkCollapsibleGroupBox</class>
-   <extends>QGroupBox</extends>
-   <header>ctkCollapsibleGroupBox.h</header>
-   <container>1</container>
   </customwidget>
   <customwidget>
    <class>ctkMenuButton</class>
