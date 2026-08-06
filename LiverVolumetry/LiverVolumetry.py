@@ -634,6 +634,11 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._aimStructureSource(node)
     node = slicer.mrmlScene.AddNode(node)
     self._seedsDisplayNode = node
+    # Give the per-volume seeds table the shared display node so its per-volume
+    # Place toggle publishes the active volume + armed flag onto it (the same
+    # channel the slice placement pipeline reads at placement time).
+    if self._seedsTable is not None and hasattr(self._seedsTable, "setDisplayNode"):
+      self._seedsTable.setDisplayNode(node)
     return node
 
   def _aimStructureSource(self, displayNode):
@@ -1008,8 +1013,11 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._pickLabelmap = None
     self._pickLabelmapKey = None
     # Unbind the table from the now-invalid carrier (drops its observer) so it
-    # empties and does not observe a scene-cleared node.
+    # empties and does not observe a scene-cleared node, and drop the stale
+    # display-node reference so a per-volume Place toggle cannot arm a gone node.
     self._bindSeedsTable(None)
+    if self._seedsTable is not None and hasattr(self._seedsTable, "setDisplayNode"):
+      self._seedsTable.setDisplayNode(None)
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
     self.initializeParameterNode()
 
