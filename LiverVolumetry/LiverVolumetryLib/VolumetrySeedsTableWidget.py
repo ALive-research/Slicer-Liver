@@ -31,14 +31,19 @@ Each VOLUME (top-level) row carries a horizontal strip, addressed by NAME:
 Each SEED (child) row carries the strip the flat table used: a COLOUR swatch, an
 editable LABEL (the generated segment name, ADR-0038 §Conformance), a TARGET
 combo (the seed→segment binding + retarget, ``territory-usability`` §"Seed→label
-capture"), and a DELETE button.  A small ``qt.QTimer`` fades the bound segment's
-2D fill on placement / row-selection as a confirmation ON TOP of the named
-target (ADR-0010, never colour/animation alone).
+capture"), and a DELETE button.  Selecting a seed row RESTORES its visibility
+snapshot (``VisibilityCarve``) and highlights its EFFECTIVE (carved) region in
+the 2D slices with slowly MARCHING diagonal stripes: this widget owns the phase
+``qt.QTimer`` and publishes ``highlightSeed`` / ``stripePhase`` onto the shared
+display node (``CarvedRegionStripes``); the LayerDM slice pipelines render.
+The highlight is persistent while selected (no opacity flashing) and is paired
+with the row's text naming the owner + context (ADR-0010, never
+colour/animation alone).
 
 CARRIER IS THE MODEL.  The table reads/writes the carrier and OBSERVES its
 ``vtkCommand::ModifiedEvent`` to rebuild.  ``cleanup()`` detaches the observer +
-stops the fade so a parentless widget does not survive to app shutdown holding a
-MRML observer (``feedback_launched_widget_teardown_crash``).
+stops the stripe timer so a parentless widget does not survive to app shutdown
+holding a MRML observer (``feedback_launched_widget_teardown_crash``).
 
 The arm state / active volume ride the shared ``vtkMRMLVolumetrySeedsDisplayNode``
 (not a Python pipeline instance LayerDM does not drive,
@@ -69,12 +74,24 @@ try:  # pragma: no cover - exercised once per import path
         resolve_touched_candidates,
     )
     from .VisibilityCarve import apply_visibility_context
+    from .CarvedRegionStripes import (
+        STRIPE_PERIOD_PX,
+        STRIPE_TICK_MS,
+        set_highlight_seed,
+        set_stripe_phase,
+    )
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from SeedTargetResolution import (  # type: ignore[no-redef]
         gather_touched_candidates,
         resolve_touched_candidates,
     )
     from VisibilityCarve import apply_visibility_context  # type: ignore[no-redef]
+    from CarvedRegionStripes import (  # type: ignore[no-redef]
+        STRIPE_PERIOD_PX,
+        STRIPE_TICK_MS,
+        set_highlight_seed,
+        set_stripe_phase,
+    )
 
 # The arm / active-volume state rides the shared display node via the base's
 # PointPlacementState (the LiverVolumetry.* channel the slice pipeline reads at
@@ -109,12 +126,6 @@ _VOLUME_PALETTE = (
     (0.90, 0.49, 0.13),  # orange
 )
 
-#: The fade pulse: how many in/out cycles, and the per-step timer interval (ms).
-_FADE_STEPS = 12
-_FADE_INTERVAL_MS = 60
-_FADE_MIN_OPACITY = 0.15
-_FADE_MAX_OPACITY = 1.0
-
 #: The single column the composite row widget lives on (mirrors the territory
 #: tree slice-4 amendment): a header-less tree, one composite QWidget per item.
 _COMPOSITE_COLUMN = 0
@@ -145,8 +156,6 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         # The structure-source segmentation the retarget menu recomputes touched
         # candidates against; bound by the module widget via setStructureSource.
         self._structureSource: Any = None
-        # The index of the last seed we fired a placement-fade for.
-        self._lastFadedSeed = -1
         # Deterministic volume order: minted / seed-bearing / display volumes in
         # first-seen order (so an EMPTY minted volume keeps its top-level row).
         self._volume_order: list[str] = []
@@ -158,14 +167,16 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         # Auto-mint counter for "Add volume".
         self._mint_counter = 0
 
-        # The fade-pulse machinery (as in the flat table).
-        self._fadeTimer = qt.QTimer(self)
-        self._fadeTimer.setInterval(_FADE_INTERVAL_MS)
-        self._fadeTimer.connect("timeout()", self._onFadeStep)
-        self._fadeStep = 0
-        self._fadeDisplayNode: Any = None
-        self._fadeSegmentID: str = ""
-        self._fadeRestoreOpacity = 1.0
+        # The carved-region stripe highlight: THIS widget owns the phase timer
+        # and publishes highlightSeed / stripePhase onto the shared display
+        # node (CarvedRegionStripes); the LayerDM slice pipelines render the
+        # marching stripes.  Persistent while a seed row is selected -- no
+        # opacity flashing (the old fade pulse is retired).
+        self._stripeTimer = qt.QTimer(self)
+        self._stripeTimer.setInterval(STRIPE_TICK_MS)
+        self._stripeTimer.connect("timeout()", self._onStripeTick)
+        self._stripePhase = 0
+        self._highlightedSeed = -1
 
         layout = qt.QVBoxLayout(self)
 
@@ -195,8 +206,8 @@ class VolumetrySeedsTableWidget(qt.QWidget):
     # ------------------------------------------------------------------ #
 
     def cleanup(self) -> None:
-        """Drop the carrier observer + stop the fade timer (test teardown fixture)."""
-        self._stopFade(restore=True)
+        """Drop the carrier observer + stop the stripe highlight (teardown)."""
+        self._clearHighlight()
         self._detachCarrierObserver()
 
     def setStructureSource(self, segmentationNode: Any) -> None:
@@ -218,8 +229,12 @@ class VolumetrySeedsTableWidget(qt.QWidget):
 
         The per-volume Place toggle publishes the active volume + armed flag onto
         THIS node via the base ``PointPlacementState``; the LayerDM-created slice
-        pipeline reads them at placement time (``_assign_active_volume``).
+        pipeline reads them at placement time (``_assign_active_volume``).  The
+        stripe highlight rides the same node, so a rebind clears it off the old
+        one first.
         """
+        if displayNode is not self._displayNode:
+            self._clearHighlight()
         self._displayNode = displayNode
         self._rebuild()
 
@@ -243,12 +258,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         del caller, event
         if self._rebuilding:
             return
-        newest = self._seedCount() - 1
-        newlyBound = newest >= 0 and bool(self._seedBindingSegmentID(newest)) and newest != self._lastFadedSeed
         self._rebuild()
-        if newlyBound:
-            self._lastFadedSeed = newest
-            self._fadeSeedBinding(newest)
 
     # ------------------------------------------------------------------ #
     # Item-model reader seams
@@ -445,7 +455,13 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             self._carrier.RemoveNthSeed(int(seedIndex))
 
     def retargetSeed(self, seedIndex: int, segmentID: str) -> None:
-        """Rebind the seed at ``seedIndex`` to ``segmentID`` + re-fade + re-name."""
+        """Rebind the seed at ``seedIndex`` to ``segmentID`` + re-name.
+
+        The Target combo is the FALLBACK retarget of the OWNING segment: the
+        carve re-derives within the SAME visibility snapshot (the carrier's
+        ModifiedEvent invalidates the pipelines' carve cache), so a highlighted
+        seed's stripes follow the new owner without touching the context.
+        """
         if self._carrier is None or not segmentID:
             return
         source = self._structureSource
@@ -455,7 +471,6 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         segment = source.GetSegmentation().GetSegment(segmentID)
         if segment is not None:
             self.setSeedLabel(seedIndex, segment.GetName())
-        self._fadeSeedBinding(seedIndex)
 
     def _onVolumeLabelEdited(self, volumeId: str, edit: Any) -> None:
         if self._rebuilding:
@@ -485,23 +500,25 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             self.retargetSeed(seedIndex, str(segmentID))
 
     def _onRowSelectionChanged(self) -> None:
-        """Restore the selected seed's visibility snapshot + re-fade its binding.
+        """Restore the selected seed's snapshot + raise its carved highlight.
 
         Selecting a seed row flips the structure-source visibility to EXACTLY
         the seed's placement-time context (the visibility-composed carve rule:
         the snapshot IS the seed's reproducible definition), so the view shows
-        the composition that defines the seed.  Deselecting restores nothing --
-        the last selected context stays.
+        the composition that defines the seed, and starts the marching-stripes
+        highlight of its carved region.  Deselecting (or selecting a volume
+        row) clears the highlight but restores no visibility -- the last
+        selected context stays.
         """
         if self._rebuilding:
             return
         items = self._tree.selectedItems()
-        if not items:
+        seedIndex = items[0].data(0, qt.Qt.UserRole) if items else None
+        if seedIndex is None:
+            self._clearHighlight()
             return
-        seedIndex = items[0].data(0, qt.Qt.UserRole)
-        if seedIndex is not None:
-            self._restoreVisibilityContext(int(seedIndex))
-            self._fadeSeedBinding(int(seedIndex))
+        self._restoreVisibilityContext(int(seedIndex))
+        self._highlightSeed(int(seedIndex))
 
     # ------------------------------------------------------------------ #
     # Visibility snapshot (restore-on-select, ``VisibilityCarve``)
@@ -584,10 +601,9 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             if ungrouped:
                 self._appendUngroupedSeeds(ungrouped)
             self._tree.expandAll()
-            if self._lastFadedSeed >= self._seedCount():
-                self._lastFadedSeed = -1
         finally:
             self._rebuilding = False
+        self._syncHighlightToSelection()
 
     def _appendVolumeItem(self, volumeId: str, seedIndices: list[int]) -> None:
         item = qt.QTreeWidgetItem(self._tree)
@@ -674,7 +690,8 @@ class VolumetrySeedsTableWidget(qt.QWidget):
 
     def _appendSeedItem(self, parentItem: Any, seedIndex: int) -> None:
         child = qt.QTreeWidgetItem(parentItem)
-        # Carry the global seed index on the item so row-selection can re-fade.
+        # Carry the global seed index on the item so row-selection can restore
+        # the seed's snapshot + raise its carved highlight.
         child.setData(0, qt.Qt.UserRole, seedIndex)
         rowWidget = self._buildSeedRow(seedIndex)
         self._tree.setItemWidget(child, _COMPOSITE_COLUMN, rowWidget)
@@ -815,49 +832,58 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         return segment.GetName() if segment is not None else ""
 
     # ------------------------------------------------------------------ #
-    # Fade pulse (the caught-structure confirmation; no named Slicer fade API)
+    # Carved-region stripe highlight (CarvedRegionStripes; replaces the old
+    # opacity-fade pulse -- persistent while selected, never a blink)
     # ------------------------------------------------------------------ #
 
-    def _fadeSeedBinding(self, seedIndex: int) -> None:
-        self._stopFade(restore=True)
-        source = self._structureSource
-        segmentID = self._seedBindingSegmentID(seedIndex)
-        if source is None or not segmentID:
-            return
-        displayNode = source.GetDisplayNode()
-        if displayNode is None or not hasattr(displayNode, "GetSegmentOpacity2DFill"):
-            return
-        self._fadeDisplayNode = displayNode
-        self._fadeSegmentID = segmentID
-        self._fadeRestoreOpacity = displayNode.GetSegmentOpacity2DFill(segmentID)
-        self._fadeStep = 0
-        self._fadeTimer.start()
+    def _highlightSeed(self, seedIndex: int) -> None:
+        """Publish the highlight + start the marching-phase timer.
 
-    def _onFadeStep(self) -> None:
-        import math
-
-        if self._fadeStep >= _FADE_STEPS or self._fadeDisplayNode is None:
-            self._stopFade(restore=True)
+        The highlight state rides the shared display node
+        (``feedback_layerdm_state_on_display_node``): this widget writes
+        ``highlightSeed`` / ``stripePhase`` and the LayerDM slice pipelines
+        render the stripes.  Persistent while the row stays selected.
+        """
+        if self._displayNode is None:
             return
-        phase = (self._fadeStep / _FADE_STEPS) * 2.0 * math.pi * 2.0
-        blend = (1.0 - math.cos(phase)) * 0.5  # 0..1
-        opacity = _FADE_MIN_OPACITY + blend * (_FADE_MAX_OPACITY - _FADE_MIN_OPACITY)
-        try:
-            self._fadeDisplayNode.SetSegmentOpacity2DFill(self._fadeSegmentID, opacity)
-        except Exception:  # noqa: BLE001 - a segment removed mid-pulse just ends the fade
-            self._stopFade(restore=False)
-            return
-        self._fadeStep += 1
+        self._highlightedSeed = int(seedIndex)
+        self._stripePhase = 0
+        set_stripe_phase(self._displayNode, 0)
+        set_highlight_seed(self._displayNode, seedIndex)
+        if not self._stripeTimer.isActive():
+            self._stripeTimer.start()
 
-    def _stopFade(self, restore: bool) -> None:
-        if self._fadeTimer.isActive():
-            self._fadeTimer.stop()
-        if restore and self._fadeDisplayNode is not None and self._fadeSegmentID:
-            try:
-                self._fadeDisplayNode.SetSegmentOpacity2DFill(
-                    self._fadeSegmentID, self._fadeRestoreOpacity
-                )
-            except Exception:  # noqa: BLE001 - best-effort restore
-                pass
-        self._fadeDisplayNode = None
-        self._fadeSegmentID = ""
+    def _clearHighlight(self) -> None:
+        """Stop the march + clear the highlight off the display node."""
+        if self._stripeTimer.isActive():
+            self._stripeTimer.stop()
+        if self._highlightedSeed >= 0:
+            set_highlight_seed(self._displayNode, -1)
+        self._highlightedSeed = -1
+
+    def _onStripeTick(self) -> None:
+        """Advance the stripe phase one pixel (the calm, continuous march).
+
+        Each write fires the display node's ModifiedEvent -- the pipelines'
+        render tick; they reuse the cached carved mask and only shift the
+        stripe family.
+        """
+        if self._displayNode is None or self._highlightedSeed < 0:
+            self._clearHighlight()
+            return
+        self._stripePhase = (self._stripePhase + 1) % STRIPE_PERIOD_PX
+        set_stripe_phase(self._displayNode, self._stripePhase)
+
+    def _syncHighlightToSelection(self) -> None:
+        """Clear the highlight when its row is gone (rebuild drops selection).
+
+        A rebuild (a seed placed / deleted / cleared) clears the tree
+        selection, so a stale highlight would march for a row that is no
+        longer selected -- placement-of-another clears the highlight.
+        """
+        if self._highlightedSeed < 0:
+            return
+        items = self._tree.selectedItems()
+        selected = items[0].data(0, qt.Qt.UserRole) if items else None
+        if selected != self._highlightedSeed:
+            self._clearHighlight()

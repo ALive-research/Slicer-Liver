@@ -119,6 +119,11 @@ set(_volumetry_pytest_files
   # fires without a reslice).  LayerDM base + wrapped carrier + slice node ->
   # SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_slice_reproject.py
+  # territory-usability -- the carved-region marching-stripes highlight: the
+  # diagonal stripe family clipped to the 2D mask, the phase march, the
+  # once-per-(seed, slice) plane cut, and the highlightSeed/stripePhase
+  # display-node channel.  Pure Python/numpy -> RUNS bare (ADR-0027).
+  test_volumetry_carved_stripes.py
   # territory-usability -- selecting a seed row restores its visibility
   # snapshot on the structure source (show exactly the context, hide the rest;
   # empty snapshot is a no-op) and the row names owner + context in text

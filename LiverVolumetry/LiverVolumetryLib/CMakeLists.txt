@@ -23,6 +23,7 @@ set(LiverVolumetryLib_PYTHON_SCRIPTS
   TransientVolumetrySeeds.py
   VolumetrySeedProvider.py
   InVolumePick.py
+  CarvedRegionStripes.py
   SeedTargetResolution.py
   VisibilityCarve.py
   VolumeSegmentAggregation.py

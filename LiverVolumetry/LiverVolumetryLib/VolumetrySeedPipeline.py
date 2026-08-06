@@ -85,7 +85,14 @@ try:  # pragma: no cover - exercised once per import path
         gather_touched_candidates,
         resolve_touched_candidates,
     )
-    from .VisibilityCarve import visible_context
+    from .VisibilityCarve import carve_effective_mask, segments_above, visible_context
+    from .CarvedRegionStripes import (
+        STRIPE_PERIOD_PX,
+        get_highlight_seed,
+        get_stripe_phase,
+        resample_mask_to_plane,
+        stripe_segments,
+    )
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from VolumetrySeedProvider import VolumetrySeedProvider  # type: ignore[no-redef]
     from InVolumePick import InVolumePick  # type: ignore[no-redef]
@@ -93,7 +100,18 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
         gather_touched_candidates,
         resolve_touched_candidates,
     )
-    from VisibilityCarve import visible_context  # type: ignore[no-redef]
+    from VisibilityCarve import (  # type: ignore[no-redef]
+        carve_effective_mask,
+        segments_above,
+        visible_context,
+    )
+    from CarvedRegionStripes import (  # type: ignore[no-redef]
+        STRIPE_PERIOD_PX,
+        get_highlight_seed,
+        get_stripe_phase,
+        resample_mask_to_plane,
+        stripe_segments,
+    )
 
 #: The base namespace for the volumetry arm/carrier/pick state on the shared
 #: display node (matches the display node's ``LiverVolumetry.*`` attribute
@@ -425,6 +443,27 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         self._preview_actor.GetProperty().SetLineWidth(2.0)
         self._preview_actor.SetVisibility(False)
 
+        # Carved-region marching-stripes highlight (CarvedRegionStripes): while
+        # a seed's row is SELECTED the widget publishes highlightSeed +
+        # stripePhase onto the shared display node; this pipeline cuts the
+        # seed's EFFECTIVE (carved) region to the slice plane once and redraws
+        # only the stripe family each phase tick.  Diagonal LINES through a
+        # 2D mapper -- the reliable slice-overlay primitive (2D RGBA fills are
+        # not; the slice-polygon presence-cutoff lesson).
+        self._stripes_polydata = vtk.vtkPolyData()
+        self._stripes_polydata.SetPoints(vtk.vtkPoints())
+        self._stripes_mapper = vtk.vtkPolyDataMapper2D()
+        self._stripes_mapper.SetInputData(self._stripes_polydata)
+        self._stripes_actor = vtk.vtkActor2D()
+        self._stripes_actor.SetMapper(self._stripes_mapper)
+        self._stripes_actor.GetProperty().SetLineWidth(3.0)
+        self._stripes_actor.SetVisibility(False)
+        # (key, mask) caches: the 3D carve keyed on the seed + node MTimes, the
+        # 2D cut keyed on the carve key + the slice pose + view size.  The
+        # phase tick hits both caches and only rebuilds the stripe lines.
+        self._carve3d_cache: tuple | None = None
+        self._mask2d_cache: tuple | None = None
+
     def _after_display_node_set(self) -> None:
         _wire_provider_and_pick(self, self._display_node)
         self._ensure_carrier_observed()
@@ -448,6 +487,12 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         except Exception:  # pragma: no cover - C++ boundary must never raise
             pass
         super().UpdatePipeline()
+        # The stripe highlight rides the same display-node ModifiedEvent tick:
+        # the widget's phase timer writes stripePhase, which lands here.
+        try:
+            self._update_stripes()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            self._stripes_actor.SetVisibility(False)
 
     def cleanup(self) -> None:
         # The base detaches every observed node here (renderer churn); drop the
@@ -478,10 +523,12 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
 
     def _add_actors(self, renderer: Any) -> None:
         super()._add_actors(renderer)
+        renderer.AddActor2D(self._stripes_actor)
         renderer.AddActor2D(self._preview_actor)
 
     def _remove_actors(self, renderer: Any) -> None:
         super()._remove_actors(renderer)
+        renderer.RemoveActor2D(self._stripes_actor)
         renderer.RemoveActor2D(self._preview_actor)
 
     def _on_bare_move_decline(self, eventData: Any) -> None:
@@ -644,6 +691,145 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         if display is None or not hasattr(display, "GetStructureSourceNode"):
             return None
         return display.GetStructureSourceNode()
+
+    # ------------------------------------------------------------------ #
+    # Carved-region marching-stripes highlight (CarvedRegionStripes)
+    # ------------------------------------------------------------------ #
+
+    def _update_stripes(self) -> None:
+        """Redraw the highlighted seed's carved region as marching stripes.
+
+        Reads the highlight index + stripe phase off the shared display node
+        (the widget's timer channel).  The carved 3D mask and its slice-plane
+        cut are cached; a phase tick only rebuilds the stripe line family --
+        the cheap per-tick path.
+        """
+        show = False
+        index = get_highlight_seed(self._display_node)
+        if index >= 0:
+            mask2d = self._carved_mask_2d(index)
+            if mask2d is not None:
+                phase = get_stripe_phase(self._display_node)
+                segments = stripe_segments(mask2d, STRIPE_PERIOD_PX, phase)
+                if segments:
+                    self._build_stripe_lines(segments)
+                    self._stripes_actor.GetProperty().SetColor(*self._stripe_rgb(index))
+                    show = True
+        self._stripes_actor.SetVisibility(show)
+
+    def _seed_context(self, carrier: Any, index: int) -> list:
+        """The seed's ordered visibility snapshot off the carrier."""
+        if not hasattr(carrier, "GetNthSeedVisibilityContext"):
+            return []
+        ids = vtk.vtkStringArray()
+        carrier.GetNthSeedVisibilityContext(index, ids)
+        return [ids.GetValue(i) for i in range(ids.GetNumberOfValues())]
+
+    def _carved_mask_3d(self, index: int):
+        """The seed's EFFECTIVE region as a boolean mask on the pick labelmap grid.
+
+        Owner segment minus the snapshot segments above it (``VisibilityCarve``),
+        every mask resampled onto the pick-surface labelmap geometry so the
+        carve is same-grid boolean algebra.  Cached on the seed + the carrier /
+        source / reference MTimes; ``None`` when the seed is unbound or the
+        nodes are not wired.
+        """
+        carrier = _carrier_from_display(self._display_node)
+        source = self._structure_source_from_display()
+        reference = _labelmap_from_display(self._display_node)
+        if carrier is None or source is None or reference is None:
+            return None
+        owner = carrier.GetNthSeedBindingSegmentID(index)
+        if not owner:
+            return None
+        key = (index, carrier.GetMTime(), source.GetMTime(), reference.GetMTime())
+        if self._carve3d_cache is not None and self._carve3d_cache[0] == key:
+            return self._carve3d_cache[1]
+
+        import slicer
+
+        def _segment_mask(segmentID):
+            try:
+                arr = slicer.util.arrayFromSegmentBinaryLabelmap(source, segmentID, reference)
+            except Exception:  # noqa: BLE001 - a segment without a labelmap carves nothing
+                return None
+            return arr
+
+        owner_mask = _segment_mask(owner)
+        if owner_mask is None:
+            return None
+        context = self._seed_context(carrier, index)
+        above_masks = []
+        for segmentID in segments_above(context, owner):
+            mask = _segment_mask(segmentID)
+            if mask is not None:
+                above_masks.append(mask)
+        carved = carve_effective_mask(owner_mask, above_masks)
+        self._carve3d_cache = (key, carved)
+        return carved
+
+    def _carved_mask_2d(self, index: int):
+        """The carved mask cut to THIS view's slice plane (cached per pose)."""
+        mask3d = self._carved_mask_3d(index)
+        slice_node = self._slice_node
+        reference = _labelmap_from_display(self._display_node)
+        if mask3d is None or slice_node is None or reference is None:
+            return None
+        ras_to_ijk = vtk.vtkMatrix4x4()
+        reference.GetRASToIJKMatrix(ras_to_ijk)
+        xy_to_ijk = vtk.vtkMatrix4x4()
+        vtk.vtkMatrix4x4.Multiply4x4(ras_to_ijk, slice_node.GetXYToRAS(), xy_to_ijk)
+        dims = slice_node.GetDimensions()
+        affine = tuple(
+            xy_to_ijk.GetElement(r, c) for r in range(4) for c in range(4)
+        )
+        key = (self._carve3d_cache[0] if self._carve3d_cache else None, affine, dims[0], dims[1])
+        if self._mask2d_cache is not None and self._mask2d_cache[0] == key:
+            return self._mask2d_cache[1]
+
+        import numpy as np
+
+        matrix = np.array(affine, dtype=float).reshape(4, 4)
+        mask2d = resample_mask_to_plane(mask3d, matrix, int(dims[0]), int(dims[1]))
+        self._mask2d_cache = (key, mask2d)
+        return mask2d
+
+    def _build_stripe_lines(self, segments: list) -> None:
+        """Rebuild the stripe polydata from the clipped segment endpoints."""
+        points = vtk.vtkPoints()
+        lines = vtk.vtkCellArray()
+        for (x0, y0), (x1, y1) in segments:
+            if x0 == x1 and y0 == y1:
+                # A single-pixel run: pad along the stripe so it still draws.
+                x1, y1 = x0 + 0.5, y0 - 0.5
+            a = points.InsertNextPoint(x0, y0, 0.0)
+            b = points.InsertNextPoint(x1, y1, 0.0)
+            lines.InsertNextCell(2)
+            lines.InsertCellPoint(a)
+            lines.InsertCellPoint(b)
+        self._stripes_polydata.SetPoints(points)
+        self._stripes_polydata.SetLines(lines)
+        self._stripes_polydata.Modified()
+
+    def _stripe_rgb(self, index: int):
+        """The highlight hue: the seed's VOLUME colour, else its own colour."""
+        carrier = _carrier_from_display(self._display_node)
+        if carrier is None:
+            return _DEFAULT_SEED_RGB
+        volumeId = (
+            carrier.GetNthSeedVolume(index)
+            if hasattr(carrier, "GetNthSeedVolume")
+            else ""
+        )
+        if volumeId and hasattr(carrier, "GetVolumeColor"):
+            rgb = carrier.GetVolumeColor(volumeId)
+            return (rgb[0], rgb[1], rgb[2])
+        rgb = carrier.GetNthSeedColor(index)
+        return (rgb[0], rgb[1], rgb[2])
+
+    def GetStripesActor(self) -> Any:  # noqa: N802 - VTK verb
+        """The carved-region stripes actor (introspection seam)."""
+        return self._stripes_actor
 
 
 def registerVolumetrySeedPipeline3DCreator() -> None:  # noqa: N802 - project convention
