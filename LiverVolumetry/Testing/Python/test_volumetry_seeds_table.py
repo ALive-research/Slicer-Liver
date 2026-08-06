@@ -2,12 +2,14 @@
 # Distributed under the OSI-approved BSD 3-Clause License.
 """ADR-0038 (amendment) -- the LiverVolumetry seeds table widget.
 
-Pins the carrier-backed seeds table (the volumetry sibling of the
-VascularTerritories ``TerritoriesTableWidget``, simplified for the FLAT seed
-carrier):
+Pins the carrier-backed seeds table's per-SEED contract (the volumetry sibling
+of the VascularTerritories ``TerritoriesTableWidget``).  The table now nests
+seeds under their VOLUME (territory-usability grouped-volumes,
+``test_volumetry_volumes_table.py``); this file pins the per-seed row controls,
+which stay keyed by the seed's GLOBAL placement index on top of the grouping:
 
-* ROW-PER-SEED -- the table has one row per carrier seed, in placement order,
-  matching ``GetNumberOfSeeds`` (the carrier is the model).
+* ROW-PER-SEED -- ``rowCount`` counts one SEED row per carrier seed, in
+  placement order, matching ``GetNumberOfSeeds`` (the carrier is the model).
 * CARRIER MODIFIED REBUILD -- adding a seed to the carrier (outside the table)
   grows the row count without an explicit refresh (the table observes the
   carrier's ``ModifiedEvent``).
@@ -128,9 +130,9 @@ def test_table_has_one_row_per_seed(qt_widgets):
     carrier.Modified()
 
     assert table.rowCount() == carrier.GetNumberOfSeeds() == 3, (
-        "the table must render one row per carrier seed."
+        "the table must render one SEED row per carrier seed (per-volume tree, "
+        "territory-usability)."
     )
-    assert table.table().rowCount == 3
 
 
 def test_carrier_modified_event_rebuilds_the_table(qt_widgets):

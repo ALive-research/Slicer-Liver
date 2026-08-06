@@ -49,6 +49,10 @@ set(_volumetry_pytest_files
   # the shared display node (the active-territory routing analogue).  Pure
   # Python seam over fakes -> RUNS bare (ADR-0027).
   test_volumetry_active_volume_placement.py
+  # territory-usability -- the per-VOLUME seeds table: Add volume, per-volume
+  # colour/label/delete, seeds nested under their volume, Place arms into the
+  # active volume.  Qt + wrapped carrier -> SKIPS bare, RUNS launched (ADR-0027).
+  test_volumetry_volumes_table.py
   # ADR-0038 §Conformance -- the pure carrier->transient-fiducial mapping
   # preserves position + LABEL + order.  Pure Python -> RUNS bare (ADR-0027).
   test_volumetry_seed_transient_fiducial.py
