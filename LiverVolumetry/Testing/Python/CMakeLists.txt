@@ -119,6 +119,11 @@ set(_volumetry_pytest_files
   # fires without a reslice).  LayerDM base + wrapped carrier + slice node ->
   # SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_slice_reproject.py
+  # territory-usability -- the per-seed VISIBILITY CONTEXT slot on the carrier:
+  # ordered round-trip, parallel-slot lockstep on remove, empty default, and
+  # the .vsd.json storage round-trip.  Wrapped C++ node -> SKIPS bare, RUNS
+  # launched (ADR-0027).
+  test_volumetry_seed_visibility_context.py
   # territory-usability -- the visibility-composed carve rule: the carving set
   # is the context prefix above the owner; the effective region is the owner's
   # mask minus the union of the carvers (the 216-54=162 phantom case at unit

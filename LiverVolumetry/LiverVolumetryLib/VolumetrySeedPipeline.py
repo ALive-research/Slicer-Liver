@@ -85,6 +85,7 @@ try:  # pragma: no cover - exercised once per import path
         gather_touched_candidates,
         resolve_touched_candidates,
     )
+    from .VisibilityCarve import visible_context
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from VolumetrySeedProvider import VolumetrySeedProvider  # type: ignore[no-redef]
     from InVolumePick import InVolumePick  # type: ignore[no-redef]
@@ -92,6 +93,7 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
         gather_touched_candidates,
         resolve_touched_candidates,
     )
+    from VisibilityCarve import visible_context  # type: ignore[no-redef]
 
 #: The base namespace for the volumetry arm/carrier/pick state on the shared
 #: display node (matches the display node's ``LiverVolumetry.*`` attribute
@@ -590,6 +592,12 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         the seed LABEL so the a11y text names the caught structure (never
         colour/animation alone, ADR-0010).  Best-effort: any resolution miss
         leaves the seed unbound.
+
+        Alongside the binding, the seed's VISIBILITY CONTEXT is snapshotted:
+        the ordered (top-first) segment IDs visible at placement (the
+        visibility-composed carve rule, ``VisibilityCarve``).  The snapshot IS
+        the seed's reproducible definition -- restore-on-select, the carved
+        highlight, and compute all re-derive the effective region from it.
         """
         carrier = self._provider.carrier() if self._provider is not None else None
         if carrier is None:
@@ -601,6 +609,7 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         if segmentationNode is None:
             return
         displayNode = segmentationNode.GetDisplayNode()
+        self._snapshot_visibility_context(carrier, index, segmentationNode, displayNode)
         touched = gather_touched_candidates(segmentationNode, displayNode, world)
         _ordered, top = resolve_touched_candidates(touched)
         if top is None:
@@ -609,6 +618,25 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         segment = segmentationNode.GetSegmentation().GetSegment(top)
         if segment is not None and not carrier.GetNthSeedLabel(index):
             carrier.SetNthSeedLabel(index, segment.GetName())
+
+    @staticmethod
+    def _snapshot_visibility_context(carrier: Any, index: int, segmentationNode: Any, displayNode: Any) -> None:
+        """Record the placement-time visibility snapshot on the seed.
+
+        Best-effort: a carrier without the context slot (an older build) or a
+        gather failure leaves the seed snapshotless (legacy no-carve
+        semantics) -- the placement still succeeds.
+        """
+        if not hasattr(carrier, "SetNthSeedVisibilityContext"):
+            return
+        try:
+            context = visible_context(segmentationNode, displayNode)
+            ids = vtk.vtkStringArray()
+            for segmentID in context:
+                ids.InsertNextValue(segmentID)
+            carrier.SetNthSeedVisibilityContext(index, ids)
+        except Exception:  # pragma: no cover - snapshot must never break placement
+            pass
 
     def _structure_source_from_display(self):
         """The structure-source segmentation the seed→label capture scans."""
