@@ -67,7 +67,10 @@ from .CarvedRegionStripes import (
 # The per-volume segment aggregation (territory-usability compute-per-volume) is
 # a pure, side-effect-free fold over the carrier, so it imports unconditionally
 # (the bare unit layer reaches ``distinct_bound_segments_per_volume``).
-from .VolumeSegmentAggregation import distinct_bound_segments_per_volume
+from .VolumeSegmentAggregation import (
+    distinct_bound_segments_per_volume,
+    effective_regions_per_volume,
+)
 
 # The LayerDM Pipeline creators depend on the shared base (LayerDMLib, reachable
 # only from a launched Slicer with the SlicerLayerDisplayableManager extension on
@@ -124,6 +127,7 @@ __all__ = [
     "set_stripe_phase",
     "stripe_segments",
     "distinct_bound_segments_per_volume",
+    "effective_regions_per_volume",
     "VolumetrySeedPipeline3D",
     "VolumetrySeedPipelineSlice",
     "registerVolumetrySeedPipeline3DCreator",

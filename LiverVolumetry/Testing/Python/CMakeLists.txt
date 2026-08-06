@@ -119,6 +119,11 @@ set(_volumetry_pytest_files
   # fires without a reslice).  LayerDM base + wrapped carrier + slice node ->
   # SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_slice_reproject.py
+  # territory-usability -- Compute measures the seeds' CARVED regions: the
+  # carve-aware fold (distinct (owner, snapshot) pairs) RUNS bare; the driver
+  # over a layered segmentation (owner-minus-visible-above == the 216-54=162
+  # phantom shape) SKIPS bare, RUNS launched (ADR-0027).
+  test_volumetry_compute_on_carved.py
   # territory-usability -- the carved-region marching-stripes highlight: the
   # diagonal stripe family clipped to the 2D mask, the phase march, the
   # once-per-(seed, slice) plane cut, and the highlightSeed/stripePhase
