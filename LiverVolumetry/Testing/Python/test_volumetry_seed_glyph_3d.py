@@ -149,28 +149,44 @@ def test_seed_glyph_has_one_point_per_carrier_seed(monkeypatch):
     )
 
 
-def test_seed_glyph_colour_follows_the_carrier(monkeypatch):
-    """Each glyph point carries the carrier's per-seed colour (RGB, 0..255).
+def test_seed_glyph_colour_follows_the_seed_volume(monkeypatch):
+    """Each glyph point carries the seed's VOLUME colour (RGB, 0..255).
 
-    The seeds are coloured from the provider's per-point colour (the carrier's
-    ``GetNthSeedColor``), so the 3D glyphs read at the same colour the table /
-    slice handles show -- one source of truth for a seed's colour.
+    territory-usability: a seed grouped into a named volume takes THAT volume's
+    colour (``GetVolumeColor``), the same colour shown on the volume's table row
+    and the slice handles -- so differently-coloured volumes read apart in the
+    3D view.  Mirrors ``TerritoryPointProvider``'s per-group colour lookup.  A
+    seed with no volume falls back to its per-seed colour (the legacy /
+    ungrouped seed still renders).
     """
     slicer = _slicer_or_skip()
     Pipeline, namespace = _import_pipeline_or_skip()
     carrier, display = _bind_carrier(slicer, namespace)
     pipeline = _wired_pipeline(Pipeline, display)
 
-    idx = carrier.AddSeed(20.0, 20.0, 10.0)
-    if not hasattr(carrier, "SetNthSeedColor"):
-        pytest.skip("carrier has no SetNthSeedColor -- cannot pin glyph colour.")
-    carrier.SetNthSeedColor(idx, 1.0, 0.0, 0.0)  # red
+    for method in ("SetNthSeedVolume", "SetVolumeColor", "SetNthSeedColor"):
+        if not hasattr(carrier, method):
+            pytest.skip(f"carrier has no {method} -- cannot pin glyph colour.")
+
+    # A seed grouped into a red volume renders in the VOLUME colour, even when
+    # its own per-seed colour differs -- the volume colour wins for a grouped
+    # seed (one source of truth per volume).
+    grouped = carrier.AddSeed(20.0, 20.0, 10.0)
+    carrier.SetNthSeedColor(grouped, 0.0, 1.0, 0.0)  # green per-seed colour
+    carrier.SetNthSeedVolume(grouped, "V1")
+    carrier.SetVolumeColor("V1", 1.0, 0.0, 0.0)  # red volume colour
+
+    # An UNGROUPED seed keeps its own per-seed colour (the fallback path).
+    ungrouped = carrier.AddSeed(30.0, 30.0, 15.0)
+    carrier.SetNthSeedColor(ungrouped, 0.0, 0.0, 1.0)  # blue
 
     scalars = pipeline.GetSeedPolyData().GetPointData().GetScalars()
-    assert scalars is not None and scalars.GetNumberOfTuples() == 1
-    rgb = scalars.GetTuple3(0)
-    assert rgb == pytest.approx((255.0, 0.0, 0.0), abs=1.0), (
-        "the glyph colour must follow the carrier's per-seed colour."
+    assert scalars is not None and scalars.GetNumberOfTuples() == 2
+    assert scalars.GetTuple3(0) == pytest.approx((255.0, 0.0, 0.0), abs=1.0), (
+        "a grouped seed's glyph colour must follow its VOLUME colour."
+    )
+    assert scalars.GetTuple3(1) == pytest.approx((0.0, 0.0, 255.0), abs=1.0), (
+        "an ungrouped seed's glyph colour falls back to its per-seed colour."
     )
 
 
