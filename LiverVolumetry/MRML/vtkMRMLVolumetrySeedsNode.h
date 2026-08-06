@@ -47,6 +47,7 @@
 // STD includes
 #include <array>
 #include <string>
+#include <utility>
 #include <vector>
 
 class vtkMRMLStorageNode;
@@ -82,6 +83,13 @@ class vtkMRMLStorageNode;
  *   - ``Seeds``       — ordered RAS coordinates.
  *   - ``SeedLabels``  — per-seed segment-name label.
  *   - ``SeedColors``  — per-seed RGB display colour.
+ *   - ``SeedBindings``— per-seed structure binding: the ``(segmentation node
+ *     id, segment id)`` the seed was dropped into (the seed-to-label capture,
+ *     ``territory-usability`` §"Seed→label capture").  A seed dropped in a
+ *     2D slice binds to the top VISIBLE segment whose binary labelmap covers
+ *     the clicked voxel; the surgeon may retarget it to another touched
+ *     candidate.  An empty pair means "unbound" (placed before a target was
+ *     resolved).
  */
 class VTK_SLICER_LIVERVOLUMETRY_MODULE_MRML_EXPORT vtkMRMLVolumetrySeedsNode : public vtkMRMLStorableNode
 {
@@ -154,6 +162,25 @@ public:
   const double* GetNthSeedColor(int i) VTK_SIZEHINT(3);
 
   //--------------------------------------------------------------------------
+  // Per-seed structure binding (the seed→label capture,
+  // ``territory-usability`` §"Seed→label capture")
+  //--------------------------------------------------------------------------
+
+  /// Set the i-th seed's structure BINDING: the ``(segmentationNodeID,
+  /// segmentID)`` of the segment the seed is bound to.  Both empty clears the
+  /// binding (the seed is "unbound").  Fires ONE ModifiedEvent; a no-op for an
+  /// out-of-range index.  Does NOT touch the coordinate.
+  void SetNthSeedBinding(int i, const std::string& segmentationNodeID, const std::string& segmentID);
+
+  /// The i-th seed's bound segmentation node id (empty when unbound or for an
+  /// out-of-range index).
+  std::string GetNthSeedBindingSegmentationNodeID(int i);
+
+  /// The i-th seed's bound segment id (empty when unbound or for an
+  /// out-of-range index).
+  std::string GetNthSeedBindingSegmentID(int i);
+
+  //--------------------------------------------------------------------------
   // Storage
   //--------------------------------------------------------------------------
 
@@ -177,6 +204,9 @@ protected:
   std::vector<std::array<double, 3>> Seeds;
   std::vector<std::string> SeedLabels;
   std::vector<std::array<double, 3>> SeedColors;
+  /// Per-seed structure binding: the ``(segmentationNodeID, segmentID)`` the
+  /// seed was dropped into (parallel to ``Seeds``; both empty == unbound).
+  std::vector<std::pair<std::string, std::string>> SeedBindings;
 
   /// Scratch buffers backing the size-hinted 3-tuple returns (the
   /// ``GetNthAnnotationPoint`` idiom): a stable address to alias so the

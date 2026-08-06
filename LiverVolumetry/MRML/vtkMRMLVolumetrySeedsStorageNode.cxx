@@ -183,11 +183,21 @@ int vtkMRMLVolumetrySeedsStorageNode::WriteJson(const std::string& filePath, vtk
     const std::string label = carrier->GetNthSeedLabel(i);
     const double* colorSrc = carrier->GetNthSeedColor(i);
     double color[3] = { colorSrc[0], colorSrc[1], colorSrc[2] };
+    const std::string bindingSegmentationNodeID = carrier->GetNthSeedBindingSegmentationNodeID(i);
+    const std::string bindingSegmentID = carrier->GetNthSeedBindingSegmentID(i);
 
     writer->WriteObjectStart();
     writer->WriteVectorProperty("xyz", xyz, 3);
     writer->WriteStringProperty("label", label);
     writer->WriteVectorProperty("color", color, 3);
+    // The structure binding the seed→label capture resolves
+    // (``territory-usability`` §"Seed→label capture"): both empty == unbound,
+    // and are only written when present so an unbound seed stays terse.
+    if (!bindingSegmentationNodeID.empty() || !bindingSegmentID.empty())
+    {
+      writer->WriteStringProperty("bindingSegmentationNodeID", bindingSegmentationNodeID);
+      writer->WriteStringProperty("bindingSegmentID", bindingSegmentID);
+    }
     writer->WriteObjectEnd();
   }
   writer->WriteArrayPropertyEnd();
@@ -269,6 +279,12 @@ int vtkMRMLVolumetrySeedsStorageNode::ReadJson(const std::string& filePath, vtkM
     if (item->GetVectorProperty("color", color, 3))
     {
       carrier->SetNthSeedColor(index, color[0], color[1], color[2]);
+    }
+    if (item->HasMember("bindingSegmentID") || item->HasMember("bindingSegmentationNodeID"))
+    {
+      const std::string bindingSegmentationNodeID = item->HasMember("bindingSegmentationNodeID") ? item->GetStringProperty("bindingSegmentationNodeID") : std::string();
+      const std::string bindingSegmentID = item->HasMember("bindingSegmentID") ? item->GetStringProperty("bindingSegmentID") : std::string();
+      carrier->SetNthSeedBinding(index, bindingSegmentationNodeID, bindingSegmentID);
     }
   }
   return 1;
