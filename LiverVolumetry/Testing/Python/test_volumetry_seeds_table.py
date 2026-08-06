@@ -287,6 +287,80 @@ def test_delete_button_removes_exactly_that_seed(qt_widgets):
 
 
 # --------------------------------------------------------------------------- #
+# TARGET column + retarget (the seed→label capture surface)
+# --------------------------------------------------------------------------- #
+
+
+def test_target_combo_names_the_bound_segment(qt_widgets):
+    """The row's target combo names the seed's bound segment (a11y text).
+
+    ``territory-usability`` §"Seed→label capture" / ADR-0010: the caught
+    structure is named in text, never signalled by the fade alone.
+    """
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    if not hasattr(carrier, "SetNthSeedBinding"):
+        pytest.skip(f"{SEEDS_NODE_CLASS} has no SetNthSeedBinding (ADR-0027).")
+    table = _make_table_or_skip(slicer, carrier)
+    qt_widgets.append(table)
+    if not hasattr(table, "targetCombo") or not hasattr(table, "setStructureSource"):
+        pytest.skip("VolumetrySeedsTableWidget has no target/retarget seam (ADR-0027).")
+
+    segmentation = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", "SegSrc")
+    segmentation.CreateDefaultDisplayNodes()
+    segmentation.GetSegmentation().AddEmptySegment("segA", "Alpha")
+    segmentation.GetSegmentation().AddEmptySegment("segB", "Beta")
+    table.setStructureSource(segmentation)
+
+    carrier.AddSeed(0.0, 0.0, 0.0)
+    carrier.SetNthSeedBinding(0, segmentation.GetID(), "segB")
+    carrier.Modified()
+
+    combo = table.targetCombo(0)
+    assert combo is not None, "the seed row must carry a target combo."
+    assert combo.currentText == "Beta", (
+        "the target combo must name the seed's bound segment (ADR-0010 text)."
+    )
+
+
+def test_retarget_rebinds_the_seed_and_renames_label(qt_widgets):
+    """``retargetSeed`` rebinds the seed and renames its label to follow.
+
+    Picking another candidate writes the carrier binding + relabels the seed to
+    the new segment's name so the a11y text tracks the binding.
+    """
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    if not hasattr(carrier, "SetNthSeedBinding"):
+        pytest.skip(f"{SEEDS_NODE_CLASS} has no SetNthSeedBinding (ADR-0027).")
+    table = _make_table_or_skip(slicer, carrier)
+    qt_widgets.append(table)
+    if not hasattr(table, "retargetSeed") or not hasattr(table, "setStructureSource"):
+        pytest.skip("VolumetrySeedsTableWidget has no retarget seam (ADR-0027).")
+
+    segmentation = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", "SegSrc")
+    segmentation.CreateDefaultDisplayNodes()
+    segmentation.GetSegmentation().AddEmptySegment("segA", "Alpha")
+    segmentation.GetSegmentation().AddEmptySegment("segB", "Beta")
+    table.setStructureSource(segmentation)
+
+    carrier.AddSeed(0.0, 0.0, 0.0)
+    carrier.SetNthSeedBinding(0, segmentation.GetID(), "segB")
+    carrier.Modified()
+
+    table.retargetSeed(0, "segA")
+
+    assert carrier.GetNthSeedBindingSegmentID(0) == "segA", (
+        "retarget must rebind the seed to the chosen segment."
+    )
+    assert carrier.GetNthSeedLabel(0) == "Alpha", (
+        "retarget must rename the seed label to follow the new binding."
+    )
+
+
+# --------------------------------------------------------------------------- #
 # OBSERVER teardown
 # --------------------------------------------------------------------------- #
 
