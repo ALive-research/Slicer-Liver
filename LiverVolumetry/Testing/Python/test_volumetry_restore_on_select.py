@@ -84,17 +84,21 @@ def _set_context(carrier, index, context):
 
 
 def _select_seed_row(table, seedIndex):
-    """Select the tree item carrying ``seedIndex`` (the child seed row)."""
+    """Select the tree item carrying ``seedIndex`` (the child seed row).
+
+    Walks top-level items + children by hand: ``QTreeWidgetItemIterator`` is
+    not wrapped into Slicer's ``qt`` namespace.
+    """
     import qt
 
     tree = table.tree()
-    it = qt.QTreeWidgetItemIterator(tree)
-    while it.value():
-        item = it.value()
-        if item.data(0, qt.Qt.UserRole) == seedIndex:
-            tree.setCurrentItem(item)
-            return True
-        it += 1
+    for t in range(tree.topLevelItemCount):
+        top = tree.topLevelItem(t)
+        for c in range(top.childCount()):
+            child = top.child(c)
+            if child.data(0, qt.Qt.UserRole) == seedIndex:
+                tree.setCurrentItem(child)
+                return True
     return False
 
 

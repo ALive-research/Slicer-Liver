@@ -85,7 +85,13 @@ try:  # pragma: no cover - exercised once per import path
         gather_touched_candidates,
         resolve_touched_candidates,
     )
-    from .VisibilityCarve import carve_effective_mask, segments_above, visible_context
+    from .VisibilityCarve import (
+        carve_effective_mask,
+        read_seed_context,
+        segments_above,
+        visible_context,
+        write_seed_context,
+    )
     from .CarvedRegionStripes import (
         STRIPE_PERIOD_PX,
         get_highlight_seed,
@@ -102,8 +108,10 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
     )
     from VisibilityCarve import (  # type: ignore[no-redef]
         carve_effective_mask,
+        read_seed_context,
         segments_above,
         visible_context,
+        write_seed_context,
     )
     from CarvedRegionStripes import (  # type: ignore[no-redef]
         STRIPE_PERIOD_PX,
@@ -674,14 +682,8 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         gather failure leaves the seed snapshotless (legacy no-carve
         semantics) -- the placement still succeeds.
         """
-        if not hasattr(carrier, "SetNthSeedVisibilityContext"):
-            return
         try:
-            context = visible_context(segmentationNode, displayNode)
-            ids = vtk.vtkStringArray()
-            for segmentID in context:
-                ids.InsertNextValue(segmentID)
-            carrier.SetNthSeedVisibilityContext(index, ids)
+            write_seed_context(carrier, index, visible_context(segmentationNode, displayNode))
         except Exception:  # pragma: no cover - snapshot must never break placement
             pass
 
@@ -717,14 +719,6 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
                     show = True
         self._stripes_actor.SetVisibility(show)
 
-    def _seed_context(self, carrier: Any, index: int) -> list:
-        """The seed's ordered visibility snapshot off the carrier."""
-        if not hasattr(carrier, "GetNthSeedVisibilityContext"):
-            return []
-        ids = vtk.vtkStringArray()
-        carrier.GetNthSeedVisibilityContext(index, ids)
-        return [ids.GetValue(i) for i in range(ids.GetNumberOfValues())]
-
     def _carved_mask_3d(self, index: int):
         """The seed's EFFECTIVE region as a boolean mask on the pick labelmap grid.
 
@@ -758,7 +752,7 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         owner_mask = _segment_mask(owner)
         if owner_mask is None:
             return None
-        context = self._seed_context(carrier, index)
+        context = read_seed_context(carrier, index)
         above_masks = []
         for segmentID in segments_above(context, owner):
             mask = _segment_mask(segmentID)
