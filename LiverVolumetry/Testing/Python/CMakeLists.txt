@@ -119,6 +119,11 @@ set(_volumetry_pytest_files
   # fires without a reslice).  LayerDM base + wrapped carrier + slice node ->
   # SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_slice_reproject.py
+  # territory-usability -- the segment show/hide eye list on the panel (the
+  # visibility-composition instrument): trimmed to name+eye, read-only, bound
+  # to the input segmentation.  Qt + module widget -> SKIPS bare, RUNS
+  # launched (ADR-0027).
+  test_volumetry_visibility_list.py
   # territory-usability -- Compute measures the seeds' CARVED regions: the
   # carve-aware fold (distinct (owner, snapshot) pairs) RUNS bare; the driver
   # over a layered segmentation (owner-minus-visible-above == the 216-54=162
