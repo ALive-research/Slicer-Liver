@@ -119,6 +119,12 @@ set(_volumetry_pytest_files
   # fires without a reslice).  LayerDM base + wrapped carrier + slice node ->
   # SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_slice_reproject.py
+  # territory-usability -- the visibility-composed carve rule: the carving set
+  # is the context prefix above the owner; the effective region is the owner's
+  # mask minus the union of the carvers (the 216-54=162 phantom case at unit
+  # voxels); restore-on-select shows exactly the snapshot.  Pure Python/numpy
+  # -> RUNS bare (ADR-0027).
+  test_volumetry_visibility_carve.py
   # ``territory-usability`` §"Seed→label capture" -- the pure candidate-
   # resolution rule: touched segments order top-first by layer index and the
   # default binding is the top layer's segment.  Pure Python -> RUNS bare
