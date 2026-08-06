@@ -264,6 +264,13 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # ModifiedEvent observer.
     self.ui.ClearAllSeedsButton.connect('clicked(bool)', self.onClearAllSeeds)
 
+    # Compose the segment show/hide list into the Segments section (ADR-0004:
+    # the panel is Python).  Visibility is the PRIMARY region-composition
+    # instrument (the visibility-composed carve rule, VisibilityCarve): the
+    # surgeon shows/hides segments BEFORE placing, so the eye list must live in
+    # the module -- composing visibility must not require leaving the panel.
+    self._composeVisibilityList(liverVolumetryWidget)
+
     # Compose the carrier-backed seeds table into the panel (ADR-0004: the
     # panel is Python).  It is bound to the seed carrier lazily -- the carrier
     # is created on first placement -- so it starts empty and repaints on the
@@ -317,6 +324,54 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         "registered (%s) -- seed placement is disabled in this session.  "
         "Loading the SlicerLayerDisplayableManager extension is required for "
         "the Pipeline path (ADR-0013/0038).", exc)
+
+  def _composeVisibilityList(self, panelWidget):
+    """Compose the segment show/hide eye list into the Segments section.
+
+    A ``qMRMLSegmentsTableView`` trimmed to NAME + VISIBILITY (the eye
+    column) over the input segmentation -- the same instrument the
+    Segmentations module offers, so show/hide reads familiarly.  The eye list
+    is how the surgeon COMPOSES the region a seed measures (the
+    visibility-composed carve rule): the visible layers carve each other, and
+    a dropped seed snapshots exactly this composition.  Read-only names (the
+    input is not edited here); bound to the current input by
+    ``segmentationNodeSelected``.  Degrades gracefully when the widget class
+    is unavailable (the panel simply omits the list).
+    """
+    self._visibilityList = None
+    viewClass = getattr(slicer, "qMRMLSegmentsTableView", None)
+    if viewClass is None:
+      logging.warning(
+        "LiverVolumetry: qMRMLSegmentsTableView unavailable -- the segment "
+        "show/hide list is omitted this session.")
+      return
+    view = viewClass()
+    view.setMRMLScene(slicer.mrmlScene)
+    # Name + eye only: the list is a visibility instrument, not an editor.
+    view.visibilityColumnVisible = True
+    view.colorColumnVisible = False
+    view.opacityColumnVisible = False
+    view.statusColumnVisible = False
+    view.headerVisible = False
+    view.filterBarVisible = False
+    view.readOnly = True
+    view.setToolTip(
+      "Show/hide segments to compose the region a seed measures: the top "
+      "visible segment owns each voxel and carves the ones below. A placed "
+      "seed remembers this composition.")
+    self._visibilityList = view
+    grid = self.ui.VisibilityGroupWidget.layout() if hasattr(self.ui, "VisibilityGroupWidget") else None
+    if grid is not None and hasattr(grid, "addWidget"):
+      grid.addWidget(view, 0, 0)
+    else:
+      panelWidget.layout().addWidget(view)
+
+  def _bindVisibilityList(self, segmentationNode):
+    """Point the show/hide eye list at the current input segmentation."""
+    view = getattr(self, "_visibilityList", None)
+    if view is None:
+      return
+    view.setSegmentationNode(segmentationNode)
 
   def _composeSeedsTable(self, panelWidget):
     """Compose the carrier-backed seeds table into the partition group (ADR-0004).
@@ -955,6 +1010,9 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return
 
     self.ui.SegmentationShow3DButton.setSegmentationNode(segmentationNode)
+    # Bind the show/hide eye list (the visibility-composition instrument) to
+    # the same input the seeds capture against.
+    self._bindVisibilityList(segmentationNode)
     self._applyInputSegmentVisibility(segmentationNode)
     # Keep the seeds-table retarget menu pointed at the current input.
     self._bindSeedsTableStructureSource()
