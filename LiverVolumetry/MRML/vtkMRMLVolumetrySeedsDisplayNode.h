@@ -129,6 +129,27 @@ public:
   /// Resolve the referenced pick surface, or ``nullptr`` when none is wired.
   vtkMRMLNode* GetPickSurfaceNode();
 
+  //--------------------------------------------------------------------------
+  // Structure-source reference (the segmentation the seed→label capture
+  // resolves touched candidates against; ``territory-usability``
+  // §"Seed→label capture").  Distinct from the pick surface (a rasterized
+  // labelmap): the capture needs the SEGMENTATION so it can read each
+  // segment's binary labelmap + layer index at the clicked voxel.
+  //--------------------------------------------------------------------------
+
+  /// Reference role name for the structure-source segmentation the seed→label
+  /// capture scans.  Namespaced ``LiverVolumetry.*`` to match the interaction-
+  /// state attribute channel.
+  static const char* GetStructureSourceReferenceRole() { return "LiverVolumetry.structureSource"; }
+
+  /// Reference the structure-source segmentation.  ``nullptr`` clears the
+  /// reference.
+  void SetAndObserveStructureSourceNodeID(const char* segmentationNodeID);
+
+  /// Resolve the referenced structure-source segmentation, or ``nullptr``
+  /// when none is wired.
+  vtkMRMLNode* GetStructureSourceNode();
+
 protected:
   vtkMRMLVolumetrySeedsDisplayNode();
   ~vtkMRMLVolumetrySeedsDisplayNode() override;

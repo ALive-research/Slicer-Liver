@@ -46,6 +46,10 @@ class VolumetrySeedProvider:
         """Bind the shared display node the interaction state rides."""
         self._display_node = displayNode
 
+    def carrier(self) -> Any:
+        """The bound seed carrier (the placement path's binding write-back target)."""
+        return self._carrier
+
     def iter_points(self):
         """Yield ``(world, base_rgb)`` per seed, flat in placement order.
 
