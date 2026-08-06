@@ -52,6 +52,7 @@
 #include <vector>
 
 class vtkMRMLStorageNode;
+class vtkStringArray;
 
 /**
  * \class vtkMRMLVolumetrySeedsNode
@@ -91,6 +92,14 @@ class vtkMRMLStorageNode;
  *     the clicked voxel; the surgeon may retarget it to another touched
  *     candidate.  An empty pair means "unbound" (placed before a target was
  *     resolved).
+ *   - ``SeedContexts`` — per-seed VISIBILITY CONTEXT: the ordered (top-first)
+ *     segment IDs visible at placement (the visibility-composed carve rule,
+ *     ``territory-usability``).  Together with the owning-segment binding this
+ *     snapshot IS the seed's reproducible definition: the effective region a
+ *     seed measures is the owner minus the context segments stacked above it
+ *     (``VisibilityCarve``), re-derived from the snapshot regardless of the
+ *     live visibility.  Empty means "no snapshot" (a legacy seed: the whole
+ *     bound segment, no carve).
  *   - ``SeedVolumes`` — per-seed VOLUME-GROUP id: the surgeon-named volume the
  *     seed belongs to (``territory-usability`` grouped-volumes).  Mirrors the
  *     ``vtkMRMLCustomTerritoriesNode`` per-territory grouping model: the surgeon
@@ -198,6 +207,22 @@ public:
   std::string GetNthSeedBindingSegmentID(int i);
 
   //--------------------------------------------------------------------------
+  // Per-seed visibility context (the visibility-composed carve rule,
+  // ``territory-usability``; the pure carve lives in ``VisibilityCarve``)
+  //--------------------------------------------------------------------------
+
+  /// Snapshot the i-th seed's VISIBILITY CONTEXT: the ordered (top-first)
+  /// segment IDs visible at placement.  A ``nullptr`` / empty array clears the
+  /// snapshot (legacy semantics: no carve).  Fires ONE ModifiedEvent; a no-op
+  /// for an out-of-range index.  Does NOT touch the coordinate / binding.
+  void SetNthSeedVisibilityContext(int i, vtkStringArray* segmentIDs);
+
+  /// Fill ``segmentIDs`` with the i-th seed's visibility context in snapshot
+  /// order (cleared first; left empty for an out-of-range index or a seed with
+  /// no snapshot).
+  void GetNthSeedVisibilityContext(int i, vtkStringArray* segmentIDs);
+
+  //--------------------------------------------------------------------------
   // Per-seed VOLUME group (``territory-usability`` grouped-volumes)
   //--------------------------------------------------------------------------
   //
@@ -286,6 +311,9 @@ protected:
   /// Per-seed structure binding: the ``(segmentationNodeID, segmentID)`` the
   /// seed was dropped into (parallel to ``Seeds``; both empty == unbound).
   std::vector<std::pair<std::string, std::string>> SeedBindings;
+  /// Per-seed VISIBILITY CONTEXT: the ordered (top-first) segment IDs visible
+  /// at placement (parallel to ``Seeds``; empty == no snapshot / no carve).
+  std::vector<std::vector<std::string>> SeedContexts;
   /// Per-seed VOLUME group id (parallel to ``Seeds``; empty == ungrouped).
   std::vector<std::string> SeedVolumes;
 

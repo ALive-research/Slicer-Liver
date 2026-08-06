@@ -186,6 +186,14 @@ int vtkMRMLVolumetrySeedsStorageNode::WriteJson(const std::string& filePath, vtk
     const std::string bindingSegmentationNodeID = carrier->GetNthSeedBindingSegmentationNodeID(i);
     const std::string bindingSegmentID = carrier->GetNthSeedBindingSegmentID(i);
     const std::string volume = carrier->GetNthSeedVolume(i);
+    vtkNew<vtkStringArray> contextArray;
+    carrier->GetNthSeedVisibilityContext(i, contextArray);
+    std::vector<std::string> context;
+    context.reserve(static_cast<std::size_t>(contextArray->GetNumberOfValues()));
+    for (vtkIdType v = 0; v < contextArray->GetNumberOfValues(); ++v)
+    {
+      context.push_back(contextArray->GetValue(v));
+    }
 
     writer->WriteObjectStart();
     writer->WriteVectorProperty("xyz", xyz, 3);
@@ -198,6 +206,14 @@ int vtkMRMLVolumetrySeedsStorageNode::WriteJson(const std::string& filePath, vtk
     {
       writer->WriteStringProperty("bindingSegmentationNodeID", bindingSegmentationNodeID);
       writer->WriteStringProperty("bindingSegmentID", bindingSegmentID);
+    }
+    // The VISIBILITY CONTEXT snapshot (the visibility-composed carve rule,
+    // ``VisibilityCarve``): the ordered top-first segment IDs visible at
+    // placement.  Empty == no snapshot (legacy: no carve) and is only written
+    // when present so an unsnapshotted seed stays terse.
+    if (!context.empty())
+    {
+      writer->WriteStringVectorProperty("visibilityContext", context);
     }
     // The VOLUME group the seed belongs to (``territory-usability``
     // grouped-volumes); empty == ungrouped and only written when present.
@@ -346,6 +362,19 @@ int vtkMRMLVolumetrySeedsStorageNode::ReadJson(const std::string& filePath, vtkM
       const std::string bindingSegmentationNodeID = item->HasMember("bindingSegmentationNodeID") ? item->GetStringProperty("bindingSegmentationNodeID") : std::string();
       const std::string bindingSegmentID = item->HasMember("bindingSegmentID") ? item->GetStringProperty("bindingSegmentID") : std::string();
       carrier->SetNthSeedBinding(index, bindingSegmentationNodeID, bindingSegmentID);
+    }
+    if (item->HasMember("visibilityContext"))
+    {
+      std::vector<std::string> context;
+      if (item->GetStringVectorProperty("visibilityContext", context))
+      {
+        vtkNew<vtkStringArray> contextArray;
+        for (const std::string& segmentID : context)
+        {
+          contextArray->InsertNextValue(segmentID);
+        }
+        carrier->SetNthSeedVisibilityContext(index, contextArray);
+      }
     }
     if (item->HasMember("volume"))
     {
