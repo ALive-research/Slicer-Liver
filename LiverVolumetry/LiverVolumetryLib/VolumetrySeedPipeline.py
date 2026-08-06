@@ -99,6 +99,16 @@ PREVIEW_CURSOR_COLOR = (1.0, 0.9, 0.2)
 #: placed handle so the "about to place" cue reads as a cursor, not a handle.
 PREVIEW_GLYPH_SCALE_PX = 11.0
 
+#: The placed-seed sphere radius (mm) in the 3D view.  Matches the territory
+#: seed-glyph radius (TerritoryPlacementPipeline) so the two seed families read
+#: at the same scale; volumetry seeds are independent glyph actors, NOT tied to
+#: any liver/model surface, so they are visible with no model shown.
+SEED_SPHERE_RADIUS_MM = 2.2
+
+#: Opaque-white fallback when a seed carries no per-point colour (matches the
+#: carrier's own out-of-range default in ``VolumetrySeedProvider``).
+_DEFAULT_SEED_RGB = (1.0, 1.0, 1.0)
+
 _REGISTERED_3D = False
 _REGISTERED_SLICE = False
 
@@ -146,10 +156,59 @@ class VolumetrySeedPipeline3D(_Pipeline3DBase):
     (``IsArmed`` -> False), which drops the base's add branch in both
     ``Can/ProcessInteractionEvent`` while leaving grab-drag editing + rendering
     intact; the shared armed flag (read by the slice pipeline) is untouched.
+
+    RENDERING (the seed glyphs): the base's 3D pipeline iterates the provider
+    only for hit-testing; it draws nothing.  So this client mirrors the
+    territory client's ``_rebuild_seed_actor`` pattern -- a ``vtkPolyData`` of
+    seed points glyphed by a ``vtkSphereSource`` into a ``vtkActor``, coloured
+    per the provider's per-point colour -- to make each placed seed visible in
+    the 3D view.  The glyph actor is an INDEPENDENT overlay (not tied to any
+    liver/model surface), so the seeds show even with no model loaded.  It is
+    added on ``OnRendererAdded`` and rebuilt on any carrier ``Modified``.
     """
 
     def __init__(self) -> None:
         super().__init__(namespace=VOLUMETRY_NAMESPACE)
+
+        self._observer_tags: dict = {}
+        self._observed_node_refs: list = []
+        # The carrier currently observed for the seed-glyph rebuild; production
+        # resolves it from the display node (the direct provider bind is not the
+        # only path), so the observer is (re)attached through
+        # ``_ensure_carrier_observed`` and deduped on this reference.
+        self._observed_carrier: Any | None = None
+
+        # -- placed-seed rendering (mirrors TerritoryPlacementPipeline): one
+        # actor for the whole seed set, glyphed as spheres, coloured per seed
+        # from the provider.  Rebuilt on any carrier Modified.
+        self._seed_points = vtk.vtkPoints()
+        self._seed_colors = vtk.vtkUnsignedCharArray()
+        self._seed_colors.SetNumberOfComponents(3)
+        self._seed_colors.SetName("SeedColors")
+        self._seed_polydata = vtk.vtkPolyData()
+        self._seed_polydata.SetPoints(self._seed_points)
+        self._seed_polydata.GetPointData().SetScalars(self._seed_colors)
+        self._seed_sphere = vtk.vtkSphereSource()
+        self._seed_sphere.SetPhiResolution(12)
+        self._seed_sphere.SetThetaResolution(12)
+        self._seed_sphere.SetRadius(SEED_SPHERE_RADIUS_MM)
+        self._seed_glyph = vtk.vtkGlyph3D()
+        self._seed_glyph.SetInputData(self._seed_polydata)
+        self._seed_glyph.SetSourceConnection(self._seed_sphere.GetOutputPort())
+        self._seed_glyph.SetScaleModeToDataScalingOff()
+        self._seed_glyph.SetColorModeToColorByScalar()
+        self._seed_mapper = vtk.vtkPolyDataMapper()
+        self._seed_mapper.SetInputConnection(self._seed_glyph.GetOutputPort())
+        # Interpret the per-glyph uchar[3] scalars as RGB directly.  Without
+        # ScalarVisibilityOn + UsePointData the mapper falls back to the LUT
+        # (which maps the 3-component array to near-black), so the spheres
+        # render invisible against the dark 3D background (the territory
+        # seed-glyph lesson, feedback_layerdm_state_on_display_node).
+        self._seed_mapper.SetScalarModeToUsePointData()
+        self._seed_mapper.ScalarVisibilityOn()
+        self._seed_mapper.SetColorModeToDirectScalars()
+        self._seed_actor = vtk.vtkActor()
+        self._seed_actor.SetMapper(self._seed_mapper)
 
     def IsArmed(self) -> bool:  # noqa: N802 - VTK verb
         """A 3D view never arms for placement (in-volume seeds are slice-placed).
@@ -167,22 +226,44 @@ class VolumetrySeedPipeline3D(_Pipeline3DBase):
         super().SetDisplayNode(displayNode)
         self._display_node = displayNode
         self._rewire()
+        self._ensure_carrier_observed()
 
     def OnRendererAdded(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
         try:
             self._renderer = renderer
+            if renderer is not None:
+                renderer.AddActor(self._seed_actor)
             if self._display_node is None:
                 display = self.GetDisplayNode()
                 if display is not None:
                     self.SetDisplayNode(display)
             self._rewire()
+            self._ensure_carrier_observed()
+            self._rebuild_seed_actor()
             self.RequestRender()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
+
+    def OnRendererRemoved(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
+        try:
+            if renderer is not None:
+                renderer.RemoveActor(self._seed_actor)
+            self._renderer = None
+            for node in list(self._observed_node_refs):
+                self._detach_observer(node)
+            self._observed_carrier = None
         except Exception:  # pragma: no cover - C++ boundary must never raise
             pass
 
     def UpdatePipeline(self) -> None:  # noqa: N802 - VTK verb
         try:
             self._rewire()
+            # LayerDM fires this when the carrier reference is finally set on the
+            # display node (added to the scene before the widget binds it), so
+            # this is where the seed-glyph observer attaches -- without it a seed
+            # placed from a SLICE view never repaints the 3D glyphs.
+            self._ensure_carrier_observed()
+            self._rebuild_seed_actor()
             self.RequestRender()
         except Exception:  # pragma: no cover - C++ boundary must never raise
             pass
@@ -190,6 +271,102 @@ class VolumetrySeedPipeline3D(_Pipeline3DBase):
     def _rewire(self) -> None:
         """(Re)resolve the provider + pick from the shared display node."""
         _wire_provider_and_pick(self, self._display_node)
+
+    # ------------------------------------------------------------------ #
+    # Seed-glyph rendering (mirrors TerritoryPlacementPipeline, minus the
+    # territory grouping + vessel-visibility gate -- volumetry is flat)
+    # ------------------------------------------------------------------ #
+
+    def _rebuild_seed_actor(self) -> None:
+        """Rebuild the seed-glyph point set from the provider, coloured per seed.
+
+        The carrier (via the provider) is the source of truth: read every
+        seed's world + per-point colour through ``iter_points`` and glyph each
+        as a sphere.  A no-op-safe rebuild -- an empty carrier clears the
+        glyphs.  Holds no shadow copy of the point set (ADR-0038 no-drift): a
+        rebuild driven by an unrelated ``Modified`` re-reads the provider and
+        adds / moves / drops nothing.
+        """
+        self._seed_points.Reset()
+        self._seed_colors.Reset()
+        self._seed_colors.SetNumberOfComponents(3)
+        provider = self._provider
+        if provider is not None:
+            for world, base_rgb in provider.iter_points():
+                self._seed_points.InsertNextPoint(world[0], world[1], world[2])
+                rgb = base_rgb if base_rgb is not None else _DEFAULT_SEED_RGB
+                self._seed_colors.InsertNextTuple3(
+                    int(max(0.0, min(1.0, rgb[0])) * 255),
+                    int(max(0.0, min(1.0, rgb[1])) * 255),
+                    int(max(0.0, min(1.0, rgb[2])) * 255),
+                )
+        self._seed_points.Modified()
+        self._seed_colors.Modified()
+        self._seed_polydata.Modified()
+
+    def GetSeedActor(self) -> Any:  # noqa: N802 - VTK verb
+        """The seed-glyph actor (the placed-seed spheres); introspection seam."""
+        return self._seed_actor
+
+    def GetSeedPolyData(self) -> Any:  # noqa: N802 - VTK verb
+        """The seed-glyph point set (one point per rendered seed)."""
+        return self._seed_polydata
+
+    # ------------------------------------------------------------------ #
+    # Carrier observation (the seed-glyph rebuild trigger)
+    # ------------------------------------------------------------------ #
+
+    def _ensure_carrier_observed(self) -> None:
+        """Observe the in-effect carrier so the seed glyphs track its edits.
+
+        The provider resolves the carrier from the display node, so the glyph
+        rebuild needs its own ModifiedEvent observer; (re)attaches when the
+        resolved carrier changes, idempotent otherwise.
+        """
+        carrier = _carrier_from_display(self._display_node)
+        if carrier is self._observed_carrier:
+            return
+        if self._observed_carrier is not None:
+            self._detach_observer(self._observed_carrier)
+        self._observed_carrier = carrier
+        if carrier is not None:
+            self._attach_observer(carrier)
+
+    def _attach_observer(self, node: Any) -> None:
+        if node is None or not hasattr(node, "AddObserver"):
+            return
+        tag = node.AddObserver("ModifiedEvent", self._on_seed_carrier_modified)
+        self._observer_tags.setdefault(id(node), []).append(tag)
+        if node not in self._observed_node_refs:
+            self._observed_node_refs.append(node)
+
+    def _detach_observer(self, node: Any) -> None:
+        if node is None:
+            return
+        for tag in self._observer_tags.pop(id(node), []):
+            try:
+                node.RemoveObserver(tag)
+            except Exception:  # pragma: no cover - defensive
+                pass
+        try:
+            self._observed_node_refs.remove(node)
+        except ValueError:
+            pass
+
+    def _on_seed_carrier_modified(self, caller: Any, event: str) -> None:
+        """Rebuild + repaint the seed glyphs on a carrier ``Modified``.
+
+        Repaint immediately: a carrier ``Modified`` fired synchronously inside
+        a slice-view placement does not flush a 3D frame on its own (the
+        RequestRender mid-interaction discipline), so the glyph must be rebuilt
+        and a render requested here for the just-placed seed to show in 3D.
+        """
+        del caller, event
+        try:
+            self._rebuild_seed_actor()
+            self.RequestRender()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
 
 class VolumetrySeedPipelineSlice(_PipelineSliceBase):
