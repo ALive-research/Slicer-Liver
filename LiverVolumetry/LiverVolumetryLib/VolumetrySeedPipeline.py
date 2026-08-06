@@ -543,18 +543,43 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         return pick.pick_for_slice_event(self._slice_node, display_xy)
 
     def _add_point(self, world: Any) -> None:
-        """Add the seed, then capture its structure binding (seed→label capture).
+        """Add the seed, route it to the active volume, then capture its binding.
 
         Overrides the base's add write-back: after the flat provider appends
         the seed at ``world`` (the interior RAS the in-volume pick resolved),
-        resolve the touched-candidate set at that RAS against the structure-
-        source segmentation and bind the new seed to the TOP layer's segment
-        (``territory-usability`` §"Seed→label capture").  A seed placed with no
-        structure source, or off every visible segment, stays unbound -- the
-        placement still succeeds.
+        (1) assign it to the ACTIVE VOLUME read off the shared display node
+        (``territory-usability`` grouped-volumes -- the active-territory routing
+        analogue), and (2) resolve the touched-candidate set at that RAS against
+        the structure-source segmentation and bind the new seed to the TOP
+        layer's segment (``territory-usability`` §"Seed→label capture").  A seed
+        placed with no active volume stays ungrouped; one placed off every
+        visible segment stays unbound -- the placement still succeeds either
+        way.
         """
         super()._add_point(world)
+        carrier = self._provider.carrier() if self._provider is not None else None
+        if carrier is not None:
+            self._assign_active_volume(carrier.GetNumberOfSeeds() - 1)
         self._capture_binding(world)
+
+    def _assign_active_volume(self, index: int) -> None:
+        """Assign the ``index``-th seed to the ACTIVE volume on the display node.
+
+        The active-volume id rides the shared display node via the base's
+        ``PointPlacementState`` active slot (the same channel the territory
+        client uses for its active territory), so the widget publishes it and
+        the LayerDM-created pipeline reads it at placement time.  A no-op for an
+        out-of-range index, a missing carrier, or no active volume set (the seed
+        stays ungrouped).
+        """
+        if index < 0:
+            return
+        carrier = self._provider.carrier() if self._provider is not None else None
+        if carrier is None:
+            return
+        volumeId = PointPlacementState(VOLUMETRY_NAMESPACE).get_active(self._display_node)
+        if volumeId:
+            carrier.SetNthSeedVolume(index, volumeId)
 
     def _capture_binding(self, world: Any) -> None:
         """Bind the LAST-placed seed to the top touched segment at ``world`` RAS.
