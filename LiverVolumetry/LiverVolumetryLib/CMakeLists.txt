@@ -24,6 +24,7 @@ set(LiverVolumetryLib_PYTHON_SCRIPTS
   VolumetrySeedProvider.py
   InVolumePick.py
   SeedTargetResolution.py
+  VolumeSegmentAggregation.py
   VolumetrySeedPipeline.py
   VolumetrySeedsTableWidget.py
   )
