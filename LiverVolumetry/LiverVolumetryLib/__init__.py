@@ -35,6 +35,18 @@ from .SeedTargetResolution import (
     resolve_touched_candidates,
 )
 
+# The visibility-composed carve rule (territory-usability): the pure ordering /
+# carving / restore functions are dependency-free (numpy lazily inside the mask
+# carve) and the scene-side context gatherer is plain attribute access, so this
+# imports unconditionally (the bare unit layer reaches the carve core).
+from .VisibilityCarve import (
+    apply_visibility_context,
+    carve_effective_mask,
+    order_visible_top_first,
+    segments_above,
+    visible_context,
+)
+
 # The per-volume segment aggregation (territory-usability compute-per-volume) is
 # a pure, side-effect-free fold over the carrier, so it imports unconditionally
 # (the bare unit layer reaches ``distinct_bound_segments_per_volume``).
@@ -79,6 +91,11 @@ __all__ = [
     "InVolumePick",
     "gather_touched_candidates",
     "resolve_touched_candidates",
+    "apply_visibility_context",
+    "carve_effective_mask",
+    "order_visible_top_first",
+    "segments_above",
+    "visible_context",
     "distinct_bound_segments_per_volume",
     "VolumetrySeedPipeline3D",
     "VolumetrySeedPipelineSlice",
