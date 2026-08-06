@@ -68,11 +68,13 @@ try:  # pragma: no cover - exercised once per import path
         gather_touched_candidates,
         resolve_touched_candidates,
     )
+    from .VisibilityCarve import apply_visibility_context
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from SeedTargetResolution import (  # type: ignore[no-redef]
         gather_touched_candidates,
         resolve_touched_candidates,
     )
+    from VisibilityCarve import apply_visibility_context  # type: ignore[no-redef]
 
 # The arm / active-volume state rides the shared display node via the base's
 # PointPlacementState (the LiverVolumetry.* channel the slice pipeline reads at
@@ -483,7 +485,14 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             self.retargetSeed(seedIndex, str(segmentID))
 
     def _onRowSelectionChanged(self) -> None:
-        """Re-fade the selected seed's bound segment (confirmation on demand)."""
+        """Restore the selected seed's visibility snapshot + re-fade its binding.
+
+        Selecting a seed row flips the structure-source visibility to EXACTLY
+        the seed's placement-time context (the visibility-composed carve rule:
+        the snapshot IS the seed's reproducible definition), so the view shows
+        the composition that defines the seed.  Deselecting restores nothing --
+        the last selected context stays.
+        """
         if self._rebuilding:
             return
         items = self._tree.selectedItems()
@@ -491,7 +500,40 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             return
         seedIndex = items[0].data(0, qt.Qt.UserRole)
         if seedIndex is not None:
+            self._restoreVisibilityContext(int(seedIndex))
             self._fadeSeedBinding(int(seedIndex))
+
+    # ------------------------------------------------------------------ #
+    # Visibility snapshot (restore-on-select, ``VisibilityCarve``)
+    # ------------------------------------------------------------------ #
+
+    def _seedVisibilityContext(self, seedIndex: int) -> list[str]:
+        """The seed's ordered (top-first) visibility snapshot off the carrier."""
+        carrier = self._carrier
+        if carrier is None or not hasattr(carrier, "GetNthSeedVisibilityContext"):
+            return []
+        ids = vtk.vtkStringArray()
+        carrier.GetNthSeedVisibilityContext(int(seedIndex), ids)
+        return [ids.GetValue(i) for i in range(ids.GetNumberOfValues())]
+
+    def _restoreVisibilityContext(self, seedIndex: int) -> None:
+        """Flip the structure-source visibility to the seed's snapshot.
+
+        Shows exactly the context's segments and hides the rest; an empty
+        snapshot (a legacy seed) is a NO-OP so the live view is never blanked.
+        """
+        source = self._structureSource
+        if source is None or not hasattr(source, "GetSegmentation"):
+            return
+        context = self._seedVisibilityContext(seedIndex)
+        if not context:
+            return
+        segmentation = source.GetSegmentation()
+        allIDs = [
+            segmentation.GetNthSegmentID(n)
+            for n in range(segmentation.GetNumberOfSegments())
+        ]
+        apply_visibility_context(source.GetDisplayNode(), allIDs, context)
 
     # ------------------------------------------------------------------ #
     # Repaint
@@ -693,6 +735,11 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         )
         rowLayout.addWidget(deleteButton)
 
+        # a11y: name the owning segment + the visibility context in TEXT on the
+        # row (ADR-0010 -- never colour/animation alone).  Selecting the row
+        # restores this snapshot; the tooltip says what that means.
+        rowWidget.setToolTip(self._seedContextToolTip(seedIndex))
+
         self._seed_rows[seedIndex] = {
             "widget": rowWidget,
             "colour": colourButton,
@@ -701,6 +748,21 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             "delete": deleteButton,
         }
         return rowWidget
+
+    def _seedContextToolTip(self, seedIndex: int) -> str:
+        """The seed's owner + snapshot named in text (the a11y companion)."""
+        owner = self._seedBindingSegmentID(seedIndex)
+        ownerName = self._segmentName(owner) or owner or "unbound"
+        context = self._seedVisibilityContext(seedIndex)
+        if not context:
+            return f"Structure: {ownerName} (no visibility snapshot)"
+        contextNames = ", ".join(
+            self._segmentName(segmentID) or segmentID for segmentID in context
+        )
+        return (
+            f"Structure: {ownerName}. Visible at placement: {contextNames}. "
+            "Selecting this row restores that view."
+        )
 
     def _buildTargetCombo(self, seedIndex: int) -> Any:
         """Compose the row's retarget combo: the touched candidates, top-first."""

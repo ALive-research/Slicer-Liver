@@ -119,6 +119,11 @@ set(_volumetry_pytest_files
   # fires without a reslice).  LayerDM base + wrapped carrier + slice node ->
   # SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_slice_reproject.py
+  # territory-usability -- selecting a seed row restores its visibility
+  # snapshot on the structure source (show exactly the context, hide the rest;
+  # empty snapshot is a no-op) and the row names owner + context in text
+  # (ADR-0010).  Qt + wrapped carrier -> SKIPS bare, RUNS launched (ADR-0027).
+  test_volumetry_restore_on_select.py
   # territory-usability -- the per-seed VISIBILITY CONTEXT slot on the carrier:
   # ordered round-trip, parallel-slot lockstep on remove, empty default, and
   # the .vsd.json storage round-trip.  Wrapped C++ node -> SKIPS bare, RUNS
