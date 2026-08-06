@@ -1,46 +1,49 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital.  All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
 
-"""Gating truth-table for the data-first volumetry panel.
+"""Gating truth-table for the seeds-first-class volumetry panel.
 
-The data-first redesign (``Docs/design/volumetry-data-first-redesign.md``
-§3.4) replaces the panel's false preconditions with the gates the logic
-actually needs:
+The corrected model (``Docs/design/volumetry-data-first-redesign.md`` §1/§3):
+segment volumes are computed in two PEER ways -- tick segments OR place seeds
+to pick regions -- and resections are an OPTIONAL refinement, never the
+framing.  The seeds-without-resections path (logic B2: a seed measures the
+whole segment/region it sits in) is a valid, first-class workflow.
 
-* COMPUTE VOLUMES is enabled iff a segmentation is selected (an empty
-  segment selection means "all segments", matching the export semantics);
-  the requirements line otherwise reads "Select a segmentation."  The old
-  reference-volume + "select at least one segment" preconditions are gone
-  (§3.3 -- the data never needed them).
-* PARTITION contributes rows to Compute iff >= 1 resection is checked AND
-  >= 1 seed is placed; otherwise the requirements line reads "Check a
-  resection and place at least one seed (e.g. in the remnant)." -- this
-  closes the B4 silent no-op (resections-without-seeds was a runnable-but-
-  empty state).
+The gates the panel enforces:
+
+* COMPUTE VOLUMES is enabled iff a segmentation is selected AND (>= 1 segment
+  is ticked OR >= 1 seed is placed).  The requirements line otherwise reads
+  "Select a segmentation, then tick segments or place seeds."
 * PLACE SEEDS is enabled iff a segmentation is selected (the in-volume pick
   needs a target region's labelmap).
-* GENERATE SEGMENTS is enabled iff the partition gate is met.
+* REFINE BY RESECTION is purely optional: when ON it wants >= 1 resection
+  checked to have effect ("Check a resection to bound the seed regions"), but
+  it NEVER blocks the plain seed path.  There is NO gate that requires a
+  resection to compute.
+* GENERATE SEGMENTS is enabled iff >= 1 seed is placed (resections optional).
 
 The existing ``_actionRequirements`` / ``_updateActionEnablement`` /
-``_updateRequirementsMessage`` trio stays the single source of truth; only
-the predicate set changes.
+``_updateRequirementsMessage`` trio stays the single source of truth; only the
+predicate set changes.
 
-This file pins (mirroring the VascularTerritories requirements-surface
-idiom):
+This file pins (mirroring the VascularTerritories requirements-surface idiom):
 
-* i1 (launched, widget) -- with no segmentation Compute + Place are
-  disabled and the requirements line names the segmentation; selecting a
-  segmentation (no segment selection) ENABLES Compute + Place.
-* i2 (launched, widget) -- the partition gate: a checked resection alone or
-  a seed alone does not arm Generate / the partition contribution; both
-  together do, and the requirements line names the partition requirement.
-* i3 (launched, widget) -- Clear-all empties the carrier and re-disables.
+* i1 (launched, widget) -- with no segmentation Compute + Place are disabled
+  and the requirements line names the segmentation; selecting a segmentation
+  and TICKING a segment ENABLES Compute; selecting a segmentation alone
+  (nothing ticked, no seed) does NOT enable Compute but DOES enable Place.
+* i2 (launched, widget) -- the seeds-only (B2) path: a placed seed with NO
+  resection enables Compute AND Generate.  Resections are not required.
+* i3 (launched, widget) -- Refine-by-resection is optional: turning it ON with
+  no resection checked names the refine requirement but does NOT disable
+  Compute (the plain seed path still runs).
+* i4 (launched, widget) -- Clear-all empties the carrier and re-disables.
 
-Both need the wrapped carrier + a live scene + Qt, so they SKIP cleanly
-bare and RUN launched (ADR-0027).
+Both need the wrapped carrier + a live scene + Qt, so they SKIP cleanly bare
+and RUN launched (ADR-0027).
 
 See also:
-  * Docs/design/volumetry-data-first-redesign.md  (§3.4 gating truth table)
+  * Docs/design/volumetry-data-first-redesign.md  (§1/§3 seeds-first-class)
   * Docs/adr/0027-invariant-test-first.md  (RED / skip-pending discipline)
 """
 
@@ -52,9 +55,9 @@ vtk = pytest.importorskip("vtk")
 
 SEGMENTATION_CLASS = "vtkMRMLSegmentationNode"
 
+_NEEDS_INPUT = "Select a segmentation, then tick segments or place seeds."
 _NEEDS_SEGMENTATION = "Select a segmentation."
-_NEEDS_PARTITION = (
-    "Check a resection and place at least one seed (e.g. in the remnant).")
+_NEEDS_RESECTION = "Check a resection to bound the seed regions."
 
 
 # --------------------------------------------------------------------------- #
@@ -115,19 +118,27 @@ def _single_segment_segmentation(slicer, name="EnablementLiver"):
     return seg
 
 
+def _tick_all_segments(widget, seg):
+    """Tick every segment of ``seg`` on the input selector (the B1 path)."""
+    segmentation = seg.GetSegmentation()
+    ids = [segmentation.GetNthSegmentID(i)
+           for i in range(segmentation.GetNumberOfSegments())]
+    widget.ui.InputSegmentSelectorWidget.setSelectedSegmentIDs(ids)
+
+
 # =========================================================================== #
-# i1 -- Compute + Place gate ONLY on a segmentation (§3.4)
+# i1 -- Compute gates on a segmentation AND (a ticked segment OR a seed);
+#       Place gates on a segmentation only (§3.4)
 # =========================================================================== #
 
 
-def test_compute_and_place_gate_on_segmentation_only(qt_widgets):
-    """§3.4: Compute + Place enabled iff a segmentation is selected.
+def test_compute_gates_on_segmentation_plus_ticked_or_seed(qt_widgets):
+    """§3.4: Compute needs a segmentation AND (a ticked segment OR a seed).
 
-    With no segmentation both are disabled and every action lists
-    "Select a segmentation."  Selecting a segmentation (with NO segment
-    selection -- "all segments") ENABLES Compute + Place, and the reference-
-    volume + "select at least one segment" preconditions are gone.
-    Launched (widget); SKIPS bare.
+    With no segmentation Compute + Place are disabled and every action lists
+    "Select a segmentation...".  Selecting a segmentation ENABLES Place but
+    NOT Compute (nothing ticked, no seed yet); ticking a segment then enables
+    Compute.  Launched (widget); SKIPS bare.
     """
     slicer = _slicer_or_skip()
     widget = _make_widget_or_skip(slicer)
@@ -143,41 +154,50 @@ def test_compute_and_place_gate_on_segmentation_only(qt_widgets):
     assert widget.ui.AddSeedsButton.enabled is False, (
         "Place seeds must be DISABLED with no segmentation (§3.4)."
     )
-    placeUnmet, computeUnmet, _generateUnmet = widget._actionRequirements()
-    assert computeUnmet == [_NEEDS_SEGMENTATION], (
-        "with no segmentation Compute must list ONLY the segmentation "
-        "requirement (the reference-volume + segment preconditions are gone)."
+    placeUnmet, computeUnmet, _generateUnmet, _refineUnmet = widget._actionRequirements()
+    assert computeUnmet == [_NEEDS_INPUT], (
+        "with no segmentation Compute must list ONLY the combined input "
+        "requirement (tick segments or place seeds)."
     )
     assert placeUnmet == [_NEEDS_SEGMENTATION]
 
     seg = _single_segment_segmentation(slicer)
     widget.ui.InputSegmentSelectorWidget.setCurrentNode(seg)
+    widget.ui.InputSegmentSelectorWidget.setSelectedSegmentIDs([])
     widget._updateActionEnablement()
-    assert widget.ui.ComputeVolumePushButton.enabled is True, (
-        "Compute must ENABLE once a segmentation is selected -- an empty "
-        "segment selection means 'all segments' (§3.4)."
-    )
     assert widget.ui.AddSeedsButton.enabled is True, (
         "Place seeds must ENABLE once a segmentation is selected."
     )
-    _place2, computeUnmet2, _gen2 = widget._actionRequirements()
+    assert widget.ui.ComputeVolumePushButton.enabled is False, (
+        "Compute must stay DISABLED with a segmentation but nothing ticked "
+        "and no seed placed (§3.4)."
+    )
+
+    _tick_all_segments(widget, seg)
+    widget._updateActionEnablement()
+    assert widget.ui.ComputeVolumePushButton.enabled is True, (
+        "Compute must ENABLE once a segment is ticked (§3.4)."
+    )
+    _p2, computeUnmet2, _g2, _r2 = widget._actionRequirements()
     assert computeUnmet2 == [], (
-        "with a segmentation selected Compute has no unmet preconditions."
+        "with a segmentation selected and a segment ticked Compute has no "
+        "unmet preconditions."
     )
 
 
 # =========================================================================== #
-# i2 -- the partition gate: resection AND seed (§3.4, closes B4)
+# i2 -- the seeds-only (B2) path: a seed with NO resection enables Compute +
+#       Generate (§1/§3 -- seeds are first-class, resections optional)
 # =========================================================================== #
 
 
-def test_partition_gate_needs_both_resection_and_seed(qt_widgets):
-    """§3.4: the partition contributes iff a resection is checked AND a seed.
+def test_seed_without_resection_enables_compute_and_generate(qt_widgets):
+    """§1/§3: a placed seed alone (no resection) enables Compute AND Generate.
 
-    A checked resection with no seed (the old B4 silent no-op) does NOT arm
-    Generate; a seed with no checked resection does not either; both
-    together do.  The requirements line names the partition requirement when
-    unmet.  Launched (widget); SKIPS bare.
+    Seeds are a first-class way to pick regions to measure; a seed measures
+    the whole region it sits in (logic B2).  A seed with NO checked resection
+    must enable BOTH Compute and Generate -- there is no resection-required
+    gate.  Launched (widget); SKIPS bare.
     """
     slicer = _slicer_or_skip()
     widget = _make_widget_or_skip(slicer)
@@ -187,6 +207,7 @@ def test_partition_gate_needs_both_resection_and_seed(qt_widgets):
 
     seg = _single_segment_segmentation(slicer)
     widget.ui.InputSegmentSelectorWidget.setCurrentNode(seg)
+    widget.ui.InputSegmentSelectorWidget.setSelectedSegmentIDs([])
     carrier = widget._ensureSeedsCarrier()
     if carrier is None:
         pytest.skip(
@@ -194,27 +215,91 @@ def test_partition_gate_needs_both_resection_and_seed(qt_widgets):
             "(launched build; ADR-0027)."
         )
 
-    # Neither resection nor seed -> partition gate unmet, Generate disabled.
+    # No seed yet, nothing ticked -> Compute + Generate disabled.
     widget._updateActionEnablement()
+    assert widget.ui.ComputeVolumePushButton.enabled is False
     assert widget.ui.GenerateSegmentsPushButton.enabled is False, (
-        "Generate must be DISABLED with no resection and no seed (§3.4)."
-    )
-    _place, _compute, generateUnmet = widget._actionRequirements()
-    assert generateUnmet == [_NEEDS_PARTITION], (
-        "the partition requirement message must name both a resection and a "
-        "seed (§3.4)."
+        "Generate must be DISABLED with no seed placed (§3.4)."
     )
 
-    # A seed alone (no checked resection) -> still unmet.
+    # A seed alone (no checked resection) -> Compute AND Generate ENABLED.
     carrier.AddSeed(0.0, 0.0, 0.0)
     widget._updateActionEnablement()
-    assert widget.ui.GenerateSegmentsPushButton.enabled is False, (
-        "a seed without a checked resection must NOT arm Generate (§3.4)."
+    assert widget.ui.ComputeVolumePushButton.enabled is True, (
+        "a seed alone (no resection) must ENABLE Compute -- the B2 seeds-only "
+        "path is first-class (§1/§3)."
+    )
+    assert widget.ui.GenerateSegmentsPushButton.enabled is True, (
+        "a seed alone (no resection) must ENABLE Generate -- resections are "
+        "an optional refinement, not a precondition (§1/§3)."
+    )
+    _p, computeUnmet, generateUnmet, _r = widget._actionRequirements()
+    assert computeUnmet == [], "a placed seed satisfies Compute's input gate."
+    assert generateUnmet == [], "a placed seed satisfies Generate's gate."
+
+
+# =========================================================================== #
+# i3 -- Refine-by-resection is OPTIONAL: never blocks the plain seed path
+# =========================================================================== #
+
+
+def test_refine_by_resection_is_optional(qt_widgets):
+    """§1/§3: Refine-by-resection is optional and never blocks Compute.
+
+    Turning refine ON with NO resection checked names the refine requirement
+    (so the surgeon knows a resection is wanted to have effect) but does NOT
+    disable Compute -- the plain seed path still runs (logic B2).  Launched
+    (widget); SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    widget = _make_widget_or_skip(slicer)
+    qt_widgets.append(widget)
+    _detach_scene_observers(slicer, widget)
+    _require_requirements_seam_or_skip(widget)
+
+    if not hasattr(widget.ui, "RefineByResectionCheckBox"):
+        pytest.skip(
+            "widget has no RefineByResectionCheckBox -- the refine sub-control "
+            "has not landed (ADR-0027)."
+        )
+
+    seg = _single_segment_segmentation(slicer)
+    widget.ui.InputSegmentSelectorWidget.setCurrentNode(seg)
+    widget.ui.InputSegmentSelectorWidget.setSelectedSegmentIDs([])
+    carrier = widget._ensureSeedsCarrier()
+    if carrier is None:
+        pytest.skip(
+            "seed carrier unavailable -- the ADR-0038 carrier has not landed "
+            "(launched build; ADR-0027)."
+        )
+    carrier.AddSeed(0.0, 0.0, 0.0)
+
+    # Refine OFF (default): no refine requirement, Compute enabled.
+    widget.ui.RefineByResectionCheckBox.setChecked(False)
+    widget._updateActionEnablement()
+    assert widget.ui.ComputeVolumePushButton.enabled is True
+    _p, _c, _g, refineUnmet = widget._actionRequirements()
+    assert refineUnmet == [], (
+        "with refine OFF there is no refine requirement (§3.4)."
+    )
+
+    # Refine ON but no resection checked: names the requirement, Compute STILL
+    # enabled (the plain seed path is never blocked).
+    widget.ui.RefineByResectionCheckBox.setChecked(True)
+    widget._updateActionEnablement()
+    assert widget.ui.ComputeVolumePushButton.enabled is True, (
+        "Refine-by-resection must NEVER block the plain seed path -- Compute "
+        "stays enabled with a seed placed (§1/§3)."
+    )
+    _p2, _c2, _g2, refineUnmet2 = widget._actionRequirements()
+    assert refineUnmet2 == [_NEEDS_RESECTION], (
+        "refine ON with no resection checked must name the resection "
+        "requirement (§3.4)."
     )
 
 
 # =========================================================================== #
-# i3 -- Clear all seeds
+# i4 -- Clear all seeds
 # =========================================================================== #
 
 
