@@ -41,6 +41,10 @@ set(_volumetry_pytest_files
   # add/get/delete + per-seed LABEL + colour + storage round-trip.  Wrapped
   # C++ node -> SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_seed_carrier.py
+  # territory-usability -- the grouped-VOLUMES carrier: per-seed volume id +
+  # per-volume display slots + AddSeedToVolume + delete-volume + storage
+  # round-trip.  Wrapped C++ node -> SKIPS bare, RUNS launched (ADR-0027).
+  test_volumetry_seed_volumes.py
   # ADR-0038 §Conformance -- the pure carrier->transient-fiducial mapping
   # preserves position + LABEL + order.  Pure Python -> RUNS bare (ADR-0027).
   test_volumetry_seed_transient_fiducial.py

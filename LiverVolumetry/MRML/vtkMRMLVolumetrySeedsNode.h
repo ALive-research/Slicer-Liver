@@ -46,6 +46,7 @@
 
 // STD includes
 #include <array>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -90,6 +91,22 @@ class vtkMRMLStorageNode;
  *     the clicked voxel; the surgeon may retarget it to another touched
  *     candidate.  An empty pair means "unbound" (placed before a target was
  *     resolved).
+ *   - ``SeedVolumes`` — per-seed VOLUME-GROUP id: the surgeon-named volume the
+ *     seed belongs to (``territory-usability`` grouped-volumes).  Mirrors the
+ *     ``vtkMRMLCustomTerritoriesNode`` per-territory grouping model: the surgeon
+ *     adds a named volume, arms placement into the ACTIVE one, and placed seeds
+ *     ride that volume.  Empty means "ungrouped" (a legacy / flat seed).  This
+ *     is a fifth PARALLEL slot: it does not perturb the coordinate / label /
+ *     colour / binding a delete keeps every slot in lockstep.
+ *
+ * \par Per-volume display slots
+ *
+ * Alongside the parallel per-seed slots, the carrier holds per-VOLUME display
+ * attributes (colour + label) in OWN ``std::map`` slots keyed on the volume id,
+ * mirroring the territory carrier's ``TerritoryColors`` / ``TerritoryLabels``
+ * (ADR-0037 §Decision 3).  A display write never touches seed geometry, and an
+ * empty (zero-seed) volume lives in these display maps alone so its table row
+ * survives before a seed lands.
  */
 class VTK_SLICER_LIVERVOLUMETRY_MODULE_MRML_EXPORT vtkMRMLVolumetrySeedsNode : public vtkMRMLStorableNode
 {
@@ -181,6 +198,68 @@ public:
   std::string GetNthSeedBindingSegmentID(int i);
 
   //--------------------------------------------------------------------------
+  // Per-seed VOLUME group (``territory-usability`` grouped-volumes)
+  //--------------------------------------------------------------------------
+  //
+  // A fifth PARALLEL per-seed slot: the surgeon-named volume the seed belongs
+  // to, mirroring the territory carrier's per-territory grouping.  Empty means
+  // "ungrouped".  The per-volume DISPLAY (colour / label) lives in the OWN maps
+  // below, keyed on the same volume id — so an empty (zero-seed) volume is still
+  // enumerable through its display slot.
+
+  /// Append a seed at RAS ``(x, y, z)`` ALREADY assigned to ``volumeId`` (an
+  /// empty label + the module default colour + unbound).  The convenience the
+  /// active-volume placement path uses; returns the placement index.  Fires ONE
+  /// ModifiedEvent.
+  int AddSeedToVolume(const std::string& volumeId, double x, double y, double z);
+
+  /// Set the i-th seed's VOLUME group id.  Fires ONE ModifiedEvent; a no-op for
+  /// an out-of-range index.  Does NOT touch the coordinate / label / binding.
+  void SetNthSeedVolume(int i, const std::string& volumeId);
+
+  /// The i-th seed's VOLUME group id (empty when ungrouped or for an
+  /// out-of-range index).
+  std::string GetNthSeedVolume(int i);
+
+  /// Register an EMPTY volume group (a display slot) so its id enumerates
+  /// before any seed lands.  Idempotent; fires ONE ModifiedEvent when the
+  /// volume is newly registered.
+  void AddVolume(const std::string& volumeId);
+
+  /// The volume-group ids that carry at least one seed OR a display slot, in a
+  /// deterministic (sorted) order.  Used by the table + the storage node to
+  /// enumerate the volumes.
+  std::vector<std::string> GetVolumeIds();
+
+  /// Remove ``volumeId`` wholesale — every seed assigned to it AND its display
+  /// slot — leaving siblings intact.  The tail seeds shift up in lockstep.
+  /// Fires ONE ModifiedEvent iff something was removed.  Returns true iff the
+  /// volume carried any seed or display slot.
+  bool RemoveVolume(const std::string& volumeId);
+
+  //--------------------------------------------------------------------------
+  // Per-volume display slots (colour + label; OWN maps, ADR-0014 §"Fourth
+  // layer" display-vs-geometry independence)
+  //--------------------------------------------------------------------------
+
+  /// Set volume ``volumeId``'s display colour (RGB in [0, 1]).  Fires ONE
+  /// ModifiedEvent.  Does NOT touch seed geometry.
+  void SetVolumeColor(const std::string& volumeId, double r, double g, double b);
+
+  /// Volume ``volumeId``'s display colour as a 3-tuple in Python
+  /// (``VTK_SIZEHINT``).  An unset volume returns the module default (opaque
+  /// white).  The pointer aliases an internal scratch buffer valid until the
+  /// next call — copy before re-calling.
+  const double* GetVolumeColor(const std::string& volumeId) VTK_SIZEHINT(3);
+
+  /// Set volume ``volumeId``'s display label.  Fires ONE ModifiedEvent.  Does
+  /// NOT touch seed geometry.
+  void SetVolumeLabel(const std::string& volumeId, const std::string& label);
+
+  /// Volume ``volumeId``'s display label (empty string if unset).
+  std::string GetVolumeLabel(const std::string& volumeId);
+
+  //--------------------------------------------------------------------------
   // Storage
   //--------------------------------------------------------------------------
 
@@ -207,12 +286,23 @@ protected:
   /// Per-seed structure binding: the ``(segmentationNodeID, segmentID)`` the
   /// seed was dropped into (parallel to ``Seeds``; both empty == unbound).
   std::vector<std::pair<std::string, std::string>> SeedBindings;
+  /// Per-seed VOLUME group id (parallel to ``Seeds``; empty == ungrouped).
+  std::vector<std::string> SeedVolumes;
+
+  /// Per-volume display attributes keyed on the surgeon-named volume id, in
+  /// SEPARATE maps so a display write cannot perturb the seed geometry
+  /// (ADR-0014 §"Fourth layer").  A volume with no seed but a display slot is
+  /// still enumerable (an empty minted volume).  A volume with no entry falls
+  /// back to the module defaults (opaque white, empty label).
+  std::map<std::string, std::array<double, 3>> VolumeColors;
+  std::map<std::string, std::string> VolumeLabels;
 
   /// Scratch buffers backing the size-hinted 3-tuple returns (the
   /// ``GetNthAnnotationPoint`` idiom): a stable address to alias so the
   /// wrapped 3-tuple does not point at a temporary.
   double SeedScratch[3] = { 0.0, 0.0, 0.0 };
   double SeedColorScratch[3] = { 1.0, 1.0, 1.0 };
+  double VolumeColorScratch[3] = { 1.0, 1.0, 1.0 };
 };
 
 #endif // __vtkmrmlvolumetryseedsnode_h_
