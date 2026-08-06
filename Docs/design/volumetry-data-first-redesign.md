@@ -1,7 +1,7 @@
 # LiverVolumetry — data-first UI/workflow redesign
 
-- **Status:** Design proposal (no code) — for maintainer decision
-- **Date:** 2026-08-05
+- **Status:** Design-of-record (implemented) — seeds-first-class corrected model
+- **Date:** 2026-08-05; corrected 2026-08-06 (seeds are first-class)
 - **Scope:** `LiverVolumetry/Resources/UI/LiverVolumetryWidget.ui`,
   `LiverVolumetry/LiverVolumetry.py` (panel composition + gating only).
   The C++ logic (`Logic/vtkLiverVolumetryLogic.*`, ADR-0015), the seed
@@ -32,6 +32,18 @@ selected silently by which optional inputs happen to exist:
 | B2 | none | ≥1 | label-lookup at each seed in the rasterized selection | one row per seed = volume of the **whole segment** the seed sits in |
 | B3 | ≥1 | ≥1 | Bezier carriers projected as barriers → `ConnectedThreshold` region-grow per seed | one row per seed = the **piece** bounded by the resection(s), + a total row |
 | B4 | ≥1 | none | `ComputeAdvancedPlanningVolumetry` early-returns inside its `if (ROIMarkersList)` guard | **nothing** — silent no-op |
+
+> **Correction (2026-08-06): seeds are a FIRST-CLASS input.** An earlier
+> revision of this document retired B2 (seeds without resections) from the UI
+> and framed the whole seed workflow as subordinate to resections ("Partition
+> by resection"). That framing was **wrong**. The surgeon computes segment
+> volumes in **two peer ways** — *tick segments* (B1) OR *place seeds to pick
+> regions* (B2) — and resections are an **optional refinement** (B3), not the
+> framing. The seeds-without-resections path (B2: a seed measures the whole
+> segment/region it sits in) is restored as a valid, first-class workflow. The
+> sections below are amended to this corrected model; only the still-true
+> removals (reference-volume selector, duplicate total-volume picker,
+> module-owned results table) are kept from the earlier revision.
 
 `GenerateSegmentsLabelMap(...)` (the "Generate segments" button) always
 needs **seeds**; resections are optional barriers. Each seed's piece
@@ -106,25 +118,29 @@ They could not fix S1–S3 because the *shape* of the panel is wrong.
 
 ## 3. The redesign
 
-### 3.1 Two workflows, honestly ranked
+### 3.1 Two peer ways to say "what to measure", plus an optional refinement
 
-- **A. Segment volumetry (the 90% path).** "How big is the liver / the
-  tumor?" → pick segments → **Compute volumes** → table. Zero seeds,
-  zero foldables, zero ceremony. Two interactions when a single
-  segmentation exists (auto-selected).
-- **B. Partition volumetry (the advanced path).** "If I cut along these
+- **Tick segments (B1).** "How big is the liver / the tumor?" → tick the
+  segment(s) → **Compute volumes** → table. Zero seeds, zero ceremony.
+- **Place seeds (B2).** "Measure these regions." → **Place seeds** →
+  click inside each region you want measured → the same **Compute
+  volumes** button emits one row per seed (each = the whole
+  segment/region the seed sits in). No resection needed — this is a
+  first-class workflow, not subordinate to resections.
+- **Refine by resection (B3, optional).** "If I cut along these
   resections, what remains?" (ADR-0023 Stage 5: "seed-and-category
   partition workbench consuming Confirmed resections as barriers") →
-  open **one** collapsed group → check resection(s) → place one seed per
-  piece to measure (one in the remnant for FLR%) → the same **Compute
-  volumes** button now also emits the piece rows; **Generate segments**
-  materialises the partition as a Segmentation.
+  turn on **Refine by resection** → check resection(s) → each seed now
+  measures the **piece** bounded by the resection(s) instead of the whole
+  region; **Generate segments** materialises the partition as a
+  Segmentation.
 
-One primary verb (Compute volumes) serves both; workflow B *modifies
-what is computed* instead of being a parallel action stack. This removes
-the S3 hidden-mode problem by making the mode a visible, foldable choice.
+One primary verb (Compute volumes) serves all three. Ticking segments and
+placing seeds are **peers**; the refinement *modifies what a seed
+measures* without being a precondition. This removes the S3 hidden-mode
+problem by making the refinement a visible, off-by-default choice.
 
-### 3.2 Panel, top to bottom (1 foldable total, down from 7)
+### 3.2 Panel, top to bottom (0 foldables, down from 7)
 
 ```
 Volumetry
@@ -132,14 +148,16 @@ Volumetry
 │ Segments   [segmentation node ▾]                  [Show 3D ▾] │   ← one header row
 │ [ segment multi-select list (qMRMLSegmentSelectorWidget) ]    │
 │                                                               │
-│ ▸ Partition by resection                        (collapsed)   │   ← the ONLY foldable
-│ │  Resections   [☑ Resection 1  ☐ Resection 2 ▾]              │
-│ │  [ Place seeds ]  [ Clear all ]                             │
-│ │  [ seeds table: swatch · label · delete ]                   │
-│ │  Hint: place one seed in each piece to measure —            │
-│ │        e.g. one inside the intended remnant.                │
-│ │  [ Generate segments ]                                      │
+│ Seeds                                                         │   ← flat, first-class
+│ [ Place seeds ]  [ Clear all ]                                │
+│ [ seeds table: swatch · label · delete ]                      │
+│ Hint: place a seed in each region you want measured.          │
 │                                                               │
+│ ☐ Refine by resection                                         │   ← optional, unchecked
+│    Resections   [☑ Resection 1  ☐ Resection 2 ▾] (enabled     │
+│                  only while the box is checked)               │
+│                                                               │
+│ [ Generate segments ]                          (shown w/ seeds)│   ← secondary
 │ [██████████████  Compute volumes  ██████████████]             │   ← primary, full width
 │ Requirements/status line (always visible)                     │
 └───────────────────────────────────────────────────────────────┘
@@ -151,18 +169,20 @@ Layout rules:
   the stage header already says Volumetry (ADR-0023 sidebar); a second
   headline is noise. (`updateGUIFromParameterNode`'s enable-gate moves
   to the top-level widget.)
-- **Section labels are flat bold labels** (`Segments`,
-  `Partition by resection`), not group boxes — the Segment Editor / Data
-  module idiom. Only the partition section folds, because it is the only
-  genuinely optional block (progressive disclosure done right: advanced
-  = folded, basic = never folded).
+- **Section labels are flat bold labels** (`Segments`, `Seeds`), not
+  group boxes — the Segment Editor / Data module idiom. Nothing folds:
+  seeds are first-class, so they are never hidden behind a fold. The
+  optional refinement is a plain labelled **checkbox**, not a collapsible
+  wrapping a single row (that was the S1 fold-tax sin).
 - **Show 3D** becomes the right-aligned trailing widget of the
   *segmentation node row*, fixed width — same row as the node it acts
   on, resolving S4 by association, not by decoration.
 - **Compute volumes** is the panel's single full-width default-styled
   button, last, above the requirements line — the Slicer Apply
-  convention. **Generate segments** lives *inside* the partition group
-  (it is meaningless without it), secondary styling.
+  convention. **Generate segments** sits just above it, secondary
+  styling, hidden until at least one seed exists (it needs a seed).
+- **Refine by resection** is an unchecked-by-default checkbox that
+  enables the resection combo; it *never* gates Compute.
 
 ### 3.3 Removed inputs (the data said so)
 
@@ -177,17 +197,24 @@ Layout rules:
 
 | Action | Enabled when | Requirements line otherwise |
 |---|---|---|
-| Compute volumes | a segmentation is selected (empty segment selection ⇒ "all segments", matching export semantics) **and** (partition group collapsed/unarmed **or** its own gate below is met) | "Select a segmentation." |
-| Partition (contributes rows to Compute) | ≥1 resection checked **and** ≥1 seed placed | "Check a resection and place at least one seed (e.g. in the remnant)." — closes the B4 silent no-op |
-| Place seeds | segmentation selected (unchanged; pick labelmap needs it) | "Select a segmentation." |
-| Generate segments | partition gate met | same as partition |
+| Compute volumes | a segmentation is selected **and** (≥1 segment ticked **or** ≥1 seed placed) | "Select a segmentation, then tick segments or place seeds." |
+| Place seeds | a segmentation is selected (pick labelmap needs it) | "Select a segmentation." |
+| Generate segments | ≥1 seed placed (resections optional) | "Place at least one seed." (button hidden until a seed exists) |
+| Refine by resection (optional; never gates Compute) | when ON, ≥1 resection checked to have effect | "Check a resection to bound the seed regions." |
+
+There is **no** gate that requires a resection to compute. The
+seeds-without-resections path (B2) is first-class: a seed alone satisfies
+both Compute and Generate. Refine-by-resection is purely optional — when
+ON with no resection checked it names the refine requirement (so the
+surgeon knows the refinement has no effect yet) but never disables
+Compute.
 
 The existing `_actionRequirements` / `_updateRequirementsMessage` /
-tooltip trio is kept verbatim as the single source of truth; only the
-predicate set changes. Seeds-without-resections (B2) is no longer
-reachable from the UI: §1 shows it only re-measures whole segments the
-segment picker already measures. The C++ branch stays (ADR-0015,
-untouched); OQ5 records the removal-from-UI decision.
+tooltip trio is kept as the single source of truth; only the predicate
+set changes. `_actionRequirements` now returns a fourth `refineUnmet`
+list. The C++ branches (B1/B2/B3) stay unchanged (ADR-0015); the earlier
+revision's decision to retire B2 from the UI is **reverted** (see the §1
+correction and OQ5).
 
 ### 3.5 Behaviour polish (recognition over recall)
 
@@ -227,11 +254,14 @@ untouched); OQ5 records the removal-from-UI decision.
 
 ```mermaid
 flowchart LR
-  A[Select segments\n(auto when unambiguous)] --> C[Compute volumes]
+  S[Select segmentation] --> B1[Tick segments]
+  S --> B2[Place seeds]
+  B1 --> C[Compute volumes]
+  B2 --> C
   C --> T[Volumes table\nRegion / mL / %]
-  A -. optional .-> P[Partition by resection:\ncheck resections + place seeds]
-  P --> C
-  P --> G[Generate segments\n(new Segmentation:\npieces + Remnant)]
+  B2 -. optional .-> R[Refine by resection:\ncheck resection barriers]
+  R --> C
+  B2 --> G[Generate segments\n(new Segmentation:\nregions + Remnant)]
 ```
 
 ---
@@ -258,8 +288,13 @@ flowchart LR
   who want to keep a run rename the table in Data before recomputing
   (matches Segment Statistics ergonomics).
 - **OQ5 — Retire UI reachability of B2 (seeds without resections)?**
-  **Default: yes** — seeds live only inside the partition group. The
-  C++ branch remains for compatibility and tests.
+  **RESOLVED 2026-08-06: NO — B2 is first-class.** The earlier
+  "Default: yes" was wrong (see the §1 correction). Seeds are a peer way
+  to pick regions to measure, usable with no resection: a seed alone
+  measures the whole region it sits in. The UI reaches B2 whenever a seed
+  is placed and Refine-by-resection is off. Resections are fed to the
+  compute (routing seeds into B3) *only* when Refine-by-resection is on
+  and ≥1 resection is checked.
 - **OQ6 — Show 3D: keep or drop?** Not a data input; pure viewing
   convenience. **Default: keep**, right-aligned on the segmentation
   row (it is the one button surgeons reach for constantly in Stage 2).
