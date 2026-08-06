@@ -73,7 +73,7 @@ try:  # pragma: no cover - exercised once per import path
         gather_touched_candidates,
         resolve_touched_candidates,
     )
-    from .VisibilityCarve import apply_visibility_context
+    from .VisibilityCarve import apply_visibility_context, read_seed_context
     from .CarvedRegionStripes import (
         STRIPE_PERIOD_PX,
         STRIPE_TICK_MS,
@@ -85,7 +85,10 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
         gather_touched_candidates,
         resolve_touched_candidates,
     )
-    from VisibilityCarve import apply_visibility_context  # type: ignore[no-redef]
+    from VisibilityCarve import (  # type: ignore[no-redef]
+        apply_visibility_context,
+        read_seed_context,
+    )
     from CarvedRegionStripes import (  # type: ignore[no-redef]
         STRIPE_PERIOD_PX,
         STRIPE_TICK_MS,
@@ -526,12 +529,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
 
     def _seedVisibilityContext(self, seedIndex: int) -> list[str]:
         """The seed's ordered (top-first) visibility snapshot off the carrier."""
-        carrier = self._carrier
-        if carrier is None or not hasattr(carrier, "GetNthSeedVisibilityContext"):
-            return []
-        ids = vtk.vtkStringArray()
-        carrier.GetNthSeedVisibilityContext(int(seedIndex), ids)
-        return [ids.GetValue(i) for i in range(ids.GetNumberOfValues())]
+        return read_seed_context(self._carrier, seedIndex)
 
     def _restoreVisibilityContext(self, seedIndex: int) -> None:
         """Flip the structure-source visibility to the seed's snapshot.
