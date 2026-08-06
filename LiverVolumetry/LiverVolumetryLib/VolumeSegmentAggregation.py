@@ -2,22 +2,32 @@
 # Distributed under the OSI-approved BSD 3-Clause License.
 """territory-usability -- per-volume segment aggregation for Compute.
 
-Compute reports ONE results row per VOLUME: the combined region of the DISTINCT
-segments the volume's seeds are bound to (the union of the bound segments'
-regions).  A volume whose seeds bind to Segment_2 + Segment_3 measures
-``|seg2 ∪ seg3|``.
+Compute reports ONE results row per VOLUME: the union of its seeds' EFFECTIVE
+(carved) regions (the visibility-composed carve rule, ``VisibilityCarve``).
+Each seed contributes its owning segment MINUS the snapshot segments stacked
+above it -- so with Parenchyma + Segment_1 visible at placement, a seed in
+Parenchyma outside Segment_1 contributes ``Parenchyma \\ Segment_1``, NOT the
+whole parenchyma.  A seed with no snapshot (legacy) contributes its whole
+bound segment.
 
-This module holds the PURE aggregation the compute path drives: reading the
-carrier's per-seed volume ids + per-seed structure bindings and folding them
-into ``{volumeId: [distinct bound segmentIDs]}``.  Kept as a thin, side-effect-
-free helper (no Slicer / no VTK) so it RUNS BARE (ADR-0027) and the voxel-union
-volume computation in the module Logic drives it with a rasterizer.
+This module holds the PURE aggregation the compute path drives:
+
+* ``distinct_bound_segments_per_volume`` -- the flat owner fold (also the
+  grouped-compute gate).
+* ``effective_regions_per_volume`` -- the carve-aware fold:
+  ``{volumeId: [(ownerSegmentID, contextTuple), ...]}`` with distinct
+  (owner, context) pairs in first-seen order; the module Logic rasterizes each
+  pair's carved mask and unions them per volume.
+
+Kept side-effect-free (vtk only lazily, for the carrier's string-array
+context accessor) so it RUNS BARE (ADR-0027).
 
 References
 ----------
-* territory-usability -- the compute-per-volume plan (this SUT).
+* territory-usability -- the compute-per-volume + compute-on-carved plan.
+* LiverVolumetry/LiverVolumetryLib/VisibilityCarve.py -- the carve rule.
 * LiverVolumetry/LiverVolumetry.py -- LiverVolumetryLogic.computeVolumePerVolume
-  (the driver that rasterizes each volume's bound-segment union).
+  (the driver that rasterizes each volume's carved-region union).
 """
 
 from __future__ import annotations
@@ -50,4 +60,43 @@ def distinct_bound_segments_per_volume(carrier: Any) -> dict[str, list[str]]:
         segments = per_volume.setdefault(volumeId, [])
         if segmentID not in segments:
             segments.append(segmentID)
+    return per_volume
+
+
+def _seed_visibility_context(carrier: Any, i: int) -> tuple:
+    """The i-th seed's snapshot as a tuple (empty for a legacy carrier/seed)."""
+    if not hasattr(carrier, "GetNthSeedVisibilityContext"):
+        return ()
+    import vtk
+
+    ids = vtk.vtkStringArray()
+    carrier.GetNthSeedVisibilityContext(i, ids)
+    return tuple(ids.GetValue(v) for v in range(ids.GetNumberOfValues()))
+
+
+def effective_regions_per_volume(carrier: Any) -> dict[str, list[tuple[str, tuple]]]:
+    """Fold the seeds into ``{volumeId: [(ownerSegmentID, contextTuple), ...]}``.
+
+    The carve-aware sibling of ``distinct_bound_segments_per_volume``: each
+    bound, grouped seed contributes its ``(owning segment, visibility
+    snapshot)`` pair -- the seed's reproducible region definition
+    (``VisibilityCarve``).  DISTINCT pairs are kept in first-seen order (two
+    seeds with the same owner AND the same snapshot count once; the same owner
+    under DIFFERENT snapshots counts twice -- they carve differently).  An
+    empty snapshot means "the whole owning segment" (legacy semantics).
+    Unbound or ungrouped seeds are skipped, as in the flat fold.
+    """
+    per_volume: dict[str, list[tuple[str, tuple]]] = {}
+    if carrier is None:
+        return per_volume
+    count = carrier.GetNumberOfSeeds()
+    for i in range(count):
+        volumeId = carrier.GetNthSeedVolume(i)
+        segmentID = carrier.GetNthSeedBindingSegmentID(i)
+        if not volumeId or not segmentID:
+            continue
+        entry = (segmentID, _seed_visibility_context(carrier, i))
+        entries = per_volume.setdefault(volumeId, [])
+        if entry not in entries:
+            entries.append(entry)
     return per_volume
