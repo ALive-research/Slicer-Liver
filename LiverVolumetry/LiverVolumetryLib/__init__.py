@@ -47,6 +47,23 @@ from .VisibilityCarve import (
     visible_context,
 )
 
+# The carved-region marching-stripes highlight (territory-usability): the
+# stripe geometry / plane cut / highlight-state helpers are pure numpy +
+# attribute access, so this imports unconditionally (the bare unit layer
+# reaches the stripe core).
+from .CarvedRegionStripes import (
+    HIGHLIGHT_SEED_ATTRIBUTE,
+    STRIPE_PERIOD_PX,
+    STRIPE_PHASE_ATTRIBUTE,
+    STRIPE_TICK_MS,
+    get_highlight_seed,
+    get_stripe_phase,
+    resample_mask_to_plane,
+    set_highlight_seed,
+    set_stripe_phase,
+    stripe_segments,
+)
+
 # The per-volume segment aggregation (territory-usability compute-per-volume) is
 # a pure, side-effect-free fold over the carrier, so it imports unconditionally
 # (the bare unit layer reaches ``distinct_bound_segments_per_volume``).
@@ -96,6 +113,16 @@ __all__ = [
     "order_visible_top_first",
     "segments_above",
     "visible_context",
+    "HIGHLIGHT_SEED_ATTRIBUTE",
+    "STRIPE_PERIOD_PX",
+    "STRIPE_PHASE_ATTRIBUTE",
+    "STRIPE_TICK_MS",
+    "get_highlight_seed",
+    "get_stripe_phase",
+    "resample_mask_to_plane",
+    "set_highlight_seed",
+    "set_stripe_phase",
+    "stripe_segments",
     "distinct_bound_segments_per_volume",
     "VolumetrySeedPipeline3D",
     "VolumetrySeedPipelineSlice",
