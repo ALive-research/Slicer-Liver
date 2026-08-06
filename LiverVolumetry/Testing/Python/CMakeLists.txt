@@ -124,6 +124,11 @@ set(_volumetry_pytest_files
   # default binding is the top layer's segment.  Pure Python -> RUNS bare
   # (ADR-0027).
   test_volumetry_seed_target_resolution.py
+  # territory-usability -- the volumetry provider yields each seed's VOLUME
+  # colour (per-group lookup, mirroring TerritoryPointProvider) with a fall-back
+  # to the per-seed colour for an ungrouped seed.  Pure Python -> RUNS bare
+  # (ADR-0027).
+  test_volumetry_seed_provider_colour.py
 )
 
 foreach(_pytest_file IN LISTS _volumetry_pytest_files)
