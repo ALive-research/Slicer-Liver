@@ -239,9 +239,14 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.ComputeVolumePushButton.connect('clicked(bool)', self.onComputeAdvancedVolumeButtonClicked)
     self.ui.GenerateSegmentsPushButton.connect('clicked(bool)', self.onGenerateSegmentsButtonClicked)
     self.ui.ResectionTargetNodeComboBox.connect('currentNodeChanged(vtkMRMLNode*)', self.onGenerateSegmentsParameterChanged)
-    # The partition gate reads the CHECKED resections (data-first redesign
-    # §3.4), so re-gate when the check state changes, not only the current node.
+    # The refine-by-resection message reads the CHECKED resections (data-first
+    # redesign §3.4), so re-gate when the check state changes, not only the
+    # current node.
     self.ui.ResectionTargetNodeComboBox.connect('checkedNodesChanged()', self.onGenerateSegmentsParameterChanged)
+    # Refine-by-resection is an OPTIONAL sub-control (seeds-first-class model,
+    # §3): toggling it enables the resection combo and re-gates so the refine
+    # message appears/clears, but it NEVER blocks the plain seed path.
+    self.ui.RefineByResectionCheckBox.connect('toggled(bool)', self.onRefineByResectionToggled)
     # ADR-0038-amendment: the ROIMarkersList fiducial selector + place widget
     # are RETIRED; placement is the arm toggle below, driving the seed carrier
     # through the shared base pipeline.
@@ -373,25 +378,45 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return carrier.GetNumberOfSeeds()
 
   def _hasCheckedResection(self):
-    """True iff at least one resection is checked in the partition combo."""
+    """True iff at least one resection is checked in the resection combo."""
     return not self.ui.ResectionTargetNodeComboBox.noneChecked()
 
+  def _refineByResection(self):
+    """True iff the optional Refine-by-resection sub-control is enabled."""
+    return self.ui.RefineByResectionCheckBox.checked
+
+  def _hasTickedSegment(self):
+    """True iff at least one segment is ticked on the input selector.
+
+    A ticked segment is one PEER way to say "measure this" (logic B1); the
+    other is a placed seed (logic B2).  "Nothing ticked and no seed" is
+    not-yet-ready for Compute -- the user has not said what to measure.
+    """
+    return len(self.ui.InputSegmentSelectorWidget.selectedSegmentIDs()) > 0
+
   def _actionRequirements(self):
-    """The UNMET preconditions for Place / Compute / Generate, as message lists.
+    """The UNMET preconditions for Place / Compute / Generate / Refine.
 
     Reads the SAME live state the enablement gates read (D1) so the messaging
     and the enablement cannot diverge -- the enablement is simply "the list is
     empty".  Each entry is a short, actionable, platform-neutral instruction
     (ADR-0010 legible text).
 
-    Returns ``(placeUnmet, computeUnmet, generateUnmet)`` -- lists of
-    human-readable strings; an empty list means the action can run.
+    Returns ``(placeUnmet, computeUnmet, generateUnmet, refineUnmet)`` -- lists
+    of human-readable strings; an empty list means the action can run / the
+    refinement has effect.
+
+    Seeds are a FIRST-CLASS input (seeds-first-class model, §1/§3): a placed
+    seed measures the whole region it sits in (logic B2), so a seed alone --
+    with NO resection -- satisfies Compute and Generate.  Resections are an
+    OPTIONAL refinement that never blocks the plain seed path.
 
     SHARED-EXTRACTION SEAM: mirrors ``VascularTerritoriesWidget._actionRequirements``.
     """
     hasSegmentation = self._inputSegmentationNode() is not None
     hasResection = self._hasCheckedResection()
     hasSeeds = self._seedCount() > 0
+    hasTicked = self._hasTickedSegment()
 
     # Place seeds: the arm toggle needs a target region to drop interior seeds
     # into.  Gating placement on a segmentation fixes the silent-decline -- with
@@ -401,23 +426,29 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if not hasSegmentation:
       placeUnmet.append("Select a segmentation.")
 
-    # Compute volumes gates ONLY on a segmentation (data-first §3.4): an empty
-    # segment selection means "all segments", and the reference-volume + total-
-    # volume preconditions were removed (§3.3 -- the data never needed them).
+    # Compute volumes: a segmentation is selected AND the user has said WHAT to
+    # measure -- either ticked >=1 segment (B1) OR placed >=1 seed (B2).  The
+    # two are peers; neither requires a resection (data-first §3.4).
     computeUnmet = []
-    if not hasSegmentation:
-      computeUnmet.append("Select a segmentation.")
+    if not (hasSegmentation and (hasTicked or hasSeeds)):
+      computeUnmet.append(
+        "Select a segmentation, then tick segments or place seeds.")
 
-    # The partition contributes rows / arms Generate iff a resection is checked
-    # AND a seed is placed (data-first §3.4): this closes the B4 silent no-op
-    # (resections-without-seeds computed nothing).  A single combined message
-    # names both halves so a half-met partition self-explains.
+    # Generate segments materialises the SEEDED regions as a Segmentation, so
+    # it needs >=1 seed placed; resections are an optional barrier, never a
+    # precondition (seeds-first-class model, §1/§3).
     generateUnmet = []
-    if not (hasResection and hasSeeds):
-      generateUnmet.append(
-        "Check a resection and place at least one seed (e.g. in the remnant).")
+    if not hasSeeds:
+      generateUnmet.append("Place at least one seed.")
 
-    return placeUnmet, computeUnmet, generateUnmet
+    # Refine-by-resection is purely optional: it NEVER blocks Compute.  When ON
+    # it wants >=1 resection checked to have effect; the message tells the
+    # surgeon so, but the plain seed path still runs regardless.
+    refineUnmet = []
+    if self._refineByResection() and not hasResection:
+      refineUnmet.append("Check a resection to bound the seed regions.")
+
+    return placeUnmet, computeUnmet, generateUnmet, refineUnmet
 
   def _updateActionEnablement(self):
     """Gate Place / Compute / Generate / Clear on their REAL preconditions (D1/D2).
@@ -429,16 +460,21 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     parameter change, on the carrier ModifiedEvent (seeds add/delete), and after
     clear-all.
     """
-    placeUnmet, computeUnmet, generateUnmet = self._actionRequirements()
+    placeUnmet, computeUnmet, generateUnmet, refineUnmet = self._actionRequirements()
 
     self.ui.AddSeedsButton.setEnabled(not placeUnmet)
     self.ui.ComputeVolumePushButton.setEnabled(not computeUnmet)
     self.ui.GenerateSegmentsPushButton.setEnabled(not generateUnmet)
-    # Clear-all is available only when there is something to clear (critique D3).
-    self.ui.ClearAllSeedsButton.setEnabled(self._seedCount() > 0)
+    # Generate segments is shown only once seeds exist (§3.2): materialising a
+    # partition is meaningless without a seed, so hide the affordance until the
+    # surgeon has placed one.  Clear-all is enabled on the same condition
+    # (critique D3: something to clear).
+    hasSeeds = self._seedCount() > 0
+    self.ui.GenerateSegmentsPushButton.setVisible(hasSeeds)
+    self.ui.ClearAllSeedsButton.setEnabled(hasSeeds)
 
     self._updateArmedCue()
-    self._updateRequirementsMessage(placeUnmet, computeUnmet, generateUnmet)
+    self._updateRequirementsMessage(placeUnmet, computeUnmet, generateUnmet, refineUnmet)
 
   def _updateArmedCue(self):
     """Reflect the Place-seeds toggle's ARMED state in its label + tooltip (D2).
@@ -455,7 +491,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       button.setText("Place seeds")
 
-  def _updateRequirementsMessage(self, placeUnmet, computeUnmet, generateUnmet):
+  def _updateRequirementsMessage(self, placeUnmet, computeUnmet, generateUnmet, refineUnmet):
     """Surface the unmet preconditions on the status line + the button tooltips.
 
     An always-visible label under the buttons enumerates what is missing for
@@ -468,7 +504,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # §3.4), so the tips + status line present them verbatim -- no extra prefix
     # or trailing period.
     placeTip = (
-      "Place seeds is ready: click inside a piece to drop an interior "
+      "Place seeds is ready: click inside a region to drop an interior "
       "region-growing seed." if not placeUnmet
       else "Place seeds needs:\n- " + "\n- ".join(placeUnmet))
     computeTip = (
@@ -484,16 +520,18 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     label = getattr(self, "_requirementsLabel", None)
     if label is None:
       return
-    if not placeUnmet and not computeUnmet and not generateUnmet:
+    if not computeUnmet and not refineUnmet:
       label.setText("All requirements met -- compute volumes.")
       return
-    # The compute (basic-path) requirement leads; the partition requirement is
-    # only shown when the partition group is being used but is half-met.
+    # The Compute input requirement leads; the optional refine requirement is
+    # only shown when Refine-by-resection is on but no resection is checked
+    # (it never blocks Compute -- it only tells the surgeon the refinement has
+    # no effect yet).
     lines = []
     if computeUnmet:
       lines.extend(computeUnmet)
-    if generateUnmet and not computeUnmet:
-      lines.extend(generateUnmet)
+    if refineUnmet:
+      lines.extend(refineUnmet)
     label.setText("\n".join(lines))
 
   def onClearAllSeeds(self):
@@ -684,7 +722,20 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onGenerateSegmentsParameterChanged(self):
     # Re-gate all actions on their live preconditions + refresh the requirements
-    # surface: Generate needs the partition gate (a checked resection + a seed).
+    # surface: the refine message reads the checked resection(s), and Generate
+    # reads the seed count.
+    self._updateActionEnablement()
+
+  def onRefineByResectionToggled(self, refine):
+    """Enable/disable the resection combo with the optional refine sub-control.
+
+    Refine-by-resection is off by default (seeds-first-class model, §3): the
+    resection combo is only interactive while refine is on.  Re-gates so the
+    refine message appears/clears, but Compute is NEVER blocked by this
+    toggle (the plain seed path always runs).
+    """
+    self.ui.ResectionLabel.setEnabled(bool(refine))
+    self.ui.ResectionTargetNodeComboBox.setEnabled(bool(refine))
     self._updateActionEnablement()
 
   def _exportSelectedSegments(self, name):
@@ -718,6 +769,16 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._updateActionEnablement()
 
   def getResectionNodes(self):
+    """The Bezier barrier surfaces, ONLY when Refine-by-resection is on (B3).
+
+    Resections are an optional refinement (seeds-first-class model, §1/§3):
+    without the refine toggle on, the compute runs the plain seed path (B2 --
+    each seed measures the whole region it sits in), so the resections must
+    NOT be fed.  Returns ``None`` when refine is off or nothing is checked, so
+    ``computeVolume`` takes the no-barrier branch.
+    """
+    if not self._refineByResection():
+      return None
     resectionNodes = vtk.vtkCollection()
     if not self.ui.ResectionTargetNodeComboBox.noneChecked():
       checkedNodes = self.ui.ResectionTargetNodeComboBox.checkedNodes()
