@@ -93,6 +93,11 @@ set(_volumetry_pytest_files
   # (the reported "Show 3D shows nothing" was the prior hide-all).  Qt widget
   # + wrapped node -> SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_show3d_visibility.py
+  # ADR-0038 §Decision -- a seed placed in a slice reprojects into the clicked
+  # plane at once (the client observes the carrier so the base's reproject
+  # fires without a reslice).  LayerDM base + wrapped carrier + slice node ->
+  # SKIPS bare, RUNS launched (ADR-0027).
+  test_volumetry_slice_reproject.py
 )
 
 foreach(_pytest_file IN LISTS _volumetry_pytest_files)
