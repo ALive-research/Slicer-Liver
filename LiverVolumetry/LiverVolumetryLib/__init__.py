@@ -35,6 +35,11 @@ from .SeedTargetResolution import (
     resolve_touched_candidates,
 )
 
+# The per-volume segment aggregation (territory-usability compute-per-volume) is
+# a pure, side-effect-free fold over the carrier, so it imports unconditionally
+# (the bare unit layer reaches ``distinct_bound_segments_per_volume``).
+from .VolumeSegmentAggregation import distinct_bound_segments_per_volume
+
 # The LayerDM Pipeline creators depend on the shared base (LayerDMLib, reachable
 # only from a launched Slicer with the SlicerLayerDisplayableManager extension on
 # the path); guard them so the bare unit layer can still import the package for
@@ -74,6 +79,7 @@ __all__ = [
     "InVolumePick",
     "gather_touched_candidates",
     "resolve_touched_candidates",
+    "distinct_bound_segments_per_volume",
     "VolumetrySeedPipeline3D",
     "VolumetrySeedPipelineSlice",
     "registerVolumetrySeedPipeline3DCreator",
