@@ -53,6 +53,10 @@ set(_volumetry_pytest_files
   # colour/label/delete, seeds nested under their volume, Place arms into the
   # active volume.  Qt + wrapped carrier -> SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_volumes_table.py
+  # territory-usability -- compute reports ONE row per VOLUME = the union of its
+  # DISTINCT bound segments' regions.  Pure aggregation RUNS bare; the driver
+  # over a real segmentation SKIPS bare, RUNS launched (ADR-0027).
+  test_volumetry_volume_compute.py
   # ADR-0038 §Conformance -- the pure carrier->transient-fiducial mapping
   # preserves position + LABEL + order.  Pure Python -> RUNS bare (ADR-0027).
   test_volumetry_seed_transient_fiducial.py
