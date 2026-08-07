@@ -160,6 +160,11 @@ set(_volumetry_pytest_files
   # to the per-seed colour for an ungrouped seed.  Pure Python -> RUNS bare
   # (ADR-0027).
   test_volumetry_seed_provider_colour.py
+  # territory-usability -- neutral vocabulary in the volumetry core: no
+  # "remnant" anywhere, the leftover segment is "Unassigned", resection wording
+  # confined to the optional refine control.  Pure file scan -> RUNS bare
+  # (ADR-0027).
+  test_volumetry_neutral_vocabulary.py
 )
 
 foreach(_pytest_file IN LISTS _volumetry_pytest_files)
