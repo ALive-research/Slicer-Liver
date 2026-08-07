@@ -65,6 +65,14 @@ RESULTS_TABLE_NAME = "Volumetry"
 # The per-run partition total row's label (data-first redesign §3.5): a stable
 # surgeon term, never the transient fiducial node's name.
 PARTITION_TOTAL_LABEL = "All pieces"
+# The "% of total" DENOMINATOR made explicit (territory-usability): every
+# results run ends with a Total row naming what the percentages are measured
+# against, its mL, and 100%.  The denominator SEMANTICS are unchanged -- the
+# rasterized input selection (selected segments; all when none is selected) on
+# the classic path, the whole segmentation on the per-volume path -- only its
+# VISIBILITY changed.  The per-volume path derives its label from the
+# segmentation's name ("Total (<segmentation name>)").
+TOTAL_SELECTED_SEGMENTS_LABEL = "Total (selected segments)"
 
 # The placement requirements messages (territory-usability): placement is a
 # per-volume row control, so the requirements line -- not a standalone Place
@@ -1344,6 +1352,18 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
         if ROIMarkersList is not None:
           ROIMarkersList.SetName(PARTITION_TOTAL_LABEL)
         self.scl.ComputeAdvancedPlanningVolumetry(segmentsVolumeNode, outputTable, ROIMarkersList, resectionNodes, targetSegmentVolume)
+      # The explicit % denominator row (territory-usability): every run ends
+      # with a Total row naming what "% of total" is measured against -- the
+      # rasterized input selection (selected segments; ALL segments when none
+      # is selected) -- with its mL and 100%.  Same denominator as before,
+      # now visible.
+      self.scl.VolumetryTable(
+        TOTAL_SELECTED_SEGMENTS_LABEL, targetSegmentVolume, 0,
+        targetSegmentVolume, outputTable)
+      self._describePercentColumn(
+        outputTable,
+        "Measured against the Total row: the selected input segments "
+        "(all segments when none is selected).")
     finally:
       if ROIMarkersList is not None:
         slicer.mrmlScene.RemoveNode(ROIMarkersList)
@@ -1361,8 +1381,11 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
     regions; a seed with no snapshot contributes its whole bound segment
     (legacy semantics).  Rows are in surgeon terms (mL + % of total); the
     total is the whole segmentation's region so the % reads against the
-    organ.  A volume with no bound seed yields no row.  The module owns +
-    clears the table (``_ensureResultsTable``), so this only appends rows.
+    organ, and the run ends with an explicit ``Total (<segmentation name>)``
+    row carrying that denominator's mL and 100% (territory-usability -- the
+    denominator is visible, not implicit).  A volume with no bound seed
+    yields no row.  The module owns + clears the table
+    (``_ensureResultsTable``), so this only appends rows.
     """
     if outputTable is None:
       raise ValueError("Missing outputTable")
@@ -1441,8 +1464,34 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
         volumeMl = voxelCount * voxelMl
         rowName = seedsNode.GetVolumeLabel(volumeId) or volumeId
         self.scl.VolumetryTable(rowName, totalVolumeMl, voxelCount, volumeMl, outputTable)
+
+      # The explicit % denominator row (territory-usability): on this path the
+      # denominator is the WHOLE segmentation's region (all segments rasterized
+      # together), so the Total row names the segmentation and reads 100%.
+      totalLabel = f"Total ({segmentationNode.GetName()})"
+      self.scl.VolumetryTable(
+        totalLabel, totalVolumeMl, int(numpy.count_nonzero(scalars)),
+        totalVolumeMl, outputTable)
+      self._describePercentColumn(
+        outputTable,
+        f"Measured against the Total row: the whole '{segmentationNode.GetName()}' "
+        "segmentation (all segments together).")
     finally:
       slicer.mrmlScene.RemoveNode(reference)
+
+  @staticmethod
+  def _describePercentColumn(outputTable, text):
+    """State the % denominator's definition on the column (header tooltip).
+
+    The Total row makes the denominator visible in the DATA; the column
+    description carries the same definition as the header's tooltip so the
+    "% of total" wording is self-explaining (never colour/position alone,
+    ADR-0010).  Best-effort: an outputTable without the schema API degrades
+    to the Total row alone.
+    """
+    if outputTable is None or not hasattr(outputTable, "SetColumnDescription"):
+      return
+    outputTable.SetColumnDescription("% of total", text)
 
   def generateSegments(self, resectionNodes, seedsNode, segmentsVolumeNode):
     ROIMarkersList = self.transientFiducialFromSeeds(seedsNode)

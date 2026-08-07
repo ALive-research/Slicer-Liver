@@ -218,12 +218,25 @@ def test_compute_measures_the_carved_region():
     table = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTableNode", "CarvedComputeTable")
     logic.computeVolumePerVolume(segmentation, carrier, table)
 
-    assert table.GetNumberOfRows() == 1
+    # One row per bound volume + the trailing explicit Total row (the %
+    # denominator made visible, territory-usability).
+    assert table.GetNumberOfRows() == 2
     volumes = _column_values(table, "Volume (mL)")
     assert float(volumes[0]) == pytest.approx(162 * 0.001, rel=1e-3), (
         "the row must measure the CARVED region (owner minus visible-above), "
         "not the whole owning segment."
     )
+    regions = _column_values(table, "Region")
+    assert regions[-1] == f"Total ({segmentation.GetName()})", (
+        "the run must end with a Total row NAMING the % denominator (the "
+        "whole segmentation on the per-volume path)."
+    )
+    assert float(volumes[-1]) == pytest.approx(216 * 0.001, rel=1e-3), (
+        "the Total row must carry the denominator's own mL (the whole "
+        "segmentation region -- Inner lies inside Outer, so 216 unit voxels)."
+    )
+    percents = _column_values(table, "% of total")
+    assert percents[-1].startswith("100"), "the Total row reads 100% of itself."
 
 
 def test_compute_without_a_snapshot_measures_the_whole_owner():
@@ -242,6 +255,9 @@ def test_compute_without_a_snapshot_measures_the_whole_owner():
 
     volumes = _column_values(table, "Volume (mL)")
     assert float(volumes[0]) == pytest.approx(216 * 0.001, rel=1e-3)
+    # The trailing explicit Total row is present on this path too.
+    regions = _column_values(table, "Region")
+    assert regions[-1] == f"Total ({segmentation.GetName()})"
 
 
 if __name__ == "__main__":

@@ -176,9 +176,20 @@ def test_compute_per_volume_emits_one_row_per_volume():
     outputTable = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTableNode", "Volumetry")
     logic.computeVolumePerVolume(seg, seeds, outputTable)
 
-    # One row per bound volume: exactly one row here ("Left").
-    assert outputTable.GetNumberOfRows() == 1, (
-        "compute-per-volume must emit ONE row per bound volume."
+    # One row per bound volume ("Left") + the trailing explicit Total row
+    # (the % denominator made visible, territory-usability).
+    assert outputTable.GetNumberOfRows() == 2, (
+        "compute-per-volume must emit ONE row per bound volume plus the "
+        "explicit Total row."
+    )
+    regionColumn = None
+    for c in range(outputTable.GetNumberOfColumns()):
+        if outputTable.GetColumnName(c) == "Region":
+            regionColumn = c
+    assert regionColumn is not None
+    assert outputTable.GetCellText(0, regionColumn) == "Left"
+    assert outputTable.GetCellText(1, regionColumn) == f"Total ({seg.GetName()})", (
+        "the run must end with a Total row naming the % denominator."
     )
 
 

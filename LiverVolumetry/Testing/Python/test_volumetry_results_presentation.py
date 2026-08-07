@@ -135,5 +135,77 @@ def test_total_row_label_is_all_pieces():
     )
 
 
+def test_total_row_names_the_selected_segments_denominator():
+    """territory-usability: the classic compute ends with an explicit Total row.
+
+    The ``% of total`` denominator used to be implicit (the rasterized input
+    selection).  Every ``computeVolume`` run must now END with a Total row
+    NAMING that definition -- ``Total (selected segments)`` -- carrying the
+    denominator's own mL and 100%, so the surgeon can see what the
+    percentages are measured against.  The denominator semantics are
+    unchanged.  Launched; SKIPS bare.
+    """
+    slicer = _slicer_or_skip()
+    _cpp_logic_or_skip()  # the module logic wraps the same C++ class
+    try:
+        from LiverVolumetry import LiverVolumetryLogic, TOTAL_SELECTED_SEGMENTS_LABEL
+    except Exception as exc:  # pragma: no cover - import-environment dependent
+        pytest.skip(f"LiverVolumetryLogic not importable ({exc!r}).")
+
+    assert TOTAL_SELECTED_SEGMENTS_LABEL == "Total (selected segments)", (
+        "the Total row label must NAME the denominator definition."
+    )
+
+    # A 20^3 unit-spacing labelmap: value 3 in one half, 5 in the other --
+    # 8000 nonzero voxels == 8 mL denominator; one seed in the value-3 half
+    # measures 4000 voxels == 4 mL (50%).
+    labelmap = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "TotalRowRegions")
+    image = vtk.vtkImageData()
+    image.SetDimensions(20, 20, 20)
+    image.SetSpacing(1.0, 1.0, 1.0)
+    image.AllocateScalars(vtk.VTK_SHORT, 1)
+    scalars = image.GetPointData().GetScalars()
+    for k in range(20):
+        for j in range(20):
+            for i in range(20):
+                scalars.SetTuple1(i + 20 * (j + 20 * k), 3 if i < 10 else 5)
+    image.Modified()
+    labelmap.SetAndObserveImageData(image)
+
+    carrier = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLVolumetrySeedsNode", "TotalRowSeeds")
+    if carrier is None or not hasattr(carrier, "AddSeed"):
+        pytest.skip("vtkMRMLVolumetrySeedsNode not registered (launched build).")
+    index = carrier.AddSeed(5.0, 10.0, 10.0)
+    carrier.SetNthSeedLabel(index, "LeftRegion")
+
+    table = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTableNode", "TotalRowTable")
+    logic = LiverVolumetryLogic()
+    logic.computeVolume(labelmap, labelmap, None, table, carrier, None)
+
+    names = _column_names(tableNode=table)
+    regionIndex = names.index(_REGION_COL)
+    volumeIndex = names.index(_VOLUME_COL)
+    percentIndex = names.index(_PERCENT_COL)
+    grid = table.GetTable()
+    lastRow = table.GetNumberOfRows() - 1
+    assert lastRow >= 1, "the seed row + the Total row must both be present."
+    assert str(grid.GetColumn(regionIndex).GetValue(lastRow)) == TOTAL_SELECTED_SEGMENTS_LABEL, (
+        "the run must END with the explicit Total row naming the denominator."
+    )
+    assert float(grid.GetColumn(volumeIndex).GetValue(lastRow)) == pytest.approx(8.0, rel=1e-3), (
+        "the Total row must carry the denominator's own mL."
+    )
+    assert str(grid.GetColumn(percentIndex).GetValue(lastRow)).startswith("100"), (
+        "the Total row reads 100% of itself."
+    )
+    # The column itself states the same definition (the header tooltip).
+    description = table.GetColumnDescription(_PERCENT_COL)
+    assert "selected" in description.lower(), (
+        "the '% of total' column description must state the denominator "
+        "definition (the selected input segments)."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
