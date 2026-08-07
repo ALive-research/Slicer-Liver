@@ -394,5 +394,87 @@ def test_cleanup_detaches_the_carrier_observer(qt_widgets):
     )
 
 
+# --------------------------------------------------------------------------- #
+# ROW-SELECT event filter -- a press on a row's child control selects the row
+# --------------------------------------------------------------------------- #
+
+
+def test_row_children_carry_the_row_select_tag(qt_widgets):
+    """Every seed-row control is tagged with its row's global seed index.
+
+    The composite row widget covers the whole tree item, so a real click on
+    "the row" lands on a child control and is consumed there -- the tree
+    viewport never selects the item.  The row-select event filter needs each
+    child tagged with its row key (a dynamic Qt property) to resolve the
+    press back to the tree item.
+    """
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier)
+    qt_widgets.append(table)
+
+    carrier.AddSeed(1.0, 0.0, 0.0)
+
+    for control in (table.labelEdit(0), table.colourButton(0), table.deleteButton(0)):
+        assert control is not None
+        assert control.property("volumetryRowSeed") == 0, (
+            "each seed-row control must carry the row's seed index so the "
+            "row-select event filter can select the row on a press."
+        )
+
+
+def test_press_on_a_seed_row_control_selects_the_row(qt_widgets):
+    """The row-select seam makes a press on a child control select the row.
+
+    ``_selectRowForWidget`` is the seam ``eventFilter`` delegates every
+    mouse press to; selecting through it fires the SAME
+    ``itemSelectionChanged`` path a viewport click drives (visibility
+    restore + the carved-stripes highlight).  Without it, placing a seed and
+    clicking its row showed no highlight at all in the real GUI (the press
+    died in the line edit).
+    """
+    import qt
+
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier)
+    qt_widgets.append(table)
+
+    carrier.AddSeed(1.0, 0.0, 0.0)
+    assert not table.tree().selectedItems()
+
+    table._selectRowForWidget(table.labelEdit(0))
+
+    selected = table.tree().selectedItems()
+    assert [item.data(0, qt.Qt.UserRole) for item in selected] == [0], (
+        "a press on a seed row's child control must select that seed's row "
+        "(the row-selection features are otherwise unreachable by a click)."
+    )
+
+
+def test_press_on_a_volume_row_control_selects_the_volume_row(qt_widgets):
+    """A press on a VOLUME row's control selects the volume row (which clears
+    a running seed highlight via the selection-change path)."""
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier)
+    qt_widgets.append(table)
+    if not hasattr(table, "addVolume"):
+        pytest.skip("VolumetrySeedsTableWidget has no addVolume seam (ADR-0027).")
+
+    volumeId = table.addVolume()
+
+    table._selectRowForWidget(table.volumeLabelEdit(volumeId))
+
+    selected = table.tree().selectedItems()
+    tree = table.tree()
+    assert selected and tree.indexOfTopLevelItem(selected[0]) == tree.indexOfTopLevelItem(
+        table.volumeItem(volumeId)
+    ), "a press on a volume row's child control must select the volume row."
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

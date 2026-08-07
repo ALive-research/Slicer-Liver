@@ -31,7 +31,13 @@ Each VOLUME (top-level) row carries a horizontal strip, addressed by NAME:
 Each SEED (child) row carries the strip the flat table used: a COLOUR swatch, an
 editable LABEL (the generated segment name, ADR-0038 §Conformance), a TARGET
 combo (the seed→segment binding + retarget, ``territory-usability`` §"Seed→label
-capture"), and a DELETE button.  Selecting a seed row RESTORES its visibility
+capture"), and a DELETE button.  Each composite row widget covers its whole tree
+item, so a press anywhere on the row lands on a CHILD control (the stretch line
+edit under most of it), which consumes the press -- the tree item itself would
+never be selected by a real click.  A row-select event filter on every row
+child selects the row FIRST and does not consume the press, so a click on a row
+both selects it and still drives the clicked control.  Selecting a seed row
+RESTORES its visibility
 snapshot (``VisibilityCarve``) and highlights its EFFECTIVE (carved) region in
 the 2D slices with slowly MARCHING diagonal stripes: this widget owns the phase
 ``qt.QTimer`` and publishes ``highlightSeed`` / ``stripePhase`` onto the shared
@@ -134,6 +140,13 @@ _VOLUME_PALETTE = (
 _COMPOSITE_COLUMN = 0
 _COLUMN_COUNT = 1
 
+#: Dynamic Qt properties tagging every widget of a composite row with its row
+#: key, so the row-select event filter can resolve WHICH tree item a pressed
+#: child control belongs to (a press on a child never reaches the tree
+#: viewport, so the tree cannot select the row itself).
+_ROW_SEED_PROPERTY = "volumetryRowSeed"
+_ROW_VOLUME_PROPERTY = "volumetryRowVolume"
+
 
 class VolumetrySeedsTableWidget(qt.QWidget):
     """Per-volume carrier-backed tree over ``vtkMRMLVolumetrySeedsNode``.
@@ -167,6 +180,9 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._volume_rows: dict[str, dict[str, Any]] = {}
         # global seed index -> the seed composite row's named controls; rebuilt.
         self._seed_rows: dict[int, dict[str, Any]] = {}
+        # global seed index -> the seed child QTreeWidgetItem (the row-select
+        # event filter's target); rebuilt with the tree.
+        self._seed_items: dict[int, Any] = {}
         # Auto-mint counter for "Add volume".
         self._mint_counter = 0
 
@@ -584,6 +600,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             self._volume_items = {}
             self._volume_rows = {}
             self._seed_rows = {}
+            self._seed_items = {}
             # Seeds grouped by volume; ungrouped seeds ride a synthetic
             # "Ungrouped" bucket so a legacy / pre-volume seed still shows.
             grouped: dict[str, list[int]] = {}
@@ -608,6 +625,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._volume_items[volumeId] = item
         rowWidget = self._buildVolumeRow(volumeId)
         self._tree.setItemWidget(item, _COMPOSITE_COLUMN, rowWidget)
+        self._installRowSelectFilter(rowWidget, _ROW_VOLUME_PROPERTY, volumeId)
         for seedIndex in seedIndices:
             self._appendSeedItem(item, seedIndex)
 
@@ -691,8 +709,68 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         # Carry the global seed index on the item so row-selection can restore
         # the seed's snapshot + raise its carved highlight.
         child.setData(0, qt.Qt.UserRole, seedIndex)
+        self._seed_items[int(seedIndex)] = child
         rowWidget = self._buildSeedRow(seedIndex)
         self._tree.setItemWidget(child, _COMPOSITE_COLUMN, rowWidget)
+        self._installRowSelectFilter(rowWidget, _ROW_SEED_PROPERTY, int(seedIndex))
+
+    # ------------------------------------------------------------------ #
+    # Row-select event filter (a press anywhere on a composite row selects
+    # the row FIRST, without consuming the press)
+    # ------------------------------------------------------------------ #
+
+    def _installRowSelectFilter(self, rowWidget: Any, propertyName: str, key: Any) -> None:
+        """Tag the row widget + every descendant and watch their mouse presses.
+
+        The composite row widget covers the whole tree item, so a press on
+        "the row" always lands on a child control (mostly the stretch line
+        edit) and is CONSUMED there -- the tree viewport never sees it and the
+        item is never selected, which made the row-selection features
+        (visibility restore + the carved-region stripes) unreachable by a
+        real click.  Tagging rides a dynamic Qt property (stable across
+        PythonQt wrapper identities); the filter resolves it back to the tree
+        item and selects, then lets the press continue into the control.
+        """
+        # Manual descendant walk: PythonQt does not reliably wrap the template
+        # ``findChildren`` (the ``slicer.util.findChildren`` precedent).
+        stack = [rowWidget]
+        while stack:
+            widget = stack.pop()
+            widget.setProperty(propertyName, key)
+            if hasattr(widget, "installEventFilter"):
+                widget.installEventFilter(self)
+            stack.extend(widget.children())
+
+    def eventFilter(self, watched: Any, event: Any) -> bool:  # noqa: N802 - Qt virtual
+        try:
+            if event.type() == qt.QEvent.MouseButtonPress:
+                self._selectRowForWidget(watched)
+        except Exception:  # noqa: BLE001 - an event filter must never raise
+            pass
+        return False  # never consume: the pressed control still works
+
+    def _selectRowForWidget(self, widget: Any) -> None:
+        """Select the tree row the pressed row-child ``widget`` belongs to.
+
+        Resolves the row key off the widget's dynamic property (seed index or
+        volume id) and makes that item the current selection -- firing the
+        SAME ``itemSelectionChanged`` path a viewport click drives (visibility
+        restore + carved-stripes highlight for a seed row; highlight clear for
+        a volume row).  A no-op for untagged widgets or during a rebuild.
+        """
+        if self._rebuilding or widget is None:
+            return
+        item = None
+        seedIndex = widget.property(_ROW_SEED_PROPERTY)
+        if seedIndex is not None:
+            item = self._seed_items.get(int(seedIndex))
+        else:
+            volumeId = widget.property(_ROW_VOLUME_PROPERTY)
+            if volumeId:
+                item = self._volume_items.get(str(volumeId))
+        if item is None or item.isSelected():
+            return
+        self._tree.setCurrentItem(item)
 
     def _seedColor(self, seedIndex: int) -> tuple[float, float, float]:
         if self._carrier is None:
