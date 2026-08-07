@@ -73,6 +73,11 @@ PARTITION_TOTAL_LABEL = "All pieces"
 # VISIBILITY changed.  The per-volume path derives its label from the
 # segmentation's name ("Total (<segmentation name>)").
 TOTAL_SELECTED_SEGMENTS_LABEL = "Total (selected segments)"
+# The generated leftover segment's NEUTRAL name (territory-usability §"pure
+# neutral tools"): volumetry is a measuring instrument, not a resection
+# planner, so the region no seed claimed is "Unassigned" -- never a
+# resection-planning term.
+UNSEEDED_SEGMENT_LABEL = "Unassigned"
 
 # The placement requirements messages (territory-usability): placement is a
 # per-volume row control, so the requirements line -- not a standalone Place
@@ -1506,8 +1511,11 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
       seg = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
       slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(generatedSegmentsNode, seg)
 
-      ##set segments label
-      seg.GetSegmentation().GetNthSegment(0).SetName("Remnant")
+      # Segment names: the leftover (unseeded) region gets the NEUTRAL
+      # "Unassigned" label -- volumetry carries no resection-planning
+      # vocabulary (territory-usability); the seeded segments take their
+      # seeds' labels.
+      seg.GetSegmentation().GetNthSegment(0).SetName(UNSEEDED_SEGMENT_LABEL)
       for i in range(ROIMarkersList.GetNumberOfControlPoints()):
         seg.GetSegmentation().GetNthSegment(i+1).SetName(ROIMarkersList.GetNthFiducialLabel(i))
 
