@@ -204,3 +204,96 @@ def test_apply_visibility_context_with_empty_context_is_a_no_op():
 
 def test_apply_visibility_context_tolerates_a_missing_display():
     apply_visibility_context(None, ["A"], ["A"])  # must not raise
+
+
+# --------------------------------------------------------------------------- #
+# carved_mask_for_seed -- the shared owner-minus-above fold over an injected
+# mask reader (the table's empty-carve cue + the slice pipeline share it)
+# --------------------------------------------------------------------------- #
+
+
+class _FakeSeedCarrier:
+    """A seed carrier stub exposing the binding + snapshot readers."""
+
+    def __init__(self, owner: str, context: list[str]):
+        self._owner = owner
+        self._context = context
+
+    def GetNthSeedBindingSegmentID(self, index):  # noqa: N802 - MRML verb
+        return self._owner
+
+    def GetNthSeedVisibilityContext(self, index, ids):  # noqa: N802 - MRML verb
+        for segmentID in self._context:
+            ids.InsertNextValue(segmentID)
+
+
+def _mask_reader(masks: dict):
+    """A mask-for-segment reader over a dict (None for unknown segments)."""
+    return lambda segmentID: masks.get(segmentID)
+
+
+def test_carved_mask_for_seed_is_owner_minus_the_context_above():
+    from VisibilityCarve import carved_mask_for_seed
+
+    owner = np.zeros((4, 4), dtype=bool)
+    owner[1:3, 1:3] = True  # 4 voxels
+    above = np.zeros((4, 4), dtype=bool)
+    above[1, 1:3] = True  # covers 2 of them
+    carrier = _FakeSeedCarrier("Parenchyma", ["Segment_1", "Parenchyma"])
+
+    carved = carved_mask_for_seed(
+        carrier, 0, _mask_reader({"Parenchyma": owner, "Segment_1": above})
+    )
+
+    assert carved is not None and int(carved.sum()) == 2
+
+
+def test_fully_covered_owner_carves_to_an_EMPTY_mask_not_none():
+    """The silent-nothing case the empty-carve cue must name: the owner is
+    fully covered by the snapshot segments above it -- the carve exists and
+    is EMPTY (distinct from the unknown/None cases below)."""
+    from VisibilityCarve import carved_mask_for_seed
+
+    owner = np.ones((3, 3), dtype=bool)
+    cover = np.ones((3, 3), dtype=bool)
+    carrier = _FakeSeedCarrier("Parenchyma", ["Tumor", "Parenchyma"])
+
+    carved = carved_mask_for_seed(
+        carrier, 0, _mask_reader({"Parenchyma": owner, "Tumor": cover})
+    )
+
+    assert carved is not None and not carved.any()
+
+
+def test_unbound_seed_yields_none_not_an_empty_mask():
+    """Unbound is UNKNOWN, not empty: the cue must not claim full coverage."""
+    from VisibilityCarve import carved_mask_for_seed
+
+    carrier = _FakeSeedCarrier("", ["A"])
+    assert carved_mask_for_seed(carrier, 0, _mask_reader({})) is None
+
+
+def test_owner_without_a_mask_yields_none():
+    from VisibilityCarve import carved_mask_for_seed
+
+    carrier = _FakeSeedCarrier("Parenchyma", ["Parenchyma"])
+    assert carved_mask_for_seed(carrier, 0, _mask_reader({})) is None
+
+
+def test_missing_above_mask_carves_nothing_for_that_segment():
+    """A context segment whose labelmap cannot be read carves nothing --
+    best-effort degradation, never a crash."""
+    from VisibilityCarve import carved_mask_for_seed
+
+    owner = np.ones((2, 2), dtype=bool)
+    carrier = _FakeSeedCarrier("Parenchyma", ["Gone", "Parenchyma"])
+
+    carved = carved_mask_for_seed(carrier, 0, _mask_reader({"Parenchyma": owner}))
+
+    assert carved is not None and int(carved.sum()) == 4
+
+
+def test_missing_carrier_yields_none():
+    from VisibilityCarve import carved_mask_for_seed
+
+    assert carved_mask_for_seed(None, 0, _mask_reader({})) is None
