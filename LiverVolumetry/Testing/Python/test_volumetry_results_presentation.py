@@ -135,12 +135,14 @@ def test_total_row_label_is_all_pieces():
     )
 
 
-def test_total_row_names_the_selected_segments_denominator():
+def test_total_row_names_the_ticked_segments_denominator():
     """territory-usability: the classic compute ends with an explicit Total row.
 
-    The ``% of total`` denominator used to be implicit (the rasterized input
-    selection).  Every ``computeVolume`` run must now END with a Total row
-    NAMING that definition -- ``Total (selected segments)`` -- carrying the
+    The ``% of total`` denominator used to be implicit (the rasterized tick
+    selection).  Every ``computeVolume`` run must now END with a Total volume
+    row NAMING that definition -- ``Total volume (ticked segments)`` (the
+    ticked segments in the "Total volume segments" section define the total;
+    seeds/volumes are the measurement) -- carrying the
     denominator's own mL and 100%, so the surgeon can see what the
     percentages are measured against.  The denominator semantics are
     unchanged.  Launched; SKIPS bare.
@@ -152,8 +154,8 @@ def test_total_row_names_the_selected_segments_denominator():
     except Exception as exc:  # pragma: no cover - import-environment dependent
         pytest.skip(f"LiverVolumetryLogic not importable ({exc!r}).")
 
-    assert TOTAL_SELECTED_SEGMENTS_LABEL == "Total (selected segments)", (
-        "the Total row label must NAME the denominator definition."
+    assert TOTAL_SELECTED_SEGMENTS_LABEL == "Total volume (ticked segments)", (
+        "the Total volume row label must NAME the denominator definition."
     )
 
     # A 20^3 unit-spacing labelmap: value 3 in one half, 5 in the other --
@@ -201,9 +203,9 @@ def test_total_row_names_the_selected_segments_denominator():
     )
     # The column itself states the same definition (the header tooltip).
     description = table.GetColumnDescription(_PERCENT_COL)
-    assert "selected" in description.lower(), (
+    assert "ticked" in description.lower(), (
         "the '% of total' column description must state the denominator "
-        "definition (the selected input segments)."
+        "definition (the ticked total-volume segments)."
     )
 
 
