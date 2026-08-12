@@ -86,9 +86,7 @@ try:  # pragma: no cover - exercised once per import path
         resolve_touched_candidates,
     )
     from .VisibilityCarve import (
-        carve_effective_mask,
-        read_seed_context,
-        segments_above,
+        carved_mask_for_seed,
         visible_context,
         write_seed_context,
     )
@@ -107,9 +105,7 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
         resolve_touched_candidates,
     )
     from VisibilityCarve import (  # type: ignore[no-redef]
-        carve_effective_mask,
-        read_seed_context,
-        segments_above,
+        carved_mask_for_seed,
         visible_context,
         write_seed_context,
     )
@@ -749,16 +745,9 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
                 return None
             return arr
 
-        owner_mask = _segment_mask(owner)
-        if owner_mask is None:
+        carved = carved_mask_for_seed(carrier, index, _segment_mask)
+        if carved is None:
             return None
-        context = read_seed_context(carrier, index)
-        above_masks = []
-        for segmentID in segments_above(context, owner):
-            mask = _segment_mask(segmentID)
-            if mask is not None:
-                above_masks.append(mask)
-        carved = carve_effective_mask(owner_mask, above_masks)
         self._carve3d_cache = (key, carved)
         return carved
 

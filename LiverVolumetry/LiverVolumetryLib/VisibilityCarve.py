@@ -92,6 +92,37 @@ def carve_effective_mask(owner_mask: Any, above_masks: list) -> Any:
     return carved
 
 
+def carved_mask_for_seed(carrier: Any, index: int, mask_for_segment: Any) -> Any:
+    """The seed's EFFECTIVE mask: owner minus the snapshot segments above it.
+
+    The ONE owner-minus-above fold every consumer shares (the slice pipeline's
+    stripe highlight, the table's empty-carve cue), over an INJECTED
+    ``mask_for_segment(segmentID) -> mask | None`` reader so the fold stays
+    pure/bare-testable while the scene side supplies
+    ``slicer.util.arrayFromSegmentBinaryLabelmap`` on a common reference grid.
+
+    Returns ``None`` for UNKNOWN (missing carrier, unbound seed, or an owner
+    whose mask cannot be read) -- distinct from a present-but-EMPTY carve (a
+    fully covered owner), which returns an all-False mask the empty-carve cue
+    names explicitly.  An unreadable above-mask carves nothing (best-effort).
+    """
+    if carrier is None or not hasattr(carrier, "GetNthSeedBindingSegmentID"):
+        return None
+    owner = carrier.GetNthSeedBindingSegmentID(int(index))
+    if not owner:
+        return None
+    owner_mask = mask_for_segment(owner)
+    if owner_mask is None:
+        return None
+    context = read_seed_context(carrier, index)
+    above_masks = [
+        mask
+        for mask in (mask_for_segment(s) for s in segments_above(context, owner))
+        if mask is not None
+    ]
+    return carve_effective_mask(owner_mask, above_masks)
+
+
 def apply_visibility_context(displayNode: Any, allSegmentIDs: list[str], context: list[str]) -> None:
     """Restore the visibility state to a seed's snapshot (restore-on-select).
 

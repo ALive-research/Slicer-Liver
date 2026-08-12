@@ -79,7 +79,11 @@ try:  # pragma: no cover - exercised once per import path
         gather_touched_candidates,
         resolve_touched_candidates,
     )
-    from .VisibilityCarve import apply_visibility_context, read_seed_context
+    from .VisibilityCarve import (
+        apply_visibility_context,
+        carved_mask_for_seed,
+        read_seed_context,
+    )
     from .CarvedRegionStripes import (
         STRIPE_PERIOD_PX,
         STRIPE_TICK_MS,
@@ -93,6 +97,7 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
     )
     from VisibilityCarve import (  # type: ignore[no-redef]
         apply_visibility_context,
+        carved_mask_for_seed,
         read_seed_context,
     )
     from CarvedRegionStripes import (  # type: ignore[no-redef]
@@ -139,6 +144,13 @@ _VOLUME_PALETTE = (
 #: tree slice-4 amendment): a header-less tree, one composite QWidget per item.
 _COMPOSITE_COLUMN = 0
 _COLUMN_COUNT = 1
+
+#: The empty-carve cue (ADR-0010 legible text -- silent nothing is not a
+#: state): shown on the SELECTED seed row when its effective (carved) region
+#: is EMPTY -- the owner segment is fully covered by the snapshot segments
+#: above it -- so "no stripes" is named, never mute.  An UNKNOWN carve (an
+#: unbound seed / unreadable masks) shows no cue: unknown is not empty.
+EMPTY_CARVE_MESSAGE = "Region fully covered by segments above"
 
 #: Dynamic Qt properties tagging every widget of a composite row with its row
 #: key, so the row-select event filter can resolve WHICH tree item a pressed
@@ -357,6 +369,10 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         """The seed row's delete ``qt.QToolButton`` (keyed by global index)."""
         return self._seedControl(seedIndex, "delete")
 
+    def statusLabel(self, seedIndex: int) -> Any:
+        """The seed row's empty-carve cue ``qt.QLabel`` (keyed by global index)."""
+        return self._seedControl(seedIndex, "status")
+
     # ------------------------------------------------------------------ #
     # Volume lifecycle (add / arm / delete)
     # ------------------------------------------------------------------ #
@@ -535,9 +551,11 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         seedIndex = items[0].data(0, qt.Qt.UserRole) if items else None
         if seedIndex is None:
             self._clearHighlight()
+            self._updateEmptyCarveCue(None)
             return
         self._restoreVisibilityContext(int(seedIndex))
         self._highlightSeed(int(seedIndex))
+        self._updateEmptyCarveCue(int(seedIndex))
 
     # ------------------------------------------------------------------ #
     # Visibility snapshot (restore-on-select, ``VisibilityCarve``)
@@ -818,6 +836,14 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         targetCombo = self._buildTargetCombo(seedIndex)
         rowLayout.addWidget(targetCombo)
 
+        # The empty-carve cue label: hidden until THIS row is selected and its
+        # carved region turns out empty (``EMPTY_CARVE_MESSAGE``).  Plain row
+        # text (ADR-0010) right where the surgeon clicked -- the stripes'
+        # absence is named, never a silent nothing.
+        statusLabel = qt.QLabel("")
+        statusLabel.setVisible(False)
+        rowLayout.addWidget(statusLabel)
+
         deleteButton = qt.QToolButton()
         deleteButton.setAutoRaise(True)
         deleteButton.setText("Delete")
@@ -839,6 +865,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             "label": labelEdit,
             "target": targetCombo,
             "delete": deleteButton,
+            "status": statusLabel,
         }
         return rowWidget
 
@@ -949,6 +976,55 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             return
         self._stripePhase = (self._stripePhase + 1) % STRIPE_PERIOD_PX
         set_stripe_phase(self._displayNode, self._stripePhase)
+
+    def _updateEmptyCarveCue(self, seedIndex: int | None) -> None:
+        """Name an EMPTY carve on the selected seed row; hide every other cue.
+
+        Runs once per row selection (never per stripe tick).  ``None`` (a
+        deselect / a volume row) hides all cues.  Only a PRESENT-but-empty
+        carve shows the message: an unknown carve (unbound seed, unreadable
+        masks) stays cueless -- unknown is not empty.
+        """
+        for index, row in self._seed_rows.items():
+            status = row.get("status")
+            if status is not None and index != seedIndex:
+                status.setVisible(False)
+        if seedIndex is None:
+            return
+        status = self._seedControl(seedIndex, "status")
+        if status is None:
+            return
+        empty = self._carvedRegionIsEmpty(seedIndex)
+        status.setText(EMPTY_CARVE_MESSAGE if empty else "")
+        status.setVisible(bool(empty))
+
+    def _carvedRegionIsEmpty(self, seedIndex: int) -> bool:
+        """True iff the seed's carved region is PRESENT and empty.
+
+        Re-derives the owner-minus-above fold (``carved_mask_for_seed``, the
+        same fold the stripes pipeline renders) with every mask resampled onto
+        the display node's pick-surface labelmap grid.  ``False`` when the
+        carve is UNKNOWN -- no structure source / reference / binding -- so the
+        cue never claims full coverage it cannot establish.
+        """
+        source = self._structureSource
+        display = self._displayNode
+        if source is None or display is None or not hasattr(display, "GetPickSurfaceNode"):
+            return False
+        reference = display.GetPickSurfaceNode()
+        if reference is None:
+            return False
+
+        def _segment_mask(segmentID: str) -> Any:
+            try:
+                import slicer
+
+                return slicer.util.arrayFromSegmentBinaryLabelmap(source, segmentID, reference)
+            except Exception:  # noqa: BLE001 - an unreadable mask carves nothing
+                return None
+
+        mask = carved_mask_for_seed(self._carrier, seedIndex, _segment_mask)
+        return mask is not None and not mask.any()
 
     def _syncHighlightToSelection(self) -> None:
         """Clear the highlight when its row is gone (rebuild drops selection).
