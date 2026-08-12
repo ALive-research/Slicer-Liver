@@ -83,6 +83,7 @@ try:  # pragma: no cover - exercised once per import path
         apply_visibility_context,
         carved_mask_for_seed,
         read_seed_context,
+        segment_mask_reader,
     )
     from .CarvedRegionStripes import (
         STRIPE_PERIOD_PX,
@@ -99,6 +100,7 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
         apply_visibility_context,
         carved_mask_for_seed,
         read_seed_context,
+        segment_mask_reader,
     )
     from CarvedRegionStripes import (  # type: ignore[no-redef]
         STRIPE_PERIOD_PX,
@@ -1014,16 +1016,9 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         reference = display.GetPickSurfaceNode()
         if reference is None:
             return False
-
-        def _segment_mask(segmentID: str) -> Any:
-            try:
-                import slicer
-
-                return slicer.util.arrayFromSegmentBinaryLabelmap(source, segmentID, reference)
-            except Exception:  # noqa: BLE001 - an unreadable mask carves nothing
-                return None
-
-        mask = carved_mask_for_seed(self._carrier, seedIndex, _segment_mask)
+        mask = carved_mask_for_seed(
+            self._carrier, seedIndex, segment_mask_reader(source, reference)
+        )
         return mask is not None and not mask.any()
 
     def _syncHighlightToSelection(self) -> None:

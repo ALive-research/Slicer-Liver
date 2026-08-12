@@ -280,9 +280,8 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.ClearAllSeedsButton.connect('clicked(bool)', self.onClearAllSeeds)
 
     # Compose the segment show/hide list into the Total-volume-segments
-    # section (ADR-0004:
-    # the panel is Python).  Visibility is the PRIMARY region-composition
-    # instrument (the visibility-composed carve rule, VisibilityCarve): the
+    # section (ADR-0004: the panel is Python).  Visibility is the PRIMARY
+    # region-composition instrument (the visibility-composed carve rule): the
     # surgeon shows/hides segments BEFORE placing, so the eye list must live in
     # the module -- composing visibility must not require leaving the panel.
     self._composeVisibilityList(liverVolumetryWidget)
