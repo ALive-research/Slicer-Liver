@@ -188,7 +188,7 @@ def test_compute_per_volume_emits_one_row_per_volume():
             regionColumn = c
     assert regionColumn is not None
     assert outputTable.GetCellText(0, regionColumn) == "Left"
-    assert outputTable.GetCellText(1, regionColumn) == f"Total ({seg.GetName()})", (
+    assert outputTable.GetCellText(1, regionColumn) == f"Total volume ({seg.GetName()})", (
         "the run must end with a Total row naming the % denominator."
     )
 

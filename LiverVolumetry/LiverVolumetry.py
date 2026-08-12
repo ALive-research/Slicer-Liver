@@ -66,13 +66,15 @@ RESULTS_TABLE_NAME = "Volumetry"
 # surgeon term, never the transient fiducial node's name.
 PARTITION_TOTAL_LABEL = "All pieces"
 # The "% of total" DENOMINATOR made explicit (territory-usability): every
-# results run ends with a Total row naming what the percentages are measured
-# against, its mL, and 100%.  The denominator SEMANTICS are unchanged -- the
-# rasterized input selection (selected segments; all when none is selected) on
-# the classic path, the whole segmentation on the per-volume path -- only its
-# VISIBILITY changed.  The per-volume path derives its label from the
-# segmentation's name ("Total (<segmentation name>)").
-TOTAL_SELECTED_SEGMENTS_LABEL = "Total (selected segments)"
+# results run ends with a Total volume row naming what the percentages are
+# measured against, its mL, and 100%.  The TICKED segments in the "Total
+# volume segments" section define that total (the denominator); seeds/volumes
+# are the measurement.  The denominator SEMANTICS are unchanged -- the
+# rasterized tick selection (all segments when none is ticked) on the classic
+# path, the whole segmentation on the per-volume path -- only its VISIBILITY
+# changed.  The per-volume path derives its label from the segmentation's
+# name ("Total volume (<segmentation name>)").
+TOTAL_SELECTED_SEGMENTS_LABEL = "Total volume (ticked segments)"
 # The generated leftover segment's NEUTRAL name (territory-usability §"pure
 # neutral tools"): volumetry is a measuring instrument, not a resection
 # planner, so the region no seed claimed is "Unassigned" -- never a
@@ -277,7 +279,8 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # ModifiedEvent observer.
     self.ui.ClearAllSeedsButton.connect('clicked(bool)', self.onClearAllSeeds)
 
-    # Compose the segment show/hide list into the Segments section (ADR-0004:
+    # Compose the segment show/hide list into the Total-volume-segments
+    # section (ADR-0004:
     # the panel is Python).  Visibility is the PRIMARY region-composition
     # instrument (the visibility-composed carve rule, VisibilityCarve): the
     # surgeon shows/hides segments BEFORE placing, so the eye list must live in
@@ -339,7 +342,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         "the Pipeline path (ADR-0013/0038).", exc)
 
   def _composeVisibilityList(self, panelWidget):
-    """Compose the segment show/hide eye list into the Segments section.
+    """Compose the segment show/hide eye list into the Total-volume-segments section.
 
     A ``qMRMLSegmentsTableView`` trimmed to NAME + VISIBILITY (the eye
     column) over the input segmentation -- the same instrument the
@@ -369,9 +372,11 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     view.filterBarVisible = False
     view.readOnly = True
     view.setToolTip(
-      "Show/hide segments to compose the region a seed measures: the top "
-      "visible segment owns each voxel and carves the ones below. A placed "
-      "seed remembers this composition.")
+      "Show/hide list (the carve instrument): show or hide segments to "
+      "compose the region a seed measures -- the top visible segment owns "
+      "each voxel and carves the ones below; a placed seed remembers this "
+      "composition. Separate from the total-volume ticks above, which only "
+      "define the percentage denominator.")
     self._visibilityList = view
     grid = self.ui.VisibilityGroupWidget.layout() if hasattr(self.ui, "VisibilityGroupWidget") else None
     if grid is not None and hasattr(grid, "addWidget"):
@@ -1358,17 +1363,17 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
           ROIMarkersList.SetName(PARTITION_TOTAL_LABEL)
         self.scl.ComputeAdvancedPlanningVolumetry(segmentsVolumeNode, outputTable, ROIMarkersList, resectionNodes, targetSegmentVolume)
       # The explicit % denominator row (territory-usability): every run ends
-      # with a Total row naming what "% of total" is measured against -- the
-      # rasterized input selection (selected segments; ALL segments when none
-      # is selected) -- with its mL and 100%.  Same denominator as before,
+      # with a Total volume row naming what "% of total" is measured against
+      # -- the rasterized tick selection (ticked segments; ALL segments when
+      # none is ticked) -- with its mL and 100%.  Same denominator as before,
       # now visible.
       self.scl.VolumetryTable(
         TOTAL_SELECTED_SEGMENTS_LABEL, targetSegmentVolume, 0,
         targetSegmentVolume, outputTable)
       self._describePercentColumn(
         outputTable,
-        "Measured against the Total row: the selected input segments "
-        "(all segments when none is selected).")
+        "Measured against the Total volume row: the ticked total-volume "
+        "segments (all segments when none is ticked).")
     finally:
       if ROIMarkersList is not None:
         slicer.mrmlScene.RemoveNode(ROIMarkersList)
@@ -1386,9 +1391,9 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
     regions; a seed with no snapshot contributes its whole bound segment
     (legacy semantics).  Rows are in surgeon terms (mL + % of total); the
     total is the whole segmentation's region so the % reads against the
-    organ, and the run ends with an explicit ``Total (<segmentation name>)``
-    row carrying that denominator's mL and 100% (territory-usability -- the
-    denominator is visible, not implicit).  A volume with no bound seed
+    organ, and the run ends with an explicit ``Total volume (<segmentation
+    name>)`` row carrying that denominator's mL and 100% (territory-usability
+    -- the denominator is visible, not implicit).  A volume with no bound seed
     yields no row.  The module owns + clears the table
     (``_ensureResultsTable``), so this only appends rows.
     """
@@ -1473,14 +1478,14 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
       # The explicit % denominator row (territory-usability): on this path the
       # denominator is the WHOLE segmentation's region (all segments rasterized
       # together), so the Total row names the segmentation and reads 100%.
-      totalLabel = f"Total ({segmentationNode.GetName()})"
+      totalLabel = f"Total volume ({segmentationNode.GetName()})"
       self.scl.VolumetryTable(
         totalLabel, totalVolumeMl, int(numpy.count_nonzero(scalars)),
         totalVolumeMl, outputTable)
       self._describePercentColumn(
         outputTable,
-        f"Measured against the Total row: the whole '{segmentationNode.GetName()}' "
-        "segmentation (all segments together).")
+        f"Measured against the Total volume row: the whole "
+        f"'{segmentationNode.GetName()}' segmentation (all segments together).")
     finally:
       slicer.mrmlScene.RemoveNode(reference)
 
