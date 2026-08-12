@@ -87,6 +87,7 @@ try:  # pragma: no cover - exercised once per import path
     )
     from .VisibilityCarve import (
         carved_mask_for_seed,
+        segment_mask_reader,
         visible_context,
         write_seed_context,
     )
@@ -106,6 +107,7 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
     )
     from VisibilityCarve import (  # type: ignore[no-redef]
         carved_mask_for_seed,
+        segment_mask_reader,
         visible_context,
         write_seed_context,
     )
@@ -736,16 +738,9 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         if self._carve3d_cache is not None and self._carve3d_cache[0] == key:
             return self._carve3d_cache[1]
 
-        import slicer
-
-        def _segment_mask(segmentID):
-            try:
-                arr = slicer.util.arrayFromSegmentBinaryLabelmap(source, segmentID, reference)
-            except Exception:  # noqa: BLE001 - a segment without a labelmap carves nothing
-                return None
-            return arr
-
-        carved = carved_mask_for_seed(carrier, index, _segment_mask)
+        carved = carved_mask_for_seed(
+            carrier, index, segment_mask_reader(source, reference)
+        )
         if carved is None:
             return None
         self._carve3d_cache = (key, carved)

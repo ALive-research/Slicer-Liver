@@ -92,6 +92,29 @@ def carve_effective_mask(owner_mask: Any, above_masks: list) -> Any:
     return carved
 
 
+def segment_mask_reader(segmentationNode: Any, referenceNode: Any) -> Any:
+    """A ``mask_for_segment`` reader over a segmentation + reference grid.
+
+    The scene-side companion to ``carved_mask_for_seed``: wraps
+    ``slicer.util.arrayFromSegmentBinaryLabelmap`` so every consumer (the
+    stripes pipeline, the table's empty-carve cue) resamples onto the SAME
+    reference labelmap geometry with the same best-effort semantics -- an
+    unreadable segment yields ``None`` (carves nothing), never a raise.
+    """
+
+    def _mask(segmentID: str) -> Any:
+        try:
+            import slicer
+
+            return slicer.util.arrayFromSegmentBinaryLabelmap(
+                segmentationNode, segmentID, referenceNode
+            )
+        except Exception:  # noqa: BLE001 - an unreadable mask carves nothing
+            return None
+
+    return _mask
+
+
 def carved_mask_for_seed(carrier: Any, index: int, mask_for_segment: Any) -> Any:
     """The seed's EFFECTIVE mask: owner minus the snapshot segments above it.
 
