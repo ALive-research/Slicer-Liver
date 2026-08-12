@@ -20,7 +20,10 @@
    <item>
     <widget class="QLabel" name="SegmentsSectionLabel">
      <property name="text">
-      <string>Segments</string>
+      <string>Total volume segments</string>
+     </property>
+     <property name="toolTip">
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Ticked segments define the total volume that percentages are measured against. With no segment ticked, all segments define the total.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
      </property>
      <property name="styleSheet">
       <string notr="true">font-weight: bold;</string>
@@ -38,7 +41,7 @@
         </sizepolicy>
        </property>
        <property name="toolTip">
-        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Choose the segmentation and tick the segment(s) to measure. With no segment ticked, all segments are measured; the percentage column is measured against this same selection.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Total volume ticks: choose the segmentation and tick the segments that define the total volume the percentages are measured against. With no segment ticked, all segments define the total. Ticked segments are also measured as rows when computing without seeds.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
        </property>
        <property name="segmentationNodeSelectorVisible">
         <bool>true</bool>

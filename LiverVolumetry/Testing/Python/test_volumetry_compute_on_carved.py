@@ -227,7 +227,7 @@ def test_compute_measures_the_carved_region():
         "not the whole owning segment."
     )
     regions = _column_values(table, "Region")
-    assert regions[-1] == f"Total ({segmentation.GetName()})", (
+    assert regions[-1] == f"Total volume ({segmentation.GetName()})", (
         "the run must end with a Total row NAMING the % denominator (the "
         "whole segmentation on the per-volume path)."
     )
@@ -257,7 +257,7 @@ def test_compute_without_a_snapshot_measures_the_whole_owner():
     assert float(volumes[0]) == pytest.approx(216 * 0.001, rel=1e-3)
     # The trailing explicit Total row is present on this path too.
     regions = _column_values(table, "Region")
-    assert regions[-1] == f"Total ({segmentation.GetName()})"
+    assert regions[-1] == f"Total volume ({segmentation.GetName()})"
 
 
 if __name__ == "__main__":
