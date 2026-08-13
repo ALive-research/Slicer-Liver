@@ -20,7 +20,7 @@
    <item>
     <widget class="QLabel" name="SegmentsSectionLabel">
      <property name="text">
-      <string>Total volume segments</string>
+      <string>Total volume</string>
      </property>
      <property name="toolTip">
       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Ticked segments define the total volume that percentages are measured against. With no segment ticked, all segments define the total.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
