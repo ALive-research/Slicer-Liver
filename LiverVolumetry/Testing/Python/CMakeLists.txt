@@ -134,11 +134,13 @@ set(_volumetry_pytest_files
   # once-per-(seed, slice) plane cut, and the highlightSeed/stripePhase
   # display-node channel.  Pure Python/numpy -> RUNS bare (ADR-0027).
   test_volumetry_carved_stripes.py
-  # territory-usability -- selecting a seed row restores its visibility
-  # snapshot on the structure source (show exactly the context, hide the rest;
-  # empty snapshot is a no-op) and the row names owner + context in text
-  # (ADR-0010).  Qt + wrapped carrier -> SKIPS bare, RUNS launched (ADR-0027).
-  test_volumetry_restore_on_select.py
+  # territory-usability -- the highlight's TWO drivers, decoupled from row
+  # selection: placement publishes the new seed's highlight directly (no
+  # selection, no restore); the per-seed Highlight toggle restores the seed's
+  # visibility snapshot + publishes (exclusive; uncheck clears); selection is
+  # inert; the row names owner + context in text (ADR-0010).  Qt + wrapped
+  # carrier + display node -> SKIPS bare, RUNS launched (ADR-0027).
+  test_volumetry_highlight_driver.py
   # territory-usability -- the per-seed VISIBILITY CONTEXT slot on the carrier:
   # ordered round-trip, parallel-slot lockstep on remove, empty default, and
   # the .vsd.json storage round-trip.  Wrapped C++ node -> SKIPS bare, RUNS

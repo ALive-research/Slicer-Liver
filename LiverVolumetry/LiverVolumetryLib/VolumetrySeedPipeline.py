@@ -449,9 +449,10 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         self._preview_actor.GetProperty().SetLineWidth(2.0)
         self._preview_actor.SetVisibility(False)
 
-        # Carved-region marching-stripes highlight (CarvedRegionStripes): while
-        # a seed's row is SELECTED the widget publishes highlightSeed +
-        # stripePhase onto the shared display node; this pipeline cuts the
+        # Carved-region marching-stripes highlight (CarvedRegionStripes): at
+        # placement / while a seed's Highlight toggle is on the widget
+        # publishes highlightSeed + stripePhase onto the shared display node
+        # (row selection is not a driver); this pipeline cuts the
         # seed's EFFECTIVE (carved) region to the slice plane once and redraws
         # only the stripe family each phase tick.  Diagonal LINES through a
         # 2D mapper -- the reliable slice-overlay primitive (2D RGBA fills are

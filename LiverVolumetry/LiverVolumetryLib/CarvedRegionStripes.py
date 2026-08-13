@@ -2,11 +2,12 @@
 # Distributed under the OSI-approved BSD 3-Clause License.
 """territory-usability -- the carved-region marching-stripes highlight (pure core).
 
-While a volumetry seed's row is SELECTED, its EFFECTIVE (carved) region is
+While a volumetry seed is HIGHLIGHTED -- right after its placement, or while
+its row's dedicated Highlight toggle is on -- its EFFECTIVE (carved) region is
 overlaid in the 2D slices with slowly MARCHING diagonal stripes -- a calm,
 continuous "bars moving" cue (never an opacity blink; this replaces the
-placement fade).  The stripes stay while the row is selected and clear on
-deselect / placement of another seed.
+placement fade).  The stripes stay while the highlight holds and clear on
+untoggle / placement of another seed.  Row SELECTION is not a driver.
 
 Split per the LayerDM state discipline (``feedback_layerdm_state_on_display_
 node``): the WIDGET owns the QTimer and publishes ``highlightSeed`` +
@@ -35,7 +36,7 @@ from typing import Any
 
 #: The shared display-node attribute carrying the highlighted seed's GLOBAL
 #: placement index ("-1" / absent == no highlight).  Written by the seeds
-#: table on row selection; read by the slice pipelines.
+#: table at placement / on the Highlight toggle; read by the slice pipelines.
 HIGHLIGHT_SEED_ATTRIBUTE = "LiverVolumetry.highlightSeed"
 
 #: The shared display-node attribute carrying the stripe phase (px along the
