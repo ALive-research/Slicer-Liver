@@ -251,6 +251,13 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # sync, the requirements re-gate, and the Show-3D binding.  The reference-
     # volume, total-volume, and output-table selectors were removed (data-first
     # redesign §3.3); their data now comes from the segmentation selection.
+    # The selector's built-in "Segment(s):" caption reads as a generic picker;
+    # in this panel the ticked segments DEFINE the total volume, so caption the
+    # internal label accordingly (only setHorizontalLayout rewrites it, which
+    # this panel never toggles after setup).
+    segmentCaption = self.ui.InputSegmentSelectorWidget.findChild(qt.QLabel, "label_Segment")
+    if segmentCaption is not None:
+      segmentCaption.setText("Total volume: ")
     self.ui.InputSegmentSelectorWidget.connect('currentNodeChanged(vtkMRMLNode*)', self.onVolumetryParameterChanged)
     self.ui.InputSegmentSelectorWidget.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
     self.ui.InputSegmentSelectorWidget.connect('currentNodeChanged(bool)', self.segmentationNodeSelected)
