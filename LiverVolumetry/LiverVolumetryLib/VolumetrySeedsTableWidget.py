@@ -28,23 +28,36 @@ Each VOLUME (top-level) row carries a horizontal strip, addressed by NAME:
 * an editable LABEL (``qt.QLineEdit``) writing ``SetVolumeLabel``;
 * a DELETE (``qt.QToolButton``) removing the whole volume via ``RemoveVolume``.
 
-Each SEED (child) row carries the strip the flat table used: a COLOUR swatch, an
-editable LABEL (the generated segment name, ADR-0038 §Conformance), a TARGET
-combo (the seed→segment binding + retarget, ``territory-usability`` §"Seed→label
-capture"), and a DELETE button.  Each composite row widget covers its whole tree
-item, so a press anywhere on the row lands on a CHILD control (the stretch line
-edit under most of it), which consumes the press -- the tree item itself would
-never be selected by a real click.  A row-select event filter on every row
-child selects the row FIRST and does not consume the press, so a click on a row
-both selects it and still drives the clicked control.  Selecting a seed row
-RESTORES its visibility
-snapshot (``VisibilityCarve``) and highlights its EFFECTIVE (carved) region in
-the 2D slices with slowly MARCHING diagonal stripes: this widget owns the phase
-``qt.QTimer`` and publishes ``highlightSeed`` / ``stripePhase`` onto the shared
-display node (``CarvedRegionStripes``); the LayerDM slice pipelines render.
-The highlight is persistent while selected (no opacity flashing) and is paired
-with the row's text naming the owner + context (ADR-0010, never
-colour/animation alone).
+Each SEED (child) row carries the strip the flat table used: a HIGHLIGHT
+toggle, a COLOUR swatch, an editable LABEL (the generated segment name,
+ADR-0038 §Conformance), a TARGET combo (the seed→segment binding + retarget,
+``territory-usability`` §"Seed→label capture"), and a DELETE button.  Each
+composite row widget covers its whole tree item, so a press anywhere on the row
+lands on a CHILD control (the stretch line edit under most of it), which
+consumes the press -- the tree item itself would never be selected by a real
+click.  A row-select event filter on every row child selects the row FIRST and
+does not consume the press, so a click on a row both selects it and still
+drives the clicked control.  Selection is PLAIN row UX with NO side effects:
+the rows are dense with actionable controls, so tying visibility or the
+stripes to selection made every stray click a state change.
+
+The carved-region stripes have exactly TWO drivers instead:
+
+* PLACEMENT -- a one-seed carrier append publishes the new seed's highlight
+  directly (the surgeon always sees the just-measured region striped at once,
+  no row interaction).  Placement restores no visibility context: the seed's
+  snapshot equals the live visibility at that moment.
+* the per-seed HIGHLIGHT toggle (exclusive, checkable ``qt.QToolButton``) --
+  checking it RESTORES the seed's visibility snapshot (``VisibilityCarve``)
+  and raises its stripes; unchecking clears them.  Only this explicit toggle
+  restores the context.
+
+Either driver highlights the seed's EFFECTIVE (carved) region in the 2D slices
+with slowly MARCHING diagonal stripes: this widget owns the phase ``qt.QTimer``
+and publishes ``highlightSeed`` / ``stripePhase`` onto the shared display node
+(``CarvedRegionStripes``); the LayerDM slice pipelines render.  The highlight
+is persistent while toggled (no opacity flashing) and is paired with the row's
+text naming the owner + context (ADR-0010, never colour/animation alone).
 
 CARRIER IS THE MODEL.  The table reads/writes the carrier and OBSERVES its
 ``vtkCommand::ModifiedEvent`` to rebuild.  ``cleanup()`` detaches the observer +
@@ -148,10 +161,11 @@ _COMPOSITE_COLUMN = 0
 _COLUMN_COUNT = 1
 
 #: The empty-carve cue (ADR-0010 legible text -- silent nothing is not a
-#: state): shown on the SELECTED seed row when its effective (carved) region
-#: is EMPTY -- the owner segment is fully covered by the snapshot segments
-#: above it -- so "no stripes" is named, never mute.  An UNKNOWN carve (an
-#: unbound seed / unreadable masks) shows no cue: unknown is not empty.
+#: state): shown on the HIGHLIGHTED seed row (toggle or placement driven)
+#: when its effective (carved) region is EMPTY -- the owner segment is fully
+#: covered by the snapshot segments above it -- so "no stripes" is named,
+#: never mute.  An UNKNOWN carve (an unbound seed / unreadable masks) shows
+#: no cue: unknown is not empty.
 EMPTY_CARVE_MESSAGE = "Region fully covered by segments above"
 
 #: Dynamic Qt properties tagging every widget of a composite row with its row
@@ -198,8 +212,8 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         # event filter's target); rebuilt with the tree.
         self._seed_items: dict[int, Any] = {}
         # Seed count after the last observer-driven rebuild: a +1 step marks a
-        # placement, which auto-selects the new seed's row (the selection is
-        # the single highlight driver, so placement highlights immediately).
+        # placement, which publishes the new seed's highlight DIRECTLY (no row
+        # selection -- selection has no side effects).
         self._known_seed_count: int | None = None
         # Auto-mint counter for "Add volume".
         self._mint_counter = 0
@@ -207,8 +221,9 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         # The carved-region stripe highlight: THIS widget owns the phase timer
         # and publishes highlightSeed / stripePhase onto the shared display
         # node (CarvedRegionStripes); the LayerDM slice pipelines render the
-        # marching stripes.  Persistent while a seed row is selected -- no
-        # opacity flashing (the old fade pulse is retired).
+        # marching stripes.  Driven by placement + the per-seed Highlight
+        # toggle only; persistent while toggled -- no opacity flashing (the
+        # old fade pulse is retired).
         self._stripeTimer = qt.QTimer(self)
         self._stripeTimer.setInterval(STRIPE_TICK_MS)
         self._stripeTimer.connect("timeout()", self._onStripeTick)
@@ -224,7 +239,11 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._tree.setRootIsDecorated(True)
         self._tree.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
         self._tree.setSelectionMode(qt.QAbstractItemView.SingleSelection)
-        self._tree.connect("itemSelectionChanged()", self._onRowSelectionChanged)
+        # Row selection is deliberately NOT connected to anything: selecting a
+        # row must have NO side effects on visibility or the stripe highlight
+        # (the rows are dense with actionable controls, so a selection-driven
+        # highlight fired on every stray click).  The Highlight toggle and
+        # placement are the only stripe drivers.
         layout.addWidget(self._tree)
 
         buttons = qt.QHBoxLayout()
@@ -237,6 +256,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
 
         self._attachCarrierObserver()
         self._rebuild()
+        self._known_seed_count = self._seedCount()
 
     # ------------------------------------------------------------------ #
     # Lifecycle
@@ -300,15 +320,19 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._rebuild()
         current = self._seedCount()
         self._known_seed_count = current
-        if previous is not None and current == previous + 1:
-            # Exactly one seed appended = a placement: select its row so the
-            # carved-region stripes highlight what the seed just measured
-            # (selection is the single highlight driver; the seed's snapshot
-            # equals the live visibility at placement, so the context restore
-            # is a no-op).
-            item = self._seed_items.get(current - 1)
-            if item is not None:
-                self._tree.setCurrentItem(item)
+        if previous is None:
+            return
+        if current == previous + 1:
+            # Exactly one seed appended = a placement: publish the new seed's
+            # highlight DIRECTLY so the carved-region stripes show what the
+            # seed just measured, with no row interaction.  No visibility
+            # restore: the seed's snapshot equals the live visibility at
+            # placement, so the restore stays with the explicit toggle.
+            self._publishHighlight(current - 1)
+        elif current < previous and self._highlightedSeed >= 0:
+            # A removal reshuffles the global seed indices, so the highlight
+            # index no longer names the seed it was raised for -- retire it.
+            self._retireHighlight()
 
     # ------------------------------------------------------------------ #
     # Item-model reader seams
@@ -391,6 +415,11 @@ class VolumetrySeedsTableWidget(qt.QWidget):
     def statusLabel(self, seedIndex: int) -> Any:
         """The seed row's empty-carve cue ``qt.QLabel`` (keyed by global index)."""
         return self._seedControl(seedIndex, "status")
+
+    def highlightButton(self, seedIndex: int) -> Any:
+        """The seed row's checkable Highlight ``qt.QToolButton`` (the stripes'
+        dedicated driver, keyed by global index)."""
+        return self._seedControl(seedIndex, "highlight")
 
     # ------------------------------------------------------------------ #
     # Volume lifecycle (add / arm / delete)
@@ -553,31 +582,26 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         if segmentID:
             self.retargetSeed(seedIndex, str(segmentID))
 
-    def _onRowSelectionChanged(self) -> None:
-        """Restore the selected seed's snapshot + raise its carved highlight.
+    def _onHighlightToggled(self, seedIndex: int, checked: bool) -> None:
+        """The dedicated highlight driver (the row's Highlight toggle).
 
-        Selecting a seed row flips the structure-source visibility to EXACTLY
-        the seed's placement-time context (the visibility-composed carve rule:
-        the snapshot IS the seed's reproducible definition), so the view shows
-        the composition that defines the seed, and starts the marching-stripes
-        highlight of its carved region.  Deselecting (or selecting a volume
-        row) clears the highlight but restores no visibility -- the last
-        selected context stays.
+        Checking RESTORES the seed's visibility snapshot (the visibility-
+        composed carve rule: the snapshot IS the seed's reproducible
+        definition) and raises its marching-stripes highlight; the toggles are
+        exclusive, so this retires any other seed's highlight.  Unchecking
+        clears the highlight (no visibility change -- the restored context
+        stays).
         """
         if self._rebuilding:
             return
-        items = self._tree.selectedItems()
-        seedIndex = items[0].data(0, qt.Qt.UserRole) if items else None
-        if seedIndex is None:
-            self._clearHighlight()
-            self._updateEmptyCarveCue(None)
-            return
-        self._restoreVisibilityContext(int(seedIndex))
-        self._highlightSeed(int(seedIndex))
-        self._updateEmptyCarveCue(int(seedIndex))
+        if checked:
+            self._restoreVisibilityContext(int(seedIndex))
+            self._publishHighlight(int(seedIndex))
+        else:
+            self._retireHighlight()
 
     # ------------------------------------------------------------------ #
-    # Visibility snapshot (restore-on-select, ``VisibilityCarve``)
+    # Visibility snapshot (restore-on-highlight, ``VisibilityCarve``)
     # ------------------------------------------------------------------ #
 
     def _seedVisibilityContext(self, seedIndex: int) -> list[str]:
@@ -655,7 +679,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             self._tree.expandAll()
         finally:
             self._rebuilding = False
-        self._syncHighlightToSelection()
+        self._syncHighlightAfterRebuild()
 
     def _appendVolumeItem(self, volumeId: str, seedIndices: list[int]) -> None:
         item = qt.QTreeWidgetItem(self._tree)
@@ -743,8 +767,8 @@ class VolumetrySeedsTableWidget(qt.QWidget):
 
     def _appendSeedItem(self, parentItem: Any, seedIndex: int) -> None:
         child = qt.QTreeWidgetItem(parentItem)
-        # Carry the global seed index on the item so row-selection can restore
-        # the seed's snapshot + raise its carved highlight.
+        # Carry the global seed index on the item so introspection (tests,
+        # the row-select filter) can resolve the row back to its seed.
         child.setData(0, qt.Qt.UserRole, seedIndex)
         self._seed_items[int(seedIndex)] = child
         rowWidget = self._buildSeedRow(seedIndex)
@@ -761,12 +785,12 @@ class VolumetrySeedsTableWidget(qt.QWidget):
 
         The composite row widget covers the whole tree item, so a press on
         "the row" always lands on a child control (mostly the stretch line
-        edit) and is CONSUMED there -- the tree viewport never sees it and the
-        item is never selected, which made the row-selection features
-        (visibility restore + the carved-region stripes) unreachable by a
-        real click.  Tagging rides a dynamic Qt property (stable across
-        PythonQt wrapper identities); the filter resolves it back to the tree
-        item and selects, then lets the press continue into the control.
+        edit) and is CONSUMED there -- the tree viewport never sees it and
+        the item would never read selected on a real click.  Tagging rides a
+        dynamic Qt property (stable across PythonQt wrapper identities); the
+        filter resolves it back to the tree item and selects, then lets the
+        press continue into the control.  Selection is PLAIN row UX -- it
+        drives no visibility or highlight state.
         """
         # Manual descendant walk: PythonQt does not reliably wrap the template
         # ``findChildren`` (the ``slicer.util.findChildren`` precedent).
@@ -790,10 +814,10 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         """Select the tree row the pressed row-child ``widget`` belongs to.
 
         Resolves the row key off the widget's dynamic property (seed index or
-        volume id) and makes that item the current selection -- firing the
-        SAME ``itemSelectionChanged`` path a viewport click drives (visibility
-        restore + carved-stripes highlight for a seed row; highlight clear for
-        a volume row).  A no-op for untagged widgets or during a rebuild.
+        volume id) and makes that item the current selection.  Selection is
+        plain row UX with NO side effects -- the stripes and the visibility
+        restore belong to the Highlight toggle + placement.  A no-op for
+        untagged widgets or during a rebuild.
         """
         if self._rebuilding or widget is None:
             return
@@ -821,7 +845,8 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         return self._carrier.GetNthSeedLabel(seedIndex)
 
     def _buildSeedRow(self, seedIndex: int) -> Any:
-        """Compose one seed row: colour swatch, label, target combo, delete."""
+        """Compose one seed row: highlight toggle, colour swatch, label,
+        target combo, delete."""
         color = self._seedColor(seedIndex)
         label = self._seedLabel(seedIndex)
 
@@ -829,6 +854,24 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         rowLayout = qt.QHBoxLayout(rowWidget)
         rowLayout.setContentsMargins(2, 1, 2, 1)
         rowLayout.setSpacing(4)
+
+        # The DEDICATED highlight driver: one small checkable button whose
+        # only job is the stripes (exclusive across seeds).  Text + tooltip
+        # per ADR-0010 -- the control is named, never an icon alone.
+        highlightButton = qt.QToolButton()
+        highlightButton.setAutoRaise(True)
+        highlightButton.setCheckable(True)
+        highlightButton.setText("Highlight")
+        highlightButton.setToolTip(
+            "Show this seed's measured region with a striped overlay; "
+            "restores the visibility the seed was placed under"
+        )
+        highlightButton.setChecked(int(seedIndex) == self._highlightedSeed)
+        highlightButton.connect(
+            "toggled(bool)",
+            lambda checked, i=seedIndex: self._onHighlightToggled(i, checked),
+        )
+        rowLayout.addWidget(highlightButton)
 
         colourButton = ctk.ctkColorPickerButton()
         colourButton.displayColorName = False
@@ -855,10 +898,11 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         targetCombo = self._buildTargetCombo(seedIndex)
         rowLayout.addWidget(targetCombo)
 
-        # The empty-carve cue label: hidden until THIS row is selected and its
-        # carved region turns out empty (``EMPTY_CARVE_MESSAGE``).  Plain row
-        # text (ADR-0010) right where the surgeon clicked -- the stripes'
-        # absence is named, never a silent nothing.
+        # The empty-carve cue label: hidden until THIS row is highlighted
+        # (toggle or placement) and its carved region turns out empty
+        # (``EMPTY_CARVE_MESSAGE``).  Plain row text (ADR-0010) right where
+        # the surgeon is looking -- the stripes' absence is named, never a
+        # silent nothing.
         statusLabel = qt.QLabel("")
         statusLabel.setVisible(False)
         rowLayout.addWidget(statusLabel)
@@ -873,13 +917,14 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         )
         rowLayout.addWidget(deleteButton)
 
-        # a11y: name the owning segment + the visibility context in TEXT on the
-        # row (ADR-0010 -- never colour/animation alone).  Selecting the row
-        # restores this snapshot; the tooltip says what that means.
+        # a11y: name the owning segment + the visibility context in TEXT on
+        # the row (ADR-0010 -- never colour/animation alone).  The Highlight
+        # toggle restores this snapshot; the tooltip says what that means.
         rowWidget.setToolTip(self._seedContextToolTip(seedIndex))
 
         self._seed_rows[seedIndex] = {
             "widget": rowWidget,
+            "highlight": highlightButton,
             "colour": colourButton,
             "label": labelEdit,
             "target": targetCombo,
@@ -900,7 +945,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         )
         return (
             f"Structure: {ownerName}. Visible at placement: {contextNames}. "
-            "Selecting this row restores that view."
+            "The Highlight toggle restores that view."
         )
 
     def _buildTargetCombo(self, seedIndex: int) -> Any:
@@ -955,7 +1000,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
 
     # ------------------------------------------------------------------ #
     # Carved-region stripe highlight (CarvedRegionStripes; replaces the old
-    # opacity-fade pulse -- persistent while selected, never a blink)
+    # opacity-fade pulse -- persistent while toggled, never a blink)
     # ------------------------------------------------------------------ #
 
     def _highlightSeed(self, seedIndex: int) -> None:
@@ -964,7 +1009,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         The highlight state rides the shared display node
         (``feedback_layerdm_state_on_display_node``): this widget writes
         ``highlightSeed`` / ``stripePhase`` and the LayerDM slice pipelines
-        render the stripes.  Persistent while the row stays selected.
+        render the stripes.  Persistent while the Highlight toggle stays on.
         """
         if self._displayNode is None:
             return
@@ -997,12 +1042,12 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         set_stripe_phase(self._displayNode, self._stripePhase)
 
     def _updateEmptyCarveCue(self, seedIndex: int | None) -> None:
-        """Name an EMPTY carve on the selected seed row; hide every other cue.
+        """Name an EMPTY carve on the highlighted seed row; hide other cues.
 
-        Runs once per row selection (never per stripe tick).  ``None`` (a
-        deselect / a volume row) hides all cues.  Only a PRESENT-but-empty
-        carve shows the message: an unknown carve (unbound seed, unreadable
-        masks) stays cueless -- unknown is not empty.
+        Runs once per highlight change (never per stripe tick).  ``None``
+        (highlight cleared) hides all cues.  Only a PRESENT-but-empty carve
+        shows the message: an unknown carve (unbound seed, unreadable masks)
+        stays cueless -- unknown is not empty.
         """
         for index, row in self._seed_rows.items():
             status = row.get("status")
@@ -1038,16 +1083,48 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         )
         return mask is not None and not mask.any()
 
-    def _syncHighlightToSelection(self) -> None:
-        """Clear the highlight when its row is gone (rebuild drops selection).
+    def _publishHighlight(self, seedIndex: int) -> None:
+        """Point the highlight at ``seedIndex`` (the toggle/placement drivers).
 
-        A rebuild (a seed placed / deleted / cleared) clears the tree
-        selection, so a stale highlight would march for a row that is no
-        longer selected -- placement-of-another clears the highlight.
+        Publishes the stripes, names an empty carve on the row, and re-checks
+        the toggles so exactly this seed's Highlight button reads on.  No
+        visibility restore here -- that stays with the explicit toggle.
+        """
+        self._highlightSeed(int(seedIndex))
+        self._updateEmptyCarveCue(int(seedIndex))
+        self._syncHighlightToggles()
+
+    def _retireHighlight(self) -> None:
+        """Clear the highlight + its cue and uncheck every Highlight toggle."""
+        self._clearHighlight()
+        self._updateEmptyCarveCue(None)
+        self._syncHighlightToggles()
+
+    def _syncHighlightToggles(self) -> None:
+        """Check exactly the highlighted seed's toggle (exclusivity, silent).
+
+        Signals are blocked so re-checking the buttons never re-enters
+        ``_onHighlightToggled`` (a programmatic sync is not a driver).
+        """
+        for index, row in self._seed_rows.items():
+            button = row.get("highlight")
+            if button is None:
+                continue
+            button.blockSignals(True)
+            button.setChecked(index == self._highlightedSeed)
+            button.blockSignals(False)
+
+    def _syncHighlightAfterRebuild(self) -> None:
+        """Re-seat the highlight on the fresh rows after a rebuild.
+
+        The rows (toggles + cue labels) are rebuilt from scratch, so a
+        persisting highlight (a label edit / retarget rebuild) gets its cue
+        re-derived; a highlight whose seed is gone is retired.
         """
         if self._highlightedSeed < 0:
             return
-        items = self._tree.selectedItems()
-        selected = items[0].data(0, qt.Qt.UserRole) if items else None
-        if selected != self._highlightedSeed:
-            self._clearHighlight()
+        if self._highlightedSeed >= self._seedCount():
+            self._retireHighlight()
+            return
+        self._updateEmptyCarveCue(self._highlightedSeed)
+        self._syncHighlightToggles()
