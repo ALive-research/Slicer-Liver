@@ -141,7 +141,7 @@ def test_total_row_names_the_ticked_segments_denominator():
     The ``% of total`` denominator used to be implicit (the rasterized tick
     selection).  Every ``computeVolume`` run must now END with a Total volume
     row NAMING that definition -- ``Total volume (ticked segments)`` (the
-    ticked segments in the "Total volume segments" section define the total;
+    ticked segments in the "Total volume" section define the total;
     seeds/volumes are the measurement) -- carrying the
     denominator's own mL and 100%, so the surgeon can see what the
     percentages are measured against.  The denominator semantics are
