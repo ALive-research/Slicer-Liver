@@ -197,6 +197,10 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         # global seed index -> the seed child QTreeWidgetItem (the row-select
         # event filter's target); rebuilt with the tree.
         self._seed_items: dict[int, Any] = {}
+        # Seed count after the last observer-driven rebuild: a +1 step marks a
+        # placement, which auto-selects the new seed's row (the selection is
+        # the single highlight driver, so placement highlights immediately).
+        self._known_seed_count: int | None = None
         # Auto-mint counter for "Add volume".
         self._mint_counter = 0
 
@@ -256,6 +260,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._carrier = carrier
         self._attachCarrierObserver()
         self._rebuild()
+        self._known_seed_count = self._seedCount()
 
     def setDisplayNode(self, displayNode: Any) -> None:
         """Bind the shared display node the arm / active-volume state rides.
@@ -291,7 +296,19 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         del caller, event
         if self._rebuilding:
             return
+        previous = self._known_seed_count
         self._rebuild()
+        current = self._seedCount()
+        self._known_seed_count = current
+        if previous is not None and current == previous + 1:
+            # Exactly one seed appended = a placement: select its row so the
+            # carved-region stripes highlight what the seed just measured
+            # (selection is the single highlight driver; the seed's snapshot
+            # equals the live visibility at placement, so the context restore
+            # is a no-op).
+            item = self._seed_items.get(current - 1)
+            if item is not None:
+                self._tree.setCurrentItem(item)
 
     # ------------------------------------------------------------------ #
     # Item-model reader seams
