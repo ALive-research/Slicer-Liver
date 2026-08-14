@@ -288,6 +288,14 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         # transient member under the ``preview:`` marker.  Hover-out
         # restores the pinned seed's stripes (or clears).
         self._previewSeedID = ""
+        # Pin persistence hook: the module widget registers a callback
+        # (``setPinChangedCallback``) and mirrors the pinned seed's STABLE ID
+        # into its parameter node, so a scene save/reload resumes the pin on
+        # module enter.  ``stopHighlight`` (module-exit hygiene) suppresses
+        # the callback: exiting stops the stripes but must NOT erase the
+        # persisted pin.
+        self._pinChangedCallback: Any = None
+        self._suppressPinCallback = False
 
         # The restored-context state ("Restore placement view", symmetric,
         # depth ONE): entering a restore captures the CURRENT visibility as
@@ -1541,6 +1549,43 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         """The seed previewed by the current Pin-button hover ("" none)."""
         return self._previewSeedID
 
+    # ------------------------------------------------------------------ #
+    # Pin persistence seams (parameter-node mirroring by the module widget)
+    # ------------------------------------------------------------------ #
+
+    def pinnedSeedID(self) -> str:
+        """The pinned seed's stable ID ("" when nothing is pinned)."""
+        return self._highlightedSeedID
+
+    def setPinChangedCallback(self, callback: Any) -> None:
+        """Register ``callback(seedID)`` fired on every REAL pin change.
+
+        Fired for the toggle, placement auto-pin, and pin retirement --
+        never for the hover preview (transient) and never from
+        ``stopHighlight`` (module exit must keep the persisted pin).
+        """
+        self._pinChangedCallback = callback
+
+    def pinSeed(self, seedID: str) -> bool:
+        """Raise the pin on ``seedID`` (the enter()-time resume seam).
+
+        Returns True iff the pin actually raised (the ID resolves on the
+        carrier AND the shared display node is bound); anything less leaves
+        the caller free to clear its persistence.
+        """
+        if not seedID or self._resolveSeedIndex(seedID) < 0:
+            return False
+        self._publishHighlight(seedID)
+        return self._highlightedSeedID == seedID
+
+    def _firePinChanged(self, seedID: str) -> None:
+        if self._suppressPinCallback or self._pinChangedCallback is None:
+            return
+        try:
+            self._pinChangedCallback(seedID)
+        except Exception:  # noqa: BLE001 - a persistence hook must not break the UI
+            pass
+
     def _startHoverPreview(self, seedID: str) -> None:
         """Show ``seedID``'s stripes static + dimmed while its Pin is hovered.
 
@@ -1622,6 +1667,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._updateEmptyCarveCue(seedID)
         self._updateDivergenceChips()
         self._syncHighlightToggles()
+        self._firePinChanged(seedID)
 
     def _retireHighlight(self) -> None:
         """Clear the highlight + its cue/chip and uncheck every Pin toggle."""
@@ -1629,6 +1675,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._updateEmptyCarveCue(None)
         self._updateDivergenceChips()
         self._syncHighlightToggles()
+        self._firePinChanged("")
 
     def stopHighlight(self) -> None:
         """Retire the highlight + stop the march timer (module-exit hygiene).
@@ -1636,11 +1683,17 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         Called by the module widget on ``exit()`` so no timer keeps firing --
         and no frozen stripes linger -- while LiverVolumetry is inactive.
         Also ends a restored context (the banner clears on module exit)
-        WITHOUT touching the visibility the surgeon is looking at.
+        WITHOUT touching the visibility the surgeon is looking at.  The pin
+        PERSISTENCE callback is suppressed: exiting retires the live
+        stripes, not the persisted pin ``enter()`` resumes from.
         """
         if self._restoredSeedID:
             self._endRestoredContext()
-        self._retireHighlight()
+        self._suppressPinCallback = True
+        try:
+            self._retireHighlight()
+        finally:
+            self._suppressPinCallback = False
 
     def _syncHighlightToggles(self) -> None:
         """Check exactly the highlighted seed's toggle (exclusivity, silent).

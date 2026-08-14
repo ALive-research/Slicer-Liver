@@ -153,6 +153,11 @@ set(_volumetry_pytest_files
   # the pin; visibility untouched).  Qt + wrapped carrier + display node ->
   # SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_hover_preview.py
+  # territory-usability -- pin persistence: the pinned seed's stable ID is
+  # mirrored into the module parameter node; exit keeps it, enter resumes
+  # it, a stale ID clears.  Module widget + wrapped carrier -> SKIPS bare,
+  # RUNS launched (ADR-0027).
+  test_volumetry_pin_persistence.py
   # territory-usability -- the per-seed VISIBILITY CONTEXT slot on the carrier:
   # ordered round-trip, parallel-slot lockstep on remove, empty default, and
   # the .vsd.json storage round-trip.  Wrapped C++ node -> SKIPS bare, RUNS
