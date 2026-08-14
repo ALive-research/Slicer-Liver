@@ -122,11 +122,14 @@ def test_selecting_segmentation_preserves_segment_colours_and_opacity(qt_widgets
         pytest.skip("two-segment segmentation not built in this harness (ADR-0027).")
 
     # Give each segment a DISTINCT non-default colour + opacity so a clobber
-    # (a reset to the palette default) is observable.
+    # (a reset to the palette default) is observable.  The colour lives on
+    # the SEGMENT (vtkSegment::SetColor -- the display node only reads it
+    # back through GetSegmentColor / applies overrides); the 3D opacity is
+    # a display-node property.
+    seg.GetSegmentation().GetSegment(segmentIDs[0]).SetColor(0.11, 0.22, 0.33)
     displayNode.SetSegmentOpacity3D(segmentIDs[0], 0.37)
-    displayNode.SetSegmentColor(segmentIDs[0], 0.11, 0.22, 0.33)
+    seg.GetSegmentation().GetSegment(segmentIDs[1]).SetColor(0.44, 0.55, 0.66)
     displayNode.SetSegmentOpacity3D(segmentIDs[1], 0.81)
-    displayNode.SetSegmentColor(segmentIDs[1], 0.44, 0.55, 0.66)
     before = _display_snapshot(displayNode, segmentIDs)
 
     widget.ui.InputSegmentSelectorWidget.setCurrentNode(seg)

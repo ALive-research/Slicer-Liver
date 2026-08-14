@@ -186,10 +186,13 @@ def test_escape_shortcut_is_panel_scoped(qt_widgets):
     if shortcut is None:
         pytest.skip("ESC shortcut seam absent (ADR-0027).")
 
-    key = shortcut.key()
+    # PythonQt exposes QShortcut.key / .context as properties (not callables).
+    key = shortcut.key
+    key = key() if callable(key) else key
     key = key.toString() if hasattr(key, "toString") else str(key)
     assert str(key) == "Esc"
-    context = shortcut.context()
+    context = shortcut.context
+    context = context() if callable(context) else context
     assert context == qt.Qt.WidgetWithChildrenShortcut, (
         "the ESC shortcut is scoped to the panel's widget tree, never global."
     )
@@ -213,9 +216,14 @@ def _pipeline_fixture(slicer):
         )
     from PointPlacementState import PointPlacementState
 
-    slice_node = slicer.util.getNode("vtkMRMLSliceNodeRed")
+    # The launched harness runs without slice widgets, so no vtkMRMLSliceNode
+    # pre-exists (and the conftest clears the scene between tests): create the
+    # slice node the pipeline projects against (the in-volume-pick precedent).
+    slice_node = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLSliceNode")
     if slice_node is None:
-        pytest.skip("no Red slice node available in this launched Slicer.")
+        slice_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSliceNode", "Red")
+    if slice_node is None:
+        pytest.skip("no vtkMRMLSliceNode available in this launched Slicer.")
     carrier = slicer.mrmlScene.AddNewNodeByClass(SEEDS_NODE_CLASS, "PinAnnotSeeds")
     display = slicer.mrmlScene.AddNewNodeByClass(DISPLAY_NODE_CLASS, "PinAnnotDisplay")
     if carrier is None or display is None or not hasattr(carrier, "GetNthSeedID"):

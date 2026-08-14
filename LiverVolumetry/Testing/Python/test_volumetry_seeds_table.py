@@ -470,8 +470,52 @@ def test_seed_row_carries_no_inline_combo_or_delete(qt_widgets):
     )
 
 
+def _overlapping_two_segment_segmentation(slicer, name="SegSrc"):
+    """Two LAYERED block segments overlapping at (2, 2, 2): Alpha under Beta.
+
+    The retarget submenu offers the TOUCHED candidates (the seed→label
+    capture contract, SeedTargetResolution), so a retarget test needs REAL
+    overlapping labelmap geometry at the seed position -- empty segments
+    touch nothing and would offer only the bound segment.  The touched
+    membership read (``arrayFromSegmentBinaryLabelmap``) needs the
+    segmentation's reference image geometry, so the first source labelmap
+    stays in the scene as that reference.
+    """
+    import numpy as np
+
+    seg = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", name)
+    seg.CreateDefaultDisplayNodes()
+
+    def _add_segment_from_array(array, label, keepAsReference=False):
+        labelmap = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
+        slicer.util.updateVolumeFromArray(labelmap, array.astype(np.uint8))
+        ok = slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(
+            labelmap, seg)
+        assert ok
+        if keepAsReference:
+            seg.SetReferenceImageGeometryParameterFromVolumeNode(labelmap)
+        else:
+            slicer.mrmlScene.RemoveNode(labelmap)
+        segmentation = seg.GetSegmentation()
+        segmentID = segmentation.GetNthSegmentID(segmentation.GetNumberOfSegments() - 1)
+        segmentation.GetSegment(segmentID).SetName(label)
+        return segmentID
+
+    outer = np.zeros((8, 8, 8), dtype=np.uint8)
+    outer[1:7, 1:7, 1:7] = 1
+    inner = np.zeros((8, 8, 8), dtype=np.uint8)
+    inner[1:4, 1:4, 1:4] = 1
+    alphaID = _add_segment_from_array(outer, "Alpha", keepAsReference=True)
+    betaID = _add_segment_from_array(inner, "Beta")
+    return seg, (alphaID, betaID)
+
+
 def test_retarget_action_rebinds_through_the_menu(qt_widgets):
-    """Triggering a retarget submenu candidate rebinds + renames the seed."""
+    """Triggering a retarget submenu candidate rebinds + renames the seed.
+
+    The seed sits where BOTH segments overlap, so the touched-candidate set
+    offers Alpha alongside the bound Beta (SeedTargetResolution).
+    """
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
@@ -482,14 +526,11 @@ def test_retarget_action_rebinds_through_the_menu(qt_widgets):
     if not hasattr(table, "retargetMenu"):
         pytest.skip("VolumetrySeedsTableWidget has no retargetMenu seam (ADR-0027).")
 
-    segmentation = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", "SegSrc")
-    segmentation.CreateDefaultDisplayNodes()
-    segmentation.GetSegmentation().AddEmptySegment("segA", "Alpha")
-    segmentation.GetSegmentation().AddEmptySegment("segB", "Beta")
+    segmentation, (alphaID, betaID) = _overlapping_two_segment_segmentation(slicer)
     table.setStructureSource(segmentation)
 
-    carrier.AddSeed(0.0, 0.0, 0.0)
-    carrier.SetNthSeedBinding(0, segmentation.GetID(), "segB")
+    carrier.AddSeed(2.0, 2.0, 2.0)  # inside BOTH blocks
+    carrier.SetNthSeedBinding(0, segmentation.GetID(), betaID)
     carrier.Modified()
 
     alpha = None
@@ -498,10 +539,10 @@ def test_retarget_action_rebinds_through_the_menu(qt_widgets):
         text = text() if callable(text) else text
         if text == "Alpha":
             alpha = action
-    assert alpha is not None, "the bound candidate list must offer Alpha."
+    assert alpha is not None, "the touched-candidate list must offer Alpha."
     alpha.trigger()
 
-    assert carrier.GetNthSeedBindingSegmentID(0) == "segA", (
+    assert carrier.GetNthSeedBindingSegmentID(0) == alphaID, (
         "a retarget-menu pick must rebind the seed."
     )
     assert carrier.GetNthSeedLabel(0) == "Alpha", (

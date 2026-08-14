@@ -459,10 +459,12 @@ def test_selection_does_not_clear_an_active_highlight(qt_widgets):
     carrier.AddSeed(1.0, 0.0, 0.0)
     table = _make_table_or_skip(slicer, carrier, display)
     qt_widgets.append(table)
+    # Volumes are minted explicitly (per-volume tree): add one so the
+    # selection has a VOLUME row to move to.
+    volumeId = table.addVolume()
 
     table.highlightButton(0).setChecked(True)
 
-    volumeId = table.volumeIds()[0]
     table.tree().setCurrentItem(table.volumeItem(volumeId))
 
     assert _highlight_id(display) == _seed_id(carrier, 0), (
