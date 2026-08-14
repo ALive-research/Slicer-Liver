@@ -10,9 +10,19 @@ placement fade).  The stripes stay while the highlight holds and clear on
 untoggle / placement of another seed.  Row SELECTION is not a driver.
 
 Split per the LayerDM state discipline (``feedback_layerdm_state_on_display_
-node``): the WIDGET owns the QTimer and publishes ``highlightSeed`` +
-``stripePhase`` onto the shared display node; the LayerDM-created slice
-pipeline reads them back on the display node's ``ModifiedEvent`` and renders.
+node``): the WIDGET owns the QTimer and publishes the highlighted seed's
+STABLE ID onto the shared display node's TRANSIENT ``HighlightSeedID``
+member (``vtkMRMLVolumetrySeedsDisplayNode``, the ``TransientPoint``
+precedent -- NOT a node attribute: ``SetAttribute`` values serialize into
+the scene XML, so an attribute-borne highlight froze into orphan stripes on
+scene reload).  The LayerDM-created slice pipeline reads the member back on
+the display node's ``ModifiedEvent`` and renders.  The stripe PHASE never
+touches MRML at all: the widget's timer fires ``STRIPE_TICK_EVENT`` (a
+custom VTK event -- ``InvokeEvent`` neither serializes nor implies
+Modified), and each pipeline advances its OWN local phase (the
+SegmentEditorThresholdEffect precedent: preview animation with zero MRML
+writes per tick).
+
 This module holds the PURE pieces both sides share (bare-testable, numpy
 only -- ADR-0027):
 
@@ -21,28 +31,21 @@ only -- ADR-0027):
 * ``stripe_segments`` -- the diagonal stripe line segments clipped to the
   2D mask at a given phase (the only per-tick work: the phase shifts the
   stripe family, the mask is reused).
-* the ``highlightSeed`` / ``stripePhase`` display-node attribute helpers.
+* the ``HighlightSeedID`` member helpers + the stripe-tick event + the
+  legacy-attribute sanitation.
 
 References
 ----------
 * ``VisibilityCarve`` -- the effective-region carve the mask encodes.
 * ``feedback_layerdm_state_on_display_node`` -- widget state rides the
   display node, not a pipeline instance.
+* ``vtkMRMLVolumetrySeedsDisplayNode`` -- the transient (never-serialized)
+  ``HighlightSeedID`` / ``TransientPoint`` members.
 """
 
 from __future__ import annotations
 
 from typing import Any
-
-#: The shared display-node attribute carrying the highlighted seed's GLOBAL
-#: placement index ("-1" / absent == no highlight).  Written by the seeds
-#: table at placement / on the Highlight toggle; read by the slice pipelines.
-HIGHLIGHT_SEED_ATTRIBUTE = "LiverVolumetry.highlightSeed"
-
-#: The shared display-node attribute carrying the stripe phase (px along the
-#: stripe normal).  The widget's timer advances it; each write fires the
-#: display node's ModifiedEvent, which is the pipelines' render tick.
-STRIPE_PHASE_ATTRIBUTE = "LiverVolumetry.stripePhase"
 
 #: Stripe spacing (px) along the diagonal normal.  One full phase cycle
 #: translates the family by one period, so the march loops seamlessly.
@@ -52,46 +55,81 @@ STRIPE_PERIOD_PX = 12
 #: steady, calm march (~2 periods per second).
 STRIPE_TICK_MS = 40
 
+#: The stripe-tick event id the widget's timer fires on the shared display
+#: node (``InvokeEvent`` -- no serialization, no Modified) and the slice
+#: pipelines observe to advance their LOCAL phase.  Offset from
+#: ``vtkCommand::UserEvent`` (1000); the fallback keeps this module
+#: importable without vtk (the bare unit layer, ADR-0027).
+try:  # pragma: no cover - exercised once per import environment
+    from vtkmodules.vtkCommonCore import vtkCommand as _vtkCommand
+
+    _USER_EVENT = int(_vtkCommand.UserEvent)
+except ImportError:  # bare fallback: vtkCommand::UserEvent is the stable 1000
+    _USER_EVENT = 1000
+STRIPE_TICK_EVENT = _USER_EVENT + 61
+
+#: LEGACY display-node ATTRIBUTES from the retired attribute-borne highlight
+#: channel.  Node attributes serialize into the scene XML, so an old scene can
+#: carry a frozen highlight/phase; ``clear_legacy_highlight_attributes``
+#: scrubs them on module enter / scene load.  Kept ONLY for that sanitation.
+_LEGACY_HIGHLIGHT_SEED_ATTRIBUTE = "LiverVolumetry.highlightSeed"
+_LEGACY_STRIPE_PHASE_ATTRIBUTE = "LiverVolumetry.stripePhase"
+
 
 # --------------------------------------------------------------------------- #
-# Highlight state on the shared display node
+# Highlight state on the shared display node (transient member, never XML)
 # --------------------------------------------------------------------------- #
 
 
-def set_highlight_seed(displayNode: Any, seedIndex: int) -> None:
-    """Publish the highlighted seed's global index (-1 clears)."""
-    if displayNode is None:
+def set_highlight_seed_id(displayNode: Any, seedID: str) -> None:
+    """Publish the highlighted seed's STABLE ID (empty / ``None`` clears).
+
+    Writes the display node's transient ``HighlightSeedID`` member (fires
+    ModifiedEvent, excluded from scene serialization).
+    """
+    setter = getattr(displayNode, "SetHighlightSeedID", None)
+    if setter is None:
         return
-    displayNode.SetAttribute(HIGHLIGHT_SEED_ATTRIBUTE, str(int(seedIndex)))
+    setter(str(seedID) if seedID else "")
 
 
-def get_highlight_seed(displayNode: Any) -> int:
-    """The highlighted seed's global index (-1 when none)."""
-    if displayNode is None:
-        return -1
-    value = displayNode.GetAttribute(HIGHLIGHT_SEED_ATTRIBUTE)
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return -1
+def get_highlight_seed_id(displayNode: Any) -> str:
+    """The highlighted seed's stable ID (empty string when none)."""
+    getter = getattr(displayNode, "GetHighlightSeedID", None)
+    if getter is None:
+        return ""
+    return getter() or ""
 
 
-def set_stripe_phase(displayNode: Any, phase: int) -> None:
-    """Publish the stripe phase (px; the widget timer's tick)."""
-    if displayNode is None:
+def invoke_stripe_tick(displayNode: Any) -> None:
+    """Fire the stripe-tick event on the shared display node.
+
+    ``InvokeEvent`` does not serialize and does not imply Modified -- the
+    tick wakes ONLY the pipelines observing ``STRIPE_TICK_EVENT``, never the
+    whole ModifiedEvent audience (the 25 Hz Modified-storm fix).
+    """
+    invoke = getattr(displayNode, "InvokeEvent", None)
+    if invoke is None:
         return
-    displayNode.SetAttribute(STRIPE_PHASE_ATTRIBUTE, str(int(phase)))
+    invoke(STRIPE_TICK_EVENT)
 
 
-def get_stripe_phase(displayNode: Any) -> int:
-    """The stripe phase (0 when unset)."""
+def clear_legacy_highlight_attributes(displayNode: Any) -> bool:
+    """Scrub the retired attribute-borne highlight channel off ``displayNode``.
+
+    Old scenes serialized ``LiverVolumetry.highlightSeed`` /
+    ``LiverVolumetry.stripePhase`` node ATTRIBUTES; on reload they render as
+    frozen orphan stripes no widget owns.  Returns True iff anything was
+    removed.
+    """
     if displayNode is None:
-        return 0
-    value = displayNode.GetAttribute(STRIPE_PHASE_ATTRIBUTE)
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return 0
+        return False
+    cleared = False
+    for name in (_LEGACY_HIGHLIGHT_SEED_ATTRIBUTE, _LEGACY_STRIPE_PHASE_ATTRIBUTE):
+        if displayNode.GetAttribute(name) is not None:
+            displayNode.RemoveAttribute(name)
+            cleared = True
+    return cleared
 
 
 # --------------------------------------------------------------------------- #

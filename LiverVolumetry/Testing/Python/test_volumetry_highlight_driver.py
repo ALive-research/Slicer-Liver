@@ -7,9 +7,10 @@ with actionable controls, so a selection-driven highlight fired on every stray
 click and a real placement did not reliably select a row at all.  The two
 drivers are:
 
-* PLACEMENT -- a one-seed carrier append publishes ``highlightSeed`` for the
-  new seed directly (no row selection, no visibility restore: the seed's
-  snapshot equals the live visibility at placement).
+* PLACEMENT -- a one-seed carrier append publishes the new seed's STABLE ID
+  onto the display node's transient ``HighlightSeedID`` member directly (no
+  row selection, no visibility restore: the seed's snapshot equals the live
+  visibility at placement).
 * the per-seed HIGHLIGHT toggle -- checking it RESTORES the seed's visibility
   snapshot (``VisibilityCarve``) and publishes its highlight; the toggles are
   exclusive; unchecking clears the highlight.
@@ -18,14 +19,17 @@ Pins on the table widget:
 
 * TOGGLE RESTORES + PUBLISHES -- checking a seed's Highlight button flips the
   structure-source visibility to exactly the seed's snapshot and publishes
-  ``highlightSeed`` on the shared display node.
+  the seed's stable ID on the shared display node.
 * EMPTY SNAPSHOT IS A NO-OP -- a legacy seed with no context must not blank
   the view.
 * EXCLUSIVITY -- checking another seed's toggle moves the highlight and
   unchecks the first.
-* UNTOGGLE CLEARS -- unchecking clears ``highlightSeed`` back to -1.
+* UNTOGGLE CLEARS -- unchecking clears ``HighlightSeedID`` back to empty.
 * PLACEMENT AUTO-HIGHLIGHTS -- a carrier append publishes the new seed's
   highlight WITHOUT selecting its row and WITHOUT touching visibility.
+* PIN SURVIVES OTHER DELETIONS -- the highlight is keyed by stable ID, so
+  deleting a DIFFERENT seed leaves the pinned seed pinned; deleting the
+  pinned seed retires the pin.
 * SELECTION IS INERT -- selecting a seed row changes neither the highlight
   nor the visibility (selection is plain row UX).
 * A11Y TEXT -- the seed row names its owning segment + context in text
@@ -71,6 +75,11 @@ def _make_display_or_skip(slicer, name="HighlightDriverDisplayTest"):
     node = slicer.mrmlScene.AddNewNodeByClass(DISPLAY_NODE_CLASS, name)
     if node is None:
         pytest.skip(f"{DISPLAY_NODE_CLASS} not registered (launched build; ADR-0027).")
+    if not hasattr(node, "GetHighlightSeedID"):
+        pytest.skip(
+            f"{DISPLAY_NODE_CLASS} has no HighlightSeedID member -- the "
+            "transient highlight slot has not landed (ADR-0027)."
+        )
     return node
 
 
@@ -87,10 +96,16 @@ def _make_table_or_skip(slicer, carrier, display=None):
     return table
 
 
-def _highlight_seed(display):
-    from LiverVolumetryLib.CarvedRegionStripes import get_highlight_seed
+def _highlight_id(display):
+    from LiverVolumetryLib.CarvedRegionStripes import get_highlight_seed_id
 
-    return get_highlight_seed(display)
+    return get_highlight_seed_id(display)
+
+
+def _seed_id(carrier, index):
+    if not hasattr(carrier, "GetNthSeedID"):
+        pytest.skip("carrier has no GetNthSeedID -- the stable-ID slot has not landed.")
+    return carrier.GetNthSeedID(index)
 
 
 def _make_segmentation(slicer, name="HighlightDriverSegSrc"):
@@ -169,8 +184,8 @@ def test_toggling_highlight_restores_snapshot_and_publishes(qt_widgets):
     assert not segDisplay.GetSegmentVisibility("Tumor"), (
         "the Highlight toggle must HIDE segments outside the snapshot."
     )
-    assert _highlight_seed(display) == 0, (
-        "the Highlight toggle must publish highlightSeed for its seed."
+    assert _highlight_id(display) == _seed_id(carrier, 0), (
+        "the Highlight toggle must publish its seed's STABLE ID."
     )
 
 
@@ -196,7 +211,7 @@ def test_toggling_a_snapshotless_seed_keeps_the_view(qt_widgets):
     assert segDisplay.GetSegmentVisibility("Tumor"), (
         "an empty snapshot is a NO-OP -- the live view stays."
     )
-    assert _highlight_seed(display) == 0, (
+    assert _highlight_id(display) == _seed_id(carrier, 0), (
         "the highlight still publishes for a snapshotless seed."
     )
 
@@ -213,11 +228,11 @@ def test_highlight_toggles_are_exclusive(qt_widgets):
     qt_widgets.append(table)
 
     table.highlightButton(0).setChecked(True)
-    assert _highlight_seed(display) == 0
+    assert _highlight_id(display) == _seed_id(carrier, 0)
 
     table.highlightButton(1).setChecked(True)
 
-    assert _highlight_seed(display) == 1, (
+    assert _highlight_id(display) == _seed_id(carrier, 1), (
         "checking another seed's toggle must move the highlight."
     )
     assert not table.highlightButton(0).isChecked(), (
@@ -238,11 +253,11 @@ def test_unchecking_the_toggle_clears_the_highlight(qt_widgets):
 
     button = table.highlightButton(0)
     button.setChecked(True)
-    assert _highlight_seed(display) == 0
+    assert _highlight_id(display) == _seed_id(carrier, 0)
 
     button.setChecked(False)
 
-    assert _highlight_seed(display) == -1, (
+    assert _highlight_id(display) == "", (
         "unchecking the Highlight toggle must clear the published highlight."
     )
     assert not table._stripeTimer.isActive(), (  # noqa: SLF001 - timer seam
@@ -268,7 +283,7 @@ def test_placement_publishes_the_highlight_without_selection(qt_widgets):
 
     carrier.AddSeed(2.0, 0.0, 0.0)  # the placement (fires ModifiedEvent)
 
-    assert _highlight_seed(display) == 1, (
+    assert _highlight_id(display) == _seed_id(carrier, 1), (
         "placing a seed must publish its highlight IMMEDIATELY (the surgeon "
         "sees the just-measured region striped with no row interaction)."
     )
@@ -295,7 +310,7 @@ def test_placement_repoints_an_existing_highlight(qt_widgets):
     table.highlightButton(0).setChecked(True)
     carrier.AddSeed(2.0, 0.0, 0.0)  # the placement
 
-    assert _highlight_seed(display) == 1
+    assert _highlight_id(display) == _seed_id(carrier, 1)
     assert not table.highlightButton(0).isChecked(), (
         "a placement re-points the highlight: the old toggle unchecks."
     )
@@ -328,7 +343,73 @@ def test_placement_does_not_restore_visibility(qt_widgets):
         "placement must NOT restore any seed's visibility context."
     )
     assert segDisplay.GetSegmentVisibility("Tumor")
-    assert _highlight_seed(display) == 1
+    assert _highlight_id(display) == _seed_id(carrier, 1)
+
+
+# --------------------------------------------------------------------------- #
+# The pin is keyed by STABLE ID -- deletions of OTHER seeds do not move it
+# --------------------------------------------------------------------------- #
+
+
+def test_pin_survives_deleting_another_seed(qt_widgets):
+    """Deleting a DIFFERENT seed leaves the pinned seed pinned.
+
+    The highlight is keyed by the carrier-minted stable ID, so an index
+    reshuffle (the pinned seed shifts from index 1 to index 0) must neither
+    clear the highlight nor move it to another seed.
+    """
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    display = _make_display_or_skip(slicer)
+    carrier.AddSeed(1.0, 0.0, 0.0)
+    carrier.AddSeed(2.0, 0.0, 0.0)
+    pinnedID = _seed_id(carrier, 1)
+    table = _make_table_or_skip(slicer, carrier, display)
+    qt_widgets.append(table)
+
+    table.highlightButton(1).setChecked(True)
+    assert _highlight_id(display) == pinnedID
+
+    carrier.RemoveNthSeed(0)  # delete a DIFFERENT seed; the pin's index shifts
+
+    assert _highlight_id(display) == pinnedID, (
+        "deleting another seed must leave the pinned seed pinned (the ID "
+        "still resolves; indices are not identity)."
+    )
+    assert carrier.GetSeedIndexByID(pinnedID) == 0, "the pinned seed shifted to 0."
+    assert table.highlightButton(0).isChecked(), (
+        "the surviving row (now index 0) must still read highlighted."
+    )
+    assert table._stripeTimer.isActive()  # noqa: SLF001 - timer seam
+
+
+def test_pin_retires_when_its_own_seed_is_deleted(qt_widgets):
+    """Deleting the PINNED seed retires the pin (ID no longer resolves)."""
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    display = _make_display_or_skip(slicer)
+    carrier.AddSeed(1.0, 0.0, 0.0)
+    carrier.AddSeed(2.0, 0.0, 0.0)
+    pinnedID = _seed_id(carrier, 1)
+    table = _make_table_or_skip(slicer, carrier, display)
+    qt_widgets.append(table)
+
+    table.highlightButton(1).setChecked(True)
+    assert _highlight_id(display) == pinnedID
+
+    carrier.RemoveNthSeed(1)  # delete the pinned seed itself
+
+    assert _highlight_id(display) == "", (
+        "deleting the pinned seed must retire the pin."
+    )
+    assert not table.highlightButton(0).isChecked(), (
+        "no other seed inherits the highlight."
+    )
+    assert not table._stripeTimer.isActive(), (  # noqa: SLF001 - timer seam
+        "retiring the pin must stop the march timer."
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -358,7 +439,7 @@ def test_selecting_a_seed_row_has_no_side_effects(qt_widgets):
 
     assert _select_seed_row(table, 0), "the seed row must be selectable."
 
-    assert _highlight_seed(display) == -1, (
+    assert _highlight_id(display) == "", (
         "row selection must NOT publish a highlight (decoupled driver)."
     )
     assert not segDisplay.GetSegmentVisibility("Parenchyma"), (
@@ -384,7 +465,7 @@ def test_selection_does_not_clear_an_active_highlight(qt_widgets):
     volumeId = table.volumeIds()[0]
     table.tree().setCurrentItem(table.volumeItem(volumeId))
 
-    assert _highlight_seed(display) == 0, (
+    assert _highlight_id(display) == _seed_id(carrier, 0), (
         "selection changes must not clear the toggle-driven highlight."
     )
     assert table.highlightButton(0).isChecked()
@@ -411,7 +492,7 @@ def test_seed_row_names_owner_and_context_in_text(qt_widgets):
     qt_widgets.append(table)
     table.setStructureSource(segmentation)
 
-    row = table._seed_rows.get(0)  # noqa: SLF001 - introspection seam
+    row = table._seed_rows.get(_seed_id(carrier, 0))  # noqa: SLF001 - introspection seam
     assert row is not None
     tip = row["widget"].toolTip
     tip = tip() if callable(tip) else tip

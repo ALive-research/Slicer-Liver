@@ -400,13 +400,15 @@ def test_cleanup_detaches_the_carrier_observer(qt_widgets):
 
 
 def test_row_children_carry_the_row_select_tag(qt_widgets):
-    """Every seed-row control is tagged with its row's global seed index.
+    """Every seed-row control is tagged with its row's STABLE seed ID.
 
     The composite row widget covers the whole tree item, so a real click on
     "the row" lands on a child control and is consumed there -- the tree
     viewport never selects the item.  The row-select event filter needs each
     child tagged with its row key (a dynamic Qt property) to resolve the
-    press back to the tree item.
+    press back to the tree item.  The key is the carrier-minted stable ID
+    (never the placement index): a deletion reshuffles indices but must not
+    re-key surviving rows.
     """
     slicer = _slicer_or_skip()
     _qt_or_skip()
@@ -415,11 +417,14 @@ def test_row_children_carry_the_row_select_tag(qt_widgets):
     qt_widgets.append(table)
 
     carrier.AddSeed(1.0, 0.0, 0.0)
+    if not hasattr(carrier, "GetNthSeedID"):
+        pytest.skip("carrier has no GetNthSeedID -- the stable-ID slot has not landed.")
+    seedID = carrier.GetNthSeedID(0)
 
     for control in (table.labelEdit(0), table.colourButton(0), table.deleteButton(0)):
         assert control is not None
-        assert control.property("volumetryRowSeed") == 0, (
-            "each seed-row control must carry the row's seed index so the "
+        assert control.property("volumetryRowSeed") == seedID, (
+            "each seed-row control must carry the row's STABLE seed ID so the "
             "row-select event filter can select the row on a press."
         )
 

@@ -93,8 +93,8 @@ try:  # pragma: no cover - exercised once per import path
     )
     from .CarvedRegionStripes import (
         STRIPE_PERIOD_PX,
-        get_highlight_seed,
-        get_stripe_phase,
+        STRIPE_TICK_EVENT,
+        get_highlight_seed_id,
         resample_mask_to_plane,
         stripe_segments,
     )
@@ -113,8 +113,8 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
     )
     from CarvedRegionStripes import (  # type: ignore[no-redef]
         STRIPE_PERIOD_PX,
-        get_highlight_seed,
-        get_stripe_phase,
+        STRIPE_TICK_EVENT,
+        get_highlight_seed_id,
         resample_mask_to_plane,
         stripe_segments,
     )
@@ -451,10 +451,14 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
 
         # Carved-region marching-stripes highlight (CarvedRegionStripes): at
         # placement / while a seed's Highlight toggle is on the widget
-        # publishes highlightSeed + stripePhase onto the shared display node
-        # (row selection is not a driver); this pipeline cuts the
-        # seed's EFFECTIVE (carved) region to the slice plane once and redraws
-        # only the stripe family each phase tick.  Diagonal LINES through a
+        # publishes the seed's STABLE ID onto the shared display node's
+        # transient HighlightSeedID member (row selection is not a driver);
+        # this pipeline cuts the seed's EFFECTIVE (carved) region to the slice
+        # plane once and redraws only the stripe family each march tick.  The
+        # PHASE is pipeline-LOCAL: the widget's timer fires STRIPE_TICK_EVENT
+        # (InvokeEvent, no MRML write / no Modified) and this pipeline
+        # advances its own counter -- the SegmentEditorThresholdEffect
+        # zero-MRML-writes-per-tick precedent.  Diagonal LINES through a
         # 2D mapper -- the reliable slice-overlay primitive (2D RGBA fills are
         # not; the slice-polygon presence-cutoff lesson).
         self._stripes_polydata = vtk.vtkPolyData()
@@ -467,13 +471,18 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         self._stripes_actor.SetVisibility(False)
         # (key, mask) caches: the 3D carve keyed on the seed + node MTimes, the
         # 2D cut keyed on the carve key + the slice pose + view size.  The
-        # phase tick hits both caches and only rebuilds the stripe lines.
+        # march tick hits both caches and only rebuilds the stripe lines.
         self._carve3d_cache: tuple | None = None
         self._mask2d_cache: tuple | None = None
+        # The pipeline-LOCAL stripe phase + the highlight it marches for: a
+        # highlight change restarts the march from phase zero.
+        self._stripe_phase = 0
+        self._stripe_highlight_id = ""
 
     def _after_display_node_set(self) -> None:
         _wire_provider_and_pick(self, self._display_node)
         self._ensure_carrier_observed()
+        self._observe_stripe_tick()
 
     def OnRendererAdded(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
         # The base re-attaches the slice-node observer after renderer churn but
@@ -494,8 +503,9 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         except Exception:  # pragma: no cover - C++ boundary must never raise
             pass
         super().UpdatePipeline()
-        # The stripe highlight rides the same display-node ModifiedEvent tick:
-        # the widget's phase timer writes stripePhase, which lands here.
+        # The highlight RAISE/CLEAR rides the display-node ModifiedEvent (the
+        # widget writes the transient HighlightSeedID member); the per-tick
+        # march arrives separately through STRIPE_TICK_EVENT.
         try:
             self._update_stripes()
         except Exception:  # pragma: no cover - C++ boundary must never raise
@@ -527,6 +537,38 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         self._observed_carrier = carrier
         if carrier is not None:
             self._attach_observer(carrier)
+
+    def _observe_stripe_tick(self) -> None:
+        """Observe the widget's stripe-tick event on the shared display node.
+
+        The tick is a custom VTK event (``STRIPE_TICK_EVENT``), NOT a
+        ModifiedEvent: only the stripe march wakes, never every display-node
+        observer in every view.  The tag rides the base's per-node tag ledger
+        so the base's detach paths (display-node rebind, ``cleanup``) drop it
+        with the ModifiedEvent tag.
+        """
+        node = self._display_node
+        if node is None or not hasattr(node, "AddObserver"):
+            return
+        tag = node.AddObserver(STRIPE_TICK_EVENT, self._on_stripe_tick)
+        self._observer_tags.setdefault(id(node), []).append(tag)
+
+    def _on_stripe_tick(self, caller: Any, event: Any) -> None:
+        """Advance the LOCAL stripe phase one pixel + redraw the stripe family.
+
+        Zero MRML writes (the SegmentEditorThresholdEffect preview-timer
+        precedent): the cached carved mask is reused, only the stripe lines
+        shift, and a render is requested for THIS view.
+        """
+        del caller, event
+        try:
+            if not get_highlight_seed_id(self._display_node):
+                return
+            self._stripe_phase = (self._stripe_phase + 1) % STRIPE_PERIOD_PX
+            self._update_stripes()
+            self.RequestRender()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
     def _add_actors(self, renderer: Any) -> None:
         super()._add_actors(renderer)
@@ -700,23 +742,38 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
     def _update_stripes(self) -> None:
         """Redraw the highlighted seed's carved region as marching stripes.
 
-        Reads the highlight index + stripe phase off the shared display node
-        (the widget's timer channel).  The carved 3D mask and its slice-plane
-        cut are cached; a phase tick only rebuilds the stripe line family --
-        the cheap per-tick path.
+        Reads the highlighted seed's STABLE ID off the shared display node's
+        transient member and resolves it to the CURRENT carrier index
+        (``GetSeedIndexByID``) -- so deleting a DIFFERENT seed leaves the
+        highlight on its seed, and a retired ID simply stops resolving.  The
+        stripe phase is pipeline-LOCAL (advanced by ``_on_stripe_tick``); a
+        highlight change restarts the march from zero.  The carved 3D mask
+        and its slice-plane cut are cached; a march tick only rebuilds the
+        stripe line family -- the cheap per-tick path.
         """
         show = False
-        index = get_highlight_seed(self._display_node)
-        if index >= 0:
-            mask2d = self._carved_mask_2d(index)
-            if mask2d is not None:
-                phase = get_stripe_phase(self._display_node)
-                segments = stripe_segments(mask2d, STRIPE_PERIOD_PX, phase)
-                if segments:
-                    self._build_stripe_lines(segments)
-                    self._stripes_actor.GetProperty().SetColor(*self._stripe_rgb(index))
-                    show = True
+        seedID = get_highlight_seed_id(self._display_node)
+        if seedID != self._stripe_highlight_id:
+            self._stripe_highlight_id = seedID
+            self._stripe_phase = 0
+        if seedID:
+            index = self._resolve_seed_index(seedID)
+            if index >= 0:
+                mask2d = self._carved_mask_2d(index)
+                if mask2d is not None:
+                    segments = stripe_segments(mask2d, STRIPE_PERIOD_PX, self._stripe_phase)
+                    if segments:
+                        self._build_stripe_lines(segments)
+                        self._stripes_actor.GetProperty().SetColor(*self._stripe_rgb(index))
+                        show = True
         self._stripes_actor.SetVisibility(show)
+
+    def _resolve_seed_index(self, seedID: str) -> int:
+        """The highlighted seed's CURRENT carrier index (-1 when gone)."""
+        carrier = _carrier_from_display(self._display_node)
+        if carrier is None or not hasattr(carrier, "GetSeedIndexByID"):
+            return -1
+        return carrier.GetSeedIndexByID(seedID)
 
     def _carved_mask_3d(self, index: int):
         """The seed's EFFECTIVE region as a boolean mask on the pick labelmap grid.
