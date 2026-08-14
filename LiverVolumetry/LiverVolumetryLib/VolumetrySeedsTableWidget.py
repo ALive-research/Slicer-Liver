@@ -226,6 +226,41 @@ _ROW_VOLUME_PROPERTY = "volumetryRowVolume"
 #: the seed's stripes static + dimmed; leave restores the pinned seed's).
 _ROW_PIN_PROPERTY = "volumetryPinSeed"
 
+#: Stock icon resources for the icon-only row toggles.  Place rides the
+#: markups fiducial place-mode pair every Slicer user already reads as
+#: "click to place" (the armed variant carries the persistent-place "+");
+#: Pin rides the push-pin out/in pair.  The unchecked/checked variants sit
+#: on one ``qt.QIcon``'s Off/On states, so a checked toggle is visually
+#: unmistakable without any swap handler.  Both are resolved at runtime with
+#: a text-glyph fallback (``_apply_toggle_icon``) for a harness without the
+#: application's compiled-in resources.
+_PLACE_ICON_OFF = ":/Icons/MarkupsFiducialMouseModePlace.png"
+_PLACE_ICON_ON = ":/Icons/MarkupsFiducialMouseModePlaceAdd.png"
+_PIN_ICON_OFF = ":/Icons/PushPinOut.png"
+_PIN_ICON_ON = ":/Icons/PushPinIn.png"
+
+
+def _apply_toggle_icon(button: Any, offPath: str, onPath: str, fallbackText: str) -> None:
+    """Make ``button`` icon-only with an unchecked/checked stock-icon pair.
+
+    The pair rides one ``qt.QIcon``'s Off/On states, so the checked state
+    swaps the glyph with no toggle handler -- and survives a signal-blocked
+    programmatic ``setChecked`` (the exclusivity re-sync).  Falls back to the
+    short ``fallbackText`` when the stock resources are unavailable (a bare
+    harness without the application's compiled-in icons), so the toggle never
+    renders blank; identity stays on the tooltip + accessible name either way
+    (ADR-0010 -- the icon never stands alone).
+    """
+    if qt.QIcon(offPath).isNull():
+        button.setText(fallbackText)
+        return
+    icon = qt.QIcon()
+    icon.addFile(offPath, qt.QSize(), qt.QIcon.Normal, qt.QIcon.Off)
+    checkedPath = onPath if not qt.QIcon(onPath).isNull() else offPath
+    icon.addFile(checkedPath, qt.QSize(), qt.QIcon.Normal, qt.QIcon.On)
+    button.setText("")
+    button.setIcon(icon)
+
 
 class VolumetrySeedsTableWidget(qt.QWidget):
     """Per-volume carrier-backed tree over ``vtkMRMLVolumetrySeedsNode``.
@@ -1116,8 +1151,9 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         placeButton = qt.QToolButton()
         placeButton.setAutoRaise(True)
         placeButton.setCheckable(True)
-        placeButton.setText("Place")
+        _apply_toggle_icon(placeButton, _PLACE_ICON_OFF, _PLACE_ICON_ON, "Place")
         placeButton.setToolTip("Arm placement into this volume (exclusive)")
+        placeButton.setAccessibleName("Place seeds into this volume")
         placeButton.setChecked(self._isArmedInto(volumeId))
         placeButton.connect(
             "toggled(bool)",
@@ -1299,15 +1335,17 @@ class VolumetrySeedsTableWidget(qt.QWidget):
 
         # The DEDICATED stripe driver: one small checkable button whose only
         # job is the stripes (exclusive across seeds; NEVER a visibility
-        # change).  Text + tooltip per ADR-0010 -- the control is named,
-        # never an icon alone.
+        # change).  Icon-only push-pin (out/in on the toggle) with the name
+        # riding the tooltip + accessible name per ADR-0010 -- the icon
+        # never stands alone.
         highlightButton = qt.QToolButton()
         highlightButton.setAutoRaise(True)
         highlightButton.setCheckable(True)
-        highlightButton.setText("Pin")
+        _apply_toggle_icon(highlightButton, _PIN_ICON_OFF, _PIN_ICON_ON, "Pin")
         highlightButton.setToolTip(
             "Show this seed's measured region as a striped overlay"
         )
+        highlightButton.setAccessibleName("Pin this seed's measured region")
         highlightButton.setChecked(bool(seedID) and seedID == self._highlightedSeedID)
         highlightButton.connect(
             "toggled(bool)",
