@@ -314,6 +314,12 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
+    # Belt-and-braces sanitation on scene load: old scenes serialized the
+    # attribute-borne highlight/phase channel onto the seed display node;
+    # scrub it so a reload never renders frozen orphan stripes no widget
+    # owns (the highlight now rides the transient HighlightSeedID member,
+    # the TransientPoint rule).
+    self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndImportEvent, self.onSceneEndImport)
 
     # Gate the workflow actions on their real preconditions from the start
     # (D1/D2): with no input segmentation the Place-seeds toggle is disabled and
@@ -1099,6 +1105,9 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # click only lands while LiverVolumetry is active.  Entering auto-arms
     # NOTHING -- placement is the explicit Add-seeds toggle.
     self._setModuleActive(True)
+    # Scrub any legacy attribute-borne highlight state a loaded scene may
+    # carry (belt-and-braces alongside the EndImportEvent sanitation).
+    self._sanitizeLegacyHighlightAttributes()
     # Make sure parameter node exists and observed
     self.initializeParameterNode()
 
@@ -1106,6 +1115,11 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Called each time the user opens a different module.
     """
+    # Retire the stripe highlight + stop its march timer on the way out
+    # (timer lifecycle rides module enter/exit): a background module must not
+    # keep a 25 Hz timer firing, nor leave frozen stripes on the slices.
+    if self._seedsTable is not None and hasattr(self._seedsTable, "stopHighlight"):
+      self._seedsTable.stopHighlight()
     # Disarm placement + close the module-active gate on the way out so no view
     # claims an add-on-click while LiverVolumetry is inactive (ADR-0038).  The
     # per-volume Place toggles read the armed flag off this display node, so
@@ -1127,6 +1141,30 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return
     from SlicerLiverInteractionLib.PointPlacementState import PointPlacementState
     PointPlacementState(VOLUMETRY_NAMESPACE).set_module_active(node, bool(active))
+
+  def onSceneEndImport(self, caller, event):
+    """Scrub legacy attribute-borne highlight state off loaded seed display nodes."""
+    del caller, event
+    self._sanitizeLegacyHighlightAttributes()
+
+  def _sanitizeLegacyHighlightAttributes(self):
+    """Remove the retired highlight/phase ATTRIBUTES from every seed display node.
+
+    Old scenes serialized the highlight/phase channel as node attributes
+    (``SetAttribute`` values persist into the scene XML); reloading such a
+    scene rendered frozen orphan stripes no widget owned.  The live
+    highlight now rides the display node's transient
+    ``HighlightSeedID`` member, so any surviving attribute is stale by
+    definition and is dropped wholesale.
+    """
+    try:
+      from LiverVolumetryLib import clear_legacy_highlight_attributes
+    except ImportError:
+      return
+    if clear_legacy_highlight_attributes is None:
+      return
+    for node in slicer.util.getNodesByClass(SEEDS_DISPLAY_NODE_CLASS):
+      clear_legacy_highlight_attributes(node)
 
   def onSceneStartClose(self, caller, event):
     """
