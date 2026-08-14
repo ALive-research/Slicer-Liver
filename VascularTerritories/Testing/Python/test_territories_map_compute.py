@@ -710,7 +710,16 @@ def _make_widget_or_skip(slicer):
     _require_qt_widget()
     from VascularTerritories import VascularTerritoriesWidget
 
-    widget = VascularTerritoriesWidget()
+    # Explicit parent: with parent=None, ScriptedLoadableModuleWidget's
+    # __init__ auto-runs setup() (and show()), so the explicit setup()
+    # below would run TWICE -- stacking two panels and registering
+    # duplicate scene observers that outlive cleanup() (the destroyed-ui
+    # 'enabled' storm, feedback_launched_widget_teardown_crash).
+    import qt
+
+    widgetParent = qt.QWidget()
+    qt.QVBoxLayout(widgetParent)
+    widget = VascularTerritoriesWidget(widgetParent)
     widget.setup()
     return widget
 
