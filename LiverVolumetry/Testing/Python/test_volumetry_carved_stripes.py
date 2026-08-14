@@ -30,12 +30,15 @@ if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 
 from CarvedRegionStripes import (  # noqa: E402
+    PREVIEW_PREFIX,
     STRIPE_TICK_EVENT,
     clear_legacy_highlight_attributes,
     get_highlight_seed_id,
     invoke_stripe_tick,
+    parse_highlight_value,
     resample_mask_to_plane,
     set_highlight_seed_id,
+    set_preview_seed_id,
     stripe_segments,
 )
 
@@ -201,6 +204,28 @@ def test_highlight_helpers_never_touch_the_attribute_channel():
         "the highlight helpers must NEVER write a node attribute -- "
         "attributes persist into the scene XML."
     )
+
+
+def test_preview_channel_rides_the_same_transient_member():
+    """The hover-preview marks the ONE transient member with ``preview:`` --
+    no second member, no attribute channel -- and parses back losslessly."""
+    display = _FakeDisplayNode()
+
+    set_preview_seed_id(display, "seed_7")
+
+    assert get_highlight_seed_id(display) == f"{PREVIEW_PREFIX}seed_7"
+    assert parse_highlight_value(get_highlight_seed_id(display)) == ("seed_7", True)
+    assert display.attribute_writes == []
+
+    set_preview_seed_id(display, "")
+    assert get_highlight_seed_id(display) == "", "an empty preview clears."
+
+
+def test_parse_highlight_value_splits_pin_and_preview():
+    assert parse_highlight_value("seed_3") == ("seed_3", False)
+    assert parse_highlight_value(f"{PREVIEW_PREFIX}seed_3") == ("seed_3", True)
+    assert parse_highlight_value("") == ("", False)
+    assert parse_highlight_value(None) == ("", False)
 
 
 def test_stripe_tick_fires_the_custom_event_with_no_mrml_write():

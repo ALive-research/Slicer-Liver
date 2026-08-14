@@ -147,6 +147,12 @@ set(_volumetry_pytest_files
   # stale-snapshot hard-guard / placement guard / banner text).  Qt +
   # wrapped carrier + display node -> SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_pin_restore.py
+  # territory-usability -- the Pin-button hover-preview: an unpinned seed's
+  # stripes show STATIC + DIMMED while its Pin is hovered (the preview:
+  # marker on the shared transient member; ticks held; hover-out resumes
+  # the pin; visibility untouched).  Qt + wrapped carrier + display node ->
+  # SKIPS bare, RUNS launched (ADR-0027).
+  test_volumetry_hover_preview.py
   # territory-usability -- the per-seed VISIBILITY CONTEXT slot on the carrier:
   # ordered round-trip, parallel-slot lockstep on remove, empty default, and
   # the .vsd.json storage round-trip.  Wrapped C++ node -> SKIPS bare, RUNS
