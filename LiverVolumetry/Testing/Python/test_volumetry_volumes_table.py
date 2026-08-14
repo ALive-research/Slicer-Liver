@@ -8,11 +8,13 @@ VOLUMES are TOP-LEVEL rows, seeds nest as CHILD rows under their volume.  The
 surgeon adds a named VOLUME (Add volume), arms placement into the ACTIVE volume
 (a per-volume Place toggle publishing the active volume onto the shared display
 node), and placed seeds nest under that volume.  Each volume row carries a
-colour swatch, an editable label, and a delete button; each seed row keeps its
-Target combo + delete (the seed→segment binding is untouched).
+colour swatch, an editable label, and an overflow "..." menu carrying Remove
+volume (confirming when seeds would go with it); each seed row keeps its
+retarget + delete behind its own overflow (the seed→segment binding is
+untouched).
 
 The per-SEED getters stay keyed by the seed's GLOBAL placement INDEX
-(``labelEdit`` / ``targetCombo`` / ``deleteButton`` / ``setSeedColor`` /
+(``labelEdit`` / ``targetCombo`` / ``deleteAction`` / ``setSeedColor`` /
 ``deleteSeed`` / ``retargetSeed``), so the existing seed-row + Target-combo
 contract (``test_volumetry_seeds_table.py``) is preserved on top of the
 grouping.
@@ -236,9 +238,84 @@ def test_seed_target_combo_keyed_by_global_index(qt_widgets):
     carrier.SetNthSeedBinding(0, segmentation.GetID(), "segB")
     carrier.Modified()
 
-    combo = table.targetCombo(0)
-    assert combo is not None, "the seed row must carry a target combo keyed by index."
-    assert combo.currentText == "Beta"
+    menu = table.targetCombo(0)
+    assert menu is not None, (
+        "the seed overflow must carry a Retarget submenu keyed by index."
+    )
+    checked = []
+    for action in menu.actions():
+        isChecked = action.isChecked
+        if isChecked() if callable(isChecked) else isChecked:
+            text = action.text
+            checked.append(text() if callable(text) else text)
+    assert checked == ["Beta"], (
+        "the Retarget submenu must CHECK the bound segment (the menu-backed "
+        "successor of the Target combo)."
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Volume overflow -- Remove confirms when seeds would go with it
+# --------------------------------------------------------------------------- #
+
+
+def test_remove_volume_action_confirms_when_it_carries_seeds(qt_widgets):
+    """The overflow "Remove volume..." confirms a seed-bearing volume, naming
+    the label + seed count; declining keeps everything."""
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier)
+    qt_widgets.append(table)
+    if not hasattr(table, "volumeRemoveAction"):
+        pytest.skip("VolumetrySeedsTableWidget has no volumeRemoveAction (ADR-0027).")
+
+    carrier.AddSeedToVolume("Drop", 1.0, 0.0, 0.0)
+    carrier.AddSeedToVolume("Drop", 2.0, 0.0, 0.0)
+    carrier.SetVolumeLabel("Drop", "Left lobe")
+    carrier.Modified()
+
+    confirms = []
+
+    def _fake_confirm(text):
+        confirms.append(text)
+        return _fake_confirm.answer
+
+    _fake_confirm.answer = False
+    table._confirmDestructive = _fake_confirm  # noqa: SLF001 - confirm seam
+
+    table.volumeRemoveAction("Drop").trigger()
+    assert carrier.GetNumberOfSeeds() == 2, (
+        "a DECLINED confirm must keep the volume and its seeds."
+    )
+    assert confirms and "Left lobe" in confirms[0] and "2" in confirms[0], (
+        "the confirm must name the volume label AND its seed count."
+    )
+
+    _fake_confirm.answer = True
+    table.volumeRemoveAction("Drop").trigger()
+    assert carrier.GetNumberOfSeeds() == 0
+    assert "Drop" not in list(table.volumeIds())
+
+
+def test_remove_empty_volume_stays_one_click(qt_widgets):
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier)
+    qt_widgets.append(table)
+    if not hasattr(table, "volumeRemoveAction") or not hasattr(table, "addVolume"):
+        pytest.skip("VolumetrySeedsTableWidget has no volume overflow (ADR-0027).")
+
+    volumeId = table.addVolume()
+
+    def _never_confirm(text):
+        raise AssertionError("removing an EMPTY volume must not confirm")
+
+    table._confirmDestructive = _never_confirm  # noqa: SLF001 - confirm seam
+    table.volumeRemoveAction(volumeId).trigger()
+
+    assert volumeId not in list(table.volumeIds())
 
 
 if __name__ == "__main__":

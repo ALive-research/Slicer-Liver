@@ -674,16 +674,27 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     The flat-list analogue of the VascularTerritories per-territory Remove.
     Routes through the carrier's existing ``RemoveNthSeed`` (the same removal
     the per-row Delete uses) from the top down, so the table + placement
-    pipeline refresh via the carrier ModifiedEvent observer.  No confirmation
-    modal (critique OQ3): re-placement is the recovery path.  Disabled when
-    there are no seeds, so this is a no-op on an empty carrier.
+    pipeline refresh via the carrier ModifiedEvent observer.  Clearing MORE
+    THAN ONE seed confirms first (destructive out of the misclick path);
+    a single seed clears one-click -- re-placement is the recovery path.
+    Disabled when there are no seeds, so this is a no-op on an empty carrier.
     """
     carrier = self._seedsCarrier
     if carrier is None or not slicer.mrmlScene.IsNodePresent(carrier):
       return
-    for index in range(carrier.GetNumberOfSeeds() - 1, -1, -1):
+    count = carrier.GetNumberOfSeeds()
+    if count > 1 and not self._confirmDestructive(
+        f"Delete all {count} seeds?"):
+      return
+    for index in range(count - 1, -1, -1):
       carrier.RemoveNthSeed(index)
     self._updateActionEnablement()
+
+  def _confirmDestructive(self, text):
+    """The destructive-action confirm seam (tests stub this)."""
+    return (
+      qt.QMessageBox.question(self.parent, "Liver Volumetry", text)
+      == qt.QMessageBox.Yes)
 
   # ------------------------------------------------------------------ #
   # Seed carrier + placement arming (ADR-0038-amendment)
