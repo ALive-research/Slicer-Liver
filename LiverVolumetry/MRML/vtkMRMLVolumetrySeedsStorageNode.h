@@ -67,16 +67,21 @@ class vtkMRMLVolumetrySeedsNode;
  * \code
  * {
  *   "schemaVersion": 1,
+ *   "seedIdCounter": 3,
  *   "seeds": [
- *     { "xyz": [x, y, z], "label": "SegmentV",  "color": [r, g, b] },
- *     { "xyz": [x, y, z], "label": "SegmentVI", "color": [r, g, b] }
+ *     { "xyz": [x, y, z], "id": "seed_1", "label": "SegmentV",  "color": [r, g, b] },
+ *     { "xyz": [x, y, z], "id": "seed_3", "label": "SegmentVI", "color": [r, g, b] }
  *   ]
  * }
  * \endcode
  *
  * The ``seeds`` array is ORDERED — placement order + per-seed labels +
  * per-seed colours round-trip identically (ADR-0038 §Conformance, the
- * segment-name fidelity).  The storage node is typed to
+ * segment-name fidelity).  Each seed's STABLE ``id`` and the carrier's mint
+ * counter (``seedIdCounter``) round-trip too, so seed identity survives
+ * save/load and a reloaded carrier can never re-mint a retired ID.  Both are
+ * additive optional fields: a document written before the stable-ID slot
+ * simply re-mints fresh IDs on read.  The storage node is typed to
  * ``vtkMRMLVolumetrySeedsNode`` and rejects any other node.
  */
 class VTK_SLICER_LIVERVOLUMETRY_MODULE_MRML_EXPORT vtkMRMLVolumetrySeedsStorageNode : public vtkMRMLStorageNode

@@ -20,7 +20,9 @@
 #include <vtkStringArray.h>
 
 // STD includes
+#include <algorithm>
 #include <set>
+#include <stdexcept>
 
 //------------------------------------------------------------------------------
 vtkMRMLNodeNewMacro(vtkMRMLVolumetrySeedsNode);
@@ -68,6 +70,8 @@ void vtkMRMLVolumetrySeedsNode::CopyContent(vtkMRMLNode* anode, bool deepCopy /*
     return;
   }
   this->Seeds = other->Seeds;
+  this->SeedIDs = other->SeedIDs;
+  this->SeedIDCounter = other->SeedIDCounter;
   this->SeedLabels = other->SeedLabels;
   this->SeedColors = other->SeedColors;
   this->SeedBindings = other->SeedBindings;
@@ -88,6 +92,10 @@ bool vtkMRMLVolumetrySeedsNode::IsValidIndex(int i) const
 int vtkMRMLVolumetrySeedsNode::AddSeed(double x, double y, double z)
 {
   this->Seeds.push_back({ x, y, z });
+  // Mint the seed's STABLE ID from the persisted counter: the counter only
+  // grows, so a deleted seed's ID is never reused (the segment-ID / markup
+  // control-point-ID stable-string precedent).
+  this->SeedIDs.push_back("seed_" + std::to_string(++this->SeedIDCounter));
   this->SeedLabels.emplace_back();
   // Module default swatch: opaque white until the caller picks a colour.
   this->SeedColors.push_back({ 1.0, 1.0, 1.0 });
@@ -144,8 +152,10 @@ bool vtkMRMLVolumetrySeedsNode::RemoveNthSeed(int i)
   }
   const std::size_t idx = static_cast<std::size_t>(i);
   // The parallel vectors shift in lockstep so a seed's label + colour +
-  // binding + context stay bound to its coordinate.
+  // binding + context stay bound to its coordinate.  The ID vector shifts
+  // too, but the mint counter does NOT decrement: the removed ID retires.
   this->Seeds.erase(this->Seeds.begin() + idx);
+  this->SeedIDs.erase(this->SeedIDs.begin() + idx);
   this->SeedLabels.erase(this->SeedLabels.begin() + idx);
   this->SeedColors.erase(this->SeedColors.begin() + idx);
   this->SeedBindings.erase(this->SeedBindings.begin() + idx);
@@ -153,6 +163,77 @@ bool vtkMRMLVolumetrySeedsNode::RemoveNthSeed(int i)
   this->SeedVolumes.erase(this->SeedVolumes.begin() + idx);
   this->Modified();
   return true;
+}
+
+//------------------------------------------------------------------------------
+std::string vtkMRMLVolumetrySeedsNode::GetNthSeedID(int i)
+{
+  if (!this->IsValidIndex(i))
+  {
+    return std::string();
+  }
+  return this->SeedIDs[static_cast<std::size_t>(i)];
+}
+
+//------------------------------------------------------------------------------
+int vtkMRMLVolumetrySeedsNode::GetSeedIndexByID(const std::string& id)
+{
+  if (id.empty())
+  {
+    return -1;
+  }
+  for (std::size_t i = 0; i < this->SeedIDs.size(); ++i)
+  {
+    if (this->SeedIDs[i] == id)
+    {
+      return static_cast<int>(i);
+    }
+  }
+  return -1;
+}
+
+//------------------------------------------------------------------------------
+int vtkMRMLVolumetrySeedsNode::GetSeedIDCounter()
+{
+  return this->SeedIDCounter;
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLVolumetrySeedsNode::SetNthSeedID(int i, const std::string& id)
+{
+  if (!this->IsValidIndex(i) || id.empty())
+  {
+    return;
+  }
+  this->SeedIDs[static_cast<std::size_t>(i)] = id;
+  // Never-reuse belt-and-braces: bump the mint counter past the restored ID's
+  // numeric suffix so a document written by a newer session cannot make a
+  // later AddSeed re-mint one of its IDs.
+  const std::string prefix = "seed_";
+  if (id.compare(0, prefix.size(), prefix) == 0)
+  {
+    const std::string suffix = id.substr(prefix.size());
+    if (!suffix.empty() && suffix.find_first_not_of("0123456789") == std::string::npos)
+    {
+      try
+      {
+        this->SeedIDCounter = std::max(this->SeedIDCounter, std::stoi(suffix));
+      }
+      catch (const std::out_of_range&)
+      {
+        // A suffix beyond int range: leave the counter as-is (still monotonic).
+      }
+    }
+  }
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLVolumetrySeedsNode::SetSeedIDCounter(int counter)
+{
+  // The counter only grows (the never-reuse invariant): a restore can move it
+  // forward, never backwards.
+  this->SeedIDCounter = std::max(this->SeedIDCounter, counter);
 }
 
 //------------------------------------------------------------------------------
@@ -364,6 +445,7 @@ bool vtkMRMLVolumetrySeedsNode::RemoveVolume(const std::string& volumeId)
     if (this->SeedVolumes[static_cast<std::size_t>(i)] == volumeId)
     {
       this->Seeds.erase(this->Seeds.begin() + i);
+      this->SeedIDs.erase(this->SeedIDs.begin() + i);
       this->SeedLabels.erase(this->SeedLabels.begin() + i);
       this->SeedColors.erase(this->SeedColors.begin() + i);
       this->SeedBindings.erase(this->SeedBindings.begin() + i);
