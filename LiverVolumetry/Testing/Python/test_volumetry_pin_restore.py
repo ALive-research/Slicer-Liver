@@ -435,5 +435,91 @@ def test_deleting_the_restored_seed_ends_the_context(qt_widgets):
     assert not _shown(table.restoreBanner())
 
 
+# --------------------------------------------------------------------------- #
+# Divergence chip (pinned row, live vs snapshot)
+# --------------------------------------------------------------------------- #
+
+
+def test_chip_appears_when_pinned_view_diverges(qt_widgets):
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    from LiverVolumetryLib.VolumetrySeedsTableWidget import DIVERGENCE_CHIP_TEXT
+
+    carrier, _display, segmentation, table = _restore_fixture(
+        slicer, qt_widgets, [["Segment_1", "Parenchyma"]]
+    )
+    if not hasattr(table, "divergenceChip"):
+        pytest.skip("VolumetrySeedsTableWidget has no divergenceChip seam (ADR-0027).")
+
+    _set_visible(segmentation, {"Segment_1", "Parenchyma"})  # matches snapshot
+    table.highlightButton(0).setChecked(True)
+
+    chip = table.divergenceChip(0)
+    assert chip is not None
+    assert not _shown(chip), "matching live view shows no chip."
+    text = chip.text
+    text = text() if callable(text) else text
+    assert text == DIVERGENCE_CHIP_TEXT, (
+        "the chip is plain text naming the divergence (not a tooltip)."
+    )
+
+    # The user hides a snapshot segment: the live view now diverges.
+    segmentation.GetDisplayNode().SetSegmentVisibility("Segment_1", False)
+
+    assert _shown(table.divergenceChip(0)), (
+        "the PINNED row must chip when live visibility != the snapshot."
+    )
+
+
+def test_chip_hides_when_unpinned_or_matching_again(qt_widgets):
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier, _display, segmentation, table = _restore_fixture(
+        slicer, qt_widgets, [["Segment_1", "Parenchyma"]]
+    )
+    if not hasattr(table, "divergenceChip"):
+        pytest.skip("VolumetrySeedsTableWidget has no divergenceChip seam (ADR-0027).")
+
+    _set_visible(segmentation, {"Tumor"})
+    table.highlightButton(0).setChecked(True)
+    assert _shown(table.divergenceChip(0))
+
+    # Back to the snapshot composition by hand: the chip clears.
+    _set_visible(segmentation, {"Segment_1", "Parenchyma"})
+    assert not _shown(table.divergenceChip(0)), (
+        "a live view matching the snapshot again must clear the chip."
+    )
+
+    # Diverge again, then unpin: the chip clears with the pin.
+    _set_visible(segmentation, {"Tumor"})
+    assert _shown(table.divergenceChip(0))
+    table.highlightButton(0).setChecked(False)
+    assert not _shown(table.divergenceChip(0)), "no pin, no chip."
+
+
+def test_chip_click_restores_the_placement_view(qt_widgets):
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier, _display, segmentation, table = _restore_fixture(
+        slicer, qt_widgets, [["Segment_1", "Parenchyma"]]
+    )
+    if not hasattr(table, "divergenceChip"):
+        pytest.skip("VolumetrySeedsTableWidget has no divergenceChip seam (ADR-0027).")
+
+    _set_visible(segmentation, {"Tumor"})
+    table.highlightButton(0).setChecked(True)
+    assert _shown(table.divergenceChip(0))
+
+    table.divergenceChip(0).click()
+
+    assert _visible_ids(segmentation) == {"Segment_1", "Parenchyma"}, (
+        "the chip doubles as the Restore placement view entry point."
+    )
+    assert table.restoredSeedID() == carrier.GetNthSeedID(0)
+    assert not _shown(table.divergenceChip(0)), (
+        "after the restore the live view matches -- the chip clears."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
