@@ -47,10 +47,22 @@ The carved-region stripes have exactly TWO drivers instead:
   directly (the surgeon always sees the just-measured region striped at once,
   no row interaction).  Placement restores no visibility context: the seed's
   snapshot equals the live visibility at that moment.
-* the per-seed HIGHLIGHT toggle (exclusive, checkable ``qt.QToolButton``) --
-  checking it RESTORES the seed's visibility snapshot (``VisibilityCarve``)
-  and raises its stripes; unchecking clears them.  Only this explicit toggle
-  restores the context.
+* the per-seed PIN toggle (exclusive, checkable ``qt.QToolButton``) --
+  checking it raises the seed's stripes; unchecking clears them.  The pin is
+  STRIPES ONLY: it NEVER touches the segment visibility.
+
+RESTORING a seed's placement-time visibility snapshot is its own explicit
+affordance ("Restore placement view", reachable from the seed row's overflow
+menu and the divergence chip), fully decoupled from the pin.  The restore is
+symmetric and depth ONE: entering a restored context first captures the
+CURRENT visibility as "my view" (one widget-side slot); "Return to my view"
+puts it back, restoring a DIFFERENT seed reuses the same capture (a switch),
+and a MANUAL eye-list change simply ENDS the restored context -- the user
+took over, and the widget never re-asserts visibility against them.  While a
+restored context is active a banner line on the panel names it in text
+(ADR-0010) with the inline return button.  A snapshot whose intersection
+with the segmentation's CURRENT segment IDs is empty REFUSES the restore
+("no longer exists") -- the view is never blanked.
 
 Either driver highlights the seed's EFFECTIVE (carved) region in the 2D slices
 with slowly MARCHING diagonal stripes: this widget owns the march ``qt.QTimer``
@@ -103,6 +115,7 @@ try:  # pragma: no cover - exercised once per import path
         carved_mask_for_seed,
         read_seed_context,
         segment_mask_reader,
+        visible_context,
     )
     from .CarvedRegionStripes import (
         STRIPE_TICK_MS,
@@ -119,6 +132,7 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
         carved_mask_for_seed,
         read_seed_context,
         segment_mask_reader,
+        visible_context,
     )
     from CarvedRegionStripes import (  # type: ignore[no-redef]
         STRIPE_TICK_MS,
@@ -171,6 +185,16 @@ _COLUMN_COUNT = 1
 #: never mute.  An UNKNOWN carve (an unbound seed / unreadable masks) shows
 #: no cue: unknown is not empty.
 EMPTY_CARVE_MESSAGE = "Region fully covered by segments above"
+
+#: The stale-snapshot refusal (ADR-0010 legible text): a restore whose
+#: snapshot shares NO segment with the segmentation's current segment IDs is
+#: REFUSED -- applying it would blank the view.  Shown in the banner slot.
+STALE_SNAPSHOT_MESSAGE = (
+    "This seed's placement view no longer exists in the segmentation"
+)
+
+#: The restored-context banner lead-in (the inline return button follows).
+RESTORE_BANNER_PREFIX = "Showing placement view of"
 
 #: Dynamic Qt properties tagging every widget of a composite row with its row
 #: key, so the row-select event filter can resolve WHICH tree item a pressed
@@ -239,7 +263,46 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._stripeTimer.connect("timeout()", self._onStripeTick)
         self._highlightedSeedID = ""
 
+        # The restored-context state ("Restore placement view", symmetric,
+        # depth ONE): entering a restore captures the CURRENT visibility as
+        # "my view" (one slot); returning / switching reuses it; a manual
+        # eye-list change ends the context (user takeover -- the widget never
+        # re-asserts visibility).  ``_applyingVisibility`` marks the widget's
+        # OWN visibility writes so the takeover observer does not read them
+        # as the user's; ``_restoredVisibleSet`` is the visible-ID set the
+        # restore applied, so unrelated display edits (opacity, colour) are
+        # not mistaken for a takeover.
+        self._restoredSeedID = ""
+        self._myViewContext: list[str] | None = None
+        self._restoredVisibleSet: frozenset | None = None
+        self._applyingVisibility = False
+        self._observedSourceDisplay: Any = None
+        self._sourceDisplayObserverTag: int | None = None
+
         layout = qt.QVBoxLayout(self)
+
+        # The restored-context banner: a visible text line naming the
+        # restored placement view (ADR-0010 -- never state without words)
+        # with the inline "Return to my view" button.  Hidden while no
+        # restored context is active; also carries the stale-snapshot
+        # refusal message (then without the return button).
+        self._restoreBanner = qt.QWidget()
+        bannerLayout = qt.QHBoxLayout(self._restoreBanner)
+        bannerLayout.setContentsMargins(2, 1, 2, 1)
+        bannerLayout.setSpacing(4)
+        self._restoreBannerLabel = qt.QLabel("")
+        self._restoreBannerLabel.setWordWrap(True)
+        bannerLayout.addWidget(self._restoreBannerLabel, 1)
+        self._returnToMyViewButton = qt.QPushButton("Return to my view")
+        self._returnToMyViewButton.setToolTip(
+            "Put the segment visibility back to how it was before the restore"
+        )
+        self._returnToMyViewButton.connect(
+            "clicked(bool)", lambda _checked: self.returnToMyView()
+        )
+        bannerLayout.addWidget(self._returnToMyViewButton)
+        self._restoreBanner.setVisible(False)
+        layout.addWidget(self._restoreBanner)
 
         # Single-column, header-less two-level tree (volumes -> seeds).
         self._tree = qt.QTreeWidget()
@@ -272,13 +335,22 @@ class VolumetrySeedsTableWidget(qt.QWidget):
     # ------------------------------------------------------------------ #
 
     def cleanup(self) -> None:
-        """Drop the carrier observer + stop the stripe highlight (teardown)."""
+        """Drop the observers + stop the stripe highlight (teardown)."""
         self._clearHighlight()
         self._detachCarrierObserver()
+        self._detachSourceDisplayObserver()
 
     def setStructureSource(self, segmentationNode: Any) -> None:
-        """Bind the structure-source segmentation the retarget menu scans."""
+        """Bind the structure-source segmentation the retarget menu scans.
+
+        Also re-aims the eye-list observer (the user-takeover detector for a
+        restored context) at the new source's display node, and ends any
+        restored context minted against the OLD source.
+        """
+        if segmentationNode is not self._structureSource and self._restoredSeedID:
+            self._endRestoredContext()
         self._structureSource = segmentationNode
+        self._observeSourceDisplay()
         self._rebuild()
 
     def setCarrier(self, carrier: Any) -> None:
@@ -457,9 +529,14 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         return self._seedControl(seedIndex, "status")
 
     def highlightButton(self, seedIndex: int) -> Any:
-        """The seed row's checkable Highlight ``qt.QToolButton`` (the stripes'
-        dedicated driver, keyed by global index)."""
+        """The seed row's checkable Pin ``qt.QToolButton`` (the stripes'
+        dedicated driver -- stripes only, never a visibility change; keyed
+        by global index).  Historic getter name kept for the test contract."""
         return self._seedControl(seedIndex, "highlight")
+
+    def pinButton(self, seedIndex: int) -> Any:
+        """Alias for ``highlightButton`` under the control's surgeon name."""
+        return self.highlightButton(seedIndex)
 
     # ------------------------------------------------------------------ #
     # Volume lifecycle (add / arm / delete)
@@ -530,7 +607,14 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         )
 
     def _armInto(self, volumeId: str) -> None:
-        """Arm placement into ``volumeId`` via the shared display node."""
+        """Arm placement into ``volumeId`` via the shared display node.
+
+        The placement guard: arming while a RESTORED context is active first
+        returns to "my view", so a new seed's snapshot is always minted from
+        the surgeon's own composition, never a borrowed placement view.
+        """
+        if self._restoredSeedID:
+            self.returnToMyView()
         if self._displayNode is None:
             return
         state = self._state()
@@ -628,53 +712,193 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             self.retargetSeed(index, str(segmentID))
 
     def _onHighlightToggled(self, seedID: str, checked: bool) -> None:
-        """The dedicated highlight driver (the row's Highlight toggle).
+        """The dedicated stripe driver (the row's Pin toggle).
 
-        Checking RESTORES the seed's visibility snapshot (the visibility-
-        composed carve rule: the snapshot IS the seed's reproducible
-        definition) and raises its marching-stripes highlight; the toggles are
-        exclusive, so this retires any other seed's highlight.  Unchecking
-        clears the highlight (no visibility change -- the restored context
-        stays).  Keyed by the seed's STABLE ID: the toggle keeps naming its
-        seed even after other rows' deletions reshuffle the indices.
+        Checking raises the seed's marching-stripes highlight; the toggles
+        are exclusive, so this retires any other seed's highlight.
+        Unchecking clears the highlight.  The pin is STRIPES ONLY -- it
+        NEVER touches the segment visibility; restoring the placement view
+        is the explicit "Restore placement view" affordance instead.  Keyed
+        by the seed's STABLE ID: the toggle keeps naming its seed even after
+        other rows' deletions reshuffle the indices.
         """
         if self._rebuilding:
             return
         if checked:
-            index = self._resolveSeedIndex(seedID)
-            if index < 0:
+            if self._resolveSeedIndex(seedID) < 0:
                 return
-            self._restoreVisibilityContext(index)
             self._publishHighlight(seedID)
         else:
             self._retireHighlight()
 
     # ------------------------------------------------------------------ #
-    # Visibility snapshot (restore-on-highlight, ``VisibilityCarve``)
+    # Restore placement view (explicit, symmetric, depth ONE)
     # ------------------------------------------------------------------ #
 
     def _seedVisibilityContext(self, seedIndex: int) -> list[str]:
         """The seed's ordered (top-first) visibility snapshot off the carrier."""
         return read_seed_context(self._carrier, seedIndex)
 
-    def _restoreVisibilityContext(self, seedIndex: int) -> None:
-        """Flip the structure-source visibility to the seed's snapshot.
+    def restoredSeedID(self) -> str:
+        """The seed whose placement view is currently restored ("" none)."""
+        return self._restoredSeedID
 
-        Shows exactly the context's segments and hides the rest; an empty
-        snapshot (a legacy seed) is a NO-OP so the live view is never blanked.
+    def restoreBanner(self) -> Any:
+        """The restored-context banner widget (introspection seam)."""
+        return self._restoreBanner
+
+    def restoreBannerLabel(self) -> Any:
+        """The banner's text label (introspection seam)."""
+        return self._restoreBannerLabel
+
+    def returnToMyViewButton(self) -> Any:
+        """The banner's inline return button (introspection seam)."""
+        return self._returnToMyViewButton
+
+    def restorePlacementView(self, seedID: str) -> bool:
+        """Flip the visibility to ``seedID``'s placement snapshot (depth one).
+
+        Entering a restored context first captures the CURRENT visibility as
+        "my view" (one slot); restoring ANOTHER seed while restored is a
+        SWITCH that reuses the same capture.  A snapshot sharing NO segment
+        with the segmentation's current segment IDs is REFUSED (the
+        stale-snapshot hard-guard: the view is never blanked) -- the banner
+        names the refusal.  Returns True iff the restore was applied.
+        """
+        source = self._structureSource
+        index = self._resolveSeedIndex(seedID)
+        if source is None or not hasattr(source, "GetSegmentation") or index < 0:
+            return False
+        context = self._seedVisibilityContext(index)
+        segmentation = source.GetSegmentation()
+        allIDs = [
+            segmentation.GetNthSegmentID(n)
+            for n in range(segmentation.GetNumberOfSegments())
+        ]
+        if not set(context) & set(allIDs):
+            self._showBanner(STALE_SNAPSHOT_MESSAGE, withReturn=False)
+            return False
+        if not self._restoredSeedID:
+            # Entering the restored context: capture the surgeon's own
+            # composition ONCE; a switch to another seed reuses it.
+            self._myViewContext = visible_context(source, source.GetDisplayNode())
+        self._restoredSeedID = seedID
+        self._applyContext(context)
+        self._showBanner(self._restoreBannerText(index), withReturn=True)
+        return True
+
+    def returnToMyView(self) -> None:
+        """Put the visibility back to the pre-restore capture + end the context."""
+        context = self._myViewContext
+        if context:
+            self._applyContext(context)
+        self._endRestoredContext()
+
+    def _endRestoredContext(self) -> None:
+        """Drop the restored context + its capture and hide the banner.
+
+        Never touches visibility itself -- the return path applies the
+        capture BEFORE calling this; a user takeover / module exit ends the
+        context with the view exactly as the user left it.
+        """
+        self._restoredSeedID = ""
+        self._myViewContext = None
+        self._restoredVisibleSet = None
+        self._hideBanner()
+
+    def _applyContext(self, context: list[str]) -> None:
+        """Show exactly ``context``'s segments on the structure source.
+
+        Marks the write as the widget's OWN (``_applyingVisibility``) so the
+        takeover observer does not read it as the user's, and records the
+        applied visible set for the takeover comparison.
         """
         source = self._structureSource
         if source is None or not hasattr(source, "GetSegmentation"):
-            return
-        context = self._seedVisibilityContext(seedIndex)
-        if not context:
             return
         segmentation = source.GetSegmentation()
         allIDs = [
             segmentation.GetNthSegmentID(n)
             for n in range(segmentation.GetNumberOfSegments())
         ]
-        apply_visibility_context(source.GetDisplayNode(), allIDs, context)
+        self._applyingVisibility = True
+        try:
+            apply_visibility_context(source.GetDisplayNode(), allIDs, context)
+        finally:
+            self._applyingVisibility = False
+        self._restoredVisibleSet = frozenset(
+            visible_context(source, source.GetDisplayNode())
+        )
+
+    def _restoreBannerText(self, seedIndex: int) -> str:
+        """The banner line naming the restored seed + its volume in text."""
+        label = self._seedLabel(seedIndex) or f"Seed {seedIndex + 1}"
+        volumeLabel = ""
+        if self._carrier is not None and hasattr(self._carrier, "GetNthSeedVolume"):
+            volumeId = self._carrier.GetNthSeedVolume(seedIndex)
+            if volumeId:
+                volumeLabel = self._carrier.GetVolumeLabel(volumeId) or volumeId
+        if volumeLabel:
+            return f"{RESTORE_BANNER_PREFIX} {label} ({volumeLabel})"
+        return f"{RESTORE_BANNER_PREFIX} {label}"
+
+    def _showBanner(self, text: str, withReturn: bool) -> None:
+        self._restoreBannerLabel.setText(text)
+        self._returnToMyViewButton.setVisible(bool(withReturn))
+        self._restoreBanner.setVisible(True)
+
+    def _hideBanner(self) -> None:
+        self._restoreBannerLabel.setText("")
+        self._restoreBanner.setVisible(False)
+
+    # -- user-takeover detection (the eye list wins) -------------------- #
+
+    def _observeSourceDisplay(self) -> None:
+        """(Re)attach the takeover observer to the source's display node."""
+        source = self._structureSource
+        display = (
+            source.GetDisplayNode()
+            if source is not None and hasattr(source, "GetDisplayNode")
+            else None
+        )
+        if display is self._observedSourceDisplay:
+            return
+        self._detachSourceDisplayObserver()
+        if display is None or not hasattr(display, "AddObserver"):
+            return
+        self._observedSourceDisplay = display
+        self._sourceDisplayObserverTag = display.AddObserver(
+            vtk.vtkCommand.ModifiedEvent, self._onSourceDisplayModified
+        )
+
+    def _detachSourceDisplayObserver(self) -> None:
+        display = self._observedSourceDisplay
+        if display is not None and self._sourceDisplayObserverTag is not None:
+            try:
+                display.RemoveObserver(self._sourceDisplayObserverTag)
+            except Exception:  # noqa: BLE001 - teardown is best-effort
+                pass
+        self._observedSourceDisplay = None
+        self._sourceDisplayObserverTag = None
+
+    def _onSourceDisplayModified(self, caller: Any, event: str) -> None:
+        """End a restored context on a MANUAL visibility change (takeover).
+
+        The widget's own restore writes are marked (``_applyingVisibility``)
+        and skipped; an unrelated display edit (opacity, colour) leaves the
+        visible set unchanged and is ignored.  A real takeover ends the
+        context WITHOUT re-asserting anything: the user's toggles win.
+        """
+        del caller, event
+        if self._applyingVisibility or not self._restoredSeedID:
+            return
+        source = self._structureSource
+        if source is None:
+            return
+        current = frozenset(visible_context(source, source.GetDisplayNode()))
+        if self._restoredVisibleSet is not None and current == self._restoredVisibleSet:
+            return
+        self._endRestoredContext()
 
     # ------------------------------------------------------------------ #
     # Repaint
@@ -912,16 +1136,16 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         rowLayout.setContentsMargins(2, 1, 2, 1)
         rowLayout.setSpacing(4)
 
-        # The DEDICATED highlight driver: one small checkable button whose
-        # only job is the stripes (exclusive across seeds).  Text + tooltip
-        # per ADR-0010 -- the control is named, never an icon alone.
+        # The DEDICATED stripe driver: one small checkable button whose only
+        # job is the stripes (exclusive across seeds; NEVER a visibility
+        # change).  Text + tooltip per ADR-0010 -- the control is named,
+        # never an icon alone.
         highlightButton = qt.QToolButton()
         highlightButton.setAutoRaise(True)
         highlightButton.setCheckable(True)
-        highlightButton.setText("Highlight")
+        highlightButton.setText("Pin")
         highlightButton.setToolTip(
-            "Show this seed's measured region with a striped overlay; "
-            "restores the visibility the seed was placed under"
+            "Show this seed's measured region as a striped overlay"
         )
         highlightButton.setChecked(bool(seedID) and seedID == self._highlightedSeedID)
         highlightButton.connect(
@@ -975,8 +1199,8 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         rowLayout.addWidget(deleteButton)
 
         # a11y: name the owning segment + the visibility context in TEXT on
-        # the row (ADR-0010 -- never colour/animation alone).  The Highlight
-        # toggle restores this snapshot; the tooltip says what that means.
+        # the row (ADR-0010 -- never colour/animation alone).  "Restore
+        # placement view" shows this snapshot; the tooltip says what it is.
         rowWidget.setToolTip(self._seedContextToolTip(seedIndex))
 
         self._seed_rows[seedID] = {
@@ -1002,7 +1226,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         )
         return (
             f"Structure: {ownerName}. Visible at placement: {contextNames}. "
-            "The Highlight toggle restores that view."
+            "Restore placement view shows that view again."
         )
 
     def _buildTargetCombo(self, seedIndex: int) -> Any:
@@ -1167,7 +1391,11 @@ class VolumetrySeedsTableWidget(qt.QWidget):
 
         Called by the module widget on ``exit()`` so no timer keeps firing --
         and no frozen stripes linger -- while LiverVolumetry is inactive.
+        Also ends a restored context (the banner clears on module exit)
+        WITHOUT touching the visibility the surgeon is looking at.
         """
+        if self._restoredSeedID:
+            self._endRestoredContext()
         self._retireHighlight()
 
     def _syncHighlightToggles(self) -> None:
@@ -1194,6 +1422,10 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         highlight whose OWN seed is gone (the ID no longer resolves) is
         retired.
         """
+        if self._restoredSeedID and self._resolveSeedIndex(self._restoredSeedID) < 0:
+            # The restored seed itself is gone: end the context (banner
+            # clears) without touching the visibility the surgeon sees.
+            self._endRestoredContext()
         if not self._highlightedSeedID:
             return
         if self._resolveSeedIndex(self._highlightedSeedID) < 0:
