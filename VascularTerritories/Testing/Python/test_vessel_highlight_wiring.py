@@ -59,7 +59,16 @@ def test_widget_wires_highlight_picksurface_to_selected_segmentation(qt_widgets)
 
     from VascularTerritories import VascularTerritoriesWidget
 
-    widget = VascularTerritoriesWidget()
+    # Explicit parent: with parent=None, ScriptedLoadableModuleWidget's
+    # __init__ auto-runs setup() (and show()), so the explicit setup()
+    # below would run TWICE -- stacking two panels and registering
+    # duplicate scene observers that outlive cleanup() (the destroyed-ui
+    # 'enabled' storm, feedback_launched_widget_teardown_crash).
+    import qt
+
+    widgetParent = qt.QWidget()
+    qt.QVBoxLayout(widgetParent)
+    widget = VascularTerritoriesWidget(widgetParent)
     widget.setup()
 
     segmentationNode = _sphere_segmentation(slicer, radius=30.0)

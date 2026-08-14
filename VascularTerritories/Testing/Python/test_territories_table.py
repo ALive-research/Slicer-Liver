@@ -1408,7 +1408,16 @@ def test_highlight_picksurface_wiring_survives_selector_retirement(qt_widgets):
 
     from VascularTerritories import VascularTerritoriesWidget
 
-    widget = VascularTerritoriesWidget()
+    # Explicit parent: with parent=None, ScriptedLoadableModuleWidget's
+    # __init__ auto-runs setup() (and show()), so the explicit setup()
+    # below would run TWICE -- stacking two panels and registering
+    # duplicate scene observers that outlive cleanup() (the destroyed-ui
+    # 'enabled' storm, feedback_launched_widget_teardown_crash).
+    import qt
+
+    widgetParent = qt.QWidget()
+    qt.QVBoxLayout(widgetParent)
+    widget = VascularTerritoriesWidget(widgetParent)
     widget.setup()
     qt_widgets.append(widget)
 
@@ -1468,7 +1477,16 @@ def test_no_endpoints_selector_and_no_persisted_fiducial(qt_widgets):
 
     from VascularTerritories import VascularTerritoriesWidget
 
-    widget = VascularTerritoriesWidget()
+    # Explicit parent: with parent=None, ScriptedLoadableModuleWidget's
+    # __init__ auto-runs setup() (and show()), so the explicit setup()
+    # below would run TWICE -- stacking two panels and registering
+    # duplicate scene observers that outlive cleanup() (the destroyed-ui
+    # 'enabled' storm, feedback_launched_widget_teardown_crash).
+    import qt
+
+    widgetParent = qt.QWidget()
+    qt.QVBoxLayout(widgetParent)
+    widget = VascularTerritoriesWidget(widgetParent)
     widget.setup()
     qt_widgets.append(widget)
 
