@@ -1588,7 +1588,12 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
       image = reference.GetImageData()
       if image is None:
         return
-      scalars = vtk.util.numpy_support.vtk_to_numpy(image.GetPointData().GetScalars())
+      scalarArray = image.GetPointData().GetScalars()
+      if scalarArray is None:
+        # An all-empty segmentation exports an image with no scalars: there
+        # is no reference grid to carve on, so there is nothing to measure.
+        return
+      scalars = vtk.util.numpy_support.vtk_to_numpy(scalarArray)
       spacing = reference.GetSpacing()
       voxelMl = spacing[0] * spacing[1] * spacing[2] * 0.001
       totalVolumeMl = int(numpy.count_nonzero(scalars)) * voxelMl
