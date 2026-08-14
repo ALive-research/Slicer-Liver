@@ -135,6 +135,105 @@ def test_display_node_holds_transient_adhering_point():
     assert tuple(node.GetTransientPoint()) == pytest.approx((1.0, 2.0, 3.0), abs=1e-9)
 
 
+def test_display_node_holds_transient_highlight_seed_id():
+    """The display node carries the highlighted seed's STABLE ID, transiently.
+
+    The stripes highlight rides a C++ member (``HighlightSeedID``) mirroring
+    ``TransientPoint`` -- NOT a node attribute, because ``SetAttribute``
+    values serialize into the scene XML and a saved highlight reloads as
+    frozen orphan stripes no widget owns.  Empty string == no highlight.
+    """
+    slicer = _slicer_or_skip()
+    node = _make_display_or_skip(slicer)
+    if not hasattr(node, "SetHighlightSeedID"):
+        pytest.skip(
+            f"{DISPLAY_NODE_CLASS} has no SetHighlightSeedID -- the transient "
+            "highlight slot has not landed (ADR-0027)."
+        )
+
+    assert node.GetHighlightSeedID() == "", "default is no highlight."
+
+    node.SetHighlightSeedID("seed_7")
+    assert node.GetHighlightSeedID() == "seed_7"
+
+    node.SetHighlightSeedID("")
+    assert node.GetHighlightSeedID() == "", "empty clears the highlight."
+
+
+def test_highlight_seed_id_fires_modified_on_change_only():
+    """Setting the highlight fires ModifiedEvent (the pipelines' raise/clear
+    tick); re-publishing the same value must NOT churn the observers."""
+    import vtk
+
+    slicer = _slicer_or_skip()
+    node = _make_display_or_skip(slicer)
+    if not hasattr(node, "SetHighlightSeedID"):
+        pytest.skip(f"{DISPLAY_NODE_CLASS} has no SetHighlightSeedID (ADR-0027).")
+
+    fired = []
+    tag = node.AddObserver(vtk.vtkCommand.ModifiedEvent, lambda c, e: fired.append(1))
+    try:
+        node.SetHighlightSeedID("seed_1")
+        assert len(fired) == 1, "a highlight change must fire ModifiedEvent."
+        node.SetHighlightSeedID("seed_1")
+        assert len(fired) == 1, "a same-value re-publish must not fire."
+        node.SetHighlightSeedID("")
+        assert len(fired) == 2, "clearing must fire ModifiedEvent."
+    finally:
+        node.RemoveObserver(tag)
+
+
+def test_highlight_seed_id_is_never_serialized_into_the_scene():
+    """The scene XML must NOT carry the highlight (the TransientPoint rule).
+
+    A saved scene freezing the highlight is exactly the bug the transient
+    member fixes: on reload the frozen value rendered orphan stripes no
+    widget owned.  The persisted ``radius`` is asserted PRESENT as the
+    positive control that the node's own attributes did serialize.
+    """
+    slicer = _slicer_or_skip()
+    node = _make_display_or_skip(slicer)
+    if not hasattr(node, "SetHighlightSeedID"):
+        pytest.skip(f"{DISPLAY_NODE_CLASS} has no SetHighlightSeedID (ADR-0027).")
+
+    node.SetRadius(4.75)
+    node.SetHighlightSeedID("seed_42")
+
+    scene = slicer.mrmlScene
+    scene.SetSaveToXMLString(1)
+    try:
+        scene.Commit()
+        xml = scene.GetSceneXMLString()
+    finally:
+        scene.SetSaveToXMLString(0)
+
+    assert "4.75" in xml, "positive control: the persisted radius must serialize."
+    assert "seed_42" not in xml, (
+        "the highlight must NEVER serialize into the scene XML -- it is "
+        "session interaction state (the TransientPoint precedent)."
+    )
+    assert "highlightSeed" not in xml and "stripePhase" not in xml, (
+        "no attribute-borne highlight/phase channel may reach the scene XML."
+    )
+
+
+def test_highlight_seed_id_does_not_ride_copy_content():
+    """``CopyContent`` must not clone the transient highlight (mirrors
+    TransientPoint: node duplication / restore never carries it)."""
+    slicer = _slicer_or_skip()
+    node = _make_display_or_skip(slicer)
+    if not hasattr(node, "SetHighlightSeedID"):
+        pytest.skip(f"{DISPLAY_NODE_CLASS} has no SetHighlightSeedID (ADR-0027).")
+    other = _make_display_or_skip(slicer, "VolumetrySeedsDisplayCopyTest")
+
+    node.SetHighlightSeedID("seed_3")
+    other.CopyContent(node)
+
+    assert other.GetHighlightSeedID() == "", (
+        "CopyContent must not propagate the transient highlight."
+    )
+
+
 def test_display_node_is_data_only_no_rendering_machinery():
     """The display node exposes NO rendering machinery (data-only, ADR-0013 §5).
 

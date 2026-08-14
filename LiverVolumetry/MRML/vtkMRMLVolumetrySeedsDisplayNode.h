@@ -49,6 +49,9 @@
 // VTK includes
 #include <vtkSetGet.h>
 
+// STD includes
+#include <string>
+
 /**
  * \class vtkMRMLVolumetrySeedsDisplayNode
  *
@@ -70,6 +73,13 @@
  *   - ``TransientPoint`` — TRANSIENT adhering point (RAS) under the cursor
  *     (the hover preview the Pipeline renders without a carrier mutation).
  *     Get/Set; NOT persisted.
+ *   - ``HighlightSeedID`` — TRANSIENT stable ID of the seed whose carved
+ *     region the slice pipelines stripe (empty = no highlight).  Session
+ *     interaction state, NOT persisted (mirrors ``TransientPoint``): a
+ *     saved scene must never freeze a highlight into frozen orphan stripes
+ *     no widget owns on reload.  Deliberately a C++ member and not a node
+ *     ATTRIBUTE — ``vtkMRMLNode::SetAttribute`` values serialize into the
+ *     scene XML.
  *   - ``Radius`` — marker glyph radius (mm).  Persisted.
  *   - the surface the pick resolves against is referenced through the
  *     ``pickSurface`` node-reference role (generic
@@ -106,6 +116,14 @@ public:
   /// Deliberately NOT persisted — re-derived from interaction every hover.
   void SetTransientPoint(double x, double y, double z);
   vtkGetVector3Macro(TransientPoint, double);
+
+  /// TRANSIENT highlighted-seed stable ID (empty = no highlight).  Fires
+  /// ModifiedEvent on change (the pipelines' raise/clear tick) but is
+  /// deliberately EXCLUDED from WriteXML / ReadXMLAttributes / CopyContent
+  /// persistence, mirroring ``TransientPoint``: the highlight is session
+  /// interaction state the widget owns, never scene content.
+  void SetHighlightSeedID(const std::string& seedID);
+  std::string GetHighlightSeedID();
 
   /// Marker glyph radius (mm).  Persisted.  Colour and visibility are
   /// inherited from vtkMRMLDisplayNode (Get/SetColor, Get/SetVisibility).
@@ -160,6 +178,8 @@ private:
 
   double TransientPoint[3];
   double Radius;
+  /// TRANSIENT (never serialized): the highlighted seed's stable ID.
+  std::string HighlightSeedID;
 };
 
 #endif // __vtkmrmlvolumetryseedsdisplaynode_h_

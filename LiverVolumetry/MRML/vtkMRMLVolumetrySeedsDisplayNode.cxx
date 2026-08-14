@@ -53,13 +53,34 @@ void vtkMRMLVolumetrySeedsDisplayNode::SetTransientPoint(double x, double y, dou
 }
 
 //------------------------------------------------------------------------------
+void vtkMRMLVolumetrySeedsDisplayNode::SetHighlightSeedID(const std::string& seedID)
+{
+  // Guard against a redundant Modified() so a re-publish of the same
+  // highlight does not churn the Pipelines.
+  if (this->HighlightSeedID == seedID)
+  {
+    return;
+  }
+  this->HighlightSeedID = seedID;
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+std::string vtkMRMLVolumetrySeedsDisplayNode::GetHighlightSeedID()
+{
+  return this->HighlightSeedID;
+}
+
+//------------------------------------------------------------------------------
 void vtkMRMLVolumetrySeedsDisplayNode::WriteXML(ostream& of, int nIndent)
 {
   Superclass::WriteXML(of, nIndent);
 
-  // TransientPoint is TRANSIENT (re-derived from the cursor every hover) and
-  // is deliberately absent here; only the marker Radius round-trips (Color /
-  // Visibility persist on the base).
+  // TransientPoint and HighlightSeedID are TRANSIENT (session interaction
+  // state the widget re-derives / owns) and are deliberately absent here;
+  // only the marker Radius round-trips (Color / Visibility persist on the
+  // base).  A persisted highlight would reload as frozen orphan stripes no
+  // widget owns.
   vtkMRMLWriteXMLBeginMacro(of);
   vtkMRMLWriteXMLFloatMacro(radius, Radius);
   vtkMRMLWriteXMLEndMacro();
@@ -85,6 +106,8 @@ void vtkMRMLVolumetrySeedsDisplayNode::CopyContent(vtkMRMLNode* anode, bool deep
   MRMLNodeModifyBlocker blocker(this);
   Superclass::CopyContent(anode, deepCopy);
 
+  // HighlightSeedID is deliberately NOT copied (mirrors TransientPoint):
+  // transient interaction state never rides node duplication / restore.
   vtkMRMLCopyBeginMacro(anode);
   vtkMRMLCopyFloatMacro(Radius);
   vtkMRMLCopyEndMacro();
@@ -122,5 +145,6 @@ void vtkMRMLVolumetrySeedsDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
   vtkMRMLPrintBeginMacro(os, indent);
   vtkMRMLPrintVectorMacro(TransientPoint, double, 3);
   vtkMRMLPrintFloatMacro(Radius);
+  vtkMRMLPrintStdStringMacro(HighlightSeedID);
   vtkMRMLPrintEndMacro();
 }
