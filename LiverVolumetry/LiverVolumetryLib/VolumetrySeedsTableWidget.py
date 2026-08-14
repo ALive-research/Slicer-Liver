@@ -559,8 +559,13 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         return self._tree
 
     def rowCount(self) -> int:
-        """The number of SEED rows currently rendered (one per carrier seed)."""
-        return self._seedCount()
+        """The number of SEED rows currently RENDERED (one per carrier seed).
+
+        Counts the built rows, not the live carrier: after ``cleanup``
+        detached the carrier observer, a carrier edit must NOT read as a
+        rebuilt table (feedback_launched_widget_teardown_crash).
+        """
+        return len(self._seed_rows)
 
     def volumeIds(self) -> list[str]:
         """The volume ids of the top-level items, in display order."""
