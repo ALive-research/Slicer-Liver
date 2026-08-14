@@ -1198,6 +1198,13 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         and table.pinSeed(seedID)
     ):
       return
+    # The persisted ID is STALE (its seed no longer resolves): retire any
+    # live pin too, so the resumed state matches the cleared persistence --
+    # a leftover live highlight must not outlive the parameter it rode on.
+    # ``stopHighlight`` suppresses the persistence callback; the explicit
+    # clear below is the one write.
+    if table is not None and hasattr(table, "stopHighlight"):
+      table.stopHighlight()
     node.SetParameter(PINNED_SEED_PARAMETER, "")
 
   def _adoptSceneSeedNodes(self):
