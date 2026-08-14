@@ -171,6 +171,10 @@ int vtkMRMLVolumetrySeedsStorageNode::WriteJson(const std::string& filePath, vtk
 
   writer->WriteIntProperty("schemaVersion", SchemaVersion);
 
+  // The stable-ID mint counter: persisted so a reloaded carrier keeps minting
+  // PAST every ID this document ever handed out (never-reuse across sessions).
+  writer->WriteIntProperty("seedIdCounter", carrier->GetSeedIDCounter());
+
   // seeds -- an ORDERED array; each element carries the RAS coordinate, the
   // per-seed LABEL (the generated segment name, ADR-0038 §Conformance), and
   // the per-seed display colour.
@@ -197,6 +201,9 @@ int vtkMRMLVolumetrySeedsStorageNode::WriteJson(const std::string& filePath, vtk
 
     writer->WriteObjectStart();
     writer->WriteVectorProperty("xyz", xyz, 3);
+    // The seed's STABLE identity (minted at AddSeed, never reused): written
+    // unconditionally -- identity is core, not an optional decoration.
+    writer->WriteStringProperty("id", carrier->GetNthSeedID(i));
     writer->WriteStringProperty("label", label);
     writer->WriteVectorProperty("color", color, 3);
     // The structure binding the seed→label capture resolves
@@ -291,6 +298,15 @@ int vtkMRMLVolumetrySeedsStorageNode::ReadJson(const std::string& filePath, vtkM
     carrier->RemoveVolume(volumeId);
   }
 
+  // Restore the stable-ID mint counter FIRST (the setter clamps forward-only,
+  // so a reused sink whose counter already ran ahead keeps the larger value —
+  // the never-reuse invariant).  A legacy document without the field leaves
+  // the counter to grow through the AddSeed mints below.
+  if (root->HasMember("seedIdCounter"))
+  {
+    carrier->SetSeedIDCounter(root->GetIntProperty("seedIdCounter"));
+  }
+
   if (root->HasMember("volumes"))
   {
     vtkSmartPointer<vtkMRMLJsonElement> volumes = vtkSmartPointer<vtkMRMLJsonElement>::Take(root->GetArrayProperty("volumes"));
@@ -348,6 +364,16 @@ int vtkMRMLVolumetrySeedsStorageNode::ReadJson(const std::string& filePath, vtkM
       continue;
     }
     const int index = carrier->AddSeed(xyz[0], xyz[1], xyz[2]);
+    // Restore the seed's STABLE ID over the freshly-minted one (the protected
+    // storage-read seam); a legacy document without ids keeps the mint.
+    if (item->HasMember("id"))
+    {
+      const std::string seedID = item->GetStringProperty("id");
+      if (!seedID.empty())
+      {
+        carrier->SetNthSeedID(index, seedID);
+      }
+    }
     if (item->HasMember("label"))
     {
       carrier->SetNthSeedLabel(index, item->GetStringProperty("label"));
