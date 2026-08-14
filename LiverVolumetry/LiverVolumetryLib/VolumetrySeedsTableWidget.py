@@ -121,6 +121,7 @@ try:  # pragma: no cover - exercised once per import path
         STRIPE_TICK_MS,
         invoke_stripe_tick,
         set_highlight_seed_id,
+        set_preview_seed_id,
     )
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from SeedTargetResolution import (  # type: ignore[no-redef]
@@ -138,6 +139,7 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
         STRIPE_TICK_MS,
         invoke_stripe_tick,
         set_highlight_seed_id,
+        set_preview_seed_id,
     )
 
 # The arm / active-volume state rides the shared display node via the base's
@@ -204,6 +206,11 @@ RESTORE_BANNER_PREFIX = "Showing placement view of"
 _ROW_SEED_PROPERTY = "volumetryRowSeed"
 _ROW_VOLUME_PROPERTY = "volumetryRowVolume"
 
+#: Dynamic Qt property tagging each row's PIN button with its seed's stable
+#: ID, so the shared event filter can drive the hover-PREVIEW (enter shows
+#: the seed's stripes static + dimmed; leave restores the pinned seed's).
+_ROW_PIN_PROPERTY = "volumetryPinSeed"
+
 
 class VolumetrySeedsTableWidget(qt.QWidget):
     """Per-volume carrier-backed tree over ``vtkMRMLVolumetrySeedsNode``.
@@ -262,6 +269,12 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._stripeTimer.setInterval(STRIPE_TICK_MS)
         self._stripeTimer.connect("timeout()", self._onStripeTick)
         self._highlightedSeedID = ""
+        # The hover-PREVIEW: while the cursor rests on an UNPINNED seed's Pin
+        # button, that seed's stripes show STATIC (the widget stops ticking;
+        # the pipeline freezes the phase) and DIMMED, riding the same
+        # transient member under the ``preview:`` marker.  Hover-out
+        # restores the pinned seed's stripes (or clears).
+        self._previewSeedID = ""
 
         # The restored-context state ("Restore placement view", symmetric,
         # depth ONE): entering a restore captures the CURRENT visibility as
@@ -1079,11 +1092,20 @@ class VolumetrySeedsTableWidget(qt.QWidget):
 
     def eventFilter(self, watched: Any, event: Any) -> bool:  # noqa: N802 - Qt virtual
         try:
-            if event.type() == qt.QEvent.MouseButtonPress:
+            eventType = event.type()
+            if eventType == qt.QEvent.MouseButtonPress:
                 self._selectRowForWidget(watched)
+            elif eventType == qt.QEvent.Enter:
+                pinSeedID = watched.property(_ROW_PIN_PROPERTY)
+                if pinSeedID:
+                    self._startHoverPreview(str(pinSeedID))
+            elif eventType == qt.QEvent.Leave:
+                pinSeedID = watched.property(_ROW_PIN_PROPERTY)
+                if pinSeedID:
+                    self._endHoverPreview()
         except Exception:  # noqa: BLE001 - an event filter must never raise
             pass
-        return False  # never consume: the pressed control still works
+        return False  # never consume: the watched control still works
 
     def _selectRowForWidget(self, widget: Any) -> None:
         """Select the tree row the pressed row-child ``widget`` belongs to.
@@ -1152,6 +1174,9 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             "toggled(bool)",
             lambda checked, s=seedID: self._onHighlightToggled(s, checked),
         )
+        # Tag the Pin button for the hover-PREVIEW (the shared event filter
+        # resolves Enter/Leave back to this seed).
+        highlightButton.setProperty(_ROW_PIN_PROPERTY, seedID)
         rowLayout.addWidget(highlightButton)
 
         colourButton = ctk.ctkColorPickerButton()
@@ -1305,9 +1330,10 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         """Stop the march + clear the highlight off the display node."""
         if self._stripeTimer.isActive():
             self._stripeTimer.stop()
-        if self._highlightedSeedID:
+        if self._highlightedSeedID or self._previewSeedID:
             set_highlight_seed_id(self._displayNode, "")
         self._highlightedSeedID = ""
+        self._previewSeedID = ""
 
     def _onStripeTick(self) -> None:
         """Fire one march tick (the calm, continuous stripe advance).
@@ -1316,12 +1342,46 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         (``invoke_stripe_tick``): no MRML write, no ModifiedEvent -- only the
         slice pipelines observing ``STRIPE_TICK_EVENT`` wake, advance their
         OWN local phase, and re-render (the SegmentEditorThresholdEffect
-        widget-owned preview-timer precedent).
+        widget-owned preview-timer precedent).  Held while a hover PREVIEW
+        is up: the preview is static by contract (phase frozen).
         """
         if self._displayNode is None or not self._highlightedSeedID:
             self._clearHighlight()
             return
+        if self._previewSeedID:
+            return
         invoke_stripe_tick(self._displayNode)
+
+    # ------------------------------------------------------------------ #
+    # Hover-preview (static + dimmed stripes on an unpinned seed's Pin)
+    # ------------------------------------------------------------------ #
+
+    def previewSeedID(self) -> str:
+        """The seed previewed by the current Pin-button hover ("" none)."""
+        return self._previewSeedID
+
+    def _startHoverPreview(self, seedID: str) -> None:
+        """Show ``seedID``'s stripes static + dimmed while its Pin is hovered.
+
+        Only for an UNPINNED seed (hovering the pinned seed's own button is
+        not a preview) and only when the seed still resolves.  No visibility
+        change ever; the pinned highlight (if any) resumes on hover-out.
+        """
+        if self._rebuilding or self._displayNode is None:
+            return
+        if not seedID or seedID == self._highlightedSeedID:
+            return
+        if self._resolveSeedIndex(seedID) < 0:
+            return
+        self._previewSeedID = seedID
+        set_preview_seed_id(self._displayNode, seedID)
+
+    def _endHoverPreview(self) -> None:
+        """Drop the preview; the pinned seed's stripes (if any) resume."""
+        if not self._previewSeedID:
+            return
+        self._previewSeedID = ""
+        set_highlight_seed_id(self._displayNode, self._highlightedSeedID or "")
 
     def _updateEmptyCarveCue(self, seedID: str | None) -> None:
         """Name an EMPTY carve on the highlighted seed row; hide other cues.
@@ -1376,6 +1436,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         """
         if not seedID:
             return
+        self._previewSeedID = ""  # a pin change supersedes any hover preview
         self._highlightSeed(seedID)
         self._updateEmptyCarveCue(seedID)
         self._syncHighlightToggles()
@@ -1426,6 +1487,9 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             # The restored seed itself is gone: end the context (banner
             # clears) without touching the visibility the surgeon sees.
             self._endRestoredContext()
+        # The rebuild replaced every row widget, so a hovered Pin button's
+        # Leave may never arrive: drop any preview (the pin resumes).
+        self._endHoverPreview()
         if not self._highlightedSeedID:
             return
         if self._resolveSeedIndex(self._highlightedSeedID) < 0:
