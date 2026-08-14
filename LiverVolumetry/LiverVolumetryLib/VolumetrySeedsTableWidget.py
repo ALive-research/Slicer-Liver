@@ -1598,9 +1598,16 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         LayerDM slice pipelines render the stripes.  Persistent while the
         Highlight toggle stays on.
         """
-        if self._displayNode is None or not seedID:
+        if not seedID:
             return
+        # The pin BOOKKEEPING (the toggle state, the cue, the persistence
+        # callback) is table state and holds with or without a display node;
+        # only the stripes publish + the march need the shared node.  Without
+        # this split, a display-less pin desynced the toggle (the sync
+        # unchecked it) and the next uncheck never fired -- the cue stuck.
         self._highlightedSeedID = str(seedID)
+        if self._displayNode is None:
+            return
         set_highlight_seed_id(self._displayNode, self._highlightedSeedID)
         # (Re)start the bounded march: every pin change earns a fresh
         # STRIPE_IDLE_STATIC_MS of motion, after which the stripes freeze
@@ -1670,8 +1677,9 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         """Raise the pin on ``seedID`` (the enter()-time resume seam).
 
         Returns True iff the pin actually raised (the ID resolves on the
-        carrier AND the shared display node is bound); anything less leaves
-        the caller free to clear its persistence.
+        carrier); anything less leaves the caller free to clear its
+        persistence.  The stripes publish only when the shared display node
+        is bound -- the pin bookkeeping itself never needs it.
         """
         if not seedID or self._resolveSeedIndex(seedID) < 0:
             return False
