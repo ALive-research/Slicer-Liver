@@ -53,11 +53,17 @@ The carved-region stripes have exactly TWO drivers instead:
   restores the context.
 
 Either driver highlights the seed's EFFECTIVE (carved) region in the 2D slices
-with slowly MARCHING diagonal stripes: this widget owns the phase ``qt.QTimer``
-and publishes ``highlightSeed`` / ``stripePhase`` onto the shared display node
-(``CarvedRegionStripes``); the LayerDM slice pipelines render.  The highlight
-is persistent while toggled (no opacity flashing) and is paired with the row's
-text naming the owner + context (ADR-0010, never colour/animation alone).
+with slowly MARCHING diagonal stripes: this widget owns the march ``qt.QTimer``
+and publishes the highlighted seed's STABLE ID onto the shared display node's
+transient ``HighlightSeedID`` member (``CarvedRegionStripes``; never a node
+attribute -- attributes serialize into the scene XML).  Each timer tick fires
+``STRIPE_TICK_EVENT`` on the display node (``InvokeEvent`` -- no MRML write,
+no Modified storm); the LayerDM slice pipelines observe it and advance their
+own local phase.  Seeds are addressed by their carrier-minted stable ID
+(``GetNthSeedID``), so a pinned highlight survives deleting a DIFFERENT seed
+and retires only when its own seed goes.  The highlight is persistent while
+toggled (no opacity flashing) and is paired with the row's text naming the
+owner + context (ADR-0010, never colour/animation alone).
 
 CARRIER IS THE MODEL.  The table reads/writes the carrier and OBSERVES its
 ``vtkCommand::ModifiedEvent`` to rebuild.  ``cleanup()`` detaches the observer +
@@ -99,10 +105,9 @@ try:  # pragma: no cover - exercised once per import path
         segment_mask_reader,
     )
     from .CarvedRegionStripes import (
-        STRIPE_PERIOD_PX,
         STRIPE_TICK_MS,
-        set_highlight_seed,
-        set_stripe_phase,
+        invoke_stripe_tick,
+        set_highlight_seed_id,
     )
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from SeedTargetResolution import (  # type: ignore[no-redef]
@@ -116,10 +121,9 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
         segment_mask_reader,
     )
     from CarvedRegionStripes import (  # type: ignore[no-redef]
-        STRIPE_PERIOD_PX,
         STRIPE_TICK_MS,
-        set_highlight_seed,
-        set_stripe_phase,
+        invoke_stripe_tick,
+        set_highlight_seed_id,
     )
 
 # The arm / active-volume state rides the shared display node via the base's
@@ -171,7 +175,8 @@ EMPTY_CARVE_MESSAGE = "Region fully covered by segments above"
 #: Dynamic Qt properties tagging every widget of a composite row with its row
 #: key, so the row-select event filter can resolve WHICH tree item a pressed
 #: child control belongs to (a press on a child never reaches the tree
-#: viewport, so the tree cannot select the row itself).
+#: viewport, so the tree cannot select the row itself).  Seed rows are keyed
+#: by the seed's STABLE ID (``GetNthSeedID``), never its shifting index.
 _ROW_SEED_PROPERTY = "volumetryRowSeed"
 _ROW_VOLUME_PROPERTY = "volumetryRowVolume"
 
@@ -206,11 +211,14 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         # volumeId -> its top-level QTreeWidgetItem + named controls; rebuilt.
         self._volume_items: dict[str, Any] = {}
         self._volume_rows: dict[str, dict[str, Any]] = {}
-        # global seed index -> the seed composite row's named controls; rebuilt.
-        self._seed_rows: dict[int, dict[str, Any]] = {}
-        # global seed index -> the seed child QTreeWidgetItem (the row-select
+        # STABLE seed ID -> the seed composite row's named controls; rebuilt.
+        # Keyed by ID (never the placement index): a deletion reshuffles the
+        # indices but must not re-key surviving rows.  The public per-seed
+        # getters stay index-signed for back-compat and resolve index -> ID.
+        self._seed_rows: dict[str, dict[str, Any]] = {}
+        # STABLE seed ID -> the seed child QTreeWidgetItem (the row-select
         # event filter's target); rebuilt with the tree.
-        self._seed_items: dict[int, Any] = {}
+        self._seed_items: dict[str, Any] = {}
         # Seed count after the last observer-driven rebuild: a +1 step marks a
         # placement, which publishes the new seed's highlight DIRECTLY (no row
         # selection -- selection has no side effects).
@@ -218,17 +226,18 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         # Auto-mint counter for "Add volume".
         self._mint_counter = 0
 
-        # The carved-region stripe highlight: THIS widget owns the phase timer
-        # and publishes highlightSeed / stripePhase onto the shared display
-        # node (CarvedRegionStripes); the LayerDM slice pipelines render the
-        # marching stripes.  Driven by placement + the per-seed Highlight
-        # toggle only; persistent while toggled -- no opacity flashing (the
-        # old fade pulse is retired).
+        # The carved-region stripe highlight: THIS widget owns the march timer
+        # and publishes the highlighted seed's STABLE ID onto the shared
+        # display node's transient HighlightSeedID member (CarvedRegionStripes);
+        # each tick fires STRIPE_TICK_EVENT (InvokeEvent -- zero MRML writes
+        # per tick, the SegmentEditorThresholdEffect preview-timer precedent)
+        # and the LayerDM slice pipelines advance their own local phase.
+        # Driven by placement + the per-seed Highlight toggle only; persistent
+        # while toggled -- no opacity flashing (the old fade pulse is retired).
         self._stripeTimer = qt.QTimer(self)
         self._stripeTimer.setInterval(STRIPE_TICK_MS)
         self._stripeTimer.connect("timeout()", self._onStripeTick)
-        self._stripePhase = 0
-        self._highlightedSeed = -1
+        self._highlightedSeedID = ""
 
         layout = qt.QVBoxLayout(self)
 
@@ -328,11 +337,40 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             # seed just measured, with no row interaction.  No visibility
             # restore: the seed's snapshot equals the live visibility at
             # placement, so the restore stays with the explicit toggle.
-            self._publishHighlight(current - 1)
-        elif current < previous and self._highlightedSeed >= 0:
-            # A removal reshuffles the global seed indices, so the highlight
-            # index no longer names the seed it was raised for -- retire it.
-            self._retireHighlight()
+            self._publishHighlight(self._seedID(current - 1))
+        # A removal needs no branch here: the highlight is keyed by STABLE ID,
+        # so deleting a DIFFERENT seed leaves the pin resolving (the rebuild
+        # re-seats it), and deleting the pinned seed itself retires the pin in
+        # ``_syncHighlightAfterRebuild`` (the ID no longer resolves).
+
+    # ------------------------------------------------------------------ #
+    # Stable seed-ID addressing (identity survives index shifts)
+    # ------------------------------------------------------------------ #
+
+    def _seedID(self, seedIndex: int) -> str:
+        """The stable ID of the seed at CURRENT index ``seedIndex`` ("" gone).
+
+        The carrier mints the ID at AddSeed (``GetNthSeedID``).  A carrier
+        without the ID slot degrades to a positional pseudo-key so the table
+        still renders; identity guarantees need the carrier slot.
+        """
+        index = int(seedIndex)
+        if self._carrier is None or index < 0 or index >= self._seedCount():
+            return ""
+        if hasattr(self._carrier, "GetNthSeedID"):
+            return self._carrier.GetNthSeedID(index) or ""
+        return f"index:{index}"
+
+    def _resolveSeedIndex(self, seedID: str) -> int:
+        """The CURRENT index of the seed carrying ``seedID`` (-1 when gone)."""
+        if not seedID or self._carrier is None:
+            return -1
+        if hasattr(self._carrier, "GetSeedIndexByID"):
+            return self._carrier.GetSeedIndexByID(seedID)
+        if seedID.startswith("index:"):
+            index = int(seedID[len("index:"):])
+            return index if 0 <= index < self._seedCount() else -1
+        return -1
 
     # ------------------------------------------------------------------ #
     # Item-model reader seams
@@ -390,10 +428,12 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         """The delete ``qt.QToolButton`` on the volume row."""
         return self._volumeControl(volumeId, "delete")
 
-    # -- per-seed control getters (by GLOBAL index; flat-table contract) - #
+    # -- per-seed control getters (by GLOBAL index; flat-table contract).
+    # The getters stay INDEX-signed for back-compat and resolve index -> the
+    # stable-ID row key internally. --------------------------------------- #
 
     def _seedControl(self, seedIndex: int, key: str) -> Any:
-        row = self._seed_rows.get(int(seedIndex))
+        row = self._seed_rows.get(self._seedID(int(seedIndex)))
         return row[key] if row is not None else None
 
     def colourButton(self, seedIndex: int) -> Any:
@@ -565,24 +605,29 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             return
         self.setVolumeColor(volumeId, colour.redF(), colour.greenF(), colour.blueF())
 
-    def _onLabelEdited(self, seedIndex: int, edit: Any) -> None:
+    def _onLabelEdited(self, seedID: str, edit: Any) -> None:
         if self._rebuilding:
             return
-        self.setSeedLabel(seedIndex, edit.text)
+        index = self._resolveSeedIndex(seedID)
+        if index >= 0:
+            self.setSeedLabel(index, edit.text)
 
-    def _onColourChanged(self, seedIndex: int, colour: Any) -> None:
+    def _onColourChanged(self, seedID: str, colour: Any) -> None:
         if self._rebuilding:
             return
-        self.setSeedColor(seedIndex, colour.redF(), colour.greenF(), colour.blueF())
+        index = self._resolveSeedIndex(seedID)
+        if index >= 0:
+            self.setSeedColor(index, colour.redF(), colour.greenF(), colour.blueF())
 
-    def _onTargetChanged(self, seedIndex: int, combo: Any) -> None:
+    def _onTargetChanged(self, seedID: str, combo: Any) -> None:
         if self._rebuilding:
             return
+        index = self._resolveSeedIndex(seedID)
         segmentID = combo.itemData(combo.currentIndex)
-        if segmentID:
-            self.retargetSeed(seedIndex, str(segmentID))
+        if index >= 0 and segmentID:
+            self.retargetSeed(index, str(segmentID))
 
-    def _onHighlightToggled(self, seedIndex: int, checked: bool) -> None:
+    def _onHighlightToggled(self, seedID: str, checked: bool) -> None:
         """The dedicated highlight driver (the row's Highlight toggle).
 
         Checking RESTORES the seed's visibility snapshot (the visibility-
@@ -590,13 +635,17 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         definition) and raises its marching-stripes highlight; the toggles are
         exclusive, so this retires any other seed's highlight.  Unchecking
         clears the highlight (no visibility change -- the restored context
-        stays).
+        stays).  Keyed by the seed's STABLE ID: the toggle keeps naming its
+        seed even after other rows' deletions reshuffle the indices.
         """
         if self._rebuilding:
             return
         if checked:
-            self._restoreVisibilityContext(int(seedIndex))
-            self._publishHighlight(int(seedIndex))
+            index = self._resolveSeedIndex(seedID)
+            if index < 0:
+                return
+            self._restoreVisibilityContext(index)
+            self._publishHighlight(seedID)
         else:
             self._retireHighlight()
 
@@ -767,13 +816,15 @@ class VolumetrySeedsTableWidget(qt.QWidget):
 
     def _appendSeedItem(self, parentItem: Any, seedIndex: int) -> None:
         child = qt.QTreeWidgetItem(parentItem)
-        # Carry the global seed index on the item so introspection (tests,
-        # the row-select filter) can resolve the row back to its seed.
+        # Carry the CURRENT global seed index on the item for positional
+        # introspection (tests walk rows by index); the row-keying itself is
+        # the stable ID below.
         child.setData(0, qt.Qt.UserRole, seedIndex)
-        self._seed_items[int(seedIndex)] = child
+        seedID = self._seedID(seedIndex)
+        self._seed_items[seedID] = child
         rowWidget = self._buildSeedRow(seedIndex)
         self._tree.setItemWidget(child, _COMPOSITE_COLUMN, rowWidget)
-        self._installRowSelectFilter(rowWidget, _ROW_SEED_PROPERTY, int(seedIndex))
+        self._installRowSelectFilter(rowWidget, _ROW_SEED_PROPERTY, seedID)
 
     # ------------------------------------------------------------------ #
     # Row-select event filter (a press anywhere on a composite row selects
@@ -813,8 +864,8 @@ class VolumetrySeedsTableWidget(qt.QWidget):
     def _selectRowForWidget(self, widget: Any) -> None:
         """Select the tree row the pressed row-child ``widget`` belongs to.
 
-        Resolves the row key off the widget's dynamic property (seed index or
-        volume id) and makes that item the current selection.  Selection is
+        Resolves the row key off the widget's dynamic property (stable seed ID
+        or volume id) and makes that item the current selection.  Selection is
         plain row UX with NO side effects -- the stripes and the visibility
         restore belong to the Highlight toggle + placement.  A no-op for
         untagged widgets or during a rebuild.
@@ -822,9 +873,9 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         if self._rebuilding or widget is None:
             return
         item = None
-        seedIndex = widget.property(_ROW_SEED_PROPERTY)
-        if seedIndex is not None:
-            item = self._seed_items.get(int(seedIndex))
+        seedID = widget.property(_ROW_SEED_PROPERTY)
+        if seedID:
+            item = self._seed_items.get(str(seedID))
         else:
             volumeId = widget.property(_ROW_VOLUME_PROPERTY)
             if volumeId:
@@ -846,7 +897,13 @@ class VolumetrySeedsTableWidget(qt.QWidget):
 
     def _buildSeedRow(self, seedIndex: int) -> Any:
         """Compose one seed row: highlight toggle, colour swatch, label,
-        target combo, delete."""
+        target combo, delete.
+
+        Every control callback captures the seed's STABLE ID and resolves the
+        current index at fire time, so an edit landing after another row's
+        deletion still writes to the seed it was built for.
+        """
+        seedID = self._seedID(seedIndex)
         color = self._seedColor(seedIndex)
         label = self._seedLabel(seedIndex)
 
@@ -866,10 +923,10 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             "Show this seed's measured region with a striped overlay; "
             "restores the visibility the seed was placed under"
         )
-        highlightButton.setChecked(int(seedIndex) == self._highlightedSeed)
+        highlightButton.setChecked(bool(seedID) and seedID == self._highlightedSeedID)
         highlightButton.connect(
             "toggled(bool)",
-            lambda checked, i=seedIndex: self._onHighlightToggled(i, checked),
+            lambda checked, s=seedID: self._onHighlightToggled(s, checked),
         )
         rowLayout.addWidget(highlightButton)
 
@@ -881,7 +938,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         colourButton.setToolTip(f"Seed {seedIndex + 1} colour")
         colourButton.connect(
             "colorChanged(QColor)",
-            lambda c, i=seedIndex: self._onColourChanged(i, c),
+            lambda c, s=seedID: self._onColourChanged(s, c),
         )
         rowLayout.addWidget(colourButton)
 
@@ -891,7 +948,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         labelEdit.setToolTip("Label for this seed (becomes the generated segment name)")
         labelEdit.connect(
             "editingFinished()",
-            lambda i=seedIndex, e=labelEdit: self._onLabelEdited(i, e),
+            lambda s=seedID, e=labelEdit: self._onLabelEdited(s, e),
         )
         rowLayout.addWidget(labelEdit, 1)
 
@@ -913,7 +970,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         deleteButton.setToolTip("Remove this seed")
         deleteButton.connect(
             "clicked(bool)",
-            lambda _checked, i=seedIndex: self.deleteSeed(i),
+            lambda _checked, s=seedID: self.deleteSeed(self._resolveSeedIndex(s)),
         )
         rowLayout.addWidget(deleteButton)
 
@@ -922,7 +979,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         # toggle restores this snapshot; the tooltip says what that means.
         rowWidget.setToolTip(self._seedContextToolTip(seedIndex))
 
-        self._seed_rows[seedIndex] = {
+        self._seed_rows[seedID] = {
             "widget": rowWidget,
             "highlight": highlightButton,
             "colour": colourButton,
@@ -968,7 +1025,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             combo.setEnabled(False)
         combo.connect(
             "activated(int)",
-            lambda _idx, i=seedIndex, c=combo: self._onTargetChanged(i, c),
+            lambda _idx, s=self._seedID(seedIndex), c=combo: self._onTargetChanged(s, c),
         )
         return combo
 
@@ -1003,20 +1060,20 @@ class VolumetrySeedsTableWidget(qt.QWidget):
     # opacity-fade pulse -- persistent while toggled, never a blink)
     # ------------------------------------------------------------------ #
 
-    def _highlightSeed(self, seedIndex: int) -> None:
-        """Publish the highlight + start the marching-phase timer.
+    def _highlightSeed(self, seedID: str) -> None:
+        """Publish the highlight + start the march timer.
 
         The highlight state rides the shared display node
-        (``feedback_layerdm_state_on_display_node``): this widget writes
-        ``highlightSeed`` / ``stripePhase`` and the LayerDM slice pipelines
-        render the stripes.  Persistent while the Highlight toggle stays on.
+        (``feedback_layerdm_state_on_display_node``): this widget writes the
+        seed's STABLE ID onto the transient ``HighlightSeedID`` member (never
+        a node attribute -- attributes serialize into the scene XML) and the
+        LayerDM slice pipelines render the stripes.  Persistent while the
+        Highlight toggle stays on.
         """
-        if self._displayNode is None:
+        if self._displayNode is None or not seedID:
             return
-        self._highlightedSeed = int(seedIndex)
-        self._stripePhase = 0
-        set_stripe_phase(self._displayNode, 0)
-        set_highlight_seed(self._displayNode, seedIndex)
+        self._highlightedSeedID = str(seedID)
+        set_highlight_seed_id(self._displayNode, self._highlightedSeedID)
         if not self._stripeTimer.isActive():
             self._stripeTimer.start()
 
@@ -1024,41 +1081,44 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         """Stop the march + clear the highlight off the display node."""
         if self._stripeTimer.isActive():
             self._stripeTimer.stop()
-        if self._highlightedSeed >= 0:
-            set_highlight_seed(self._displayNode, -1)
-        self._highlightedSeed = -1
+        if self._highlightedSeedID:
+            set_highlight_seed_id(self._displayNode, "")
+        self._highlightedSeedID = ""
 
     def _onStripeTick(self) -> None:
-        """Advance the stripe phase one pixel (the calm, continuous march).
+        """Fire one march tick (the calm, continuous stripe advance).
 
-        Each write fires the display node's ModifiedEvent -- the pipelines'
-        render tick; they reuse the cached carved mask and only shift the
-        stripe family.
+        The tick is a plain ``InvokeEvent`` on the shared display node
+        (``invoke_stripe_tick``): no MRML write, no ModifiedEvent -- only the
+        slice pipelines observing ``STRIPE_TICK_EVENT`` wake, advance their
+        OWN local phase, and re-render (the SegmentEditorThresholdEffect
+        widget-owned preview-timer precedent).
         """
-        if self._displayNode is None or self._highlightedSeed < 0:
+        if self._displayNode is None or not self._highlightedSeedID:
             self._clearHighlight()
             return
-        self._stripePhase = (self._stripePhase + 1) % STRIPE_PERIOD_PX
-        set_stripe_phase(self._displayNode, self._stripePhase)
+        invoke_stripe_tick(self._displayNode)
 
-    def _updateEmptyCarveCue(self, seedIndex: int | None) -> None:
+    def _updateEmptyCarveCue(self, seedID: str | None) -> None:
         """Name an EMPTY carve on the highlighted seed row; hide other cues.
 
-        Runs once per highlight change (never per stripe tick).  ``None``
-        (highlight cleared) hides all cues.  Only a PRESENT-but-empty carve
-        shows the message: an unknown carve (unbound seed, unreadable masks)
-        stays cueless -- unknown is not empty.
+        Runs once per highlight change (never per stripe tick).  ``None`` /
+        empty (highlight cleared) hides all cues.  Only a PRESENT-but-empty
+        carve shows the message: an unknown carve (unbound seed, unreadable
+        masks) stays cueless -- unknown is not empty.
         """
-        for index, row in self._seed_rows.items():
+        for rowID, row in self._seed_rows.items():
             status = row.get("status")
-            if status is not None and index != seedIndex:
+            if status is not None and rowID != seedID:
                 status.setVisible(False)
-        if seedIndex is None:
+        if not seedID:
             return
-        status = self._seedControl(seedIndex, "status")
+        row = self._seed_rows.get(seedID)
+        status = row.get("status") if row is not None else None
         if status is None:
             return
-        empty = self._carvedRegionIsEmpty(seedIndex)
+        index = self._resolveSeedIndex(seedID)
+        empty = index >= 0 and self._carvedRegionIsEmpty(index)
         status.setText(EMPTY_CARVE_MESSAGE if empty else "")
         status.setVisible(bool(empty))
 
@@ -1083,15 +1143,17 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         )
         return mask is not None and not mask.any()
 
-    def _publishHighlight(self, seedIndex: int) -> None:
-        """Point the highlight at ``seedIndex`` (the toggle/placement drivers).
+    def _publishHighlight(self, seedID: str) -> None:
+        """Point the highlight at ``seedID`` (the toggle/placement drivers).
 
         Publishes the stripes, names an empty carve on the row, and re-checks
         the toggles so exactly this seed's Highlight button reads on.  No
         visibility restore here -- that stays with the explicit toggle.
         """
-        self._highlightSeed(int(seedIndex))
-        self._updateEmptyCarveCue(int(seedIndex))
+        if not seedID:
+            return
+        self._highlightSeed(seedID)
+        self._updateEmptyCarveCue(seedID)
         self._syncHighlightToggles()
 
     def _retireHighlight(self) -> None:
@@ -1100,31 +1162,42 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._updateEmptyCarveCue(None)
         self._syncHighlightToggles()
 
+    def stopHighlight(self) -> None:
+        """Retire the highlight + stop the march timer (module-exit hygiene).
+
+        Called by the module widget on ``exit()`` so no timer keeps firing --
+        and no frozen stripes linger -- while LiverVolumetry is inactive.
+        """
+        self._retireHighlight()
+
     def _syncHighlightToggles(self) -> None:
         """Check exactly the highlighted seed's toggle (exclusivity, silent).
 
         Signals are blocked so re-checking the buttons never re-enters
         ``_onHighlightToggled`` (a programmatic sync is not a driver).
         """
-        for index, row in self._seed_rows.items():
+        for rowID, row in self._seed_rows.items():
             button = row.get("highlight")
             if button is None:
                 continue
             button.blockSignals(True)
-            button.setChecked(index == self._highlightedSeed)
+            button.setChecked(bool(rowID) and rowID == self._highlightedSeedID)
             button.blockSignals(False)
 
     def _syncHighlightAfterRebuild(self) -> None:
         """Re-seat the highlight on the fresh rows after a rebuild.
 
         The rows (toggles + cue labels) are rebuilt from scratch, so a
-        persisting highlight (a label edit / retarget rebuild) gets its cue
-        re-derived; a highlight whose seed is gone is retired.
+        persisting highlight (a label edit / retarget / OTHER-seed deletion
+        rebuild) gets its cue re-derived on the surviving row -- the pin is
+        keyed by stable ID, so it stays pinned through index shifts.  A
+        highlight whose OWN seed is gone (the ID no longer resolves) is
+        retired.
         """
-        if self._highlightedSeed < 0:
+        if not self._highlightedSeedID:
             return
-        if self._highlightedSeed >= self._seedCount():
+        if self._resolveSeedIndex(self._highlightedSeedID) < 0:
             self._retireHighlight()
             return
-        self._updateEmptyCarveCue(self._highlightedSeed)
+        self._updateEmptyCarveCue(self._highlightedSeedID)
         self._syncHighlightToggles()

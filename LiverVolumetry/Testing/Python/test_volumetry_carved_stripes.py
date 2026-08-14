@@ -12,9 +12,10 @@ ADR-0027):
   family (the march); an empty mask yields nothing.
 * ``resample_mask_to_plane`` -- the once-per-(seed, slice) 3D->2D cut; the
   per-tick work is stripe_segments alone.
-* the ``highlightSeed`` / ``stripePhase`` display-node attribute helpers the
-  widget timer and the slice pipelines share
-  (``feedback_layerdm_state_on_display_node``).
+* the ``HighlightSeedID`` transient-member helpers + the ``STRIPE_TICK_EVENT``
+  InvokeEvent tick the widget timer and the slice pipelines share
+  (``feedback_layerdm_state_on_display_node``; NEVER a node attribute --
+  attributes serialize into the scene XML) + the legacy-attribute sanitation.
 """
 
 from __future__ import annotations
@@ -29,11 +30,12 @@ if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 
 from CarvedRegionStripes import (  # noqa: E402
-    get_highlight_seed,
-    get_stripe_phase,
+    STRIPE_TICK_EVENT,
+    clear_legacy_highlight_attributes,
+    get_highlight_seed_id,
+    invoke_stripe_tick,
     resample_mask_to_plane,
-    set_highlight_seed,
-    set_stripe_phase,
+    set_highlight_seed_id,
     stripe_segments,
 )
 
@@ -140,37 +142,126 @@ def test_offset_plane_samples_the_translated_voxels():
 
 
 class _FakeDisplayNode:
-    def __init__(self):
-        self._attrs: dict = {}
+    """Mimics the display node's transient member + attribute + event API,
+    recording every write so the tests can pin WHICH channel was used."""
 
+    def __init__(self):
+        self._highlight = ""
+        self._attrs: dict = {}
+        self.attribute_writes: list = []
+        self.invoked_events: list = []
+
+    # -- the transient HighlightSeedID member (never serialized) ---------- #
+    def SetHighlightSeedID(self, seedID):  # noqa: N802 - MRML verb
+        self._highlight = seedID
+
+    def GetHighlightSeedID(self):  # noqa: N802 - MRML verb
+        return self._highlight
+
+    # -- the generic (SERIALIZING) attribute channel ---------------------- #
     def SetAttribute(self, key, value):  # noqa: N802 - MRML verb
         self._attrs[key] = value
+        self.attribute_writes.append((key, value))
 
     def GetAttribute(self, key):  # noqa: N802 - MRML verb
         return self._attrs.get(key)
 
+    def RemoveAttribute(self, key):  # noqa: N802 - MRML verb
+        self._attrs.pop(key, None)
 
-def test_highlight_seed_round_trips_and_defaults_off():
+    # -- events ------------------------------------------------------------ #
+    def InvokeEvent(self, eventId):  # noqa: N802 - VTK verb
+        self.invoked_events.append(eventId)
+
+
+def test_highlight_seed_id_round_trips_and_defaults_off():
     display = _FakeDisplayNode()
-    assert get_highlight_seed(display) == -1, "default is no highlight."
+    assert get_highlight_seed_id(display) == "", "default is no highlight."
 
-    set_highlight_seed(display, 3)
-    assert get_highlight_seed(display) == 3
+    set_highlight_seed_id(display, "seed_3")
+    assert get_highlight_seed_id(display) == "seed_3"
 
-    set_highlight_seed(display, -1)
-    assert get_highlight_seed(display) == -1
+    set_highlight_seed_id(display, "")
+    assert get_highlight_seed_id(display) == "", "empty clears."
+
+    set_highlight_seed_id(display, None)
+    assert get_highlight_seed_id(display) == "", "None clears too."
 
 
-def test_stripe_phase_round_trips_and_defaults_zero():
+def test_highlight_helpers_never_touch_the_attribute_channel():
+    """The highlight rides the TRANSIENT member ONLY: ``SetAttribute`` values
+    serialize into the scene XML, which is exactly the frozen-orphan-stripes
+    bug the member fixes."""
     display = _FakeDisplayNode()
-    assert get_stripe_phase(display) == 0
 
-    set_stripe_phase(display, 7)
-    assert get_stripe_phase(display) == 7
+    set_highlight_seed_id(display, "seed_3")
+    get_highlight_seed_id(display)
+
+    assert display.attribute_writes == [], (
+        "the highlight helpers must NEVER write a node attribute -- "
+        "attributes persist into the scene XML."
+    )
+
+
+def test_stripe_tick_fires_the_custom_event_with_no_mrml_write():
+    """The march tick is an InvokeEvent (no serialization, no Modified) --
+    the SegmentEditorThresholdEffect zero-MRML-writes-per-tick precedent."""
+    display = _FakeDisplayNode()
+
+    invoke_stripe_tick(display)
+    invoke_stripe_tick(display)
+
+    assert display.invoked_events == [STRIPE_TICK_EVENT, STRIPE_TICK_EVENT]
+    assert display.attribute_writes == [], (
+        "the per-tick path must carry ZERO attribute writes (no stripePhase "
+        "channel remains)."
+    )
 
 
 def test_state_helpers_tolerate_a_missing_display_node():
-    set_highlight_seed(None, 1)
-    set_stripe_phase(None, 1)
-    assert get_highlight_seed(None) == -1
-    assert get_stripe_phase(None) == 0
+    set_highlight_seed_id(None, "seed_1")
+    invoke_stripe_tick(None)
+    assert get_highlight_seed_id(None) == ""
+    assert clear_legacy_highlight_attributes(None) is False
+
+
+def test_legacy_highlight_attributes_are_scrubbed():
+    """Sanitation removes BOTH retired attributes and leaves others alone."""
+    display = _FakeDisplayNode()
+    display.SetAttribute("LiverVolumetry.highlightSeed", "2")
+    display.SetAttribute("LiverVolumetry.stripePhase", "7")
+    display.SetAttribute("LiverVolumetry.Armed", "1")  # unrelated: must stay
+
+    assert clear_legacy_highlight_attributes(display) is True
+
+    assert display.GetAttribute("LiverVolumetry.highlightSeed") is None
+    assert display.GetAttribute("LiverVolumetry.stripePhase") is None
+    assert display.GetAttribute("LiverVolumetry.Armed") == "1"
+    assert clear_legacy_highlight_attributes(display) is False, (
+        "a second pass finds nothing (idempotent)."
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Conformance pin: the attribute channel must not creep back in
+# --------------------------------------------------------------------------- #
+
+
+def test_no_attribute_borne_highlight_channel_remains_in_the_module():
+    """No LiverVolumetry source writes the retired highlight/phase attributes.
+
+    Grep-level pin: the ONLY residence of the legacy attribute names is the
+    sanitation constants in ``CarvedRegionStripes`` itself.  A re-appearance
+    anywhere else means the serializing channel crept back.
+    """
+    module_root = _LIB.parent
+    offenders = []
+    for source in sorted(module_root.rglob("*.py")):
+        if "Testing" in source.parts or source.name == "CarvedRegionStripes.py":
+            continue
+        text = source.read_text(encoding="utf-8")
+        if "LiverVolumetry.highlightSeed" in text or "LiverVolumetry.stripePhase" in text:
+            offenders.append(str(source.relative_to(module_root)))
+    assert offenders == [], (
+        f"the attribute-borne highlight channel crept back into: {offenders}"
+    )
