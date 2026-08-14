@@ -186,7 +186,17 @@ _COLUMN_COUNT = 1
 #: covered by the snapshot segments above it -- so "no stripes" is named,
 #: never mute.  An UNKNOWN carve (an unbound seed / unreadable masks) shows
 #: no cue: unknown is not empty.
-EMPTY_CARVE_MESSAGE = "Region fully covered by segments above"
+EMPTY_CARVE_MESSAGE = (
+    "Region fully covered by segments above -- hide covering segments or "
+    "retarget the seed."
+)
+
+#: The divergence chip on the PINNED seed's row (plain text, never a
+#: tooltip): shown when the LIVE visibility no longer matches the seed's
+#: placement snapshot, so the striped region on screen is being read
+#: against a different composition than the one that defined it.  The chip
+#: doubles as the entry point: clicking it restores the placement view.
+DIVERGENCE_CHIP_TEXT = "View differs from placement snapshot"
 
 #: The stale-snapshot refusal (ADR-0010 legible text): a restore whose
 #: snapshot shares NO segment with the segmentation's current segment IDs is
@@ -541,6 +551,11 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         """The seed row's empty-carve cue ``qt.QLabel`` (keyed by global index)."""
         return self._seedControl(seedIndex, "status")
 
+    def divergenceChip(self, seedIndex: int) -> Any:
+        """The seed row's divergence chip (pinned-row live-vs-snapshot text,
+        doubling as the Restore placement view entry; keyed by global index)."""
+        return self._seedControl(seedIndex, "chip")
+
     def highlightButton(self, seedIndex: int) -> Any:
         """The seed row's checkable Pin ``qt.QToolButton`` (the stripes'
         dedicated driver -- stripes only, never a visibility change; keyed
@@ -798,6 +813,9 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._restoredSeedID = seedID
         self._applyContext(context)
         self._showBanner(self._restoreBannerText(index), withReturn=True)
+        # The widget's own write is guarded off the observer; re-derive the
+        # pinned row's divergence chip here instead.
+        self._updateDivergenceChips()
         return True
 
     def returnToMyView(self) -> None:
@@ -806,6 +824,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         if context:
             self._applyContext(context)
         self._endRestoredContext()
+        self._updateDivergenceChips()
 
     def _endRestoredContext(self) -> None:
         """Drop the restored context + its capture and hide the banner.
@@ -895,23 +914,57 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._sourceDisplayObserverTag = None
 
     def _onSourceDisplayModified(self, caller: Any, event: str) -> None:
-        """End a restored context on a MANUAL visibility change (takeover).
+        """React to an eye-list change: takeover check + divergence chip.
 
         The widget's own restore writes are marked (``_applyingVisibility``)
         and skipped; an unrelated display edit (opacity, colour) leaves the
-        visible set unchanged and is ignored.  A real takeover ends the
-        context WITHOUT re-asserting anything: the user's toggles win.
+        visible set unchanged and is ignored by the takeover check.  A real
+        takeover ends the restored context WITHOUT re-asserting anything:
+        the user's toggles win.  The pinned row's divergence chip re-derives
+        on every change either way.
         """
         del caller, event
-        if self._applyingVisibility or not self._restoredSeedID:
+        if self._applyingVisibility:
             return
-        source = self._structureSource
-        if source is None:
-            return
-        current = frozenset(visible_context(source, source.GetDisplayNode()))
-        if self._restoredVisibleSet is not None and current == self._restoredVisibleSet:
-            return
-        self._endRestoredContext()
+        if self._restoredSeedID:
+            source = self._structureSource
+            if source is not None:
+                current = frozenset(
+                    visible_context(source, source.GetDisplayNode())
+                )
+                if (
+                    self._restoredVisibleSet is None
+                    or current != self._restoredVisibleSet
+                ):
+                    self._endRestoredContext()
+        self._updateDivergenceChips()
+
+    # ------------------------------------------------------------------ #
+    # Divergence chip (live visibility vs the pinned seed's snapshot)
+    # ------------------------------------------------------------------ #
+
+    def _updateDivergenceChips(self) -> None:
+        """Show the chip on exactly the PINNED row when live != snapshot.
+
+        Compares the SETS of visible segment IDs vs the seed's snapshot (the
+        top-first order derives from the layer indices, which the eye list
+        does not move).  Hidden when unpinned, matching, snapshotless (a
+        legacy seed has nothing to diverge from), or sourceless.
+        """
+        pinnedID = self._highlightedSeedID
+        diverges = False
+        if pinnedID:
+            source = self._structureSource
+            index = self._resolveSeedIndex(pinnedID)
+            if source is not None and index >= 0:
+                snapshot = self._seedVisibilityContext(index)
+                if snapshot:
+                    live = visible_context(source, source.GetDisplayNode())
+                    diverges = set(live) != set(snapshot)
+        for rowID, row in self._seed_rows.items():
+            chip = row.get("chip")
+            if chip is not None:
+                chip.setVisible(bool(diverges) and rowID == pinnedID)
 
     # ------------------------------------------------------------------ #
     # Repaint
@@ -1213,6 +1266,23 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         statusLabel.setVisible(False)
         rowLayout.addWidget(statusLabel)
 
+        # The divergence chip (PINNED row only): plain text naming that the
+        # live visibility differs from the seed's placement snapshot, and
+        # the click-through entry point to Restore placement view.
+        divergenceChip = qt.QToolButton()
+        divergenceChip.setAutoRaise(True)
+        divergenceChip.setText(DIVERGENCE_CHIP_TEXT)
+        divergenceChip.setToolTip(
+            "The current show/hide composition is not the one this seed was "
+            "measured under. Click to restore the placement view."
+        )
+        divergenceChip.setVisible(False)
+        divergenceChip.connect(
+            "clicked(bool)",
+            lambda _checked, s=seedID: self.restorePlacementView(s),
+        )
+        rowLayout.addWidget(divergenceChip)
+
         deleteButton = qt.QToolButton()
         deleteButton.setAutoRaise(True)
         deleteButton.setText("Delete")
@@ -1236,6 +1306,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             "target": targetCombo,
             "delete": deleteButton,
             "status": statusLabel,
+            "chip": divergenceChip,
         }
         return rowWidget
 
@@ -1439,12 +1510,14 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._previewSeedID = ""  # a pin change supersedes any hover preview
         self._highlightSeed(seedID)
         self._updateEmptyCarveCue(seedID)
+        self._updateDivergenceChips()
         self._syncHighlightToggles()
 
     def _retireHighlight(self) -> None:
-        """Clear the highlight + its cue and uncheck every Highlight toggle."""
+        """Clear the highlight + its cue/chip and uncheck every Pin toggle."""
         self._clearHighlight()
         self._updateEmptyCarveCue(None)
+        self._updateDivergenceChips()
         self._syncHighlightToggles()
 
     def stopHighlight(self) -> None:
@@ -1496,4 +1569,5 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             self._retireHighlight()
             return
         self._updateEmptyCarveCue(self._highlightedSeedID)
+        self._updateDivergenceChips()
         self._syncHighlightToggles()
