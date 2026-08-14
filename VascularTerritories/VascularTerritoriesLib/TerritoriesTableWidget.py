@@ -261,6 +261,13 @@ class TerritoriesTableWidget(qt.QWidget):
 
         self._addTerritoryButton.connect("clicked(bool)", lambda _checked: self.addTerritory())
 
+        # Detach-before-callback guard: when a host destroys the Qt tree
+        # (the panel this table is composed into dies) while this Python
+        # object still holds a VTK observer, a later carrier edit would
+        # drive ``_rebuild`` into destroyed Qt members.  The hook is
+        # Qt-free (feedback_launched_widget_teardown_crash).
+        self.connect("destroyed()", self._onQtDestroyed)
+
         self._attachCarrierObserver()
         self._rebuild()
 
@@ -270,6 +277,10 @@ class TerritoriesTableWidget(qt.QWidget):
 
     def cleanup(self) -> None:
         """Drop the carrier observer (called by the test teardown fixture)."""
+        self._detachCarrierObserver()
+
+    def _onQtDestroyed(self) -> None:
+        """The Qt tree died: drop the VTK observer, touching NO Qt member."""
         self._detachCarrierObserver()
 
     def _attachCarrierObserver(self) -> None:
