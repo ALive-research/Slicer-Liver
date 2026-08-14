@@ -328,6 +328,12 @@ protected:
   /// True iff ``i`` indexes an existing seed.
   bool IsValidIndex(int i) const;
 
+  /// Erase the i-th seed's slot from EVERY parallel per-seed vector in
+  /// lockstep (no bounds check, no event -- the callers own both).  The one
+  /// place the lockstep roster is spelled out, so adding a per-seed vector
+  /// cannot silently miss an erase site.
+  void EraseSeedAt(std::size_t idx);
+
   /// Restore the i-th seed's stable ID.  STORAGE-READ SEAM ONLY (the storage
   /// node is a friend): everywhere else IDs are minted by ``AddSeed``.  The
   /// mint counter is bumped past any numeric suffix in ``id`` so a restored

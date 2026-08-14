@@ -144,13 +144,8 @@ void vtkMRMLVolumetrySeedsNode::SetNthSeed(int i, double x, double y, double z)
 }
 
 //------------------------------------------------------------------------------
-bool vtkMRMLVolumetrySeedsNode::RemoveNthSeed(int i)
+void vtkMRMLVolumetrySeedsNode::EraseSeedAt(std::size_t idx)
 {
-  if (!this->IsValidIndex(i))
-  {
-    return false;
-  }
-  const std::size_t idx = static_cast<std::size_t>(i);
   // The parallel vectors shift in lockstep so a seed's label + colour +
   // binding + context stay bound to its coordinate.  The ID vector shifts
   // too, but the mint counter does NOT decrement: the removed ID retires.
@@ -161,6 +156,16 @@ bool vtkMRMLVolumetrySeedsNode::RemoveNthSeed(int i)
   this->SeedBindings.erase(this->SeedBindings.begin() + idx);
   this->SeedContexts.erase(this->SeedContexts.begin() + idx);
   this->SeedVolumes.erase(this->SeedVolumes.begin() + idx);
+}
+
+//------------------------------------------------------------------------------
+bool vtkMRMLVolumetrySeedsNode::RemoveNthSeed(int i)
+{
+  if (!this->IsValidIndex(i))
+  {
+    return false;
+  }
+  this->EraseSeedAt(static_cast<std::size_t>(i));
   this->Modified();
   return true;
 }
@@ -439,18 +444,12 @@ bool vtkMRMLVolumetrySeedsNode::RemoveVolume(const std::string& volumeId)
   }
   bool removed = false;
   // Drop every seed assigned to the volume, tail-first so the parallel vectors
-  // shift in lockstep (the same erase order ``RemoveNthSeed`` uses).
+  // shift in lockstep (the shared ``EraseSeedAt`` lockstep erase).
   for (int i = static_cast<int>(this->Seeds.size()) - 1; i >= 0; --i)
   {
     if (this->SeedVolumes[static_cast<std::size_t>(i)] == volumeId)
     {
-      this->Seeds.erase(this->Seeds.begin() + i);
-      this->SeedIDs.erase(this->SeedIDs.begin() + i);
-      this->SeedLabels.erase(this->SeedLabels.begin() + i);
-      this->SeedColors.erase(this->SeedColors.begin() + i);
-      this->SeedBindings.erase(this->SeedBindings.begin() + i);
-      this->SeedContexts.erase(this->SeedContexts.begin() + i);
-      this->SeedVolumes.erase(this->SeedVolumes.begin() + i);
+      this->EraseSeedAt(static_cast<std::size_t>(i));
       removed = true;
     }
   }

@@ -1161,8 +1161,6 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       from LiverVolumetryLib import clear_legacy_highlight_attributes
     except ImportError:
       return
-    if clear_legacy_highlight_attributes is None:
-      return
     for node in slicer.util.getNodesByClass(SEEDS_DISPLAY_NODE_CLASS):
       clear_legacy_highlight_attributes(node)
 
