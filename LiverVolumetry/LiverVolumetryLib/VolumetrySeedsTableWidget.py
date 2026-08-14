@@ -408,6 +408,14 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._escapeShortcut.setContext(qt.Qt.WidgetWithChildrenShortcut)
         self._escapeShortcut.connect("activated()", self.cancelArmedPlacement)
 
+        # Detach-before-callback guard: when a host destroys the Qt tree
+        # (the panel this table is composed into dies) while this Python
+        # object still holds VTK observers, a later carrier / display edit
+        # would drive ``_rebuild`` into destroyed Qt members.  The hook is
+        # Qt-free: it drops ONLY the VTK observers + Python-side callbacks
+        # (feedback_launched_widget_teardown_crash).
+        self.connect("destroyed()", self._onQtDestroyed)
+
         self._attachCarrierObserver()
         self._rebuild()
         self._known_seed_count = self._seedCount()
@@ -421,6 +429,18 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._clearHighlight()
         self._detachCarrierObserver()
         self._detachSourceDisplayObserver()
+
+    def _onQtDestroyed(self) -> None:
+        """The Qt tree died: drop the VTK observers, touching NO Qt member.
+
+        Fired by this widget's own ``destroyed()`` signal (the stripe timer
+        is a Qt child, so it died with the tree and cannot tick).  A late
+        carrier ``ModifiedEvent`` after this can no longer reach a
+        destroyed row widget.
+        """
+        self._detachCarrierObserver()
+        self._detachSourceDisplayObserver()
+        self._pinChangedCallback = None
 
     def setStructureSource(self, segmentationNode: Any) -> None:
         """Bind the structure-source segmentation the retarget menu scans.
