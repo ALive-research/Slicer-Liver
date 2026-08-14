@@ -228,6 +228,15 @@ def test_parse_highlight_value_splits_pin_and_preview():
     assert parse_highlight_value(None) == ("", False)
 
 
+def test_idle_static_interval_is_ten_seconds_of_ticks():
+    """The march is BOUNDED (reduced motion): 10 s, a whole number of ticks."""
+    from CarvedRegionStripes import STRIPE_IDLE_STATIC_MS, STRIPE_TICK_MS
+
+    assert STRIPE_IDLE_STATIC_MS == 10000
+    assert STRIPE_IDLE_STATIC_MS % STRIPE_TICK_MS == 0
+    assert STRIPE_IDLE_STATIC_MS // STRIPE_TICK_MS >= 1
+
+
 def test_stripe_tick_fires_the_custom_event_with_no_mrml_write():
     """The march tick is an InvokeEvent (no serialization, no Modified) --
     the SegmentEditorThresholdEffect zero-MRML-writes-per-tick precedent."""
