@@ -473,6 +473,17 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         self._stripes_actor.SetMapper(self._stripes_mapper)
         self._stripes_actor.GetProperty().SetLineWidth(3.0)
         self._stripes_actor.SetVisibility(False)
+        # On-slice identity text (ADR-0010 -- never colour/animation alone
+        # IN THE VIEW either): while a seed is PINNED, a corner annotation
+        # names the pinned seed + its volume in text right where the
+        # stripes render.  Cleared with the pin; a hover preview shows no
+        # annotation (transient by design).
+        self._pin_annotation = vtk.vtkCornerAnnotation()
+        self._pin_annotation.SetLinearFontScaleFactor(2)
+        self._pin_annotation.SetNonlinearFontScaleFactor(1)
+        self._pin_annotation.SetMaximumFontSize(14)
+        self._pin_annotation.SetVisibility(False)
+
         # (key, mask) caches: the 3D carve keyed on the seed + node MTimes, the
         # 2D cut keyed on the carve key + the slice pose + view size.  The
         # march tick hits both caches and only rebuilds the stripe lines.
@@ -583,11 +594,13 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         super()._add_actors(renderer)
         renderer.AddActor2D(self._stripes_actor)
         renderer.AddActor2D(self._preview_actor)
+        renderer.AddActor2D(self._pin_annotation)
 
     def _remove_actors(self, renderer: Any) -> None:
         super()._remove_actors(renderer)
         renderer.RemoveActor2D(self._stripes_actor)
         renderer.RemoveActor2D(self._preview_actor)
+        renderer.RemoveActor2D(self._pin_annotation)
 
     def _on_bare_move_decline(self, eventData: Any) -> None:
         """Raise the placement-preview cursor on a declined bare move (ADR-0033).
@@ -785,6 +798,42 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
                         )
                         show = True
         self._stripes_actor.SetVisibility(show)
+        self._update_pin_annotation(seedID if not isPreview else "")
+
+    def _update_pin_annotation(self, seedID: str) -> None:
+        """Name the pinned seed + volume in the slice corner (text identity).
+
+        Empty / unresolvable clears the annotation.  Preview never annotates
+        (the caller passes "" for a preview).
+        """
+        text = ""
+        if seedID:
+            index = self._resolve_seed_index(seedID)
+            if index >= 0:
+                text = self._pin_annotation_text(index)
+        # Lower-right corner (position 1): clear of Slicer's own lower-left
+        # slice annotations.
+        self._pin_annotation.SetText(1, text)
+        self._pin_annotation.SetVisibility(bool(text))
+
+    def _pin_annotation_text(self, index: int) -> str:
+        """The pinned seed's identity line: label ( + volume label when set)."""
+        carrier = _carrier_from_display(self._display_node)
+        if carrier is None:
+            return ""
+        label = carrier.GetNthSeedLabel(index) or f"Seed {index + 1}"
+        volumeLabel = ""
+        if hasattr(carrier, "GetNthSeedVolume"):
+            volumeId = carrier.GetNthSeedVolume(index)
+            if volumeId and hasattr(carrier, "GetVolumeLabel"):
+                volumeLabel = carrier.GetVolumeLabel(volumeId) or volumeId
+        if volumeLabel:
+            return f"Pinned: {label} ({volumeLabel})"
+        return f"Pinned: {label}"
+
+    def GetPinAnnotation(self) -> Any:  # noqa: N802 - VTK verb
+        """The pinned-seed corner annotation (introspection seam)."""
+        return self._pin_annotation
 
     def _resolve_seed_index(self, seedID: str) -> int:
         """The highlighted seed's CURRENT carrier index (-1 when gone)."""

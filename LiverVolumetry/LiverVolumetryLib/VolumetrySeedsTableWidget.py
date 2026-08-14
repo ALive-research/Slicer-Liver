@@ -121,6 +121,7 @@ try:  # pragma: no cover - exercised once per import path
         visible_context,
     )
     from .CarvedRegionStripes import (
+        STRIPE_IDLE_STATIC_MS,
         STRIPE_TICK_MS,
         invoke_stripe_tick,
         set_highlight_seed_id,
@@ -139,6 +140,7 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
         visible_context,
     )
     from CarvedRegionStripes import (  # type: ignore[no-redef]
+        STRIPE_IDLE_STATIC_MS,
         STRIPE_TICK_MS,
         invoke_stripe_tick,
         set_highlight_seed_id,
@@ -282,6 +284,9 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._stripeTimer.setInterval(STRIPE_TICK_MS)
         self._stripeTimer.connect("timeout()", self._onStripeTick)
         self._highlightedSeedID = ""
+        # The bounded-motion countdown (idle-static): ticks left before the
+        # march freezes; refilled on every pin change.
+        self._stripeTicksRemaining = 0
         # The hover-PREVIEW: while the cursor rests on an UNPINNED seed's Pin
         # button, that seed's stripes show STATIC (the widget stops ticking;
         # the pipeline freezes the phase) and DIMMED, riding the same
@@ -359,6 +364,14 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         buttons.addStretch(1)
         layout.addLayout(buttons)
         self._addVolumeButton.connect("clicked(bool)", lambda _checked: self.addVolume())
+
+        # ESC cancels an armed placement (disarm + the Place toggle unchecks
+        # on the repaint) -- scoped to this panel's widget tree so a global
+        # Escape elsewhere is untouched.  ESC never clears the pin.
+        self._escapeShortcut = qt.QShortcut(self)
+        self._escapeShortcut.setKey(qt.QKeySequence("Esc"))
+        self._escapeShortcut.setContext(qt.Qt.WidgetWithChildrenShortcut)
+        self._escapeShortcut.connect("activated()", self.cancelArmedPlacement)
 
         self._attachCarrierObserver()
         self._rebuild()
@@ -695,6 +708,18 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         if self._displayNode is None:
             return
         self._state().set_armed(self._displayNode, False)
+
+    def cancelArmedPlacement(self) -> None:
+        """ESC: cancel an armed placement (disarm + uncheck the Place toggle).
+
+        A no-op when nothing is armed.  Touches ONLY the arm state -- the
+        pin, the stripes, and the restored context all stay.
+        """
+        display = self._displayNode
+        if display is None or not self._state().is_armed(display):
+            return
+        self._disarm()
+        self._rebuild()  # repaint unchecks the armed volume's Place toggle
 
     def _onPlaceToggled(self, volumeId: str, checked: bool) -> None:
         """Arm into ``volumeId`` exclusively on ON; disarm on OFF."""
@@ -1512,6 +1537,10 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             return
         self._highlightedSeedID = str(seedID)
         set_highlight_seed_id(self._displayNode, self._highlightedSeedID)
+        # (Re)start the bounded march: every pin change earns a fresh
+        # STRIPE_IDLE_STATIC_MS of motion, after which the stripes freeze
+        # in place (idle-static -- the reduced-motion bound).
+        self._stripeTicksRemaining = max(1, STRIPE_IDLE_STATIC_MS // STRIPE_TICK_MS)
         if not self._stripeTimer.isActive():
             self._stripeTimer.start()
 
@@ -1532,7 +1561,10 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         slice pipelines observing ``STRIPE_TICK_EVENT`` wake, advance their
         OWN local phase, and re-render (the SegmentEditorThresholdEffect
         widget-owned preview-timer precedent).  Held while a hover PREVIEW
-        is up: the preview is static by contract (phase frozen).
+        is up (the preview is static by contract), and BOUNDED: after
+        ``STRIPE_IDLE_STATIC_MS`` of marching the timer stops and the
+        stripes freeze in place -- the highlight stays, only the motion
+        ends (any pin change restarts it).
         """
         if self._displayNode is None or not self._highlightedSeedID:
             self._clearHighlight()
@@ -1540,6 +1572,9 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         if self._previewSeedID:
             return
         invoke_stripe_tick(self._displayNode)
+        self._stripeTicksRemaining -= 1
+        if self._stripeTicksRemaining <= 0:
+            self._stripeTimer.stop()  # idle-static: frozen stripes, live pin
 
     # ------------------------------------------------------------------ #
     # Hover-preview (static + dimmed stripes on an unpinned seed's Pin)
