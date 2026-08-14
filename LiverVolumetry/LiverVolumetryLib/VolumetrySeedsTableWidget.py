@@ -15,8 +15,8 @@ It is a Python-composed ``qt.QWidget`` (ADR-0004) that OWNS a two-level
 territory tree.  The prior FLAT per-seed table (ADR-0038) is subsumed: seed rows
 keep every per-seed control, and the per-SEED getters stay keyed by the seed's
 GLOBAL placement INDEX (``labelEdit`` / ``colourButton`` / ``targetCombo`` /
-``deleteButton`` / ``setSeedColor`` / ``setSeedLabel`` / ``deleteSeed`` /
-``retargetSeed``), so the existing seed→segment binding + Target-combo contract
+``deleteAction`` / ``setSeedColor`` / ``setSeedLabel`` / ``deleteSeed`` /
+``retargetSeed``), so the existing seed→segment binding + retarget contract
 is preserved on top of the grouping.
 
 Each VOLUME (top-level) row carries a horizontal strip, addressed by NAME:
@@ -26,12 +26,15 @@ Each VOLUME (top-level) row carries a horizontal strip, addressed by NAME:
   the shared display node via the base ``PointPlacementState``);
 * a COLOUR swatch (``ctk.ctkColorPickerButton``) writing ``SetVolumeColor``;
 * an editable LABEL (``qt.QLineEdit``) writing ``SetVolumeLabel``;
-* a DELETE (``qt.QToolButton``) removing the whole volume via ``RemoveVolume``.
+* an overflow "..." menu holding "Remove volume..." (confirming when seeds
+  would go with it) -- the destructive action sits out of the misclick path.
 
-Each SEED (child) row carries the strip the flat table used: a HIGHLIGHT
+Each SEED (child) row shows at most FOUR controls (the row diet): the PIN
 toggle, a COLOUR swatch, an editable LABEL (the generated segment name,
-ADR-0038 §Conformance), a TARGET combo (the seed→segment binding + retarget,
-``territory-usability`` §"Seed→label capture"), and a DELETE button.  Each
+ADR-0038 §Conformance), and the cue/chip text -- plus an overflow "..."
+menu holding "Retarget" (the seed→segment binding + retarget submenu,
+``territory-usability`` §"Seed→label capture"), "Restore placement view",
+and "Delete seed" (confirming when the seed carries a snapshot).  Each
 composite row widget covers its whole tree item, so a press anywhere on the row
 lands on a CHILD control (the stretch line edit under most of it), which
 consumes the press -- the tree item itself would never be selected by a real
@@ -519,9 +522,17 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         """The editable label ``qt.QLineEdit`` on the volume row."""
         return self._volumeControl(volumeId, "label")
 
-    def volumeDeleteButton(self, volumeId: str) -> Any:
-        """The delete ``qt.QToolButton`` on the volume row."""
-        return self._volumeControl(volumeId, "delete")
+    def volumeOverflowButton(self, volumeId: str) -> Any:
+        """The volume row's "..." overflow ``qt.QToolButton``."""
+        return self._volumeControl(volumeId, "overflow")
+
+    def volumeRemoveAction(self, volumeId: str) -> Any:
+        """The overflow menu's "Remove volume..." ``qt.QAction``.
+
+        Replaces the retired per-row Remove button (the row diet); the
+        action confirms when the volume still carries seeds.
+        """
+        return self._volumeControl(volumeId, "removeAction")
 
     # -- per-seed control getters (by GLOBAL index; flat-table contract).
     # The getters stay INDEX-signed for back-compat and resolve index -> the
@@ -540,12 +551,35 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         return self._seedControl(seedIndex, "label")
 
     def targetCombo(self, seedIndex: int) -> Any:
-        """The seed row's retarget ``qt.QComboBox`` (keyed by global index)."""
+        """The seed row's retarget control (keyed by global index).
+
+        Historic name kept for the test contract; since the row diet this is
+        the overflow menu's Retarget SUBMENU (``qt.QMenu`` -- the touched
+        candidates as checkable actions, the bound one checked), no longer a
+        ``QComboBox``.  ``retargetMenu`` is the same seam under its real name.
+        """
         return self._seedControl(seedIndex, "target")
 
-    def deleteButton(self, seedIndex: int) -> Any:
-        """The seed row's delete ``qt.QToolButton`` (keyed by global index)."""
-        return self._seedControl(seedIndex, "delete")
+    def retargetMenu(self, seedIndex: int) -> Any:
+        """The overflow menu's Retarget submenu (keyed by global index)."""
+        return self._seedControl(seedIndex, "target")
+
+    def overflowButton(self, seedIndex: int) -> Any:
+        """The seed row's "..." overflow ``qt.QToolButton`` (keyed by index)."""
+        return self._seedControl(seedIndex, "overflow")
+
+    def deleteAction(self, seedIndex: int) -> Any:
+        """The overflow menu's "Delete seed" ``qt.QAction`` (keyed by index).
+
+        Replaces the retired per-row delete button (the row diet: the
+        destructive action sits behind the overflow, out of the misclick
+        path, and confirms when the seed carries a visibility snapshot).
+        """
+        return self._seedControl(seedIndex, "deleteAction")
+
+    def restoreAction(self, seedIndex: int) -> Any:
+        """The overflow menu's "Restore placement view" ``qt.QAction``."""
+        return self._seedControl(seedIndex, "restore")
 
     def statusLabel(self, seedIndex: int) -> Any:
         """The seed row's empty-carve cue ``qt.QLabel`` (keyed by global index)."""
@@ -730,14 +764,6 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         index = self._resolveSeedIndex(seedID)
         if index >= 0:
             self.setSeedColor(index, colour.redF(), colour.greenF(), colour.blueF())
-
-    def _onTargetChanged(self, seedID: str, combo: Any) -> None:
-        if self._rebuilding:
-            return
-        index = self._resolveSeedIndex(seedID)
-        segmentID = combo.itemData(combo.currentIndex)
-        if index >= 0 and segmentID:
-            self.retargetSeed(index, str(segmentID))
 
     def _onHighlightToggled(self, seedID: str, checked: bool) -> None:
         """The dedicated stripe driver (the row's Pin toggle).
@@ -1085,24 +1111,49 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         )
         rowLayout.addWidget(labelEdit, 1)
 
-        deleteButton = qt.QToolButton()
-        deleteButton.setAutoRaise(True)
-        deleteButton.setText("Remove")
-        deleteButton.setToolTip("Remove this volume and its seeds")
-        deleteButton.connect(
-            "clicked(bool)",
-            lambda _checked, v=volumeId: self.deleteVolume(v),
+        # The volume overflow "..." (the row diet): Remove sits one
+        # deliberate step away and confirms when seeds would go with it.
+        overflowButton = qt.QToolButton()
+        overflowButton.setAutoRaise(True)
+        overflowButton.setText("...")
+        overflowButton.setToolTip("More actions for this volume")
+        overflowButton.setPopupMode(qt.QToolButton.InstantPopup)
+        menu = qt.QMenu(overflowButton)
+        removeAction = menu.addAction("Remove volume...")
+        removeAction.connect(
+            "triggered()", lambda v=volumeId: self._onRemoveVolumeAction(v)
         )
-        rowLayout.addWidget(deleteButton)
+        overflowButton.setMenu(menu)
+        rowLayout.addWidget(overflowButton)
 
         self._volume_rows[volumeId] = {
             "widget": rowWidget,
             "place": placeButton,
             "colour": colourButton,
             "label": labelEdit,
-            "delete": deleteButton,
+            "overflow": overflowButton,
+            "removeAction": removeAction,
         }
         return rowWidget
+
+    def _onRemoveVolumeAction(self, volumeId: str) -> None:
+        """Remove via the overflow menu, confirming when seeds go with it.
+
+        A volume with N > 0 seeds names them in the confirm; an empty volume
+        removes one-click.  The programmatic ``deleteVolume`` seam stays
+        confirm-free for scripted callers.
+        """
+        seedCount = len(self.seedIndicesForVolume(volumeId))
+        if seedCount > 0:
+            label = volumeId
+            if self._carrier is not None:
+                label = self._carrier.GetVolumeLabel(volumeId) or volumeId
+            noun = "seed" if seedCount == 1 else "seeds"
+            if not self._confirmDestructive(
+                f'Remove "{label}" and its {seedCount} {noun}?'
+            ):
+                return
+        self.deleteVolume(volumeId)
 
     def _appendSeedItem(self, parentItem: Any, seedIndex: int) -> None:
         child = qt.QTreeWidgetItem(parentItem)
@@ -1254,9 +1305,6 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         )
         rowLayout.addWidget(labelEdit, 1)
 
-        targetCombo = self._buildTargetCombo(seedIndex)
-        rowLayout.addWidget(targetCombo)
-
         # The empty-carve cue label: hidden until THIS row is highlighted
         # (toggle or placement) and its carved region turns out empty
         # (``EMPTY_CARVE_MESSAGE``).  Plain row text (ADR-0010) right where
@@ -1283,15 +1331,13 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         )
         rowLayout.addWidget(divergenceChip)
 
-        deleteButton = qt.QToolButton()
-        deleteButton.setAutoRaise(True)
-        deleteButton.setText("Delete")
-        deleteButton.setToolTip("Remove this seed")
-        deleteButton.connect(
-            "clicked(bool)",
-            lambda _checked, s=seedID: self.deleteSeed(self._resolveSeedIndex(s)),
+        # The overflow "..." menu (the row diet: at most four visible
+        # controls; the occasional actions -- retarget, restore, delete --
+        # sit one deliberate step away, out of the misclick path).
+        overflowButton, retargetMenu, restoreAction, deleteAction = (
+            self._buildSeedOverflow(seedIndex, seedID)
         )
-        rowLayout.addWidget(deleteButton)
+        rowLayout.addWidget(overflowButton)
 
         # a11y: name the owning segment + the visibility context in TEXT on
         # the row (ADR-0010 -- never colour/animation alone).  "Restore
@@ -1303,12 +1349,100 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             "highlight": highlightButton,
             "colour": colourButton,
             "label": labelEdit,
-            "target": targetCombo,
-            "delete": deleteButton,
+            "target": retargetMenu,
+            "overflow": overflowButton,
+            "restore": restoreAction,
+            "deleteAction": deleteAction,
             "status": statusLabel,
             "chip": divergenceChip,
         }
         return rowWidget
+
+    def _buildSeedOverflow(self, seedIndex: int, seedID: str) -> tuple:
+        """Compose the seed row's "..." overflow: Retarget / Restore / Delete.
+
+        Returns ``(button, retargetMenu, restoreAction, deleteAction)``.  The
+        retarget submenu carries the touched candidates top-first with the
+        BOUND segment checked (the former Target combo's model); Delete goes
+        through the snapshot-aware confirm.
+        """
+        overflowButton = qt.QToolButton()
+        overflowButton.setAutoRaise(True)
+        overflowButton.setText("...")
+        overflowButton.setToolTip("More actions for this seed")
+        overflowButton.setPopupMode(qt.QToolButton.InstantPopup)
+        menu = qt.QMenu(overflowButton)
+
+        retargetMenu = menu.addMenu("Retarget")
+        retargetMenu.setToolTip(
+            "The structure this seed is bound to (pick another to retarget)"
+        )
+        boundSegmentID = self._seedBindingSegmentID(seedIndex)
+        candidates = self._touchedCandidates(seedIndex)
+        if boundSegmentID and boundSegmentID not in candidates:
+            candidates = [boundSegmentID] + candidates
+        if candidates:
+            for segmentID in candidates:
+                action = retargetMenu.addAction(
+                    self._segmentName(segmentID) or segmentID
+                )
+                action.setCheckable(True)
+                action.setChecked(segmentID == boundSegmentID)
+                action.connect(
+                    "triggered()",
+                    lambda s=seedID, seg=segmentID: self._onRetargetAction(s, seg),
+                )
+        else:
+            unbound = retargetMenu.addAction("Unbound")
+            unbound.setEnabled(False)
+
+        restoreAction = menu.addAction("Restore placement view")
+        restoreAction.connect(
+            "triggered()", lambda s=seedID: self.restorePlacementView(s)
+        )
+
+        deleteAction = menu.addAction("Delete seed")
+        deleteAction.connect(
+            "triggered()", lambda s=seedID: self._onDeleteSeedAction(s)
+        )
+
+        overflowButton.setMenu(menu)
+        return overflowButton, retargetMenu, restoreAction, deleteAction
+
+    def _onRetargetAction(self, seedID: str, segmentID: str) -> None:
+        """Route a retarget-submenu pick into ``retargetSeed`` (ID-keyed)."""
+        if self._rebuilding:
+            return
+        index = self._resolveSeedIndex(seedID)
+        if index >= 0 and segmentID:
+            self.retargetSeed(index, segmentID)
+
+    def _onDeleteSeedAction(self, seedID: str) -> None:
+        """Delete via the overflow menu, confirming a snapshot-bearing seed.
+
+        A seed WITH a visibility snapshot carries a placement view worth a
+        pause; a plain snapshotless delete stays one click (re-placement is
+        the recovery path).  The programmatic ``deleteSeed`` seam stays
+        confirm-free for scripted callers.
+        """
+        index = self._resolveSeedIndex(seedID)
+        if index < 0:
+            return
+        if self._seedVisibilityContext(index):
+            label = self._seedLabel(index) or f"Seed {index + 1}"
+            if not self._confirmDestructive(
+                f'Delete seed "{label}"? Its placement view snapshot is '
+                "deleted with it."
+            ):
+                return
+        self.deleteSeed(index)
+
+    def _confirmDestructive(self, text: str) -> bool:
+        """The one destructive-action confirm seam (tests stub this)."""
+        return (
+            qt.QMessageBox.question(self, "Liver Volumetry", text)
+            == qt.QMessageBox.Yes
+        )
 
     def _seedContextToolTip(self, seedIndex: int) -> str:
         """The seed's owner + snapshot named in text (the a11y companion)."""
@@ -1324,30 +1458,6 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             f"Structure: {ownerName}. Visible at placement: {contextNames}. "
             "Restore placement view shows that view again."
         )
-
-    def _buildTargetCombo(self, seedIndex: int) -> Any:
-        """Compose the row's retarget combo: the touched candidates, top-first."""
-        combo = qt.QComboBox()
-        combo.setToolTip("The structure this seed is bound to (pick another to retarget)")
-        boundSegmentID = self._seedBindingSegmentID(seedIndex)
-        candidates = self._touchedCandidates(seedIndex)
-        if boundSegmentID and boundSegmentID not in candidates:
-            candidates = [boundSegmentID] + candidates
-        selected = 0
-        for i, segmentID in enumerate(candidates):
-            combo.addItem(self._segmentName(segmentID) or segmentID, segmentID)
-            if segmentID == boundSegmentID:
-                selected = i
-        if candidates:
-            combo.setCurrentIndex(selected)
-        else:
-            combo.addItem("Unbound", "")
-            combo.setEnabled(False)
-        combo.connect(
-            "activated(int)",
-            lambda _idx, s=self._seedID(seedIndex), c=combo: self._onTargetChanged(s, c),
-        )
-        return combo
 
     # ------------------------------------------------------------------ #
     # Binding + candidate readers (the target column's model)
