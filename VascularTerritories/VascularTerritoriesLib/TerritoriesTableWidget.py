@@ -125,6 +125,37 @@ _LOCK_GLYPH = "🔒"
 _LOCK_TEXT = "Locked"
 _LOCK_TOOLTIP = "Territory validated (Completed) — cycle status off Completed to edit"
 
+#: Stock icon resources for the icon-only Place toggle -- the SAME markups
+#: fiducial place-mode pair the LiverVolumetry seeds table uses, so the two
+#: tables read identically (the armed variant carries the persistent-place
+#: "+").  Resolved at runtime with a text-glyph fallback
+#: (``_apply_toggle_icon``) for a harness without the application's
+#: compiled-in resources.
+_PLACE_ICON_OFF = ":/Icons/MarkupsFiducialMouseModePlace.png"
+_PLACE_ICON_ON = ":/Icons/MarkupsFiducialMouseModePlaceAdd.png"
+
+
+def _apply_toggle_icon(button: Any, offPath: str, onPath: str, fallbackText: str) -> None:
+    """Make ``button`` icon-only with an unchecked/checked stock-icon pair.
+
+    The pair rides one ``qt.QIcon``'s Off/On states, so the checked state
+    swaps the glyph with no toggle handler -- and survives a signal-blocked
+    programmatic ``setChecked``.  Falls back to the short ``fallbackText``
+    when the stock resources are unavailable (a bare harness without the
+    application's compiled-in icons), so the toggle never renders blank;
+    identity stays on the tooltip + accessible name either way (ADR-0010 --
+    the icon never stands alone).
+    """
+    if qt.QIcon(offPath).isNull():
+        button.setText(fallbackText)
+        return
+    icon = qt.QIcon()
+    icon.addFile(offPath, qt.QSize(), qt.QIcon.Normal, qt.QIcon.Off)
+    checkedPath = onPath if not qt.QIcon(onPath).isNull() else offPath
+    icon.addFile(checkedPath, qt.QSize(), qt.QIcon.Normal, qt.QIcon.On)
+    button.setText("")
+    button.setIcon(icon)
+
 
 def _status_cell_text(status: int) -> str:
     """The status cell's GLYPH + TEXT for a status ordinal (ADR-0010)."""
@@ -838,8 +869,9 @@ class TerritoriesTableWidget(qt.QWidget):
         placeButton = qt.QToolButton()
         placeButton.setAutoRaise(True)
         placeButton.setCheckable(True)
-        placeButton.setText("Place")
+        _apply_toggle_icon(placeButton, _PLACE_ICON_OFF, _PLACE_ICON_ON, "Place")
         placeButton.setToolTip("Arm placement into this territory (exclusive)")
+        placeButton.setAccessibleName("Place seeds into this territory")
         placeButton.setChecked(
             _state.is_armed(self._displayNode)
             and _state.get_active_territory(self._displayNode) == territoryId

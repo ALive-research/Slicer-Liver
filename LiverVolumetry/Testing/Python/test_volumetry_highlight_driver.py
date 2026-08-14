@@ -500,9 +500,11 @@ def test_seed_row_names_owner_and_context_in_text(qt_widgets):
     assert "Segment 1" in tip, "the row text must name the context segments."
 
 
-def test_pin_toggle_carries_text_and_tooltip(qt_widgets):
-    """The Pin toggle is named in text + tooltip (ADR-0010) and its tooltip
-    no longer promises a visibility restore (the P1 trap)."""
+def test_pin_toggle_carries_icon_and_accessible_name(qt_widgets):
+    """The Pin toggle is icon-only (stock push-pin, text-glyph fallback where
+    the app's compiled-in resources are unavailable) and is NAMED via the
+    accessible name + tooltip (ADR-0010 -- the icon never stands alone); the
+    tooltip no longer promises a visibility restore (the P1 trap)."""
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
@@ -512,9 +514,19 @@ def test_pin_toggle_carries_text_and_tooltip(qt_widgets):
 
     button = table.highlightButton(0)
     assert button is not None
+    accessible = button.accessibleName
+    accessible = accessible() if callable(accessible) else accessible
+    assert "pin" in accessible.lower(), (
+        "the icon-only toggle must carry a naming accessibleName (ADR-0010)."
+    )
+    icon = button.icon
+    icon = icon() if callable(icon) else icon
     text = button.text
     text = text() if callable(text) else text
-    assert text == "Pin"
+    assert (icon is not None and not icon.isNull()) or text, (
+        "the toggle must show the stock pin icon or the text-glyph "
+        "fallback -- never a blank button."
+    )
     tip = button.toolTip
     tip = tip() if callable(tip) else tip
     assert "striped overlay" in tip, (
