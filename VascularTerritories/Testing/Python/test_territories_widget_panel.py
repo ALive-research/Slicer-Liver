@@ -115,7 +115,16 @@ def _make_widget(slicer):
     """Build a set-up ``VascularTerritoriesWidget`` on the launched scene."""
     from VascularTerritories import VascularTerritoriesWidget
 
-    widget = VascularTerritoriesWidget()
+    # Explicit parent: with parent=None, ScriptedLoadableModuleWidget's
+    # __init__ auto-runs setup() (and show()), so the explicit setup()
+    # below would run TWICE -- stacking two panels and registering
+    # duplicate scene observers that outlive cleanup() (the destroyed-ui
+    # 'enabled' storm, feedback_launched_widget_teardown_crash).
+    import qt
+
+    widgetParent = qt.QWidget()
+    qt.QVBoxLayout(widgetParent)
+    widget = VascularTerritoriesWidget(widgetParent)
     widget.setup()
     return widget
 

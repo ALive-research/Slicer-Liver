@@ -629,7 +629,16 @@ def test_enter_auto_arms_nothing_exit_disarms():
     except Exception as exc:  # pragma: no cover - import-environment dependent
         pytest.skip(f"VascularTerritoriesWidget not importable ({exc!r}) (ADR-0027).")
 
-    widget = VascularTerritoriesWidget()
+    # Explicit parent: with parent=None, ScriptedLoadableModuleWidget's
+    # __init__ auto-runs setup() (and show()), so the explicit setup()
+    # below would run TWICE -- stacking two panels and registering
+    # duplicate scene observers that outlive cleanup() (the destroyed-ui
+    # 'enabled' storm, feedback_launched_widget_teardown_crash).
+    import qt
+
+    widgetParent = qt.QWidget()
+    qt.QVBoxLayout(widgetParent)
+    widget = VascularTerritoriesWidget(widgetParent)
     widget.setup()
     # Drop the widget's scene observers before the autouse scene-clear fires.
     for event, handler in (
