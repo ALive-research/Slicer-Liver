@@ -482,30 +482,23 @@ def test_press_on_a_volume_row_control_selects_the_volume_row(qt_widgets):
 
 
 # --------------------------------------------------------------------------- #
-# EMPTY-CARVE CUE -- a selected seed whose carved region is empty names it in
+# EMPTY-CARVE CUE -- a pinned seed whose carved region is empty names it in
 # row text (never a silent nothing; the stripes have nothing to draw)
 # --------------------------------------------------------------------------- #
 
 
-def _select_seed_item(table, seedIndex):
-    """Select the tree item carrying ``seedIndex`` (manual walk; the item
-    iterator is not wrapped into Slicer's ``qt`` namespace)."""
-    import qt
-
-    tree = table.tree()
-    for t in range(tree.topLevelItemCount):
-        top = tree.topLevelItem(t)
-        for c in range(top.childCount()):
-            child = top.child(c)
-            if child.data(0, qt.Qt.UserRole) == seedIndex:
-                tree.setCurrentItem(child)
-                return True
-    return False
+def _shown(widget):
+    """True iff ``widget`` is explicitly shown (``isHidden`` tracks the
+    setVisible state regardless of the never-shown test parent)."""
+    hidden = widget.isHidden
+    hidden = hidden() if callable(hidden) else hidden
+    return not hidden
 
 
-def test_selecting_an_empty_carve_seed_shows_the_cue(qt_widgets, monkeypatch):
-    """Selecting a seed row whose carve is EMPTY shows the explicit text cue
-    on the row (``EMPTY_CARVE_MESSAGE``) -- silent nothing must not recur."""
+def test_pinning_an_empty_carve_seed_shows_the_cue(qt_widgets, monkeypatch):
+    """Pinning a seed whose carve is EMPTY shows the explicit text cue on the
+    row (``EMPTY_CARVE_MESSAGE``) -- silent nothing must not recur -- and the
+    cue names the REMEDY (hide covering segments or retarget)."""
     slicer = _slicer_or_skip()
     _qt_or_skip()
     from LiverVolumetryLib.VolumetrySeedsTableWidget import EMPTY_CARVE_MESSAGE
@@ -514,15 +507,15 @@ def test_selecting_an_empty_carve_seed_shows_the_cue(qt_widgets, monkeypatch):
     carrier.AddSeed(0.0, 0.0, 0.0)
     table = _make_table_or_skip(slicer, carrier)
     qt_widgets.append(table)
-    if not hasattr(table, "statusLabel"):
-        pytest.skip("VolumetrySeedsTableWidget has no statusLabel seam (ADR-0027).")
+    if not hasattr(table, "statusLabel") or not hasattr(table, "highlightButton"):
+        pytest.skip("VolumetrySeedsTableWidget has no cue/pin seam (ADR-0027).")
 
     monkeypatch.setattr(table, "_carvedRegionIsEmpty", lambda index: True)
 
-    assert _select_seed_item(table, 0), "the seed row must be selectable."
+    table.highlightButton(0).setChecked(True)
 
     status = table.statusLabel(0)
-    assert status is not None and status.isVisible(), (
+    assert status is not None and _shown(status), (
         "an empty carve must surface the row cue, not a silent nothing."
     )
     text = status.text
@@ -531,37 +524,40 @@ def test_selecting_an_empty_carve_seed_shows_the_cue(qt_widgets, monkeypatch):
     assert "covered by segments above" in text, (
         "the cue must NAME the cause in plain text (ADR-0010)."
     )
+    assert "hide covering segments" in text and "retarget" in text, (
+        "the cue must NAME the remedy, not just the cause."
+    )
 
 
-def test_non_empty_carve_shows_no_cue_and_deselect_clears(qt_widgets, monkeypatch):
-    """A normal (non-empty / unknown) carve keeps the row cueless, and moving
-    the selection to a volume row hides a previously shown cue."""
+def test_non_empty_carve_shows_no_cue_and_unpin_clears(qt_widgets, monkeypatch):
+    """A normal (non-empty / unknown) carve keeps the pinned row cueless, and
+    unpinning hides a previously shown cue."""
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
     carrier.AddSeed(0.0, 0.0, 0.0)
     table = _make_table_or_skip(slicer, carrier)
     qt_widgets.append(table)
-    if not hasattr(table, "statusLabel"):
-        pytest.skip("VolumetrySeedsTableWidget has no statusLabel seam (ADR-0027).")
+    if not hasattr(table, "statusLabel") or not hasattr(table, "highlightButton"):
+        pytest.skip("VolumetrySeedsTableWidget has no cue/pin seam (ADR-0027).")
 
-    # Non-empty carve: no cue on selection.
+    # Non-empty carve: no cue on pin.
     monkeypatch.setattr(table, "_carvedRegionIsEmpty", lambda index: False)
-    assert _select_seed_item(table, 0)
+    button = table.highlightButton(0)
+    button.setChecked(True)
     status = table.statusLabel(0)
-    assert status is not None and not status.isVisible(), (
+    assert status is not None and not _shown(status), (
         "a non-empty carve must not show the empty-carve cue."
     )
+    button.setChecked(False)
 
-    # Empty carve shown, then a volume-row selection clears it.
+    # Empty carve shown on pin, then unpinning clears it.
     monkeypatch.setattr(table, "_carvedRegionIsEmpty", lambda index: True)
-    table.tree().clearSelection()
-    assert _select_seed_item(table, 0)
-    assert table.statusLabel(0).isVisible()
-    volumeId = table.volumeIds()[0]
-    table.tree().setCurrentItem(table.volumeItem(volumeId))
-    assert not table.statusLabel(0).isVisible(), (
-        "selecting a volume row must clear the seed cue."
+    button.setChecked(True)
+    assert _shown(table.statusLabel(0))
+    button.setChecked(False)
+    assert not _shown(table.statusLabel(0)), (
+        "unpinning must clear the seed cue."
     )
 
 
