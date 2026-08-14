@@ -267,6 +267,64 @@ def _compute_rows(ph, carrier):
     return rows
 
 
+class _Region:
+    """A generated segment: name + voxel count + boolean mask on the phantom grid."""
+
+    def __init__(self, name, count, mask):
+        self.name = name
+        self.count = count
+        self.mask = mask
+
+
+def _generate(ph, carrier):
+    """Run generateSegments on the all-segments export -> import-ordered regions.
+
+    Voxel COUNTS alone can coincide between the correct region and a wrong one
+    (e.g. case 2: Parenchyma∖Segment_1 and Parenchyma∖Segment_4-flat are both
+    162.000 mL), so each region also carries its MASK for geometric asserts.
+    """
+    from slicer import util
+
+    export = _export_all(ph)
+    before = {n.GetID() for n in util.getNodesByClass("vtkMRMLSegmentationNode")}
+    try:
+        ph.logic.generateSegments(None, carrier, export)
+    finally:
+        ph.slicer.mrmlScene.RemoveNode(export)
+    generated = [n for n in util.getNodesByClass("vtkMRMLSegmentationNode")
+                 if n.GetID() not in before]
+    assert len(generated) == 1, "Generate must add exactly ONE segmentation node."
+    seg = generated[0].GetSegmentation()
+    entries = []
+    for i in range(seg.GetNumberOfSegments()):
+        sid = seg.GetNthSegmentID(i)
+        array = util.arrayFromSegmentBinaryLabelmap(generated[0], sid, ph.volume)
+        entries.append(_Region(
+            seg.GetNthSegment(i).GetName(),
+            int(array.sum()) if array is not None else -1,
+            array.astype(bool) if array is not None else None))
+    return entries
+
+
+def _counts_by_name(entries):
+    return {r.name: r.count for r in entries}
+
+
+def _contains(region, ijk):
+    """True iff the region's mask covers the (i, j, k) voxel (array is [k][j][i])."""
+    i, j, k = ijk
+    return region.mask is not None and bool(region.mask[k, j, i])
+
+
+def _region_at(entries, ijk):
+    """The unique generated region covering the (i, j, k) voxel."""
+    hits = [r for r in entries if _contains(r, ijk)]
+    assert len(hits) == 1, (
+        f"exactly one generated segment must own voxel {ijk}; got "
+        f"{[r.name for r in hits]!r}")
+    return hits[0]
+
+
 def _ml(voxels):
     return voxels * VOXEL_ML
 
@@ -300,6 +358,31 @@ def test_case1_compute_single_seed_measures_the_tumor(phantom):
     assert _pct(total_pct) == pytest.approx(100.0, abs=0.01)
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="G1 name shift: generateSegments names index 0 'Unassigned' and 1..N "
+    "from the seeds, but the no-resection GenerateSegmentsLabelMap keeps seeded "
+    "voxels at their original export label values (< 99) and marks the leftover "
+    "99; the labelmap import orders segments by ascending label value, so the "
+    "leftover imports LAST and every name lands one region off (the tumor reads "
+    "'Unassigned' and the leftover reads 'SeedTumor').",
+)
+def test_case1_generate_names_bind_to_the_seed_regions(phantom):
+    """The seeded region carries the SEED's label; the leftover is 'Unassigned'."""
+    carrier = _new_carrier(phantom, "c1g")
+    carrier.AddVolume("V1")
+    _add_seed(phantom, carrier, "V1", SEED_TUMOR, "Tumor", ALL_NAMES, "SeedTumor")
+
+    entries = _generate(phantom, carrier)
+
+    assert _counts_by_name(entries) == {
+        "SeedTumor": phantom.truth["Tumor"],
+        "Unassigned": phantom.truth["Parenchyma"] - phantom.truth["Tumor"],
+    }
+    assert _region_at(entries, SEED_TUMOR).name == "SeedTumor", (
+        "the segment carrying the seed's label must CONTAIN the seed's voxel.")
+
+
 # --------------------------------------------------------------------------- #
 # Case 2 -- carve context: only Parenchyma + Segment_1 visible, seed outside
 # Segment_1.  The seed's effective region is Parenchyma∖Segment_1 = 162.000.
@@ -316,6 +399,41 @@ def test_case2_compute_measures_the_carved_parenchyma(phantom):
     rows = _compute_rows(phantom, carrier)
 
     assert rows[0][1] == pytest.approx(_ml(phantom.truth["Parenchyma∖Segment_1"]), abs=0.01)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="G3 binding/carve-blind: generateSegments derives the seed's region "
+    "from the FLAT ticked-segments export value at the seed coordinate "
+    "(GetROIPointsLabelValue), not from the carrier's bound owner + snapshot -- "
+    "the seed Compute measures as 162.000 mL materialises as the covering "
+    "slab's 54.000 mL flat region instead (and G1 shifts the names on top; the "
+    "count map even COINCIDES with the correct one here, so the geometric "
+    "containment asserts below are the real pin).",
+)
+def test_case2_generate_honours_the_binding_and_the_carve(phantom):
+    """Generate must materialise the SAME region Compute measures: the seed's
+    bound Parenchyma minus its snapshot's Segment_1 (162.000 mL), leaving
+    Unassigned = the export's remaining 54.000 mL (OQ-C: 'Unassigned' ==
+    everything not claimed by any seed's effective region)."""
+    carrier = _new_carrier(phantom, "c2g")
+    carrier.AddVolume("V1")
+    _add_seed(phantom, carrier, "V1", SEED_S4, "Parenchyma",
+              ["Parenchyma", "Segment_1"], "SeedPar")
+
+    entries = _generate(phantom, carrier)
+
+    assert _counts_by_name(entries) == {
+        "SeedPar": phantom.truth["Parenchyma∖Segment_1"],
+        "Unassigned": phantom.truth["Segment_1"],
+    }
+    # Geometry, not just counts: the current output's leftover HAPPENS to also
+    # read 162.000 (Parenchyma minus the flat slab under the seed), so the
+    # count map alone can pass while the region is the wrong shape.
+    assert _region_at(entries, SEED_S4).name == "SeedPar", (
+        "the claimed region must contain the seed's own voxel.")
+    assert _region_at(entries, SEED_S1).name == "Unassigned", (
+        "the snapshot's Segment_1 is the only unclaimed region.")
 
 
 # --------------------------------------------------------------------------- #
@@ -341,6 +459,24 @@ def test_case3_compute_empty_carve_yields_an_explicit_zero_row(phantom):
     assert rows[0][1] == pytest.approx(0.0, abs=0.01)
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="G3 binding/carve-blind: an empty-carve seed must claim NOTHING, but "
+    "generateSegments materialises the flat export label under the seed "
+    "coordinate (Segment_1's 54.000 mL slab) instead.",
+)
+def test_case3_generate_empty_carve_contributes_nothing(phantom):
+    """A seed whose effective region is empty generates NO claimed region:
+    the output is the 'Unassigned' leftover alone (matching Compute's 0 mL)."""
+    carrier = _new_carrier(phantom, "c3g")
+    carrier.AddVolume("V1")
+    _add_seed(phantom, carrier, "V1", SEED_S1, "Parenchyma", ALL_NAMES, "SeedEmpty")
+
+    entries = _generate(phantom, carrier)
+
+    assert _counts_by_name(entries) == {"Unassigned": phantom.truth["Parenchyma"]}
+
+
 # --------------------------------------------------------------------------- #
 # Case 4 -- one volume, two seeds on DISJOINT segments (only Segment_2 +
 # Segment_3 visible in both snapshots): the row is their union, 108.000.
@@ -362,6 +498,39 @@ def test_case4_compute_unions_disjoint_seed_regions(phantom):
         _ml(phantom.truth["Segment_2"] + phantom.truth["Segment_3"]), abs=0.01)
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="G3 binding/carve-blind: both snapshots HIDE the tumor, so each seed "
+    "claims its whole slab (54.000 + 54.000), but the flat export removes the "
+    "tumor-covered voxels from both slabs regardless of the snapshots -- "
+    "Generate materialises 50.644 + 50.203 and drops the tumor overlap into "
+    "'Unassigned' (and G1 shifts the names on top).  OQ-A: Generate's per-SEED "
+    "segments vs Compute's single per-VOLUME row is a granularity the "
+    "maintainer must decide; this test keeps the code's per-seed shape.",
+)
+def test_case4_generate_materialises_the_snapshot_regions(phantom):
+    carrier = _new_carrier(phantom, "c4g")
+    carrier.AddVolume("V1")
+    context = ["Segment_2", "Segment_3"]
+    _add_seed(phantom, carrier, "V1", SEED_S2, "Segment_2", context, "SeedS2")
+    _add_seed(phantom, carrier, "V1", SEED_S3, "Segment_3", context, "SeedS3")
+
+    entries = _generate(phantom, carrier)
+
+    assert _counts_by_name(entries) == {
+        "SeedS2": phantom.truth["Segment_2"],
+        "SeedS3": phantom.truth["Segment_3"],
+        "Unassigned": phantom.truth["Parenchyma"]
+        - phantom.truth["Segment_2"] - phantom.truth["Segment_3"],
+    }
+    assert _region_at(entries, SEED_S2).name == "SeedS2"
+    assert _region_at(entries, SEED_S3).name == "SeedS3"
+    # The snapshots HIDE the tumor, so the tumor-covered slab voxels belong to
+    # the slabs' claims, never to 'Unassigned'.
+    assert _region_at(entries, TUMOR_IN_S2).name == "SeedS2"
+    assert _region_at(entries, TUMOR_IN_S3).name == "SeedS3"
+
+
 # --------------------------------------------------------------------------- #
 # Case 5 -- one volume, two seeds in the SAME segment: no double-count.
 # --------------------------------------------------------------------------- #
@@ -379,6 +548,34 @@ def test_case5_compute_same_segment_counts_once(phantom):
     assert rows[0][1] == pytest.approx(_ml(phantom.truth["Segment_2"]), abs=0.01), (
         "two seeds on the same (owner, snapshot) measure the segment ONCE -- "
         "54.000, never 108.")
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="G2 same-label crash: two seeds resolving to the SAME flat export "
+    "label produce ONE labelmap segment, but the naming loop indexes one "
+    "segment per seed -- GetNthSegment returns None and Generate raises "
+    "AttributeError (also leaking the scratch generated labelmap node, whose "
+    "RemoveNode is skipped by the exception).",
+)
+def test_case5_generate_two_seeds_same_segment_must_not_raise(phantom):
+    """Two seeds in one segment generate that segment once + the leftover."""
+    carrier = _new_carrier(phantom, "c5g")
+    carrier.AddVolume("V1")
+    _add_seed(phantom, carrier, "V1", SEED_S2, "Segment_2", ["Segment_2"], "SeedA")
+    _add_seed(phantom, carrier, "V1", SEED_S2_B, "Segment_2", ["Segment_2"], "SeedB")
+
+    entries = _generate(phantom, carrier)  # must not raise
+
+    counts = sorted(r.count for r in entries)
+    assert counts == sorted([
+        phantom.truth["Segment_2"],
+        phantom.truth["Parenchyma"] - phantom.truth["Segment_2"],
+    ])
+    claimed = _region_at(entries, SEED_S2)
+    assert _contains(claimed, SEED_S2_B), (
+        "ONE region claims both seeds' voxels (they share the segment).")
+    assert claimed.count == phantom.truth["Segment_2"]
 
 
 # --------------------------------------------------------------------------- #
@@ -400,6 +597,27 @@ def test_case6_compute_two_disjoint_volumes(phantom):
     assert [r[0] for r in rows] == ["VolA", "VolB", "Total volume (GenerationMatrixPhantom)"]
     assert rows[0][1] == pytest.approx(_ml(phantom.truth["Segment_1"]), abs=0.01)
     assert rows[1][1] == pytest.approx(_ml(phantom.truth["Segment_4"]), abs=0.01)
+
+
+def test_case6_generate_tiles_the_disjoint_regions(phantom):
+    """The materialised REGIONS are right on disjoint claims: each slab once +
+    the 108.000 leftover (the region↔name mapping defect is pinned by the G1
+    xfail on case 1 -- this pins the tiling, which already holds)."""
+    carrier = _new_carrier(phantom, "c6g")
+    carrier.AddVolume("V1")
+    carrier.AddVolume("V2")
+    _add_seed(phantom, carrier, "V1", SEED_S1, "Segment_1", ["Segment_1"], "SeedS1")
+    _add_seed(phantom, carrier, "V2", SEED_S4, "Segment_4", ["Segment_4"], "SeedS4")
+
+    entries = _generate(phantom, carrier)
+
+    assert len(entries) == 3
+    assert _region_at(entries, SEED_S1).count == phantom.truth["Segment_1"]
+    assert _region_at(entries, SEED_S4).count == phantom.truth["Segment_4"]
+    assert _region_at(entries, SEED_TUMOR).count == (
+        phantom.truth["Parenchyma"]
+        - phantom.truth["Segment_1"] - phantom.truth["Segment_4"]), (
+        "the unclaimed middle (Segment_2+Segment_3) is the leftover region.")
 
 
 # --------------------------------------------------------------------------- #
@@ -433,6 +651,26 @@ def test_case7_compute_rows_are_independent_and_double_count_overlap(phantom):
         f"the {_ml(overlap):.3f} mL overlap is double-counted across rows (OQ-B).")
 
 
+def test_case7_generate_overlap_ownership_is_top_layer_wins(phantom):
+    """OQ-B's Generate side pinned: the flat export resolves tumor∩Segment_2 to
+    the TUMOR (the higher layer wins at export), independent of volume order --
+    V1's materialised region is Segment_2∖Tumor (50.644) even though V1's
+    Compute row reads the full 54.000.  The two products disagree on overlap
+    ownership; the maintainer must pick one semantics."""
+    carrier = _new_carrier(phantom, "c7g")
+    carrier.AddVolume("V1")
+    carrier.AddVolume("V2")
+    _add_seed(phantom, carrier, "V1", SEED_S2, "Segment_2", ["Segment_2"], "SeedS2")
+    _add_seed(phantom, carrier, "V2", SEED_TUMOR, "Tumor", ["Tumor"], "SeedT")
+
+    entries = _generate(phantom, carrier)
+
+    assert _region_at(entries, SEED_S2).count == phantom.truth["Segment_2∖Tumor"]
+    assert _region_at(entries, SEED_TUMOR).count == phantom.truth["Tumor"]
+    # The ownership pin: a tumor∩Segment_2 voxel belongs to the TUMOR's region.
+    assert _region_at(entries, TUMOR_IN_S2).count == phantom.truth["Tumor"]
+
+
 # --------------------------------------------------------------------------- #
 # Case 8 -- carve + overlap combined: V1 in Segment_2 under FULL visibility
 # (carved to Segment_2∖Tumor), V2 in the tumor -- disjoint by construction.
@@ -454,6 +692,27 @@ def test_case8_compute_carved_claims_are_disjoint(phantom):
     assert rows[1][1] == pytest.approx(_ml(phantom.truth["Tumor"]), abs=0.01)
 
 
+def test_case8_generate_tiles_without_overlap(phantom):
+    """With carved-disjoint claims the export's flat regions COINCIDE with the
+    contract regions, so the tiling is right: 50.644 + 7.153 + 158.203 (the
+    name mapping defect remains G1's xfail)."""
+    carrier = _new_carrier(phantom, "c8g")
+    carrier.AddVolume("V1")
+    carrier.AddVolume("V2")
+    _add_seed(phantom, carrier, "V1", SEED_S2, "Segment_2", ALL_NAMES, "SeedS2")
+    _add_seed(phantom, carrier, "V2", SEED_TUMOR, "Tumor", ALL_NAMES, "SeedT")
+
+    entries = _generate(phantom, carrier)
+
+    assert _region_at(entries, SEED_S2).count == phantom.truth["Segment_2∖Tumor"]
+    assert _region_at(entries, SEED_TUMOR).count == phantom.truth["Tumor"]
+    # V1's snapshot SHOWS the tumor, so tumor∩Segment_2 belongs to V2's claim.
+    assert _region_at(entries, TUMOR_IN_S2).count == phantom.truth["Tumor"]
+    assert _region_at(entries, SEED_S1).count == (
+        phantom.truth["Parenchyma"]
+        - phantom.truth["Segment_2∖Tumor"] - phantom.truth["Tumor"])
+
+
 # --------------------------------------------------------------------------- #
 # Case 9 -- mixed snapshots in ONE volume: seed A in Segment_2 under FULL
 # visibility (50.644); seed B in Segment_3 with the tumor HIDDEN (whole
@@ -473,6 +732,37 @@ def test_case9_compute_unions_regions_from_different_snapshots(phantom):
 
     assert rows[0][1] == pytest.approx(
         _ml(phantom.truth["Segment_2∖Tumor"] + phantom.truth["Segment_3"]), abs=0.01)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="G3 binding/carve-blind: seed B's snapshot hides the tumor, so its "
+    "claim includes tumor∩Segment_3 (whole Segment_3 = 54.000), but the flat "
+    "export drops those voxels into the tumor label and Generate materialises "
+    "only Segment_3∖Tumor (50.203) -- the seeded total reads 100.847 instead "
+    "of Compute's 104.644 (and G1 shifts the names on top).",
+)
+def test_case9_generate_respects_per_seed_snapshots(phantom):
+    carrier = _new_carrier(phantom, "c9g")
+    carrier.AddVolume("V1")
+    _add_seed(phantom, carrier, "V1", SEED_S2, "Segment_2", ALL_NAMES, "SeedA")
+    no_tumor = ["Parenchyma", "Segment_1", "Segment_2", "Segment_3", "Segment_4"]
+    _add_seed(phantom, carrier, "V1", SEED_S3, "Segment_3", no_tumor, "SeedB")
+
+    entries = _generate(phantom, carrier)
+
+    assert _counts_by_name(entries) == {
+        "SeedA": phantom.truth["Segment_2∖Tumor"],
+        "SeedB": phantom.truth["Segment_3"],
+        "Unassigned": phantom.truth["Parenchyma"]
+        - phantom.truth["Segment_2∖Tumor"] - phantom.truth["Segment_3"],
+    }
+    assert _region_at(entries, SEED_S2).name == "SeedA"
+    assert _region_at(entries, SEED_S3).name == "SeedB"
+    # Per-seed snapshots: A shows the tumor (tumor∩Segment_2 stays unclaimed);
+    # B hides it (tumor∩Segment_3 belongs to B's claim).
+    assert _region_at(entries, TUMOR_IN_S2).name == "Unassigned"
+    assert _region_at(entries, TUMOR_IN_S3).name == "SeedB"
 
 
 # --------------------------------------------------------------------------- #
@@ -497,6 +787,23 @@ def test_case10_compute_skips_the_ungrouped_seed(phantom):
     assert rows[0][1] == pytest.approx(_ml(phantom.truth["Segment_1"]), abs=0.01)
 
 
+def test_case10_generate_includes_the_ungrouped_seed(phantom):
+    """Generate walks ALL carrier seeds (grouped or not): the legacy seed's
+    region materialises alongside the grouped one's (OQ-E divergence from the
+    per-volume Compute, which skipped it)."""
+    carrier = _new_carrier(phantom, "c10g")
+    carrier.AddVolume("V1")
+    _add_seed(phantom, carrier, "V1", SEED_S1, "Segment_1", ["Segment_1"], "SeedS1")
+    _add_seed(phantom, carrier, "", SEED_S4, "Segment_4", ["Segment_4"], "SeedLegacy")
+
+    entries = _generate(phantom, carrier)
+
+    assert len(entries) == 3
+    assert _region_at(entries, SEED_S1).count == phantom.truth["Segment_1"]
+    assert _region_at(entries, SEED_S4).count == phantom.truth["Segment_4"], (
+        "the ungrouped seed's region IS materialised (OQ-E).")
+
+
 # --------------------------------------------------------------------------- #
 # Case 11 -- zero seeds: Generate is widget-gated ("Place at least one seed.",
 # pinned in test_volumetry_action_enablement); at LOGIC level it degrades to a
@@ -504,6 +811,14 @@ def test_case10_compute_skips_the_ungrouped_seed(phantom):
 # ticked-segments path (B1): one TRUE per-segment row each + the explicit
 # ticked-total row.
 # --------------------------------------------------------------------------- #
+
+
+def test_case11_generate_zero_seeds_yields_the_unassigned_whole(phantom):
+    carrier = _new_carrier(phantom, "c11")
+
+    entries = _generate(phantom, carrier)
+
+    assert _counts_by_name(entries) == {"Unassigned": phantom.truth["Parenchyma"]}
 
 
 def test_case11_compute_zero_seeds_reports_per_segment_rows(phantom):
