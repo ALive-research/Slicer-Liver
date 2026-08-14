@@ -11,17 +11,17 @@ drivers are:
   onto the display node's transient ``HighlightSeedID`` member directly (no
   row selection, no visibility restore: the seed's snapshot equals the live
   visibility at placement).
-* the per-seed HIGHLIGHT toggle -- checking it RESTORES the seed's visibility
-  snapshot (``VisibilityCarve``) and publishes its highlight; the toggles are
-  exclusive; unchecking clears the highlight.
+* the per-seed PIN toggle -- checking it publishes the seed's highlight;
+  the toggles are exclusive; unchecking clears the highlight.  The pin is
+  STRIPES ONLY: it NEVER touches the segment visibility (restoring the
+  placement view is the explicit "Restore placement view" affordance,
+  ``test_volumetry_pin_restore.py``).
 
 Pins on the table widget:
 
-* TOGGLE RESTORES + PUBLISHES -- checking a seed's Highlight button flips the
-  structure-source visibility to exactly the seed's snapshot and publishes
-  the seed's stable ID on the shared display node.
-* EMPTY SNAPSHOT IS A NO-OP -- a legacy seed with no context must not blank
-  the view.
+* PIN NEVER RESTORES -- checking a seed's Pin button publishes the seed's
+  stable ID on the shared display node and leaves the structure-source
+  visibility byte-identical.
 * EXCLUSIVITY -- checking another seed's toggle moves the highlight and
   unchecks the first.
 * UNTOGGLE CLEARS -- unchecking clears ``HighlightSeedID`` back to empty.
@@ -146,13 +146,14 @@ def _select_seed_row(table, seedIndex):
 
 
 # --------------------------------------------------------------------------- #
-# The Highlight toggle -- restore + publish, exclusivity, clear
+# The Pin toggle -- publish WITHOUT touching visibility, exclusivity, clear
 # --------------------------------------------------------------------------- #
 
 
-def test_toggling_highlight_restores_snapshot_and_publishes(qt_widgets):
-    """Checking a seed's Highlight button restores its snapshot and publishes
-    ``highlightSeed`` on the shared display node."""
+def test_toggling_pin_publishes_without_touching_visibility(qt_widgets):
+    """Checking a seed's Pin button publishes ``HighlightSeedID`` and leaves
+    the structure-source visibility byte-identical (the pin is stripes ONLY;
+    the restore moved to the explicit Restore placement view affordance)."""
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
@@ -168,29 +169,27 @@ def test_toggling_highlight_restores_snapshot_and_publishes(qt_widgets):
     qt_widgets.append(table)
     table.setStructureSource(segmentation)
 
-    # Start from a DIFFERENT live visibility so the restore is observable.
+    # A live visibility DIFFERENT from the snapshot: the pin must not move it.
     segDisplay.SetSegmentVisibility("Parenchyma", False)
     segDisplay.SetSegmentVisibility("Segment_1", False)
     segDisplay.SetSegmentVisibility("Tumor", True)
 
     button = table.highlightButton(0)
-    assert button is not None, "the seed row must carry a Highlight toggle."
+    assert button is not None, "the seed row must carry a Pin toggle."
     button.setChecked(True)
 
-    assert segDisplay.GetSegmentVisibility("Parenchyma"), (
-        "the Highlight toggle must SHOW the snapshot's segments."
+    assert not segDisplay.GetSegmentVisibility("Parenchyma"), (
+        "the Pin toggle must NEVER change the segment visibility."
     )
-    assert segDisplay.GetSegmentVisibility("Segment_1")
-    assert not segDisplay.GetSegmentVisibility("Tumor"), (
-        "the Highlight toggle must HIDE segments outside the snapshot."
-    )
+    assert not segDisplay.GetSegmentVisibility("Segment_1")
+    assert segDisplay.GetSegmentVisibility("Tumor")
     assert _highlight_id(display) == _seed_id(carrier, 0), (
-        "the Highlight toggle must publish its seed's STABLE ID."
+        "the Pin toggle must publish its seed's STABLE ID."
     )
 
 
-def test_toggling_a_snapshotless_seed_keeps_the_view(qt_widgets):
-    """A legacy seed (empty context) must not blank the live visibility."""
+def test_unpinning_leaves_visibility_untouched_too(qt_widgets):
+    """Unchecking the Pin changes no visibility either (symmetry)."""
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
@@ -198,7 +197,8 @@ def test_toggling_a_snapshotless_seed_keeps_the_view(qt_widgets):
     segmentation = _make_segmentation(slicer)
     segDisplay = segmentation.GetDisplayNode()
 
-    carrier.AddSeed(0.0, 0.0, 0.0)  # no context snapshot
+    carrier.AddSeed(0.0, 0.0, 0.0)
+    _set_context(carrier, 0, ["Segment_1", "Parenchyma"])
 
     table = _make_table_or_skip(slicer, carrier, display)
     qt_widgets.append(table)
@@ -206,14 +206,14 @@ def test_toggling_a_snapshotless_seed_keeps_the_view(qt_widgets):
 
     segDisplay.SetSegmentVisibility("Tumor", True)
 
-    table.highlightButton(0).setChecked(True)
+    button = table.highlightButton(0)
+    button.setChecked(True)
+    button.setChecked(False)
 
     assert segDisplay.GetSegmentVisibility("Tumor"), (
-        "an empty snapshot is a NO-OP -- the live view stays."
+        "neither pinning nor unpinning may change the visibility."
     )
-    assert _highlight_id(display) == _seed_id(carrier, 0), (
-        "the highlight still publishes for a snapshotless seed."
-    )
+    assert _highlight_id(display) == ""
 
 
 def test_highlight_toggles_are_exclusive(qt_widgets):
@@ -500,8 +500,9 @@ def test_seed_row_names_owner_and_context_in_text(qt_widgets):
     assert "Segment 1" in tip, "the row text must name the context segments."
 
 
-def test_highlight_toggle_carries_text_and_tooltip(qt_widgets):
-    """The Highlight toggle is named in text + tooltip (ADR-0010)."""
+def test_pin_toggle_carries_text_and_tooltip(qt_widgets):
+    """The Pin toggle is named in text + tooltip (ADR-0010) and its tooltip
+    no longer promises a visibility restore (the P1 trap)."""
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
@@ -513,12 +514,15 @@ def test_highlight_toggle_carries_text_and_tooltip(qt_widgets):
     assert button is not None
     text = button.text
     text = text() if callable(text) else text
-    assert text == "Highlight"
+    assert text == "Pin"
     tip = button.toolTip
     tip = tip() if callable(tip) else tip
-    assert "striped overlay" in tip and "restores the visibility" in tip, (
-        "the toggle's tooltip must say what it shows AND that it restores "
-        "the placement visibility (ADR-0010)."
+    assert "striped overlay" in tip, (
+        "the toggle's tooltip must say what it shows (ADR-0010)."
+    )
+    assert "restores" not in tip.lower(), (
+        "the pin tooltip must NOT promise a visibility restore -- the "
+        "restore is its own explicit affordance."
     )
 
 

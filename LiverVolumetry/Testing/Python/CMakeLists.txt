@@ -141,6 +141,12 @@ set(_volumetry_pytest_files
   # inert; the row names owner + context in text (ADR-0010).  Qt + wrapped
   # carrier + display node -> SKIPS bare, RUNS launched (ADR-0027).
   test_volumetry_highlight_driver.py
+  # territory-usability -- "Restore placement view": explicit, symmetric,
+  # depth-one restore decoupled from the Pin toggle (capture "my view" /
+  # return / switch reuses the capture / user takeover ends the context /
+  # stale-snapshot hard-guard / placement guard / banner text).  Qt +
+  # wrapped carrier + display node -> SKIPS bare, RUNS launched (ADR-0027).
+  test_volumetry_pin_restore.py
   # territory-usability -- the per-seed VISIBILITY CONTEXT slot on the carrier:
   # ordered round-trip, parallel-slot lockstep on remove, empty default, and
   # the .vsd.json storage round-trip.  Wrapped C++ node -> SKIPS bare, RUNS
