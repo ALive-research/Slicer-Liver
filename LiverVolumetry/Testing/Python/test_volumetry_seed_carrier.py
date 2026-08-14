@@ -263,6 +263,141 @@ def test_seed_binding_defaults_empty_and_deletes_in_lockstep():
 
 
 # --------------------------------------------------------------------------- #
+# Stable per-seed IDs (identity across deletions + save/load)
+# --------------------------------------------------------------------------- #
+
+
+GET_ID_METHOD = "GetNthSeedID"
+GET_INDEX_BY_ID_METHOD = "GetSeedIndexByID"
+GET_ID_COUNTER_METHOD = "GetSeedIDCounter"
+
+
+def _make_id_carrier_or_skip(slicer, name="VolumetrySeedIDsTest"):
+    carrier = _make_carrier_or_skip(slicer, name)
+    for method in (GET_ID_METHOD, GET_INDEX_BY_ID_METHOD, GET_ID_COUNTER_METHOD):
+        if not hasattr(carrier, method):
+            pytest.skip(
+                f"{SEEDS_NODE_CLASS} has no {method} -- the stable per-seed "
+                "ID slot has not landed (ADR-0027)."
+            )
+    return carrier
+
+
+def test_seed_ids_are_minted_distinct_and_monotonic():
+    """Every ``AddSeed`` mints a fresh, distinct stable ID off a growing counter.
+
+    The segment-ID / markup control-point-ID precedent: identity is a stable
+    string, never a mutable index.
+    """
+    slicer = _slicer_or_skip()
+    carrier = _make_id_carrier_or_skip(slicer)
+
+    ids = [
+        carrier.GetNthSeedID(carrier.AddSeed(float(i), 0.0, 0.0)) for i in range(3)
+    ]
+
+    assert all(ids), "every seed must carry a non-empty stable ID."
+    assert len(set(ids)) == len(ids), "minted IDs must be distinct."
+    assert carrier.GetSeedIDCounter() >= len(ids), (
+        "the mint counter must have grown with every mint."
+    )
+
+
+def test_seed_ids_survive_deleting_another_seed():
+    """Deleting one seed leaves every OTHER seed's ID (and resolution) intact.
+
+    Indices shift under deletion; the stable IDs must not -- that is the
+    whole point of the slot (identity-bearing consumers key on the ID).
+    """
+    slicer = _slicer_or_skip()
+    carrier = _make_id_carrier_or_skip(slicer)
+
+    for i in range(3):
+        carrier.AddSeed(float(i), 0.0, 0.0)
+    id0, id1, id2 = (carrier.GetNthSeedID(i) for i in range(3))
+
+    carrier.RemoveNthSeed(1)
+
+    assert carrier.GetNthSeedID(0) == id0
+    assert carrier.GetNthSeedID(1) == id2, "the tail's ID shifts up in lockstep."
+    assert carrier.GetSeedIndexByID(id0) == 0
+    assert carrier.GetSeedIndexByID(id2) == 1, (
+        "GetSeedIndexByID must return the seed's CURRENT index after shifts."
+    )
+    assert carrier.GetSeedIndexByID(id1) == -1, (
+        "a deleted seed's ID must resolve to -1 (gone, never recycled)."
+    )
+
+
+def test_deleted_seed_ids_are_never_reused():
+    """A new mint after a deletion never re-issues the retired ID."""
+    slicer = _slicer_or_skip()
+    carrier = _make_id_carrier_or_skip(slicer)
+
+    for i in range(3):
+        carrier.AddSeed(float(i), 0.0, 0.0)
+    retired = carrier.GetNthSeedID(2)
+    carrier.RemoveNthSeed(2)
+
+    fresh = carrier.GetNthSeedID(carrier.AddSeed(9.0, 9.0, 9.0))
+
+    assert fresh != retired, (
+        "the mint counter never decrements: a deleted seed's ID is retired "
+        "for the carrier's lifetime."
+    )
+
+
+def test_seed_index_by_id_handles_missing_and_empty_ids():
+    slicer = _slicer_or_skip()
+    carrier = _make_id_carrier_or_skip(slicer)
+
+    carrier.AddSeed(0.0, 0.0, 0.0)
+
+    assert carrier.GetSeedIndexByID("") == -1
+    assert carrier.GetSeedIndexByID("never_minted") == -1
+
+
+def test_storage_round_trips_seed_ids_and_counter(tmp_path):
+    """Seed IDs + the mint counter round-trip; a reload can never re-mint.
+
+    The document carries each seed's ``id`` and the carrier's mint counter,
+    so identity survives save/load AND a post-reload ``AddSeed`` cannot
+    collide with any ID the saved session ever minted (including deleted
+    ones).
+    """
+    slicer = _slicer_or_skip()
+    carrier = _make_id_carrier_or_skip(slicer)
+    storage = slicer.mrmlScene.AddNewNodeByClass(SEEDS_STORAGE_CLASS)
+    if storage is None:
+        pytest.skip(f"{SEEDS_STORAGE_CLASS} not registered (ADR-0027).")
+
+    for i in range(3):
+        carrier.AddSeed(float(i), 0.0, 0.0)
+    retired = carrier.GetNthSeedID(1)
+    carrier.RemoveNthSeed(1)  # retire an ID before saving
+    savedIDs = [carrier.GetNthSeedID(i) for i in range(carrier.GetNumberOfSeeds())]
+
+    path = str(tmp_path / "seeds_ids.vsd.json")
+    storage.SetFileName(path)
+    assert storage.WriteData(carrier) != 0
+
+    reloaded = slicer.mrmlScene.AddNewNodeByClass(SEEDS_NODE_CLASS, "ReloadedIDs")
+    assert storage.ReadData(reloaded) != 0
+
+    assert [
+        reloaded.GetNthSeedID(i) for i in range(reloaded.GetNumberOfSeeds())
+    ] == savedIDs, "stable IDs must round-trip through storage."
+    for i, seedID in enumerate(savedIDs):
+        assert reloaded.GetSeedIndexByID(seedID) == i
+
+    fresh = reloaded.GetNthSeedID(reloaded.AddSeed(9.0, 9.0, 9.0))
+    assert fresh not in set(savedIDs) | {retired}, (
+        "the round-tripped mint counter must keep post-reload mints past "
+        "EVERY ID the saved session handed out (never-reuse across save/load)."
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Storage round-trip
 # --------------------------------------------------------------------------- #
 

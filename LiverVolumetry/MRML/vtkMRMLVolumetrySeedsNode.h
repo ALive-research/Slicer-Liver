@@ -83,6 +83,14 @@ class vtkStringArray;
  * \par Field roster (parallel per-seed vectors)
  *
  *   - ``Seeds``       — ordered RAS coordinates.
+ *   - ``SeedIDs``     — per-seed STABLE identity string (e.g. ``"seed_7"``),
+ *     minted at ``AddSeed`` from a monotonically-increasing counter persisted
+ *     on the node and NEVER reused after a deletion.  Identity-bearing
+ *     consumers (the highlight channel, table row keys, pipeline seed
+ *     resolution) address seeds by this ID; the placement INDEX remains a
+ *     positional accessor only (the segment-ID / markup control-point-ID
+ *     precedent: indices shift under deletion and save/load, stable strings
+ *     do not).
  *   - ``SeedLabels``  — per-seed segment-name label.
  *   - ``SeedColors``  — per-seed RGB display colour.
  *   - ``SeedBindings``— per-seed structure binding: the ``(segmentation node
@@ -159,6 +167,24 @@ public:
   /// in order.  Fires ONE ModifiedEvent; a no-op for an out-of-range index.
   /// Returns true iff a seed was removed.
   bool RemoveNthSeed(int i);
+
+  //--------------------------------------------------------------------------
+  // Stable per-seed IDs (identity across deletions + save/load)
+  //--------------------------------------------------------------------------
+
+  /// The i-th seed's STABLE ID (e.g. ``"seed_7"``), minted at ``AddSeed`` from
+  /// the node's monotonically-increasing counter and NEVER reused after a
+  /// deletion.  Empty string for an out-of-range index.
+  std::string GetNthSeedID(int i);
+
+  /// The CURRENT placement index of the seed carrying ``id``, or -1 when no
+  /// such seed exists (deleted, never minted, or empty ``id``).  The index
+  /// shifts on deletions; the ID does not.
+  int GetSeedIndexByID(const std::string& id);
+
+  /// The last minted ID number (the persisted mint counter; only grows).
+  /// Introspection / storage seam.
+  int GetSeedIDCounter();
 
   //--------------------------------------------------------------------------
   // Per-seed label (becomes the generated segment name, ADR-0038 §Conformance)
@@ -302,10 +328,25 @@ protected:
   /// True iff ``i`` indexes an existing seed.
   bool IsValidIndex(int i) const;
 
+  /// Restore the i-th seed's stable ID.  STORAGE-READ SEAM ONLY (the storage
+  /// node is a friend): everywhere else IDs are minted by ``AddSeed``.  The
+  /// mint counter is bumped past any numeric suffix in ``id`` so a restored
+  /// document can never cause ID reuse.  A no-op for an out-of-range index.
+  void SetNthSeedID(int i, const std::string& id);
+
+  /// Restore the mint counter.  STORAGE-READ SEAM ONLY; clamped to never go
+  /// backwards (the counter only grows — the never-reuse invariant).
+  void SetSeedIDCounter(int counter);
+
+  friend class vtkMRMLVolumetrySeedsStorageNode;
+
   /// Ordered per-seed attributes on PARALLEL vectors keyed by placement
   /// index: a remove shifts all three in lockstep so the label + colour
   /// stay bound to their coordinate (ADR-0038 §"Consumers ledger").
   std::vector<std::array<double, 3>> Seeds;
+  /// Per-seed STABLE identity string (parallel to ``Seeds``); minted at
+  /// ``AddSeed`` from ``SeedIDCounter``, never reused after deletion.
+  std::vector<std::string> SeedIDs;
   std::vector<std::string> SeedLabels;
   std::vector<std::array<double, 3>> SeedColors;
   /// Per-seed structure binding: the ``(segmentationNodeID, segmentID)`` the
@@ -324,6 +365,11 @@ protected:
   /// back to the module defaults (opaque white, empty label).
   std::map<std::string, std::array<double, 3>> VolumeColors;
   std::map<std::string, std::string> VolumeLabels;
+
+  /// The stable-ID mint counter: the LAST minted ID number.  Monotonically
+  /// increasing, persisted through the storage node, and NEVER decremented —
+  /// so a deleted seed's ID is never handed out again.
+  int SeedIDCounter = 0;
 
   /// Scratch buffers backing the size-hinted 3-tuple returns (the
   /// ``GetNthAnnotationPoint`` idiom): a stable address to alias so the
