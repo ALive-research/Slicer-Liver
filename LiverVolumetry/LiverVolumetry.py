@@ -87,6 +87,12 @@ UNSEEDED_SEGMENT_LABEL = "Unassigned"
 _NEEDS_SEGMENTATION_MESSAGE = "Select a segmentation."
 _NEEDS_VOLUME_MESSAGE = "Add a volume to place seeds."
 
+# The pinned seed's STABLE ID mirrored into the module parameter node
+# (territory-usability pin persistence): parameter nodes serialize with the
+# scene and the carrier-minted seed ID is stable, so a reloaded scene resumes
+# the pin on module enter (a gone ID clears the parameter instead).
+PINNED_SEED_PARAMETER = "PinnedSeedID"
+
 
 #
 # LiverVolumetry
@@ -421,6 +427,11 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         "table is omitted this session.")
       return
     self._seedsTable = VolumetrySeedsTableWidget(carrier=None)
+    # Mirror every REAL pin change into the parameter node so a saved scene
+    # resumes the pin on module enter (the hover preview never fires this;
+    # module exit suppresses it -- the persisted pin survives the exit).
+    if hasattr(self._seedsTable, "setPinChangedCallback"):
+      self._seedsTable.setPinChangedCallback(self._onPinnedSeedChanged)
     grid = self.ui.SeedsGroupWidget.layout()
     if grid is not None and hasattr(grid, "addWidget"):
       grid.addWidget(self._seedsTable, 0, 0)
@@ -1121,6 +1132,65 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._sanitizeLegacyHighlightAttributes()
     # Make sure parameter node exists and observed
     self.initializeParameterNode()
+    # Re-raise the persisted pin (territory-usability pin persistence):
+    # exit() stopped the stripes; the parameter node kept the seed's stable
+    # ID, so entering resumes the pin -- including after a scene reload,
+    # where the carrier/display node are adopted from the loaded scene.
+    self._resumePinFromParameterNode()
+
+  def _onPinnedSeedChanged(self, seedID):
+    """Mirror the pinned seed's stable ID into the parameter node."""
+    node = self._parameterNode
+    if node is None or not slicer.mrmlScene.IsNodePresent(node):
+      return
+    node.SetParameter(PINNED_SEED_PARAMETER, seedID or "")
+
+  def _resumePinFromParameterNode(self):
+    """Raise the persisted pin if its seed still resolves; else clear it.
+
+    Adopts a scene-loaded carrier/display node first (a reloaded scene has
+    the nodes but this widget's handles are fresh), then asks the table to
+    pin the persisted ID.  A stale ID -- the seed was deleted, or no carrier
+    survives -- clears the parameter so it never resurrects later.
+    """
+    node = self._parameterNode
+    if node is None or not slicer.mrmlScene.IsNodePresent(node):
+      return
+    seedID = node.GetParameter(PINNED_SEED_PARAMETER)
+    if not seedID:
+      return
+    self._adoptSceneSeedNodes()
+    table = self._seedsTable
+    if (
+        table is not None
+        and hasattr(table, "pinSeed")
+        and table.pinSeed(seedID)
+    ):
+      return
+    node.SetParameter(PINNED_SEED_PARAMETER, "")
+
+  def _adoptSceneSeedNodes(self):
+    """Adopt a scene-resident carrier + display node into fresh handles.
+
+    After a scene load the seed nodes exist in the scene but this widget's
+    lazily-created handles are ``None``; re-running the ensure paths would
+    mint DUPLICATE nodes.  Adopt the first scene instances instead, rebinding
+    the table + the carrier observer exactly as the ensure paths do.  No-ops
+    when the handles are already live or the scene has no seed nodes.
+    """
+    if self._seedsCarrier is None or not slicer.mrmlScene.IsNodePresent(self._seedsCarrier):
+      carrier = slicer.mrmlScene.GetFirstNodeByClass(SEEDS_NODE_CLASS)
+      if carrier is not None:
+        self._seedsCarrier = carrier
+        self._bindSeedsTable(carrier)
+        if not self.hasObserver(carrier, vtk.vtkCommand.ModifiedEvent, self._onSeedsCarrierModified):
+          self.addObserver(carrier, vtk.vtkCommand.ModifiedEvent, self._onSeedsCarrierModified)
+    if self._seedsDisplayNode is None or not slicer.mrmlScene.IsNodePresent(self._seedsDisplayNode):
+      display = slicer.mrmlScene.GetFirstNodeByClass(SEEDS_DISPLAY_NODE_CLASS)
+      if display is not None:
+        self._seedsDisplayNode = display
+        if self._seedsTable is not None and hasattr(self._seedsTable, "setDisplayNode"):
+          self._seedsTable.setDisplayNode(display)
 
   def exit(self):
     """
