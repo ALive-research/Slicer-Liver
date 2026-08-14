@@ -18,9 +18,10 @@ which stay keyed by the seed's GLOBAL placement index on top of the grouping:
   §Conformance) without touching the seed coordinate.
 * COLOUR EDIT -- the row's colour picker writes ``SetNthSeedColor`` without
   touching the coordinate.
-* DELETE -- the row's delete button calls ``RemoveNthSeed``, dropping exactly
-  that seed; the ``deleteSeed`` entry point converges on the same carrier
-  method.
+* DELETE -- the row's overflow "Delete seed" action calls ``RemoveNthSeed``,
+  dropping exactly that seed (one-click when snapshotless; the confirm names
+  a snapshot-bearing seed); the ``deleteSeed`` entry point converges on the
+  same carrier method.
 * OBSERVER TEARDOWN -- ``cleanup`` detaches the carrier observer so a
   parentless widget does not survive to app shutdown holding a MRML observer
   (feedback_launched_widget_teardown_crash).
@@ -260,8 +261,12 @@ def test_delete_seed_removes_exactly_one_point(qt_widgets):
     assert tuple(carrier.GetNthSeed(1)) == pytest.approx(pts[2], abs=1e-6)
 
 
-def test_delete_button_removes_exactly_that_seed(qt_widgets):
-    """Clicking a row's delete button removes exactly that seed via the carrier."""
+def test_delete_action_removes_exactly_that_seed(qt_widgets):
+    """Triggering a row's overflow "Delete seed" removes exactly that seed.
+
+    The row diet moved the destructive delete behind the "..." overflow
+    menu; a SNAPSHOTLESS seed still deletes one-click (no confirm).
+    """
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier = _make_carrier_or_skip(slicer)
@@ -269,23 +274,72 @@ def test_delete_button_removes_exactly_that_seed(qt_widgets):
         pytest.skip(f"{SEEDS_NODE_CLASS} has no RemoveNthSeed (ADR-0027).")
     table = _make_table_or_skip(slicer, carrier)
     qt_widgets.append(table)
-    if not hasattr(table, "deleteButton"):
-        pytest.skip("VolumetrySeedsTableWidget has no deleteButton seam (ADR-0027).")
+    if not hasattr(table, "deleteAction"):
+        pytest.skip("VolumetrySeedsTableWidget has no deleteAction seam (ADR-0027).")
 
     pts = [(0.0, 0.0, 1.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
     for x, y, z in pts:
         carrier.AddSeed(x, y, z)
     carrier.Modified()
 
-    delete = table.deleteButton(1)
-    assert delete is not None, "the seed row must carry a delete button."
-    delete.click()
+    def _never_confirm(text):
+        raise AssertionError("a snapshotless delete must not confirm")
+
+    table._confirmDestructive = _never_confirm  # noqa: SLF001 - confirm seam
+
+    delete = table.deleteAction(1)
+    assert delete is not None, "the seed overflow must carry a Delete seed action."
+    delete.trigger()
 
     assert carrier.GetNumberOfSeeds() == len(pts) - 1, (
-        "clicking a row's delete button must remove EXACTLY ONE carrier seed."
+        "the overflow Delete seed must remove EXACTLY ONE carrier seed."
     )
     assert tuple(carrier.GetNthSeed(0)) == pytest.approx(pts[0], abs=1e-6)
     assert tuple(carrier.GetNthSeed(1)) == pytest.approx(pts[2], abs=1e-6)
+
+
+def test_deleting_a_snapshot_bearing_seed_confirms_by_name(qt_widgets):
+    """Deleting a seed WITH a visibility snapshot goes through the confirm,
+    which names the seed; declining keeps it."""
+    import vtk
+
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    if not hasattr(carrier, "SetNthSeedVisibilityContext"):
+        pytest.skip(f"{SEEDS_NODE_CLASS} has no visibility-context slot (ADR-0027).")
+    table = _make_table_or_skip(slicer, carrier)
+    qt_widgets.append(table)
+    if not hasattr(table, "deleteAction"):
+        pytest.skip("VolumetrySeedsTableWidget has no deleteAction seam (ADR-0027).")
+
+    carrier.AddSeed(0.0, 0.0, 0.0)
+    carrier.SetNthSeedLabel(0, "Wedge seed")
+    ids = vtk.vtkStringArray()
+    ids.InsertNextValue("Parenchyma")
+    carrier.SetNthSeedVisibilityContext(0, ids)
+    carrier.Modified()
+
+    confirms = []
+
+    def _fake_confirm(text):
+        confirms.append(text)
+        return _fake_confirm.answer
+
+    _fake_confirm.answer = False
+    table._confirmDestructive = _fake_confirm  # noqa: SLF001 - confirm seam
+
+    table.deleteAction(0).trigger()
+    assert carrier.GetNumberOfSeeds() == 1, (
+        "a DECLINED confirm must keep the snapshot-bearing seed."
+    )
+    assert confirms and "Wedge seed" in confirms[0], (
+        "the confirm must NAME the seed it is about to delete."
+    )
+
+    _fake_confirm.answer = True
+    table.deleteAction(0).trigger()
+    assert carrier.GetNumberOfSeeds() == 0
 
 
 # --------------------------------------------------------------------------- #
@@ -293,11 +347,24 @@ def test_delete_button_removes_exactly_that_seed(qt_widgets):
 # --------------------------------------------------------------------------- #
 
 
-def test_target_combo_names_the_bound_segment(qt_widgets):
-    """The row's target combo names the seed's bound segment (a11y text).
+def _checked_action_texts(menu):
+    """The texts of the CHECKED actions on a retarget submenu."""
+    texts = []
+    for action in menu.actions():
+        checked = action.isChecked
+        checked = checked() if callable(checked) else checked
+        if checked:
+            text = action.text
+            texts.append(text() if callable(text) else text)
+    return texts
+
+
+def test_retarget_menu_names_the_bound_segment(qt_widgets):
+    """The overflow Retarget submenu CHECKS the seed's bound segment.
 
     ``territory-usability`` §"Seed→label capture" / ADR-0010: the caught
-    structure is named in text, never signalled by the fade alone.
+    structure is named in text.  The row diet moved the Target combo into
+    the overflow menu; the bound candidate reads checked.
     """
     slicer = _slicer_or_skip()
     _qt_or_skip()
@@ -319,10 +386,11 @@ def test_target_combo_names_the_bound_segment(qt_widgets):
     carrier.SetNthSeedBinding(0, segmentation.GetID(), "segB")
     carrier.Modified()
 
-    combo = table.targetCombo(0)
-    assert combo is not None, "the seed row must carry a target combo."
-    assert combo.currentText == "Beta", (
-        "the target combo must name the seed's bound segment (ADR-0010 text)."
+    menu = table.targetCombo(0)
+    assert menu is not None, "the seed overflow must carry a Retarget submenu."
+    assert _checked_action_texts(menu) == ["Beta"], (
+        "the Retarget submenu must CHECK the seed's bound segment "
+        "(ADR-0010 text)."
     )
 
 
@@ -359,6 +427,85 @@ def test_retarget_rebinds_the_seed_and_renames_label(qt_widgets):
     )
     assert carrier.GetNthSeedLabel(0) == "Alpha", (
         "retarget must rename the seed label to follow the new binding."
+    )
+
+
+# --------------------------------------------------------------------------- #
+# ROW DIET -- at most four visible controls; occasional actions overflow
+# --------------------------------------------------------------------------- #
+
+
+def test_seed_row_carries_no_inline_combo_or_delete(qt_widgets):
+    """The seed row shows Pin / colour / label / cue-chip text only; the
+    retarget combo and delete moved behind the "..." overflow menu."""
+    import qt
+
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    table = _make_table_or_skip(slicer, carrier)
+    qt_widgets.append(table)
+    if not hasattr(table, "overflowButton"):
+        pytest.skip("VolumetrySeedsTableWidget has no overflow seam (ADR-0027).")
+
+    carrier.AddSeed(0.0, 0.0, 0.0)
+
+    row = table._seed_rows[carrier.GetNthSeedID(0)]["widget"]  # noqa: SLF001
+    stack, combos = [row], []
+    while stack:
+        widget = stack.pop()
+        if isinstance(widget, qt.QComboBox):
+            combos.append(widget)
+        stack.extend(widget.children())
+    assert combos == [], (
+        "no inline QComboBox on the seed row -- the retarget moved into the "
+        "overflow menu (the row diet)."
+    )
+    assert table.overflowButton(0) is not None
+    assert table.deleteAction(0) is not None, (
+        "delete lives on the overflow menu, not the row strip."
+    )
+    assert table.restoreAction(0) is not None, (
+        "Restore placement view lives on the overflow menu."
+    )
+
+
+def test_retarget_action_rebinds_through_the_menu(qt_widgets):
+    """Triggering a retarget submenu candidate rebinds + renames the seed."""
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    carrier = _make_carrier_or_skip(slicer)
+    if not hasattr(carrier, "SetNthSeedBinding"):
+        pytest.skip(f"{SEEDS_NODE_CLASS} has no SetNthSeedBinding (ADR-0027).")
+    table = _make_table_or_skip(slicer, carrier)
+    qt_widgets.append(table)
+    if not hasattr(table, "retargetMenu"):
+        pytest.skip("VolumetrySeedsTableWidget has no retargetMenu seam (ADR-0027).")
+
+    segmentation = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", "SegSrc")
+    segmentation.CreateDefaultDisplayNodes()
+    segmentation.GetSegmentation().AddEmptySegment("segA", "Alpha")
+    segmentation.GetSegmentation().AddEmptySegment("segB", "Beta")
+    table.setStructureSource(segmentation)
+
+    carrier.AddSeed(0.0, 0.0, 0.0)
+    carrier.SetNthSeedBinding(0, segmentation.GetID(), "segB")
+    carrier.Modified()
+
+    alpha = None
+    for action in table.retargetMenu(0).actions():
+        text = action.text
+        text = text() if callable(text) else text
+        if text == "Alpha":
+            alpha = action
+    assert alpha is not None, "the bound candidate list must offer Alpha."
+    alpha.trigger()
+
+    assert carrier.GetNthSeedBindingSegmentID(0) == "segA", (
+        "a retarget-menu pick must rebind the seed."
+    )
+    assert carrier.GetNthSeedLabel(0) == "Alpha", (
+        "the seed label follows the new binding."
     )
 
 
@@ -421,7 +568,11 @@ def test_row_children_carry_the_row_select_tag(qt_widgets):
         pytest.skip("carrier has no GetNthSeedID -- the stable-ID slot has not landed.")
     seedID = carrier.GetNthSeedID(0)
 
-    for control in (table.labelEdit(0), table.colourButton(0), table.deleteButton(0)):
+    for control in (
+        table.labelEdit(0),
+        table.colourButton(0),
+        table.overflowButton(0),
+    ):
         assert control is not None
         assert control.property("volumetryRowSeed") == seedID, (
             "each seed-row control must carry the row's STABLE seed ID so the "

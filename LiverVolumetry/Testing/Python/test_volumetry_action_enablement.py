@@ -358,6 +358,26 @@ def test_clear_all_seeds_empties_carrier_and_disables(qt_widgets):
         "Clear all seeds must ENABLE once at least one seed is placed."
     )
 
+    # >1 seed clears only through the confirm (destructive out of the
+    # misclick path); the seam is stubbed so no modal blocks the harness.
+    confirms = []
+
+    def _fake_confirm(text):
+        confirms.append(text)
+        return _fake_confirm.answer
+
+    _fake_confirm.answer = False
+    widget._confirmDestructive = _fake_confirm
+
+    widget.onClearAllSeeds()
+    assert carrier.GetNumberOfSeeds() == 2, (
+        "a DECLINED confirm must leave every seed in place."
+    )
+    assert confirms and "2" in confirms[0], (
+        "the confirm must name HOW MANY seeds are about to go."
+    )
+
+    _fake_confirm.answer = True
     widget.onClearAllSeeds()
     assert carrier.GetNumberOfSeeds() == 0, (
         "Clear all seeds must remove every seed from the carrier."
@@ -365,6 +385,33 @@ def test_clear_all_seeds_empties_carrier_and_disables(qt_widgets):
     assert widget.ui.ClearAllSeedsButton.enabled is False, (
         "Clear all seeds must re-disable once the carrier is empty."
     )
+
+
+def test_clear_all_single_seed_stays_one_click(qt_widgets):
+    """One seed clears WITHOUT a confirm (re-placement is the recovery)."""
+    slicer = _slicer_or_skip()
+    widget = _make_widget_or_skip(slicer)
+    qt_widgets.append(widget)
+    _detach_scene_observers(slicer, widget)
+
+    if not hasattr(widget, "_confirmDestructive"):
+        pytest.skip("widget has no confirm seam -- has not landed (ADR-0027).")
+
+    seg = _single_segment_segmentation(slicer)
+    widget.ui.InputSegmentSelectorWidget.setCurrentNode(seg)
+    carrier = widget._ensureSeedsCarrier()
+    if carrier is None:
+        pytest.skip("seed carrier unavailable (launched build; ADR-0027).")
+
+    carrier.AddSeed(0.0, 0.0, 0.0)
+
+    def _never_confirm(text):
+        raise AssertionError("a single-seed clear must not confirm")
+
+    widget._confirmDestructive = _never_confirm
+    widget.onClearAllSeeds()
+
+    assert carrier.GetNumberOfSeeds() == 0
 
 
 if __name__ == "__main__":
