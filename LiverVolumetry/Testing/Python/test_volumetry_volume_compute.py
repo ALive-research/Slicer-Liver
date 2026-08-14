@@ -163,10 +163,33 @@ def test_compute_per_volume_emits_one_row_per_volume():
     if seeds is None or not hasattr(seeds, "AddSeedToVolume"):
         pytest.skip("vtkMRMLVolumetrySeedsNode grouped API absent (ADR-0027).")
 
+    # Two REAL disjoint block segments: the driver rasterizes the whole
+    # segmentation as its reference grid, and an all-empty segmentation
+    # exports no scalars (nothing to measure -- the driver returns without
+    # rows), so the row contract needs actual geometry.
+    import numpy as np
+
     seg = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", "Seg")
     seg.CreateDefaultDisplayNodes()
-    segA = seg.GetSegmentation().AddEmptySegment("segA", "Alpha")
-    segB = seg.GetSegmentation().AddEmptySegment("segB", "Beta")
+
+    def _add_segment_from_array(array, name):
+        labelmap = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
+        slicer.util.updateVolumeFromArray(labelmap, array.astype(np.uint8))
+        ok = slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(
+            labelmap, seg)
+        slicer.mrmlScene.RemoveNode(labelmap)
+        assert ok
+        segmentation = seg.GetSegmentation()
+        segmentID = segmentation.GetNthSegmentID(segmentation.GetNumberOfSegments() - 1)
+        segmentation.GetSegment(segmentID).SetName(name)
+        return segmentID
+
+    blockA = np.zeros((8, 8, 8), dtype=np.uint8)
+    blockA[1:4, 1:4, 1:4] = 1
+    blockB = np.zeros((8, 8, 8), dtype=np.uint8)
+    blockB[5:7, 5:7, 5:7] = 1
+    segA = _add_segment_from_array(blockA, "Alpha")
+    segB = _add_segment_from_array(blockB, "Beta")
 
     seeds.AddSeedToVolume("Left", 0.0, 0.0, 0.0)
     seeds.SetNthSeedBinding(0, seg.GetID(), segA)

@@ -80,9 +80,14 @@ def _import_pipeline_or_skip():
 
 
 def _red_slice_node(slicer):
-    node = slicer.util.getNode("vtkMRMLSliceNodeRed")
+    # The launched harness runs without slice widgets, so no vtkMRMLSliceNode
+    # pre-exists (and the conftest clears the scene between tests): create the
+    # slice node the pipeline projects against (the in-volume-pick precedent).
+    node = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLSliceNode")
+    if node is None:
+        node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSliceNode", "Red")
     if node is None or not hasattr(node, "GetSliceToRAS"):
-        pytest.skip("no Red slice node available in this launched Slicer.")
+        pytest.skip("no vtkMRMLSliceNode available in this launched Slicer.")
     return node
 
 
