@@ -729,17 +729,22 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         "LiverVolumetry: %s unavailable -- seed placement disabled this "
         "session.", SEEDS_NODE_CLASS)
       return None
-    self._seedsCarrier = node
-    # Bind the freshly-created carrier into the panel's seeds table so labels /
-    # colours / deletes edit the same carrier the placement writes to.
-    self._bindSeedsTable(node)
-    # Re-gate the actions whenever the carrier changes (a seed placed via the
-    # pipeline, deleted per-row, or cleared): Generate + Clear-all read the live
-    # seed count, and the requirements surface must track it (D1/D3).  Removed in
-    # cleanup / on scene close.
-    if not self.hasObserver(node, vtk.vtkCommand.ModifiedEvent, self._onSeedsCarrierModified):
-      self.addObserver(node, vtk.vtkCommand.ModifiedEvent, self._onSeedsCarrierModified)
+    self._attachCarrierHandle(node)
     return node
+
+  def _attachCarrierHandle(self, carrier):
+    """Adopt ``carrier`` as THE seed carrier: handle + table bind + observer.
+
+    Shared by the lazy-create path and the scene-load adoption.  Binds the
+    panel's seeds table so labels / colours / deletes edit the same carrier
+    the placement writes to, and re-gates the actions on every carrier edit
+    (Generate + Clear-all read the live seed count, D1/D3).  The observer is
+    removed in cleanup / on scene close.
+    """
+    self._seedsCarrier = carrier
+    self._bindSeedsTable(carrier)
+    if not self.hasObserver(carrier, vtk.vtkCommand.ModifiedEvent, self._onSeedsCarrierModified):
+      self.addObserver(carrier, vtk.vtkCommand.ModifiedEvent, self._onSeedsCarrierModified)
 
   def _onSeedsCarrierModified(self, caller, event):
     """Re-gate actions on a carrier edit (seed placed / deleted / cleared)."""
@@ -1181,10 +1186,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if self._seedsCarrier is None or not slicer.mrmlScene.IsNodePresent(self._seedsCarrier):
       carrier = slicer.mrmlScene.GetFirstNodeByClass(SEEDS_NODE_CLASS)
       if carrier is not None:
-        self._seedsCarrier = carrier
-        self._bindSeedsTable(carrier)
-        if not self.hasObserver(carrier, vtk.vtkCommand.ModifiedEvent, self._onSeedsCarrierModified):
-          self.addObserver(carrier, vtk.vtkCommand.ModifiedEvent, self._onSeedsCarrierModified)
+        self._attachCarrierHandle(carrier)
     if self._seedsDisplayNode is None or not slicer.mrmlScene.IsNodePresent(self._seedsDisplayNode):
       display = slicer.mrmlScene.GetFirstNodeByClass(SEEDS_DISPLAY_NODE_CLASS)
       if display is not None:

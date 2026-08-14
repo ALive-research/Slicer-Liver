@@ -857,12 +857,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         if source is None or not hasattr(source, "GetSegmentation") or index < 0:
             return False
         context = self._seedVisibilityContext(index)
-        segmentation = source.GetSegmentation()
-        allIDs = [
-            segmentation.GetNthSegmentID(n)
-            for n in range(segmentation.GetNumberOfSegments())
-        ]
-        if not set(context) & set(allIDs):
+        if not set(context) & set(self._allSegmentIDs()):
             self._showBanner(STALE_SNAPSHOT_MESSAGE, withReturn=False)
             return False
         if not self._restoredSeedID:
@@ -897,6 +892,17 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         self._restoredVisibleSet = None
         self._hideBanner()
 
+    def _allSegmentIDs(self) -> list[str]:
+        """Every segment ID on the structure source ([] when unbound)."""
+        source = self._structureSource
+        if source is None or not hasattr(source, "GetSegmentation"):
+            return []
+        segmentation = source.GetSegmentation()
+        return [
+            segmentation.GetNthSegmentID(n)
+            for n in range(segmentation.GetNumberOfSegments())
+        ]
+
     def _applyContext(self, context: list[str]) -> None:
         """Show exactly ``context``'s segments on the structure source.
 
@@ -907,14 +913,11 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         source = self._structureSource
         if source is None or not hasattr(source, "GetSegmentation"):
             return
-        segmentation = source.GetSegmentation()
-        allIDs = [
-            segmentation.GetNthSegmentID(n)
-            for n in range(segmentation.GetNumberOfSegments())
-        ]
         self._applyingVisibility = True
         try:
-            apply_visibility_context(source.GetDisplayNode(), allIDs, context)
+            apply_visibility_context(
+                source.GetDisplayNode(), self._allSegmentIDs(), context
+            )
         finally:
             self._applyingVisibility = False
         self._restoredVisibleSet = frozenset(
@@ -1023,7 +1026,7 @@ class VolumetrySeedsTableWidget(qt.QWidget):
         for rowID, row in self._seed_rows.items():
             chip = row.get("chip")
             if chip is not None:
-                chip.setVisible(bool(diverges) and rowID == pinnedID)
+                chip.setVisible(diverges and rowID == pinnedID)
 
     # ------------------------------------------------------------------ #
     # Repaint
@@ -1232,14 +1235,13 @@ class VolumetrySeedsTableWidget(qt.QWidget):
             eventType = event.type()
             if eventType == qt.QEvent.MouseButtonPress:
                 self._selectRowForWidget(watched)
-            elif eventType == qt.QEvent.Enter:
+            elif eventType in (qt.QEvent.Enter, qt.QEvent.Leave):
                 pinSeedID = watched.property(_ROW_PIN_PROPERTY)
                 if pinSeedID:
-                    self._startHoverPreview(str(pinSeedID))
-            elif eventType == qt.QEvent.Leave:
-                pinSeedID = watched.property(_ROW_PIN_PROPERTY)
-                if pinSeedID:
-                    self._endHoverPreview()
+                    if eventType == qt.QEvent.Enter:
+                        self._startHoverPreview(str(pinSeedID))
+                    else:
+                        self._endHoverPreview()
         except Exception:  # noqa: BLE001 - an event filter must never raise
             pass
         return False  # never consume: the watched control still works
