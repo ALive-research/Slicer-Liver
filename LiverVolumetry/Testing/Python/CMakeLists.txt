@@ -190,6 +190,14 @@ set(_volumetry_pytest_files
   # confined to the optional refine control.  Pure file scan -> RUNS bare
   # (ADR-0027).
   test_volumetry_neutral_vocabulary.py
+  # territory-usability -- the SYSTEMATIC case matrix for Generate-segments +
+  # compute-per-volume over the analytic overlapping-layer phantom: carve
+  # contexts, disjoint/same-segment/overlapping claims, mixed snapshots,
+  # ungrouped seeds, zero seeds, % denominators.  Known Generate defects are
+  # pinned with strict xfails carrying the CORRECT expectations (ADR-0027
+  # red->green).  Wrapped C++ nodes + segmentations -> SKIPS bare, RUNS
+  # launched (ADR-0027).
+  test_volumetry_generation_matrix.py
 )
 
 foreach(_pytest_file IN LISTS _volumetry_pytest_files)
