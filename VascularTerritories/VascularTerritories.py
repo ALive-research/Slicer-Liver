@@ -188,6 +188,15 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # Load widget from .ui file (created by Qt Designer)
     uiWidget = slicer.util.loadUI(self.resourcePath('UI/VascularTerritories.ui'))
     self.layout.addWidget(uiWidget)
+    # Detach-before-callback guard: a host (the Liver shell composes this
+    # panel via widgetRepresentation) may destroy the Qt tree while this
+    # Python widget object -- and its scene / parameter-node observers --
+    # lives on.  A later scene close would then drive
+    # ``updateGUIFromParameterNode`` into destroyed ui ("Trying to set
+    # property 'enabled' on a destroyed ..." storms,
+    # feedback_launched_widget_teardown_crash).  Drop every observer the
+    # moment the panel dies so no late event can touch destroyed ui.
+    uiWidget.connect("destroyed()", self._onPanelDestroyed)
 
     # Add a spacer at the botton to keep the UI flowing from top to bottom
     spacerItem = qt.QSpacerItem(0,0, qt.QSizePolicy.Minimum, qt.QSizePolicy.MinimumExpanding)
@@ -769,6 +778,20 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     table = getattr(self, "_territoriesTable", None)
     if table is not None and hasattr(table, "cleanup"):
       table.cleanup()
+    self.removeObservers()
+
+  def _onPanelDestroyed(self):
+    """The panel's Qt tree died: drop every observer + Qt handle (Qt-free).
+
+    Fired by the loaded ui root's ``destroyed()`` signal.  Touches NO Qt
+    member -- only the VTK observers (scene / parameter node / carrier /
+    segmentation display, all mixin-managed) and the Python-side handles --
+    so a scene close after the host disposed the panel can never write into
+    destroyed ui.  Idempotent with ``cleanup()``.
+    """
+    # The composed territories table died with the panel; its own
+    # destroyed() hook drops its VTK observers.
+    self._territoriesTable = None
     self.removeObservers()
 
   def enter(self):

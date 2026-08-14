@@ -225,6 +225,15 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # §3.2 -- the Liver shell already headers the stage), the no-parameter-node
     # enable-gate moves onto the loaded panel root.
     self._panelWidget = liverVolumetryWidget
+    # Detach-before-callback guard: a host (the Liver shell composes this
+    # panel via widgetRepresentation) may destroy the Qt tree while this
+    # Python widget object -- and its scene / parameter-node observers --
+    # lives on.  A later scene close would then drive
+    # ``updateGUIFromParameterNode`` into destroyed ui ("Trying to set
+    # property 'enabled' on a destroyed ..." storms,
+    # feedback_launched_widget_teardown_crash).  Drop every observer the
+    # moment the panel dies so no late event can touch destroyed ui.
+    liverVolumetryWidget.connect("destroyed()", self._onPanelDestroyed)
 
     # Add a spacer at the botton to keep the UI flowing from top to bottom
     spacerItem = qt.QSpacerItem(0,0, qt.QSizePolicy.Minimum, qt.QSizePolicy.MinimumExpanding)
@@ -1121,6 +1130,23 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # (feedback_launched_widget_teardown_crash).
     if self._seedsTable is not None:
       self._seedsTable.cleanup()
+    self.removeObservers()
+
+  def _onPanelDestroyed(self):
+    """The panel's Qt tree died: drop every observer + Qt handle (Qt-free).
+
+    Fired by the panel root's ``destroyed()`` signal.  Touches NO Qt member
+    -- only the VTK observers (scene / parameter node / carrier, all
+    mixin-managed) and the Python-side handles -- so a scene close after the
+    host disposed the panel can never write into destroyed ui.  Idempotent
+    with ``cleanup()``.
+    """
+    self._panelWidget = None
+    # The composed children (seeds table, eye list, requirements label) died
+    # with the panel; their own destroyed() hooks drop their VTK observers.
+    self._seedsTable = None
+    self._visibilityList = None
+    self._requirementsLabel = None
     self.removeObservers()
 
   def enter(self):
