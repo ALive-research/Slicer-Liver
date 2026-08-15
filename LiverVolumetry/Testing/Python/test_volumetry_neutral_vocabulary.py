@@ -63,8 +63,15 @@ def test_unseeded_segment_label_is_unassigned():
         "leftover segment's neutral name)."
     )
     assert match.group(1) == "Unassigned"
-    assert 'SetName(UNSEEDED_SEGMENT_LABEL)' in text, (
-        "generateSegments must name the leftover segment via the constant."
+    # BOTH Generate paths must name their leftover THROUGH the constant: the
+    # plain per-volume path (one segment per volume + the unclaimed rest) and
+    # the resection-refined C++ path (one piece per seed + the unclaimed rest).
+    # A hardcoded literal on either would let the two drift apart.
+    body = text[match.end():]
+    references = len(re.findall(r"\bUNSEEDED_SEGMENT_LABEL\b", body))
+    assert references >= 2, (
+        "both generateSegments paths must name the leftover segment via the "
+        f"UNSEEDED_SEGMENT_LABEL constant (found {references} reference(s))."
     )
 
 
