@@ -189,7 +189,7 @@
       <bool>false</bool>
      </property>
      <property name="toolTip">
-      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Materialise the seeded regions as a new Segmentation: one segment per seed, plus an Unassigned segment for the unseeded rest.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Materialise the measured regions as a new Segmentation: one segment per volume, carrying exactly the region Compute volumes reported for it, plus an Unassigned segment for the rest.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
      </property>
      <property name="text">
       <string>Generate segments</string>
