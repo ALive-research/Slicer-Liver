@@ -80,6 +80,11 @@ TOTAL_SELECTED_SEGMENTS_LABEL = "Total volume (ticked segments)"
 # planner, so the region no seed claimed is "Unassigned" -- never a
 # resection-planning term.
 UNSEEDED_SEGMENT_LABEL = "Unassigned"
+# Its swatch: a neutral mid-grey.  The volumes' generated segments carry their
+# OWN colours (the surgeon's), so the leftover must not read as one more
+# measured territory; the NAME carries the meaning and the grey only keeps it
+# recessive beside them (never colour alone, ADR-0010).
+UNSEEDED_SEGMENT_COLOR = (0.6, 0.6, 0.6)
 
 # The placement requirements messages (territory-usability): placement is a
 # per-volume row control, so the requirements line -- not a standalone Place
@@ -1601,7 +1606,7 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
 
       # One row per volume, in the carrier's volume order: the union of the
       # volume's distinct (owner, snapshot) carved regions -- the SAME masks
-      # the generated segments will carry (``carved_masks_per_volume``).
+      # Generate materialises as segments (``carved_masks_per_volume``).
       masks = carved_masks_per_volume(
         seedsNode, self._segmentMaskReader(segmentationNode, reference), shape)
       for volumeId, union in masks.items():
@@ -1659,10 +1664,145 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
       return
     outputTable.SetColumnDescription("% of total", text)
 
+  @staticmethod
+  def _boundSegmentationNode(seedsNode):
+    """The segmentation the carrier's seeds are bound to (the region source).
+
+    Generate is fed the ticked-segments EXPORT -- a FLAT labelmap that has
+    already resolved overlaps top-layer-wins -- but the regions it must
+    materialise are defined on the SEGMENTATION each seed's binding names, in
+    layers.  The first bound seed's segmentation is that source (a carrier's
+    seeds all bind into the panel's one input segmentation).  ``None`` when no
+    seed carries a binding: nothing is claimed.
+    """
+    if seedsNode is None:
+      return None
+    for i in range(seedsNode.GetNumberOfSeeds()):
+      nodeID = seedsNode.GetNthSeedBindingSegmentationNodeID(i)
+      if not nodeID:
+        continue
+      node = slicer.mrmlScene.GetNodeByID(nodeID)
+      if node is not None:
+        return node
+    return None
+
   def generateSegments(self, resectionNodes, seedsNode, segmentsVolumeNode):
+    """Materialise the volumetry claims as a new Segmentation.
+
+    Two paths, matching the two products the panel offers:
+
+    * NO resection (the plain path, ``_generateSegmentsPerVolume``): ONE
+      segment per VOLUME, carrying the very masks Compute measures.
+    * Refine-by-resection ON (``_generateSegmentsFromBarriers``): the
+      unchanged C++ region-grow partition bounded by the Bezier surfaces
+      (ADR-0015 -- the C++ logic is fed, never rewritten).
+
+    Returns the generated ``vtkMRMLSegmentationNode``, or ``None`` when there
+    is nothing to materialise.
+    """
+    if resectionNodes is not None:
+      return self._generateSegmentsFromBarriers(
+        resectionNodes, seedsNode, segmentsVolumeNode)
+    return self._generateSegmentsPerVolume(seedsNode, segmentsVolumeNode)
+
+  def _generateSegmentsPerVolume(self, seedsNode, segmentsVolumeNode):
+    """ONE generated segment per VOLUME = the region Compute measured for it.
+
+    The plain (no-resection) Generate, on the same contract as
+    ``computeVolumePerVolume`` -- it materialises the SAME masks
+    (``carved_masks_per_volume``), so a results row's mL and its segment are
+    one region, never two derivations that can disagree:
+
+    * a volume's labelmap is the union of its seeds' EFFECTIVE (carved)
+      regions -- the seed's BOUND owner minus its visibility snapshot's
+      segments above it -- named with the volume's label and coloured with the
+      volume's colour;
+    * volumes that claim OVERLAPPING voxels keep the overlap in BOTH segments
+      (Slicer stores overlapping binary labelmaps as separate layers), the
+      materialised counterpart of Compute's independent per-volume rows;
+    * "Unassigned" is the ticked export MINUS every claim, omitted entirely
+      when empty (there is no empty region to show);
+    * ungrouped seeds and empty-carve seeds claim nothing -- the same skips
+      Compute applies, so the two products never disagree on the seed set.
+    """
+    if seedsNode is None or segmentsVolumeNode is None:
+      return None
+
+    import numpy
+    import vtk
+
+    from LiverVolumetryLib import carved_masks_per_volume
+
+    image = segmentsVolumeNode.GetImageData()
+    scalarArray = None if image is None else image.GetPointData().GetScalars()
+    if scalarArray is None:
+      # An all-empty export carries no scalars: no grid to build regions on.
+      return None
+    dims = image.GetDimensions()
+    shape = (dims[2], dims[1], dims[0])
+    ticked = vtk.util.numpy_support.vtk_to_numpy(scalarArray).reshape(shape) != 0
+
+    # The export grid is the common geometry: every carved mask is resampled
+    # onto it (the carve is same-grid boolean algebra) and it is the leftover's
+    # universe, so the generated segments tile exactly what the surgeon ticked.
+    segmentationNode = self._boundSegmentationNode(seedsNode)
+    masks = {}
+    if segmentationNode is not None:
+      masks = carved_masks_per_volume(
+        seedsNode,
+        self._segmentMaskReader(segmentationNode, segmentsVolumeNode),
+        shape)
+
+    generated = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
+    generated.CreateDefaultDisplayNodes()
+    generated.SetReferenceImageGeometryParameterFromVolumeNode(segmentsVolumeNode)
+
+    claimed = numpy.zeros(shape, dtype=bool)
+    for volumeId, mask in masks.items():
+      if not mask.any():
+        continue
+      self._addMaskAsSegment(
+        generated, segmentsVolumeNode, mask,
+        seedsNode.GetVolumeLabel(volumeId) or volumeId,
+        list(seedsNode.GetVolumeColor(volumeId)))
+      claimed |= mask
+
+    leftover = ticked & ~claimed
+    if leftover.any():
+      self._addMaskAsSegment(
+        generated, segmentsVolumeNode, leftover,
+        UNSEEDED_SEGMENT_LABEL, list(UNSEEDED_SEGMENT_COLOR))
+    return generated
+
+  @staticmethod
+  def _addMaskAsSegment(segmentationNode, referenceNode, mask, name, colour):
+    """Add ``mask`` to ``segmentationNode`` as its OWN named, coloured segment.
+
+    One segment per mask, written independently: overlapping masks land in
+    separate binary-labelmap LAYERS, so a voxel two volumes both claim stays
+    in both segments (the materialised counterpart of Compute's independent
+    per-volume rows) instead of being resolved away.
+    """
+    import numpy
+
+    segmentID = segmentationNode.GetSegmentation().AddEmptySegment("", name, colour)
+    slicer.util.updateSegmentBinaryLabelmapFromArray(
+      mask.astype(numpy.uint8), segmentationNode, segmentID, referenceNode)
+    return segmentID
+
+  def _generateSegmentsFromBarriers(self, resectionNodes, seedsNode, segmentsVolumeNode):
+    """The resection-refined partition: the unchanged C++ region-grow (ADR-0015).
+
+    Refine-by-resection materialises the PIECES the Bezier barriers cut, which
+    only ``vtkLiverVolumetryLogic::GenerateSegmentsLabelMap`` computes: each
+    seed region-grows against the projected surfaces, so this path stays
+    per-SEED (one piece per seed, named from the seed's label) and keeps the
+    C++ signatures fed by a transient fiducial (ADR-0038 §3c).
+    """
     ROIMarkersList = self.transientFiducialFromSeeds(seedsNode)
     if ROIMarkersList is None:
-      return
+      return None
+    generatedSegmentsNode = None
     try:
       generatedSegmentsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
       generatedSegmentsNode.CreateDefaultDisplayNodes()
@@ -1675,11 +1815,20 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
       # Segment names: the leftover (unseeded) region gets the NEUTRAL
       # "Unassigned" label -- volumetry carries no resection-planning
       # vocabulary (territory-usability); the seeded segments take their
-      # seeds' labels.
-      seg.GetSegmentation().GetNthSegment(0).SetName(UNSEEDED_SEGMENT_LABEL)
-      for i in range(ROIMarkersList.GetNumberOfControlPoints()):
-        seg.GetSegmentation().GetNthSegment(i+1).SetName(ROIMarkersList.GetNthFiducialLabel(i))
-
-      slicer.mrmlScene.RemoveNode(generatedSegmentsNode)
+      # seeds' labels.  Two seeds can land in ONE imported segment, so the
+      # naming walks the segments that EXIST -- an index past the end would
+      # both crash and (before the try/finally below) leak the scratch
+      # labelmap into the scene.
+      segmentation = seg.GetSegmentation()
+      names = [UNSEEDED_SEGMENT_LABEL] + [
+        ROIMarkersList.GetNthFiducialLabel(i)
+        for i in range(ROIMarkersList.GetNumberOfControlPoints())]
+      for i in range(min(len(names), segmentation.GetNumberOfSegments())):
+        segmentation.GetNthSegment(i).SetName(names[i])
+      return seg
     finally:
+      # The scratch labelmap is removed on EVERY exit (a raising C++ call used
+      # to leave it in the scene), as is the transient fiducial.
+      if generatedSegmentsNode is not None:
+        slicer.mrmlScene.RemoveNode(generatedSegmentsNode)
       slicer.mrmlScene.RemoveNode(ROIMarkersList)
