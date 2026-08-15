@@ -67,6 +67,7 @@ from .CarvedRegionStripes import (
 # a pure, side-effect-free fold over the carrier, so it imports unconditionally
 # (the bare unit layer reaches ``distinct_bound_segments_per_volume``).
 from .VolumeSegmentAggregation import (
+    carved_masks_per_volume,
     distinct_bound_segments_per_volume,
     effective_regions_per_volume,
 )
@@ -124,6 +125,7 @@ __all__ = [
     "resample_mask_to_plane",
     "set_highlight_seed_id",
     "stripe_segments",
+    "carved_masks_per_volume",
     "distinct_bound_segments_per_volume",
     "effective_regions_per_volume",
     "VolumetrySeedPipeline3D",
