@@ -1563,13 +1563,11 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
     import numpy
     import vtk
 
-    from LiverVolumetryLib import (
-      carve_effective_mask,
-      effective_regions_per_volume,
-      segments_above,
-    )
-    perVolume = effective_regions_per_volume(seedsNode)
-    if not perVolume:
+    from LiverVolumetryLib import carved_masks_per_volume, effective_regions_per_volume
+    # A cheap pure pre-check on the carrier: with no grouped, bound seed there
+    # is nothing to measure, and this returns before the expensive reference
+    # rasterization below (which the mask fold needs but an empty run does not).
+    if not effective_regions_per_volume(seedsNode):
       return
 
     # ONE reference rasterization: the whole segmentation exported to a
@@ -1598,41 +1596,15 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
       voxelMl = spacing[0] * spacing[1] * spacing[2] * 0.001
       totalVolumeMl = int(numpy.count_nonzero(scalars)) * voxelMl
 
-      maskCache = {}
-      def _segment_mask(segmentID):
-        """The segment's binary mask on the reference grid (cached), or None."""
-        if segmentID in maskCache:
-          return maskCache[segmentID]
-        try:
-          mask = slicer.util.arrayFromSegmentBinaryLabelmap(
-            segmentationNode, segmentID, reference)
-        except Exception:  # noqa: BLE001 - a segment without a labelmap measures nothing
-          mask = None
-        maskCache[segmentID] = mask
-        return mask
-
       dims = image.GetDimensions()
       shape = (dims[2], dims[1], dims[0])
 
-      # One row per volume, in first-seen volume order on the carrier: the
-      # union of the volume's distinct (owner, snapshot) carved regions.
-      for volumeId in seedsNode.GetVolumeIds():
-        entries = perVolume.get(volumeId)
-        if not entries:
-          continue
-        union = numpy.zeros(shape, dtype=bool)
-        for ownerSegmentID, context in entries:
-          ownerMask = _segment_mask(ownerSegmentID)
-          if ownerMask is None:
-            continue
-          aboveMasks = [
-            mask
-            for mask in (
-              _segment_mask(segmentID)
-              for segmentID in segments_above(list(context), ownerSegmentID))
-            if mask is not None
-          ]
-          union |= carve_effective_mask(ownerMask, aboveMasks)
+      # One row per volume, in the carrier's volume order: the union of the
+      # volume's distinct (owner, snapshot) carved regions -- the SAME masks
+      # the generated segments will carry (``carved_masks_per_volume``).
+      masks = carved_masks_per_volume(
+        seedsNode, self._segmentMaskReader(segmentationNode, reference), shape)
+      for volumeId, union in masks.items():
         voxelCount = int(union.sum())
         volumeMl = voxelCount * voxelMl
         rowName = seedsNode.GetVolumeLabel(volumeId) or volumeId
@@ -1651,6 +1623,27 @@ class LiverVolumetryLogic(ScriptedLoadableModuleLogic):
         f"'{segmentationNode.GetName()}' segmentation (all segments together).")
     finally:
       slicer.mrmlScene.RemoveNode(reference)
+
+  @staticmethod
+  def _segmentMaskReader(segmentationNode, referenceNode):
+    """A CACHING ``mask_for_segment`` reader over ONE reference grid.
+
+    ``VisibilityCarve.segment_mask_reader`` (same best-effort semantics: an
+    unreadable segment yields ``None``, never a raise) plus a per-run memo --
+    the fold reads a handful of segments over many seeds, so re-rasterizing a
+    segment per seed would dominate the run on clinical volumes.  The memo is
+    per call: nothing survives the run.
+    """
+    from LiverVolumetryLib.VisibilityCarve import segment_mask_reader
+    read = segment_mask_reader(segmentationNode, referenceNode)
+    cache = {}
+
+    def _mask(segmentID):
+      if segmentID not in cache:
+        cache[segmentID] = read(segmentID)
+      return cache[segmentID]
+
+    return _mask
 
   @staticmethod
   def _describePercentColumn(outputTable, text):
