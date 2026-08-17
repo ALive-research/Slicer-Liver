@@ -129,7 +129,17 @@ def _bare_shell(pages):
             f"Liver scripted module not importable ({exc}); "
             "ensure --additional-module-paths includes Liver/."
         )
-    shell = Liver.LiverWidget.__new__(Liver.LiverWidget)
+    # From the repo root ``import Liver`` resolves to the module DIRECTORY as
+    # a namespace package (``__file__`` is None), which carries no widget
+    # class; only the staged/launched module path yields the real Liver.py.
+    # Skip cleanly there rather than failing on the missing attribute.
+    widgetClass = getattr(Liver, "LiverWidget", None)
+    if widgetClass is None:
+        pytest.skip(
+            "'Liver' resolved to the module directory (namespace package), not "
+            "the scripted module; needs the staged module path (launched)."
+        )
+    shell = widgetClass.__new__(widgetClass)
     # The relay reads only these three members; ``_stageTabs`` stays None so
     # the indicator repaint short-circuits (its documented pre-setup guard).
     shell._stageTabs = None
