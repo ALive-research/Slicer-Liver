@@ -238,6 +238,7 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.updateParameterNodeFromGUI)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
+    self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndImportEvent, self.onSceneEndImport)
     self.ui.inputSurfaceSelector.connect('currentNodeChanged(bool)', self.segmentationNodeSelected)
 
     # Vessel-adhering-highlight wiring (ADR-0036 / ADR-0037).  Keep the
@@ -861,6 +862,21 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         node.SetAdhering(False)
     # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
     self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
+
+  def onSceneEndImport(self, caller, event):
+    """Re-assert the module-scoped overlay gate on every loaded highlight node.
+
+    A scene saved WHILE this module was showing carries an open overlay gate
+    on its highlight display node; re-loading it in the SAME session (the one
+    case where the persisted session nonce still matches) must not raise our
+    overlays under whatever module is showing now.  Every loaded node is
+    normalized, not only the one this widget holds -- an imported scene may
+    bring another, and LayerDM builds Pipelines for it just the same.
+    """
+    del caller, event
+    from VascularTerritoriesLib import TerritoryInteractionState as _territoryState
+    for node in slicer.util.getNodesByClass("vtkMRMLTerritoriesHighlightDisplayNode"):
+      _territoryState.set_overlays_enabled(node, self._moduleActive)
 
   def onSceneStartClose(self, caller, event):
     """
