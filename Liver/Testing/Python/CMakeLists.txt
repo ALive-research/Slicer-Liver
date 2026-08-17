@@ -57,6 +57,10 @@ set(_liver_shell_pytest_files
   test_liver_shell_sidebar.py
   test_liver_shell_isstagecomplete.py
   test_liver_shell_no_domain_imports.py
+  # Stage-lifecycle relay: the shell forwards enter()/exit() to the panel of
+  # the showing stage (ADR-0023 §"Shell composition (Option H)").  Pure
+  # Python bookkeeping over the hosted pages, so it runs bare as well.
+  test_liver_shell_stage_lifecycle.py
   # Harness-contract + skip-path-preservation guards for the launched-
   # Slicer pytest driver (run_pytest_launched.py).  See ADR-0008 §6.
   test_run_pytest_launched_contract.py
