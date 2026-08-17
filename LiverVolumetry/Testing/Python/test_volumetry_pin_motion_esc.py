@@ -297,14 +297,24 @@ def test_hiding_the_display_node_retires_every_slice_overlay():
 
     pipeline, carrier, display = _pipeline_fixture(slicer)
     carrier.AddSeed(1.0, 2.0, 0.0)  # in-plane, so the handle projects present
+    carrier.SetNthSeedLabel(0, "Scoped seed")
     set_highlight_seed_id(display, carrier.GetNthSeedID(0))
     pipeline.UpdatePipeline()
     assert pipeline._handles_actor.GetVisibility(), (  # noqa: SLF001 - actor seam
         "precondition: the visible display node projects the seed handle."
     )
+    assert "Scoped seed" in (pipeline.GetPinAnnotation().GetText(1) or ""), (
+        "precondition: the pin names itself in the slice corner."
+    )
 
     display.SetVisibility(False)
     pipeline.UpdatePipeline()
+
+    assert not (pipeline.GetPinAnnotation().GetText(1) or ""), (
+        "the pinned-seed identity TEXT must be blanked, not just hidden -- a "
+        "vtkCornerAnnotation keeps its text and would outlive the module."
+    )
+    assert not pipeline.GetPinAnnotation().GetVisibility()
 
     assert not pipeline._handles_actor.GetVisibility(), (  # noqa: SLF001 - actor seam
         "a hidden display node must retire the projected seed handles."
@@ -321,6 +331,30 @@ def test_hiding_the_display_node_retires_every_slice_overlay():
     assert pipeline._slice_admissible()  # noqa: SLF001 - gate seam
     assert pipeline._handles_actor.GetVisibility(), (  # noqa: SLF001 - actor seam
         "re-showing the display node must repaint the seed handles."
+    )
+
+
+def test_renderer_teardown_blanks_the_pin_annotation():
+    """``cleanup`` (renderer churn / removal) blanks the identity text.
+
+    The other retire route named by the display lifecycle: a pipeline whose
+    renderer goes away must leave no "Pinned: ..." text behind for a re-added
+    actor to resurrect.
+    """
+    slicer = _slicer_or_skip()
+    from LiverVolumetryLib.CarvedRegionStripes import set_highlight_seed_id
+
+    pipeline, carrier, display = _pipeline_fixture(slicer)
+    carrier.AddSeed(1.0, 2.0, 0.0)
+    carrier.SetNthSeedLabel(0, "Teardown seed")
+    set_highlight_seed_id(display, carrier.GetNthSeedID(0))
+    pipeline.UpdatePipeline()
+    assert pipeline.GetPinAnnotation().GetText(1)
+
+    pipeline.cleanup()
+
+    assert not (pipeline.GetPinAnnotation().GetText(1) or ""), (
+        "a renderer teardown must blank the pinned-seed identity text."
     )
 
 
