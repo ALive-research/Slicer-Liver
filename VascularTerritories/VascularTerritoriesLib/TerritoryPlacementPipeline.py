@@ -135,6 +135,13 @@ class TerritoryPlacementPipeline(_PipelineBase):
 
         self._observer_tags: dict = {}
         self._observed_node_refs: list = []
+        # The display node currently observed for the module-scoped overlay gate
+        # (``TerritoryInteractionState.overlays_enabled``) + the last gate value
+        # seen, so a flip repaints exactly once.  LayerDM does not drive
+        # ``UpdatePipeline`` on a display-node ``Modified``, so the client owns
+        # this observer.
+        self._observed_display: Any | None = None
+        self._overlay_gate: bool = True
 
         # The carrier + the active territory the placement writes into.
         self._carrier: Any | None = None
@@ -465,6 +472,7 @@ class TerritoryPlacementPipeline(_PipelineBase):
         # carrier: force both to re-resolve (the highlight-Pipeline precedent).
         self._pick = None
         self._ensure_carrier_observed()
+        self._ensure_display_observed()
 
     def OnRendererAdded(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
         try:
@@ -495,6 +503,8 @@ class TerritoryPlacementPipeline(_PipelineBase):
                 renderer.RemoveActor(self._marker_actor)
             self._detach_halo_renderer()
             self._renderer = None
+            self._seed_actor.SetVisibility(False)
+            self._marker_actor.SetVisibility(False)
             self.cleanup()
         except Exception:  # pragma: no cover - C++ boundary must never raise
             pass
@@ -549,9 +559,39 @@ class TerritoryPlacementPipeline(_PipelineBase):
         self._carrier = None
         self._observed_carrier = None
         self._observed_pick_display = None
+        self._observed_display = None
         self._drag_key = None  # the base's grab bookkeeping
         self._hover_target = None
         self._halo_actor.SetVisibility(False)
+
+    def _ensure_display_observed(self) -> None:
+        """Observe the shared display node so an overlay-gate flip repaints.
+
+        The module-active flag is the module-scoped overlay gate
+        (``TerritoryInteractionState.overlays_enabled``); without this observer
+        the seed glyphs / halo would keep drawing after the widget's ``exit()``
+        closed it.  Deduped on the observed reference; idempotent.
+        """
+        node = self._display_node
+        if node is self._observed_display:
+            return
+        if self._observed_display is not None:
+            self._detach_observer(self._observed_display)
+        self._observed_display = node
+        if node is not None:
+            self._attach_observer(node)
+
+    def _overlay_gate_open(self) -> bool:
+        """True while this module's overlays may draw (module-scoped rule)."""
+        return _state.overlays_enabled(self._display_node)
+
+    def _admissible(self) -> bool:
+        """Veto the grab-drag while our overlays are retired.
+
+        A hidden seed glyph must not be draggable: one gate covers the cue and
+        the gesture.
+        """
+        return self._overlay_gate_open()
 
     def _ensure_carrier_observed(self) -> None:
         """Observe the in-effect carrier so seed glyphs track its edits.
@@ -602,7 +642,10 @@ class TerritoryPlacementPipeline(_PipelineBase):
         try:
             self._ensure_carrier_observed()
             self._ensure_pick_surface_observed()
+            self._ensure_display_observed()
+            self._overlay_gate = self._overlay_gate_open()
             self._rebuild_seed_actor()
+            self._position_halo()
             self._reconcile_highlight()
         except Exception:  # pragma: no cover - C++ boundary must never raise
             pass
@@ -630,7 +673,11 @@ class TerritoryPlacementPipeline(_PipelineBase):
             self._marker_actor.GetProperty().SetColor(color[0], color[1], color[2])
         except Exception:  # pragma: no cover - defensive
             pass
-        adhering = bool(display.GetAdhering()) and bool(display.GetVisibility())
+        adhering = (
+            bool(display.GetAdhering())
+            and bool(display.GetVisibility())
+            and self._overlay_gate_open()
+        )
         self._marker_actor.SetVisibility(adhering)
         if adhering:
             point = display.GetAdheringPointWorld()
@@ -927,7 +974,7 @@ class TerritoryPlacementPipeline(_PipelineBase):
         target = self._drag_target or self._hover_target
         carrier = self._get_carrier()
         show = False
-        if target is not None and carrier is not None:
+        if target is not None and carrier is not None and self._overlay_gate_open():
             territory, index = target
             if 0 <= index < carrier.GetNumberOfAnnotationPoints(territory):
                 point = carrier.GetNthAnnotationPoint(territory, index)
@@ -994,9 +1041,21 @@ class TerritoryPlacementPipeline(_PipelineBase):
         unrelated ``Modified`` (a table repaint, a colour change) reads the
         carrier and repaints without adding / moving / dropping any point
         (ADR-0037 §Conformance no-drift).
+
+        A DISPLAY-node ``Modified`` may be the module-scoped overlay gate
+        flipping (the widget's ``enter()`` / ``exit()``): a flip retires the
+        halo + the hover recolour with the glyphs, so nothing of ours -- and no
+        stale hover state -- survives the module switch.
         """
-        del caller, event
+        del event
         try:
+            gate = self._overlay_gate_open()
+            if caller is self._display_node and gate != self._overlay_gate:
+                self._overlay_gate = gate
+                if not gate:
+                    self._hover_target = None
+                    self._halo_actor.SetVisibility(False)
+                    self._marker_actor.SetVisibility(False)
             self._rebuild_seed_actor()
             self.RequestRender()
         except Exception:  # pragma: no cover - C++ boundary must never raise
@@ -1015,6 +1074,11 @@ class TerritoryPlacementPipeline(_PipelineBase):
         (nearest input segment) is hidden via the structures table is OMITTED,
         so hiding a vessel hides its seeds live (ADR-0037 slice 5).  A
         no-op-safe rebuild — an empty carrier clears the glyphs.
+
+        The glyph actor also carries the module-scoped overlay gate: the seeds
+        are one of THIS module's transient overlays, so they stop drawing while
+        VascularTerritories is inactive and come back on re-entry (the point set
+        is rebuilt either way, so no carrier edit is needed to restore them).
         """
         self._seed_points.Reset()
         self._seed_colors.Reset()
@@ -1050,6 +1114,7 @@ class TerritoryPlacementPipeline(_PipelineBase):
         self._seed_points.Modified()
         self._seed_colors.Modified()
         self._seed_polydata.Modified()
+        self._seed_actor.SetVisibility(self._overlay_gate_open())
 
 
 class _TerritorySurfacePick:

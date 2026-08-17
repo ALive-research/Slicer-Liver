@@ -824,11 +824,21 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     if table is not None and hasattr(table, "disarm"):
       table.disarm()
     # Close the module-active gate (ADR-0037 slice-5 concern #1): no view
-    # claims an add-on-click while VascularTerritories is inactive.
+    # claims an add-on-click while VascularTerritories is inactive.  The gate is
+    # ALSO the module-scoped overlay rule (``overlays_enabled``): closing it
+    # retires every temporary visual our Pipelines draw -- the seed glyphs, the
+    # slice handles + hover ring, the adhering marker, the vessel hover
+    # highlight and the glow halo -- so nothing of ours stays on screen under
+    # another module.  Persistent RESULTS (the extracted centerline models, the
+    # territory map) are untouched: they are scene data, not overlays.
     node = getattr(self, "_highlightDisplayNode", None)
     if node is not None:
       from VascularTerritoriesLib import TerritoryInteractionState as _territoryState
       _territoryState.set_module_active(node, False)
+      # Drop the adhering hover state too, so re-entering starts with no marker
+      # waiting to be re-raised by a stale publish.
+      if hasattr(node, "SetAdhering") and bool(node.GetAdhering()):
+        node.SetAdhering(False)
     # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
     self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
 

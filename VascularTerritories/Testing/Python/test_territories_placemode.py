@@ -937,6 +937,11 @@ def test_exit_disarms_and_a_later_click_places_nothing(qt_widgets, monkeypatch):
     highlight) so no view claims an add-on-click while VascularTerritories is
     inactive.  After ``exit()``, a click through the display-node-wired
     pipeline places nothing and the display node reads dis-armed + hidden.
+
+    The same closed gate carries the MODULE-SCOPED OVERLAY rule
+    (``territory-usability`` display lifecycle): nothing this module draws may
+    stay visible under another module, so the seed glyphs retire on ``exit()``
+    and come back on ``enter()``.
     [launched, pipeline wired via the display node.]
     """
     _slicer_or_skip()
@@ -1011,6 +1016,28 @@ def test_exit_disarms_and_a_later_click_places_nothing(qt_widgets, monkeypatch):
         "a click after exit() must place nothing (no view claims an add-on-"
         "click while the module is inactive)."
     )
+
+    # The module-scoped OVERLAY rule (territory-usability display lifecycle):
+    # the closed gate must also retire everything this module DRAWS -- here the
+    # seed glyphs -- and re-entering must bring them back.  A seed added while
+    # inactive still renders no glyph; the restore rides the pipeline's own
+    # display-node observer (LayerDM does not call UpdatePipeline on a
+    # display-node Modified).
+    carrier.AddAnnotationPoint(territory, 5.0, 0.0, 0.0)
+    pipeline.UpdatePipeline()
+    assert not pipeline._seed_actor.GetVisibility(), (  # noqa: SLF001 - actor seam
+        "an inactive module must draw no seed glyphs."
+    )
+    assert not pipeline._admissible(), (  # noqa: SLF001 - gate seam
+        "a retired glyph must not be grabbable either."
+    )
+
+    widget.enter()
+
+    assert pipeline._seed_actor.GetVisibility(), (  # noqa: SLF001 - actor seam
+        "enter() must bring our overlays back (the workflow resumes as left)."
+    )
+    assert pipeline._admissible()  # noqa: SLF001 - gate seam
 
     widget.cleanup()
 

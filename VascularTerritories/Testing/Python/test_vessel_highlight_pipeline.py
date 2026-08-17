@@ -88,6 +88,15 @@ class _FakeDisplayNode:
         self._radius = 3.0
         self._color = [1.0, 0.6, 0.1]
         self._visibility = True
+        # The attribute channel the shared interaction state rides (arm /
+        # module-active): the module-scoped overlay gate is read off it.
+        self._attributes: dict = {}
+
+    def GetAttribute(self, key):
+        return self._attributes.get(key)
+
+    def SetAttribute(self, key, value):
+        self._attributes[key] = value
 
     def GetAdheringPointWorld(self):
         return list(self._point)
@@ -254,6 +263,46 @@ def test_process_interaction_event_never_claims():
 
     pipeline = VesselHighlightPipeline()
     assert pipeline.ProcessInteractionEvent(_FakeEvent()) is False
+
+
+def test_an_inactive_module_neither_hovers_nor_shows_the_marker():
+    """The module-scoped overlay rule reaches the vessel hover marker.
+
+    ``territory-usability`` display lifecycle: while VascularTerritories is not
+    the active module, a hover must publish nothing (no surface pick, no MRML
+    write) and an already-raised marker must retire -- nothing this module draws
+    survives the switch.  Re-opening the gate restores the hover cue.
+    """
+    VesselHighlightPipeline = _import_pipeline()
+    VesselSurfacePick = _import_pick()
+    from TerritoryInteractionState import set_module_active
+
+    pipeline = VesselHighlightPipeline()
+    display = _FakeDisplayNode()
+    _wire_pipeline(pipeline, display, _FakeRenderer(), VesselSurfacePick(_unit_sphere()))
+
+    pipeline.CanProcessInteractionEvent(_FakeEvent())
+    pipeline.UpdatePipeline()
+    assert pipeline.GetMarkerActor().GetVisibility() == 1  # precondition
+
+    set_module_active(display, False)
+    pipeline.UpdatePipeline()
+    assert pipeline.GetMarkerActor().GetVisibility() == 0, (
+        "an inactive module must show no vessel hover marker."
+    )
+
+    display.SetAdhering(False)
+    pipeline.CanProcessInteractionEvent(_FakeEvent())
+    assert display.GetAdhering() is False, (
+        "an inactive module must not even publish a hover (no pick, no write)."
+    )
+
+    set_module_active(display, True)
+    pipeline.CanProcessInteractionEvent(_FakeEvent())
+    pipeline.UpdatePipeline()
+    assert pipeline.GetMarkerActor().GetVisibility() == 1, (
+        "re-entering the module restores the hover cue."
+    )
 
 
 def test_no_renderer_declines_without_touching_state():
