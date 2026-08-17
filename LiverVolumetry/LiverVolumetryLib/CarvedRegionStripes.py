@@ -55,12 +55,6 @@ STRIPE_PERIOD_PX = 12
 #: steady, calm march (~2 periods per second).
 STRIPE_TICK_MS = 40
 
-#: How long a pin MARCHES before going idle-static (ms): the march is an
-#: attention cue for the pin CHANGE, not a permanent animation, so after
-#: this interval the stripes freeze in place (the highlight stays).  Any
-#: pin change restarts the march.  This is also the reduced-motion story:
-#: motion is bounded, never indefinite.
-STRIPE_IDLE_STATIC_MS = 10000
 
 #: The stripe-tick event id the widget's timer fires on the shared display
 #: node (``InvokeEvent`` -- no serialization, no Modified) and the slice
