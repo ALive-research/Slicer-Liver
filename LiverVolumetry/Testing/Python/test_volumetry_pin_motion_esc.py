@@ -229,6 +229,12 @@ def _pipeline_fixture(slicer):
     if carrier is None or display is None or not hasattr(carrier, "GetNthSeedID"):
         pytest.skip(f"{SEEDS_NODE_CLASS}/{DISPLAY_NODE_CLASS} not registered.")
     PointPlacementState(VOLUMETRY_NAMESPACE).set_carrier(display, carrier)
+    # Drawing is gated on the module having ENTERED (the gate is default-closed
+    # so a scene loaded without opening the module draws nothing); a pipeline
+    # test asserting the overlay renders must open it, as the module's enter()
+    # does.
+    from slicer_pytest_support import open_module_overlay_gate
+    open_module_overlay_gate(display, VOLUMETRY_NAMESPACE)
 
     pipeline = VolumetrySeedPipelineSlice()
     pipeline.SetViewNode(slice_node)
