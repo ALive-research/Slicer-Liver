@@ -71,6 +71,36 @@ def is_module_active(displayNode: Any) -> bool:
     return _STATE.is_module_active(displayNode)
 
 
+def overlays_enabled(displayNode: Any) -> bool:
+    """True while this module's TRANSIENT overlays may draw.
+
+    ADR-0037 §Decision 2 makes the display node's VISIBILITY the arm-scoped
+    gate of the adhering placement marker (raised on arm, dropped on disarm),
+    so it cannot double as the module scope.  The MODULE-ACTIVE flag can: the
+    widget's ``enter()`` / ``exit()`` own it, and it is exactly the question
+    "is VascularTerritories the module the surgeon is looking at?".  Every
+    territory overlay -- seed glyphs, slice handles + hover ring, the adhering
+    marker, the vessel hover highlight, the glow halo -- reads this so nothing
+    of ours stays on screen under another module.
+
+    Unset reads enabled (the ``is_module_active`` contract): LayerDM creates
+    the Pipelines the moment the display node enters the scene, before any
+    ``enter()``, and the seeds must render in that window.
+
+    Persistent RESULTS (the extracted centerline models, the territory map)
+    are NOT overlays: they are scene data the surgeon asked for, and they keep
+    their own visibility across a module switch.
+
+    A node with no attribute channel at all (a unit-layer double) cannot
+    express the gate, so it reads enabled rather than raising at a rendering
+    boundary.
+    """
+    try:
+        return _STATE.is_module_active(displayNode)
+    except Exception:  # pragma: no cover - defensive (unit-layer doubles)
+        return True
+
+
 def set_grabbing(displayNode: Any, grabbing: bool) -> None:
     """Publish that a seed-drag gesture is in flight on the display node."""
     _STATE.set_grabbing(displayNode, grabbing)
