@@ -228,6 +228,14 @@ def _make_display_node_or_skip(slicer, name="TableHighlightTest"):
             f"{HIGHLIGHT_DISPLAY_CLASS} not registered -- the shared highlight "
             "display node (ADR-0036/0037) is unavailable (launched build)."
         )
+    # The module-scoped overlay gate is default-CLOSED and opened by the
+    # widget's enter() (TerritoryInteractionState.set_overlays_enabled).  A
+    # Pipeline test mints its own display node and has no widget, so it models
+    # a SHOWING module explicitly -- otherwise the pipeline correctly draws
+    # nothing and every overlay assertion below would be asserting the gate.
+    from slicer_pytest_support import open_module_overlay_gate
+
+    open_module_overlay_gate(node, "VascularTerritories")
     return node
 
 

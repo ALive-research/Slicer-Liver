@@ -155,3 +155,30 @@ def drain_widgets_for_teardown():
     widgets = list(registry)
     registry.clear()
     return widgets
+
+
+# --------------------------------------------------------------------------- #
+# Module-scoped overlay gate (the "this module is showing" fixture step).
+#
+# Every transient overlay a Slicer-Liver interaction module draws is gated on
+# the shared display node's overlay flag, which is default-CLOSED and opened by
+# the owning module's ``enter()`` (ADR-0038 §"Shared home + names";
+# PointPlacementState.set_overlays_visible).  A Pipeline test that mints its own
+# display node has no widget and therefore no ``enter()``, so it must open the
+# gate itself or the pipeline correctly draws nothing.  One helper so a fixture
+# expresses that in a single line.
+# --------------------------------------------------------------------------- #
+
+def open_module_overlay_gate(displayNode, namespace):
+    """Open ``namespace``'s overlay gate on ``displayNode`` (model a showing module).
+
+    Returns ``displayNode`` so it can wrap a creation call.  A no-op when the
+    shared interaction lib is unreachable (the bare unit layer, where the gate
+    reads open anyway for lack of an attribute channel).
+    """
+    try:
+        from SlicerLiverInteractionLib.PointPlacementState import PointPlacementState
+    except ImportError:
+        return displayNode
+    PointPlacementState(namespace).set_overlays_visible(displayNode, True)
+    return displayNode

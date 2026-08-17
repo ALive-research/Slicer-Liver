@@ -71,21 +71,30 @@ def is_module_active(displayNode: Any) -> bool:
     return _STATE.is_module_active(displayNode)
 
 
+def set_overlays_enabled(displayNode: Any, enabled: bool) -> None:
+    """Open/close the module-scoped overlay gate (the ``enter()``/``exit()`` pair)."""
+    _STATE.set_overlays_visible(displayNode, enabled)
+
+
 def overlays_enabled(displayNode: Any) -> bool:
     """True while this module's TRANSIENT overlays may draw.
 
     ADR-0037 §Decision 2 makes the display node's VISIBILITY the arm-scoped
     gate of the adhering placement marker (raised on arm, dropped on disarm),
-    so it cannot double as the module scope.  The MODULE-ACTIVE flag can: the
+    so it cannot double as the module scope.  The OVERLAY gate can: the
     widget's ``enter()`` / ``exit()`` own it, and it is exactly the question
     "is VascularTerritories the module the surgeon is looking at?".  Every
     territory overlay -- seed glyphs, slice handles + hover ring, the adhering
     marker, the vessel hover highlight, the glow halo -- reads this so nothing
     of ours stays on screen under another module.
 
-    Unset reads enabled (the ``is_module_active`` contract): LayerDM creates
-    the Pipelines the moment the display node enters the scene, before any
-    ``enter()``, and the seeds must render in that window.
+    Unset reads DISABLED (``PointPlacementState.overlays_visible``), unlike the
+    sibling placement gate ``is_module_active``: LayerDM creates the Pipelines
+    the moment the display node enters the scene, which on a scene load happens
+    with no widget in play at all, and an overlay drawn in that window is
+    clutter over whatever module the surgeon actually has open.  The placement
+    gate stays optimistically open in the same window because a declined click
+    is a lost gesture; drawing has no such cost.
 
     Persistent RESULTS (the extracted centerline models, the territory map)
     are NOT overlays: they are scene data the surgeon asked for, and they keep
@@ -95,8 +104,10 @@ def overlays_enabled(displayNode: Any) -> bool:
     express the gate, so it reads enabled rather than raising at a rendering
     boundary.
     """
+    if displayNode is None:
+        return True
     try:
-        return _STATE.is_module_active(displayNode)
+        return _STATE.overlays_visible(displayNode)
     except Exception:  # pragma: no cover - defensive (unit-layer doubles)
         return True
 

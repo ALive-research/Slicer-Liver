@@ -160,6 +160,11 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # reference tracks the input segmentation and whose Visibility gates
     # the hover Pipeline's paint (live only during marker placement).
     self._highlightDisplayNode = None
+    # Is this module the one the surgeon is looking at?  ``enter()`` /
+    # ``exit()`` own it, and the overlay gate is derived from it wherever a
+    # display node is minted or adopted outside that pair (the gate is
+    # default-CLOSED, so a node created while inactive must stay dark).
+    self._moduleActive = False
     # The input segmentation's display node the widget observes so hiding a
     # structure hides its extracted centerline(s) (ADR-0037 slice 5).  Tracked
     # so the observer can be re-aimed on an input change and removed in cleanup.
@@ -361,6 +366,13 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     node.UnRegister(None)
     node.SetName("Vessel Highlight")
     node.SetVisibility(False)  # off until arming turns it on
+    # The module-scoped overlay gate is default-CLOSED, and this node is minted
+    # lazily -- from ``enter()`` but also from a placement/pick-surface path
+    # after a scene close dropped the handle.  Seed it from the live module
+    # state, PRE-AddNode, or the Pipelines LayerDM builds at AddNode would read
+    # a closed gate and draw nothing for a module that IS showing.
+    from VascularTerritoriesLib import TerritoryInteractionState as _territoryState
+    _territoryState.set_overlays_enabled(node, bool(self._moduleActive))
     # Configure BEFORE AddNode: LayerDM consults the pipeline creators the
     # moment the node enters the scene, and each created pipeline (3D + every
     # slice) resolves + OBSERVES the annotation carrier at creation.  So the
@@ -370,7 +382,6 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # "configure before AddNode" precedent).
     carrier = getattr(self, "_annotationCarrier", None)
     if carrier is not None:
-      from VascularTerritoriesLib import TerritoryInteractionState as _territoryState
       _territoryState.set_carrier(node, carrier)
     segmentation = self.ui.inputSurfaceSelector.currentNode()
     if segmentation is not None:
@@ -804,10 +815,17 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # Open the module-active gate (ADR-0037 slice-5 concern #1): the
     # LayerDM-created placement Pipelines read this flag off the shared display
     # node, so an armed click only lands while VascularTerritories is active.
+    self._moduleActive = True
     node = self._ensureHighlightDisplayNode()
     if node is not None:
       from VascularTerritoriesLib import TerritoryInteractionState as _territoryState
       _territoryState.set_module_active(node, True)
+      # Open the module-scoped OVERLAY gate explicitly on every entry.  It is
+      # default-closed and session-scoped, so this is the one thing that lets
+      # our transient visuals draw at all -- including the first entry of the
+      # session and an entry after a scene load (whose persisted gate value
+      # belongs to the session that saved it and reads closed).
+      _territoryState.set_overlays_enabled(node, True)
     # Make sure parameter node exists and observed
     self.initializeParameterNode()
 
@@ -820,12 +838,13 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     # inactive.  Reuse the table's shared disarm body (clears the display
     # node's armed/active + hides the highlight); the follow-up rebuild
     # re-derives every Place toggle un-checked.
+    self._moduleActive = False
     table = getattr(self, "_territoriesTable", None)
     if table is not None and hasattr(table, "disarm"):
       table.disarm()
     # Close the module-active gate (ADR-0037 slice-5 concern #1): no view
-    # claims an add-on-click while VascularTerritories is inactive.  The gate is
-    # ALSO the module-scoped overlay rule (``overlays_enabled``): closing it
+    # claims an add-on-click while VascularTerritories is inactive.  Close the
+    # module-scoped overlay gate (``overlays_enabled``) alongside it: that
     # retires every temporary visual our Pipelines draw -- the seed glyphs, the
     # slice handles + hover ring, the adhering marker, the vessel hover
     # highlight and the glow halo -- so nothing of ours stays on screen under
@@ -835,6 +854,7 @@ class VascularTerritoriesWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     if node is not None:
       from VascularTerritoriesLib import TerritoryInteractionState as _territoryState
       _territoryState.set_module_active(node, False)
+      _territoryState.set_overlays_enabled(node, False)
       # Drop the adhering hover state too, so re-entering starts with no marker
       # waiting to be re-raised by a stale publish.
       if hasattr(node, "SetAdhering") and bool(node.GetAdhering()):

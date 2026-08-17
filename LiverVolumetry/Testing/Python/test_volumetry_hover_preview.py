@@ -55,6 +55,12 @@ def _make_fixture(slicer, qt_widgets, seeds=2):
     display = slicer.mrmlScene.AddNewNodeByClass(DISPLAY_NODE_CLASS, "HoverPreviewDisplay")
     if display is None or not hasattr(display, "GetHighlightSeedID"):
         pytest.skip(f"{DISPLAY_NODE_CLASS} HighlightSeedID member not available (ADR-0027).")
+    # The overlay gate is default-CLOSED and opened by the module's enter()
+    # (PointPlacementState.set_overlays_visible).  A Pipeline test mints its own
+    # display node and has no widget, so it models a SHOWING module explicitly.
+    from slicer_pytest_support import open_module_overlay_gate
+
+    open_module_overlay_gate(display, "LiverVolumetry")
     for i in range(seeds):
         carrier.AddSeed(float(i), 0.0, 0.0)
     try:

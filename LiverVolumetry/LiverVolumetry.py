@@ -794,10 +794,18 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     node.UnRegister(None)
     node.SetName("Volumetry Seeds Display")
     node.SetVisibility(True)
+    # Open the overlay gate here too, PRE-AddNode: the gate is default-closed,
+    # this node is minted lazily (the first placement precondition, long after
+    # ``enter()``), and the Pipelines LayerDM builds at AddNode read the gate
+    # immediately -- so an ``enter()`` that ran before the node existed would
+    # otherwise leave the surgeon's own seeds invisible.  Reads the module's
+    # live active state, so a node minted while inactive stays dark.
+    from SlicerLiverInteractionLib.PointPlacementState import PointPlacementState
+    state = PointPlacementState(VOLUMETRY_NAMESPACE)
+    state.set_overlays_visible(node, bool(self._moduleActive))
     carrier = self._ensureSeedsCarrier()
     if carrier is not None:
-      from SlicerLiverInteractionLib.PointPlacementState import PointPlacementState
-      PointPlacementState(VOLUMETRY_NAMESPACE).set_carrier(node, carrier)
+      state.set_carrier(node, carrier)
     self._aimPickSurface(node)
     self._aimStructureSource(node)
     node = slicer.mrmlScene.AddNode(node)
@@ -1276,7 +1284,7 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
     self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
 
-  def _setOverlayVisibility(self, visible):
+  def _setOverlayVisibility(self, visible, node=None):
     """Show/hide EVERY overlay this module draws, via the seeds display node.
 
     The seed glyphs (3D), the slice handles + hover ring, the placement-preview
@@ -1286,14 +1294,27 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     family on ``exit()`` and restores it on ``enter()``.  Guarded: exit may run
     with no scene, no display node and no panel.
 
+    Writes BOTH halves of the gate the Pipelines read (``_overlays_enabled``):
+    the node's visibility AND the overlay gate, which is default-CLOSED and
+    session-scoped (``PointPlacementState.set_overlays_visible``) so a display
+    node that no ``enter()`` has opened this session draws nothing -- including
+    one that arrives from a scene saved with the overlays up, where no widget
+    exists to scrub the persisted visibility.
+
+    ``node`` defaults to the widget's own display node; the scene-load
+    sanitation passes each loaded node explicitly.
+
     Only OUR overlays move; the input segmentation's per-segment visibility (the
     surgeon's eye-list composition) is never written here.
     """
-    node = getattr(self, "_seedsDisplayNode", None)
+    if node is None:
+      node = getattr(self, "_seedsDisplayNode", None)
     if node is None or not slicer.mrmlScene.IsNodePresent(node):
       return
     if hasattr(node, "SetVisibility"):
       node.SetVisibility(bool(visible))
+    from SlicerLiverInteractionLib.PointPlacementState import PointPlacementState
+    PointPlacementState(VOLUMETRY_NAMESPACE).set_overlays_visible(node, bool(visible))
 
   def _setModuleActive(self, active):
     """Open/close the shared display node's module-active add-on-click gate."""

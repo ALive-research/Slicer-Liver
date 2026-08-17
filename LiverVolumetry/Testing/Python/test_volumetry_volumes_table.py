@@ -195,6 +195,12 @@ def test_place_toggle_arms_into_the_active_volume(qt_widgets):
     display = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLVolumetrySeedsDisplayNode")
     if display is None:
         pytest.skip("vtkMRMLVolumetrySeedsDisplayNode not registered (ADR-0027).")
+    # The overlay gate is default-CLOSED and opened by the module's enter()
+    # (PointPlacementState.set_overlays_visible).  A Pipeline test mints its own
+    # display node and has no widget, so it models a SHOWING module explicitly.
+    from slicer_pytest_support import open_module_overlay_gate
+
+    open_module_overlay_gate(display, "LiverVolumetry")
     table = _make_table_or_skip(slicer, carrier, displayNode=display)
     qt_widgets.append(table)
     if not hasattr(table, "placeButton"):

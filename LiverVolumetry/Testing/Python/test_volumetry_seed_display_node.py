@@ -76,6 +76,12 @@ def _make_display_or_skip(slicer, name="VolumetrySeedsDisplayTest"):
             f"{DISPLAY_NODE_CLASS} not registered -- the ADR-0038-amendment "
             "volumetry seed display node (plan §3a) has not landed (ADR-0027)."
         )
+    # The overlay gate is default-CLOSED and opened by the module's enter()
+    # (PointPlacementState.set_overlays_visible).  A Pipeline test mints its own
+    # display node and has no widget, so it models a SHOWING module explicitly.
+    from slicer_pytest_support import open_module_overlay_gate
+
+    open_module_overlay_gate(node, "LiverVolumetry")
     return node
 
 

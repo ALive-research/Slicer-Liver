@@ -87,6 +87,12 @@ def _bind_carrier(slicer, namespace):
     display = slicer.mrmlScene.AddNewNodeByClass(DISPLAY_NODE_CLASS, "GlyphDisplay")
     if carrier is None or display is None or not hasattr(carrier, "AddSeed"):
         pytest.skip(f"{SEEDS_NODE_CLASS}/{DISPLAY_NODE_CLASS} not registered.")
+    # The overlay gate is default-CLOSED and opened by the module's enter()
+    # (PointPlacementState.set_overlays_visible).  A Pipeline test mints its own
+    # display node and has no widget, so it models a SHOWING module explicitly.
+    from slicer_pytest_support import open_module_overlay_gate
+
+    open_module_overlay_gate(display, "LiverVolumetry")
     PointPlacementState(namespace).set_carrier(display, carrier)
     return carrier, display
 
