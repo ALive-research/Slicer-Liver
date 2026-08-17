@@ -43,9 +43,11 @@ from LayerDMLib import vtkMRMLLayerDMScriptedPipeline as _PipelineBase
 try:  # pragma: no cover - exercised once per import path
     from .VesselSurfacePick import VesselSurfacePick
     from .VesselHighlightWiring import vascular_surface_polydata, visibility_mtime as _visibility_mtime
+    from . import TerritoryInteractionState as _state
 except ImportError:  # top-level import path (the unit layer's sys.path setup)
     from VesselSurfacePick import VesselSurfacePick  # type: ignore[no-redef]
     from VesselHighlightWiring import vascular_surface_polydata, visibility_mtime as _visibility_mtime  # type: ignore[no-redef]
+    import TerritoryInteractionState as _state  # type: ignore[no-redef]
 
 _REGISTERED = False
 
@@ -153,7 +155,15 @@ class VesselHighlightPipeline(_PipelineBase):
         color = display.GetColor()
         self._marker_actor.GetProperty().SetColor(color[0], color[1], color[2])
 
-        adhering = bool(display.GetAdhering()) and bool(display.GetVisibility())
+        # The module-scoped overlay rule (``overlays_enabled``): the hover
+        # marker is one of this module's transient visuals, so it never draws
+        # while VascularTerritories is inactive -- even if a straggler publish
+        # left the adhering flag raised.
+        adhering = (
+            bool(display.GetAdhering())
+            and bool(display.GetVisibility())
+            and _state.overlays_enabled(display)
+        )
         self._marker_actor.SetVisibility(adhering)
         if adhering:
             point = display.GetAdheringPointWorld()
@@ -181,6 +191,10 @@ class VesselHighlightPipeline(_PipelineBase):
         try:
             renderer = self._safe_get_renderer()
             if renderer is None:
+                return False, sys.float_info.max
+            # No hover cue -- and no surface pick, and no MRML publish -- while
+            # this module is inactive (the module-scoped overlay rule).
+            if not _state.overlays_enabled(self._display_node):
                 return False, sys.float_info.max
             if _event_type(eventData) == vtk.vtkCommand.MouseMoveEvent:
                 self._update_highlight(renderer, eventData)
@@ -341,10 +355,12 @@ class VesselHighlightPipeline(_PipelineBase):
     def _on_node_modified(self, caller: Any, event: str) -> None:
         """Re-sync the marker and repaint when the adhering state changed.
 
-        The render request is gated on the (adhering, point) tuple actually
-        changing (the ControlPolygonPipeline digest pattern): a hover that
-        moves the marker repaints, a render-induced ``Modified`` at fixed
-        state does not — no render feedback loop.
+        The render request is gated on the (gate, adhering, point) tuple
+        actually changing (the ControlPolygonPipeline digest pattern): a hover
+        that moves the marker repaints, a render-induced ``Modified`` at fixed
+        state does not — no render feedback loop.  The module-scoped overlay
+        gate rides IN the digest: closing it retires the marker, and that
+        retire has to reach the screen.
         """
         del caller, event
         try:
@@ -352,7 +368,8 @@ class VesselHighlightPipeline(_PipelineBase):
             display = self._display_node
             adhering = bool(display.GetAdhering()) if display is not None else False
             point = tuple(display.GetAdheringPointWorld()) if display is not None else ()
-            render_key = (adhering, point if adhering else ())
+            gate = _state.overlays_enabled(display)
+            render_key = (gate, adhering, point if adhering else ())
             if render_key == self._last_render_key:
                 return
             self._last_render_key = render_key

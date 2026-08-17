@@ -218,6 +218,11 @@ class TerritorySlicePipeline(_PipelineBase):
         self._highlight_actor.SetMapper(self._highlight_mapper)
         self._highlight_actor.SetVisibility(False)
 
+        # Last module-scoped overlay-gate value seen, so a display-node
+        # Modified that FLIPS it repaints the handles exactly once (a plain
+        # adhering-point publish keeps its cheap marker-only path).
+        self._overlay_gate: bool = True
+
     # ------------------------------------------------------------------ #
     # Grab bookkeeping -- the base's ``_drag_key`` IS the grabbed
     # ``(territoryId, index)`` (the key the projection stores); the rendering
@@ -342,6 +347,38 @@ class TerritorySlicePipeline(_PipelineBase):
         self._pick = None
         self._ensure_carrier_observed()
         self._ensure_pick_surface_observed()
+        self._overlay_gate = self._overlay_gate_open()
+
+    def _overlay_gate_open(self) -> bool:
+        """True while this module's overlays may draw (module-scoped rule).
+
+        ``TerritoryInteractionState.overlays_enabled`` -- the module-active
+        flag, NOT the display node's visibility (that one is the arm-scoped
+        gate of the adhering marker, ADR-0037 §Decision 2).
+        """
+        return _state.overlays_enabled(self._display_node)
+
+    def _slice_admissible(self) -> bool:
+        """Veto the whole arbitration while our overlays are retired.
+
+        A hidden handle must not be grabbable: the gated ``_reconcile`` stops
+        reprojecting, so the last projection would otherwise stay clickable
+        under another module.
+        """
+        return self._overlay_gate_open()
+
+    def _reconcile(self) -> None:
+        """Reproject the seed handles -- unless our overlays are retired.
+
+        While VascularTerritories is not the active module the handles + hover
+        ring are hidden instead of reprojected; re-entering flips the gate and
+        the next reconcile repaints from the carrier (no shadow state).
+        """
+        if not self._overlay_gate_open():
+            self._handles_actor.SetVisibility(False)
+            self._ring_actor.SetVisibility(False)
+            return
+        super()._reconcile()
 
     def _add_actors(self, renderer: Any) -> None:
         super()._add_actors(renderer)
@@ -625,6 +662,7 @@ class TerritorySlicePipeline(_PipelineBase):
                 and slice_node is not None
                 and bool(display.GetAdhering())
                 and bool(display.GetVisibility())
+                and self._overlay_gate_open()
             ):
                 ras_to_xy = _proj.inverse_xy_to_ras(slice_node)
                 if ras_to_xy is not None:
@@ -662,12 +700,17 @@ class TerritorySlicePipeline(_PipelineBase):
         / dropping any seed (ADR-0037 §Conformance no-drift).  A display-node
         Modified is (almost always) an adhering-point / visibility change from
         a hover in SOME view: repaint the marker only, keeping the per-hover
-        cost off the full seed reprojection.
+        cost off the full seed reprojection.  The exception is the
+        module-scoped overlay gate FLIPPING (the widget's ``enter()`` /
+        ``exit()``): that must retire / restore the handles too, so the flip --
+        and only the flip -- pays for a reconcile.
         """
         del event
         try:
-            if caller is not self._display_node:
-                self._reproject()
+            gate = self._overlay_gate_open()
+            if caller is not self._display_node or gate != self._overlay_gate:
+                self._overlay_gate = gate
+                self._reconcile()
             self._reconcile_highlight()
             self.RequestRender()
         except Exception:  # pragma: no cover - C++ boundary must never raise
