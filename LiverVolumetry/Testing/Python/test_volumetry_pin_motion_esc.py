@@ -241,10 +241,7 @@ def _pipeline_fixture(slicer):
 
 def test_slice_annotation_names_the_pinned_seed_and_volume():
     slicer = _slicer_or_skip()
-    from LiverVolumetryLib.CarvedRegionStripes import (
-        set_highlight_seed_id,
-        set_preview_seed_id,
-    )
+    from LiverVolumetryLib.CarvedRegionStripes import set_highlight_seed_id
 
     pipeline, carrier, display = _pipeline_fixture(slicer)
     carrier.AddSeed(1.0, 2.0, 3.0)
@@ -263,13 +260,6 @@ def test_slice_annotation_names_the_pinned_seed_and_volume():
     )
     if hasattr(carrier, "AddVolume"):
         assert "Left lobe" in text, "the annotation names the volume too."
-
-    # A hover preview shows no identity text (transient by design).
-    set_preview_seed_id(display, carrier.GetNthSeedID(0))
-    pipeline.UpdatePipeline()
-    assert not (pipeline.GetPinAnnotation().GetText(1) or ""), (
-        "a preview must not annotate."
-    )
 
     # Unpinning clears the annotation.
     set_highlight_seed_id(display, "")
