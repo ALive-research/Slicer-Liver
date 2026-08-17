@@ -16,6 +16,14 @@ on module enter.  Pins:
 * A STALE ID CLEARS -- an ID that no longer resolves (seed deleted, carrier
   gone) clears the parameter instead of resurrecting later.
 
+The same enter/exit round trip carries the MODULE-SCOPED OVERLAY rule
+(``territory-usability`` display lifecycle): nothing this module draws may
+stay visible under another module, so ``exit()`` hides the seeds display node
+(retiring the glyph / handle / stripe / annotation family the LayerDM
+Pipelines draw off it) and ``enter()`` restores it -- while the surgeon's
+SEGMENTATION visibility (their eye-list composition) is identical across the
+round trip.  Pinned below.
+
 HARNESS: launched Slicer (module widget + wrapped carrier).  SKIPS CLEANLY
 bare via the shared guards; RUNS launched (ADR-0027).
 """
@@ -143,6 +151,99 @@ def test_a_stale_persisted_id_clears_on_enter(qt_widgets):
     assert table.pinnedSeedID() == "", "a stale ID must not raise a pin."
     assert _parameter(widget) == "", (
         "a stale persisted ID must be CLEARED, never left to resurrect."
+    )
+
+
+def test_exit_hides_our_overlays_and_enter_restores_them(qt_widgets):
+    """``exit()`` retires the overlay family; ``enter()`` brings it back.
+
+    The seed glyphs (3D), slice handles, placement preview and pinned-seed
+    stripes/annotation are all drawn by the LayerDM Pipelines bound to the
+    seeds display node, and they honour its visibility -- so the display
+    node's visibility IS the module-scoped overlay gate.
+    """
+    slicer = _slicer_or_skip()
+    widget, carrier, table = _pin_fixture(slicer, qt_widgets)
+    display = widget._seedsDisplayNode  # noqa: SLF001 - display-node seam
+
+    table.highlightButton(0).setChecked(True)
+    widget.exit()
+
+    assert not bool(display.GetVisibility()), (
+        "exit() must hide the seeds display node -- our overlays are "
+        "module-scoped and may not survive a module switch."
+    )
+    assert table.pinnedSeedID() == "", "exit() also clears the live highlight."
+
+    widget.enter()
+
+    assert bool(display.GetVisibility()), (
+        "enter() must restore our overlays so the workflow resumes as left."
+    )
+    assert table.pinnedSeedID() == carrier.GetNthSeedID(0), (
+        "the persisted pin resumes with the restored overlays."
+    )
+
+
+def test_exit_enter_is_idempotent_and_survives_a_missing_display_node(qt_widgets):
+    """Repeated / node-less enter-exit must never raise (crash-safe guards)."""
+    slicer = _slicer_or_skip()
+    widget, _carrier, _table = _pin_fixture(slicer, qt_widgets)
+    display = widget._seedsDisplayNode  # noqa: SLF001 - display-node seam
+
+    widget.exit()
+    widget.exit()
+    assert not bool(display.GetVisibility())
+    widget.enter()
+    widget.enter()
+    assert bool(display.GetVisibility())
+
+    # No display node at all (a session that never placed a seed): the
+    # visibility writes must degrade to a no-op, not raise.
+    widget._seedsDisplayNode = None  # noqa: SLF001 - simulate the pre-placement state
+    widget.exit()
+    widget.enter()
+
+
+def test_our_overlay_scoping_leaves_segment_visibility_untouched(qt_widgets):
+    """The surgeon's eye-list composition is IDENTICAL across exit/enter.
+
+    Only OUR overlays move on a module switch; per-segment visibility on the
+    input segmentation belongs to the surgeon (the visibility-composed carve
+    reads it), so an exit/enter round trip must not rewrite a single segment.
+    """
+    slicer = _slicer_or_skip()
+    widget, _carrier, _table = _pin_fixture(slicer, qt_widgets)
+
+    segmentation = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLSegmentationNode", "OverlayScopeSegmentation")
+    if segmentation is None:
+        pytest.skip("vtkMRMLSegmentationNode unavailable (ADR-0027).")
+    segmentation.CreateDefaultDisplayNodes()
+    for name in ("A", "B", "C"):
+        segmentation.GetSegmentation().AddEmptySegment(name, name)
+    segmentationDisplay = segmentation.GetDisplayNode()
+    if segmentationDisplay is None:
+        pytest.skip("segmentation display node unavailable (ADR-0027).")
+    segmentIDs = list(segmentation.GetSegmentation().GetSegmentIDs())
+    # A deliberately MIXED composition -- the thing that must survive.
+    for index, segmentID in enumerate(segmentIDs):
+        segmentationDisplay.SetSegmentVisibility(segmentID, index % 2 == 0)
+    before = {
+        segmentID: bool(segmentationDisplay.GetSegmentVisibility(segmentID))
+        for segmentID in segmentIDs
+    }
+
+    widget.exit()
+    widget.enter()
+
+    after = {
+        segmentID: bool(segmentationDisplay.GetSegmentVisibility(segmentID))
+        for segmentID in segmentIDs
+    }
+    assert after == before, (
+        "an exit/enter round trip must not touch the surgeon's per-segment "
+        "visibility -- only OUR overlays are module-scoped."
     )
 
 

@@ -190,5 +190,47 @@ def test_seed_glyph_colour_follows_the_seed_volume(monkeypatch):
     )
 
 
+def test_hiding_the_display_node_retires_the_seed_glyphs(monkeypatch):
+    """An invisible seeds display node renders no glyph; re-showing restores it.
+
+    ``territory-usability`` display lifecycle: the seed glyphs are one of THIS
+    module's transient overlays, so the widget's ``exit()`` (which hides the
+    shared display node) must stop them drawing under another module, and
+    ``enter()`` must bring them back -- with no carrier edit in between.  The
+    gate flip reaches this view through the pipeline's own display-node
+    observer: LayerDM does not call ``UpdatePipeline`` on a display-node
+    ``Modified``.
+    """
+    slicer = _slicer_or_skip()
+    Pipeline, namespace = _import_pipeline_or_skip()
+    carrier, display = _bind_carrier(slicer, namespace)
+    pipeline = _wired_pipeline(Pipeline, display)
+    if not hasattr(pipeline, "GetSeedActor"):
+        pytest.skip("pipeline has no GetSeedActor seam (ADR-0027).")
+
+    carrier.AddSeed(20.0, 20.0, 10.0)
+    assert pipeline.GetSeedActor().GetVisibility(), (
+        "precondition: a visible display node renders the placed seed."
+    )
+
+    display.SetVisibility(False)
+
+    assert not pipeline.GetSeedActor().GetVisibility(), (
+        "a hidden seeds display node must retire the 3D seed glyphs."
+    )
+    assert not pipeline._admissible(), (  # noqa: SLF001 - gate seam
+        "a retired glyph must not be grabbable either."
+    )
+
+    display.SetVisibility(True)
+
+    assert pipeline.GetSeedActor().GetVisibility(), (
+        "re-showing the display node must bring the seed glyphs back."
+    )
+    assert pipeline.GetSeedPolyData().GetNumberOfPoints() == 1, (
+        "the glyph point set survives the round trip (no carrier edit needed)."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

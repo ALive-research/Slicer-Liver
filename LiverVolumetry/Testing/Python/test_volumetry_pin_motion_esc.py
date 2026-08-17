@@ -277,5 +277,52 @@ def test_slice_annotation_names_the_pinned_seed_and_volume():
     assert not (pipeline.GetPinAnnotation().GetText(1) or "")
 
 
+# --------------------------------------------------------------------------- #
+# Module-scoped overlays (the display node's visibility IS the gate)
+# --------------------------------------------------------------------------- #
+
+
+def test_hiding_the_display_node_retires_every_slice_overlay():
+    """An invisible seeds display node draws NOTHING; re-showing repaints.
+
+    ``territory-usability`` display lifecycle: the module widget's ``exit()``
+    hides the shared seeds display node, so every overlay this slice pipeline
+    owns -- the projected handles, the hover ring, the placement-preview
+    cursor and the pinned-seed stripes -- must retire, however the highlight
+    member reads.  ``enter()`` re-shows the node and the next reconcile
+    repaints from the carrier (no shadow state to restore).
+    """
+    slicer = _slicer_or_skip()
+    from LiverVolumetryLib.CarvedRegionStripes import set_highlight_seed_id
+
+    pipeline, carrier, display = _pipeline_fixture(slicer)
+    carrier.AddSeed(1.0, 2.0, 0.0)  # in-plane, so the handle projects present
+    set_highlight_seed_id(display, carrier.GetNthSeedID(0))
+    pipeline.UpdatePipeline()
+    assert pipeline._handles_actor.GetVisibility(), (  # noqa: SLF001 - actor seam
+        "precondition: the visible display node projects the seed handle."
+    )
+
+    display.SetVisibility(False)
+    pipeline.UpdatePipeline()
+
+    assert not pipeline._handles_actor.GetVisibility(), (  # noqa: SLF001 - actor seam
+        "a hidden display node must retire the projected seed handles."
+    )
+    assert not pipeline._ring_actor.GetVisibility()  # noqa: SLF001 - actor seam
+    assert not pipeline._preview_actor.GetVisibility()  # noqa: SLF001 - actor seam
+    assert not pipeline._stripes_actor.GetVisibility()  # noqa: SLF001 - actor seam
+    # A retired overlay is not grabbable either (one gate for cue + gesture).
+    assert not pipeline._slice_admissible()  # noqa: SLF001 - gate seam
+
+    display.SetVisibility(True)
+    pipeline.UpdatePipeline()
+
+    assert pipeline._slice_admissible()  # noqa: SLF001 - gate seam
+    assert pipeline._handles_actor.GetVisibility(), (  # noqa: SLF001 - actor seam
+        "re-showing the display node must repaint the seed handles."
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

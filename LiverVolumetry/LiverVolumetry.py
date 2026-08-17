@@ -207,6 +207,11 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # a delete affordance.  Composed into the panel in ``setup`` and bound to
     # the carrier once it exists; dropped on scene close.
     self._seedsTable = None
+    # Whether THIS module is the active one (``enter()`` .. ``exit()``).  Our
+    # transient overlays are module-scoped: nothing this module draws may stay
+    # visible once the surgeon switches away, so the seed display node's
+    # visibility follows this flag (see ``_setOverlayVisibility``).
+    self._moduleActive = False
     ScriptedLoadableModuleWidget.__init__(self, parent)
     VTKObservationMixin.__init__(self)  # needed for parameter node observation
 
@@ -1158,6 +1163,11 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Called each time the user opens this module.
     """
+    self._moduleActive = True
+    # A scene-resident carrier / display node (a loaded scene, or a previous
+    # visit in this session) is adopted FIRST so both the module-active gate
+    # and the overlay visibility below land on the node the Pipelines read.
+    self._adoptSceneSeedNodes()
     # Open the module-active add-on-click gate (ADR-0038): the LayerDM-created
     # placement Pipelines read this off the shared display node, so an armed
     # click only lands while LiverVolumetry is active.  Entering auto-arms
@@ -1173,6 +1183,10 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # ID, so entering resumes the pin -- including after a scene reload,
     # where the carrier/display node are adopted from the loaded scene.
     self._resumePinFromParameterNode()
+    # Raise OUR overlays again (the seed glyphs / slice handles the LayerDM
+    # Pipelines draw off this display node): the workflow resumes exactly as
+    # the surgeon left it, including the pin resumed just above.
+    self._setOverlayVisibility(True)
 
   def _onPinnedSeedChanged(self, seedID):
     """Mirror the pinned seed's stable ID into the parameter node."""
@@ -1236,11 +1250,18 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Called each time the user opens a different module.
     """
+    self._moduleActive = False
     # Retire the stripe highlight + stop its march timer on the way out
     # (timer lifecycle rides module enter/exit): a background module must not
     # keep a 25 Hz timer firing, nor leave frozen stripes on the slices.
     if self._seedsTable is not None and hasattr(self._seedsTable, "stopHighlight"):
       self._seedsTable.stopHighlight()
+    # Retire EVERY overlay this module draws (seed glyphs in 3D, slice handles,
+    # the placement-preview cursor, the pinned-seed corner annotation): they are
+    # module-scoped, so nothing of ours may stay on screen under another module.
+    # The surgeon's SEGMENTATION visibility is deliberately untouched -- their
+    # eye-list composition is theirs, not ours.
+    self._setOverlayVisibility(False)
     # Disarm placement + close the module-active gate on the way out so no view
     # claims an add-on-click while LiverVolumetry is inactive (ADR-0038).  The
     # per-volume Place toggles read the armed flag off this display node, so
@@ -1255,6 +1276,25 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
     self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
 
+  def _setOverlayVisibility(self, visible):
+    """Show/hide EVERY overlay this module draws, via the seeds display node.
+
+    The seed glyphs (3D), the slice handles + hover ring, the placement-preview
+    cursor and the pinned-seed stripes/annotation are all drawn by the
+    LayerDM-created Pipelines bound to the shared seeds display node, and those
+    Pipelines honour its visibility -- so one flag retires the whole overlay
+    family on ``exit()`` and restores it on ``enter()``.  Guarded: exit may run
+    with no scene, no display node and no panel.
+
+    Only OUR overlays move; the input segmentation's per-segment visibility (the
+    surgeon's eye-list composition) is never written here.
+    """
+    node = getattr(self, "_seedsDisplayNode", None)
+    if node is None or not slicer.mrmlScene.IsNodePresent(node):
+      return
+    if hasattr(node, "SetVisibility"):
+      node.SetVisibility(bool(visible))
+
   def _setModuleActive(self, active):
     """Open/close the shared display node's module-active add-on-click gate."""
     node = getattr(self, "_seedsDisplayNode", None)
@@ -1267,6 +1307,11 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """Scrub legacy attribute-borne highlight state off loaded seed display nodes."""
     del caller, event
     self._sanitizeLegacyHighlightAttributes()
+    # A scene saved WHILE this module was active carries visible overlays;
+    # loading it under another module must not raise them.  Re-assert the
+    # module-scoped rule against the adopted display node.
+    self._adoptSceneSeedNodes()
+    self._setOverlayVisibility(self._moduleActive)
 
   def _sanitizeLegacyHighlightAttributes(self):
     """Remove the retired highlight/phase ATTRIBUTES from every seed display node.
