@@ -65,6 +65,7 @@ indicators (✓ done / ● current / ○ pending) on every change.
 # ruff: noqa: F403, F405  # standard Slicer scripted-module wildcard-import pattern
 
 
+import logging
 import os
 
 import slicer
@@ -228,6 +229,13 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._exportPlanCombo = None
     self._exportStatusLabel = None
 
+    # Stage-lifecycle bookkeeping (see §"Stage lifecycle forwarding"):
+    # which stage row is showing, and whether the shell itself is the
+    # module the application currently shows.  Both are needed to forward
+    # ``enter()`` / ``exit()`` to exactly one hosted stage panel.
+    self._currentStageIndex = None
+    self._shellEntered = False
+
   def setup(self):
     """Build the six-stage navigation shell.
 
@@ -353,6 +361,7 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.layout.addWidget(self._shellHost)
 
     self._stageTabs.setCurrentIndex(0)
+    self._currentStageIndex = self._stageTabs.currentIndex
     self._refreshStageIndicators()
 
   def _resolveStagePage(self, index):
@@ -613,11 +622,92 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def _onStageRowChanged(self, row):
     """Slot for ``QTabWidget.currentChanged(int)``.
 
-    The QTabWidget already swaps the visible page on its own; this
-    slot only refreshes the per-tab indicators so the 'current'
-    marker tracks selection.
+    The QTabWidget already swaps the visible page on its own; this slot
+    refreshes the per-tab indicators so the 'current' marker tracks
+    selection, and hands the stage lifecycle over from the outgoing
+    stage's panel to the incoming one (§"Stage lifecycle forwarding").
     """
+    previous = self._currentStageIndex
+    self._currentStageIndex = row
+    if self._shellEntered and previous != row:
+      self._forwardStageLifecycle(previous, "exit")
+      self._forwardStageLifecycle(row, "enter")
     self._refreshStageIndicators()
+
+  # ------------------------------------------------------------------ #
+  # Stage lifecycle forwarding
+  #
+  # The stage panels this shell hosts are NOT modules the application
+  # enters.  Slicer calls ``enter()`` / ``exit()`` on the widget of the
+  # SELECTED module only, and every stage panel here is either a hidden
+  # module's cached ``widgetRepresentation()`` or a shell-built Python
+  # widget (ADR-0023 §"Shell composition (Option H)": "the Liver shell
+  # holds no domain logic -- only composition + navigation").  So the
+  # shell has to relay its own lifecycle:
+  #
+  #   * shell ``enter()``  -> ``enter()`` on the SHOWING stage's panel;
+  #   * shell ``exit()``   -> ``exit()``  on the SHOWING stage's panel;
+  #   * stage switch       -> ``exit()`` outgoing, ``enter()`` incoming.
+  #
+  # Only the showing stage is relayed to: a stage panel's ``enter()``
+  # means "this is the panel the surgeon is looking at" (it opens
+  # module-scoped interaction gates and raises module-scoped overlays --
+  # ADR-0037 §"Module-active gate (extends §Decision 2)", ADR-0038
+  # §"Shared home + names"), which is false for the five stages stacked
+  # behind the current tab.
+  #
+  # Without this relay every exit-hygiene body a stage panel owns --
+  # overlay retire, highlight-march timer stop, module-active gate close
+  # -- is dead code inside the shell.
+  # ------------------------------------------------------------------ #
+
+  @staticmethod
+  def _stageLifecycleTarget(page):
+    """The object carrying stage ``page``'s ``enter()`` / ``exit()`` bodies.
+
+    A scripted stage module's ``widgetRepresentation()`` exposes its Python
+    widget via ``self()``, and the lifecycle bodies live THERE.  Relaying to
+    that Python object rather than to the C++ representation is deliberate:
+    ``qSlicerAbstractModuleWidget::enter()`` / ``exit()`` also maintain an
+    ``IsEntered`` flag that is asserted on double-enter and in the
+    representation's destructor, and the shell's stage navigation is not the
+    application's module lifecycle -- driving that flag from here would
+    assert.  Shell-owned pages (Stage 4's Python widget, the Case Setup /
+    Export pages, the unavailable placeholder) are returned as themselves;
+    the caller skips any target that has no such method.
+    """
+    if page is None:
+      return None
+    if hasattr(page, "self"):
+      try:
+        inner = page.self()
+      except Exception:  # pragma: no cover — surfaces only on broken module loads
+        inner = None
+      if inner is not None:
+        return inner
+    return page
+
+  def _forwardStageLifecycle(self, row, methodName):
+    """Relay ``methodName`` to stage ``row``'s panel; never break navigation.
+
+    A row outside the built page set, a page that never got built, and a
+    panel that simply does not define the method are all silently skipped
+    (a never-built page has no state to clean up).  The call is wrapped
+    because it runs on a Qt signal / module-lifecycle boundary: a raising
+    stage panel must not strand shell navigation half-switched.
+    """
+    pages = self._stagePages or []
+    if row is None or not 0 <= row < len(pages):
+      return
+    target = self._stageLifecycleTarget(pages[row])
+    method = getattr(target, methodName, None)
+    if not callable(method):
+      return
+    try:
+      method()
+    except Exception:  # pragma: no cover — lifecycle boundary must not raise
+      logging.exception(
+        "Liver shell: stage %s %s() failed", row, methodName)
 
   # ------------------------------------------------------------------ #
   # Per-stage IsStageComplete() — hybrid: module logic owns the body,
@@ -806,19 +896,33 @@ class LiverWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     scene-change callbacks alive across module reloads, leaking one
     observer per reload.
     """
+    # A shell torn down while showing (a module reload) would otherwise
+    # leave the showing stage panel's exit hygiene unrun -- its timers
+    # still firing and its overlays still on screen with no owner.
+    self.exit()
     self.removeObservers()
 
   def enter(self):
+    """Called each time the user opens this module.
+
+    Relays the lifecycle to the showing stage's panel
+    (§"Stage lifecycle forwarding").
     """
-    Called each time the user opens this module.
-    """
-    pass
+    self._shellEntered = True
+    self._forwardStageLifecycle(self._currentStageIndex, "enter")
 
   def exit(self):
+    """Called each time the user opens a different module.
+
+    Relays the lifecycle to the showing stage's panel so its module-scoped
+    overlays / timers / interaction gates retire (§"Stage lifecycle
+    forwarding").  Idempotent: relaying happens only while the shell is
+    marked as showing.
     """
-    Called each time the user opens a different module.
-    """
-    pass
+    if not self._shellEntered:
+      return
+    self._shellEntered = False
+    self._forwardStageLifecycle(self._currentStageIndex, "exit")
 
 
 #
