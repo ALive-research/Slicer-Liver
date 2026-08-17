@@ -1,27 +1,20 @@
 # Copyright (c) 2026, The Intervention Centre, Oslo University Hospital.  All rights reserved.
 # Distributed under the OSI-approved BSD 3-Clause License.
-"""territory-usability -- the Pin-button hover-preview (static + dimmed).
+"""territory-usability -- hovering the seed rows changes NOTHING.
 
-Hovering an UNPINNED seed's Pin button previews that seed's stripes STATIC
-(the widget stops ticking; the slice pipelines freeze the phase and dim) so
-the surgeon can glance at what a seed measured without committing the pin.
-Hover-out drops the preview and the PINNED seed's stripes (if any) resume.
-The preview rides the SAME transient ``HighlightSeedID`` member under the
-``preview:`` marker (``CarvedRegionStripes``) -- render state stays on the
-shared display node (``feedback_layerdm_state_on_display_node``), never a
-widget-local channel the pipelines cannot see.
+A hover is an accident of moving the cursor, so it must never disturb
+committed render state.  An earlier revision previewed a hovered seed's
+stripes; with a pin available that made the two indistinguishable -- the
+surgeon could not tell whether the stripes on screen were the pinned
+region or whatever the cursor happened to be passing over.  The Pin
+toggle (and placement) are now the ONLY drivers of the highlight.
 
 Pins on the table widget:
 
-* HOVER PUBLISHES THE PREVIEW -- the marked ID lands on the display node;
-  the segment visibility is untouched.
-* HOVER-OUT RESUMES THE PIN -- the member returns to the pinned seed's bare
-  ID (or clears when nothing is pinned).
-* THE PINNED SEED'S OWN BUTTON IS NOT A PREVIEW -- its stripes already show.
-* TICKS ARE HELD WHILE PREVIEWING -- the march timer fires no
-  ``STRIPE_TICK_EVENT`` (the preview is static by contract).
-* PIN BUTTONS CARRY THE HOVER TAG -- the shared event filter resolves
-  Enter/Leave to the seed through the dynamic property.
+* HOVER OVER AN UNPINNED SEED'S PIN BUTTON LEAVES THE PUBLISHED HIGHLIGHT
+  UNTOUCHED -- with a pin up, and with nothing pinned.
+* THE MARCH KEEPS RUNNING ACROSS A HOVER -- no static/dimmed interlude.
+* SEGMENT VISIBILITY IS UNTOUCHED BY HOVER (as it always was).
 
 HARNESS: launched Slicer (Qt + wrapped carrier + display node).  SKIPS
 CLEANLY bare via the shared guards; RUNS launched (ADR-0027).
@@ -82,145 +75,55 @@ def _raw_member(display):
     return get_highlight_seed_id(display)
 
 
-def test_hover_publishes_a_marked_preview(qt_widgets):
+def test_hover_does_not_change_the_published_highlight(qt_widgets):
+    """A pinned seed stays published while the cursor crosses other rows."""
     slicer = _slicer_or_skip()
     _qt_or_skip()
-    from LiverVolumetryLib.CarvedRegionStripes import PREVIEW_PREFIX
+    from LiverVolumetryLib.CarvedRegionStripes import get_highlight_seed_id
 
-    carrier, display, table = _make_fixture(slicer, qt_widgets)
-    seedID = carrier.GetNthSeedID(1)
-
-    table._startHoverPreview(seedID)  # noqa: SLF001 - the Enter-filter seam
-
-    assert _raw_member(display) == f"{PREVIEW_PREFIX}{seedID}", (
-        "the hover must publish the seed under the preview marker."
-    )
-    assert table.previewSeedID() == seedID
-
-
-def test_hover_out_resumes_the_pinned_seed(qt_widgets):
-    slicer = _slicer_or_skip()
-    _qt_or_skip()
     carrier, display, table = _make_fixture(slicer, qt_widgets)
     pinnedID = carrier.GetNthSeedID(0)
+    table.highlightButton(0).setChecked(True)
+    assert get_highlight_seed_id(display) == pinnedID
+
+    # Simulate the cursor crossing another seed's Pin button: the shared
+    # event filter must ignore Enter/Leave entirely.
+    other = table.highlightButton(1)
+    qt = __import__("qt")
+    table.eventFilter(other, qt.QEvent(qt.QEvent.Enter))
+    assert get_highlight_seed_id(display) == pinnedID, (
+        "hover must not steal the highlight from the pinned seed."
+    )
+    table.eventFilter(other, qt.QEvent(qt.QEvent.Leave))
+    assert get_highlight_seed_id(display) == pinnedID
+
+
+def test_hover_publishes_nothing_when_no_seed_is_pinned(qt_widgets):
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    from LiverVolumetryLib.CarvedRegionStripes import get_highlight_seed_id
+
+    _carrier, display, table = _make_fixture(slicer, qt_widgets)
+    qt = __import__("qt")
+
+    table.eventFilter(table.highlightButton(1), qt.QEvent(qt.QEvent.Enter))
+
+    assert get_highlight_seed_id(display) == "", (
+        "with nothing pinned, a hover must leave the highlight empty."
+    )
+
+
+def test_the_march_keeps_running_across_a_hover(qt_widgets):
+    slicer = _slicer_or_skip()
+    _qt_or_skip()
+    _carrier, _display, table = _make_fixture(slicer, qt_widgets)
+    qt = __import__("qt")
 
     table.highlightButton(0).setChecked(True)
-    table._startHoverPreview(carrier.GetNthSeedID(1))  # noqa: SLF001
-    table._endHoverPreview()  # noqa: SLF001 - the Leave-filter seam
+    assert table._stripeTimer.isActive()  # noqa: SLF001 - timer seam
 
-    assert _raw_member(display) == pinnedID, (
-        "hover-out must restore the pinned seed's bare ID (its stripes resume)."
+    table.eventFilter(table.highlightButton(1), qt.QEvent(qt.QEvent.Enter))
+
+    assert table._stripeTimer.isActive(), (  # noqa: SLF001 - timer seam
+        "a hover introduces no static interlude: the march continues."
     )
-    assert table.previewSeedID() == ""
-
-
-def test_hover_out_clears_when_nothing_is_pinned(qt_widgets):
-    slicer = _slicer_or_skip()
-    _qt_or_skip()
-    carrier, display, table = _make_fixture(slicer, qt_widgets)
-
-    table._startHoverPreview(carrier.GetNthSeedID(1))  # noqa: SLF001
-    table._endHoverPreview()  # noqa: SLF001
-
-    assert _raw_member(display) == "", (
-        "with no pin, hover-out clears the member entirely."
-    )
-
-
-def test_hovering_the_pinned_seeds_own_button_is_not_a_preview(qt_widgets):
-    slicer = _slicer_or_skip()
-    _qt_or_skip()
-    carrier, display, table = _make_fixture(slicer, qt_widgets)
-    pinnedID = carrier.GetNthSeedID(0)
-
-    table.highlightButton(0).setChecked(True)
-    table._startHoverPreview(pinnedID)  # noqa: SLF001
-
-    assert _raw_member(display) == pinnedID, (
-        "hovering the pinned seed's own Pin button must not re-publish a "
-        "preview -- its stripes already show, marching."
-    )
-    assert table.previewSeedID() == ""
-
-
-def test_ticks_are_held_while_previewing(qt_widgets):
-    """The march timer fires no STRIPE_TICK_EVENT while a preview is up."""
-    slicer = _slicer_or_skip()
-    _qt_or_skip()
-    from LiverVolumetryLib.CarvedRegionStripes import STRIPE_TICK_EVENT
-
-    carrier, display, table = _make_fixture(slicer, qt_widgets)
-    ticks = []
-    display.AddObserver(STRIPE_TICK_EVENT, lambda c, e: ticks.append(1))
-
-    table.highlightButton(0).setChecked(True)
-    table._onStripeTick()  # noqa: SLF001 - the timer seam
-    assert len(ticks) == 1, "the pinned march ticks."
-
-    table._startHoverPreview(carrier.GetNthSeedID(1))  # noqa: SLF001
-    table._onStripeTick()  # noqa: SLF001
-    assert len(ticks) == 1, (
-        "no tick may fire while a preview is up -- the preview is STATIC."
-    )
-
-    table._endHoverPreview()  # noqa: SLF001
-    table._onStripeTick()  # noqa: SLF001
-    assert len(ticks) == 2, "the pinned march resumes after hover-out."
-
-
-def test_preview_leaves_visibility_untouched(qt_widgets):
-    slicer = _slicer_or_skip()
-    _qt_or_skip()
-    carrier, display, table = _make_fixture(slicer, qt_widgets)
-
-    segmentation = slicer.mrmlScene.AddNewNodeByClass(
-        "vtkMRMLSegmentationNode", "HoverPreviewSegSrc"
-    )
-    segmentation.CreateDefaultDisplayNodes()
-    segmentation.GetSegmentation().AddEmptySegment("Parenchyma", "Parenchyma")
-    segmentation.GetSegmentation().AddEmptySegment("Tumor", "Tumor")
-    table.setStructureSource(segmentation)
-    segDisplay = segmentation.GetDisplayNode()
-    segDisplay.SetSegmentVisibility("Parenchyma", False)
-    segDisplay.SetSegmentVisibility("Tumor", True)
-
-    table._startHoverPreview(carrier.GetNthSeedID(1))  # noqa: SLF001
-
-    assert not segDisplay.GetSegmentVisibility("Parenchyma")
-    assert segDisplay.GetSegmentVisibility("Tumor"), (
-        "the hover-preview must never change the segment visibility."
-    )
-
-
-def test_pin_buttons_carry_the_hover_tag(qt_widgets):
-    """The event-filter wiring: every Pin button is tagged with its seed's
-    stable ID so Enter/Leave resolve to the right preview."""
-    slicer = _slicer_or_skip()
-    _qt_or_skip()
-    carrier, _display, table = _make_fixture(slicer, qt_widgets)
-
-    for i in range(carrier.GetNumberOfSeeds()):
-        button = table.highlightButton(i)
-        assert button is not None
-        assert button.property("volumetryPinSeed") == carrier.GetNthSeedID(i), (
-            "each Pin button must carry its seed's stable ID for the "
-            "hover-preview event filter."
-        )
-
-
-def test_a_pin_change_supersedes_the_preview(qt_widgets):
-    slicer = _slicer_or_skip()
-    _qt_or_skip()
-    carrier, display, table = _make_fixture(slicer, qt_widgets)
-
-    table._startHoverPreview(carrier.GetNthSeedID(1))  # noqa: SLF001
-    table.highlightButton(0).setChecked(True)  # the pin lands mid-hover
-
-    assert _raw_member(display) == carrier.GetNthSeedID(0), (
-        "a pin change must supersede the hover preview."
-    )
-    assert table.previewSeedID() == ""
-
-
-if __name__ == "__main__":
-    raise SystemExit(pytest.main([__file__, "-q"]))
