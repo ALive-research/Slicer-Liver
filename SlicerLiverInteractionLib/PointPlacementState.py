@@ -28,7 +28,17 @@ depend on it without dragging in the Pipeline's LayerDM dependency.
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
+
+#: Nonce identifying THIS application session.  The overlay gate is stored as
+#: a display-node attribute, and attributes are serialized into the scene --
+#: so a plain ``"1"`` would make a scene saved with the overlays up resurrect
+#: them in a later session where the owning module was never opened (and where
+#: no widget exists to scrub the flag).  Storing the session nonce instead
+#: makes the gate FAIL SAFE: any value that this session did not write --
+#: unset, or persisted by an earlier session -- reads CLOSED.
+_SESSION_NONCE = uuid.uuid4().hex
 
 
 class PointPlacementState:
@@ -43,6 +53,7 @@ class PointPlacementState:
         self._armed_attr = f"{namespace}.Armed"
         self._active_attr = f"{namespace}.{active_suffix}"
         self._module_active_attr = f"{namespace}.ModuleActive"
+        self._overlay_session_attr = f"{namespace}.OverlaySession"
         self._grabbing_attr = f"{namespace}.Grabbing"
         self._carrier_role = f"{namespace}.carrier"
 
@@ -82,10 +93,48 @@ class PointPlacementState:
         window.  The gate is the module's ``exit()`` writing ``"0"`` -- the
         decline is opt-in, so opening the module (or never touching the
         flag) leaves placement enabled.
+
+        This deliberately-optimistic default is why DRAWING has its own gate
+        (``overlays_visible``, default closed): an overlay drawn before any
+        ``enter()`` is visible clutter under whatever module the surgeon
+        actually has open, whereas a declined click is a lost gesture.
         """
         return (
             displayNode is None
             or displayNode.GetAttribute(self._module_active_attr) != "0"
+        )
+
+    # ------------------------------------------------------------------ #
+    # Overlay gate (module-scoped, default CLOSED, session-scoped)
+    # ------------------------------------------------------------------ #
+    def set_overlays_visible(self, displayNode: Any, visible: bool) -> None:
+        """Open/close this module's TRANSIENT-overlay gate on the display node.
+
+        The owning module's ``enter()`` opens it and its ``exit()`` closes it,
+        so nothing the module draws stays on screen under another module.
+        Distinct from ``set_module_active``: that one guards the add-on-click /
+        placement channel and must stay open in the window between the display
+        node entering the scene (when LayerDM builds the Pipelines) and the
+        module's first ``enter()``; drawing, by contrast, must NOT start in
+        that window.
+        """
+        if displayNode is not None:
+            displayNode.SetAttribute(
+                self._overlay_session_attr, _SESSION_NONCE if visible else "")
+
+    def overlays_visible(self, displayNode: Any) -> bool:
+        """False unless THIS session's ``enter()`` has opened the gate.
+
+        Fails safe in both directions the module cannot observe: a display
+        node whose gate this session never opened (the module was never
+        entered, so no Pipeline of ours has a surgeon looking at it) and a
+        gate value persisted by an EARLIER session (a scene saved with the
+        overlays up, reloaded with the module untouched -- no widget exists
+        then to scrub it) both read CLOSED.
+        """
+        return (
+            displayNode is not None
+            and displayNode.GetAttribute(self._overlay_session_attr) == _SESSION_NONCE
         )
 
     # ------------------------------------------------------------------ #

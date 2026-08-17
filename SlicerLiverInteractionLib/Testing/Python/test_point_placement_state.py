@@ -177,6 +177,78 @@ def test_module_active_defaults_open_and_closes_only_on_explicit_zero():
     assert state.is_module_active(node) is True
 
 
+def test_overlay_gate_defaults_closed_and_opens_only_on_explicit_enter():
+    """The OVERLAY gate is the mirror image: unset reads CLOSED.
+
+    Drawing and gesture-accepting are two different questions.  LayerDM
+    builds the Pipelines the moment the display node enters the scene --
+    which on a scene load happens with no widget in play at all -- and an
+    overlay drawn in that window is clutter over whatever module the surgeon
+    actually has open.  So the overlay gate opens ONLY on an explicit
+    ``set_overlays_visible(True)`` from the owning module's ``enter()``,
+    while ``is_module_active`` keeps its optimistic default (a declined
+    click is a lost gesture; a not-yet-drawn overlay costs nothing).
+    """
+    PointPlacementState = _import_state()
+    state = PointPlacementState("Volumetry")
+    node = _FakeDisplayNode()
+
+    assert state.overlays_visible(node) is False, (
+        "an unset overlay gate must read CLOSED -- no enter() has run."
+    )
+    state.set_overlays_visible(node, True)
+    assert state.overlays_visible(node) is True
+    state.set_overlays_visible(node, False)
+    assert state.overlays_visible(node) is False
+
+    # The two gates are independent channels: closing the overlay gate must
+    # not decline placement, and vice versa.
+    assert state.is_module_active(node) is True
+    state.set_module_active(node, False)
+    state.set_overlays_visible(node, True)
+    assert state.overlays_visible(node) is True
+    assert state.is_module_active(node) is False
+
+
+def test_overlay_gate_from_another_session_reads_closed():
+    """A gate value THIS session did not write reads CLOSED.
+
+    Display-node attributes are serialized into the scene, so a scene saved
+    with the overlays up carries the gate value with it.  Re-opened in a
+    later session -- where the owning module may never be opened, and no
+    widget therefore exists to scrub the flag -- the persisted value must NOT
+    resurrect the overlays.  The gate is keyed on a per-session nonce, so any
+    foreign value reads closed.
+    """
+    PointPlacementState = _import_state()
+    state = PointPlacementState("Volumetry")
+    node = _FakeDisplayNode()
+
+    state.set_overlays_visible(node, True)
+    live_value = node.GetAttribute("Volumetry.OverlaySession")
+    assert live_value, "an opened gate must record a value on the node."
+
+    # A node arriving from a scene saved by an EARLIER session: same key,
+    # different (stale) value.
+    stale = _FakeDisplayNode()
+    stale.SetAttribute("Volumetry.OverlaySession", live_value + "-earlier-session")
+    assert state.overlays_visible(stale) is False, (
+        "a persisted gate value from another session must read CLOSED; the "
+        "overlays would otherwise resurrect on a scene load with the owning "
+        "module never opened."
+    )
+
+    # The naive boolean encodings a future refactor might reach for must not
+    # read open either.
+    for value in ("1", "true", "True", "yes"):
+        legacy = _FakeDisplayNode()
+        legacy.SetAttribute("Volumetry.OverlaySession", value)
+        assert state.overlays_visible(legacy) is False, (
+            f"the gate must not read {value!r} as open -- only this session's "
+            "own token opens it."
+        )
+
+
 def test_active_key_empty_reads_none():
     """The active key round-trips; the empty string reads back as ``None``."""
     PointPlacementState = _import_state()

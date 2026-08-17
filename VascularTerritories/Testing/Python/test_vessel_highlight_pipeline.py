@@ -170,10 +170,20 @@ def _unit_sphere():
 
 
 def _wire_pipeline(pipeline, display, renderer, pick):
-    """Attach the doubles onto the Pipeline via its unit seams."""
+    """Attach the doubles onto the Pipeline via its unit seams.
+
+    Also opens the module-scoped overlay gate on the display double: the gate
+    is default-CLOSED and the widget's ``enter()`` owns it, so a Pipeline test
+    with no widget has to say "the module is showing" itself -- otherwise the
+    marker correctly never draws and every assertion here would be asserting
+    the gate rather than the hover.
+    """
     pipeline._display_node = display
     pipeline._renderer = renderer
     pipeline.SetPickCore(pick)
+    from TerritoryInteractionState import set_overlays_enabled
+
+    set_overlays_enabled(display, True)
 
 
 # --------------------------------------------------------------------------- #
@@ -272,10 +282,15 @@ def test_an_inactive_module_neither_hovers_nor_shows_the_marker():
     the active module, a hover must publish nothing (no surface pick, no MRML
     write) and an already-raised marker must retire -- nothing this module draws
     survives the switch.  Re-opening the gate restores the hover cue.
+
+    The gate is the module-scoped OVERLAY flag, which is a separate channel
+    from the placement gate (``set_module_active``): drawing is default-off
+    until an ``enter()`` opens it, while placement stays optimistically open
+    for the window before the owning widget's first ``enter()``.
     """
     VesselHighlightPipeline = _import_pipeline()
     VesselSurfacePick = _import_pick()
-    from TerritoryInteractionState import set_module_active
+    from TerritoryInteractionState import set_overlays_enabled
 
     pipeline = VesselHighlightPipeline()
     display = _FakeDisplayNode()
@@ -285,7 +300,7 @@ def test_an_inactive_module_neither_hovers_nor_shows_the_marker():
     pipeline.UpdatePipeline()
     assert pipeline.GetMarkerActor().GetVisibility() == 1  # precondition
 
-    set_module_active(display, False)
+    set_overlays_enabled(display, False)
     pipeline.UpdatePipeline()
     assert pipeline.GetMarkerActor().GetVisibility() == 0, (
         "an inactive module must show no vessel hover marker."
@@ -297,7 +312,7 @@ def test_an_inactive_module_neither_hovers_nor_shows_the_marker():
         "an inactive module must not even publish a hover (no pick, no write)."
     )
 
-    set_module_active(display, True)
+    set_overlays_enabled(display, True)
     pipeline.CanProcessInteractionEvent(_FakeEvent())
     pipeline.UpdatePipeline()
     assert pipeline.GetMarkerActor().GetVisibility() == 1, (

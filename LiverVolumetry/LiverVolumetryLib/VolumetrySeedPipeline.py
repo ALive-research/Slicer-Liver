@@ -177,9 +177,17 @@ def _overlays_enabled(displayNode: Any) -> bool:
     module-scoped: nothing this module draws may stay on screen once the surgeon
     switches to another module.  The gate is the shared display node itself --
     its VISIBILITY (flipped by the widget's ``enter()`` / ``exit()``) plus the
-    module-active flag the same pair maintains -- so a single MRML read decides
-    it in every view, with no Python state LayerDM does not drive
+    overlay gate the same pair maintains -- so a single MRML read decides it in
+    every view, with no Python state LayerDM does not drive
     (feedback_layerdm_state_on_display_node).
+
+    The overlay gate reads CLOSED until an ``enter()`` in THIS session opens it
+    (``PointPlacementState.overlays_visible``): LayerDM builds these Pipelines
+    the moment the display node enters the scene, which happens on a scene load
+    with no widget in play at all, and a seed glyph must not appear over
+    whatever module the surgeon actually has open.  That is the one semantic
+    difference from the placement gate (``is_module_active``), which stays
+    optimistically open so a gesture is never silently swallowed.
 
     No display node (the bare unit layer) reads enabled: there is no gate to
     consult, and a pipeline with no display node has nothing bound to draw.
@@ -189,7 +197,7 @@ def _overlays_enabled(displayNode: Any) -> bool:
     try:
         if hasattr(displayNode, "GetVisibility") and not bool(displayNode.GetVisibility()):
             return False
-        return _STATE.is_module_active(displayNode)
+        return _STATE.overlays_visible(displayNode)
     except Exception:  # pragma: no cover - defensive (fake display nodes)
         return True
 
