@@ -4,11 +4,11 @@
 
 Three view-side finishing contracts:
 
-* IDLE-STATIC -- the pin's stripe march is BOUNDED: after
-  ``STRIPE_IDLE_STATIC_MS`` of marching the widget's timer stops and the
-  stripes freeze in place; the pin (and its published ID) stays.  Any pin
-  change refills the countdown and restarts the march.  This doubles as
-  the reduced-motion story: motion is never indefinite.
+* CONTINUOUS MARCH -- the pin's stripes march for as long as the pin is
+  up: a frozen stripe texture reads as a rendering fault and cannot be
+  told apart from a stuck view, so the motion IS the "this overlay is
+  live" signal.  What bounds it is module ``exit()`` (nothing of ours
+  ticks in the background), not a timeout.
 * ON-SLICE TEXT -- while pinned, the slice pipeline's corner annotation
   names the pinned seed + volume in TEXT (identity is never colour-alone
   in the view, ADR-0010); a hover preview shows no annotation; unpinning
@@ -85,54 +85,48 @@ def _make_fixture(slicer, qt_widgets, seeds=2):
 # --------------------------------------------------------------------------- #
 
 
-def test_march_goes_idle_static_and_keeps_the_pin(qt_widgets):
+def test_the_march_never_stops_while_the_pin_is_up(qt_widgets):
+    """Many ticks in, the timer is STILL running and the pin still published.
+
+    The march used to stop after a fixed idle interval, leaving a frozen
+    texture that reads as a rendering fault.  Motion now lasts exactly as
+    long as the pin.
+    """
     slicer = _slicer_or_skip()
     _qt_or_skip()
     from LiverVolumetryLib.CarvedRegionStripes import get_highlight_seed_id
 
     carrier, display, table = _make_fixture(slicer, qt_widgets)
-    if not hasattr(table, "_stripeTicksRemaining"):
-        pytest.skip("idle-static countdown seam absent (ADR-0027).")
 
     table.highlightButton(0).setChecked(True)
     assert table._stripeTimer.isActive()  # noqa: SLF001 - timer seam
 
-    # Fast-forward the countdown to its last two ticks (10 s of wall-clock
-    # marching is not a unit test's business).
-    table._stripeTicksRemaining = 2  # noqa: SLF001 - countdown seam
-    table._onStripeTick()  # noqa: SLF001
-    assert table._stripeTimer.isActive(), "one tick left -- still marching."  # noqa: SLF001
-    table._onStripeTick()  # noqa: SLF001
+    # Far more ticks than the retired 10 s bound would have allowed.
+    for _ in range(500):
+        table._onStripeTick()  # noqa: SLF001
 
-    assert not table._stripeTimer.isActive(), (  # noqa: SLF001 - timer seam
-        "after the idle-static interval the march timer must STOP."
+    assert table._stripeTimer.isActive(), (  # noqa: SLF001 - timer seam
+        "the march must not time out: a frozen texture reads as a fault."
     )
-    assert get_highlight_seed_id(display) == carrier.GetNthSeedID(0), (
-        "idle-static freezes the MOTION only -- the pin and its stripes stay."
-    )
+    assert get_highlight_seed_id(display) == carrier.GetNthSeedID(0)
     assert table.pinnedSeedID() == carrier.GetNthSeedID(0)
 
 
-def test_a_pin_change_restarts_the_march(qt_widgets):
+def test_a_pin_change_keeps_the_march_running(qt_widgets):
     slicer = _slicer_or_skip()
     _qt_or_skip()
     carrier, _display, table = _make_fixture(slicer, qt_widgets)
-    if not hasattr(table, "_stripeTicksRemaining"):
-        pytest.skip("idle-static countdown seam absent (ADR-0027).")
 
     table.highlightButton(0).setChecked(True)
-    table._stripeTicksRemaining = 1  # noqa: SLF001
-    table._onStripeTick()  # noqa: SLF001
-    assert not table._stripeTimer.isActive()  # noqa: SLF001
+    for _ in range(50):
+        table._onStripeTick()  # noqa: SLF001
 
     table.highlightButton(1).setChecked(True)  # the pin change
 
     assert table._stripeTimer.isActive(), (  # noqa: SLF001 - timer seam
-        "any pin change must restart the march."
+        "a pin change keeps the march running for the new pin."
     )
-    assert table._stripeTicksRemaining > 1, (  # noqa: SLF001 - countdown seam
-        "the pin change must refill the idle-static countdown."
-    )
+    assert table.pinnedSeedID() == carrier.GetNthSeedID(1)
 
 
 # --------------------------------------------------------------------------- #

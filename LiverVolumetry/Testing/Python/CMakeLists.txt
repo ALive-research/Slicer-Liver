@@ -158,8 +158,8 @@ set(_volumetry_pytest_files
   # it, a stale ID clears.  Module widget + wrapped carrier -> SKIPS bare,
   # RUNS launched (ADR-0027).
   test_volumetry_pin_persistence.py
-  # territory-usability -- bounded pin motion (idle-static after the
-  # interval; a pin change restarts), the on-slice corner annotation naming
+  # territory-usability -- continuous pin motion (the march lasts as long as
+  # the pin), the on-slice corner annotation naming
   # the pinned seed + volume in text, and the panel-scoped ESC that cancels
   # an armed placement without touching the pin.  Qt + wrapped carrier +
   # LayerDM slice base -> SKIPS bare, RUNS launched (ADR-0027).
