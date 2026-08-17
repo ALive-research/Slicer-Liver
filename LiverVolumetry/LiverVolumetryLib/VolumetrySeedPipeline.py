@@ -591,7 +591,10 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         try:
             self._update_stripes()
         except Exception:  # pragma: no cover - C++ boundary must never raise
+            # A failed stripe pass must not leave the pin's identity text on the
+            # slice either: retire the pair together.
             self._stripes_actor.SetVisibility(False)
+            self.ClearPinAnnotation()
 
     def cleanup(self) -> None:
         # The base detaches every observed node here (renderer churn); drop the
@@ -638,6 +641,7 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
                 actor.SetVisibility(False)
             except Exception:  # pragma: no cover - defensive
                 pass
+        self.ClearPinAnnotation()
 
     def _ensure_carrier_observed(self) -> None:
         """Observe the in-effect carrier so a placed seed reprojects at once.
@@ -707,6 +711,9 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         renderer.RemoveActor2D(self._stripes_actor)
         renderer.RemoveActor2D(self._preview_actor)
         renderer.RemoveActor2D(self._pin_annotation)
+        # Blank the identity text as the annotation leaves the renderer: a
+        # re-added actor must not resurrect a pin that is long gone.
+        self.ClearPinAnnotation()
 
     def _on_bare_move_decline(self, eventData: Any) -> None:
         """Raise the placement-preview cursor on a declined bare move (ADR-0033).
@@ -923,10 +930,29 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
             index = self._resolve_seed_index(seedID)
             if index >= 0:
                 text = self._pin_annotation_text(index)
+        if not text:
+            self.ClearPinAnnotation()
+            return
         # Lower-right corner (position 1): clear of Slicer's own lower-left
         # slice annotations.
         self._pin_annotation.SetText(1, text)
-        self._pin_annotation.SetVisibility(bool(text))
+        self._pin_annotation.SetVisibility(True)
+
+    def ClearPinAnnotation(self) -> None:  # noqa: N802 - VTK verb
+        """Blank the pinned-seed identity text (the explicit clear path).
+
+        The annotation is the one overlay that outlives its actor's visibility
+        in the eye: a ``vtkCornerAnnotation`` retains its TEXT, so every retire
+        route must blank it, not merely hide it.  Driven by the highlight
+        retire, by the module-scoped overlay gate closing, and by the renderer
+        teardown (``cleanup``) -- so the "Pinned: ..." line can never outlive
+        the pin it names.  Idempotent; never raises.
+        """
+        try:
+            self._pin_annotation.SetText(1, "")
+            self._pin_annotation.SetVisibility(False)
+        except Exception:  # pragma: no cover - defensive
+            pass
 
     def _pin_annotation_text(self, index: int) -> str:
         """The pinned seed's identity line: label ( + volume label when set)."""
