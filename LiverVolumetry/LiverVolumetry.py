@@ -1328,11 +1328,15 @@ class LiverVolumetryWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """Scrub legacy attribute-borne highlight state off loaded seed display nodes."""
     del caller, event
     self._sanitizeLegacyHighlightAttributes()
-    # A scene saved WHILE this module was active carries visible overlays;
-    # loading it under another module must not raise them.  Re-assert the
-    # module-scoped rule against the adopted display node.
+    # A scene saved WHILE this module was active carries a persisted
+    # ``Visibility=1`` on its seeds display node; loading it under another
+    # module must not raise the overlays.  Re-assert the module-scoped rule
+    # (visibility + the overlay gate) on EVERY loaded seeds display node, not
+    # only the adopted one -- an imported scene may bring more than one, and a
+    # node this widget does not hold still gets its LayerDM Pipelines.
     self._adoptSceneSeedNodes()
-    self._setOverlayVisibility(self._moduleActive)
+    for node in slicer.util.getNodesByClass(SEEDS_DISPLAY_NODE_CLASS):
+      self._setOverlayVisibility(self._moduleActive, node)
 
   def _sanitizeLegacyHighlightAttributes(self):
     """Remove the retired highlight/phase ATTRIBUTES from every seed display node.
