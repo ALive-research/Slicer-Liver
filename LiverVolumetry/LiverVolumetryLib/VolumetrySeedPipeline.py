@@ -150,11 +150,16 @@ _DEFAULT_SEED_RGB = (1.0, 1.0, 1.0)
 _REGISTERED_3D = False
 _REGISTERED_SLICE = False
 
+#: The volumetry interaction-state accessor (arm / module-active / carrier), held
+#: once at module scope: the overlay gate is read on every stripe march tick in
+#: every slice view, and the accessor is stateless (the TerritoryInteractionState
+#: ``_STATE`` precedent), so re-minting one per read is pure waste.
+_STATE = PointPlacementState(VOLUMETRY_NAMESPACE)
+
 
 def _carrier_from_display(displayNode: Any):
     """The seed carrier the shared display node binds (``LiverVolumetry.carrier``)."""
-    state = PointPlacementState(VOLUMETRY_NAMESPACE)
-    return state.get_carrier(displayNode)
+    return _STATE.get_carrier(displayNode)
 
 
 def _labelmap_from_display(displayNode: Any):
@@ -184,7 +189,7 @@ def _overlays_enabled(displayNode: Any) -> bool:
     try:
         if hasattr(displayNode, "GetVisibility") and not bool(displayNode.GetVisibility()):
             return False
-        return PointPlacementState(VOLUMETRY_NAMESPACE).is_module_active(displayNode)
+        return _STATE.is_module_active(displayNode)
     except Exception:  # pragma: no cover - defensive (fake display nodes)
         return True
 
@@ -887,10 +892,13 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         stripe line family -- the cheap per-tick path.
 
         Gated by the module-scoped overlay rule: a retired overlay family draws
-        no stripes at all, however the highlight member reads.
+        no stripes at all, however the highlight member reads.  Only the stripe
+        pair is touched here -- the handles / ring / preview belong to
+        ``_reconcile``, which honours the same gate.
         """
         if not _overlays_enabled(self._display_node):
-            self._hide_overlays()
+            self._stripes_actor.SetVisibility(False)
+            self.ClearPinAnnotation()
             return
         show = False
         raw = get_highlight_seed_id(self._display_node)
