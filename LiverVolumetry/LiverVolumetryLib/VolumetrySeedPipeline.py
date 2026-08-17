@@ -164,6 +164,31 @@ def _labelmap_from_display(displayNode: Any):
     return displayNode.GetPickSurfaceNode()
 
 
+def _overlays_enabled(displayNode: Any) -> bool:
+    """True while this module's TRANSIENT overlays may draw.
+
+    LiverVolumetry's overlays (seed glyphs, slice handles + hover ring, the
+    placement-preview cursor, the pinned-seed stripes + corner annotation) are
+    module-scoped: nothing this module draws may stay on screen once the surgeon
+    switches to another module.  The gate is the shared display node itself --
+    its VISIBILITY (flipped by the widget's ``enter()`` / ``exit()``) plus the
+    module-active flag the same pair maintains -- so a single MRML read decides
+    it in every view, with no Python state LayerDM does not drive
+    (feedback_layerdm_state_on_display_node).
+
+    No display node (the bare unit layer) reads enabled: there is no gate to
+    consult, and a pipeline with no display node has nothing bound to draw.
+    """
+    if displayNode is None:
+        return True
+    try:
+        if hasattr(displayNode, "GetVisibility") and not bool(displayNode.GetVisibility()):
+            return False
+        return PointPlacementState(VOLUMETRY_NAMESPACE).is_module_active(displayNode)
+    except Exception:  # pragma: no cover - defensive (fake display nodes)
+        return True
+
+
 def _wire_provider_and_pick(pipeline: Any, displayNode: Any) -> None:
     """(Re)resolve the flat provider + the in-volume pick from the display node.
 
@@ -215,6 +240,10 @@ class VolumetrySeedPipeline3D(_Pipeline3DBase):
         # only path), so the observer is (re)attached through
         # ``_ensure_carrier_observed`` and deduped on this reference.
         self._observed_carrier: Any | None = None
+        # The display node currently observed for the module-scoped overlay gate
+        # (its visibility / module-active flip must repaint THIS view): the 3D
+        # base observes nothing itself, so the client owns the attach + dedupe.
+        self._observed_display: Any | None = None
 
         # -- placed-seed rendering (mirrors TerritoryPlacementPipeline): one
         # actor for the whole seed set, glyphed as spheres, coloured per seed
@@ -260,11 +289,20 @@ class VolumetrySeedPipeline3D(_Pipeline3DBase):
         """
         return False
 
+    def _admissible(self) -> bool:
+        """Veto the 3D grab-drag while our overlays are retired.
+
+        A hidden seed glyph must not be draggable either: the module-scoped
+        overlay gate covers the gesture as well as the cue.
+        """
+        return _overlays_enabled(self._display_node)
+
     def SetDisplayNode(self, displayNode: Any) -> None:  # noqa: N802 - VTK verb
         super().SetDisplayNode(displayNode)
         self._display_node = displayNode
         self._rewire()
         self._ensure_carrier_observed()
+        self._ensure_display_observed()
 
     def OnRendererAdded(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
         try:
@@ -277,6 +315,7 @@ class VolumetrySeedPipeline3D(_Pipeline3DBase):
                     self.SetDisplayNode(display)
             self._rewire()
             self._ensure_carrier_observed()
+            self._ensure_display_observed()
             self._rebuild_seed_actor()
             self.RequestRender()
         except Exception:  # pragma: no cover - C++ boundary must never raise
@@ -290,6 +329,8 @@ class VolumetrySeedPipeline3D(_Pipeline3DBase):
             for node in list(self._observed_node_refs):
                 self._detach_observer(node)
             self._observed_carrier = None
+            self._observed_display = None
+            self._seed_actor.SetVisibility(False)
         except Exception:  # pragma: no cover - C++ boundary must never raise
             pass
 
@@ -301,6 +342,7 @@ class VolumetrySeedPipeline3D(_Pipeline3DBase):
             # this is where the seed-glyph observer attaches -- without it a seed
             # placed from a SLICE view never repaints the 3D glyphs.
             self._ensure_carrier_observed()
+            self._ensure_display_observed()
             self._rebuild_seed_actor()
             self.RequestRender()
         except Exception:  # pragma: no cover - C++ boundary must never raise
@@ -324,6 +366,12 @@ class VolumetrySeedPipeline3D(_Pipeline3DBase):
         glyphs.  Holds no shadow copy of the point set (ADR-0038 no-drift): a
         rebuild driven by an unrelated ``Modified`` re-reads the provider and
         adds / moves / drops nothing.
+
+        The glyph actor also carries the module-scoped overlay gate
+        (``_overlays_enabled``): the seeds are OUR transient overlay, so they
+        stop drawing the moment the widget's ``exit()`` hides the shared display
+        node, and come back on ``enter()``.  The point set is rebuilt either
+        way, so re-showing needs no carrier edit.
         """
         self._seed_points.Reset()
         self._seed_colors.Reset()
@@ -341,6 +389,7 @@ class VolumetrySeedPipeline3D(_Pipeline3DBase):
         self._seed_points.Modified()
         self._seed_colors.Modified()
         self._seed_polydata.Modified()
+        self._seed_actor.SetVisibility(_overlays_enabled(self._display_node))
 
     def GetSeedActor(self) -> Any:  # noqa: N802 - VTK verb
         """The seed-glyph actor (the placed-seed spheres); introspection seam."""
@@ -369,6 +418,24 @@ class VolumetrySeedPipeline3D(_Pipeline3DBase):
         self._observed_carrier = carrier
         if carrier is not None:
             self._attach_observer(carrier)
+
+    def _ensure_display_observed(self) -> None:
+        """Observe the shared display node so an overlay-gate flip repaints.
+
+        The 3D base observes nothing, and LayerDM does not call
+        ``UpdatePipeline`` on a display-node ``Modified`` -- so without this
+        observer the seed glyphs would keep drawing after ``exit()`` hid the
+        display node (and stay hidden after ``enter()`` re-showed it).  Deduped
+        on the observed reference; idempotent across renderer churn.
+        """
+        node = self._display_node
+        if node is self._observed_display:
+            return
+        if self._observed_display is not None:
+            self._detach_observer(self._observed_display)
+        self._observed_display = node
+        if node is not None:
+            self._attach_observer(node)
 
     def _attach_observer(self, node: Any) -> None:
         if node is None or not hasattr(node, "AddObserver"):
@@ -532,6 +599,45 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         # the next renderer add rather than believing it is still observed.
         super().cleanup()
         self._observed_carrier = None
+        # The base hides its own handles/ring; this client's overlays are its
+        # own responsibility (a renderer teardown must leave nothing of ours).
+        self._hide_overlays()
+
+    def _reconcile(self) -> None:
+        """Reproject the seed handles -- unless our overlays are retired.
+
+        The module-scoped gate (``_overlays_enabled``): while LiverVolumetry is
+        not the active module the whole overlay family is hidden instead of
+        reprojected, so nothing of ours survives a module switch.  Re-entering
+        flips the gate back and the next reconcile repaints from the carrier
+        (no shadow state to restore).
+        """
+        if not _overlays_enabled(self._display_node):
+            self._hide_overlays()
+            return
+        super()._reconcile()
+
+    def _slice_admissible(self) -> bool:
+        """Veto the whole arbitration while our overlays are retired.
+
+        A hidden handle must not be grabbable: the gated ``_reconcile`` stops
+        reprojecting, so the last projection would otherwise stay clickable
+        under another module.  One gate covers the cue and the gesture.
+        """
+        return _overlays_enabled(self._display_node)
+
+    def _hide_overlays(self) -> None:
+        """Retire every overlay actor this pipeline owns (idempotent, never raises)."""
+        for actor in (
+            self._handles_actor,
+            self._ring_actor,
+            self._preview_actor,
+            self._stripes_actor,
+        ):
+            try:
+                actor.SetVisibility(False)
+            except Exception:  # pragma: no cover - defensive
+                pass
 
     def _ensure_carrier_observed(self) -> None:
         """Observe the in-effect carrier so a placed seed reprojects at once.
@@ -772,7 +878,13 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         highlight change restarts the march from zero.  The carved 3D mask
         and its slice-plane cut are cached; a march tick only rebuilds the
         stripe line family -- the cheap per-tick path.
+
+        Gated by the module-scoped overlay rule: a retired overlay family draws
+        no stripes at all, however the highlight member reads.
         """
+        if not _overlays_enabled(self._display_node):
+            self._hide_overlays()
+            return
         show = False
         raw = get_highlight_seed_id(self._display_node)
         seedID, isPreview = parse_highlight_value(raw)
