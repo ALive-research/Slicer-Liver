@@ -125,14 +125,15 @@ _LOCK_GLYPH = "🔒"
 _LOCK_TEXT = "Locked"
 _LOCK_TOOLTIP = "Territory validated (Completed) — cycle status off Completed to edit"
 
-#: Stock icon resources for the icon-only Place toggle -- the SAME markups
-#: fiducial place-mode pair the LiverVolumetry seeds table uses, so the two
-#: tables read identically (the armed variant carries the persistent-place
-#: "+").  Resolved at runtime with a text-glyph fallback
-#: (``_apply_toggle_icon``) for a harness without the application's
-#: compiled-in resources.
+#: Stock icon resource for the icon-only Place toggle -- the SAME markups
+#: fiducial place-mode icon the LiverVolumetry seeds table uses, so the two
+#: tables read identically.  ONE icon in both states: the ``PlaceAdd``
+#: variant means "add a point" in Slicer, so borrowing it for "placement is
+#: armed" misreads, and the toggle's pushed state already carries that.
+#: Resolved at runtime with a text-glyph fallback (``_apply_toggle_icon``)
+#: for a harness without the application's compiled-in resources.
 _PLACE_ICON_OFF = ":/Icons/MarkupsFiducialMouseModePlace.png"
-_PLACE_ICON_ON = ":/Icons/MarkupsFiducialMouseModePlaceAdd.png"
+_PLACE_ICON_ON = _PLACE_ICON_OFF
 
 
 def _apply_toggle_icon(button: Any, offPath: str, onPath: str, fallbackText: str) -> None:
