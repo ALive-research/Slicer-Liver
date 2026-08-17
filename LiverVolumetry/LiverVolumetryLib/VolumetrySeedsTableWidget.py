@@ -227,15 +227,17 @@ _ROW_VOLUME_PROPERTY = "volumetryRowVolume"
 _ROW_PIN_PROPERTY = "volumetryPinSeed"
 
 #: Stock icon resources for the icon-only row toggles.  Place rides the
-#: markups fiducial place-mode pair every Slicer user already reads as
-#: "click to place" (the armed variant carries the persistent-place "+");
-#: Pin rides the push-pin out/in pair.  The unchecked/checked variants sit
-#: on one ``qt.QIcon``'s Off/On states, so a checked toggle is visually
-#: unmistakable without any swap handler.  Both are resolved at runtime with
-#: a text-glyph fallback (``_apply_toggle_icon``) for a harness without the
-#: application's compiled-in resources.
+#: markups fiducial place-mode icon every Slicer user already reads as
+#: "click to place"; Pin rides the push-pin out/in pair.  Place keeps ONE
+#: icon in both states: the ``PlaceAdd`` variant means "add a point" in
+#: Slicer, so borrowing it for "placement is armed" misreads -- the toggle's
+#: pushed state already carries that, so the glyph must not change meaning
+#: under it.  The Pin pair's out/in glyphs DO describe its two states, so
+#: they sit on one ``qt.QIcon``'s Off/On states.  Both are resolved at
+#: runtime with a text-glyph fallback (``_apply_toggle_icon``) for a harness
+#: without the application's compiled-in resources.
 _PLACE_ICON_OFF = ":/Icons/MarkupsFiducialMouseModePlace.png"
-_PLACE_ICON_ON = ":/Icons/MarkupsFiducialMouseModePlaceAdd.png"
+_PLACE_ICON_ON = _PLACE_ICON_OFF
 _PIN_ICON_OFF = ":/Icons/PushPinOut.png"
 _PIN_ICON_ON = ":/Icons/PushPinIn.png"
 
