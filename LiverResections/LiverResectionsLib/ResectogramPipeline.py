@@ -136,6 +136,12 @@ class ResectogramPipeline(_PipelineBase):
         self._resection_node: Any | None = None
         self._last_resection_scan_mtime: int | None = None
 
+        # The carrier's sibling ``vtkMRMLParametricSurfaceDisplayNode`` -- the
+        # band-style source shared with the 3D path.  Re-resolved every
+        # reconcile (a walk over the data node's own display-node list, no
+        # scene scan), so it carries no cache-invalidation obligations.
+        self._surface_display_node: Any | None = None
+
         # Whether a press-grabbed drag-reslice gesture is in flight: a
         # left-button press starts it, mouse moves keep producing picks
         # while it holds, the release ends it (see
@@ -206,6 +212,15 @@ class ResectogramPipeline(_PipelineBase):
                 self._resection_node = self._resolve_resection_node()
         if self._flattened_surface is not None:
             self._flattened_surface.SetResectionPlanNode(self._resection_node)
+            # Thread the carrier's SIBLING parametric-surface display node --
+            # the band-style source (margin colours + InterpolatedMargins)
+            # shared with the 3D path.  Resolved every reconcile: the walk is
+            # over the data node's own display-node list (no scene scan), so
+            # it is cheap and needs no cache invalidation.
+            self._surface_display_node = self._resolve_surface_display_node()
+            self._flattened_surface.SetSurfaceDisplayNode(
+                self._surface_display_node
+            )
             # Thread the cross-view locator (ADR-0025) so the strip's 2D
             # mapper paints the 1:1 correspondence marker.
             self._flattened_surface.SetLocatorNode(
@@ -535,6 +550,34 @@ class ResectogramPipeline(_PipelineBase):
             return (u, v)
         except Exception:  # pragma: no cover - defensive (stub renderers)
             return None
+
+    def _resolve_surface_display_node(self) -> Any | None:
+        """The carrier's sibling ``vtkMRMLParametricSurfaceDisplayNode``.
+
+        The carrier holds two display aspects -- the resectogram display node
+        (ours) and the parametric-surface display node the 3D path renders
+        from.  The latter carries the band STYLE (margin colours +
+        InterpolatedMargins -- Docs/architecture/target-mrml-node-hierarchy.md
+        keeps margin colours on the display node, scalars on the plan), so the
+        strip must read it too for the 2D and 3D bands to match.  Returns the
+        first parametric aspect on the data node, or ``None`` (compiled-in
+        mapper defaults then stand).  Same walk as the Stage-4 widget's
+        display-node resolution.
+        """
+        data_node = self._data_node
+        if data_node is None:
+            return None
+        try:
+            count = data_node.GetNumberOfDisplayNodes()
+            for i in range(count):
+                candidate = data_node.GetNthDisplayNode(i)
+                if candidate is not None and candidate.IsA(
+                    "vtkMRMLParametricSurfaceDisplayNode"
+                ):
+                    return candidate
+        except Exception:  # pragma: no cover - defensive (stub data nodes)
+            return None
+        return None
 
     @staticmethod
     def _resolve_locator_node(surface: Any) -> Any | None:
