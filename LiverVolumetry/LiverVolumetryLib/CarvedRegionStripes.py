@@ -69,18 +69,6 @@ except ImportError:  # bare fallback: vtkCommand::UserEvent is the stable 1000
     _USER_EVENT = 1000
 STRIPE_TICK_EVENT = _USER_EVENT + 61
 
-#: The hover-PREVIEW marker on the shared ``HighlightSeedID`` member: while
-#: the surgeon hovers an UNPINNED seed's Pin button, the widget publishes
-#: ``preview:<seedID>`` instead of the bare ID.  The slice pipelines parse
-#: the marker and render the preview STATIC (phase frozen -- the widget
-#: also stops ticking) and DIMMED, so a glance never reads as the pin.
-#: One transient member carries both states (a second member was overkill);
-#: hover-out restores the pinned ID (or clears).
-PREVIEW_PREFIX = "preview:"
-
-#: The preview stripes' dimmed opacity (the pinned stripes render opaque).
-PREVIEW_STRIPE_OPACITY = 0.4
-
 #: LEGACY display-node ATTRIBUTES from the retired attribute-borne highlight
 #: channel.  Node attributes serialize into the scene XML, so an old scene can
 #: carry a frozen highlight/phase; ``clear_legacy_highlight_attributes``
@@ -107,32 +95,11 @@ def set_highlight_seed_id(displayNode: Any, seedID: str) -> None:
 
 
 def get_highlight_seed_id(displayNode: Any) -> str:
-    """The raw highlight member value (empty string when none).
-
-    May carry the ``preview:`` marker; renderers go through
-    ``parse_highlight_value`` to split the seed ID from the preview flag.
-    """
+    """The raw highlight member value (empty string when none)."""
     getter = getattr(displayNode, "GetHighlightSeedID", None)
     if getter is None:
         return ""
     return getter() or ""
-
-
-def set_preview_seed_id(displayNode: Any, seedID: str) -> None:
-    """Publish a hover-PREVIEW highlight for ``seedID`` (static + dimmed).
-
-    Writes ``preview:<seedID>`` onto the same transient member the pin
-    uses; an empty / ``None`` seed clears the member entirely.
-    """
-    set_highlight_seed_id(displayNode, f"{PREVIEW_PREFIX}{seedID}" if seedID else "")
-
-
-def parse_highlight_value(value: str) -> tuple:
-    """Split a raw highlight member value into ``(seedID, is_preview)``."""
-    value = value or ""
-    if value.startswith(PREVIEW_PREFIX):
-        return value[len(PREVIEW_PREFIX):], True
-    return value, False
 
 
 def invoke_stripe_tick(displayNode: Any) -> None:

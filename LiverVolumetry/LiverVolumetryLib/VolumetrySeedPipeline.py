@@ -92,11 +92,9 @@ try:  # pragma: no cover - exercised once per import path
         write_seed_context,
     )
     from .CarvedRegionStripes import (
-        PREVIEW_STRIPE_OPACITY,
         STRIPE_PERIOD_PX,
         STRIPE_TICK_EVENT,
         get_highlight_seed_id,
-        parse_highlight_value,
         resample_mask_to_plane,
         stripe_segments,
     )
@@ -114,11 +112,9 @@ except ImportError:  # top-level import path (the unit layer's sys.path setup)
         write_seed_context,
     )
     from CarvedRegionStripes import (  # type: ignore[no-redef]
-        PREVIEW_STRIPE_OPACITY,
         STRIPE_PERIOD_PX,
         STRIPE_TICK_EVENT,
         get_highlight_seed_id,
-        parse_highlight_value,
         resample_mask_to_plane,
         stripe_segments,
     )
@@ -556,8 +552,7 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         # On-slice identity text (ADR-0010 -- never colour/animation alone
         # IN THE VIEW either): while a seed is PINNED, a corner annotation
         # names the pinned seed + its volume in text right where the
-        # stripes render.  Cleared with the pin; a hover preview shows no
-        # annotation (transient by design).
+        # stripes render.  Cleared with the pin.
         self._pin_annotation = vtk.vtkCornerAnnotation()
         self._pin_annotation.SetLinearFontScaleFactor(2)
         self._pin_annotation.SetNonlinearFontScaleFactor(1)
@@ -700,12 +695,8 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
         """
         del caller, event
         try:
-            seedID, isPreview = parse_highlight_value(
-                get_highlight_seed_id(self._display_node)
-            )
-            if not seedID or isPreview:
-                # A hover PREVIEW is STATIC by contract: the widget stops
-                # ticking, and a straggler tick must not march it either.
+            seedID = get_highlight_seed_id(self._display_node)
+            if not seedID:
                 return
             self._stripe_phase = (self._stripe_phase + 1) % STRIPE_PERIOD_PX
             self._update_stripes()
@@ -909,37 +900,29 @@ class VolumetrySeedPipelineSlice(_PipelineSliceBase):
             self.ClearPinAnnotation()
             return
         show = False
-        raw = get_highlight_seed_id(self._display_node)
-        seedID, isPreview = parse_highlight_value(raw)
-        if raw != self._stripe_highlight_id:
-            self._stripe_highlight_id = raw
+        seedID = get_highlight_seed_id(self._display_node)
+        if seedID != self._stripe_highlight_id:
+            self._stripe_highlight_id = seedID
             self._stripe_phase = 0
         if seedID:
             index = self._resolve_seed_index(seedID)
             if index >= 0:
                 mask2d = self._carved_mask_2d(index)
                 if mask2d is not None:
-                    # A hover preview renders STATIC (phase frozen at zero;
-                    # no tick marches it) and DIMMED, so it never reads as
-                    # the pinned highlight.
-                    phase = 0 if isPreview else self._stripe_phase
-                    segments = stripe_segments(mask2d, STRIPE_PERIOD_PX, phase)
+                    segments = stripe_segments(mask2d, STRIPE_PERIOD_PX, self._stripe_phase)
                     if segments:
                         self._build_stripe_lines(segments)
                         prop = self._stripes_actor.GetProperty()
                         prop.SetColor(*self._stripe_rgb(index))
-                        prop.SetOpacity(
-                            PREVIEW_STRIPE_OPACITY if isPreview else 1.0
-                        )
+                        prop.SetOpacity(1.0)
                         show = True
         self._stripes_actor.SetVisibility(show)
-        self._update_pin_annotation(seedID if not isPreview else "")
+        self._update_pin_annotation(seedID)
 
     def _update_pin_annotation(self, seedID: str) -> None:
         """Name the pinned seed + volume in the slice corner (text identity).
 
-        Empty / unresolvable clears the annotation.  Preview never annotates
-        (the caller passes "" for a preview).
+        Empty / unresolvable clears the annotation.
         """
         text = ""
         if seedID:
