@@ -218,6 +218,13 @@ class FlattenedSurfaceRepresentation:
         # which live on the carrier (ADR-0014 §"Fourth layer").
         self._resection_plan_node: Any | None = None
 
+        # The SHARED ``vtkMRMLParametricSurfaceDisplayNode`` -- the carrier's
+        # sibling display aspect carrying the band STYLE (margin colours +
+        # InterpolatedMargins).  One source of truth with the 3D surface
+        # (Docs/architecture/target-mrml-node-hierarchy.md: the display node
+        # carries margin COLORS only; the scalars stay on the plan wrapper).
+        self._surface_display_node: Any | None = None
+
         # The cross-view ``vtkMRMLLocatorNode`` (ADR-0025), threaded by the
         # ResectogramPipeline like the plan node; drives the 2D mapper's
         # uLocatorPosition / uLocatorRadius marker uniforms.
@@ -264,6 +271,18 @@ class FlattenedSurfaceRepresentation:
         no-distance-map fallback).
         """
         self._resection_plan_node = plan_node
+
+    def SetSurfaceDisplayNode(self, display_node: Any | None) -> None:  # noqa: N802 - VTK verb
+        """Attach the shared ``vtkMRMLParametricSurfaceDisplayNode``.
+
+        The ResectogramPipeline resolves the carrier's parametric-surface
+        display aspect and threads it here so the strip's band STYLE (margin
+        colours + InterpolatedMargins) reads from the SAME node the 3D
+        ``BezierPlanningRepresentation`` reads -- 2D and 3D bands can never
+        diverge.  ``None`` clears it; the 2D mapper's compiled-in defaults
+        then stand untouched.
+        """
+        self._surface_display_node = display_node
 
     def SetLocatorNode(self, locator_node: Any | None) -> None:  # noqa: N802 - VTK verb
         """Attach the cross-view locator node (ADR-0025); ``None`` clears."""
@@ -352,6 +371,7 @@ class FlattenedSurfaceRepresentation:
         self._distance_map_volume = None
         self._effective_texture_num_comps = 0
         self._locator_node = None
+        self._surface_display_node = None
 
         # Detach BEFORE dropping the actor handles: nulling the marker actor
         # first would make _detach_actors skip it and leak it into the
@@ -658,6 +678,36 @@ class FlattenedSurfaceRepresentation:
         if risk is not None and set_uncertainty is not None:
             set_uncertainty(float(risk()))
 
+    def _apply_band_style(self, mapper: Any) -> None:
+        """Thread the shared display node's band STYLE onto the 2D mapper.
+
+        Margin COLOURS + the InterpolatedMargins flag live on the carrier's
+        ``vtkMRMLParametricSurfaceDisplayNode`` -- the same node the 3D
+        ``BezierPlanningRepresentation`` reads -- so both views classify their
+        bands with identical style from one source of truth
+        (Docs/architecture/target-mrml-node-hierarchy.md).  A no-op when no
+        display node is wired: the mapper's compiled-in defaults stand, so
+        carriers without the parametric aspect keep the historic appearance.
+        """
+        display = self._surface_display_node
+        if display is None:
+            return
+        _push_color3(
+            mapper,
+            "SetResectionMarginColor",
+            getattr(display, "GetResectionMarginColor", None),
+        )
+        _push_color3(
+            mapper,
+            "SetUncertaintyMarginColor",
+            getattr(display, "GetUncertaintyMarginColor", None),
+        )
+        _push_bool(
+            mapper,
+            "SetInterpolatedMargins",
+            getattr(display, "GetInterpolatedMargins", None),
+        )
+
     def _apply_distance_map_texture(
         self, display_node: Any | None, data_node: Any | None
     ) -> None:
@@ -688,6 +738,9 @@ class FlattenedSurfaceRepresentation:
         # texture is bound), so they must be set even on the no-distance-map /
         # deferred-GL paths below.  Mirrors BezierPlanningRepresentation.
         self._apply_resection_margins(mapper)
+        # Band STYLE (colours + interpolation) rides the same early slot for
+        # the same reason: display state, valid without any texture bound.
+        self._apply_band_style(mapper)
 
         bind = getattr(mapper, "SetDistanceMapTextureObject", None)
         if bind is None:
@@ -1275,6 +1328,39 @@ def _safe_get_sampled_surface(data_node: Any | None) -> Any | None:
         if value is not None:
             return value
     return None
+
+
+def _push_color3(mapper: Any, setter_name: str, getter: Any | None) -> None:
+    """Read a 3-vector from ``getter`` and push it to ``mapper.<setter_name>``.
+
+    No-op when either side is absent (partial display nodes / the generic
+    fallback mapper).  Local twin of the BezierPlanningRepresentation helper
+    -- Representations stay independently importable, so no cross-module
+    import (module docstring contract).
+    """
+    if getter is None:
+        return
+    setter = getattr(mapper, setter_name, None)
+    if setter is None:
+        return
+    try:
+        c = getter()
+        setter(float(c[0]), float(c[1]), float(c[2]))
+    except Exception:  # pragma: no cover - defensive
+        pass
+
+
+def _push_bool(mapper: Any, setter_name: str, getter: Any | None) -> None:
+    """Read a bool from ``getter`` and push it to ``mapper.<setter_name>``."""
+    if getter is None:
+        return
+    setter = getattr(mapper, setter_name, None)
+    if setter is None:
+        return
+    try:
+        setter(bool(getter()))
+    except Exception:  # pragma: no cover - defensive
+        pass
 
 
 def _safe_get_bool(node: Any | None, getter_name: str, *, default: bool) -> bool:
