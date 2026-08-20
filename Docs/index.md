@@ -57,6 +57,7 @@ adr/0035-resection-init-state-machine.md
 adr/0036-vessel-highlight-separate-instance.md
 adr/0037-vascular-territories-off-markups.md
 adr/0038-unify-control-point-interaction.md
+adr/0039-ai-assisted-development-working-agreements.md
 ```
 
 ```{toctree}
