@@ -1,0 +1,73 @@
+# GitHub-dialog agent — see Docs/adr/0039-ai-assisted-development-working-agreements.md
+#
+# Mentioning @claude in an issue or PR thread dispatches Claude Code on
+# a runner.  Scope (ADR-0039 §10): write-access users only; agent-led
+# task class only (mechanical refactors, docs, test scaffolds, small
+# fixes); work is opened as Draft PRs; the agent never merges, approves,
+# or flips Ready — merge authority stays human.  Commits are authored by
+# the bot identity, keeping attribution truthful.
+#
+# Setup: the Claude GitHub App must be installed on the repository and
+# the CLAUDE_CODE_OAUTH_TOKEN secret configured (claude setup-token).
+
+name: Claude
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  claude:
+    # Trigger: an @claude mention by a user with repo write access.
+    # author_association is the first gate; the action re-validates
+    # actor permissions server-side.
+    if: >-
+      contains(github.event.comment.body, '@claude') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'),
+               github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: claude-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Follow the working agreements in
+            Docs/adr/0039-ai-assisted-development-working-agreements.md.
+            Hard limits for this dispatch:
+            - Only take on agent-led-class tasks: mechanical refactors,
+              documentation, test scaffolds, fixes of roughly 20 lines
+              or less.  If the request is larger or touches interaction
+              code, MRML state lifecycles, or architecture, reply in the
+              thread explaining that it needs a human-led session, and
+              stop.
+            - Never modify existing tests that gate behaviour; adding
+              new tests is fine.
+            - Branch off preview (or the PR's epic branch when the
+              thread belongs to one); open resulting work as a DRAFT
+              pull request with a reviewer's map (read order, mechanical
+              vs load-bearing hunks).  Never mark Ready, approve, or
+              merge.
+            - Commit messages use the repository convention
+              (ENH|PERF|BUG|STYLE|DOC|COMP: + capitalized first word)
+              and contain no AI trailers; the PR body discloses the
+              model.
+            - Keep repository content platform-neutral; reference only
+              in-repo anchors (ADR sections, class names) in source
+              comments.
+          claude_args: --max-turns 50
