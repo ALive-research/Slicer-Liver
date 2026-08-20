@@ -7,6 +7,11 @@
 # or flips Ready — merge authority stays human.  Commits are authored by
 # the bot identity, keeping attribution truthful.
 #
+# The action must run in tag mode (respond to the mention): a `prompt`
+# input would switch it to automation-agent mode and it would never
+# reply in the thread, so the standing ADR-0039 limits are injected via
+# --append-system-prompt instead.
+#
 # Setup: the Claude GitHub App must be installed on the repository and
 # the CLAUDE_CODE_OAUTH_TOKEN secret configured (claude setup-token).
 
@@ -46,28 +51,6 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          prompt: |
-            Follow the working agreements in
-            Docs/adr/0039-ai-assisted-development-working-agreements.md.
-            Hard limits for this dispatch:
-            - Only take on agent-led-class tasks: mechanical refactors,
-              documentation, test scaffolds, fixes of roughly 20 lines
-              or less.  If the request is larger or touches interaction
-              code, MRML state lifecycles, or architecture, reply in the
-              thread explaining that it needs a human-led session, and
-              stop.
-            - Never modify existing tests that gate behaviour; adding
-              new tests is fine.
-            - Branch off preview (or the PR's epic branch when the
-              thread belongs to one); open resulting work as a DRAFT
-              pull request with a reviewer's map (read order, mechanical
-              vs load-bearing hunks).  Never mark Ready, approve, or
-              merge.
-            - Commit messages use the repository convention
-              (ENH|PERF|BUG|STYLE|DOC|COMP: + capitalized first word)
-              and contain no AI trailers; the PR body discloses the
-              model.
-            - Keep repository content platform-neutral; reference only
-              in-repo anchors (ADR sections, class names) in source
-              comments.
-          claude_args: --max-turns 50
+          claude_args: |
+            --max-turns 50
+            --append-system-prompt "Follow the working agreements in Docs/adr/0039-ai-assisted-development-working-agreements.md. Hard limits: only take on agent-led-class tasks (mechanical refactors, documentation, test scaffolds, fixes of roughly 20 lines or less); if the request is larger or touches interaction code, MRML state lifecycles, or architecture, reply in the thread explaining that it needs a human-led session, and stop. Never modify existing tests that gate behaviour; adding new tests is fine. Branch off preview (or the PR's epic branch when the thread belongs to one); open resulting work as a DRAFT pull request with a reviewer's map (read order, mechanical vs load-bearing hunks); never mark Ready, approve, or merge. Commit messages use the repository convention (ENH|PERF|BUG|STYLE|DOC|COMP: plus a capitalized first word) and contain no AI trailers; the PR body discloses the model. Keep repository content platform-neutral; reference only in-repo anchors (ADR sections, class names) in source comments."
