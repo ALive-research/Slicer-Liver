@@ -66,12 +66,20 @@ def _make_pipeline_or_skip():
 
 def _require_margin_render_seam_or_skip():
     """Skip unless the margin render-key extension (slice 2) has landed."""
-    import LiverResectionsLib.LiverBezierSurfacePipeline as module
+    import importlib
+
+    # importlib.import_module returns the real submodule from
+    # sys.modules; a plain ``import X.Y as module`` resolves through
+    # the package ATTRIBUTE, which the package __init__'s
+    # ``from .Y import Y`` re-binds to the CLASS -- hasattr on that
+    # never sees module-level functions.
+    module = importlib.import_module("LiverResectionsLib.LiverBezierSurfacePipeline")
 
     if not hasattr(module, "_safe_get_plan_margins"):
         pytest.skip(
             "LiverBezierSurfacePipeline has no _safe_get_plan_margins -- "
-            "resectogram-margins slice 2 has not landed."
+            "resectogram-margins slice 2 has not landed (imported from "
+            f"{getattr(module, '__file__', '?')})."
         )
 
 
