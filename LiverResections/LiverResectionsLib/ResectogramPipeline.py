@@ -176,8 +176,9 @@ class ResectogramPipeline(_PipelineBase):
         is a no-op observationally — the memoised key short-circuits the work
         (`ADR-0013`_ §3).
 
-        The key is the data node's control-point GEOMETRY digest ALONE.  It
-        deliberately does NOT fold in ``GetMTime`` of the data or display node:
+        The key is ``(control-point geometry digest, band-state digest)`` --
+        both VALUE digests.  It deliberately does NOT fold in ``GetMTime`` of
+        any node:
         a maximize binds the resectogram view node to two live qMRMLThreeDViews
         whose renders re-``Modified()`` the surface AND the resectogram display
         node every frame, advancing those MTimes WITHOUT any geometry change.
@@ -188,7 +189,10 @@ class ResectogramPipeline(_PipelineBase):
         churn at fixed geometry leaves the digest unchanged → short-circuit →
         the loop is broken.  A markups control-point DRAG also advances only
         the control-point structure, not the node ``GetMTime``, so the digest
-        is the correct reactivity signal on both counts.
+        is the correct reactivity signal on both counts.  The band-state half
+        extends the same discipline to the plan's margins and the shared
+        display node's colours / InterpolatedMargins: an EDIT changes the
+        digested values (re-thread + repaint), churn does not.
         """
         try:
             self._reconcile()
@@ -210,14 +214,25 @@ class ResectogramPipeline(_PipelineBase):
             if scene_mtime != self._last_resection_scan_mtime:
                 self._last_resection_scan_mtime = scene_mtime
                 self._resection_node = self._resolve_resection_node()
+        # Resolve the carrier's SIBLING parametric-surface display node -- the
+        # band-style source (margin colours + InterpolatedMargins) shared with
+        # the 3D path.  Resolved every reconcile: the walk is over the data
+        # node's own display-node list (no scene scan), so it is cheap and
+        # needs no cache invalidation.  Resolved BEFORE the memo key so the
+        # band-state digest below always sees the current node.
+        self._surface_display_node = self._resolve_surface_display_node()
+
+        # Observe the resolved STATE nodes (ADR-0013 §4: the observation set
+        # includes nodes the displayed concept depends on) so a margin or
+        # band-style edit reaches ``UpdatePipeline`` with no external caller.
+        # Membership-guarded: ``_reattach_node_observers`` drains the set on
+        # renderer churn and the next reconcile re-attaches exactly once.
+        for state_node in (self._resection_node, self._surface_display_node):
+            if state_node is not None and state_node not in self._observed_node_refs:
+                self._attach_observer(state_node)
+
         if self._flattened_surface is not None:
             self._flattened_surface.SetResectionPlanNode(self._resection_node)
-            # Thread the carrier's SIBLING parametric-surface display node --
-            # the band-style source (margin colours + InterpolatedMargins)
-            # shared with the 3D path.  Resolved every reconcile: the walk is
-            # over the data node's own display-node list (no scene scan), so
-            # it is cheap and needs no cache invalidation.
-            self._surface_display_node = self._resolve_surface_display_node()
             self._flattened_surface.SetSurfaceDisplayNode(
                 self._surface_display_node
             )
@@ -227,7 +242,12 @@ class ResectogramPipeline(_PipelineBase):
                 self._resolve_locator_node(self._data_node)
             )
 
-        key = _safe_get_control_points_digest(self._data_node)
+        key = (
+            _safe_get_control_points_digest(self._data_node),
+            _safe_get_band_state_digest(
+                self._resection_node, self._surface_display_node
+            ),
+        )
         if key == self._last_update_key:
             return  # idempotent short-circuit
         self._last_update_key = key
@@ -803,11 +823,51 @@ def _safe_get_scene_mtime(node: Any) -> int | None:
     return int(scene.GetMTime())
 
 
+def _safe_get_band_state_digest(plan: Any, surface_display: Any) -> tuple:
+    """Return a VALUE digest of the margin band state.
+
+    The second half of ``UpdatePipeline``'s memo key: the plan wrapper's
+    margin scalars and the shared parametric-surface display node's band
+    style.  VALUES, never MTimes — render-induced ``Modified`` churn at
+    fixed state leaves the digest unchanged (the render-storm guard extends
+    over the band state), while a real margin / colour / interpolation edit
+    changes it and re-threads the mappers.  ``None`` nodes contribute
+    nothing, so a bare surface digests to a constant.
+    """
+    digest = []
+    if plan is not None:
+        try:
+            digest.append(
+                (
+                    float(plan.GetSafetyMargin_mm()),
+                    float(plan.GetRiskMargin_mm()),
+                )
+            )
+        except Exception:  # pragma: no cover - defensive (stub plans)
+            pass
+    if surface_display is not None:
+        try:
+            digest.append(
+                (
+                    tuple(float(c) for c in surface_display.GetResectionMarginColor()),
+                    tuple(
+                        float(c)
+                        for c in surface_display.GetUncertaintyMarginColor()
+                    ),
+                    bool(surface_display.GetInterpolatedMargins()),
+                )
+            )
+        except Exception:  # pragma: no cover - defensive (stub displays)
+            pass
+    return tuple(digest)
+
+
 def _safe_get_control_points_digest(node: Any) -> tuple:
     """Return a digest of the data node's control-point positions.
 
-    This digest is the SOLE memoisation key for ``UpdatePipeline`` (it does
-    NOT fold in ``GetMTime``): a control-point edit changes the digest, while
+    The geometry half of ``UpdatePipeline``'s memo key (paired with
+    ``_safe_get_band_state_digest``; neither folds in ``GetMTime``): a
+    control-point edit changes the digest, while
     a render-induced ``Modified`` at fixed geometry does not, which is exactly
     the discrimination that keeps edits reactive while breaking the maximize
     render storm.  A control-point edit advances the geometry digest (so

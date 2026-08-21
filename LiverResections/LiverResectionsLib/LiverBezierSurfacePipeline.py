@@ -1402,6 +1402,14 @@ class LiverBezierSurfacePipeline(_PipelineBase):
                 _machine.phase_token(self._data_node),
                 _safe_get_picked_position(self._locator_node),
                 _safe_get_locator_visibility(self._locator_node),
+                # Margin scalars + band style are visible dispatch inputs
+                # too: a spinbox edit re-threads the mapper uniforms via the
+                # MTime-keyed reconcile above, but without these VALUE
+                # components the view stayed stale until an unrelated
+                # repaint (a camera orbit).  Values, never MTimes -- same
+                # feedback-loop guard as every other component.
+                _safe_get_plan_margins(self._resection_node),
+                _safe_get_band_style(self._display_node),
             )
             if render_key == self._last_render_key:
                 return
@@ -1443,6 +1451,37 @@ def _safe_get_mtime(node: Any) -> int:
     if node is None:
         return 0
     return int(node.GetMTime())
+
+
+def _safe_get_plan_margins(node: Any) -> tuple | None:
+    """The plan wrapper's ``(SafetyMargin_mm, RiskMargin_mm)``; None sans node.
+
+    A render-key VALUE component: a margin edit changes it (one coalesced
+    repaint), render-induced ``Modified`` churn does not.
+    """
+    if node is None:
+        return None
+    try:
+        return (float(node.GetSafetyMargin_mm()), float(node.GetRiskMargin_mm()))
+    except Exception:  # pragma: no cover - defensive (stub plans)
+        return None
+
+
+def _safe_get_band_style(node: Any) -> tuple | None:
+    """The display node's ``(marginRGB, uncertaintyRGB, interpolated)``.
+
+    ``None`` sans node; a render-key VALUE component like the margins.
+    """
+    if node is None:
+        return None
+    try:
+        return (
+            tuple(float(c) for c in node.GetResectionMarginColor()),
+            tuple(float(c) for c in node.GetUncertaintyMarginColor()),
+            bool(node.GetInterpolatedMargins()),
+        )
+    except Exception:  # pragma: no cover - defensive (stub displays)
+        return None
 
 
 def _safe_get_locator_visibility(node: Any) -> bool | None:
