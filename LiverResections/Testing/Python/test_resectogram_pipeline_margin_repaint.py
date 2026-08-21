@@ -75,12 +75,20 @@ def _make_pipeline_or_skip():
 
 def _require_band_digest_seam_or_skip():
     """Skip unless the band-state digest (slice 2) has landed."""
-    import LiverResectionsLib.ResectogramPipeline as module
+    import importlib
+
+    # importlib.import_module returns the real submodule from
+    # sys.modules; a plain ``import X.Y as module`` resolves through
+    # the package ATTRIBUTE, which the package __init__'s
+    # ``from .Y import Y`` re-binds to the CLASS -- hasattr on that
+    # never sees module-level functions.
+    module = importlib.import_module("LiverResectionsLib.ResectogramPipeline")
 
     if not hasattr(module, "_safe_get_band_state_digest"):
         pytest.skip(
             "ResectogramPipeline has no _safe_get_band_state_digest -- "
-            "resectogram-margins slice 2 has not landed."
+            "resectogram-margins slice 2 has not landed (imported from "
+            f"{getattr(module, '__file__', '?')})."
         )
 
 
