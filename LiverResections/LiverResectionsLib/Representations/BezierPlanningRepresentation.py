@@ -550,10 +550,11 @@ class BezierPlanningRepresentation:
         Ports ``vtkSlicerBezierSurfaceRepresentation3D::UpdateBezierSurfaceDisplay``.
         A no-op on the generic fallback mapper, which has no ``SetResection*``
         surface — there the colour rides on the actor property set by the
-        caller.  Margin scalars (``SetResectionMargin`` / ``SetUncertaintyMargin``)
-        are intentionally left at the mapper defaults: the v2 node hierarchy
-        carries no margin field yet, and the margins only bias the distance
-        field, which is not bound in this slice.
+        caller.  Margin SCALARS (``SetResectionMargin`` / ``SetUncertaintyMargin``)
+        are not pushed here — they are plan-wrapper state
+        (``SafetyMargin_mm`` / ``RiskMargin_mm``, ADR-0031) threaded by
+        ``_apply_resection_plan``; this method pushes only the display node's
+        decoration (colours, flags, grid).
         """
         mapper = self._surface_mapper
         if mapper is None:
