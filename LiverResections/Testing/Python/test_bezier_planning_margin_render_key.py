@@ -104,8 +104,8 @@ def _wire_pipeline(slicer, pipeline):
     if not hasattr(plan, "SetAndObserveGeometryNode"):
         pytest.skip(f"{PLAN_NODE_CLASS} has no SetAndObserveGeometryNode.")
     plan.SetAndObserveGeometryNode(data)
-    if not hasattr(plan, "SetSafetyMargin_mm"):
-        pytest.skip(f"{PLAN_NODE_CLASS} has no SetSafetyMargin_mm.")
+    if not hasattr(plan, "SetSafetyMargin"):
+        pytest.skip(f"{PLAN_NODE_CLASS} has no SetSafetyMargin.")
 
     pipeline.SetDisplayNode(display)
     pipeline.UpdatePipeline()
@@ -140,10 +140,10 @@ def test_margin_write_requests_exactly_one_render():
 
     data, display, plan = _wire_pipeline(slicer, pipeline)
 
-    renders = _count_renders(pipeline, lambda: plan.SetSafetyMargin_mm(9.0))
+    renders = _count_renders(pipeline, lambda: plan.SetSafetyMargin(9.0))
 
     assert renders == 1, (
-        "a SafetyMargin_mm write at fixed geometry must request exactly one "
+        "a SafetyMargin write at fixed geometry must request exactly one "
         f"render through the extended render key; got {renders}."
     )
 
@@ -160,7 +160,7 @@ def test_noop_modified_requests_no_render():
     _require_margin_render_seam_or_skip()
 
     data, display, plan = _wire_pipeline(slicer, pipeline)
-    plan.SetSafetyMargin_mm(9.0)  # settle a non-default value first
+    plan.SetSafetyMargin(9.0)  # settle a non-default value first
 
     renders = _count_renders(pipeline, plan.Modified)
 

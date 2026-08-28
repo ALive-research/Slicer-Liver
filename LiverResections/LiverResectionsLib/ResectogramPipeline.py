@@ -839,8 +839,8 @@ def _safe_get_band_state_digest(plan: Any, surface_display: Any) -> tuple:
         try:
             digest.append(
                 (
-                    float(plan.GetSafetyMargin_mm()),
-                    float(plan.GetRiskMargin_mm()),
+                    float(plan.GetSafetyMargin()),
+                    float(plan.GetRiskMargin()),
                 )
             )
         except Exception:  # pragma: no cover - defensive (stub plans)
