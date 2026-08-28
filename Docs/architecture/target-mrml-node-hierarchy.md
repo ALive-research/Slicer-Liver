@@ -81,8 +81,8 @@ classDiagram
     class vtkMRMLResectionPlanNode {
         <<NEW v2.0 — clinical wrapper>>
         +string Name
-        +double SafetyMargin_mm
-        +double RiskMargin_mm
+        +double SafetyMargin
+        +double RiskMargin
         +int OrderIndex
         +PlanState State : Init | Planning | Confirmed
         --node refs--
