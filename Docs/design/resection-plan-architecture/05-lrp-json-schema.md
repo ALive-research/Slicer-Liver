@@ -1,5 +1,11 @@
 # 05 — `.lrp.json` v2 schema shape (trimmed)
 
+> **Key rename note (2026-08-21).** The margin keys were renamed from
+> `safetyMargin_mm` / `riskMargin_mm` to `safetyMargin` / `riskMargin`
+> (values remain millimetres).  Readers accept both spellings; writers
+> emit only the current keys.  `schemaVersion` stays `2`.
+
+
 The shipped v2 schema (PR #430) was reshaped after the 2026-05-25
 maintainer review. Two refinements landed:
 
@@ -19,8 +25,8 @@ graph TB
     root["root JSON object"]
     sv["schemaVersion: 2"]
     name["name: string"]
-    sm["safetyMargin_mm: double"]
-    rm["riskMargin_mm: double"]
+    sm["safetyMargin: double"]
+    rm["riskMargin: double"]
     oi["orderIndex: int (sentinel -1)"]
     state["state: 'Init' | 'Planning' | 'Confirmed'"]
 
@@ -74,8 +80,8 @@ distanceSpheroid                                              → moved into sur
 metadata: {}                            metadata: {}          (reserved)
 
 resection: {                            name                  (root — plan IS the resection)
-  name, safetyMargin_mm,                safetyMargin_mm
-  riskMargin_mm, orderIndex             riskMargin_mm
+  name, safetyMargin,                safetyMargin
+  riskMargin, orderIndex             riskMargin
 }                                       orderIndex
 
 scene: {                                ─────────────────────  REMOVED
@@ -119,7 +125,7 @@ scene-local node ID would reintroduce exactly the cross-machine breakage
 the trim above removed. Re-linking the distance map on load rides on the
 same v2.1 stable-ID resolution (#415) as the other node references; until
 then the plan re-establishes / recomputes it rather than carrying a
-fragile ID. The two margins (`safetyMargin_mm`, `riskMargin_mm`), being
+fragile ID. The two margins (`safetyMargin`, `riskMargin`), being
 plain scalars, **do** round-trip — the rest of the distance-shading input
 set is persisted; only the volume reference waits for v2.1. A guard test
 (`LiverResections/Testing/Python/test_resection_plan_distance_map_not_persisted.py`)
@@ -141,8 +147,8 @@ fragile persistence early.
 {
   "schemaVersion": 2,
   "name": "Right hemihepatectomy",
-  "safetyMargin_mm": 10.0,
-  "riskMargin_mm": 5.0,
+  "safetyMargin": 10.0,
+  "riskMargin": 5.0,
   "orderIndex": 0,
   "state": "Planning",
   "surface": {

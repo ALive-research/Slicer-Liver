@@ -43,8 +43,8 @@ flowchart LR
 | Field | `.mrml` (WriteXML) | `.lrp.json` (storage) |
 |---|---|---|
 | `Name` (MRML primitive) | ✓ (Superclass) | ✓ (mirrored for standalone-load) |
-| `SafetyMargin_mm` |   | ✓ |
-| `RiskMargin_mm` |   | ✓ |
+| `SafetyMargin` |   | ✓ |
+| `RiskMargin` |   | ✓ |
 | `OrderIndex` | ✓ (lightweight scalar, scene-relevant) | ✓ |
 | `State` | ✓ (lightweight scalar) | ✓ |
 | Node refs (`geometry`, storage) | ✓ (Superclass) |   |
