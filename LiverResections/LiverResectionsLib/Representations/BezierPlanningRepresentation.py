@@ -552,7 +552,7 @@ class BezierPlanningRepresentation:
         surface — there the colour rides on the actor property set by the
         caller.  Margin SCALARS (``SetResectionMargin`` / ``SetUncertaintyMargin``)
         are not pushed here — they are plan-wrapper state
-        (``SafetyMargin_mm`` / ``RiskMargin_mm``, ADR-0031) threaded by
+        (``SafetyMargin`` / ``RiskMargin``, ADR-0031) threaded by
         ``_apply_resection_plan``; this method pushes only the display node's
         decoration (colours, flags, grid).
         """
@@ -641,8 +641,8 @@ class BezierPlanningRepresentation:
         # Margins are plan fields, meaningful independent of the distance map
         # (the shader simply has no band to draw without a bound texture).
         if plan_node is not None:
-            safety = getattr(plan_node, "GetSafetyMargin_mm", None)
-            risk = getattr(plan_node, "GetRiskMargin_mm", None)
+            safety = getattr(plan_node, "GetSafetyMargin", None)
+            risk = getattr(plan_node, "GetRiskMargin", None)
             if safety is not None:
                 mapper.SetResectionMargin(float(safety()))
             if risk is not None:

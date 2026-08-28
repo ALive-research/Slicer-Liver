@@ -7,8 +7,8 @@ The resectogram's flattened strip shades from the same distance field the 3D
 Bezier path uses, through the SAME ``vtkOpenGLResection2DPolyDataMapper``.  Its
 band needs the three wrapper-owned inputs ADR-0031 clusters on the
 ``vtkMRMLResectionPlanNode`` wrapper: the distance-map volume,
-``SetResectionMargin(SafetyMargin_mm)``, and
-``SetUncertaintyMargin(RiskMargin_mm)``.
+``SetResectionMargin(SafetyMargin)``, and
+``SetUncertaintyMargin(RiskMargin)``.
 
 The gap this pins: today ``FlattenedSurfaceRepresentation._apply_distance_map_texture``
 reads ``GetDistanceMapVolumeNode`` off the DATA NODE (the carrier) -- the WRONG
@@ -171,7 +171,7 @@ def _resolved_distance_map_source(rep, fake):
 def test_flattened_surface_threads_margins_from_wrapper():
     """Invariant 2: safety + risk margins reach the 2D mapper from the WRAPPER.
 
-    With a plan wrapper carrying ``SafetyMargin_mm`` / ``RiskMargin_mm``, the
+    With a plan wrapper carrying ``SafetyMargin`` / ``RiskMargin``, the
     Representation's ``update`` pushes ``SetResectionMargin(safety)`` +
     ``SetUncertaintyMargin(risk)`` onto the 2D mapper -- porting
     ``BezierPlanningRepresentation._apply_resection_plan`` into the resectogram
@@ -188,27 +188,27 @@ def test_flattened_surface_threads_margins_from_wrapper():
     plan = slicer.mrmlScene.AddNewNodeByClass(PLAN_NODE_CLASS)
     if data is None or display is None or plan is None:
         pytest.skip("wrapper / carrier / display nodes not all registered.")
-    if not (hasattr(plan, "SetSafetyMargin_mm") and hasattr(plan, "SetRiskMargin_mm")):
+    if not (hasattr(plan, "SetSafetyMargin") and hasattr(plan, "SetRiskMargin")):
         pytest.skip(f"{PLAN_NODE_CLASS} has no Safety/Risk margin setters.")
 
-    plan.SetSafetyMargin_mm(10.0)
-    plan.SetRiskMargin_mm(2.0)
+    plan.SetSafetyMargin(10.0)
+    plan.SetRiskMargin(2.0)
 
     rep.SetResectionPlanNode(plan)
     rep.update(display, data)
 
     assert fake.resection_margin is not None, (
-        "the wrapper's SafetyMargin_mm must reach the 2D mapper's "
+        "the wrapper's SafetyMargin must reach the 2D mapper's "
         "SetResectionMargin (ADR-0031) -- no margin was threaded."
     )
     assert abs(fake.resection_margin - 10.0) < 1e-5, (
-        "plan SafetyMargin_mm must reach SetResectionMargin; got "
+        "plan SafetyMargin must reach SetResectionMargin; got "
         f"{fake.resection_margin}."
     )
     assert fake.uncertainty_margin is not None and abs(
         fake.uncertainty_margin - 2.0
     ) < 1e-5, (
-        "plan RiskMargin_mm must reach the 2D mapper's SetUncertaintyMargin; "
+        "plan RiskMargin must reach the 2D mapper's SetUncertaintyMargin; "
         f"got {fake.uncertainty_margin}."
     )
 
@@ -273,12 +273,12 @@ def test_flattened_surface_clears_source_when_wrapper_has_no_distance_map():
         pytest.skip("wrapper / carrier / display not all registered.")
     if not hasattr(plan, "SetAndObserveDistanceMapVolumeNode"):
         pytest.skip(f"{PLAN_NODE_CLASS} has no SetAndObserveDistanceMapVolumeNode.")
-    if not (hasattr(plan, "SetSafetyMargin_mm") and hasattr(plan, "SetRiskMargin_mm")):
+    if not (hasattr(plan, "SetSafetyMargin") and hasattr(plan, "SetRiskMargin")):
         pytest.skip(f"{PLAN_NODE_CLASS} has no Safety/Risk margin setters.")
 
     plan.SetAndObserveDistanceMapVolumeNode(None)
-    plan.SetSafetyMargin_mm(5.0)
-    plan.SetRiskMargin_mm(1.0)
+    plan.SetSafetyMargin(5.0)
+    plan.SetRiskMargin(1.0)
 
     rep.SetResectionPlanNode(plan)
     rep.update(display, data)

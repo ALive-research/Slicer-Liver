@@ -224,8 +224,8 @@ void populateSurface(vtkMRMLBezierSurfaceNode* node)
 void populatePlan(vtkMRMLResectionPlanNode* plan)
 {
   plan->SetName("Right hemihepatectomy");
-  plan->SetSafetyMargin_mm(10.0);
-  plan->SetRiskMargin_mm(5.0);
+  plan->SetSafetyMargin(10.0);
+  plan->SetRiskMargin(5.0);
   plan->SetOrderIndex(2);
   plan->SetState(vtkMRMLResectionPlanNode::Planning);
 }
@@ -332,8 +332,8 @@ int testSchemaVersionBoundary()
       ofs << "{\n";
       ofs << "  \"schemaVersion\": " << version << ",\n";
       ofs << "  \"name\": \"v" << version << "\",\n";
-      ofs << "  \"safetyMargin_mm\": 5.0,\n";
-      ofs << "  \"riskMargin_mm\": 2.5,\n";
+      ofs << "  \"safetyMargin\": 5.0,\n";
+      ofs << "  \"riskMargin\": 2.5,\n";
       ofs << "  \"orderIndex\": 0,\n";
       ofs << "  \"state\": \"Init\",\n";
       ofs << "  \"surface\": { \"type\": \"Bezier\", \"rows\": 4, \"cols\": 4, "
@@ -403,8 +403,8 @@ int testPlanRootedRoundTrip()
   CHECK_INT(readStorage->ReadData(sinkPlan.GetPointer()), 1);
 
   // Plan field round-trip.
-  CHECK_DOUBLE_TOLERANCE(sinkPlan->GetSafetyMargin_mm(), source->GetSafetyMargin_mm(), 1e-9);
-  CHECK_DOUBLE_TOLERANCE(sinkPlan->GetRiskMargin_mm(), source->GetRiskMargin_mm(), 1e-9);
+  CHECK_DOUBLE_TOLERANCE(sinkPlan->GetSafetyMargin(), source->GetSafetyMargin(), 1e-9);
+  CHECK_DOUBLE_TOLERANCE(sinkPlan->GetRiskMargin(), source->GetRiskMargin(), 1e-9);
   CHECK_INT(sinkPlan->GetOrderIndex(), source->GetOrderIndex());
   CHECK_INT(sinkPlan->GetState(), source->GetState());
 
@@ -576,8 +576,8 @@ int testOptionalFieldsDefaults()
   storage->SetFileName(path.c_str());
   CHECK_INT(storage->ReadData(plan.GetPointer()), 1);
 
-  CHECK_DOUBLE(plan->GetSafetyMargin_mm(), 0.0);
-  CHECK_DOUBLE(plan->GetRiskMargin_mm(), 0.0);
+  CHECK_DOUBLE(plan->GetSafetyMargin(), 0.0);
+  CHECK_DOUBLE(plan->GetRiskMargin(), 0.0);
   CHECK_INT(plan->GetOrderIndex(), -1);
   CHECK_INT(plan->GetState(), vtkMRMLResectionPlanNode::Init);
 
@@ -601,8 +601,8 @@ int testSceneBlockForwardCompat()
     ofs << "{\n";
     ofs << "  \"schemaVersion\": 2,\n";
     ofs << "  \"name\": \"plan-with-scene-block\",\n";
-    ofs << "  \"safetyMargin_mm\": 7.0,\n";
-    ofs << "  \"riskMargin_mm\": 3.0,\n";
+    ofs << "  \"safetyMargin\": 7.0,\n";
+    ofs << "  \"riskMargin\": 3.0,\n";
     ofs << "  \"orderIndex\": 1,\n";
     ofs << "  \"state\": \"Planning\",\n";
     ofs << "  \"surface\": { \"type\": \"Bezier\", \"rows\": 4, \"cols\": 4, "
@@ -1136,6 +1136,58 @@ int testWriteJsonPlanWithoutGeometry()
 } // namespace
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// Legacy margin keys -- files written before the margin rename carry the
+// unit-suffixed keys; the reader must still populate the fields (writers
+// emit only the current keys, pinned by the round-trip invariants above).
+int testLegacyMarginKeysStillLoad()
+{
+  const std::string path = makeTempPath("lrp.json");
+  {
+    std::ofstream ofs(path);
+    ofs << "{\n";
+    ofs << "  \"schemaVersion\": 2,\n";
+    ofs << "  \"name\": \"legacy-margin-keys\",\n";
+    ofs << "  \"safetyMargin_mm\": 9.0,\n";
+    ofs << "  \"riskMargin_mm\": 2.0,\n";
+    ofs << "  \"orderIndex\": 0,\n";
+    ofs << "  \"state\": \"Init\",\n";
+    ofs << "  \"surface\": { \"type\": \"Bezier\", \"rows\": 4, \"cols\": 4, "
+           "\"controlGrid\": [";
+    for (int i = 0; i < 48; ++i)
+    {
+      if (i > 0)
+      {
+        ofs << ", ";
+      }
+      ofs << "0.0";
+    }
+    ofs << "] }\n";
+    ofs << "}\n";
+  }
+
+  vtkNew<vtkMRMLScene> scene;
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLResectionPlanNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLBezierSurfaceNode>::New());
+  scene->RegisterNodeClass(vtkSmartPointer<vtkMRMLResectionPlanStorageNode>::New());
+
+  vtkNew<vtkMRMLResectionPlanNode> plan;
+  vtkNew<vtkMRMLBezierSurfaceNode> surface;
+  scene->AddNode(plan.GetPointer());
+  scene->AddNode(surface.GetPointer());
+  plan->SetAndObserveGeometryNode(surface.GetPointer());
+
+  vtkNew<vtkMRMLResectionPlanStorageNode> storage;
+  storage->SetFileName(path.c_str());
+
+  CHECK_INT(storage->ReadData(plan.GetPointer()), 1);
+  CHECK_DOUBLE_TOLERANCE(plan->GetSafetyMargin(), 9.0, 1e-9);
+  CHECK_DOUBLE_TOLERANCE(plan->GetRiskMargin(), 2.0, 1e-9);
+
+  vtksys::SystemTools::RemoveFile(path);
+  return EXIT_SUCCESS;
+}
+
 int vtkMRMLResectionPlanStorageNodeTest1(int, char*[])
 {
   vtkNew<vtkMRMLScene> scene;
@@ -1152,6 +1204,7 @@ int vtkMRMLResectionPlanStorageNodeTest1(int, char*[])
   CHECK_EXIT_SUCCESS(testStandaloneLoadCreatesSurface());
   CHECK_EXIT_SUCCESS(testOptionalFieldsDefaults());
   CHECK_EXIT_SUCCESS(testSceneBlockForwardCompat());
+  CHECK_EXIT_SUCCESS(testLegacyMarginKeysStillLoad());
   CHECK_EXIT_SUCCESS(testSurfaceBulkDataRoundTrip());
 
   // Phase 1 -- defensive guard + JSON dispatch coverage (closes the

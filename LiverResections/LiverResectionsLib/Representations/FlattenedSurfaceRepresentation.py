@@ -662,15 +662,15 @@ class FlattenedSurfaceRepresentation:
         by the ``vtkMRMLResectionPlanNode`` wrapper, alongside the distance-map
         volume, as one distance-shading input set.  Ports the margin block of
         the 3D ``BezierPlanningRepresentation._apply_resection_plan``: push
-        ``GetSafetyMargin_mm`` -> ``SetResectionMargin`` and ``GetRiskMargin_mm``
+        ``GetSafetyMargin`` -> ``SetResectionMargin`` and ``GetRiskMargin``
         -> ``SetUncertaintyMargin``.  A no-op when no plan is wired or on the
         generic fallback mapper (the getattr guards).
         """
         plan = self._resection_plan_node
         if plan is None:
             return
-        safety = getattr(plan, "GetSafetyMargin_mm", None)
-        risk = getattr(plan, "GetRiskMargin_mm", None)
+        safety = getattr(plan, "GetSafetyMargin", None)
+        risk = getattr(plan, "GetRiskMargin", None)
         set_resection = getattr(mapper, "SetResectionMargin", None)
         set_uncertainty = getattr(mapper, "SetUncertaintyMargin", None)
         if safety is not None and set_resection is not None:

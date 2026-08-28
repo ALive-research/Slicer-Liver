@@ -1454,7 +1454,7 @@ def _safe_get_mtime(node: Any) -> int:
 
 
 def _safe_get_plan_margins(node: Any) -> tuple | None:
-    """The plan wrapper's ``(SafetyMargin_mm, RiskMargin_mm)``; None sans node.
+    """The plan wrapper's ``(SafetyMargin, RiskMargin)``; None sans node.
 
     A render-key VALUE component: a margin edit changes it (one coalesced
     repaint), render-induced ``Modified`` churn does not.
@@ -1462,7 +1462,7 @@ def _safe_get_plan_margins(node: Any) -> tuple | None:
     if node is None:
         return None
     try:
-        return (float(node.GetSafetyMargin_mm()), float(node.GetRiskMargin_mm()))
+        return (float(node.GetSafetyMargin()), float(node.GetRiskMargin()))
     except Exception:  # pragma: no cover - defensive (stub plans)
         return None
 

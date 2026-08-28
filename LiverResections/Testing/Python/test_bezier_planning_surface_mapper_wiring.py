@@ -321,8 +321,8 @@ def test_planning_distance_map_threaded_from_plan_to_mapper():
     volume.SetSpacing(2.0, 2.0, 2.0)
 
     plan.SetAndObserveDistanceMapVolumeNode(volume)
-    plan.SetSafetyMargin_mm(10.0)
-    plan.SetRiskMargin_mm(2.0)
+    plan.SetSafetyMargin(10.0)
+    plan.SetRiskMargin(2.0)
 
     rep.SetResectionPlanNode(plan)
     rep.update(display, data)
@@ -332,11 +332,11 @@ def test_planning_distance_map_threaded_from_plan_to_mapper():
         "builds the 3D texture from it in C++ at render)."
     )
     assert abs(mapper.GetResectionMargin() - 10.0) < 1e-5, (
-        "plan SafetyMargin_mm must reach the mapper's ResectionMargin; got "
+        "plan SafetyMargin must reach the mapper's ResectionMargin; got "
         f"{mapper.GetResectionMargin()}."
     )
     assert abs(mapper.GetUncertaintyMargin() - 2.0) < 1e-5, (
-        "plan RiskMargin_mm must reach the mapper's UncertaintyMargin; got "
+        "plan RiskMargin must reach the mapper's UncertaintyMargin; got "
         f"{mapper.GetUncertaintyMargin()}."
     )
     ras_to_ijk_t = mapper.GetRasToIjkMatrixT()

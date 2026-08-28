@@ -69,8 +69,8 @@ class vtkMRMLScalarVolumeNode;
  * \par Field roster
  *
  *   - ``Name`` (inherited from vtkMRMLNode) — surgeon-facing plan name.
- *   - ``SafetyMargin_mm`` — clinical safety margin in millimetres.
- *   - ``RiskMargin_mm`` — clinical risk margin in millimetres.
+ *   - ``SafetyMargin`` — clinical safety margin, in millimetres.
+ *   - ``RiskMargin`` — clinical risk margin, in millimetres.
  *   - ``OrderIndex`` — zero-based position in the operative sequence
  *     (sentinel ``-1`` = unordered).  Migrated from the surface node
  *     by the wrapper-vs-carrier landing.
@@ -133,11 +133,13 @@ public:
   // Clinical field roster
   //--------------------------------------------------------------------------
 
-  vtkGetMacro(SafetyMargin_mm, double);
-  vtkSetMacro(SafetyMargin_mm, double);
+  /// Clinical safety margin, in millimetres.
+  vtkGetMacro(SafetyMargin, double);
+  vtkSetMacro(SafetyMargin, double);
 
-  vtkGetMacro(RiskMargin_mm, double);
-  vtkSetMacro(RiskMargin_mm, double);
+  /// Clinical risk (uncertainty) margin, in millimetres.
+  vtkGetMacro(RiskMargin, double);
+  vtkSetMacro(RiskMargin, double);
 
   /// Operative-sequence position (zero-based).  Default ``-1`` =
   /// unordered.  Migrated from the surface node by the
@@ -194,8 +196,8 @@ private:
   vtkMRMLResectionPlanNode(const vtkMRMLResectionPlanNode&) = delete;
   void operator=(const vtkMRMLResectionPlanNode&) = delete;
 
-  double SafetyMargin_mm;
-  double RiskMargin_mm;
+  double SafetyMargin;
+  double RiskMargin;
   int OrderIndex;
   int State;
 };

@@ -26,14 +26,15 @@
 
 // STD includes
 #include <cstring>
+#include <string>
 
 //------------------------------------------------------------------------------
 vtkMRMLNodeNewMacro(vtkMRMLResectionPlanNode);
 
 //------------------------------------------------------------------------------
 vtkMRMLResectionPlanNode::vtkMRMLResectionPlanNode()
-  : SafetyMargin_mm(0.0)
-  , RiskMargin_mm(0.0)
+  : SafetyMargin(0.0)
+  , RiskMargin(0.0)
   , OrderIndex(-1)
   , State(PlanState::Init)
 {
@@ -123,8 +124,8 @@ void vtkMRMLResectionPlanNode::WriteXML(ostream& of, int nIndent)
   Superclass::WriteXML(of, nIndent);
 
   vtkMRMLWriteXMLBeginMacro(of);
-  vtkMRMLWriteXMLFloatMacro(safetyMargin_mm, SafetyMargin_mm);
-  vtkMRMLWriteXMLFloatMacro(riskMargin_mm, RiskMargin_mm);
+  vtkMRMLWriteXMLFloatMacro(safetyMargin, SafetyMargin);
+  vtkMRMLWriteXMLFloatMacro(riskMargin, RiskMargin);
   vtkMRMLWriteXMLIntMacro(orderIndex, OrderIndex);
   vtkMRMLWriteXMLEnumMacro(state, State);
   vtkMRMLWriteXMLEndMacro();
@@ -137,11 +138,27 @@ void vtkMRMLResectionPlanNode::ReadXMLAttributes(const char** atts)
   Superclass::ReadXMLAttributes(atts);
 
   vtkMRMLReadXMLBeginMacro(atts);
-  vtkMRMLReadXMLFloatMacro(safetyMargin_mm, SafetyMargin_mm);
-  vtkMRMLReadXMLFloatMacro(riskMargin_mm, RiskMargin_mm);
+  vtkMRMLReadXMLFloatMacro(safetyMargin, SafetyMargin);
+  vtkMRMLReadXMLFloatMacro(riskMargin, RiskMargin);
   vtkMRMLReadXMLIntMacro(orderIndex, OrderIndex);
   vtkMRMLReadXMLEnumMacro(state, State);
   vtkMRMLReadXMLEndMacro();
+
+  // Legacy scene compatibility: scenes saved before the margin rename
+  // carry the unit-suffixed attribute names.  A scene holds either the
+  // old or the new names, never both, so order does not matter.
+  for (const char** att = atts; att && *att && *(att + 1); att += 2)
+  {
+    const std::string attName = *att;
+    if (attName == "safetyMargin_mm")
+    {
+      this->SafetyMargin = std::stod(*(att + 1));
+    }
+    else if (attName == "riskMargin_mm")
+    {
+      this->RiskMargin = std::stod(*(att + 1));
+    }
+  }
 
   this->EndModify(disabledModify);
 }
@@ -157,8 +174,8 @@ void vtkMRMLResectionPlanNode::CopyContent(vtkMRMLNode* anode, bool deepCopy)
   {
     return;
   }
-  this->SafetyMargin_mm = other->SafetyMargin_mm;
-  this->RiskMargin_mm = other->RiskMargin_mm;
+  this->SafetyMargin = other->SafetyMargin;
+  this->RiskMargin = other->RiskMargin;
   this->OrderIndex = other->OrderIndex;
   this->State = other->State;
 }
@@ -169,8 +186,8 @@ void vtkMRMLResectionPlanNode::PrintSelf(ostream& os, vtkIndent indent)
   this->Superclass::PrintSelf(os, indent);
 
   vtkMRMLPrintBeginMacro(os, indent);
-  vtkMRMLPrintFloatMacro(SafetyMargin_mm);
-  vtkMRMLPrintFloatMacro(RiskMargin_mm);
+  vtkMRMLPrintFloatMacro(SafetyMargin);
+  vtkMRMLPrintFloatMacro(RiskMargin);
   vtkMRMLPrintIntMacro(OrderIndex);
   vtkMRMLPrintEnumMacro(State);
   vtkMRMLPrintEndMacro();

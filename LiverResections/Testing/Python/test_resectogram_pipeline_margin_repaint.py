@@ -4,7 +4,7 @@
 """Resectogram-margins slice 2 -- margin edits repaint the strip.
 
 The Pipeline memoises ``UpdatePipeline`` on the control-point geometry
-digest, so a ``SafetyMargin_mm`` / ``RiskMargin_mm`` write on the plan
+digest, so a ``SafetyMargin`` / ``RiskMargin`` write on the plan
 wrapper -- or a band-style edit on the parametric-surface display node --
 at FIXED geometry never re-threads the mappers and never repaints: the
 strip shows stale bands until an unrelated render.  Slice 2 widens the
@@ -115,7 +115,7 @@ def _wire_full_margin_fixture(slicer):
     if not hasattr(plan, "SetAndObserveGeometryNode"):
         pytest.skip(f"{PLAN_NODE_CLASS} has no SetAndObserveGeometryNode.")
     plan.SetAndObserveGeometryNode(data)
-    if not (hasattr(plan, "SetSafetyMargin_mm") and hasattr(plan, "SetRiskMargin_mm")):
+    if not (hasattr(plan, "SetSafetyMargin") and hasattr(plan, "SetRiskMargin")):
         pytest.skip(f"{PLAN_NODE_CLASS} has no Safety/Risk margin setters.")
     return data, display, surface_display, plan
 
@@ -138,10 +138,10 @@ def test_margin_write_at_fixed_geometry_does_real_work():
     settled = pipeline.GetUpdateCount()
     assert settled >= 1, "the first dispatch must do real work."
 
-    plan.SetSafetyMargin_mm(7.0)
+    plan.SetSafetyMargin(7.0)
 
     assert pipeline.GetUpdateCount() > settled, (
-        "a SafetyMargin_mm write at fixed geometry must re-reconcile through "
+        "a SafetyMargin write at fixed geometry must re-reconcile through "
         "the Pipeline's own plan observer + the widened memo key; the count "
         "did not advance -- the margin edit was swallowed."
     )
@@ -161,7 +161,7 @@ def test_margin_key_is_idempotent_after_the_edit():
     pipeline.SetDisplayNode(display)
     pipeline.UpdatePipeline()
 
-    plan.SetSafetyMargin_mm(7.0)
+    plan.SetSafetyMargin(7.0)
     after_edit = pipeline.GetUpdateCount()
 
     pipeline.UpdatePipeline()

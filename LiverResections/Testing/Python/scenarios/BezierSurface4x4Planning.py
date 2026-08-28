@@ -284,8 +284,8 @@ def setup_scene() -> slicer.vtkMRMLBezierSurfaceNode:
     )
     plan.SetAndObserveGeometryNode(carrier)
     plan.SetAndObserveDistanceMapVolumeNode(distance_map)
-    plan.SetSafetyMargin_mm(10.0)
-    plan.SetRiskMargin_mm(2.0)
+    plan.SetSafetyMargin(10.0)
+    plan.SetRiskMargin(2.0)
 
     # Planning state activates the BezierPlanningRepresentation (the one
     # that threads the distance map).  Confirmed reuses this fixture and

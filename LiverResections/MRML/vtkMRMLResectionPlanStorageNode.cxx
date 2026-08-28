@@ -191,8 +191,8 @@ int vtkMRMLResectionPlanStorageNode::WriteJson(const std::string& filePath, vtkM
   // design 05-lrp-json-schema.md §"Why the JSON document is the plan").
   const char* mrmlName = plan->GetName();
   writer->WriteStringProperty("name", mrmlName ? mrmlName : "");
-  writer->WriteDoubleProperty("safetyMargin_mm", plan->GetSafetyMargin_mm());
-  writer->WriteDoubleProperty("riskMargin_mm", plan->GetRiskMargin_mm());
+  writer->WriteDoubleProperty("safetyMargin", plan->GetSafetyMargin());
+  writer->WriteDoubleProperty("riskMargin", plan->GetRiskMargin());
   writer->WriteIntProperty("orderIndex", plan->GetOrderIndex());
   writer->WriteStringProperty("state", vtkMRMLResectionPlanNode::GetStateAsString(plan->GetState()));
 
@@ -363,20 +363,39 @@ int vtkMRMLResectionPlanStorageNode::ReadJson(const std::string& filePath, vtkMR
       plan->SetName(name.c_str());
     }
   }
-  if (root->HasMember("safetyMargin_mm"))
+  // Margins: prefer the current keys; fall back to the legacy
+  // unit-suffixed keys written before the margin rename (a file carries
+  // one set or the other, never both).  Values are millimetres either way.
+  if (root->HasMember("safetyMargin"))
+  {
+    double value = 0.0;
+    if (root->GetDoubleProperty("safetyMargin", value))
+    {
+      plan->SetSafetyMargin(value);
+    }
+  }
+  else if (root->HasMember("safetyMargin_mm"))
   {
     double value = 0.0;
     if (root->GetDoubleProperty("safetyMargin_mm", value))
     {
-      plan->SetSafetyMargin_mm(value);
+      plan->SetSafetyMargin(value);
     }
   }
-  if (root->HasMember("riskMargin_mm"))
+  if (root->HasMember("riskMargin"))
+  {
+    double value = 0.0;
+    if (root->GetDoubleProperty("riskMargin", value))
+    {
+      plan->SetRiskMargin(value);
+    }
+  }
+  else if (root->HasMember("riskMargin_mm"))
   {
     double value = 0.0;
     if (root->GetDoubleProperty("riskMargin_mm", value))
     {
-      plan->SetRiskMargin_mm(value);
+      plan->SetRiskMargin(value);
     }
   }
   if (root->HasMember("orderIndex"))
