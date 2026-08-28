@@ -45,7 +45,7 @@ classDiagram
     %% =======================================================
     class vtkMRMLResectionPlanNode {
         +State : Init / Planning / Confirmed
-        +SafetyMargin_mm, RiskMargin_mm : double
+        +SafetyMargin, RiskMargin : double
         +SetAndObserveGeometryNode(surface)
         +SetAndObserveDistanceMapVolumeNode(volume)
     }

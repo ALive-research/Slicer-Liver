@@ -183,3 +183,13 @@ after this reference + its binding.
 - v1 source for the port:
   `LiverMarkups/VTKWidgets/vtkSlicerBezierSurfaceRepresentation3D.cxx`
   (distance-map texture upload + RAS/IJK matrices).
+
+## Amendment (2026-08-21): margin field rename
+
+The margin fields this ADR placed on the plan wrapper dropped their
+unit suffix to match the VTK/Slicer accessor idiom: the API is now
+`SetSafetyMargin` / `GetRiskMargin` (units documented as millimetres
+in the header), and the serialized keys are `safetyMargin` /
+`riskMargin` in scene XML and `.lrp.json` alike, with readers
+accepting the legacy unit-suffixed keys.  The placement decision is
+unchanged; body text above keeps the original names as written.

@@ -17,8 +17,8 @@ The v2 plan format (`.lrp.json`, schema version 2) is rooted on the
 resection **plan**, with the surface persisted as a polymorphic
 `surface` block. Beyond the control polygon, the plan carries:
 
-- `safetyMargin_mm` — clinical safety margin (mm).
-- `riskMargin_mm` — clinical risk margin (mm).
+- `safetyMargin` — clinical safety margin (mm).
+- `riskMargin` — clinical risk margin (mm).
 - `orderIndex` — zero-based position in the operative sequence.
 - `state` — plan-level state machine (`Init` / `Planning` /
   `Confirmed`).
@@ -34,8 +34,8 @@ migration applies the documented v2 reader defaults:
 
 | Field             | Default on migration |
 | ----------------- | -------------------- |
-| `safetyMargin_mm` | `0.0`                |
-| `riskMargin_mm`   | `0.0`                |
+| `safetyMargin` | `0.0`                |
+| `riskMargin`   | `0.0`                |
 | `orderIndex`      | `-1`                 |
 | `state`           | `Init`               |
 
@@ -63,3 +63,12 @@ path routes it to `vtkMRMLResectionPlanStorageNode::ReadFcsv`, which:
 Saving a migrated plan always writes the v2 `.lrp.json`. The
 `.lrp.fcsv` format is **read-only** in v2; there is no v2 writer for
 it.
+
+## Margin key rename (2026-08-21)
+
+The plan margins were renamed from `safetyMargin_mm` / `riskMargin_mm`
+to `safetyMargin` / `riskMargin` in both the C++ API
+(`SetSafetyMargin` etc.) and the serialized forms (scene XML +
+`.lrp.json`).  Values remain millimetres.  Readers accept the legacy
+unit-suffixed keys, so scenes and plan files written before the rename
+load unchanged; anything re-saved uses the current keys.
