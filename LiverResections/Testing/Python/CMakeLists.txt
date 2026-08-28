@@ -738,8 +738,8 @@ if(DEFINED Python3_EXECUTABLE)
 
     # #501 slice 5 -- the REPRESENTATION half: FlattenedSurfaceRepresentation
     # shades off the WRAPPER (ADR-0031), not the carrier.  With a plan wrapper
-    # set, update() threads SetResectionMargin(SafetyMargin_mm) +
-    # SetUncertaintyMargin(RiskMargin_mm) onto the 2D
+    # set, update() threads SetResectionMargin(SafetyMargin) +
+    # SetUncertaintyMargin(RiskMargin) onto the 2D
     # vtkOpenGLResection2DPolyDataMapper and sources the distance-map volume
     # from plan.GetDistanceMapVolumeNode() (present -> resolved source; absent ->
     # source cleared, graceful fallback, margins still set).  GL-free: a FAKE 2D

@@ -63,12 +63,16 @@ class vtkMRMLAbstractParametricSurfaceNode;
  *
  * Schema shape (trimmed v2):
  *
+ * Readers also accept the legacy unit-suffixed margin keys
+ * (``safetyMargin_mm`` / ``riskMargin_mm``) written before the margin
+ * rename; writers emit only the current keys.  Values are millimetres.
+ *
  * \code
  * {
  *   "schemaVersion": 2,
  *   "name": "Right hemihepatectomy",
- *   "safetyMargin_mm": 10.0,
- *   "riskMargin_mm": 5.0,
+ *   "safetyMargin": 10.0,
+ *   "riskMargin": 5.0,
  *   "orderIndex": 0,
  *   "state": "Planning",
  *   "surface": {

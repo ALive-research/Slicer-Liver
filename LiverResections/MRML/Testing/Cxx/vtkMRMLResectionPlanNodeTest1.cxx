@@ -26,7 +26,7 @@
  *      class is concrete and instantiable, unlike the carrier
  *      hierarchy base.)
  *   2. Defaults match the design's documented sentinels:
- *      ``SafetyMargin_mm = 0.0``, ``RiskMargin_mm = 0.0``,
+ *      ``SafetyMargin = 0.0``, ``RiskMargin = 0.0``,
  *      ``OrderIndex = -1`` (sentinel), ``State = Init``,
  *      ``Name = ""``.
  *      (Design doc 01-class-hierarchy.md ``vtkMRMLResectionPlanNode``
@@ -43,7 +43,7 @@
  *   4. XML round-trip of every plan field through WriteXML +
  *      ReadXMLAttributes (Markups precedent -- light scalars in
  *      .mrml; storage carries the heavy fields).  Includes ``Name``,
- *      ``SafetyMargin_mm``, ``RiskMargin_mm``, ``OrderIndex``,
+ *      ``SafetyMargin``, ``RiskMargin``, ``OrderIndex``,
  *      ``State``.
  *      (Design doc 03-storage-ownership.md §"Plan node
  *      (vtkMRMLResectionPlanNode)" table -- the WriteXML column for
@@ -183,8 +183,8 @@ int testInstantiable()
 int testDefaults()
 {
   vtkNew<vtkMRMLResectionPlanNode> node;
-  CHECK_DOUBLE(node->GetSafetyMargin_mm(), 0.0);
-  CHECK_DOUBLE(node->GetRiskMargin_mm(), 0.0);
+  CHECK_DOUBLE(node->GetSafetyMargin(), 0.0);
+  CHECK_DOUBLE(node->GetRiskMargin(), 0.0);
   CHECK_INT(node->GetOrderIndex(), -1);
   CHECK_INT(node->GetState(), vtkMRMLResectionPlanNode::Init);
   // ``Name`` is a Slicer-core MRML primitive (GetName / SetName on
@@ -243,8 +243,8 @@ int testXMLRoundTrip()
   vtkNew<vtkMRMLResectionPlanNode> source;
   source->SetScene(scene.GetPointer());
   source->SetName("Right hemihepatectomy");
-  source->SetSafetyMargin_mm(10.0);
-  source->SetRiskMargin_mm(5.0);
+  source->SetSafetyMargin(10.0);
+  source->SetRiskMargin(5.0);
   source->SetOrderIndex(2);
   source->SetState(vtkMRMLResectionPlanNode::Planning);
 
@@ -253,12 +253,16 @@ int testXMLRoundTrip()
   const std::string xml = out.str();
 
   // Spot-check: the serialised text mentions one of the plan-
-  // specific attributes.  vtkMRMLWriteXMLDoubleMacro emits
-  // lower-camelCase attribute names; check both casings for
-  // robustness.
-  if (xml.find("safetyMargin_mm") == std::string::npos && xml.find("SafetyMargin_mm") == std::string::npos)
+  // specific attributes (lower-camelCase per vtkMRMLWriteXMLDoubleMacro)
+  // and no longer emits the retired unit-suffixed name.
+  if (xml.find("safetyMargin") == std::string::npos)
   {
-    std::cerr << "WriteXML output missing safetyMargin_mm attribute:\n" << xml << "\n";
+    std::cerr << "WriteXML output missing safetyMargin attribute:\n" << xml << "\n";
+    return EXIT_FAILURE;
+  }
+  if (xml.find("safetyMargin_mm") != std::string::npos)
+  {
+    std::cerr << "WriteXML must not emit the legacy safetyMargin_mm attribute:\n" << xml << "\n";
     return EXIT_FAILURE;
   }
 
@@ -268,10 +272,19 @@ int testXMLRoundTrip()
   std::vector<const char*> atts = buildAttsFromXML(xml, storage);
   sink->ReadXMLAttributes(atts.data());
 
-  CHECK_DOUBLE_TOLERANCE(sink->GetSafetyMargin_mm(), source->GetSafetyMargin_mm(), 1e-9);
-  CHECK_DOUBLE_TOLERANCE(sink->GetRiskMargin_mm(), source->GetRiskMargin_mm(), 1e-9);
+  CHECK_DOUBLE_TOLERANCE(sink->GetSafetyMargin(), source->GetSafetyMargin(), 1e-9);
+  CHECK_DOUBLE_TOLERANCE(sink->GetRiskMargin(), source->GetRiskMargin(), 1e-9);
   CHECK_INT(sink->GetOrderIndex(), source->GetOrderIndex());
   CHECK_INT(sink->GetState(), source->GetState());
+
+  // Legacy-scene compatibility: attributes written before the margin
+  // rename (unit-suffixed names) still populate the fields on read.
+  vtkNew<vtkMRMLResectionPlanNode> legacySink;
+  legacySink->SetScene(scene.GetPointer());
+  const char* legacyAtts[] = { "safetyMargin_mm", "12.5", "riskMargin_mm", "4.5", nullptr };
+  legacySink->ReadXMLAttributes(legacyAtts);
+  CHECK_DOUBLE_TOLERANCE(legacySink->GetSafetyMargin(), 12.5, 1e-9);
+  CHECK_DOUBLE_TOLERANCE(legacySink->GetRiskMargin(), 4.5, 1e-9);
   return EXIT_SUCCESS;
 }
 
@@ -346,16 +359,16 @@ int testCopyContent()
 {
   vtkNew<vtkMRMLResectionPlanNode> source;
   source->SetName("Source plan");
-  source->SetSafetyMargin_mm(7.5);
-  source->SetRiskMargin_mm(3.25);
+  source->SetSafetyMargin(7.5);
+  source->SetRiskMargin(3.25);
   source->SetOrderIndex(4);
   source->SetState(vtkMRMLResectionPlanNode::Confirmed);
 
   vtkNew<vtkMRMLResectionPlanNode> sink;
   sink->CopyContent(source.GetPointer());
 
-  CHECK_DOUBLE_TOLERANCE(sink->GetSafetyMargin_mm(), 7.5, 1e-9);
-  CHECK_DOUBLE_TOLERANCE(sink->GetRiskMargin_mm(), 3.25, 1e-9);
+  CHECK_DOUBLE_TOLERANCE(sink->GetSafetyMargin(), 7.5, 1e-9);
+  CHECK_DOUBLE_TOLERANCE(sink->GetRiskMargin(), 3.25, 1e-9);
   CHECK_INT(sink->GetOrderIndex(), 4);
   CHECK_INT(sink->GetState(), vtkMRMLResectionPlanNode::Confirmed);
   return EXIT_SUCCESS;

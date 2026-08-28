@@ -246,8 +246,8 @@ def _build_resectogram_bezier(
     )
     plan.SetAndObserveGeometryNode(carrier)
     plan.SetAndObserveDistanceMapVolumeNode(distance_map)
-    plan.SetSafetyMargin_mm(10.0)
-    plan.SetRiskMargin_mm(2.0)
+    plan.SetSafetyMargin(10.0)
+    plan.SetRiskMargin(2.0)
 
     carrier.SetState(1)  # vtkMRMLBezierSurfaceNode::Planning
 

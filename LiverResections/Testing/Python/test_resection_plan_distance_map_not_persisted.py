@@ -4,8 +4,8 @@
 """#501 slice 6 -- round-trip symmetry + the distance-map non-persistence guard.
 
 The ``.lrp.json`` storage node (``vtkMRMLResectionPlanStorageNode``) already
-round-trips every PERSISTED resection-plan field -- name, ``safetyMargin_mm`` /
-``riskMargin_mm``, ``orderIndex``, ``state`` and the whole surface block (grid,
+round-trips every PERSISTED resection-plan field -- name, ``safetyMargin`` /
+``riskMargin``, ``orderIndex``, ``state`` and the whole surface block (grid,
 initMode, slicingPlane, distanceSpheroid); the C++ ``testPlanRootedRoundTrip``
 pins that symmetry field-by-field.
 
@@ -74,12 +74,12 @@ def _make_plan_with_distance_map(slicer, logic, name):
     plan = logic.CreateResectionPlan(name)
     if plan is None or not plan.IsA(PLAN_NODE_CLASS):
         pytest.skip("CreateResectionPlan did not return a resection plan.")
-    for attr in ("SetSafetyMargin_mm", "SetRiskMargin_mm", "SetAndObserveDistanceMapVolumeNode",
+    for attr in ("SetSafetyMargin", "SetRiskMargin", "SetAndObserveDistanceMapVolumeNode",
                  "GetDistanceMapVolumeNode"):
         if not hasattr(plan, attr):
             pytest.skip(f"{PLAN_NODE_CLASS} lacks {attr} in this build (ADR-0031 API absent).")
-    plan.SetSafetyMargin_mm(12.0)
-    plan.SetRiskMargin_mm(3.0)
+    plan.SetSafetyMargin(12.0)
+    plan.SetRiskMargin(3.0)
     volume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", f"{name}DMap")
     if volume is None:
         pytest.skip("vtkMRMLScalarVolumeNode not registered.")
@@ -127,11 +127,11 @@ def test_distance_map_reference_does_not_round_trip():
     assert sink_storage.ReadData(sink) == 1, "ReadData of the just-written .lrp.json failed."
 
     # Positive symmetry sanity: the margins DID round-trip.
-    assert abs(sink.GetSafetyMargin_mm() - 12.0) < 1e-6, (
-        "safetyMargin_mm must round-trip through .lrp.json."
+    assert abs(sink.GetSafetyMargin() - 12.0) < 1e-6, (
+        "safetyMargin must round-trip through .lrp.json."
     )
-    assert abs(sink.GetRiskMargin_mm() - 3.0) < 1e-6, (
-        "riskMargin_mm must round-trip through .lrp.json."
+    assert abs(sink.GetRiskMargin() - 3.0) < 1e-6, (
+        "riskMargin must round-trip through .lrp.json."
     )
 
     # The guard: the distance-map reference is DELIBERATELY not persisted in
