@@ -113,7 +113,7 @@ For volumes + verification → continue to Stage 5.
 [Open resectogram view ▶]
 ```
 
-No numeric readouts in any state. Volume / margin / vessel-cut numbers live in Stage 5 per the 2026-05-21 compute-on-stable-state pushback.
+No numeric readouts in any state. Volume / margin / vessel-cut numbers live in Stage 5 per the 2026-05-21 compute-on-stable-state pushback. Margin *inputs* are the exception: the "Resection margins" group (Safety / Risk spinboxes, total-margin label, interpolated-margins toggle) is authored here per ADR-0023 §Stage-4 / §Persistence, gated on the distance map like the drawer; computed *readouts* remain Stage 5.
 
 ### Resectogram view button
 
