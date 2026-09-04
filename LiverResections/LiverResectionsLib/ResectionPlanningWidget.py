@@ -106,6 +106,7 @@ _RESECTOGRAM_BACKGROUND_RGB = (1.0, 1.0, 1.0)
 _RESECTION_PLAN_CLASS = "vtkMRMLResectionPlanNode"
 _BEZIER_CARRIER_CLASS = "vtkMRMLBezierSurfaceNode"
 _RESECTOGRAM_DISPLAY_CLASS = "vtkMRMLResectogramDisplayNode"
+_SURFACE_DISPLAY_CLASS = "vtkMRMLParametricSurfaceDisplayNode"
 _VIEW_NODE_CLASS = "vtkMRMLViewNode"
 # The logic module whose create-API (``CreateResectionPlan``) the Place button
 # calls to mint a fresh plan + carrier + display triad (ADR-0032).
@@ -208,10 +209,59 @@ class ResectionPlanningWidget(qt.QWidget):
         self._placeButton = placeButton
         placeButton.connect("clicked()", self.onPlaceResection)
 
+        # Margin inputs (ADR-0023 §Stage-4): the plan wrapper's Safety / Risk
+        # scalars (millimetres, ADR-0031) plus the display node's
+        # InterpolatedMargins band-style flag.  Disabled until the selected
+        # plan carries a distance map -- the same gate as the drawer, since
+        # without the map the shader has no band to draw.  Computed READOUTS
+        # (achieved margins, volumes) stay in Stage 5; these are inputs.
+        marginsGroup = ctk.ctkCollapsibleGroupBox()
+        marginsGroup.setObjectName("ResectionMarginsGroupBox")
+        marginsGroup.title = "Resection margins"
+        marginsGroup.enabled = False
+        planningLayout.addWidget(marginsGroup, 2, 0, 1, 2)
+        self._marginsGroup = marginsGroup
+
+        marginsForm = qt.QFormLayout(marginsGroup)
+
+        safetySpinBox = slicer.qMRMLSpinBox()
+        safetySpinBox.setObjectName("SafetyMarginSpinBox")
+        safetySpinBox.quantity = "millimeters"
+        safetySpinBox.minimum = 0.0
+        safetySpinBox.maximum = 100.0
+        safetySpinBox.singleStep = 1.0
+        marginsForm.addRow("Safety margin:", safetySpinBox)
+        self._safetyMarginSpinBox = safetySpinBox
+
+        riskSpinBox = slicer.qMRMLSpinBox()
+        riskSpinBox.setObjectName("RiskMarginSpinBox")
+        riskSpinBox.quantity = "millimeters"
+        riskSpinBox.minimum = 0.0
+        riskSpinBox.maximum = 100.0
+        riskSpinBox.singleStep = 0.5
+        marginsForm.addRow("Risk margin (±):", riskSpinBox)
+        self._riskMarginSpinBox = riskSpinBox
+
+        totalMarginLabel = qt.QLabel("0.00 mm")
+        totalMarginLabel.setObjectName("TotalMarginLabel")
+        marginsForm.addRow("Total margin:", totalMarginLabel)
+        self._totalMarginLabel = totalMarginLabel
+
+        interpolatedCheckBox = qt.QCheckBox("Interpolated margins")
+        interpolatedCheckBox.setObjectName("InterpolatedMarginsCheckBox")
+        marginsForm.addRow(interpolatedCheckBox)
+        self._interpolatedMarginsCheckBox = interpolatedCheckBox
+
+        safetySpinBox.connect("valueChanged(double)", self.onSafetyMarginChanged)
+        riskSpinBox.connect("valueChanged(double)", self.onRiskMarginChanged)
+        interpolatedCheckBox.connect(
+            "toggled(bool)", self.onInterpolatedMarginsToggled
+        )
+
         drawer = ctk.ctkCollapsibleButton()
         drawer.setObjectName("ResectogramDrawer")
         drawer.text = "Resectogram"
-        planningLayout.addWidget(drawer, 2, 0, 1, 2)
+        planningLayout.addWidget(drawer, 3, 0, 1, 2)
         self._drawer = drawer
 
         drawerLayout = qt.QGridLayout(drawer)
@@ -236,6 +286,10 @@ class ResectionPlanningWidget(qt.QWidget):
     def setMRMLScene(self, scene):  # noqa: N802 - Slicer/Qt verb convention
         self._mrmlScene = scene
         self._comboBox.setMRMLScene(scene)
+        # The margin spinboxes need the scene for the unit framework (the mm
+        # suffix comes from the scene's unit nodes).
+        self._safetyMarginSpinBox.setMRMLScene(scene)
+        self._riskMarginSpinBox.setMRMLScene(scene)
         self._updateLocatorReslicer(scene)
         self.refreshResectogramDrawer()
 
@@ -269,6 +323,21 @@ class ResectionPlanningWidget(qt.QWidget):
 
     def resectogramHintLabel(self):  # noqa: N802 - Slicer/Qt verb convention
         return self._hintLabel
+
+    def marginsGroupBox(self):  # noqa: N802 - Slicer/Qt verb convention
+        return self._marginsGroup
+
+    def safetyMarginSpinBox(self):  # noqa: N802 - Slicer/Qt verb convention
+        return self._safetyMarginSpinBox
+
+    def riskMarginSpinBox(self):  # noqa: N802 - Slicer/Qt verb convention
+        return self._riskMarginSpinBox
+
+    def totalMarginLabel(self):  # noqa: N802 - Slicer/Qt verb convention
+        return self._totalMarginLabel
+
+    def interpolatedMarginsCheckBox(self):  # noqa: N802 - Slicer/Qt verb convention
+        return self._interpolatedMarginsCheckBox
 
     def placeResectionButton(self):  # noqa: N802 - Slicer/Qt verb convention
         return self._placeButton
@@ -343,6 +412,84 @@ class ResectionPlanningWidget(qt.QWidget):
     def _onActiveResectionModified(self, caller, event):
         self.refreshResectogramDrawer()
 
+    # ----------------------------------------------------------------------- #
+    # Margin controls (ADR-0023 §Stage-4; scalars on the plan wrapper per
+    # ADR-0031, InterpolatedMargins on the carrier's parametric display node).
+    # The slices' pipeline observers make every write repaint both views, so
+    # these slots only author MRML state -- no render plumbing here.
+    # ----------------------------------------------------------------------- #
+
+    def onSafetyMarginChanged(self, value):  # noqa: N802 - Slicer/Qt verb convention
+        plan = self._activeResectionNode
+        if plan is None:
+            return
+        plan.SetSafetyMargin(float(value))
+        self._updateTotalMarginLabel()
+
+    def onRiskMarginChanged(self, value):  # noqa: N802 - Slicer/Qt verb convention
+        plan = self._activeResectionNode
+        if plan is None:
+            return
+        plan.SetRiskMargin(float(value))
+        # v1 floor-clamp: safety >= risk keeps the shader's
+        # ``lowMargin = safety - risk`` non-negative.  Raising the minimum can
+        # clamp the safety value, whose valueChanged then writes the plan --
+        # deliberately, so the visible value and the node never diverge.
+        self._safetyMarginSpinBox.minimum = float(value)
+        self._updateTotalMarginLabel()
+
+    def onInterpolatedMarginsToggled(self, checked):  # noqa: N802 - Slicer/Qt verb convention
+        plan = self._activeResectionNode
+        carrier = plan.GetGeometryNode() if plan is not None else None
+        display = self._parametricSurfaceDisplayNode(carrier)
+        if display is not None:
+            display.SetInterpolatedMargins(bool(checked))
+
+    def _updateTotalMarginLabel(self):
+        plan = self._activeResectionNode
+        total = (
+            plan.GetSafetyMargin() + plan.GetRiskMargin()
+            if plan is not None
+            else 0.0
+        )
+        self._totalMarginLabel.text = f"{total:.2f} mm"
+
+    def _syncMarginControls(self, plan, hasDistanceMap):  # noqa: N802 - internal
+        """Pull the selected plan's margin state into the controls.
+
+        blockSignals discipline: the sync must never echo a write back onto
+        the node (an external / scripted margin edit routes here through the
+        active-plan observer, and a write-back would ping-pong).  Cheap and
+        idempotent, so it runs on every drawer refresh -- including the
+        edge-trigger-short-circuited ones, which is exactly what keeps the
+        controls current when only the margins changed.
+        """
+        controls = (
+            self._safetyMarginSpinBox,
+            self._riskMarginSpinBox,
+            self._interpolatedMarginsCheckBox,
+        )
+        for control in controls:
+            control.blockSignals(True)
+        try:
+            if plan is not None:
+                # Floor before value, so the value never clamps spuriously.
+                self._safetyMarginSpinBox.minimum = plan.GetRiskMargin()
+                self._safetyMarginSpinBox.setValue(plan.GetSafetyMargin())
+                self._riskMarginSpinBox.setValue(plan.GetRiskMargin())
+            display = self._parametricSurfaceDisplayNode(
+                plan.GetGeometryNode() if plan is not None else None
+            )
+            if display is not None:
+                self._interpolatedMarginsCheckBox.setChecked(
+                    bool(display.GetInterpolatedMargins())
+                )
+        finally:
+            for control in controls:
+                control.blockSignals(False)
+        self._marginsGroup.enabled = bool(hasDistanceMap)
+        self._updateTotalMarginLabel()
+
     def _onDrawerCollapsed(self, collapsed):
         self.scheduleResectogramRender()
 
@@ -369,6 +516,12 @@ class ResectionPlanningWidget(qt.QWidget):
             hasPlan and carrier is not None and plan.GetDistanceMapVolumeNode() is not None
         )
         scene = self._mrmlScene
+
+        # Margin controls sync BEFORE the edge-trigger short-circuit below:
+        # a margin-only edit (spinbox, script, undo) changes neither the plan
+        # identity nor the distance-map presence, yet the controls + total
+        # label must still track it.
+        self._syncMarginControls(plan, hasDistanceMap)
 
         # Edge-trigger on the populate-relevant state only.  The active-plan
         # ModifiedEvent observer fires this on EVERY wrapper modification --
@@ -836,6 +989,22 @@ class ResectionPlanningWidget(qt.QWidget):
         """Return ``node`` if it is a resection-plan wrapper node, else ``None``."""
         if node is not None and node.IsA(_RESECTION_PLAN_CLASS):
             return node
+        return None
+
+    @staticmethod
+    def _parametricSurfaceDisplayNode(carrier):
+        """The carrier's parametric-surface display aspect, or ``None``.
+
+        The band-style home (InterpolatedMargins, margin colours) shared with
+        the 3D path -- the sibling of the resectogram display node on the same
+        carrier (Docs/architecture/target-mrml-node-hierarchy.md).
+        """
+        if carrier is None:
+            return None
+        for index in range(carrier.GetNumberOfDisplayNodes()):
+            candidate = carrier.GetNthDisplayNode(index)
+            if candidate is not None and candidate.IsA(_SURFACE_DISPLAY_CLASS):
+                return candidate
         return None
 
     @staticmethod
