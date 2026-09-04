@@ -432,10 +432,16 @@ class ResectionPlanningWidget(qt.QWidget):
             return
         plan.SetRiskMargin(float(value))
         # v1 floor-clamp: safety >= risk keeps the shader's
-        # ``lowMargin = safety - risk`` non-negative.  Raising the minimum can
-        # clamp the safety value, whose valueChanged then writes the plan --
-        # deliberately, so the visible value and the node never diverge.
+        # ``lowMargin = safety - risk`` non-negative.  The SetRiskMargin above
+        # already routed through the plan observer into _syncMarginControls,
+        # which floors the minimum UNDER blockSignals -- so the spinbox may
+        # have clamped its value with the valueChanged suppressed.  Write the
+        # resulting value through explicitly: the visible value and the node
+        # must never diverge, regardless of which path did the clamping.
         self._safetyMarginSpinBox.minimum = float(value)
+        clamped = float(self._safetyMarginSpinBox.value)
+        if abs(plan.GetSafetyMargin() - clamped) > 1e-9:
+            plan.SetSafetyMargin(clamped)
         self._updateTotalMarginLabel()
 
     def onInterpolatedMarginsToggled(self, checked):  # noqa: N802 - Slicer/Qt verb convention
