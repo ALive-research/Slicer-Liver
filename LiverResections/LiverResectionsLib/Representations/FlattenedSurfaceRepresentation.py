@@ -606,6 +606,17 @@ class FlattenedSurfaceRepresentation:
             setter = getattr(mapper, "SetTextureNumComps", None)
             if setter is not None:
                 setter(texture_num_comps)
+            # The transection contour (the black parenchyma-boundary
+            # iso-line) is informational, not a margin -- surgeon-toggled
+            # via the display node so the strip shows exactly the two
+            # configured margin bands when it is off.
+            set_transection = getattr(mapper, "SetShowTransectionContour", None)
+            if set_transection is not None:
+                set_transection(
+                    _safe_get_bool(
+                        display_node, "GetShowTransectionContour", default=True
+                    )
+                )
 
     def _apply_data_node(
         self, display_node: Any | None, data_node: Any | None

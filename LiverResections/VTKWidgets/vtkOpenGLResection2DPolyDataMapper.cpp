@@ -101,6 +101,9 @@ public:
   // (Create*FromRaw takes a void* the wrapping cannot express).
   vtkSmartPointer<vtkImageData> DistanceMapImageData;
   vtkMTimeType DistanceMapBuiltMTime = 0;
+  // The strip's black parenchyma-boundary iso-line (the transection
+  // contour) -- informational, display-node-controlled, NOT a margin.
+  bool ShowTransectionContour = true;
   vtkSmartPointer<vtkMatrix4x4> RasToIjkMatrixT;
   vtkSmartPointer<vtkMatrix4x4> IjkToTextureMatrixT;
   float ResectionMargin;
@@ -262,6 +265,7 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(std::map<vtkShader:
                                "uniform vec3 uResectionColor;\n"
                                "uniform int uInterpolatedMargins;\n"
                                "uniform int uVesselSegAvailable;\n"
+                               "uniform int uShowTransectionContour;\n"
                                "uniform vec3 uResectionGridColor;\n"
                                "uniform int uGridDivisions;\n"
                                "uniform float uGridThickness;\n"
@@ -334,7 +338,7 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(std::map<vtkShader:
     "  ambientColor = uResectionMarginColor;\n"
     "  diffuseColor = vec3(0.0);\n"
     "}\n"
-    "else if(dist[0] < highMargin-(highMargin-lowMargin)*0.1){\n"
+    "else if(dist[0] < highMargin){\n"
     "  if(uInterpolatedMargins == 0){\n"
     "     ambientColor = uUncertaintyMarginColor;\n"
     "     diffuseColor = vec3(0.0);\n"
@@ -353,7 +357,7 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(std::map<vtkShader:
     "}\n"
     "else{\n"
     "  if(uTextureNumComps > 2){\n"
-    "    if( abs(dist[1])<0.5 ){\n"
+    "    if( uShowTransectionContour == 1 && abs(dist[1])<0.5 ){\n"
     "      ambientColor = vec3(0.0,0.0,0.0);\n"
     "      diffuseColor = vec3(0.0);\n"
     "    }\n"
@@ -490,6 +494,11 @@ void vtkOpenGLResection2DPolyDataMapper::SetMapperShaderParameters(vtkOpenGLHelp
     }
   }
 
+  if (cellBO.Program->IsUniformUsed("uShowTransectionContour"))
+  {
+    cellBO.Program->SetUniformi("uShowTransectionContour", this->Impl->ShowTransectionContour ? 1 : 0);
+  }
+
   if (cellBO.Program->IsUniformUsed("uVesselSegAvailable"))
   {
     cellBO.Program->SetUniformi("uVesselSegAvailable", this->Impl->VascularSegmentsTextureObject ? 1 : 0);
@@ -605,6 +614,17 @@ void vtkOpenGLResection2DPolyDataMapper::RenderPieceFinish(vtkRenderer* ren, vtk
     this->Impl->VascularSegmentsTextureObject->Deactivate();
   }
   Superclass::RenderPieceFinish(ren, act);
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLResection2DPolyDataMapper::SetShowTransectionContour(bool show)
+{
+  if (this->Impl->ShowTransectionContour == show)
+  {
+    return;
+  }
+  this->Impl->ShowTransectionContour = show;
+  this->Modified();
 }
 
 //------------------------------------------------------------------------------

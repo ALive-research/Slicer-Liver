@@ -59,6 +59,7 @@ vtkMRMLResectogramDisplayNode::vtkMRMLResectogramDisplayNode()
   , EnableFlexibleBoundary(false)
   , TextureNumComps(0)
   , BlurEnabled(false)
+  , ShowTransectionContour(true)
   , BlurRadius(2.0)
 {
 }
@@ -77,6 +78,7 @@ void vtkMRMLResectogramDisplayNode::WriteXML(ostream& of, int nIndent)
   vtkMRMLWriteXMLBooleanMacro(enableFlexibleBoundary, EnableFlexibleBoundary);
   vtkMRMLWriteXMLIntMacro(textureNumComps, TextureNumComps);
   vtkMRMLWriteXMLBooleanMacro(blurEnabled, BlurEnabled);
+  vtkMRMLWriteXMLBooleanMacro(showTransectionContour, ShowTransectionContour);
   vtkMRMLWriteXMLFloatMacro(blurRadius, BlurRadius);
   vtkMRMLWriteXMLEndMacro();
 }
@@ -94,6 +96,7 @@ void vtkMRMLResectogramDisplayNode::ReadXMLAttributes(const char** atts)
   vtkMRMLReadXMLBooleanMacro(enableFlexibleBoundary, EnableFlexibleBoundary);
   vtkMRMLReadXMLIntMacro(textureNumComps, TextureNumComps);
   vtkMRMLReadXMLBooleanMacro(blurEnabled, BlurEnabled);
+  vtkMRMLReadXMLBooleanMacro(showTransectionContour, ShowTransectionContour);
   vtkMRMLReadXMLFloatMacro(blurRadius, BlurRadius);
   vtkMRMLReadXMLEndMacro();
 
@@ -112,6 +115,7 @@ void vtkMRMLResectogramDisplayNode::CopyContent(vtkMRMLNode* anode, bool deepCop
   vtkMRMLCopyBooleanMacro(EnableFlexibleBoundary);
   vtkMRMLCopyIntMacro(TextureNumComps);
   vtkMRMLCopyBooleanMacro(BlurEnabled);
+  vtkMRMLCopyBooleanMacro(ShowTransectionContour);
   vtkMRMLCopyFloatMacro(BlurRadius);
   vtkMRMLCopyEndMacro();
 }
@@ -127,6 +131,7 @@ void vtkMRMLResectogramDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
   vtkMRMLPrintBooleanMacro(EnableFlexibleBoundary);
   vtkMRMLPrintIntMacro(TextureNumComps);
   vtkMRMLPrintBooleanMacro(BlurEnabled);
+  vtkMRMLPrintBooleanMacro(ShowTransectionContour);
   vtkMRMLPrintFloatMacro(BlurRadius);
   vtkMRMLPrintEndMacro();
 }
