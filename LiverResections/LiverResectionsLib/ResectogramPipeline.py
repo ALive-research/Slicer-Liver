@@ -259,6 +259,19 @@ class ResectogramPipeline(_PipelineBase):
 
         self._update_count += 1
 
+        # The distance-map texture bind defers while the view's GL context is
+        # not yet realized (populate-while-collapsed drawer, unshown layout
+        # widget).  A memoized key would then freeze the strip border-only
+        # forever -- nothing re-dispatches at the moment GL becomes live.
+        # Keep the key OPEN while the bind is pending so every later dispatch
+        # retries; the first one with a live context binds and memoization
+        # resumes.
+        pending = getattr(
+            self._flattened_surface, "IsDistanceMapTexturePending", None
+        )
+        if pending is not None and pending():
+            self._last_update_key = None
+
     def OnRendererAdded(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
         """Build Representations once a renderer is attached.
 
