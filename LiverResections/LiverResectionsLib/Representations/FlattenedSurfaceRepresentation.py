@@ -861,20 +861,21 @@ class FlattenedSurfaceRepresentation:
         # the GL context must be made current explicitly -- and before the
         # window's first render there is no usable context at all (the
         # vtkOpenGLState texture-format table is empty, so the upload fails
-        # noisily).  Probe with MakeCurrent/IsCurrent: not-current after the
-        # attempt means not-yet-realized -> return None so the caller's
-        # deferred path retries on a later update.  NOTE: GetInitialized() is
-        # NOT a usable gate here -- a Qt-managed vtkGenericOpenGLRenderWindow
-        # never sets it (Qt owns the context) and it would defer forever.
+        # noisily).  Realization gate: ``GetNeverRendered()`` -- true until
+        # the window's first real render pass, after which a context exists.
+        # NEITHER GetInitialized() NOR IsCurrent() is a usable gate here: a
+        # Qt-managed vtkGenericOpenGLRenderWindow never sets the former and
+        # reports the latter False even with a live Qt-owned context (Qt6),
+        # so both defer FOREVER on a realized window.
+        never_rendered = getattr(render_window, "GetNeverRendered", None)
+        if never_rendered is not None and never_rendered():
+            return None
         make_current = getattr(render_window, "MakeCurrent", None)
         if make_current is not None:
             try:
                 make_current()
             except Exception:  # pragma: no cover - defensive
                 return None
-        is_current = getattr(render_window, "IsCurrent", None)
-        if is_current is not None and not is_current():
-            return None
         # The display node's TextureNumComps defaults to 0 (unset) and the
         # workflow never writes it; a 0-component upload fails format
         # resolution deterministically.  The image knows its own count.
