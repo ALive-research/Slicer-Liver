@@ -45,6 +45,7 @@
 #include <vtkMatrix4x4.h>
 #include <vtkObjectFactory.h>
 #include <vtkOpenGLError.h>
+#include <vtkNew.h>
 #include <vtkOpenGLRenderWindow.h>
 #include <vtkOpenGLVertexBufferObject.h>
 #include <vtkOpenGLVertexBufferObjectGroup.h>
@@ -94,6 +95,12 @@ public:
   vtkWeakPointer<vtkOpenGLResection2DPolyDataMapper> Parent;
   vtkSmartPointer<vtkTextureObject> DistanceMapTextureObject;
   vtkSmartPointer<vtkTextureObject> VascularSegmentsTextureObject;
+  // Image-data upload path (the vtkOpenGLBezierResectionPolyDataMapper
+  // pattern): the texture is (re)built lazily in BuildBufferObjects where a
+  // live GL context is guaranteed; a Python-side upload cannot exist
+  // (Create*FromRaw takes a void* the wrapping cannot express).
+  vtkSmartPointer<vtkImageData> DistanceMapImageData;
+  vtkMTimeType DistanceMapBuiltMTime = 0;
   vtkSmartPointer<vtkMatrix4x4> RasToIjkMatrixT;
   vtkSmartPointer<vtkMatrix4x4> IjkToTextureMatrixT;
   float ResectionMargin;
@@ -155,6 +162,48 @@ void vtkOpenGLResection2DPolyDataMapper::BuildBufferObjects(vtkRenderer* ren, vt
       this->VBOs->CacheDataArray("vertexMCBS", vertexMCBS, cache, VTK_FLOAT);
     }
   }
+
+  // Build / refresh the 3D distance-map texture from the image data set via
+  // SetDistanceMapImageData.  Done here -- not in the setter -- because the
+  // upload needs a live GL context, and this method runs inside the render
+  // pass where the context is current by construction (the
+  // vtkOpenGLBezierResectionPolyDataMapper discipline; see its
+  // BuildBufferObjects for the full rationale, including why
+  // GetInitialized() must not gate this).  Rebuilt only when the image's
+  // MTime advances past the one the current texture was built from.
+  if (this->Impl->DistanceMapImageData)
+  {
+    vtkImageData* image = this->Impl->DistanceMapImageData;
+    if (!this->Impl->DistanceMapTextureObject || image->GetMTime() > this->Impl->DistanceMapBuiltMTime)
+    {
+      auto renWin = vtkOpenGLRenderWindow::SafeDownCast(ren->GetRenderWindow());
+      int dimensions[3] = { 0, 0, 0 };
+      image->GetDimensions(dimensions);
+      const bool canBuild = renWin != nullptr && dimensions[0] > 0 && dimensions[1] > 0 && dimensions[2] > 0 && image->GetScalarPointer() != nullptr;
+      if (canBuild)
+      {
+        vtkNew<vtkTextureObject> texture;
+        texture->SetContext(renWin);
+        texture->SetWrapS(vtkTextureObject::ClampToBorder);
+        texture->SetWrapT(vtkTextureObject::ClampToBorder);
+        texture->SetWrapR(vtkTextureObject::ClampToBorder);
+        texture->SetMinificationFilter(vtkTextureObject::Linear);
+        texture->SetMagnificationFilter(vtkTextureObject::Linear);
+        texture->SetBorderColor(1000.0f, 1000.0f, 0.0f, 0.0f);
+
+        // Cache the texture + advance the built-MTime ONLY on a successful
+        // upload (a cached failed upload would wedge the mapper for the
+        // session -- the shader keeps its no-distance-map path and a later
+        // render retries instead).
+        if (texture->Create3DFromRaw(dimensions[0], dimensions[1], dimensions[2], image->GetNumberOfScalarComponents(), image->GetScalarType(), image->GetScalarPointer()))
+        {
+          this->Impl->DistanceMapTextureObject = texture;
+          this->Impl->DistanceMapBuiltMTime = image->GetMTime();
+        }
+      }
+    }
+  }
+
   Superclass::BuildBufferObjects(ren, act);
 }
 
@@ -556,6 +605,31 @@ void vtkOpenGLResection2DPolyDataMapper::RenderPieceFinish(vtkRenderer* ren, vtk
     this->Impl->VascularSegmentsTextureObject->Deactivate();
   }
   Superclass::RenderPieceFinish(ren, act);
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLResection2DPolyDataMapper::SetDistanceMapImageData(vtkImageData* imageData)
+{
+  if (this->Impl->DistanceMapImageData == imageData)
+  {
+    return;
+  }
+  this->Impl->DistanceMapImageData = imageData;
+  // Force a texture (re)build on the next BuildBufferObjects, and drop the
+  // current texture when the image is cleared so the sampler falls back to
+  // the no-distance-map path (MRML and GL state must not diverge).
+  this->Impl->DistanceMapBuiltMTime = 0;
+  if (imageData == nullptr)
+  {
+    this->Impl->DistanceMapTextureObject = nullptr;
+  }
+  this->Modified();
+}
+
+//------------------------------------------------------------------------------
+vtkImageData* vtkOpenGLResection2DPolyDataMapper::GetDistanceMapImageData() const
+{
+  return this->Impl->DistanceMapImageData;
 }
 
 //------------------------------------------------------------------------------

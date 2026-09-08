@@ -476,6 +476,8 @@ class FlattenedSurfaceRepresentation:
         mapper = self._resection_mapper_2d
         if mapper is None or self._distance_map_volume is None:
             return False
+        if getattr(mapper, "SetDistanceMapImageData", None) is not None:
+            return False  # C++ render-time upload: the mapper owns readiness
         if getattr(mapper, "SetDistanceMapTextureObject", None) is None:
             return False  # generic-mapper fallback: no texture path at all
         return not self._mapper_has_distance_map_texture(mapper)
@@ -848,6 +850,9 @@ class FlattenedSurfaceRepresentation:
             # No distance map (or no image data): drop any stale texture so
             # the mapper falls back to its no-distance-map path instead of
             # sampling a volume that is gone (the v1 warning branch).
+            clear_image = getattr(mapper, "SetDistanceMapImageData", None)
+            if clear_image is not None:
+                clear_image(None)
             bind(None)
             self._distance_map_volume = volume
             self._effective_texture_num_comps = 0
@@ -860,6 +865,26 @@ class FlattenedSurfaceRepresentation:
         num_comps = _safe_get_int(display_node, "GetTextureNumComps", default=0)
         if num_comps <= 0:
             num_comps = image_data.GetNumberOfScalarComponents()
+
+        # PREFERRED PATH: hand the mapper the IMAGE DATA and let it build the
+        # texture in C++ inside the render pass (BuildBufferObjects), where
+        # the GL context is current by construction -- the
+        # vtkOpenGLBezierResectionPolyDataMapper discipline.  Every
+        # Python-side upload probe is unreliable (Qt-owned contexts) and the
+        # raw upload itself is not Python-expressible, so this path makes the
+        # deferral machinery below unnecessary whenever the real mapper is in
+        # play.
+        set_image = getattr(mapper, "SetDistanceMapImageData", None)
+        if set_image is not None:
+            set_image(image_data)
+            self._distance_map_volume = volume
+            self._effective_texture_num_comps = int(num_comps)
+            set_comps = getattr(mapper, "SetTextureNumComps", None)
+            if set_comps is not None:
+                set_comps(int(num_comps))
+            self._apply_distance_map_matrices(volume, image_data)
+            return
+
         texture = self._create_distance_map_texture(image_data, num_comps)
         if texture is None:
             # The GL render window is not live yet (texture build deferred):

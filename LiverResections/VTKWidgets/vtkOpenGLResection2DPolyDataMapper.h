@@ -51,6 +51,7 @@
 
 //-------------------------------------------------------------------------------
 class vtkTextureObject;
+class vtkImageData;
 
 //-------------------------------------------------------------------------------
 class VTK_SLICER_LIVERRESECTIONS_MODULE_VTKWIDGETS_EXPORT vtkOpenGLResection2DPolyDataMapper : public vtkOpenGLPolyDataMapper
@@ -62,6 +63,14 @@ public:
 
   /// Get distance map
   vtkTextureObject* GetDistanceMapTextureObject() const;
+
+  /// The distance-map volume's image data; the mapper (re)builds its 3D
+  /// texture from it lazily in ``BuildBufferObjects`` where a live GL
+  /// context is guaranteed (the vtkOpenGLBezierResectionPolyDataMapper
+  /// pattern).  Preferred over ``SetDistanceMapTextureObject``: Python
+  /// callers cannot perform the raw upload themselves.
+  void SetDistanceMapImageData(vtkImageData* imageData);
+  vtkImageData* GetDistanceMapImageData() const;
 
   /// Set distance map
   void SetDistanceMapTextureObject(vtkTextureObject* node);
