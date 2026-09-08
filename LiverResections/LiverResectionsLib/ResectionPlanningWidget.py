@@ -551,6 +551,9 @@ class ResectionPlanningWidget(qt.QWidget):
         if not hasDistanceMap or scene is None:
             # ADR-0009 §"explainable state": show a hint INSTEAD of an edge-on /
             # blank view, and stop observing any stale carrier for render.
+            # Also solo NOTHING: no active drawable plan means no strip may
+            # linger in the singleton view.
+            self._soloActiveResectogramStrip(scene, None)
             if self._resectogramWidget is not None:
                 self._resectogramWidget.hide()
             self.observeSurfaceForRender(None)
@@ -570,6 +573,9 @@ class ResectionPlanningWidget(qt.QWidget):
             displayNode = scene.AddNewNodeByClass(_RESECTOGRAM_DISPLAY_CLASS)
             if displayNode is not None:
                 carrier.AddAndObserveDisplayNodeID(displayNode.GetID())
+        # Solo the active plan's strip (the place-then-empty defect: a plan
+        # switch otherwise stacks the new strip over the previous bands).
+        self._soloActiveResectogramStrip(scene, displayNode)
 
         # Ensure the singleton resectogram view node AND present the flattened
         # strip alone in it (display-node + view-node + camera configuration;
@@ -996,6 +1002,29 @@ class ResectionPlanningWidget(qt.QWidget):
         if node is not None and node.IsA(_RESECTION_PLAN_CLASS):
             return node
         return None
+
+    @staticmethod
+    def _soloActiveResectogramStrip(scene, activeDisplayNode):  # noqa: N802 - internal
+        """Show exactly ONE strip in the singleton view: the active plan's.
+
+        Every carrier with a resectogram display node renders its strip into
+        the SAME singleton resectogram view, stacked -- so a plan switch
+        would draw the new plan's (possibly blank Init-state) strip over the
+        previous plan's bands.  The drawer owns the view's presentation, so
+        it flips ``ShowResection2D`` to solo the ACTIVE plan (``None``
+        activeDisplayNode hides them all).  Value-guarded writes: no
+        Modified churn when nothing changes.
+        """
+        if scene is None:
+            return
+        active_id = activeDisplayNode.GetID() if activeDisplayNode is not None else None
+        for index in range(scene.GetNumberOfNodesByClass(_RESECTOGRAM_DISPLAY_CLASS)):
+            node = scene.GetNthNodeByClass(index, _RESECTOGRAM_DISPLAY_CLASS)
+            if node is None:
+                continue
+            desired = node.GetID() == active_id
+            if bool(node.GetShowResection2D()) != desired:
+                node.SetShowResection2D(desired)
 
     @staticmethod
     def _parametricSurfaceDisplayNode(carrier):
