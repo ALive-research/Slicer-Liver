@@ -70,6 +70,11 @@ public:
   /// pattern).  Preferred over ``SetDistanceMapTextureObject``: Python
   /// callers cannot perform the raw upload themselves.
   void SetDistanceMapImageData(vtkImageData* imageData);
+
+  /// Toggle the strip's black parenchyma-boundary iso-line (the
+  /// transection contour).  Informational, not a margin; driven by the
+  /// resectogram display node's ShowTransectionContour field.
+  void SetShowTransectionContour(bool show);
   vtkImageData* GetDistanceMapImageData() const;
 
   /// Set distance map

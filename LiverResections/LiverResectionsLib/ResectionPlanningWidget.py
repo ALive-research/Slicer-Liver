@@ -252,10 +252,24 @@ class ResectionPlanningWidget(qt.QWidget):
         marginsForm.addRow(interpolatedCheckBox)
         self._interpolatedMarginsCheckBox = interpolatedCheckBox
 
+        transectionCheckBox = qt.QCheckBox("Transection contour")
+        transectionCheckBox.setObjectName("TransectionContourCheckBox")
+        transectionCheckBox.setChecked(True)
+        transectionCheckBox.setToolTip(
+            "Show the black parenchyma-boundary line on the resectogram "
+            "(where the resection surface exits the organ). Informational "
+            "-- not a margin."
+        )
+        marginsForm.addRow(transectionCheckBox)
+        self._transectionContourCheckBox = transectionCheckBox
+
         safetySpinBox.connect("valueChanged(double)", self.onSafetyMarginChanged)
         riskSpinBox.connect("valueChanged(double)", self.onRiskMarginChanged)
         interpolatedCheckBox.connect(
             "toggled(bool)", self.onInterpolatedMarginsToggled
+        )
+        transectionCheckBox.connect(
+            "toggled(bool)", self.onTransectionContourToggled
         )
 
         drawer = ctk.ctkCollapsibleButton()
@@ -338,6 +352,9 @@ class ResectionPlanningWidget(qt.QWidget):
 
     def interpolatedMarginsCheckBox(self):  # noqa: N802 - Slicer/Qt verb convention
         return self._interpolatedMarginsCheckBox
+
+    def transectionContourCheckBox(self):  # noqa: N802 - Slicer/Qt verb convention
+        return self._transectionContourCheckBox
 
     def placeResectionButton(self):  # noqa: N802 - Slicer/Qt verb convention
         return self._placeButton
@@ -451,6 +468,13 @@ class ResectionPlanningWidget(qt.QWidget):
         if display is not None:
             display.SetInterpolatedMargins(bool(checked))
 
+    def onTransectionContourToggled(self, checked):  # noqa: N802 - Slicer/Qt verb convention
+        plan = self._activeResectionNode
+        carrier = plan.GetGeometryNode() if plan is not None else None
+        display = self._existingResectogramDisplayNode(carrier)
+        if display is not None and hasattr(display, "SetShowTransectionContour"):
+            display.SetShowTransectionContour(bool(checked))
+
     def _updateTotalMarginLabel(self):
         plan = self._activeResectionNode
         total = (
@@ -474,6 +498,7 @@ class ResectionPlanningWidget(qt.QWidget):
             self._safetyMarginSpinBox,
             self._riskMarginSpinBox,
             self._interpolatedMarginsCheckBox,
+            self._transectionContourCheckBox,
         )
         for control in controls:
             control.blockSignals(True)
@@ -489,6 +514,15 @@ class ResectionPlanningWidget(qt.QWidget):
             if display is not None:
                 self._interpolatedMarginsCheckBox.setChecked(
                     bool(display.GetInterpolatedMargins())
+                )
+            resectogram_display = self._existingResectogramDisplayNode(
+                plan.GetGeometryNode() if plan is not None else None
+            )
+            if resectogram_display is not None and hasattr(
+                resectogram_display, "GetShowTransectionContour"
+            ):
+                self._transectionContourCheckBox.setChecked(
+                    bool(resectogram_display.GetShowTransectionContour())
                 )
         finally:
             for control in controls:

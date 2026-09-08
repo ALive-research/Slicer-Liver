@@ -149,6 +149,13 @@ public:
   vtkSetMacro(BlurEnabled, bool);
   vtkGetMacro(BlurEnabled, bool);
 
+  /// Whether the strip draws the black transection contour -- the
+  /// parenchyma-boundary iso-line marking where the resection surface
+  /// exits the organ.  Informational, not a margin: the margin bands
+  /// are exactly the plan's Safety / Risk pair.
+  vtkSetMacro(ShowTransectionContour, bool);
+  vtkGetMacro(ShowTransectionContour, bool);
+
   /// Gaussian-blur kernel extent, in pixels, for that post-pass.
   vtkSetMacro(BlurRadius, double);
   vtkGetMacro(BlurRadius, double);
@@ -166,6 +173,7 @@ private:
   bool EnableFlexibleBoundary;
   int TextureNumComps;
   bool BlurEnabled;
+  bool ShowTransectionContour;
   double BlurRadius;
 };
 
