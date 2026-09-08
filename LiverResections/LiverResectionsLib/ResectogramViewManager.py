@@ -137,6 +137,12 @@ class ResectogramViewManager:
         # and axis labels (the Hyperprobe precedent does the same).
         view.SetBoxVisible(False)
         view.SetAxisLabelsVisible(False)
+        # The resectogram belongs to ITS view alone: exclude the singleton
+        # from layout mapping so the layout manager never presents a
+        # (squeezed, duplicate) widget for it in the standard view area --
+        # the embedded qMRMLThreeDWidget binds the view node directly and
+        # does not need the layout.
+        view.SetMappedInLayout(0)
         view = slicer.mrmlScene.AddNode(view)
         self._view_node = view
         return view
