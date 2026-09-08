@@ -218,6 +218,19 @@ class FlattenedSurfaceRepresentation:
         # which live on the carrier (ADR-0014 §"Fourth layer").
         self._resection_plan_node: Any | None = None
 
+        # Deferred texture-bind retry: a one-shot render-window EndEvent
+        # observer re-runs the bind right after a completed render, when the
+        # GL context provably exists.  Update()-driven retries alone cannot
+        # work -- the render-storm fixes removed the churn dispatches that
+        # would have carried them.
+        self._texture_retry_window: Any | None = None
+        self._texture_retry_tag: Any | None = None
+        self._last_update_nodes: tuple = (None, None)
+        # Optional callable (the Pipeline's RequestRender) fired after a
+        # successful late bind so the freshly textured strip paints without
+        # waiting for the next external render.
+        self._render_requester: Any | None = None
+
         # The SHARED ``vtkMRMLParametricSurfaceDisplayNode`` -- the carrier's
         # sibling display aspect carrying the band STYLE (margin colours +
         # InterpolatedMargins).  One source of truth with the 3D surface
@@ -284,6 +297,10 @@ class FlattenedSurfaceRepresentation:
         """
         self._surface_display_node = display_node
 
+    def SetRenderRequester(self, requester: Any | None) -> None:  # noqa: N802 - VTK verb
+        """Coalesced-render callback fired after a successful late texture bind."""
+        self._render_requester = requester
+
     def SetLocatorNode(self, locator_node: Any | None) -> None:  # noqa: N802 - VTK verb
         """Attach the cross-view locator node (ADR-0025); ``None`` clears."""
         self._locator_node = locator_node
@@ -349,6 +366,7 @@ class FlattenedSurfaceRepresentation:
         Tolerant of ``None`` arguments — when either node is missing the
         actor falls back to invisible / default state.
         """
+        self._last_update_nodes = (display_node, data_node)
         self._apply_display_node(display_node)
         self._apply_data_node(display_node, data_node)
         self._apply_locator()
@@ -368,6 +386,8 @@ class FlattenedSurfaceRepresentation:
                     unbind(None)
                 except Exception:  # pragma: no cover - defensive
                     pass
+        self._disarm_texture_retry()
+        self._render_requester = None
         self._distance_map_volume = None
         self._effective_texture_num_comps = 0
         self._locator_node = None
@@ -396,6 +416,51 @@ class FlattenedSurfaceRepresentation:
     # ------------------------------------------------------------------ #
     # Introspection — used by the unit-layer tests
     # ------------------------------------------------------------------ #
+
+    def _arm_texture_retry(self) -> None:
+        """Observe the render window's EndEvent once to retry the bind."""
+        if self._texture_retry_tag is not None:
+            return
+        render_window = self._render_window()
+        if render_window is None or not hasattr(render_window, "AddObserver"):
+            return
+        self._texture_retry_window = render_window
+        self._texture_retry_tag = render_window.AddObserver(
+            "EndEvent", self._on_render_window_end
+        )
+
+    def _disarm_texture_retry(self) -> None:
+        if self._texture_retry_window is not None and self._texture_retry_tag is not None:
+            try:
+                self._texture_retry_window.RemoveObserver(self._texture_retry_tag)
+            except Exception:  # pragma: no cover - defensive
+                pass
+        self._texture_retry_window = None
+        self._texture_retry_tag = None
+
+    def _on_render_window_end(self, caller: Any, event: Any) -> None:
+        """Post-render retry: the context is current, so the upload can run.
+
+        One-shot per arm: disarm first, retry the bind with the last update's
+        nodes, re-arm only if still pending (each subsequent render retries
+        until the bind lands).  After a successful bind, fire the Pipeline's
+        coalesced RequestRender so the textured strip paints immediately.
+        """
+        del caller, event
+        self._disarm_texture_retry()
+        display_node, data_node = self._last_update_nodes
+        try:
+            self._apply_distance_map_texture(display_node, data_node)
+        except Exception:  # pragma: no cover - defensive
+            return
+        if self.IsDistanceMapTexturePending():
+            self._arm_texture_retry()
+            return
+        if self._render_requester is not None:
+            try:
+                self._render_requester()
+            except Exception:  # pragma: no cover - defensive
+                pass
 
     def IsDistanceMapTexturePending(self) -> bool:  # noqa: N802 - VTK verb
         """True while the distance-map texture bind is deferred on GL.
@@ -799,12 +864,14 @@ class FlattenedSurfaceRepresentation:
         if texture is None:
             # The GL render window is not live yet (texture build deferred):
             # record the SOURCED (wrapper) volume so the sourced layer is
-            # observable, but leave the texture unbound so a later update --
-            # once the window exists -- retries the bind (``already_bound``
-            # stays False, so the idempotency guard above does not short it).
+            # observable, leave the texture unbound, and arm a one-shot
+            # render-window EndEvent retry -- the only moment a context
+            # provably exists (update-driven retries have no dispatch
+            # vehicle since the render-churn storm fixes).
             bind(None)
             self._distance_map_volume = volume
             self._effective_texture_num_comps = 0
+            self._arm_texture_retry()
             return
 
         # Hand the texture to the mapper's vtkSmartPointer and drop the
