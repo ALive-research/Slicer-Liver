@@ -397,6 +397,24 @@ class FlattenedSurfaceRepresentation:
     # Introspection — used by the unit-layer tests
     # ------------------------------------------------------------------ #
 
+    def IsDistanceMapTexturePending(self) -> bool:  # noqa: N802 - VTK verb
+        """True while the distance-map texture bind is deferred on GL.
+
+        A resolved wrapper volume with no texture on the mapper means
+        ``_apply_distance_map_texture`` hit the not-yet-realized-GL path
+        (``_create_distance_map_texture`` returned ``None``).  The Pipeline
+        reads this to keep its memo key OPEN so later dispatches retry the
+        bind until the render window is live -- otherwise the strip stays
+        border-only forever when the view realizes after the last
+        key-changing update (the populate-while-collapsed drawer case).
+        """
+        mapper = self._resection_mapper_2d
+        if mapper is None or self._distance_map_volume is None:
+            return False
+        if getattr(mapper, "SetDistanceMapTextureObject", None) is None:
+            return False  # generic-mapper fallback: no texture path at all
+        return not self._mapper_has_distance_map_texture(mapper)
+
     def GetResectionMapper2D(self) -> Any | None:
         return self._resection_mapper_2d
 
