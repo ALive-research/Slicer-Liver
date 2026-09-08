@@ -212,6 +212,7 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(std::map<vtkShader:
                                "uniform vec3 uUncertaintyMarginColor;\n"
                                "uniform vec3 uResectionColor;\n"
                                "uniform int uInterpolatedMargins;\n"
+                               "uniform int uVesselSegAvailable;\n"
                                "uniform vec3 uResectionGridColor;\n"
                                "uniform int uGridDivisions;\n"
                                "uniform float uGridThickness;\n"
@@ -232,7 +233,9 @@ void vtkOpenGLResection2DPolyDataMapper::ReplaceShaderValues(std::map<vtkShader:
     "//VTK::Color::Impl",
     "//VTK::Color::Impl\n"
     "vec4 dist = texture(distanceTexture, fragPositionMCBS.xyz);\n"
-    "vec4 vesselBg = texture(vesselSegTexture, fragPositionMCBS.xyz);\n"
+    "vec4 vesselBg = (uVesselSegAvailable == 1)\n"
+    "  ? texture(vesselSegTexture, fragPositionMCBS.xyz)\n"
+    "  : vec4(-1.0);\n"
     "float lowMargin = uResectionMargin - uUncertaintyMargin;\n"
     "float highMargin = uResectionMargin + uUncertaintyMargin;\n"
 
@@ -405,14 +408,42 @@ void vtkOpenGLResection2DPolyDataMapper::SetCameraShaderParameters(vtkOpenGLHelp
 //------------------------------------------------------------------------------
 void vtkOpenGLResection2DPolyDataMapper::SetMapperShaderParameters(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor)
 {
+  // Activate the 3D textures onto texture units at DRAW time and bind the
+  // sampler3D uniforms to the units the texture objects actually land on.
+  // Relying on the upload-time unit sequencing (and hardcoded units 0/1)
+  // left the samplers pointing at units with no live GL_TEXTURE_3D on a
+  // subsequent render -- the same failure the 3D
+  // vtkOpenGLBezierResectionPolyDataMapper documents; this ports its fix.
+  int distanceUnit = 0;
+  if (this->Impl->DistanceMapTextureObject)
+  {
+    this->Impl->DistanceMapTextureObject->Activate();
+    distanceUnit = this->Impl->DistanceMapTextureObject->GetTextureUnit();
+  }
   if (cellBO.Program->IsUniformUsed("distanceTexture"))
   {
-    cellBO.Program->SetUniformi("distanceTexture", 0);
+    cellBO.Program->SetUniformi("distanceTexture", distanceUnit);
   }
 
   if (cellBO.Program->IsUniformUsed("vesselSegTexture"))
   {
-    cellBO.Program->SetUniformi("vesselSegTexture", 1);
+    if (this->Impl->VascularSegmentsTextureObject)
+    {
+      this->Impl->VascularSegmentsTextureObject->Activate();
+      cellBO.Program->SetUniformi("vesselSegTexture", this->Impl->VascularSegmentsTextureObject->GetTextureUnit());
+    }
+    else
+    {
+      // No vascular-segments volume: point the sampler at the live distance
+      // texture so sampling stays defined; uVesselSegAvailable gates the
+      // value out in the shader.
+      cellBO.Program->SetUniformi("vesselSegTexture", distanceUnit);
+    }
+  }
+
+  if (cellBO.Program->IsUniformUsed("uVesselSegAvailable"))
+  {
+    cellBO.Program->SetUniformi("uVesselSegAvailable", this->Impl->VascularSegmentsTextureObject ? 1 : 0);
   }
 
   if (cellBO.Program->IsUniformUsed("uRasToIjk"))
@@ -511,6 +542,20 @@ void vtkOpenGLResection2DPolyDataMapper::SetMapperShaderParameters(vtkOpenGLHelp
   }
 
   Superclass::SetMapperShaderParameters(cellBO, ren, actor);
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLResection2DPolyDataMapper::RenderPieceFinish(vtkRenderer* ren, vtkActor* act)
+{
+  if (this->Impl->DistanceMapTextureObject)
+  {
+    this->Impl->DistanceMapTextureObject->Deactivate();
+  }
+  if (this->Impl->VascularSegmentsTextureObject)
+  {
+    this->Impl->VascularSegmentsTextureObject->Deactivate();
+  }
+  Superclass::RenderPieceFinish(ren, act);
 }
 
 //------------------------------------------------------------------------------

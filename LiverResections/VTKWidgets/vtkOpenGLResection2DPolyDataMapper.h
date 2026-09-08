@@ -192,6 +192,9 @@ protected:
   void ReplaceShaderValues(std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer* ren, vtkActor* act) override;
 
   void SetMapperShaderParameters(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor) override;
+  /// Deactivate the draw-time-activated 3D textures (the
+  /// vtkOpenGLBezierResectionPolyDataMapper twin).
+  void RenderPieceFinish(vtkRenderer* ren, vtkActor* act) override;
 
   // Set CameraShaderParameters
   void SetCameraShaderParameters(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* actor) override;
