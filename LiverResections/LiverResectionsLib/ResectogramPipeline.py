@@ -865,6 +865,7 @@ def _safe_get_display_state_digest(display: Any) -> tuple:
     digest = []
     for getter_name in (
         "GetShowResection2D",
+        "GetShowTransectionContour",
         "GetMirrorDisplay",
         "GetEnableFlexibleBoundary",
         "GetTextureNumComps",
