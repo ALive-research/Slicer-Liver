@@ -233,9 +233,6 @@ class ResectogramPipeline(_PipelineBase):
 
         if self._flattened_surface is not None:
             self._flattened_surface.SetResectionPlanNode(self._resection_node)
-            # Late-bind repaint seam: the strip fires this after a
-            # deferred texture bind lands post-render.
-            self._flattened_surface.SetRenderRequester(self.RequestRender)
             self._flattened_surface.SetSurfaceDisplayNode(
                 self._surface_display_node
             )
@@ -250,6 +247,7 @@ class ResectogramPipeline(_PipelineBase):
             _safe_get_band_state_digest(
                 self._resection_node, self._surface_display_node
             ),
+            _safe_get_display_state_digest(self._display_node),
         )
         if key == self._last_update_key:
             return  # idempotent short-circuit
@@ -262,18 +260,33 @@ class ResectogramPipeline(_PipelineBase):
 
         self._update_count += 1
 
-        # The distance-map texture bind defers while the view's GL context is
-        # not yet realized (populate-while-collapsed drawer, unshown layout
-        # widget).  A memoized key would then freeze the strip border-only
-        # forever -- nothing re-dispatches at the moment GL becomes live.
-        # Keep the key OPEN while the bind is pending so every later dispatch
-        # retries; the first one with a live context binds and memoization
-        # resumes.
-        pending = getattr(
-            self._flattened_surface, "IsDistanceMapTexturePending", None
-        )
-        if pending is not None and pending():
-            self._last_update_key = None
+    def OnReferenceToDisplayNodeAdded(self, fromNode: Any, role: Any = None) -> None:  # noqa: N802 - VTK verb
+        """Adopt the displayable when it links to our display node late.
+
+        The production ordering (the Stage-4 drawer's
+        ``AddNewNodeByClass`` -> ``AddAndObserveDisplayNodeID``) adds the
+        display node to the scene -- firing the LayerDM creator and
+        ``SetDisplayNode`` -- BEFORE the carrier link exists, so the data
+        node derived as ``None`` and the Pipeline stayed permanently
+        data-node-less: no BSPoints, no plan resolution, no texture, and a
+        constant memo key that swallowed every later update (the
+        place-then-empty defect).  Mirrors
+        ``LiverBezierSurfacePipeline.OnReferenceToDisplayNodeAdded``.
+        """
+        del role
+        try:
+            if (
+                self._data_node is None
+                and fromNode is not None
+                and fromNode is not self._display_node
+            ):
+                self._reattach_node_observers()
+                self._last_update_key = None
+                self._resection_node = None
+                self._last_resection_scan_mtime = None
+            self.UpdatePipeline()
+        except Exception:  # pragma: no cover - C++ boundary must never raise
+            pass
 
     def OnRendererAdded(self, renderer: Any) -> None:  # noqa: N802 - VTK verb
         """Build Representations once a renderer is attached.
@@ -837,6 +850,35 @@ def _safe_get_scene_mtime(node: Any) -> int | None:
     if scene is None:
         return None
     return int(scene.GetMTime())
+
+
+def _safe_get_display_state_digest(display: Any) -> tuple:
+    """VALUE digest of the resectogram display flags the reps consume.
+
+    Third leg of the memo key: a ``ShowResection2D`` flip (the drawer's
+    solo-active-strip rule) or a blur/mirror/flexible-boundary edit must
+    re-apply through the short-circuit; render churn does not change these
+    VALUES, so the storm guard holds.
+    """
+    if display is None:
+        return ()
+    digest = []
+    for getter_name in (
+        "GetShowResection2D",
+        "GetMirrorDisplay",
+        "GetEnableFlexibleBoundary",
+        "GetTextureNumComps",
+        "GetBlurEnabled",
+        "GetBlurRadius",
+    ):
+        getter = getattr(display, getter_name, None)
+        if getter is None:
+            continue
+        try:
+            digest.append(getter())
+        except Exception:  # pragma: no cover - defensive (stub displays)
+            pass
+    return tuple(digest)
 
 
 def _safe_get_band_state_digest(plan: Any, surface_display: Any) -> tuple:
