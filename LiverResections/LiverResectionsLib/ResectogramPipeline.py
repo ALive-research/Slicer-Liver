@@ -233,6 +233,9 @@ class ResectogramPipeline(_PipelineBase):
 
         if self._flattened_surface is not None:
             self._flattened_surface.SetResectionPlanNode(self._resection_node)
+            # Late-bind repaint seam: the strip fires this after a
+            # deferred texture bind lands post-render.
+            self._flattened_surface.SetRenderRequester(self.RequestRender)
             self._flattened_surface.SetSurfaceDisplayNode(
                 self._surface_display_node
             )
