@@ -552,21 +552,29 @@ class _FakeTextureHelper:
 
 
 class _FakeRenderWindow:
-    """Fake window whose context can be made current or not (realization).
+    """Fake window that has or has not completed its first real render.
 
     Mirrors the Qt-managed ``vtkGenericOpenGLRenderWindow`` reality: the
-    usable-context probe is MakeCurrent + IsCurrent -- ``GetInitialized()``
-    is never set on Qt-owned contexts and must not be used as a gate.
+    realization gate is ``GetNeverRendered()`` -- true only before the
+    window's first render pass.  NEITHER ``GetInitialized()`` NOR
+    ``IsCurrent()`` is usable on Qt-owned contexts (the former is never
+    set, the latter reports False even with a live context on Qt6), so
+    neither may gate the upload.
     """
 
     def __init__(self, initialized=True):
-        self._current = initialized
+        self._never_rendered = not initialized
+
+    def GetNeverRendered(self):  # noqa: N802 - VTK verb
+        return self._never_rendered
 
     def MakeCurrent(self):  # noqa: N802 - VTK verb
         pass
 
     def IsCurrent(self):  # noqa: N802 - VTK verb
-        return self._current
+        # Deliberately always False: pins that the upload path does NOT
+        # consult IsCurrent (the Qt6 defer-forever trap).
+        return False
 
 
 class _FakeImage3D:
@@ -624,7 +632,12 @@ def test_texture_build_returns_none_on_failed_upload(rep_module, monkeypatch):
 
 
 def test_texture_build_defers_until_window_initialized(rep_module, monkeypatch):
-    """An unrealized render window -> None without attempting the upload."""
+    """A never-rendered window -> None without attempting the upload.
+
+    The gate is ``GetNeverRendered()`` (true before the first real render
+    pass); the fake's ``IsCurrent`` is pinned False so this also proves the
+    upload path no longer consults it (the Qt6 defer-forever trap).
+    """
     rep = _texture_build_rep(rep_module, monkeypatch, initialized=False)
     texture = rep._create_distance_map_texture(_FakeImage3D(), 4)
     assert texture is None
