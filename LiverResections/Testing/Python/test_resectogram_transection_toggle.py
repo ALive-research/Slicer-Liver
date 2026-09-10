@@ -32,6 +32,50 @@ VOLUME_NODE_CLASS = "vtkMRMLScalarVolumeNode"
 MODULE_NAME = "liverresections"
 
 
+VIEW_NODE_CLASS = "vtkMRMLViewNode"
+
+
+def _purge_resectogram_singleton_view():
+    """Reclaim the resectogram singleton view + its camera around each test.
+
+    The checkbox test drives the drawer's auto-populate branch, which mints
+    the singleton view node (and a paired camera) -- both survive
+    ``vtkMRMLScene.Clear(0)`` by design and trip this directory's
+    scene-leak check unless reclaimed.  Mirrors the sibling widget-test
+    files' fixture (camera before view, so the cameras logic does not
+    re-pair an orphan).
+    """
+    try:
+        import slicer  # type: ignore[import-not-found]
+        from LiverResectionsLib.ResectogramViewManager import (  # type: ignore[import-not-found]
+            RESECTOGRAM_VIEW_SINGLETON_TAG,
+        )
+    except Exception:  # pragma: no cover - bare-pytest / import-env dependent
+        return
+    scene = getattr(slicer, "mrmlScene", None)
+    if scene is None:
+        return
+    stale_views, stale_ids = [], set()
+    for index in range(scene.GetNumberOfNodesByClass(VIEW_NODE_CLASS)):
+        node = scene.GetNthNodeByClass(index, VIEW_NODE_CLASS)
+        if node is not None and node.GetSingletonTag() == RESECTOGRAM_VIEW_SINGLETON_TAG:
+            stale_views.append(node)
+            stale_ids.add(node.GetID())
+    for index in range(scene.GetNumberOfNodesByClass("vtkMRMLCameraNode")):
+        camera = scene.GetNthNodeByClass(index, "vtkMRMLCameraNode")
+        if camera is not None and camera.GetActiveTag() in stale_ids:
+            scene.RemoveNode(camera)
+    for node in stale_views:
+        scene.RemoveNode(node)
+
+
+@pytest.fixture(autouse=True)
+def _drop_resectogram_singleton_view():
+    _purge_resectogram_singleton_view()
+    yield
+    _purge_resectogram_singleton_view()
+
+
 def _slicer_or_skip():
     from slicer_pytest_support import (
         import_slicer_or_skip as _import_slicer_or_skip,
