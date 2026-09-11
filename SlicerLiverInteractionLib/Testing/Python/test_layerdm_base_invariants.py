@@ -33,7 +33,8 @@ loaded; a bare ``PythonSlicer -m pytest`` has LayerDMLib off the path, so
 every test SKIPS CLEANLY via the ``slicer_pytest_support`` guards.  Verify
 run-vs-skip in the CI log -- never trust overall green.
 
-The SUT does not exist yet.  Per ADR-0027 red->skip the import + hasattr
+The base landed in PR #604; these four probes did not.  Per ADR-0027 the
+import + hasattr
 guards skip-pend; the skips lift at the extraction commit.
 
 References
@@ -78,7 +79,7 @@ def _import_base_or_skip():
     except Exception as exc:  # pragma: no cover - import-environment dependent
         pytest.skip(
             f"SurfacePointPlacementPipeline3D not importable ({exc!r}) -- the "
-            "ADR-0038 base has not landed OR LayerDMLib is not reachable here "
+            "LayerDMLib is not reachable in this harness "
             "(ADR-0027)."
         )
     return SurfacePointPlacementPipeline3D
@@ -92,9 +93,10 @@ def _import_base_or_skip():
 @pytest.mark.skip(
     reason=(
         "ADR-0038 trap 1 (one Pipeline per (view, display-node type)) -- the "
-        "shared base + a LayerDM factory to count instances per (view, type) "
-        "have not landed.  Skeleton pins the invariant; implementer fills the "
-        "factory-instance assertion (ADR-0027 / ADR-0013 §1)."
+        "base has landed, but LayerDM factory introspection to COUNT pipeline "
+        "instances per (view, type) is not available here.  Skeleton pins the "
+        "invariant; implementer fills the factory-instance assertion "
+        "(ADR-0027 / ADR-0013 §1)."
     )
 )
 def test_one_pipeline_instance_per_view_and_display_node_type():
@@ -124,7 +126,7 @@ def test_one_pipeline_instance_per_view_and_display_node_type():
 @pytest.mark.skip(
     reason=(
         "ADR-0038 trap 2 (configure-before-AddNode) -- the shared base's "
-        "actor-add ordering is not landed.  Skeleton pins the invariant; "
+        "actor-add ordering is not yet probed.  Skeleton pins the invariant; "
         "implementer fills the ordering assertion (ADR-0027)."
     )
 )
@@ -153,7 +155,7 @@ def test_pipeline_is_configured_before_actors_are_added():
 @pytest.mark.skip(
     reason=(
         "ADR-0038 trap 3 (UpdatePipeline on ResetDisplay, not display "
-        "Modified) -- the shared base's reconcile driver is not landed.  "
+        "Modified) -- the base's reconcile driver is not yet probed.  "
         "Skeleton pins the invariant; implementer fills the "
         "ResetDisplay-vs-Modified assertion (ADR-0027)."
     )
@@ -183,9 +185,10 @@ def test_update_pipeline_is_driven_by_reset_display_not_modified():
 @pytest.mark.skip(
     reason=(
         "ADR-0038 trap 4 (RequestRender does not flush mid-"
-        "ProcessInteractionEvent) -- the shared base's interaction handler is "
-        "not landed.  Skeleton pins the invariant; implementer fills the "
-        "coalesced-render assertion (ADR-0027)."
+        "ProcessInteractionEvent) -- the base's interaction handler has "
+        "landed, but the render-flush probe is not yet written.  Skeleton "
+        "pins the invariant; implementer fills the coalesced-render "
+        "assertion (ADR-0027)."
     )
 )
 def test_request_render_does_not_flush_inside_process_interaction_event():

@@ -35,9 +35,10 @@ labelmap volume + fiducial + table nodes.  A bare
 ``PythonSlicer -m pytest`` has ``slicer.mrmlScene is None`` so it SKIPS
 CLEANLY.
 
-The carrier + the transient-fiducial adapter do not exist yet.  Per
-ADR-0027 red->skip the guards skip-pend; the skips lift at the
-implementation commit.
+The carrier + the transient-fiducial adapter landed in PR #606.  The
+guards now skip only on HARNESS, never on absence -- except the
+table-level rollup at the end of this file, which stays skipped because
+its comparison target is still undefined (see its own skip reason).
 
 References
 ----------

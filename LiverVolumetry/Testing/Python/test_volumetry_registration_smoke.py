@@ -8,7 +8,10 @@ uses, and hosts NO per-module displayable manager
 (``feedback_layerdm_no_custom_dm``; ADR-0013 §5):
 
 1. ``RegisterNodeClass`` for the seed carrier + display node (+ storage);
-2. the upstream LayerDM displayable-manager ``RegisterInFactory``;
+2. the upstream LayerDM displayable-manager ``RegisterInFactory`` -- hosted
+   ONCE by LiverResections, not by this module: ADR-0013 §5 marks the call
+   idempotent across modules, first-to-load wins.  Listed here for the
+   complete picture, not as a LiverVolumetry obligation;
 3. a Pipeline creator matching ``(vtkMRMLViewNode,
    vtkMRMLVolumetrySeedsDisplayNode)`` returning the shared
    ``SurfacePointPlacementPipeline3D`` wired to a volumetry provider (plus
@@ -32,8 +35,8 @@ HARNESS: launched Slicer.  Node registration + the LayerDM factory are
 reachable only inside a launched Slicer with the module loaded; a bare
 ``PythonSlicer -m pytest`` SKIPS CLEANLY.
 
-The SUT does not exist yet.  Per ADR-0027 red->skip the guards skip-pend;
-the skips lift at the implementation commit.
+The SUT landed in PR #606.  The guards now skip only on HARNESS (a bare
+run has no registered nodes and no LayerDM factory), never on absence.
 
 References
 ----------
