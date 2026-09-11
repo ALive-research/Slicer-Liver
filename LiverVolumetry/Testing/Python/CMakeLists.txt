@@ -199,6 +199,26 @@ set(_volumetry_pytest_files
   # red->green).  Wrapped C++ nodes + segmentations -> SKIPS bare, RUNS
   # launched (ADR-0027).
   test_volumetry_generation_matrix.py
+  # ADR-0038 (amendment, OQ4) -- the WIRED pickSurface is readable by
+  # InVolumePick: _aimPickSurface must bind a node exposing GetImageData +
+  # RAS<->IJK, not the vtkMRMLSegmentationNode itself (which has neither, so
+  # every armed click declined and no seed landed).  The pick-math and
+  # placement tests both fed a pick surface directly and so never covered this
+  # wiring.  Live scene + Qt -> SKIPS bare, RUNS launched (ADR-0027).
+  test_volumetry_pick_surface_wiring.py
+  # territory-usability -- placement CUES: a declined bare move in the slice
+  # pipeline still requests a render so the preview cursor paints (the base
+  # declines bare moves without rendering, ADR-0033, so a hover would otherwise
+  # compute the cursor and never flush it), and the 3D pipeline declines
+  # add-on-click because in-volume seeds are placed from a slice.  Pipelines
+  # import LayerDMLib -> SKIPS bare, RUNS launched (ADR-0027).
+  test_volumetry_placement_cursor.py
+  # territory-usability -- selecting a segmentation toggles ONLY per-segment
+  # VISIBILITY; per-segment colour and opacity set by the user or another
+  # module survive selection.  Complements test_volumetry_show3d_visibility.py
+  # (visibility MAY change; colour/opacity may NOT).  Wrapped segmentation node
+  # + live scene + Qt -> SKIPS bare, RUNS launched (ADR-0027).
+  test_volumetry_show3d_preserves_display.py
 )
 
 foreach(_pytest_file IN LISTS _volumetry_pytest_files)
