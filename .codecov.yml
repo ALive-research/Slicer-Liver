@@ -25,7 +25,9 @@ codecov:
   # some notification settings.
   notify:
     wait_for_ci: true
-    after_n_builds: 1
+    # Both flags upload from the same job as separate steps; wait for
+    # both before posting so the comment never reflects half the tree.
+    after_n_builds: 2
 
 coverage:
   precision: 2
@@ -46,21 +48,23 @@ comment:
   require_changes: true
   layout: "diff,flags,files"
 
+# Flag membership comes from the upload itself: the coverage job emits
+# coverage-cxx.xml (gcovr) and coverage-py.xml (coverage.py) and uploads
+# each under its own flag.  Do NOT re-filter by `paths` here.
+#
+# A stale `paths` list silently DROPS files from the report rather than
+# merely un-flagging them: the previous list named LiverMarkups/ (module
+# deleted) and Modeling/ (never existed), placed LiverResectionsLib/ at
+# the wrong level, pointed the py flag at **/Testing/Python/ (which the
+# ignore list below discards anyway), and omitted Liver/,
+# LiverSegmentation/ and SlicerLiverInteractionLib/ entirely -- so those
+# three modules were absent from the whole-tree percentage even though
+# the coverage job measured them.
 flags:
   cxx:
-    paths:
-      - LiverResections/
-      - LiverResectionsLib/
-      - LiverMarkups/
-      - VascularTerritories/
-      - LiverVolumetry/
-      - Modeling/
+    carryforward: false
   py:
-    paths:
-      - LiverResections/Testing/Python/
-      - LiverResectionsLib/Testing/Python/
-      - VascularTerritories/
-      - LiverVolumetry/
+    carryforward: false
 
 # Exclude generated, test-only, and third-party code from both
 # coverage % and PR comment annotations.  These paths are uninteresting
