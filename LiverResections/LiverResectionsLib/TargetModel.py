@@ -35,15 +35,28 @@ _TARGET_MODEL_ATTRIBUTE = "LiverResections.TargetModel"
 
 
 def has_canonical_liver() -> bool:
-    """True iff a canonical segmentation holds an SCT-tagged liver segment.
+    """True iff a canonical segmentation holds a liver segment WITH VOXELS.
 
     The Place guard's predicate: without it there is no target mesh, no
     auto-seed, and no contour -- Place must refuse instead of minting a
     dead resection (v1 parity: AddResectionPlane errored on a missing
     target organ model).
+
+    The tag alone does not carry that guarantee.  Stage 2 pre-seeds its
+    checklist with ``AddEmptySegment`` rows that already carry their
+    terminology tags, and the Liver shell builds every stage panel on
+    module open -- so a liver-tagged but EMPTY segment exists from the
+    first frame, before anything has been segmented.  Matching on the tag
+    alone unlocked Place immediately and minted exactly the dead
+    resection this guard exists to prevent: ``ensure_target_model``
+    returned ``None``, the auto-seed bailed on zero points, and the user
+    was left with a selected plan that rendered nothing and reported
+    nothing.
     """
-    node, _segment_id = _find_canonical_liver_segment()
-    return node is not None
+    node, segment_id = _find_canonical_liver_segment()
+    if node is None:
+        return False
+    return not _segment_is_empty(node, segment_id)
 
 
 def ensure_target_model(plan_node: Any) -> Any | None:
@@ -95,6 +108,50 @@ def _find_canonical_liver_segment() -> tuple:
             if f"^{_SCT_LIVER_CODE}^" in str(text):
                 return node, segment_id
     return None, None
+
+
+def _segment_is_empty(segmentation_node: Any, segment_id: str) -> bool:
+    """True when ``segment_id`` carries no voxel of its OWN label value.
+
+    Emptiness must be LABEL-AWARE.  Stage 2's pre-seeded segments SHARE a
+    single binary-labelmap layer (the stock ``AddEmptySegment`` shape), so
+    landing content on one sharer grows the shared image's extent for
+    every sharer.  The object-level extent therefore says nothing about
+    whether THIS segment holds anything -- only a scan for its own label
+    value does.
+
+    Cheap by construction: the binary labelmap is the segmentation's
+    master representation, so this reads what is already in memory.  It
+    deliberately does NOT go through ``_liver_closed_surface``, which
+    would run a closed-surface conversion on every enablement check.
+
+    The Stage-2 sibling (``LiverSegmentation._segmentIsEmpty``) applies
+    the same rule; per this module's cross-module contract note the
+    shared vocabulary is scene data, not a Python import, so the logic is
+    restated here rather than imported.
+    """
+    if segmentation_node is None or not segment_id:
+        return True
+    segment = segmentation_node.GetSegmentation().GetSegment(segment_id)
+    if segment is None:
+        return True
+
+    name = slicer.vtkSegmentationConverter.GetSegmentationBinaryLabelmapRepresentationName()
+    labelmap = segment.GetRepresentation(name)
+    if labelmap is None:
+        return True
+    if hasattr(labelmap, "IsEmpty") and labelmap.IsEmpty():
+        return True
+    extent = labelmap.GetExtent()
+    if extent[0] > extent[1] or extent[2] > extent[3] or extent[4] > extent[5]:
+        return True
+    scalars = labelmap.GetPointData().GetScalars()
+    if scalars is None:
+        return True
+
+    from vtk.util.numpy_support import vtk_to_numpy
+
+    return not bool((vtk_to_numpy(scalars) == segment.GetLabelValue()).any())
 
 
 def _liver_closed_surface(segmentation_node: Any, segment_id: str) -> Any | None:
