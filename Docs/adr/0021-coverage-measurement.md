@@ -109,6 +109,34 @@ absolute-% threshold; ratchet pressure is per-PR.
   PR comment; tests still run.
 - Coverage % drift on rebases can produce noisy PR comments.
 
+## Configuration traps (learned 2026-09-11)
+
+The whole-tree percentage is only as honest as the upload wiring, and
+two settings can corrupt it silently -- no warning, no failed job, just
+a wrong number:
+
+- **`flags.<flag>.paths` in `.codecov.yml` DROPS files, it does not
+  merely un-flag them.**  A path list that has fallen behind the module
+  layout removes those modules from the reported percentage entirely.
+  This is the trap that hid `Liver/`, `LiverSegmentation/` and
+  `SlicerLiverInteractionLib/` while the coverage job was measuring
+  them.  Flag membership should come from the upload, not from a second
+  filter that has to be kept in sync with the tree.
+- **One `codecov-action` step with `files: a,b` + `flags: x,y` is ONE
+  session carrying BOTH flags**, so neither flag isolates its language.
+  The tell is `sessions: 1` on a repo with two flags.  Upload once per
+  flag.
+
+Because both faults change the *denominator*, they also make the
+percentage non-comparable across commits: a docs-only commit can appear
+to move coverage by several points.  When a coverage swing has no
+plausible cause in the diff, check the file and line totals before
+reading it as a test-quality regression.
+
+Any new Python sub-package staged into `qt-scripted-modules/` needs a
+`[paths]` alias in `.coveragerc`, or its launched-leg records stay on
+build-tree paths and never merge onto the source file.
+
 ## References
 
 - [ADR-0003][adr-0003] — Testability invariant.
