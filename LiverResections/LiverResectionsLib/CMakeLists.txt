@@ -24,6 +24,7 @@
 set(LiverResectionsLib_PYTHON_SCRIPTS
   __init__.py
   ControlPolygonPipeline.py
+  ControlPolygonRings.py
   DistanceMaps.py
   LiverBezierSurfacePipeline.py
   LocatorReslicer.py
