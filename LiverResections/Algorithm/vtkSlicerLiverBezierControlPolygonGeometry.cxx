@@ -100,3 +100,38 @@ vtkSmartPointer<vtkCellArray> vtkSlicerLiverBezierControlPolygonGeometry::BuildC
 
   return planeCells;
 }
+
+//------------------------------------------------------------------------------
+std::vector<std::vector<vtkIdType>> vtkSlicerLiverBezierControlPolygonGeometry::BuildRingGroups(unsigned int rows, unsigned int cols)
+{
+  // ADR-0018 §1 admits exactly two control-polygon shapes, and each has
+  // exactly two rings.  The memberships are therefore constants, written
+  // out rather than peeled off the lattice by a loop: a general
+  // decomposition would carry depth arithmetic and degenerate
+  // single-row / single-column branches for shapes this project does not
+  // allow.  Should ADR-0018 ever widen the set (a NURBS control net of
+  // arbitrary m x n is the plausible case), this body grows a general
+  // walk -- the signature and the callers do not change.
+  //
+  // Row-major ids (i * cols + j), matching BuildControlPolygonCells.
+  // The OUTER ring is listed as a contiguous clockwise walk from the
+  // top-left corner so a ring highlight can consume the order directly
+  // as a closed path.
+  switch (rows == cols ? rows : 0u)
+  {
+    case 4u: return { { 0, 1, 2, 3, 7, 11, 15, 14, 13, 12, 8, 4 }, { 5, 6, 10, 9 } };
+    case 3u:
+      // The 3x3 inner "ring" is the SINGLE centre point.  A one-element
+      // rigid-translation group is well defined, but it is not a ring in
+      // any geometric sense, and a caller presenting a ring affordance
+      // should expect it.
+      return { { 0, 1, 2, 5, 8, 7, 6, 3 }, { 4 } };
+    default:
+      vtkGenericWarningMacro("vtkSlicerLiverBezierControlPolygonGeometry::BuildRingGroups:"
+                             " (rows, cols) = ("
+                             << rows << ", " << cols
+                             << ") is outside the"
+                                " ADR-0018 §1 closed set {(3, 3), (4, 4)}; returning empty ring list.");
+      return {};
+  }
+}

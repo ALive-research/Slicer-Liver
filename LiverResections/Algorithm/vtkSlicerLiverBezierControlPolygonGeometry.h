@@ -48,6 +48,8 @@
 #include <vtkObject.h>
 #include <vtkSmartPointer.h>
 
+#include <vector>
+
 class vtkCellArray;
 
 /**
@@ -103,6 +105,33 @@ public:
   /// of the ``(i, j)`` lattice cell.  The number of cells is
   /// ``(rows - 1) * (cols - 1)`` — four for 3×3, nine for 4×4.
   static vtkSmartPointer<vtkCellArray> BuildControlPolygonCells(unsigned int rows, unsigned int cols);
+
+  /// Ring decomposition of a ``rows × cols`` control polygon, indexed
+  /// row-major (``i * cols + j``) to match
+  /// :func:`BuildControlPolygonCells`.  Ring 0 is the OUTER ring (the
+  /// lattice boundary), ring 1 the interior.  Both legal shapes have
+  /// exactly two rings, so the memberships are constants rather than a
+  /// computed decomposition.
+  ///
+  /// The group-drag gestures consume this: a ring translates rigidly
+  /// (every member displaced by the SAME delta), so the caller needs
+  /// the membership, not the geometry.
+  ///
+  /// Per ADR-0018 §1 the closed set of valid shapes is
+  /// ``{(3, 3), (4, 4)}``; any other ``(rows, cols)`` emits a
+  /// ``vtkGenericWarningMacro`` and returns an empty vector.
+  ///
+  /// Shapes differ in a way callers must handle:
+  ///   - 4×4 → two rings: outer holds 12 ids, inner holds 4.
+  ///   - 3×3 → two rings: outer holds 8 ids, inner holds the SINGLE
+  ///     centre id.  A one-element "ring" is still a valid rigid
+  ///     translation group, but it is not a ring in any geometric
+  ///     sense — callers presenting a ring affordance should expect it.
+  ///
+  /// Every control-point id appears in exactly one ring, and the
+  /// concatenation of all rings is a permutation of
+  /// ``[0, rows * cols)``.
+  static std::vector<std::vector<vtkIdType>> BuildRingGroups(unsigned int rows, unsigned int cols);
 
 protected:
   vtkSlicerLiverBezierControlPolygonGeometry();

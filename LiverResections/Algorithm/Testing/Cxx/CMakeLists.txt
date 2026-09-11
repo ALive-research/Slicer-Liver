@@ -18,6 +18,7 @@ set(KIT_TEST_SRCS
   vtkLiverSpheroidRingExtractorEdgeCasesTest.cxx
   vtkLiverSpheroidRingExtractorConsistencyTest.cxx
   vtkSlicerLiverBezierControlPolygonGeometryTest1.cxx
+  vtkSlicerLiverBezierRingGroupsTest.cxx
   vtkLiverResectogramAspectRatioTest.cxx
   vtkLiverResectogramPixelMappingTest.cxx
   )
@@ -43,6 +44,7 @@ SIMPLE_TEST(vtkLiverContourParameterizerEdgeCasesTest)
 SIMPLE_TEST(vtkLiverPlaneRingExtractorEdgeCasesTest)
 SIMPLE_TEST(vtkLiverSpheroidRingExtractorEdgeCasesTest)
 SIMPLE_TEST(vtkSlicerLiverBezierControlPolygonGeometryTest1)
+SIMPLE_TEST(vtkSlicerLiverBezierRingGroupsTest)
 
 # Stack-4 ring-extraction wiring — Constraint 1 (shader/extractor
 # parameter consistency) + Constraint 2 (extraction-granularity bound).
