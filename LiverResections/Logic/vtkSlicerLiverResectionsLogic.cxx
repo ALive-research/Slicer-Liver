@@ -355,8 +355,9 @@ char* vtkSlicerLiverResectionsLogic::LoadLiverResection(const std::string& fileN
 
   // The legacy ``.fcsv`` resection load path retired with
   // vtkMRMLLiverResectionNode (T2.7 resection-rename + LiverMarkups
-  // dissolution, ADR-0014).  Migration of pre-T2 ``.fcsv`` scenes is
-  // covered by vtkMRMLResectionPlanLegacyFcsvMigrationTest.
+  // dissolution, ADR-0014).  There is NO migration path: legacy
+  // ``.lrp.fcsv`` plans cannot be loaded, and no converter ships.  See
+  // Docs/migrations/v1-to-v2.md for what a v1 user can recover by hand.
   vtkErrorMacro("vtkSlicerLiverResectionsLogic::LoadResections failed: unrecognized file extension in " << fileName);
   return nullptr;
 }
