@@ -82,6 +82,8 @@ int testDefaults()
   // Transient cross-view interaction state: nothing hovered/grabbed.
   CHECK_INT(node->GetHoveredControlPoint(), -1);
   CHECK_INT(node->GetGrabbedControlPoint(), -1);
+  CHECK_INT(node->GetHoveredGroup(), vtkMRMLControlPolygonDisplayNode::GroupNone);
+  CHECK_INT(node->GetGrabbedGroup(), vtkMRMLControlPolygonDisplayNode::GroupNone);
 
   CHECK_STRING(node->GetNodeTagName(), "ControlPolygonDisplay");
   return EXIT_SUCCESS;
@@ -111,6 +113,15 @@ int testSettersAndGetters()
   CHECK_INT(node->GetHoveredControlPoint(), 5);
   node->SetGrabbedControlPoint(7);
   CHECK_INT(node->GetGrabbedControlPoint(), 7);
+
+  // Group-drag targets.  Frame and ring 0 span the same boundary points
+  // but are DISTINCT targets -- the frame drag moves the whole polygon,
+  // ring 0 moves only the boundary -- so the node must keep them apart.
+  node->SetHoveredGroup(vtkMRMLControlPolygonDisplayNode::GroupFrame);
+  CHECK_INT(node->GetHoveredGroup(), vtkMRMLControlPolygonDisplayNode::GroupFrame);
+  node->SetGrabbedGroup(vtkMRMLControlPolygonDisplayNode::GroupRing0 + 1);
+  CHECK_INT(node->GetGrabbedGroup(), vtkMRMLControlPolygonDisplayNode::GroupRing0 + 1);
+  CHECK_BOOL(vtkMRMLControlPolygonDisplayNode::GroupFrame != vtkMRMLControlPolygonDisplayNode::GroupRing0, true);
   return EXIT_SUCCESS;
 }
 
@@ -217,10 +228,14 @@ int testCopyContent()
   // just as the fields are excluded from the XML round-trip.
   source->SetHoveredControlPoint(5);
   source->SetGrabbedControlPoint(7);
+  source->SetHoveredGroup(vtkMRMLControlPolygonDisplayNode::GroupFrame);
+  source->SetGrabbedGroup(vtkMRMLControlPolygonDisplayNode::GroupRing0);
   vtkNew<vtkMRMLControlPolygonDisplayNode> transientSink;
   transientSink->CopyContent(source.GetPointer(), /*deepCopy=*/true);
   CHECK_INT(transientSink->GetHoveredControlPoint(), -1);
   CHECK_INT(transientSink->GetGrabbedControlPoint(), -1);
+  CHECK_INT(transientSink->GetHoveredGroup(), vtkMRMLControlPolygonDisplayNode::GroupNone);
+  CHECK_INT(transientSink->GetGrabbedGroup(), vtkMRMLControlPolygonDisplayNode::GroupNone);
   return EXIT_SUCCESS;
 }
 
