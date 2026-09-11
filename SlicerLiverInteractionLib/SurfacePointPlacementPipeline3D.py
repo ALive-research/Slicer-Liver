@@ -89,6 +89,14 @@ class SurfacePointPlacementPipeline3D(_PipelineBase):
         # None when no drag is in flight.
         self._drag_key: Any | None = None
 
+        # The GROUP gesture in flight (a client-defined id), or None.  A
+        # group translates its members rigidly; the base holds only the
+        # gesture's identity, never its meaning.
+        self._group_drag: Any | None = None
+        # Which release event ends it: a group gesture may be right-button,
+        # while the point drag is always left.
+        self._group_drag_release_event: Any | None = None
+
     # ------------------------------------------------------------------ #
     # Seam wiring
     # ------------------------------------------------------------------ #
@@ -162,13 +170,27 @@ class SurfacePointPlacementPipeline3D(_PipelineBase):
         """
         try:
             if not self._admissible():
-                self._drag_key = None  # a state flip mid-gesture drops the grab
+                # A state flip mid-gesture drops BOTH grabs.
+                self._drag_key = None
+                self._group_drag = None
+                self._group_drag_release_event = None
                 return False, sys.float_info.max
             renderer = self._safe_get_renderer()
             if renderer is None:
                 self._drag_key = None
                 return False, sys.float_info.max
             etype = _event_type(eventData)
+
+            # A group drag in flight owns move + the release of ITS OWN
+            # button (a group gesture may be right-button; the point drag
+            # is always left).
+            if self._group_drag is not None:
+                if etype in (
+                    vtk.vtkCommand.MouseMoveEvent,
+                    self._group_drag_release_event,
+                ):
+                    return True, 0.0
+                return False, sys.float_info.max
 
             if self._drag_key is not None:
                 if etype in (
@@ -183,6 +205,19 @@ class SurfacePointPlacementPipeline3D(_PipelineBase):
                 # client's hover cue is a side effect of this declined call.
                 self._on_bare_move_decline(renderer, eventData)
                 return False, sys.float_info.max
+
+            # A client that opts into group gestures may claim a press of
+            # EITHER button.  Asked before the point pick so a frame or
+            # ring target wins over a handle that merely happens to be
+            # near the cursor; a client that does not opt in returns None
+            # and the arbitration below is untouched.
+            if etype in (
+                vtk.vtkCommand.LeftButtonPressEvent,
+                vtk.vtkCommand.RightButtonPressEvent,
+            ):
+                claim = self._group_pick(renderer, eventData, etype)
+                if claim is not None:
+                    return True, claim[1]
 
             if etype != vtk.vtkCommand.LeftButtonPressEvent:
                 return False, sys.float_info.max
@@ -219,7 +254,40 @@ class SurfacePointPlacementPipeline3D(_PipelineBase):
                 return False
             etype = _event_type(eventData)
 
+            if self._group_drag is not None:
+                if etype == self._group_drag_release_event:
+                    group = self._group_drag
+                    self._group_drag = None
+                    self._group_drag_release_event = None
+                    self._on_group_release(group)
+                    self.RequestRender()
+                    return False  # gesture over -- release the focus
+                if etype == vtk.vtkCommand.MouseMoveEvent:
+                    world = self._event_world(renderer, eventData)
+                    if world is None:
+                        return True  # keep the grab; this move didn't resolve
+                    self._on_group_drag(self._group_drag, world)
+                    self.RequestRender()
+                    return True
+                return False
+
             if self._drag_key is None:
+                if etype in (
+                    vtk.vtkCommand.LeftButtonPressEvent,
+                    vtk.vtkCommand.RightButtonPressEvent,
+                ):
+                    claim = self._group_pick(renderer, eventData, etype)
+                    if claim is not None:
+                        self._group_drag = claim[0]
+                        self._group_drag_release_event = (
+                            vtk.vtkCommand.RightButtonReleaseEvent
+                            if etype == vtk.vtkCommand.RightButtonPressEvent
+                            else vtk.vtkCommand.LeftButtonReleaseEvent
+                        )
+                        self._on_group_grab(claim[0], renderer, eventData)
+                        self.RequestRender()
+                        return True
+
                 if etype != vtk.vtkCommand.LeftButtonPressEvent:
                     return False
                 key, distance2 = self._nearest_key_in_display(renderer, eventData)
@@ -273,6 +341,41 @@ class SurfacePointPlacementPipeline3D(_PipelineBase):
         such gate.
         """
         return True
+
+    # -- group gestures (opt-in; the flat clients never override these) -- #
+
+    def _group_pick(self, renderer: Any, eventData: Any, etype: Any):
+        """Claim a press as a GROUP gesture, or decline.
+
+        Return ``(group_id, distance2)`` to claim, or ``None`` to leave
+        the press to the ordinary point arbitration.  ``group_id`` is
+        opaque to the base -- it is handed back verbatim to the group
+        hooks below, so a client chooses its own encoding (the resection
+        control polygon uses its display node's ``GroupTarget``).
+
+        Default declines every press, which is what keeps this change
+        inert for clients that do not opt in: the territories, volumetry
+        and slice-polygon pipelines never override it and see exactly the
+        dispatch they saw before.
+
+        A group gesture translates its members RIGIDLY -- the base moves
+        nothing itself, because the delta's meaning is the client's.
+        """
+        return None
+
+    def _on_group_grab(self, group: Any, renderer: Any, eventData: Any) -> None:
+        """A group gesture began (default: no-op)."""
+
+    def _on_group_drag(self, group: Any, world: Any) -> None:
+        """The cursor moved to ``world`` during a group gesture.
+
+        The base does NOT apply a displacement: what a group means, and
+        what a delta does to it, is data-model knowledge the base does not
+        carry (ADR-0038 §"What is not shared").
+        """
+
+    def _on_group_release(self, group: Any) -> None:
+        """A group gesture ended (default: no-op)."""
 
     def _on_grab(self, key: Any, renderer: Any, eventData: Any) -> None:
         """Called right after the base grabs ``key`` on a press (default no-op)."""
