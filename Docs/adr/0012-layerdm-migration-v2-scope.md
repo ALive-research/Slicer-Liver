@@ -115,10 +115,12 @@ deferred:
 - **LiverSegments** — terminology dispatch (per the forthcoming
   ADR-0011), tool integrations (TotalSegmentator, MONAILabel,
   Kumar-Oram), and LabelToSCT bridges all land in v2.0.0.  LayerDM
-  display node deferred.
+  display node deferred.  *(Superseded by the 2026-07-09 amendment: the
+  migration landed in v2.0.0 -- see #569, closed complete.)*
 - **LiverVolumetry** — generic seed-and-category partition framework
   and the Couinaud preset land in v2.0.0.  LayerDM display node
-  deferred.
+  deferred.  *(Superseded by the 2026-07-09 amendment: the migration
+  landed in v2.0.0 via PR #606 -- see #570, closed complete.)*
 - **Modeling pipelines (PSR, VMTK)** — backend modernisation and
   terminology-keyed dispatch land in v2.0.0.  LayerDM display node
   deferred (would only matter for cross-module locator unification,
@@ -212,6 +214,14 @@ alone; LiverResections is the module where LayerDM pays the most.
   temporary inconsistency until v2.1.0 and must be documented in
   the v2.0.0 architecture diagrams (one diagram shows migrated
   modules, one shows the still-legacy display path).
+
+  *Superseded by the 2026-07-09 amendment.* The split did not survive:
+  `LiverSegments` was renamed `VascularTerritories` (ADR-0023) and
+  migrated (#569); `LiverVolumetry` migrated via PR #606 (#570);
+  `Modeling/` was dropped as a top-level module by ADR-0023 and never
+  existed to migrate. All shipping modules now carry LayerDM display
+  nodes, so the two-diagram treatment this paragraph asks for is moot --
+  the single target hierarchy is the accurate picture.
 - **v2.1.0 introduces additional new display node classes** for the
   deferred modules — a MINOR bump per ADR-0007 (additive,
   scene-compatible with v2.0.0).  Each deferred module needs its

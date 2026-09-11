@@ -87,7 +87,7 @@ flowchart LR
     TER["vtkMRMLAbstractTerritoriesNode<br/>(Std or Custom) — wraps SEG via segments ref"]
     PLAN["vtkMRMLResectionPlanNode(s)<br/>(clinical wrapper — name, margins, ordering, state)"]
     SURF["vtkMRMLAbstractParametricSurfaceNode<br/>(Bezier today; NURBS v2.1)"]
-    VOL["vtkMRMLLiverVolumetryPartitionNode(s)<br/>(v2.1; seed-and-category partitions)"]
+    VOL["vtkMRMLVolumetrySeedsNode(s)<br/>(seed-and-category volumetry carrier)"]
     LRP["per-plan .lrp.json<br/>(schema v2; plan + surface only)"]
     SCN["Slicer scene<br/>(.mrml + supporting files)"]
 
