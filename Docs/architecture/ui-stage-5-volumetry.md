@@ -7,6 +7,16 @@ explicit-compute output table.
 
 [adr-0023]: https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0023-unified-gui-stage-workflow.md
 
+:::{warning}
+**Design intent, not the shipped panel.** This document records the
+2026-05-21 design; the implementation diverged. Stage 5 ships a
+per-VOLUME seeds table (`LiverVolumetryLib/VolumetrySeedsTableWidget.py`)
+over `vtkMRMLVolumetrySeedsNode` / `...SeedsDisplayNode` /
+`...SeedsStorageNode` -- there is no partition-node class and no
+partitions combobox. Read the module source for current behaviour;
+read this for the reasoning behind it.
+:::
+
 ## What this stage does
 
 Compute per-category volumes by partitioning the liver parenchyma via the seed-and-category framework (2026-05-15 decision). Categories are surgeon-defined; seeds are fiducial points; barriers are Confirmed resection surfaces from Stage 4. Pure analytical workbench — **no verification card** in v2.0 (research-tool-grade per ADR-0023).
@@ -57,7 +67,7 @@ Module home: `LiverVolumetry/`.
 
 ## Top combobox — partitions
 
-- `qMRMLNodeComboBox` filtered on `vtkMRMLLiverVolumetryNode`.
+- `qMRMLNodeComboBox` filtered on a partition node class. *(Not shipped -- see the warning above; the panel is seeds-table-based.)*
 - Multiple partitions per scene are supported (e.g., "Resected vs Remnant" + "Custom regional analysis 1" + "Right-anterior watershed").
 - `[+]` creates a new empty partition. Default name on first creation: "Resected vs Remnant" (the dominant use case). Per the 2026-05-21 settlement: **empty by default** — no auto-populated categories or seeds.
 - `[-]` deletes the current partition (confirmation; deletes the output Segmentation node alongside).

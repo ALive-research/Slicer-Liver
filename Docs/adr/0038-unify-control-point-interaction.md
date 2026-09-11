@@ -108,12 +108,19 @@ state-machine integration); territories become the second, simpler client.
 
 ## Conformance
 
-- [future] A shared 3D + slice control-point interaction base exists; the
+- [test] A shared 3D + slice control-point interaction base exists; the
   resection and territory pipelines are thin clients over the
-  point-provider seam.
+  point-provider seam.  (Landed: `SlicerLiverInteractionLib/`, PR #604/#605;
+  eleven non-test client files across LiverResections, VascularTerritories
+  and LiverVolumetry.)
 - [future] The four LayerDM integration invariants (one-per-type,
   configure-before-add, ResetDisplay-drives-UpdatePipeline, render-flush in
-  the interaction handler) are asserted once on the base.
+  the interaction handler) are asserted once on the base.  **Still open**:
+  `SlicerLiverInteractionLib/Testing/Python/test_layerdm_base_invariants.py`
+  carries all four as skeletons under an unconditional `@pytest.mark.skip`.
+  The base itself has landed; what is missing is LayerDM factory
+  introspection to count pipeline instances per (view, display-node type),
+  plus the actor-ordering and render-flush probes.
 - [review] The extraction is behaviour-preserving for the resection
   interaction (characterization tests green before + after).
 - [review] Each module keeps its own display-node type + creator (ADR-0013
@@ -199,11 +206,12 @@ injected pick provider.
 
 ### Conformance (this amendment)
 
-- [future] `SlicerLiverInteractionLib` exists with the five names above; the
+- [test] `SlicerLiverInteractionLib` exists with the five names above; the
   resection and territory pipelines are thin clients over the seam.
-- [future] The pick step is a seam-injected provider; LiverVolumetry supplies
+- [test] The pick step is a seam-injected provider; LiverVolumetry supplies
   an in-volume/slice pick, surface consumers supply `SurfacePick`; the base
-  contains no surface-vs-volume branch.
+  contains no surface-vs-volume branch.  (`PointProvider.pick_for_event` is
+  the seam; the 3D base contains no labelmap/in-volume branch.)
 - [review] The refactor is behaviour-preserving for resection **and**
   vascular territories (both characterization suites green, unchanged, both
   harnesses).

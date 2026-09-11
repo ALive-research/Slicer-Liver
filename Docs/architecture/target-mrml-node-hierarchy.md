@@ -145,6 +145,24 @@ classDiagram
         <<v2.0 concrete>>
         Manual path metadata + inputs (centerlines, groupings)
     }
+    class vtkMRMLVolumetrySeedsNode {
+        <<v2.0 concrete — volumetry carrier>>
+        Ordered seeds: position + label + colour
+        Per-volume grouping (AddSeedToVolume)
+    }
+    class vtkMRMLVolumetrySeedsDisplayNode {
+        <<v2.0 — data-only>>
+        Radius, per-seed colour
+        Arm / hover / grab state (ADR-0038)
+        Transient point, HighlightSeedID (not serialized)
+        --node refs--
+        +pickSurface → vtkMRMLLabelMapVolumeNode
+        +structureSource → vtkMRMLSegmentationNode
+    }
+    class vtkMRMLVolumetrySeedsStorageNode {
+        <<v2.0>>
+        Seed round-trip
+    }
 
     vtkMRMLStorableNode <|-- vtkMRMLResectionPlanNode
     vtkMRMLStorageNode  <|-- vtkMRMLResectionPlanStorageNode
@@ -155,12 +173,17 @@ classDiagram
     vtkMRMLDisplayableNode <|-- vtkMRMLAbstractTerritoriesNode
     vtkMRMLAbstractTerritoriesNode <|-- vtkMRMLStdCouinaudTerritoriesNode
     vtkMRMLAbstractTerritoriesNode <|-- vtkMRMLCustomTerritoriesNode
+    vtkMRMLDisplayableNode <|-- vtkMRMLVolumetrySeedsNode
+    vtkMRMLDisplayNode <|-- vtkMRMLVolumetrySeedsDisplayNode
+    vtkMRMLStorageNode  <|-- vtkMRMLVolumetrySeedsStorageNode
 
     vtkMRMLResectionPlanNode --> vtkMRMLAbstractParametricSurfaceNode : geometry ref
     vtkMRMLBezierSurfaceNode --> vtkMRMLParametricSurfaceDisplayNode : display ref
     vtkMRMLNurbsSurfaceNode  --> vtkMRMLParametricSurfaceDisplayNode : display ref
     vtkMRMLAbstractTerritoriesNode --> vtkMRMLSegmentationNode : segments ref
     vtkMRMLResectionPlanNode --> vtkMRMLResectionPlanStorageNode : storage ref
+    vtkMRMLVolumetrySeedsNode --> vtkMRMLVolumetrySeedsDisplayNode : display ref
+    vtkMRMLVolumetrySeedsNode --> vtkMRMLVolumetrySeedsStorageNode : storage ref
 ```
 
 ### Notes — 2026-05-25 amendment
@@ -186,6 +209,14 @@ classDiagram
   carrier).  Segment masks persist through the segmentation's own
   `.seg.nrrd` storage, not through `.lrp.json`.  See
   [`territories-class-hierarchy.md`](territories-class-hierarchy.md).
+- **Volumetry carries its own LayerDM family** (added 2026-09-11,
+  recording PR #606 / #570).  `vtkMRMLVolumetrySeedsNode` is the seed
+  carrier; the display node is **data-only** per ADR-0033 — it holds
+  radius/colour plus the ADR-0038 arm/hover/grab interaction state, and
+  renders nothing itself.  `HighlightSeedID` and the transient placement
+  point are deliberately C++ members rather than node attributes, so they
+  never serialize.  ADR-0012's "LiverVolumetry does not carry an SLDM
+  display node" is superseded.
 - **Plan ↔ Territories**: no node reference.  Per
   [ADR-0023][adr-0023] amendment, plans do not reference
   territories or partitions or UI stage state.  Visual co-existence
