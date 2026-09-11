@@ -70,6 +70,18 @@ public:
   /// Set the slicing plane normal
   void SetReferencePoint(const std::array<float, 4>& referencePoint);
 
+  /// Python-wrappable point accessors (the std::array signatures above do
+  /// not wrap -- VTK's wrapper takes a flat std::vector of scalars but no
+  /// std::array and no nested container, and it SKIPS such a method
+  /// silently, leaving a green build with the method absent from Python).
+  /// Mirrors the sibling vtkOpenGLSlicingContourPolyDataMapper, whose
+  /// plane accessors carry the same pair for the same reason.  The
+  /// homogeneous W component is fixed to 1.
+  void SetExternalPointWorld(double x, double y, double z);
+  void SetReferencePointWorld(double x, double y, double z);
+  double* GetExternalPointWorld() VTK_SIZEHINT(3);
+  double* GetReferencePointWorld() VTK_SIZEHINT(3);
+
   /// Get the contour thickness
   float GetContourThickness() const;
 

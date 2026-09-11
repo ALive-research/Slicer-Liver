@@ -87,6 +87,11 @@ public:
   vtkWeakPointer<vtkOpenGLDistanceContourPolyDataMapper> Parent;
   std::array<float, 4> ExternalPoint;
   std::array<float, 4> ReferencePoint;
+
+  // Scratch for the Python-wrappable double[3] getters below; VTK_SIZEHINT
+  // returns a borrowed pointer, so the storage must outlive the call.
+  std::array<double, 3> ExternalPointWorld{ 0.0, 0.0, 0.0 };
+  std::array<double, 3> ReferencePointWorld{ 1.0, 0.0, 0.0 };
   float ContourThickness;
   bool ContourVisibility;
   // a0..a9 coefficients of the triaxial-ellipsoid quadric, derived from
@@ -297,6 +302,34 @@ void vtkOpenGLDistanceContourPolyDataMapper::SetReferencePoint(const std::array<
 {
   this->Impl->ReferencePoint = referencePoint;
   this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLDistanceContourPolyDataMapper::SetExternalPointWorld(double x, double y, double z)
+{
+  this->SetExternalPoint({ static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), 1.0f });
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLDistanceContourPolyDataMapper::SetReferencePointWorld(double x, double y, double z)
+{
+  this->SetReferencePoint({ static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), 1.0f });
+}
+
+//------------------------------------------------------------------------------
+double* vtkOpenGLDistanceContourPolyDataMapper::GetExternalPointWorld()
+{
+  const auto& point = this->Impl->ExternalPoint;
+  this->Impl->ExternalPointWorld = { static_cast<double>(point[0]), static_cast<double>(point[1]), static_cast<double>(point[2]) };
+  return this->Impl->ExternalPointWorld.data();
+}
+
+//------------------------------------------------------------------------------
+double* vtkOpenGLDistanceContourPolyDataMapper::GetReferencePointWorld()
+{
+  const auto& point = this->Impl->ReferencePoint;
+  this->Impl->ReferencePointWorld = { static_cast<double>(point[0]), static_cast<double>(point[1]), static_cast<double>(point[2]) };
+  return this->Impl->ReferencePointWorld.data();
 }
 
 //------------------------------------------------------------------------------
