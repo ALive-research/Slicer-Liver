@@ -662,6 +662,7 @@ jobs:
             --cov=LiverSegmentation \
             --cov=LiverResections/LiverResectionsLib \
             --cov=LiverVolumetry \
+            --cov=SlicerLiverInteractionLib \
             --cov=VascularTerritories \
             --cov-report= \
             || true
@@ -721,12 +722,18 @@ jobs:
           XML
           }
 
-      - name: Upload coverage to Codecov
+      # Two uploads, one per flag.  A single step with
+      # ``files: a,b`` + ``flags: cxx,py`` produces ONE session carrying
+      # BOTH flags, so neither flag isolates its own language and the
+      # per-flag figures on the Codecov UI are meaningless (the symptom
+      # is ``sessions: 1`` on every commit while two flags exist).
+      # Splitting the step is what makes the cxx/py split real.
+      - name: Upload C++ coverage to Codecov
         if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
         uses: codecov/codecov-action@v5
         with:
-          files: ./coverage-cxx.xml,./coverage-py.xml
-          flags: cxx,py
+          files: ./coverage-cxx.xml
+          flags: cxx
           # Non-blocking: per ADR-0021 the job's pass/fail is not a
           # branch-protection signal.  An upload failure (Codecov
           # outage, OAuth not yet configured by the maintainer, etc.)
@@ -744,4 +751,13 @@ jobs:
           # <repo>/settings, exported into GitHub Actions as the
           # ``CODECOV_TOKEN`` secret.  Rotating the token is a
           # maintainer-only step on the Codecov side.
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload Python coverage to Codecov
+        if: github.event_name != 'pull_request' || steps.changes.outputs.any_changed == 'true'
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage-py.xml
+          flags: py
+          fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}

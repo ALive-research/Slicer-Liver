@@ -29,3 +29,12 @@ liverresectionslib =
 liversegmentationlib =
     LiverSegmentation/LiverSegmentationLib/
     */qt-scripted-modules/LiverSegmentationLib/
+livervolumetrylib =
+    LiverVolumetry/LiverVolumetryLib/
+    */qt-scripted-modules/LiverVolumetryLib/
+slicerliverinteractionlib =
+    SlicerLiverInteractionLib/
+    */qt-scripted-modules/SlicerLiverInteractionLib/
+vascularterritorieslib =
+    VascularTerritories/VascularTerritoriesLib/
+    */qt-scripted-modules/VascularTerritoriesLib/
