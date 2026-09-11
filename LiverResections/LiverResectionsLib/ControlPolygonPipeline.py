@@ -88,6 +88,28 @@ CONTROL_POINT_PICK_RADIUS_PX = 20.0
 #: not by a larger halo -- the glow blur washes a halo hue out.
 HALO_HOVER_COLOR = (1.0, 0.9, 0.2)
 HALO_GRAB_COLOR = (0.3, 1.0, 0.4)
+#: Pick radius (display pixels) within which a press grabs the FRAME.
+#: Wider than the handle radius: the frame is a thin tube, and the
+#: gesture is coarse (translate everything) so a generous target costs
+#: nothing -- the group pick is asked BEFORE the point pick, but only
+#: claims when no handle is closer (see _group_pick).
+FRAME_PICK_RADIUS_PX = 10.0
+
+#: Border colour while the frame is hovered / held.
+#:
+#: COOL against a warm resting border.  The edge's default is pure RED
+#: and the handle cues are warm too (halo hover yellow, halo grab green),
+#: so a warm highlight is nearly invisible: the first attempt used orange
+#: (1.0, 0.55, 0.0) against that red and read as no change at all --
+#: the cue was firing correctly and simply could not be seen.
+#:
+#: Cyan and blue are the two hues no other element in this pipeline uses,
+#: and both differ from the resting red in hue AND luminance, so the
+#: change survives a glance.  They also stay distinct from the white
+#: handles and from each other.
+FRAME_HOVER_COLOR = (0.25, 0.9, 1.0)
+FRAME_GRAB_COLOR = (0.1, 0.45, 1.0)
+
 #: Halo radius scale vs the handle sphere.
 HALO_HOVER_SCALE = 1.35
 
@@ -100,6 +122,42 @@ DASH_LENGTH_MM = 7.0
 GAP_LENGTH_MM = 7.0
 
 _REGISTERED = False
+
+
+def _ring_groups(rows: int, cols: int):
+    """Ring membership for the group gestures, or ``()`` when unavailable.
+
+    Imported lazily and defensively: the Representations stay
+    independently importable, and a missing module must degrade to "no
+    group affordance" rather than breaking an interaction callback.
+    """
+    try:
+        from ControlPolygonRings import ring_groups
+    except Exception:
+        try:
+            from LiverResectionsLib.ControlPolygonRings import ring_groups
+        except Exception:
+            return ()
+    return ring_groups(int(rows), int(cols))
+
+
+def _point_segment_distance2(px: float, py: float, start, end) -> float:
+    """Squared distance from ``(px, py)`` to the SEGMENT ``start``-``end``.
+
+    Clamped to the segment, so the ends do not attract picks that belong
+    to the neighbouring edge.  A degenerate (zero-length) segment reduces
+    to the point distance.
+    """
+    ax, ay = start
+    bx, by = end
+    vx, vy = bx - ax, by - ay
+    length2 = vx * vx + vy * vy
+    if length2 <= 0.0:
+        return (px - ax) ** 2 + (py - ay) ** 2
+    t = ((px - ax) * vx + (py - ay) * vy) / length2
+    t = max(0.0, min(1.0, t))
+    cx, cy = ax + t * vx, ay + t * vy
+    return (px - cx) ** 2 + (py - cy) ** 2
 
 
 def _resolve_control_polygon_geometry() -> Any | None:
@@ -156,6 +214,10 @@ class ControlPolygonPipeline(_PipelineBase):
         self._control_polygon_geometry: Any | None = None
         #: Edge topology from the Algorithm builder + the (rows, cols) it
         #: was built for.
+        #: Cursor world position the running frame drag is anchored at.
+        self._group_anchor_world: Any | None = None
+        #: Whether the cursor last sat on the frame (render-change gate).
+        self._frame_hovered = False
         self._edge_cells: Any | None = None
         self._edge_cells_shape: tuple | None = None
 
@@ -446,6 +508,15 @@ class ControlPolygonPipeline(_PipelineBase):
         the picked surface (ADR-0033).  ``None`` (no grab / unresolved)
         keeps the grab alive without moving anything.
         """
+        # A GROUP drag has no grabbed point: the gesture translates the
+        # whole set, so it follows the cursor on the plane through the
+        # grid's CENTROID.  Without this the base resolves no world
+        # position, claims the move (the camera stays put, which is why the
+        # gesture looks dead rather than absent) and never calls the drag
+        # hook.
+        if self._group_drag is not None:
+            return self._event_world_at_grid_centroid(renderer, eventData)
+
         idx = self._drag_key
         if idx is None:
             return None
@@ -459,6 +530,30 @@ class ControlPolygonPipeline(_PipelineBase):
             and distance2 <= CONTROL_POINT_PICK_RADIUS_PX * CONTROL_POINT_PICK_RADIUS_PX
         )
         self._set_hover(idx if within else None)
+
+        # Frame hover: only when no handle owns the cursor, mirroring the
+        # pick arbitration so the cue cannot promise a gesture the press
+        # would not deliver.
+        frame_hovered = False
+        if not within and self._interaction_admissible():
+            frame_d2 = self._frame_distance2_in_display(renderer, eventData)
+            frame_hovered = (
+                frame_d2 is not None and frame_d2 <= FRAME_PICK_RADIUS_PX**2
+            )
+        display_node = self._display_node
+        group = (
+            getattr(display_node, "GroupFrame", 0) if display_node is not None else 0
+        )
+        # Request a render when the frame hover CHANGES.  _set_hover
+        # early-returns on an unchanged handle index and renders nothing,
+        # so leaving the frame (with no handle involved) restyled the actor
+        # and never flushed it -- the border stayed lit after the cursor
+        # had gone.
+        if frame_hovered != self._frame_hovered:
+            self._frame_hovered = frame_hovered
+            self._publish_group_state(hovered=group if frame_hovered else None)
+            self._apply_frame_style()
+            self.RequestRender()
 
     def _on_grab(self, key: Any, renderer: Any, eventData: Any) -> None:
         """The resection grab: Init->Planning commit + grab colour + halo.
@@ -485,6 +580,224 @@ class ControlPolygonPipeline(_PipelineBase):
         """The halo follows the grabbed handle during the drag."""
         self._hover_index = None
         self._set_hover(key)
+
+    # ------------------------------------------------------------------ #
+    # Group gestures (ADR-0038 seam).  The FRAME drag translates the whole
+    # control polygon rigidly -- every control point by the same delta --
+    # and the surface follows because it is regenerated from the grid.
+    # ------------------------------------------------------------------ #
+
+    def _group_pick(self, renderer: Any, eventData: Any, etype: Any):
+        """Claim a LEFT press on the polygon FRAME (the boundary edges).
+
+        Declines when a handle is nearer than the frame: the base asks
+        this before the point pick, so without that check grabbing a
+        corner would translate the whole polygon instead of editing the
+        point under the cursor.
+        """
+
+        if etype != vtk.vtkCommand.LeftButtonPressEvent:
+            return None
+        if not self._interaction_admissible():
+            return None
+
+        frame_d2 = self._frame_distance2_in_display(renderer, eventData)
+        if frame_d2 is None or frame_d2 > FRAME_PICK_RADIUS_PX**2:
+            return None
+
+        # PRECEDENCE, not proximity.  Boundary control points lie ON the
+        # frame, so near a handle both distances are ~0 and comparing them
+        # raw let sub-pixel noise decide -- a press on a corner handle
+        # sometimes translated the whole polygon.  A handle owns any press
+        # inside ITS OWN radius, full stop; the frame is only consulted
+        # when no handle is in range.  This is the same rule the hover cue
+        # applies, so the highlight can no longer promise a gesture the
+        # press would not deliver.
+        _idx, handle_d2 = self._nearest_control_point_in_display(renderer, eventData)
+        if handle_d2 <= CONTROL_POINT_PICK_RADIUS_PX**2:
+            return None  # a handle owns this press
+
+        display_node = self._display_node
+        group = (
+            display_node.GroupFrame
+            if display_node is not None and hasattr(display_node, "GroupFrame")
+            else 0
+        )
+        return group, frame_d2
+
+    def _on_group_grab(self, group: Any, renderer: Any, eventData: Any) -> None:
+        """Anchor the drag at the cursor's world position."""
+        self._group_anchor_world = self._event_world(renderer, eventData)
+        self._publish_group_state(grabbed=group)
+        self._apply_frame_style()
+        self.RequestRender()
+
+    def _on_group_drag(self, group: Any, world: Any) -> None:
+        """Translate every control point by the cursor's delta.
+
+        The anchor advances each move, so the delta is incremental: the
+        polygon tracks the cursor without accumulating the rounding that
+        an absolute origin would.
+        """
+        anchor = getattr(self, "_group_anchor_world", None)
+        if anchor is None or world is None:
+            return
+        delta = (world[0] - anchor[0], world[1] - anchor[1], world[2] - anchor[2])
+        if self._translate_control_grid(delta):
+            self._group_anchor_world = world
+
+    def _on_group_release(self, group: Any) -> None:
+        """End the gesture; the grid keeps the translation."""
+        self._group_anchor_world = None
+        # Drop the hover flag too: the cursor may have left the frame during
+        # the drag, and the next bare move must be free to re-evaluate
+        # rather than compare against a stale True.
+        self._frame_hovered = False
+        self._publish_group_state(grabbed=None, hovered=None)
+        self._apply_frame_style()
+        self.RequestRender()
+
+    def _translate_control_grid(self, delta) -> bool:
+        """Displace EVERY control point by ``delta`` (the rigid move).
+
+        One write per point through the carrier's own setter, so the
+        carrier raises its usual modified events and the surface, the
+        slice projection and the resectogram all follow from one gesture.
+        """
+        carrier = self._data_node
+        if carrier is None or _safe_get_state(carrier) != STATE_PLANNING:
+            return False
+        rows = int(carrier.GetRows())
+        cols = int(carrier.GetCols())
+        grid = carrier.GetControlGridVector()
+
+        # ONE Modified for the whole translation.  SetControlPoint fires its
+        # own Modified, so writing 16 points unbatched re-tessellated the
+        # surface and reconciled every pipeline 16 times PER MOUSE MOVE --
+        # the drag tracked the cursor correctly but crawled.  The batch is
+        # the same idiom the state machine uses for its re-fit.
+        was_modifying = carrier.StartModify()
+        try:
+            for i in range(rows * cols):
+                carrier.SetControlPoint(
+                    i // cols,
+                    i % cols,
+                    grid[i * 3 + 0] + delta[0],
+                    grid[i * 3 + 1] + delta[1],
+                    grid[i * 3 + 2] + delta[2],
+                )
+        finally:
+            carrier.EndModify(was_modifying)
+        return True
+
+    def _frame_distance2_in_display(self, renderer: Any, eventData: Any):
+        """Squared display distance from the event pixel to ANY polygon edge.
+
+        Every lattice segment counts, interior ones included: the polygon
+        reads as a single object, so grabbing any part of its wireframe
+        translates the whole thing.  Restricting this to the outer ring
+        left the interior segments inert and, with handles owning a 20px
+        radius, squeezed the grabbable band to the middle of each boundary
+        edge.
+
+        Distance is to the SEGMENTS, not the vertices -- measuring to
+        vertices would leave the middle of a long edge unpickable.
+        """
+        carrier = self._data_node
+        if carrier is None:
+            return None
+        rows = int(carrier.GetRows())
+        cols = int(carrier.GetCols())
+        if rows <= 0 or cols <= 0:
+            return None
+
+        grid = carrier.GetControlGridVector()
+        ex, ey = eventData.GetDisplayPosition()
+
+        # Project the whole grid once; the segment walk below reuses it.
+        screen = []
+        for i in range(rows * cols):
+            renderer.SetWorldPoint(
+                grid[i * 3 + 0], grid[i * 3 + 1], grid[i * 3 + 2], 1.0
+            )
+            renderer.WorldToDisplay()
+            dx, dy, _dz = renderer.GetDisplayPoint()
+            screen.append((dx, dy))
+
+        best = None
+        for r in range(rows):
+            for c in range(cols):
+                here = screen[r * cols + c]
+                if c + 1 < cols:  # segment to the right
+                    d2 = _point_segment_distance2(
+                        float(ex), float(ey), here, screen[r * cols + c + 1]
+                    )
+                    if best is None or d2 < best:
+                        best = d2
+                if r + 1 < rows:  # segment downward
+                    d2 = _point_segment_distance2(
+                        float(ex), float(ey), here, screen[(r + 1) * cols + c]
+                    )
+                    if best is None or d2 < best:
+                        best = d2
+        return best
+
+    def _apply_frame_style(self) -> None:
+        """Colour the polygon border from the SHARED group state.
+
+        Read off the display node, not a local flag, so every view paints
+        the same frame: hovering the border in one view lights it in all
+        of them, which is the coherence the gesture was asked for.
+        """
+        display_node = self._display_node
+        if display_node is None or not hasattr(display_node, "GetHoveredGroup"):
+            return
+        none_value = getattr(display_node, "GroupNone", -1)
+        frame = getattr(display_node, "GroupFrame", 0)
+
+        grabbed = display_node.GetGrabbedGroup() == frame
+        hovered = display_node.GetHoveredGroup() == frame
+
+        if grabbed:
+            colour = FRAME_GRAB_COLOR
+        elif hovered:
+            colour = FRAME_HOVER_COLOR
+        else:
+            colour = None
+
+        prop = self._edges_actor.GetProperty()
+        if colour is None:
+            # Restore the display node's own edge colour.
+            getter = getattr(display_node, "GetEdgeColor", None)
+            if getter is not None:
+                try:
+                    c = getter()
+                    prop.SetColor(float(c[0]), float(c[1]), float(c[2]))
+                except Exception:  # pragma: no cover - defensive
+                    pass
+        else:
+            prop.SetColor(*colour)
+        _ = none_value  # documented sentinel; comparisons above are explicit
+
+    def _publish_group_state(self, hovered=..., grabbed=...) -> None:
+        """Write group hover/grab onto the SHARED display node.
+
+        On the node, not this instance: LayerDM does not drive a Python
+        pipeline's attributes, so a frame hovered in one view would not
+        light the frame in the others.
+        """
+        display_node = self._display_node
+        if display_node is None or not hasattr(display_node, "SetHoveredGroup"):
+            return
+        none_value = getattr(display_node, "GroupNone", -1)
+        if hovered is not ...:
+            value = none_value if hovered is None else int(hovered)
+            if display_node.GetHoveredGroup() != value:
+                display_node.SetHoveredGroup(value)
+        if grabbed is not ...:
+            value = none_value if grabbed is None else int(grabbed)
+            if display_node.GetGrabbedGroup() != value:
+                display_node.SetGrabbedGroup(value)
 
     def _on_release(self) -> None:
         """Drop the grab colour + halo when the base clears the grab."""
@@ -671,6 +984,42 @@ class ControlPolygonPipeline(_PipelineBase):
                 best_idx = i
         return best_idx, best_d2
 
+    def _event_world_at_grid_centroid(self, renderer: Any, eventData: Any):
+        """Back-project the event pixel onto the control grid's centroid depth.
+
+        The depth reference for a GROUP gesture.  A rigid translation has
+        no single grabbed point to take depth from, and picking one member
+        arbitrarily would make the polygon swing differently depending on
+        which edge was grabbed.  The centroid keeps the motion the same
+        whichever part of the frame the cursor holds.
+        """
+        carrier = self._data_node
+        if carrier is None:
+            return None
+        try:
+            rows = int(carrier.GetRows())
+            cols = int(carrier.GetCols())
+            grid = carrier.GetControlGridVector()
+            count = rows * cols
+            if count <= 0:
+                return None
+            cx = sum(grid[i * 3 + 0] for i in range(count)) / count
+            cy = sum(grid[i * 3 + 1] for i in range(count)) / count
+            cz = sum(grid[i * 3 + 2] for i in range(count)) / count
+
+            ex, ey = eventData.GetDisplayPosition()
+            renderer.SetWorldPoint(cx, cy, cz, 1.0)
+            renderer.WorldToDisplay()
+            _dx, _dy, dz = renderer.GetDisplayPoint()
+            renderer.SetDisplayPoint(float(ex), float(ey), dz)
+            renderer.DisplayToWorld()
+            wx, wy, wz, ww = renderer.GetWorldPoint()
+        except Exception:  # pragma: no cover - defensive
+            return None
+        if ww == 0.0:
+            return None
+        return (wx / ww, wy / ww, wz / ww)
+
     def _event_world_at_control_point(self, renderer: Any, eventData: Any, idx: int):
         """Back-project the event pixel onto control point ``idx``'s depth.
 
@@ -835,6 +1184,12 @@ class ControlPolygonPipeline(_PipelineBase):
                 self._edges_tube.SetRadius(float(edge_width()))
             except Exception:  # pragma: no cover - defensive
                 pass
+
+        # Re-assert the group highlight LAST.  The block above restores the
+        # display node's own edge colour on every reconcile, and a drag
+        # reconciles on each move -- so without this the highlight was
+        # repainted away the moment the gesture it belongs to did any work.
+        self._apply_frame_style()
 
     # ------------------------------------------------------------------ #
     # Introspection (unit tests) + plumbing
