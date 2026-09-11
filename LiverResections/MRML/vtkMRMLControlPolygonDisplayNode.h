@@ -135,6 +135,44 @@ public:
   vtkSetMacro(GrabbedControlPoint, int);
   vtkGetMacro(GrabbedControlPoint, int);
 
+  /// Group-drag targets.  A GROUP translates rigidly: every member
+  /// control point is displaced by the SAME delta and the surface is
+  /// recomputed.
+  ///
+  ///  - ``GroupNone``  — nothing hovered/grabbed.
+  ///  - ``GroupFrame`` — the polygon BORDER, whose drag moves the WHOLE
+  ///    control polygon (every point, not only the boundary).  The frame
+  ///    is the affordance; its action is global.
+  ///  - ``GroupRing0`` and up — one ring from
+  ///    ``vtkSlicerLiverBezierControlPolygonGeometry::BuildRingGroups``,
+  ///    whose drag moves ONLY that ring's points.  Ring ``k`` is
+  ///    ``GroupRing0 + k``.
+  ///
+  /// Frame and ring 0 cover the same boundary points but are distinct
+  /// targets: the frame moves everything, ring 0 moves only the
+  /// boundary.  They are separated here so the highlight can say which
+  /// gesture is armed.
+  enum GroupTarget
+  {
+    GroupNone = -1,
+    GroupFrame = 0,
+    GroupRing0 = 1
+  };
+
+  /// The HOVERED group (see GroupTarget; ``GroupNone`` = none).
+  /// TRANSIENT interaction state shared across views, not serialized --
+  /// the same reasoning as HoveredControlPoint: every pipeline observing
+  /// this display node highlights the same group, whichever view the
+  /// cursor is in.  A Python pipeline instance could not do this,
+  /// because LayerDM does not drive it.
+  vtkSetMacro(HoveredGroup, int);
+  vtkGetMacro(HoveredGroup, int);
+
+  /// The GRABBED group (see GroupTarget; ``GroupNone`` = none).
+  /// TRANSIENT, cross-view, not serialized (see HoveredGroup).
+  vtkSetMacro(GrabbedGroup, int);
+  vtkGetMacro(GrabbedGroup, int);
+
 protected:
   vtkMRMLControlPolygonDisplayNode();
   ~vtkMRMLControlPolygonDisplayNode() override;
@@ -149,6 +187,8 @@ private:
   double EdgeWidth;
   int HoveredControlPoint;
   int GrabbedControlPoint;
+  int HoveredGroup;
+  int GrabbedGroup;
 };
 
 #endif //__vtkmrmlcontrolpolygondisplaynode_h_

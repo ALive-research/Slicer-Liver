@@ -60,6 +60,8 @@ vtkMRMLControlPolygonDisplayNode::vtkMRMLControlPolygonDisplayNode()
   // Transient cross-view interaction state (not serialized).
   , HoveredControlPoint(-1)
   , GrabbedControlPoint(-1)
+  , HoveredGroup(GroupNone)
+  , GrabbedGroup(GroupNone)
 {
 }
 
@@ -102,10 +104,11 @@ void vtkMRMLControlPolygonDisplayNode::CopyContent(vtkMRMLNode* anode, bool deep
   MRMLNodeModifyBlocker blocker(this);
   Superclass::CopyContent(anode, deepCopy);
 
-  // HoveredControlPoint / GrabbedControlPoint are TRANSIENT interaction
-  // state (the markups ActiveComponent precedent): copying a node must not
-  // clone a live hover/grab onto the copy, so they are excluded here just
-  // as they are from the XML round-trip.
+  // HoveredControlPoint / GrabbedControlPoint and the group-drag pair
+  // HoveredGroup / GrabbedGroup are TRANSIENT interaction state (the
+  // markups ActiveComponent precedent): copying a node must not clone a
+  // live hover/grab onto the copy, so all four are excluded here just as
+  // they are from the XML round-trip.
   vtkMRMLCopyBeginMacro(anode);
   vtkMRMLCopyFloatMacro(HandleRadius);
   vtkMRMLCopyVectorMacro(HandleColor, double, 3);
@@ -126,5 +129,7 @@ void vtkMRMLControlPolygonDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
   vtkMRMLPrintFloatMacro(EdgeWidth);
   vtkMRMLPrintIntMacro(HoveredControlPoint);
   vtkMRMLPrintIntMacro(GrabbedControlPoint);
+  vtkMRMLPrintIntMacro(HoveredGroup);
+  vtkMRMLPrintIntMacro(GrabbedGroup);
   vtkMRMLPrintEndMacro();
 }
