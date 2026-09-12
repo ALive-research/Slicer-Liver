@@ -51,12 +51,21 @@ METHOD_POISSON = "poisson"
 
 #: Binary-labelmap representation name (Slicer's canonical spelling).
 _BINARY_LABELMAP = "Binary labelmap"
+#: Closed-surface representation name.
+_CLOSED_SURFACE = "Closed surface"
 
 #: Cap on the oriented cloud handed to the solver.  A CT-resolution liver
 #: boundary runs to several hundred thousand voxels, far past the point
 #: where more samples change the fitted surface -- they only cost time.
 #: The extractor subsamples by STRIDE, so this stays deterministic.
 DEFAULT_MAX_POINTS = 200000
+
+
+#: Segment tag recording which method produced the segment's CURRENT
+#: closed-surface representation.  A tag rather than a node attribute
+#: because the choice is per-segment: a case may want a smooth liver and
+#: a staircase tumour, and one node-level flag cannot say that.
+SURFACE_METHOD_TAG = "LiverSegmentation.SurfaceMethod"
 
 
 def surface_methods() -> tuple[str, ...]:
@@ -202,3 +211,78 @@ def _algorithm_module() -> Any | None:
     except ImportError:
         return None
     return algorithm
+
+
+def apply_surface_method(
+    segmentation_node: Any,
+    segment_id: str,
+    method: str,
+    depth: int | None = None,
+    max_points: int = DEFAULT_MAX_POINTS,
+) -> bool:
+    """Install ``method``'s surface AS the segment's closed surface.
+
+    This is the single seam the choice travels through.  Slicer's
+    closed-surface representation is what the 3D view renders, what
+    ``TargetModel`` mints the hidden target mesh from, and therefore what
+    the commit-boundary ring extraction runs against.  Writing the chosen
+    surface there means every one of those consumers inherits the choice
+    through the path it already uses -- no ``method`` argument threaded
+    down a call chain, and no possibility of the rendered anatomy and the
+    planned-against geometry disagreeing.
+
+    Slicer holds an injected representation: it does not regenerate one
+    that already exists, so a later ``CreateClosedSurfaceRepresentation``
+    leaves this alone.  **An edit to the segment's labelmap does discard
+    it**, and the surface reverts to marching cubes.  That is the right
+    way round -- a reconstruction of voxels the user has since changed
+    would be stale, and looking correct is what makes stale dangerous --
+    but it means the tag below can go out of date, so treat it as a
+    record of what was last applied, not a guarantee of what is there.
+
+    Returns False and changes nothing when the surface cannot be built.
+    """
+    if segmentation_node is None or not segment_id:
+        return False
+
+    polydata = segment_surface(
+        segmentation_node, segment_id, method=method, depth=depth, max_points=max_points
+    )
+    if polydata is None or polydata.GetNumberOfPoints() == 0:
+        return False
+
+    segmentation = segmentation_node.GetSegmentation()
+    if segmentation is None:
+        return False
+    segment = segmentation.GetSegment(segment_id)
+    if segment is None:
+        return False
+
+    segment.AddRepresentation(_CLOSED_SURFACE, polydata)
+    segment.SetTag(SURFACE_METHOD_TAG, method)
+    return True
+
+
+def applied_surface_method(segmentation_node: Any, segment_id: str) -> str | None:
+    """The method last applied to ``segment_id``, or ``None``.
+
+    ``None`` means "nobody has chosen", which is not the same as
+    "marching cubes was chosen" -- the caller decides what an absent
+    choice defaults to, and the UI can tell the two apart.
+    """
+    if segmentation_node is None or not segment_id:
+        return None
+    segmentation = segmentation_node.GetSegmentation()
+    if segmentation is None:
+        return None
+    segment = segmentation.GetSegment(segment_id)
+    if segment is None:
+        return None
+
+    import vtk as _vtk
+
+    value = _vtk.mutable("")
+    if not segment.GetTag(SURFACE_METHOD_TAG, value):
+        return None
+    text = str(value)
+    return text if text in surface_methods() else None

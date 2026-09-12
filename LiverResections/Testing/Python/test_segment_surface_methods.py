@@ -252,3 +252,142 @@ def test_an_absent_label_yields_no_surface(segment_surface, algorithm):
     not a surface either -- and must not return the whole volume."""
     image, matrix, _ = _sphere_labelmap(label=3)
     assert segment_surface.reconstruct_labelmap(image, 99) is None
+
+
+# --------------------------------------------------------------------------- #
+# The apply seam: the chosen surface BECOMES the segment's closed surface, so
+# every downstream consumer inherits the choice through the path it already
+# uses.  Needs a real scene, so these are launched-only.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def scene_segment():
+    """A labelmap-backed segment in a real scene, or a skip."""
+    slicer = pytest.importorskip(
+        "slicer", reason="a MRML scene is required for the apply-seam tests."
+    )
+    if not hasattr(slicer, "vtkSlicerSegmentationsModuleLogic"):
+        pytest.skip("Segmentations logic unavailable outside a launched Slicer.")
+
+    node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", "psr-test")
+    node.CreateDefaultDisplayNodes()
+
+    # A NON-ZERO extent on purpose. A segment's labelmap is cropped to its
+    # own bounding box, and a zero-based fixture cannot tell a correct
+    # index mapping from one that drops the offset -- which is exactly the
+    # bug this pipeline shipped and the phase-4 eyeball caught.
+    image = vtk.vtkImageData()
+    image.SetExtent(10, 49, 20, 59, 5, 44)
+    image.AllocateScalars(vtk.VTK_UNSIGNED_CHAR, 1)
+    image.GetPointData().GetScalars().Fill(0)
+    for k in range(5, 45):
+        for j in range(20, 60):
+            for i in range(10, 50):
+                if (i - 30) ** 2 + (j - 40) ** 2 + (k - 25) ** 2 <= 14 * 14:
+                    image.SetScalarComponentFromDouble(i, j, k, 0, 1)
+
+    oriented = slicer.vtkOrientedImageData()
+    oriented.DeepCopy(image)
+    segment_id = node.GetSegmentation().AddEmptySegment("psr-seg")
+    slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(
+        oriented, node, segment_id
+    )
+    yield node, segment_id
+    slicer.mrmlScene.RemoveNode(node)
+
+
+def test_applying_poisson_replaces_the_closed_surface(
+    segment_surface, algorithm, scene_segment
+):
+    """The installed surface must be the one consumers read back.
+
+    This is the whole architecture in one assertion: if the injected mesh
+    does not survive read-back, the choice would have to be threaded
+    through every consumer separately, and the rendered anatomy could
+    disagree with the geometry the plan is built on.
+    """
+    node, segment_id = scene_segment
+
+    node.CreateClosedSurfaceRepresentation()
+    native = node.GetClosedSurfaceInternalRepresentation(segment_id)
+    native_points = native.GetNumberOfPoints()
+    assert native_points > 0
+
+    assert segment_surface.apply_surface_method(
+        node, segment_id, segment_surface.METHOD_POISSON
+    )
+
+    applied = node.GetClosedSurfaceInternalRepresentation(segment_id)
+    assert applied.GetNumberOfPoints() > 0
+    assert applied.GetNumberOfPoints() != native_points, (
+        "the closed surface is unchanged -- the Poisson mesh was not installed"
+    )
+    assert (
+        segment_surface.applied_surface_method(node, segment_id)
+        == segment_surface.METHOD_POISSON
+    )
+
+
+def test_an_installed_surface_survives_a_reconversion_request(
+    segment_surface, algorithm, scene_segment
+):
+    """CreateClosedSurfaceRepresentation must not silently undo the choice.
+
+    Slicer does not regenerate a representation that already exists, and
+    several code paths call this defensively. If it DID regenerate, the
+    choice would evaporate at an arbitrary later moment.
+    """
+    node, segment_id = scene_segment
+    assert segment_surface.apply_surface_method(
+        node, segment_id, segment_surface.METHOD_POISSON
+    )
+    installed = node.GetClosedSurfaceInternalRepresentation(
+        segment_id
+    ).GetNumberOfPoints()
+
+    node.CreateClosedSurfaceRepresentation()
+
+    assert (
+        node.GetClosedSurfaceInternalRepresentation(segment_id).GetNumberOfPoints()
+        == installed
+    )
+
+
+def test_the_target_mesh_inherits_the_installed_surface(
+    segment_surface, algorithm, scene_segment
+):
+    """The point of the seam: TargetModel gets the choice for free.
+
+    ``_liver_closed_surface`` reads the closed-surface representation, so
+    installing there is what makes the hidden target mesh -- and the ring
+    extraction that runs against it -- use the chosen surface without any
+    argument being threaded to them.
+    """
+    try:
+        from LiverResectionsLib import TargetModel
+    except ImportError:
+        pytest.skip("LiverResectionsLib.TargetModel not importable.")
+
+    node, segment_id = scene_segment
+    assert segment_surface.apply_surface_method(
+        node, segment_id, segment_surface.METHOD_POISSON
+    )
+    installed = node.GetClosedSurfaceInternalRepresentation(
+        segment_id
+    ).GetNumberOfPoints()
+
+    mesh = TargetModel._liver_closed_surface(node, segment_id)
+    assert mesh is not None
+    assert mesh.GetNumberOfPoints() == installed
+
+
+def test_no_method_applied_reads_as_none_not_as_a_default(
+    segment_surface, scene_segment
+):
+    """"Nobody chose" and "marching cubes was chosen" are different states.
+
+    The UI has to tell them apart to show an honest initial value.
+    """
+    node, segment_id = scene_segment
+    assert segment_surface.applied_surface_method(node, segment_id) is None
