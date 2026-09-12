@@ -12,11 +12,11 @@ repos:
       - id: debug-statements
         exclude: "Base/QTGUI/Testing/Data/Input/qSlicerScriptedLoadableModuleSyntaxErrorTestWidget.py|Base/QTGUI/Testing/Data/Input/qSlicerScriptedLoadableModuleSyntaxErrorTest.py"
       - id: end-of-file-fixer
-        exclude: "\\.(md5|svg|vtk|vtp)$|^Resources\\/[^\\/]+\\.h$|\\/ColorFiles\\/.+\\.txt$|Data\\/Input\\/.+$"
+        exclude: "\\.(md5|svg|vtk|vtp)$|^Resources\\/[^\\/]+\\.h$|\\/ColorFiles\\/.+\\.txt$|Data\\/Input\\/.+$|^LiverResections\\/Algorithm\\/PoissonRecon\\/"
       - id: mixed-line-ending
-        exclude: "\\.(svg|vtk|vtp)$"
+        exclude: "\\.(svg|vtk|vtp)$|^LiverResections\\/Algorithm\\/PoissonRecon\\/"
       - id: trailing-whitespace
-        exclude: "\\.(svg|vtk|vtp)$"
+        exclude: "\\.(svg|vtk|vtp)$|^LiverResections\\/Algorithm\\/PoissonRecon\\/"
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.9
@@ -37,6 +37,9 @@ repos:
         # Reference: https://github.com/pre-commit/identify/blob/main/identify/extensions.py
         types_or: [file, text]
         files: \.(cpp|cxx|h|hpp|hxx|txx)$
+        # Vendored upstream PoissonRecon is a pristine drop, never
+        # reformatted -- see LiverResections/Algorithm/PoissonRecon/README.md.
+        exclude: "^LiverResections\\/Algorithm\\/PoissonRecon\\/"
 
   - repo: https://github.com/asottile/pyupgrade
     rev: v3.21.2
@@ -79,3 +82,5 @@ repos:
         entry: Utilities/Hooks/check-copyright.sh
         language: script
         files: \.(cpp|cxx|h|hpp|hxx|txx|py)$
+        # Vendored upstream code keeps ITS OWN copyright notice.
+        exclude: "^LiverResections\\/Algorithm\\/PoissonRecon\\/"
