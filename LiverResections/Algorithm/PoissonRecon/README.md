@@ -39,6 +39,26 @@ variants" rather than "whatever the compiler happened to need on the day"
 to `std::async` or single-threaded execution. We therefore do **not**
 make OpenMP a build requirement; it is used if the toolchain offers it.
 
+## Gotchas when including these headers
+
+**Include VTK first.** Upstream's `Array.h` defines a function-like macro
+named `Pointer`. VTK's `vtkBuffer` has a *member* named `Pointer` and
+initialises it as `Pointer(nullptr)`, which the preprocessor rewrites to
+`nullptr*`. Include PoissonRecon before VTK and the build fails inside
+`vtkBuffer.h` with an error that mentions neither PoissonRecon nor a
+macro.
+
+Better still, keep these headers out of your own **headers** entirely, so
+the macros stay inside one translation unit and no consumer can be
+poisoned whatever order it includes things in.
+`vtkLiverPoissonSurfaceReconstruction.h` forward-declares `vtkPolyData`
+and includes nothing from here, on purpose.
+
+**`outputGradients` defaults to false.** With it off, the per-vertex
+gradient handed to a `OutputLevelSetVertexStream` is all zeros —
+silently, with no error. Anything deriving normals from the level set
+must set it.
+
 ## Syncing to a newer upstream
 
 1. Check out the new upstream tag.

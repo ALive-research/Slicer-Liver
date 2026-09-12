@@ -82,6 +82,8 @@ set(${KIT}_SRCS
   vtkLiverResectogramPixelMapping.cxx
   vtkLiverOrientedPointCloudExtractor.h
   vtkLiverOrientedPointCloudExtractor.cxx
+  vtkLiverPoissonSurfaceReconstruction.h
+  vtkLiverPoissonSurfaceReconstruction.cxx
   )
 
 #
