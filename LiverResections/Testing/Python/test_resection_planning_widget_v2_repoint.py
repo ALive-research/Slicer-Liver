@@ -536,6 +536,24 @@ def test_hint_shown_when_plan_has_no_distance_map():
     )
 
 
+def _drive_to_planning(plan):
+    """Leave Init so the resectogram predicate's state half is satisfied.
+
+    ADR-0035 owns the state machine; the resectogram hint keys on Init
+    because an unfitted grid renders a near-uniform strip.  Tolerant of a
+    carrier without the state API so the bare layer is unaffected.
+    """
+    carrier = plan.GetGeometryNode() if plan is not None else None
+    if carrier is None or not hasattr(carrier, "SetState"):
+        return
+    try:
+        from LiverResectionsLib.ResectionStateMachine import STATE_PLANNING
+
+        carrier.SetState(STATE_PLANNING)
+    except Exception:  # pragma: no cover - defensive
+        pass
+
+
 def test_hint_hidden_and_display_node_on_carrier_when_plan_has_distance_map():
     """Plan WITH a distance map => hint hidden AND one display node on the carrier.
 
@@ -559,6 +577,12 @@ def test_hint_hidden_and_display_node_on_carrier_when_plan_has_distance_map():
     plan = _make_plan_or_skip(slicer, "DistanceMapPlan", with_distance_map=True)
     assert plan.GetDistanceMapVolumeNode() is not None  # fixture sanity
     assert _count_carrier_resectogram_display_nodes(plan) == 0  # fixture sanity
+    # Past Init: a carrier still in Init has no fitted surface, so the drawer
+    # now shows the "complete the initialization" hint instead of a strip
+    # that would read as empty.  A distance map is necessary for the
+    # resectogram, not sufficient -- this test owns the MAP half of the
+    # predicate, so it satisfies the state half in the fixture.
+    _drive_to_planning(plan)
     if not _select(widget, combo, plan):
         pytest.skip("cannot select the active resection (implementer contract).")
 

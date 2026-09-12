@@ -632,15 +632,32 @@ def test_hint_shown_when_surface_has_no_distance_map():
     )
 
 
+def _leave_init(plan):
+    """Satisfy the state half of the predicate (ADR-0035 owns the machine)."""
+    carrier = plan.GetGeometryNode() if plan is not None else None
+    if carrier is None or not hasattr(carrier, "SetState"):
+        return
+    try:
+        from LiverResectionsLib.ResectionStateMachine import STATE_PLANNING
+
+        carrier.SetState(STATE_PLANNING)
+    except Exception:  # pragma: no cover - defensive
+        pass
+
+
 def test_hint_hidden_when_surface_has_distance_map():
     """Plan whose WRAPPER carries a distance map => the drawer hint is HIDDEN.
 
     ADR-0023 §Stage-4 auto-populate predicate: the positive branch -- the
     drawer populates (shows the view), so the hint is hidden.  The distance map
-    is read off the WRAPPER (ADR-0031).  State-ORTHOGONAL -- the predicate does
-    NOT read ADR-0019 ResectionState, so a distance-mapped plan populates
-    regardless of Planning/Confirmed state.  GPU-free: pins the hint visibility,
-    not the GL render.
+    is read off the WRAPPER (ADR-0031).  Orthogonal to Planning-vs-Confirmed:
+    a distance-mapped plan populates in either.
+
+    NOT orthogonal to Init, since #623: an Init carrier has no fitted surface,
+    so the drawer explains that instead of showing a near-uniform strip.  This
+    test owns the MAP half of the predicate, so the fixture leaves Init to keep
+    the two halves separable.  GPU-free: pins the hint visibility, not the GL
+    render.
     """
     slicer = _slicer_or_skip()
     slicer.mrmlScene.Clear(0)
@@ -650,6 +667,7 @@ def test_hint_hidden_when_surface_has_distance_map():
     plan = _make_surface_with_distance_map(slicer)
     _accessor_or_skip(plan)
     assert plan.GetDistanceMapVolumeNode() is not None  # fixture sanity
+    _leave_init(plan)
 
     if not _select_active_resection(widget, combo, plan):
         pytest.skip(
