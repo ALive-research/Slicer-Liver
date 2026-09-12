@@ -112,6 +112,25 @@ if(DEFINED Python3_EXECUTABLE)
       LABELS "pytest;module-layer;LiverResections"
     )
 
+    # ADR-0040 §Conformance: Poisson reconstruction is offered ALONGSIDE
+    # marching cubes, never as a silent replacement.  The dispatch half of
+    # that invariant -- both methods on the menu, marching cubes still the
+    # default, an unrecognised method refused rather than guessed -- is
+    # pure Python and RUNS (not skips) in this bare row, so a regression
+    # that quietly switched every caller fails fast and without a GPU.
+    # The reconstruction half needs the wrapped Algorithm classes and
+    # skips cleanly here; it runs in the launched row.
+    add_test(
+      NAME LiverResections_segment_surface_methods
+      COMMAND "${Python3_EXECUTABLE}" -m pytest
+        -q
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_segment_surface_methods.py"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    set_tests_properties(LiverResections_segment_surface_methods PROPERTIES
+      LABELS "pytest;module-layer;LiverResections"
+    )
+
     # #538 trigger, plan side -- CreateResectionPlan auto-attaches the
     # scene's computed distance map (DistanceMap='True' + Computed='True')
     # via SetAndObserveDistanceMapVolumeNode (ADR-0031), so Planning opens
