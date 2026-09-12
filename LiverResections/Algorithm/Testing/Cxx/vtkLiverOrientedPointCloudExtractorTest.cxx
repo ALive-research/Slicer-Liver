@@ -73,6 +73,77 @@ vtkSmartPointer<vtkImageData> MakeSphere(int dim, double radius, int label)
 }
 
 //----------------------------------------------------------------------------
+/// The same sphere, but in an image whose EXTENT STARTS AWAY FROM ZERO.
+///
+/// This is the shape the class is actually given in production: a
+/// segment's binary labelmap is cropped to its own bounding box, so its
+/// extent begins wherever that box does.  A zero-based fixture cannot
+/// tell a correct index mapping from one that ignores the offset.
+vtkSmartPointer<vtkImageData> MakeSphereAtExtent(int dim, double radius, int label, const int origin[3])
+{
+  vtkSmartPointer<vtkImageData> image = vtkSmartPointer<vtkImageData>::New();
+  image->SetExtent(origin[0], origin[0] + dim - 1, origin[1], origin[1] + dim - 1, origin[2], origin[2] + dim - 1);
+  image->AllocateScalars(VTK_UNSIGNED_CHAR, 1);
+  const double c = (dim - 1) / 2.0;
+  for (int k = 0; k < dim; ++k)
+  {
+    for (int j = 0; j < dim; ++j)
+    {
+      for (int i = 0; i < dim; ++i)
+      {
+        const double d2 = (i - c) * (i - c) + (j - c) * (j - c) + (k - c) * (k - c);
+        unsigned char* v = static_cast<unsigned char*>(image->GetScalarPointer(i + origin[0], j + origin[1], k + origin[2]));
+        *v = (d2 <= radius * radius) ? static_cast<unsigned char>(label) : 0;
+      }
+    }
+  }
+  return image;
+}
+
+//----------------------------------------------------------------------------
+/// The cloud must land at the voxels' ABSOLUTE index position.
+///
+/// Slicer's image-to-world matrix maps absolute voxel indices, so an
+/// extractor that reports indices relative to the extent produces a
+/// cloud that is intact, correctly shaped, correctly oriented -- and
+/// translated by the extent origin.  Every other assertion in this file
+/// still passes in that state, which is exactly how it reached a real
+/// liver before being caught by eye.
+int TestExtentOriginIsHonoured()
+{
+  const int dim = 30;
+  const double radius = 9.0;
+  const int origin[3] = { 100, 50, 20 };
+
+  vtkSmartPointer<vtkImageData> shifted = MakeSphereAtExtent(dim, radius, 1, origin);
+  vtkNew<vtkMatrix4x4> identity; // IJK == RAS, so the answer is exact.
+  vtkNew<vtkPolyData> cloud;
+  if (!vtkLiverOrientedPointCloudExtractor::Extract(shifted, identity, 1, 0, cloud))
+  {
+    std::cerr << "FAIL: extraction failed on a shifted-extent image" << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  double bounds[6];
+  cloud->GetBounds(bounds);
+  const double centre[3] = { (bounds[0] + bounds[1]) / 2.0, (bounds[2] + bounds[3]) / 2.0, (bounds[4] + bounds[5]) / 2.0 };
+  const double expected[3] = { origin[0] + (dim - 1) / 2.0, origin[1] + (dim - 1) / 2.0, origin[2] + (dim - 1) / 2.0 };
+
+  std::cout << "extent origin: centre (" << centre[0] << ", " << centre[1] << ", " << centre[2] << "), expected (" << expected[0] << ", " << expected[1] << ", " << expected[2]
+            << ")" << std::endl;
+
+  for (int axis = 0; axis < 3; ++axis)
+  {
+    if (std::abs(centre[axis] - expected[axis]) > 1.0)
+    {
+      std::cerr << "FAIL: axis " << axis << " off by " << (expected[axis] - centre[axis]) << " -- the extent origin was dropped" << std::endl;
+      return EXIT_FAILURE;
+    }
+  }
+  return EXIT_SUCCESS;
+}
+
+//----------------------------------------------------------------------------
 int TestNormalsPointOutward()
 {
   const int dim = 32;
@@ -278,6 +349,10 @@ int vtkLiverOrientedPointCloudExtractorTest(int, char*[])
     return EXIT_FAILURE;
   }
   if (TestOtherLabelsDoNotBleedIn() != EXIT_SUCCESS)
+  {
+    return EXIT_FAILURE;
+  }
+  if (TestExtentOriginIsHonoured() != EXIT_SUCCESS)
   {
     return EXIT_FAILURE;
   }
