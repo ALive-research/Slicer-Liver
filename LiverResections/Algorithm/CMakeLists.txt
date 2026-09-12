@@ -43,8 +43,26 @@ find_package(Eigen3 REQUIRED CONFIG
     "${ITK_DIR}/../ITK-build/ITKInternalEigen3-build"
   )
 
+#-----------------------------------------------------------------------------
+# PoissonRecon (Kazhdan), vendored header-only (ADR-0040).
+#
+# A plain include directory, deliberately: upstream is header-only, so
+# there is no library to build or link, and no find_package to fail.
+#
+# The headers are NOT added to ${KIT}_SRCS.  That matters -- this kit is
+# Python-wrapped, and SlicerMacroBuildModuleLogic hands everything in
+# SRCS to the VTK wrapper.  Upstream's templates are not wrappable and
+# have no business being offered to Python; only our own adapter class
+# is.  Keeping them out of SRCS is what draws that line.
+#
+# OpenMP is NOT required.  MultiThreading.h guards it behind #ifdef
+# _OPENMP and falls back to std::async, so the extension builds on
+# toolchains without it -- notably AppleClang.  See
+# PoissonRecon/README.md for the drop's provenance and exclusion set.
+#-----------------------------------------------------------------------------
 set(${KIT}_INCLUDE_DIRECTORIES
    ${CMAKE_CURRENT_BINARY_DIR}
+   ${CMAKE_CURRENT_SOURCE_DIR}/PoissonRecon/Src
   )
 
 set(${KIT}_SRCS

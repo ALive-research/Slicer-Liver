@@ -20,6 +20,7 @@ set(KIT_TEST_SRCS
   vtkSlicerLiverBezierControlPolygonGeometryTest1.cxx
   vtkLiverResectogramAspectRatioTest.cxx
   vtkLiverResectogramPixelMappingTest.cxx
+  PoissonReconVendorTest.cxx
   )
 
 #-----------------------------------------------------------------------------
@@ -30,6 +31,7 @@ slicerMacroConfigureModuleCxxTestDriver(
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_BINARY_DIR}/..
+    ${CMAKE_CURRENT_SOURCE_DIR}/../PoissonRecon/Src
   WITH_VTK_DEBUG_LEAKS_CHECK
   WITH_VTK_ERROR_OUTPUT_CHECK
   )
@@ -95,3 +97,9 @@ SIMPLE_TEST(vtkLiverResectogramPixelMappingTest)
 set_tests_properties(vtkLiverResectogramPixelMappingTest PROPERTIES
   SKIP_RETURN_CODE 125
   )
+
+# Build-integration test for the vendored PoissonRecon drop (ADR-0040).
+# Not a Slicer-Liver class test -- it exists because a header-only
+# template library can sit in the tree unbuildable until something
+# instantiates it, so the drop and its first instantiation ship together.
+SIMPLE_TEST(PoissonReconVendorTest)
