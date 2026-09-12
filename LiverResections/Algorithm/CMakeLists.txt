@@ -62,6 +62,8 @@ set(${KIT}_SRCS
   vtkLiverResectogramAspectRatio.cxx
   vtkLiverResectogramPixelMapping.h
   vtkLiverResectogramPixelMapping.cxx
+  vtkLiverOrientedPointCloudExtractor.h
+  vtkLiverOrientedPointCloudExtractor.cxx
   )
 
 #
