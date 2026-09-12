@@ -21,6 +21,7 @@ set(KIT_TEST_SRCS
   vtkLiverResectogramAspectRatioTest.cxx
   vtkLiverResectogramPixelMappingTest.cxx
   PoissonReconVendorTest.cxx
+  vtkLiverPoissonSurfaceReconstructionTest.cxx
   )
 
 #-----------------------------------------------------------------------------
@@ -103,3 +104,5 @@ set_tests_properties(vtkLiverResectogramPixelMappingTest PROPERTIES
 # template library can sit in the tree unbuildable until something
 # instantiates it, so the drop and its first instantiation ship together.
 SIMPLE_TEST(PoissonReconVendorTest)
+
+SIMPLE_TEST(vtkLiverPoissonSurfaceReconstructionTest)
