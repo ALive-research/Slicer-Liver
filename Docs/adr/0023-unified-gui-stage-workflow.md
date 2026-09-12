@@ -366,6 +366,11 @@ Module names changed during the v2.0 scope discussion: existing
 TotalSegmentator + Kumar-Oram orchestration. `Modeling/`
 is dropped as a top-level module — Poisson Surface Reconstruction (PSR)
 ships as a Superbuild external project exposed to Python.
+*Amended by [ADR-0040](0040-poisson-surface-reconstruction.md)
+(2026-09-12): the SuperBuild shape is withdrawn.  This extension is a
+non-SuperBuild leaf, and PSR ships the way SlicerVMTK already does —
+as a dependency whose libraries are consumed, not as a SuperBuild
+conversion of Slicer-Liver.  The Python exposure stands.*
 
 Clinical positioning: Slicer-Liver remains a *research-grade
 clinical-adjacent extension* (per the 2026-05-14 design discussion and

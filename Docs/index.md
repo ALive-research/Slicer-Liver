@@ -58,6 +58,7 @@ adr/0036-vessel-highlight-separate-instance.md
 adr/0037-vascular-territories-off-markups.md
 adr/0038-unify-control-point-interaction.md
 adr/0039-ai-assisted-development-working-agreements.md
+adr/0040-poisson-surface-reconstruction.md
 ```
 
 ```{toctree}
