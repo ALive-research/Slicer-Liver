@@ -118,6 +118,25 @@ _DEFAULT_RESECTION_NAME = "Resection"
 _EMBEDDED_MIN_HEIGHT_PX = 250
 
 
+def _safe_is_init(carrier):
+    """True when ``carrier`` is in the Init state (ADR-0035).
+
+    Defensive by the module's convention: a carrier without the state API
+    (a fake in the bare unit layer, a node type that never gained one)
+    reports NOT-Init, so the resectogram behaves exactly as it did before
+    rather than hiding itself on an unreadable state.
+    """
+    if carrier is None:
+        return False
+    try:
+        from LiverResectionsLib.ResectionStateMachine import STATE_INIT
+
+        getter = getattr(carrier, "GetState", None)
+        return getter is not None and int(getter()) == int(STATE_INIT)
+    except Exception:  # pragma: no cover - defensive
+        return False
+
+
 class ResectionPlanningWidget(qt.QWidget):
     """The Stage-4 Resection Planning panel (`ADR-0023`_ §Stage-4).
 
@@ -533,6 +552,37 @@ class ResectionPlanningWidget(qt.QWidget):
     def _onDrawerCollapsed(self, collapsed):
         self.scheduleResectogramRender()
 
+    def _attachExistingDistanceMap(self, plan):
+        """Attach an already-computed distance map to ``plan``, if one exists.
+
+        The same predicate ``CreateResectionPlan`` uses: a
+        ``vtkMRMLVectorVolumeNode`` tagged ``DistanceMap=True`` AND
+        ``Computed=True`` (ADR-0031 -- the map lives on the plan wrapper).
+        Kept deliberately identical, so a plan created before the map and one
+        created after converge on the same input rather than drifting apart.
+
+        A no-op when no tagged volume is in the scene, which is exactly the
+        pre-Stage-2 case: no map, nothing to attach, margins stay disabled
+        with the existing hint.
+        """
+        scene = self._mrmlScene
+        if plan is None or scene is None:
+            return
+        collection = scene.GetNodesByClass("vtkMRMLVectorVolumeNode")
+        if collection is None:
+            return
+        collection.UnRegister(None)
+        for index in range(collection.GetNumberOfItems()):
+            candidate = collection.GetItemAsObject(index)
+            if candidate is None:
+                continue
+            if (
+                candidate.GetAttribute("DistanceMap") == "True"
+                and candidate.GetAttribute("Computed") == "True"
+            ):
+                plan.SetAndObserveDistanceMapVolumeNode(candidate)
+                return
+
     def refreshResectogramDrawer(self):  # noqa: N802 - Slicer/Qt verb convention
         # Re-resolve the locator the click-to-reslice consumer observes BEFORE
         # the distance-map guards below (a locator minted after the widget --
@@ -548,10 +598,22 @@ class ResectionPlanningWidget(qt.QWidget):
         carrier = plan.GetGeometryNode() if plan is not None else None
 
         # ADR-0023 §Stage-4 auto-populate predicate: a resectogram is available
-        # iff a resection PLAN is selected AND its WRAPPER carries a distance map
-        # (ADR-0031).  State-orthogonal: the predicate does NOT consult the
-        # ADR-0019 ResectionState.
+        # iff a resection PLAN is selected AND its WRAPPER carries a distance
+        # map (ADR-0031).
+        #
+        # Orthogonal to Planning-vs-Confirmed, but NOT to Init: a carrier still
+        # in Init has no fitted surface (its grid sits at the origin until the
+        # candidate grab), so the strip would render a near-uniform readout
+        # that reads as empty or broken.  That case gets an explaining hint
+        # below instead.  The map half of the predicate is unchanged.
         hasPlan = plan is not None
+        # A plan minted BEFORE the map was computed never picked one up:
+        # CreateResectionPlan auto-attaches only at mint time, so the drawer
+        # and the margins stayed disabled with no recovery short of
+        # delete-and-replace.  Re-run the same tagged-volume scan here, so a
+        # map that appears later attaches on the next refresh.
+        if hasPlan and plan.GetDistanceMapVolumeNode() is None:
+            self._attachExistingDistanceMap(plan)
         hasDistanceMap = bool(
             hasPlan and carrier is not None and plan.GetDistanceMapVolumeNode() is not None
         )
@@ -627,6 +689,21 @@ class ResectionPlanningWidget(qt.QWidget):
             RESECTOGRAM_VIEW_SINGLETON_TAG, _VIEW_NODE_CLASS
         )
         if viewNode is None:
+            return
+
+        # A plan still in Init has no fitted surface -- its control grid sits
+        # at the origin until the candidate grab commits Init->Planning -- so
+        # the strip renders a near-uniform readout that reads as "empty" or
+        # "broken".  Say so instead (ADR-0009 explainable state; ADR-0035 owns
+        # the state machine that decides it).
+        if _safe_is_init(carrier):
+            if self._resectogramWidget is not None:
+                self._resectogramWidget.hide()
+            self._hintLabel.text = (
+                "Complete the initialization to see the resectogram."
+            )
+            self._hintLabel.show()
+            self.observeSurfaceForRender(carrier)
             return
 
         # The resectogram is available: hide the explanatory hint and show the
