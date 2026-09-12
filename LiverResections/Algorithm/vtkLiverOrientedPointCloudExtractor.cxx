@@ -163,6 +163,17 @@ bool vtkLiverOrientedPointCloudExtractor::Extract(vtkImageData* labelMap, vtkMat
   int dims[3] = { 0, 0, 0 };
   labelMap->GetDimensions(dims);
 
+  // The EXTENT ORIGIN, which is rarely zero for the images this class is
+  // actually given.  A segment's binary labelmap is cropped to its own
+  // bounding box, so its extent starts wherever that box does, while the
+  // ITK image built above is indexed from 0.  Slicer's image-to-world
+  // matrix maps ABSOLUTE voxel indices, so the offset has to be added
+  // back before the matrix is applied -- otherwise every point is
+  // translated by the extent origin and the cloud lands, intact and
+  // correctly shaped, in the wrong place.
+  int extent[6] = { 0, 0, 0, 0, 0, 0 };
+  labelMap->GetExtent(extent);
+
   // The normal rotates by the direction part only; translation would
   // move it and scale would skew it.  Columns are normalised so a
   // non-uniform voxel size does not bias the direction.
@@ -231,7 +242,7 @@ bool vtkLiverOrientedPointCloudExtractor::Extract(vtkImageData* labelMap, vtkMat
     }
 
     const FloatImageType::IndexType idx = itX.GetIndex();
-    double ijk[4] = { static_cast<double>(idx[0]), static_cast<double>(idx[1]), static_cast<double>(idx[2]), 1.0 };
+    double ijk[4] = { static_cast<double>(idx[0] + extent[0]), static_cast<double>(idx[1] + extent[2]), static_cast<double>(idx[2] + extent[4]), 1.0 };
     double ras[4] = { 0.0, 0.0, 0.0, 0.0 };
     ijkToRAS->MultiplyPoint(ijk, ras);
     points->InsertNextPoint(ras[0], ras[1], ras[2]);
