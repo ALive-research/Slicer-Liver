@@ -144,9 +144,11 @@ public:
   ///    control polygon (every point, not only the boundary).  The frame
   ///    is the affordance; its action is global.
   ///  - ``GroupRing0`` and up — one ring from
-  ///    ``vtkSlicerLiverBezierControlPolygonGeometry::BuildRingGroups``,
-  ///    whose drag moves ONLY that ring's points.  Ring ``k`` is
-  ///    ``GroupRing0 + k``.
+  ///    ``ControlPolygonRings.ring_groups``, whose drag moves ONLY that
+  ///    ring's points.  Ring ``k`` is ``GroupRing0 + k``, outermost
+  ///    first.  Ring membership is derived in Python, not here: this
+  ///    node carries only WHICH group is armed, so the enum stays valid
+  ///    whatever the grid shape.
   ///
   /// Frame and ring 0 cover the same boundary points but are distinct
   /// targets: the frame moves everything, ring 0 moves only the
