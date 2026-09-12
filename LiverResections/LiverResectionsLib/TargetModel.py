@@ -59,7 +59,11 @@ def has_canonical_liver() -> bool:
     return not _segment_is_empty(node, segment_id)
 
 
-def ensure_target_model(plan_node: Any) -> Any | None:
+def ensure_target_model(
+    plan_node: Any,
+    method: str | None = None,
+    depth: int | None = None,
+) -> Any | None:
     """Attach the hidden liver target model to ``plan_node``'s carrier.
 
     Resolve-or-mint (idempotent): an already-attached target with live
@@ -67,6 +71,12 @@ def ensure_target_model(plan_node: Any) -> Any | None:
     is nothing to wire (no plan/carrier, no canonical segmentation, no
     SCT-tagged liver segment) — a graceful no-op, mirroring the sibling
     ensure* helpers.
+
+    ``method`` selects how the segment becomes a mesh
+    (``SegmentSurface.surface_methods()``).  ``None`` means marching
+    cubes, so callers that do not care keep exactly the behaviour they
+    had before ADR-0040: offering Poisson reconstruction must not change
+    what anyone gets without asking.
     """
     if plan_node is None:
         return None
@@ -86,7 +96,14 @@ def ensure_target_model(plan_node: Any) -> Any | None:
     if segmentation_node is None:
         return None
 
-    polydata = _liver_closed_surface(segmentation_node, segment_id)
+    from LiverResectionsLib import SegmentSurface
+
+    polydata = SegmentSurface.segment_surface(
+        segmentation_node,
+        segment_id,
+        method=SegmentSurface.METHOD_MARCHING_CUBES if method is None else method,
+        depth=depth,
+    )
     if polydata is None or polydata.GetNumberOfPoints() == 0:
         return None
 
@@ -155,20 +172,15 @@ def _segment_is_empty(segmentation_node: Any, segment_id: str) -> bool:
 
 
 def _liver_closed_surface(segmentation_node: Any, segment_id: str) -> Any | None:
-    """A deep-copied closed-surface polydata for ``segment_id``."""
-    polydata = segmentation_node.GetClosedSurfaceInternalRepresentation(segment_id)
-    if polydata is None:
-        segmentation_node.CreateClosedSurfaceRepresentation()
-        polydata = segmentation_node.GetClosedSurfaceInternalRepresentation(
-            segment_id
-        )
-    if polydata is None:
-        return None
-    # Deep copy (the v1 pattern): the working mesh must not alias the
-    # segmentation's internal representation, which conversions rebuild.
-    copied = vtk.vtkPolyData()
-    copied.DeepCopy(polydata)
-    return copied
+    """A deep-copied closed-surface polydata for ``segment_id``.
+
+    Kept as a thin alias: the implementation moved to ``SegmentSurface``
+    when a second extraction method joined it, and marching cubes has no
+    claim to being the unqualified meaning of "the surface" any more.
+    """
+    from LiverResectionsLib import SegmentSurface
+
+    return SegmentSurface.marching_cubes_surface(segmentation_node, segment_id)
 
 
 def _resolve_or_mint_model() -> Any:
