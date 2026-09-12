@@ -187,9 +187,15 @@ class LiverSegmentation(ScriptedLoadableModule):
         self.parent.dependencies = []
         self.parent.contributors = ["Rafael Palomar (OUS)"]
         self.parent.helpText = """
-        Stage 2 (Anatomy Definition): orchestrates per-structure segmentation
-        micro-workflows (TotalSegmentator + Segment Editor) into a single
-        canonical Segmentation node consumed by downstream stages.
+        Stage 2 (Anatomy Definition): builds the single canonical Segmentation
+        node consumed by downstream stages.  Three routes, in any combination:
+
+        - AI segmentation (TotalSegmentator), downloaded on first use;
+        - manual editing with the embedded Segment Editor;
+        - Import… — bring your own segmentation, no AI required.
+
+        Structures land under review; you confirm each one from its status
+        cell.
         """
         self.parent.acknowledgementText = """
         Developed through the ALive project (grant nr. 311393).
@@ -868,8 +874,9 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         self._importButton = qt.QPushButton("Import…")
         self._importButton.setObjectName("ImportSegmentationButton")
         self._importButton.setToolTip(
-            "Import a loaded segmentation's segments into the anatomy "
-            "table (they land under review)."
+            "Use your own segmentation — no AI required.  Imports a loaded "
+            "segmentation's segments into the anatomy table, through an "
+            "explicit correspondence dialog; they land under review."
         )
         # The Stage-2-LOCAL validate affordance (ADR-0034 §Decision 6): the
         # shell-level "Validate and next" button stays with the
@@ -1327,7 +1334,9 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
             self._retireJobRows(key, structures)
         if landedCodes:
             self._statusLabel.setText(
-                "Landed for review — confirm via the row's status cell."
+                self._withDistanceMapNote(
+                    "Landed for review — confirm via the row's status cell."
+                )
             )
         elif success and not landingFailed:
             self._statusLabel.setText(
@@ -1338,6 +1347,21 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
                 sorted(self.logic._structureTitle(c) for c in structures)
             )
             self._statusLabel.setText(f"Segmentation failed: {names} — see the log.")
+
+    def _withDistanceMapNote(self, message):
+        """Append WHY the distance map was skipped, when it was.
+
+        ``ensureDistanceMap`` degrades gracefully by design -- the canonical
+        import must never fail on the map -- but silence here is what sends
+        a surgeon to Stage 4 with a greyed margins group and no way to learn
+        the cause.  The logic records the specific unmet precondition; this
+        surfaces it on the same status line that reports the landing
+        (ADR-0009 explainable state).
+        """
+        reason = getattr(self.logic, "lastDistanceMapSkipReason", None)
+        if not reason:
+            return message
+        return f"{message}  Distance map not computed: {reason}."
 
     def _reframeThreeDViews(self):
         """Re-centre the 3D views on the new anatomy; a no-op headless.
@@ -1823,13 +1847,10 @@ class LiverSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
         # surface model lands outside the default camera framing.
         self._reframeThreeDViews()
         if mapped < total:
-            self._statusLabel.setText(
-                f"Imported {mapped} of {total} segments — the source was kept."
-            )
+            message = f"Imported {mapped} of {total} segments — the source was kept."
         else:
-            self._statusLabel.setText(
-                "Imported for review — confirm via the row's status cell."
-            )
+            message = "Imported for review — confirm via the row's status cell."
+        self._statusLabel.setText(self._withDistanceMapNote(message))
 
     def onPreDownload(self):
         """Pre-download the AI backend without minting a node.
@@ -2183,10 +2204,20 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
         resolves (graceful degradation; the canonical import itself must
         never fail on the map).
         """
+        self.lastDistanceMapSkipReason = None
         if segmentationNode is None:
+            self.lastDistanceMapSkipReason = "no canonical segmentation"
             return None
         reference = self.selectInputVolume()
         if reference is None:
+            # The commonest way to reach Stage 4 with the margins group
+            # greyed: an ad-hoc session that never tagged a volume in
+            # Stage 1.  Name the precondition rather than degrade silently
+            # (ADR-0009 explainable state).
+            self.lastDistanceMapSkipReason = (
+                "no PortalVenous reference volume — tag one in Case Setup "
+                "(Stage 1)"
+            )
             return None
 
         from LiverSegmentationLib import distance_maps
@@ -2214,7 +2245,14 @@ class LiverSegmentationLogic(ScriptedLoadableModuleLogic):
             # No channel resolved (e.g. no SCT-tagged segments): drop the
             # node we minted rather than leaving an empty untagged shell.
             slicer.mrmlScene.RemoveNode(output)
+            self.lastDistanceMapSkipReason = (
+                "no SCT-tagged structures to compute distances from"
+            )
             return None
+        if computed is None:
+            self.lastDistanceMapSkipReason = (
+                "no SCT-tagged structures to compute distances from"
+            )
         return computed
 
     def ensureSurfaceRepresentation(self, segmentationNode):
