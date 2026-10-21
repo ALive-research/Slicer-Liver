@@ -109,6 +109,25 @@ list(APPEND ${PROJECT_NAME}_EP_LABEL_PYTHONPATH_LAUNCHER_BUILD
 include(${Slicer_USE_FILE})
 
 #-----------------------------------------------------------------------------
+# Minimum Slicer version (ADR-0030 §Amendments).
+#
+# Compared on MAJOR.MINOR, not the full version: ``Slicer_VERSION_PATCH``
+# is 0 on development builds regardless of what they will become, so a
+# patch-level floor would reject a perfectly good 5.12 preview build.
+#
+# This exists so a STALE BUILD IMAGE fails loudly at configure time.
+# Having no floor is how CI validated against Slicer 5.11 for three
+# months after 5.12 shipped, with every job green: nothing in the build
+# had an opinion about which Slicer it was handed.
+set(SLICERLIVER_MINIMUM_SLICER_VERSION "5.12")
+if(Slicer_VERSION VERSION_LESS SLICERLIVER_MINIMUM_SLICER_VERSION)
+  message(FATAL_ERROR
+    "Slicer-Liver requires Slicer >= ${SLICERLIVER_MINIMUM_SLICER_VERSION}, "
+    "but found ${Slicer_VERSION} at '${Slicer_DIR}'. If this is CI, the "
+    "container image pin in .github/workflows/ci.yml is behind.")
+endif()
+
+#-----------------------------------------------------------------------------
 # Standalone wrapped Subject-Hierarchy folder utility kit
 # (ADR-0023 §"Subject Hierarchy management convention").  Added before
 # the consuming modules so its target exists when their Logic kits link
