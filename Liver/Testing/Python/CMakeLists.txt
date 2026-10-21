@@ -172,8 +172,8 @@ set(_liver_additional_module_paths
   # hard-imports ``LayerDMLib`` (ADR-0013 §5, SlicerLayerDM as a hard
   # EXTENSION_DEPENDS), so the LayerDM modules must be registered with the
   # module manager, not merely import-able.  Mirrors VascularTerritories.
-  "${LayerDisplayableManager_DIR}/${Slicer_QTLOADABLEMODULES_LIB_DIR}"
-  "${LayerDisplayableManager_DIR}/${Slicer_QTSCRIPTEDMODULES_LIB_DIR}"
+  # Empty when LayerDM is core (see the root CMakeLists).
+  ${SLICERLIVER_LAYERDM_MODULE_PATHS}
 )
 
 # Same test roots as the bare ``pytest_scaffold`` entries, plus the Stage-2

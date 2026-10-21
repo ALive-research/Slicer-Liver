@@ -17,8 +17,7 @@ slicer_add_python_unittest(
   SCRIPT VascularTerritoriesTest.py
   SLICER_ARGS
     --additional-module-paths
-    ${LayerDisplayableManager_DIR}/${Slicer_QTLOADABLEMODULES_LIB_DIR}
-    ${LayerDisplayableManager_DIR}/${Slicer_QTSCRIPTEDMODULES_LIB_DIR}
+    ${SLICERLIVER_LAYERDM_MODULE_PATHS}
     ${SlicerVMTK_DIR}/${Slicer_QTLOADABLEMODULES_LIB_DIR}
     ${SlicerVMTK_DIR}/${Slicer_QTSCRIPTEDMODULES_LIB_DIR}
 )

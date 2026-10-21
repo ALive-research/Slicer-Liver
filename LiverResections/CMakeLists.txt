@@ -21,16 +21,27 @@ if(Slicer_USE_PYTHONQT)
 endif()
 
 #-----------------------------------------------------------------------------
-# T2.6-LayerDM — consume the upstream LayerDisplayableManager extension
-# (ADR-0002, ADR-0013 §5).  ``EXTENSION_DEPENDS`` in the root
-# ``CMakeLists.txt`` lists ``LayerDisplayableManager`` (the upstream's
-# ``project()`` name); Slicer's launcher-settings block calls
-# ``find_package(LayerDisplayableManager QUIET)`` to populate the
-# launcher INI, but does not propagate the imported targets to this
-# scope.  Call ``find_package`` here too so the
-# ``vtkSlicerLayerDMModuleMRMLDisplayableManager`` imported target is
-# defined for the ``setup()`` code below to link against.
-find_package(LayerDisplayableManager REQUIRED)
+# T2.6-LayerDM — resolve the LayerDM displayable-manager kit
+# (ADR-0002, ADR-0013 §5).
+#
+# When Slicer ships LayerDM as a core module, its target comes from
+# ``SlicerTargets.cmake`` and is already defined: there is no package to
+# find, and asking for one fails (the extension's
+# ``LayerDisplayableManagerConfig.cmake`` does not exist on such a
+# Slicer, and the catalog entry has been archived).
+#
+# Otherwise the extension provides it.  Slicer's launcher-settings block
+# calls ``find_package(LayerDisplayableManager QUIET)`` to populate the
+# launcher INI, but does not propagate the imported targets into this
+# scope, so this scope must find it again.
+#
+# Either way the kit is named ``vtkSlicerLayerDMModuleMRMLDisplayableManager``
+# -- core builds the same kit name the extension did, and SlicerConfig
+# exports the matching ``_INCLUDE_DIRS`` variable -- so the link line and
+# the include line below are shared verbatim.
+if(NOT SLICERLIVER_LAYERDM_IS_CORE)
+  find_package(LayerDisplayableManager REQUIRED)
+endif()
 
 #-----------------------------------------------------------------------------
 set(MODULE_EXPORT_DIRECTIVE "Q_SLICER_QTMODULES_${MODULE_NAME_UPPER}_EXPORT")
@@ -41,6 +52,13 @@ set(MODULE_INCLUDE_DIRECTORIES
   ${CMAKE_CURRENT_BINARY_DIR}/Logic
   ${CMAKE_CURRENT_SOURCE_DIR}/MRML
   ${CMAKE_CURRENT_BINARY_DIR}/MRML
+  # Populated EITHER WAY, under the same name: by the extension's
+  # LayerDisplayableManagerConfig.cmake, or -- when LayerDM is core -- by
+  # SlicerConfig.cmake, which sets a
+  # vtkSlicer<Module>ModuleMRMLDisplayableManager_INCLUDE_DIRS for every
+  # core module.  (Not via the imported target: those carry no
+  # INTERFACE_INCLUDE_DIRECTORIES.)  This is why so little else here has
+  # to change.
   ${vtkSlicerLayerDMModuleMRMLDisplayableManager_INCLUDE_DIRS}
   )
 
