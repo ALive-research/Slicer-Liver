@@ -19,7 +19,5 @@
 slicer_add_python_unittest(
   SCRIPT TerritoriesNodeWrapperTest.py
   SLICER_ARGS
-    --additional-module-paths
-    ${LayerDisplayableManager_DIR}/${Slicer_QTLOADABLEMODULES_LIB_DIR}
-    ${LayerDisplayableManager_DIR}/${Slicer_QTSCRIPTEDMODULES_LIB_DIR}
+    ${SLICERLIVER_LAYERDM_SLICER_ARGS}
 )
