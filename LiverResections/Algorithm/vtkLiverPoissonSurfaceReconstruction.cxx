@@ -4,10 +4,6 @@
 
   Copyright (c) 2026, The Intervention Centre, Oslo University Hospital. All rights reserved.
 
-  This file was originally developed for the Slicer-Liver extension as
-  the Algorithm-library adapter between VTK and the vendored PoissonRecon
-  core (per ADR-0040).
-
 ==============================================================================*/
 
 #include "vtkLiverPoissonSurfaceReconstruction.h"
