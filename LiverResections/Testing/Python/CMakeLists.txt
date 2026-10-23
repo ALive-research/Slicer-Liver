@@ -830,9 +830,7 @@ endif()
 slicer_add_python_test(
   SCRIPT distancemap_double_render_test.py
   SLICER_ARGS
-    --additional-module-paths
-    ${LayerDisplayableManager_DIR}/${Slicer_QTLOADABLEMODULES_LIB_DIR}
-    ${LayerDisplayableManager_DIR}/${Slicer_QTSCRIPTEDMODULES_LIB_DIR}
+    ${SLICERLIVER_LAYERDM_SLICER_ARGS}
 )
 set_tests_properties(py_distancemap_double_render_test PROPERTIES
   LABELS "visual-regression;LiverResections;distance-map;characterisation"

@@ -11,15 +11,51 @@ set(EXTENSION_CONTRIBUTORS "Rafael Palomar (Oslo University Hospital / NTNU), Ol
 set(EXTENSION_DESCRIPTION "3D Slicer extension for liver analysis and therapy planning")
 set(EXTENSION_ICONURL "https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/SlicerLiver.png")
 set(EXTENSION_SCREENSHOTURLS "https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/Screenshots/Slicer-Liver_screenshot_01.png https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/Screenshots/Slicer-Liver_screenshot_02.png https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/Screenshots/Slicer-Liver_screenshot_03.png https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/Screenshots/Slicer-Liver_screenshot_04.png https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/Screenshots/Slicer-Liver_screenshot_05.png https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/Screenshots/Slicer-Liver_screenshot_06.png https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/Screenshots/Slicer-Liver_screenshot_07.png https://raw.githubusercontent.com/ALive-research/Slicer-Liver/main/Screenshots/Slicer-Liver_screenshot_08.png")
+# LayerDisplayableManager is NOT listed here.  It moved into Slicer core
+# and so is conditional -- see the SLICERLIVER_LAYERDM_IS_CORE block
+# after find_package(Slicer), which appends it only when this Slicer
+# does not already provide it.
 set(EXTENSION_DEPENDS
   SlicerVMTK
   SegmentEditorExtraEffects
   ExtraMarkups
-  # Upstream is the SlicerLayerDisplayableManager repo
-  # (https://github.com/KitwareMedical/SlicerLayerDisplayableManager) but
-  # its ``project()`` and exported ``*Config.cmake`` file are named
-  # ``LayerDisplayableManager``.  The EXTENSION_DEPENDS entry must
-  # match the project name so Slicer's launcher-settings block
+  )
+
+#-----------------------------------------------------------------------------
+# Extension dependencies
+find_package(Slicer REQUIRED)
+
+#-----------------------------------------------------------------------------
+# LayerDM: a Slicer CORE module, or the standalone extension?
+#
+# LayerDM was an extension (KitwareMedical/SlicerLayerDisplayableManager)
+# until Slicer merged it into core as ``Modules/Loadable/LayerDM``
+# (Slicer PR 9184, 2026-10-07).  The catalog entry was then removed from
+# the Slicer extensions index (index PR 2412, 2026-10-12), so on a Slicer
+# that carries the core module there is no extension to depend on -- and
+# on an older Slicer there is no core module to link.  Both are live:
+# 5.12.x has only the extension, 5.13 and later have only the core
+# module.
+#
+# Detected by TARGET EXISTENCE rather than by version arithmetic.
+# ``SlicerTargets.cmake`` (included by ``SlicerConfig.cmake``, so already
+# processed by the find_package above) exports core module libraries,
+# and the core module builds the SAME kit name the extension did.  So
+# the question "does this Slicer ship LayerDM?" is answerable directly,
+# without hard-coding which release absorbed it -- a number that would
+# be a guess today and a maintenance burden forever.
+#
+# This must sit AFTER find_package(Slicer) (the targets do not exist
+# before it) and BEFORE ``include(${Slicer_USE_FILE})``, which is what
+# consumes EXTENSION_DEPENDS.
+if(TARGET vtkSlicerLayerDMModuleMRMLDisplayableManager)
+  set(SLICERLIVER_LAYERDM_IS_CORE ON)
+  message(STATUS "Slicer-Liver: LayerDM provided by Slicer core")
+else()
+  set(SLICERLIVER_LAYERDM_IS_CORE OFF)
+  message(STATUS "Slicer-Liver: LayerDM provided by the LayerDisplayableManager extension")
+  # The EXTENSION_DEPENDS entry must match the upstream ``project()``
+  # name so Slicer's launcher-settings block
   # (``SlicerBlockAdditionalLauncherSettings.cmake``) can
   # ``find_package(${dep})`` it and forward its
   # ``LIBRARY_PATHS_LAUNCHER_BUILD`` + ``PYTHONPATH_LAUNCHER_BUILD``
@@ -27,12 +63,8 @@ set(EXTENSION_DEPENDS
   # ``vtkSlicerLayerDMModule*`` libraries land on ``_DIR-NOTFOUND``
   # entries in the launcher INI and the LayerDM Python symbols never
   # become importable from ``slicer`` at runtime.
-  LayerDisplayableManager
-  )
-
-#-----------------------------------------------------------------------------
-# Extension dependencies
-find_package(Slicer REQUIRED)
+  list(APPEND EXTENSION_DEPENDS LayerDisplayableManager)
+endif()
 
 # Patch the SlicerVMTK launcher paths.  ``SlicerVMTKConfig.cmake``
 # (image-installed, not modifiable from here) exports
@@ -107,6 +139,36 @@ list(APPEND ${PROJECT_NAME}_EP_LABEL_PYTHONPATH_LAUNCHER_BUILD
   )
 
 include(${Slicer_USE_FILE})
+
+#-----------------------------------------------------------------------------
+# Launched-Slicer module paths for LayerDM.
+#
+# The launched Python tests need the LayerDM modules REGISTERED with the
+# module manager, not merely importable, so they pass the extension's
+# module trees via ``--additional-module-paths``.
+#
+# EMPTY when LayerDM is core: core modules are already on Slicer's own
+# module path, and ``LayerDisplayableManager_DIR`` is then undefined --
+# expanding it anyway would feed the launcher paths like
+# ``/lib/Slicer-5.13/qt-loadable-modules``, which are not merely useless
+# but actively wrong.
+#
+# ``SLICERLIVER_LAYERDM_SLICER_ARGS`` carries the FLAG as well as the
+# paths, because at the call sites where these are the only paths, an
+# ``--additional-module-paths`` left with no values would swallow the
+# following argument.
+set(SLICERLIVER_LAYERDM_MODULE_PATHS "")
+set(SLICERLIVER_LAYERDM_SLICER_ARGS "")
+if(NOT SLICERLIVER_LAYERDM_IS_CORE)
+  set(SLICERLIVER_LAYERDM_MODULE_PATHS
+    "${LayerDisplayableManager_DIR}/${Slicer_QTLOADABLEMODULES_LIB_DIR}"
+    "${LayerDisplayableManager_DIR}/${Slicer_QTSCRIPTEDMODULES_LIB_DIR}"
+    )
+  set(SLICERLIVER_LAYERDM_SLICER_ARGS
+    --additional-module-paths
+    ${SLICERLIVER_LAYERDM_MODULE_PATHS}
+    )
+endif()
 
 #-----------------------------------------------------------------------------
 # Standalone wrapped Subject-Hierarchy folder utility kit
