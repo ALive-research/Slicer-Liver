@@ -140,17 +140,22 @@ jobs:
     # tag rebuilt from Slicer main; a moving base means every PR builds
     # against a different, non-reproducible Slicer and a bad upstream
     # push lands on whichever PR happens to run during the window.  The
-    # `:main-<sha>` tag below names the exact Slicer commit; bump it
-    # deliberately via a dedicated image-bump PR (which absorbs any
-    # upstream breakage in isolation), never implicitly.  Keep the two
-    # jobs (build-test + coverage) on the SAME pin.
-    #   main-4fb4ac4 = Slicer main @ 4fb4ac4
-    #   digest sha256:549a820f32d78dfb723c50cfed34519ba362ccfbae1791a6487a76cae588f756
+    # The tag below names a Slicer RELEASE; bump it deliberately via a
+    # dedicated image-bump PR (which absorbs any upstream breakage in
+    # isolation), never implicitly.  Keep the two jobs (build-test +
+    # coverage) on the SAME pin.
+    #
+    # A RELEASE tag, not `main-<sha>` (ADR-0030 §Amendments).  A
+    # main-tracking pin cannot express staleness: it stays green whether
+    # or not the image is still being produced, which is how this repo
+    # validated against Slicer 5.11 for over three months after 5.12
+    # shipped.  `v5.12.4` is visibly not current once 5.12.5 lands.
+    #   v5.12.4 = Slicer release 5.12.4
     #
     # SlicerConfig.cmake is at /usr/src/Slicer-build/Slicer-build/
     # (the doubled `Slicer-build` is Slicer's superbuild convention).
     container:
-      image: ghcr.io/alive-research/slicer-build-ubuntu2404:main-4fb4ac4
+      image: ghcr.io/alive-research/slicer-build-ubuntu2404:v5.12.4
       options: --user root
 
     env:
@@ -403,10 +408,9 @@ jobs:
     # Pinned to the SAME Slicer-main build as build-test — see
     # Docs/adr/0030-ci-slicer-image-pinning.md.  Bump both jobs together
     # in the image-bump PR; never let the two drift onto different Slicer
-    # commits.  main-4fb4ac4 = Slicer main @ 4fb4ac4
-    # (digest sha256:549a820f32d78dfb723c50cfed34519ba362ccfbae1791a6487a76cae588f756).
+    # commits.  v5.12.4 = Slicer release 5.12.4 (ADR-0030 §Amendments).
     container:
-      image: ghcr.io/alive-research/slicer-build-ubuntu2404:main-4fb4ac4
+      image: ghcr.io/alive-research/slicer-build-ubuntu2404:v5.12.4
       options: --user root
 
     env:

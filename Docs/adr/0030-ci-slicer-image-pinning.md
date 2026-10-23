@@ -6,6 +6,46 @@
 - **Diagrams:** N/A
 - **PR:** _filled in on merge_
 
+## Amendments
+
+- **2026-10-21 — pin a Slicer RELEASE tag, and declare a minimum Slicer
+  version.**  §1 below decided to pin `:main-<sha>`.  That choice solved
+  the problem it was aimed at — a moving `:latest` — but could not
+  express a second failure mode this ADR did not anticipate: the image
+  **ceasing to be produced at all**.
+
+  ALive-Docker's weekly rebuild was auto-disabled by GitHub after 60
+  days of repository inactivity, and its last scheduled run had already
+  failed.  Slicer-Liver went on building against `main-4fb4ac4` —
+  Slicer **5.11**, from 2026-06-08 — for over three months after Slicer
+  5.12 shipped, with every CI job green throughout.  Nothing objected,
+  because nothing could: a `main-<sha>` pin looks current forever, and
+  the build had no opinion about which Slicer it was handed.
+
+  Two changes follow, and they must land together:
+
+  1. **Both jobs pin a release tag** (`:v5.12.4`), not `:main-<sha>`.
+     A release tag is either current or visibly not: when 5.12.5 ships,
+     `v5.12.4` says so on its face.  ALive-Docker's build workflow now
+     tags images by the revision requested, which it previously did not
+     — it emitted `main-<sha>` whatever was asked for, so a release
+     build was indistinguishable from a main-tracking one.
+  2. **`CMakeLists.txt` declares `SLICERLIVER_MINIMUM_SLICER_VERSION`**,
+     so a stale image fails loudly at configure time instead of passing
+     quietly.  It compares MAJOR.MINOR, because `Slicer_VERSION_PATCH`
+     is 0 on development builds regardless of what they become.
+
+  Ordering is load-bearing: the floor must NOT land before the image
+  bump.  Slicer-Liver had no floor at all, so introducing 5.12 while CI
+  still ran 5.11 turns the pipeline red immediately.  Same PR, or
+  strictly after.
+
+  §2's "bump deliberately, via a dedicated image-bump PR" is unchanged
+  and now carries the floor bump with it.  Alternative B (pin by
+  digest) remains rejected for the same reason: opacity.  A release tag
+  keeps the bump diff legible while adding the staleness signal a
+  digest and a `main-<sha>` both lack.
+
 ## Context
 
 [ADR-0005](https://github.com/ALive-research/Slicer-Liver/blob/preview/Docs/adr/0005-github-actions-ci.md) builds and tests every PR inside
