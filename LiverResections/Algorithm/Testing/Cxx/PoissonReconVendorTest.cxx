@@ -24,11 +24,20 @@
 // (LiverResections/Algorithm/PoissonRecon/README.md) fails here rather
 // than silently pulling a heavyweight dependency into the extension.
 
+// Upstream's MyMiscellany.h reaches <windows.h>, which defines min and
+// max as function-like macros unless NOMINMAX is set.  Left alone they
+// rewrite every std::min / std::max below into std::(a, b).  This has to
+// precede the first upstream include.
+#ifndef NOMINMAX
+# define NOMINMAX
+#endif
+
 #include "PreProcessor.h"
 
 #include "MyMiscellany.h"
 #include "Reconstructors.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -38,6 +47,12 @@
 
 using Real = float;
 static const unsigned int Dim = 3;
+
+// M_PI is a POSIX extension rather than part of <cmath>: MSVC withholds
+// it unless _USE_MATH_DEFINES is defined ahead of the include.  This
+// test links no VTK on purpose (see the file header), so vtkMath::Pi()
+// is not reachable here either -- hence a local constant.
+static constexpr double Pi = 3.14159265358979323846;
 
 namespace
 {
@@ -129,10 +144,10 @@ int PoissonReconVendorTest(int, char*[])
   const int nPhi = 120;
   for (int i = 1; i < nTheta; i++)
   {
-    const double theta = M_PI * i / nTheta;
+    const double theta = Pi * i / nTheta;
     for (int j = 0; j < nPhi; j++)
     {
-      const double phi = 2.0 * M_PI * j / nPhi;
+      const double phi = 2.0 * Pi * j / nPhi;
       const double nx = std::sin(theta) * std::cos(phi);
       const double ny = std::sin(theta) * std::sin(phi);
       const double nz = std::cos(theta);
